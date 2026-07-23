@@ -88,6 +88,39 @@ const SECTION_GROUPS = [
 ];
 const ALL_SECTION_KEYS = SECTION_GROUPS.flatMap(([, items]) => items.map(([k]) => k));
 
+// Sections whose data comes from OUR accounts (our GA4 property, our Firestore
+// counts, our Vercel project, the admin's calendar) rather than from the
+// client's own. Flipping one to DEMO renders it as an empty slot — zeroed
+// numbers, or an all-open calendar strip — so the client sees what the section
+// would give them without seeing our data. Keyed by SECTION_GROUPS label; the
+// `affects` copy names the exact section, because a group can hold sections the
+// toggle does NOT touch (Top of email also holds Weather, which stays real).
+// Mirrors DEMO_METRIC_GROUPS in features/intelligence/_digest-config.js — kept
+// hardcoded here because that module is CJS + server-only (never import it into
+// a client component).
+const DEMO_METRIC_GROUP_BY_LABEL = {
+  'Top of email': {
+    key: 'calendar',
+    affects: 'Show Calendar Agenda as demo (all days open)',
+    hint: 'The agenda reads the connected Google Calendar. Demo renders the full 5-day swipe strip with every day marked “Open” — the client sees the schedule slot without seeing anyone’s real events. Weather is unaffected. Also skips the Calendar API call.',
+  },
+  'Web Performance': {
+    key: 'webPerformance',
+    affects: 'Show as demo (zeroed)',
+    hint: 'These numbers come from HITLOOP’s own GA4 property. Demo renders the group at 0 with “not connected yet” copy — the client sees the slot, not our traffic. Also skips the GA4 call.',
+  },
+  Platform: {
+    key: 'platform',
+    affects: 'Show as demo (zeroed)',
+    hint: 'These are HITLOOP’s own Firestore user/run counts — and they drive the subject line. Demo renders the group at 0 and zeroes the subject too, so a client’s email never quotes our sign-up numbers.',
+  },
+  Deployments: {
+    key: 'deployments',
+    affects: 'Show as demo (zeroed)',
+    hint: 'These come from HITLOOP’s own Vercel project. Demo renders the group at 0 with “not connected yet” copy. Also skips the Vercel call.',
+  },
+};
+
 // ── Email size estimator ──────────────────────────────────────────────────────
 // Gmail clips emails past ~102KB and hides the rest behind "View entire
 // message" — on 2026-07-04 a 157KB digest lost every section after Post
@@ -239,7 +272,7 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
 
   // Render the preview honoring the current (even unsaved) include toggles, so
   // flipping a section off in SETTINGS and tabbing over shows it drop out.
-  const loadPreview = useCallback(async (nextMode = 'template', includeFlags, contactUrl, order, postPlatforms) => {
+  const loadPreview = useCallback(async (nextMode = 'template', includeFlags, contactUrl, order, postPlatforms, demoMetrics) => {
     if (!user) return;
     setPreviewLoading(true);
     setPreviewError('');
@@ -262,6 +295,12 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
       if (nextMode === 'live' && postPlatforms) {
         const on = Object.entries(postPlatforms).filter(([, v]) => v).map(([k]) => k).join(',');
         path += `&posts=${encodeURIComponent(on)}`;
+      }
+      // Live preview honors the current (even unsaved) demo-metric groups, so
+      // flipping a group to demo shows it drop to zeros without saving first.
+      if (nextMode === 'live' && demoMetrics) {
+        const on = Object.entries(demoMetrics).filter(([, v]) => v).map(([k]) => k).join(',');
+        path += `&demo=${encodeURIComponent(on)}`;
       }
       const data = await authFetch(user, path);
       setPreview({ html: data.html || '', paragraph: data.paragraph || data.summary?.paragraph || '', placeholder: Boolean(data.placeholder) });
@@ -393,7 +432,7 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
   // Reload the LIVE preview each time the PREVIEW tab is opened, so it reflects
   // the latest include toggles AND real data — i.e. what will actually send.
   useEffect(() => {
-    if (tab === 'preview') loadPreview('live', guardIncludeForAvailability(form?.include, currentPlatformAvailability(form)), form?.contactUrl, form?.order, form?.postPlatforms);
+    if (tab === 'preview') loadPreview('live', guardIncludeForAvailability(form?.include, currentPlatformAvailability(form)), form?.contactUrl, form?.order, form?.postPlatforms, form?.demoMetrics);
   }, [tab, form, loadPreview, currentPlatformAvailability]);
 
   const isTemplate = previewMode === 'template';
@@ -633,9 +672,30 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
                     [base[ia], base[ib]] = [base[ib], base[ia]];
                     return { ...f, order: base };
                   });
+                  const demoGroup = DEMO_METRIC_GROUP_BY_LABEL[groupLabel];
+                  const demoKey = demoGroup?.key;
+                  const demoOn = !!(demoKey && form.demoMetrics?.[demoKey]);
                   return (
                     <div key={groupLabel} style={{ display: 'grid', gap: 8 }}>
                       <span className="label" style={{ marginTop: 4 }}>{groupLabel}</span>
+                      {demoKey ? (
+                        <div
+                          id={`email-digest-demo-metrics-${demoKey}-row`}
+                          data-section="email-digest-demo-metrics"
+                          style={{ display: 'grid', gap: 2 }}
+                        >
+                          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+                            <input
+                              type="checkbox"
+                              checked={demoOn}
+                              onChange={() => setForm((f) => ({ ...f, demoMetrics: { ...(f.demoMetrics || {}), [demoKey]: !demoOn } }))}
+                              style={{ width: 16, minHeight: 16 }}
+                            />
+                            {demoGroup.affects}
+                          </label>
+                          <span className="hint">{demoGroup.hint}</span>
+                        </div>
+                      ) : null}
                       {/* Columns live in CSS (#email-digest-settings-shell .toggle-grid) —
                           NOT inline — so the ≤860px single-column collapse can win on phones. */}
                       <div className="toggle-grid" role="group" aria-label={`${groupLabel} sections`}>

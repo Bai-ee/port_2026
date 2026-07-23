@@ -96,6 +96,15 @@ gates — that was the exact bug that made analytics silently vanish from the re
 | 2 | **Executive Summary** (LLM callouts) | `generateBriefSummary` (`_brief-summary.js`) | **LLM — Haiku** (`DIGEST_SUMMARY_MODEL`, dflt `claude-haiku-4-5`). Brain context via `loadClientBrainContext(homeClientId, { useFor:'emailDigest' })` — system prompt says "strictly follow Formatting Rules." | `execSummary` (render) + `summaryEnabled` (LLM spend) |
 | 2b | **Video Remix post content** (video card + X promo caption) | `media_jobs` (status `complete`) + `generateVideoPromoPosts` | `_brief-summary.js:generateVideoPromoPosts` — uses `loadClientBrainContext({ useFor:'copy' })` (voice + few-shot). System prompt bans em dashes + hashtags explicitly. | `videoPosts` |
 | 2c | **Mockup Studio video promo** | Mockup Studio render jobs | same generator as `videoPosts` | `videoPromo` |
+
+> ⚠️ **Video reuse is labeled, never silent (2026-07-20).** Both video sections serve the newest
+> capture within `VIDEO_CAPTURE_MAX_AGE_MS` — tightened **30h → 26h** so the fallback can only ever
+> reach back to yesterday's send, never the day before. When the chosen capture is not from **today**
+> (`isSameDigestDay`, digest timezone), the email card carries an amber `⚠ from <Mon, Jul 19>` badge
+> and the run terminal reports `REUSED from … — today's render was not ready in time` (step level
+> `warn`, not `success`). Before this, a stalled render was indistinguishable from a working one:
+> the digest quietly re-sent the previous day's MP4 and the video looked "the same every day."
+> Root cause of the stall was the unawaited `repository_dispatch` — see the Video Remix SSOT gotcha #1.
 | 3 | **Today's Agenda** (5-day calendar) | `getCalendarAgenda` → Google Calendar API | Calendar card / OAuth | `agenda` |
 | 3b | **Local weather forecast** | weather API | weather service | `weather` |
 | 3c | **Follower posts** (1 recent post per followed handle) | `intel.watchlist` built from `marketingBrief.watchlistTimelines` | `refreshWatchlist` in pre-digest worker | `followerPosts` |
@@ -437,3 +446,66 @@ required** to be separately scheduled for the refresh to happen.
 - **Dynamic imports of route modules** (`refreshDigestClient`, `renderMarketingBriefHtml`) are
   the established pattern here; both are wrapped so a resolution/runtime failure degrades to
   last-good data.
+
+---
+
+## 11. Demo (zeroed) metric groups — `demoMetrics` (as-built)
+
+**The problem.** Four section groups are backed by **our** accounts, not by the client's own:
+GA4 reads *our* property, `getFirebaseMetrics` counts *our* Firestore users/runs, Vercel reads
+*our* project, and the agenda reads *the admin's* connected Google Calendar. For the home client
+those are real. For every other client they are someone else's data — a leak, and confusing.
+
+**The fix.** A per-group **demo toggle** renders the group *structurally intact but zeroed*, so
+a client sees the slot and understands the data can pipe in once connected. This is a
+presentation/teaser feature — it does **not** wire up per-client live data.
+
+`digest_config/{clientId}.demoMetrics` — top-level field, **default all `false`** (home client's
+email is unchanged). Registry `DEMO_METRIC_GROUPS` in `_digest-config.js`:
+
+| Group key | Label | Demos these `include.*` sections | Collector skipped |
+|---|---|---|---|
+| `calendar` | Calendar Agenda | `agenda` | `getCalendarAgenda` (Google Calendar API) |
+| `webPerformance` | Web Performance | `ga4Traffic · topPages · trafficSources · keyEvents · homepage` | `getGA4Metrics` + `getHomepageAnalyticsMetrics` |
+| `platform` | Platform | `platformOverview · signups · dashboards · pipeline` | `getFirebaseMetrics` |
+| `deployments` | Deployments | `deployments · runtimeErrors` | `getVercelMetrics` |
+
+**How it renders.** A demo group skips its collector entirely (**no API cost**) and is fed a
+`ZERO_*` fixture in the route instead of the `NEUTRAL_*` one. The key difference: `ZERO_GA4`
+carries a **real zeroed `overview` object, not `null`**, so the GA4 block renders its five stat
+cells at `0` rather than collapsing to prose — the "registers as 0" behavior is the point.
+Each fixture sets `demo: true`, which flips every empty-state through the `emptyCopy(source,
+demoMsg, realMsg)` helper in `buildEmailHtml` from *"No traffic recorded in the last 24 hours"*
+(reads as a dead result) to *"Not connected yet — connect Google Analytics to see your traffic
+here"* (reads as an available slot).
+
+**⚠️ Calendar is the exception — it does NOT zero, it opens.** An empty `agenda.days` makes
+`buildAgendaSection` early-return a flat one-line "No events on the calendar for the next 5
+days" card, which loses the swipe strip entirely — the opposite of showing the client what the
+slot gives them. So `buildDemoAgenda(timestamp)` returns the **real 5-day window** (genuine
+dates, weekdays, TODAY badge) with zero events, and `demo: true` turns each day's row from
+*"No events"* into *"Open"* plus a note under the strip. The client sees the full working
+calendar UI with every day available. The day-window construction is shared with the real
+collector via **`buildAgendaDayWindow(timestamp)`** — extracted from `getCalendarAgenda` so the
+demo strip can never drift from the real one. Weather (`include.weather`, same UI group) is
+**not** affected by this toggle.
+
+**Subject line.** Built from `firebase.newUsers` / `firebase.recentRuns`. With `platform` demo
+ON it zeroes automatically via `ZERO_FIREBASE` — deliberate, so a client's subject line never
+quotes our internal sign-up/dashboard counts. No separate gate.
+
+**Preview parity.** `&demo=<csv-of-on-group-keys>` (preview only), mirroring `&include=`. The
+card passes `form.demoMetrics` so flipping a group previews zeroed **without saving first**.
+Present-but-empty (`demo=`) = every group real; param absent = saved config.
+
+**UI.** A demo checkbox under the four matching group headers in §03 of `AdminEmailDigestView`
+(`#email-digest-demo-metrics-<groupKey>-row`). The label→config map
+`DEMO_METRIC_GROUP_BY_LABEL` is **hardcoded in the component** (same reason `SECTION_GROUPS` is)
+— `_digest-config.js` is CJS + server-only and must never be imported client-side. Each entry
+carries its own `affects` label + `hint`, because a UI group can hold sections the toggle does
+**not** touch (the "Top of email" group holds Weather alongside the Agenda), so generic
+group-level copy would overstate what the checkbox does.
+
+**⚠️ If you add a section to one of these groups**, add its key to that group's `keys` array in
+`DEMO_METRIC_GROUPS` *and* give its empty-state a demo variant via `emptyCopy` — otherwise the
+section renders real HITLOOP data while the rest of its group shows zeros.

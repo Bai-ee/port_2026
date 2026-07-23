@@ -160,6 +160,34 @@ function normalizePostPlatforms(value) {
   return out;
 }
 
+// Demo (zeroed) metric groups. The Web Performance / Platform / Deployments
+// sections are backed by HITLOOP-global collectors (our GA4 property, our
+// Firestore user counts, our Vercel project) — real numbers for the home client,
+// meaningless-and-leaky for every other client. Turning a group ON here skips
+// its collector entirely (no API cost) and feeds a ZEROED fixture instead, so
+// the section still renders with its headers and 0-value stat cells: the client
+// sees the slot and understands the data can pipe in once they connect it.
+// Default OFF everywhere → the home client's email is unchanged.
+//   key    — stable id stored in config
+//   label  — UI label
+//   keys   — the include.* sections this group zeroes
+const DEMO_METRIC_GROUPS = [
+  // Calendar is the odd one out: instead of zeroed numbers it renders the real
+  // 5-day swipe strip with every day OPEN (buildDemoAgenda in the digest route).
+  { key: 'calendar',       label: 'Calendar Agenda', keys: ['agenda'] },
+  { key: 'webPerformance', label: 'Web Performance', keys: ['ga4Traffic', 'topPages', 'trafficSources', 'keyEvents', 'homepage'] },
+  { key: 'platform',       label: 'Platform',        keys: ['platformOverview', 'signups', 'dashboards', 'pipeline'] },
+  { key: 'deployments',    label: 'Deployments',     keys: ['deployments', 'runtimeErrors'] },
+];
+const DEMO_METRIC_KEYS = DEMO_METRIC_GROUPS.map((g) => g.key);
+const DEFAULT_DEMO_METRICS = Object.fromEntries(DEMO_METRIC_KEYS.map((k) => [k, false]));
+function normalizeDemoMetrics(value) {
+  const v = value && typeof value === 'object' ? value : {};
+  const out = {};
+  for (const k of DEMO_METRIC_KEYS) out[k] = v[k] === true;
+  return out;
+}
+
 const SCHEDULE_FREQUENCIES = ['daily', 'weekly', 'off'];
 // Default OFF: opt-in only. A brand-new / missing config never enrolls in the
 // daily crons — the admin turns it on per client.
@@ -180,6 +208,7 @@ const DEFAULTS = {
   homeClientId: null,      // brain + primary brief source (defaults to email-resolved client)
   includeClientIds: [],    // additional clients whose latest brief to fold in
   include: { ...DEFAULT_INCLUDE },
+  demoMetrics: { ...DEFAULT_DEMO_METRICS }, // render these groups zeroed (see DEMO_METRIC_GROUPS)
   order: [...DEFAULT_ORDER],
   postPlatforms: { ...DEFAULT_POST_PLATFORMS },
   schedule: { ...DEFAULT_SCHEDULE },
@@ -299,6 +328,7 @@ async function getDigestConfig(clientId) {
     homeClientId: data.homeClientId || null,
     includeClientIds: cleanIdList(data.includeClientIds),
     include: normalizeInclude(data.include),
+    demoMetrics: normalizeDemoMetrics(data.demoMetrics),
     order: normalizeOrder(data.order),
     postPlatforms: normalizePostPlatforms(data.postPlatforms),
     schedule: normalizeSchedule(data.schedule),
@@ -321,6 +351,7 @@ async function saveDigestConfig(clientId, patch = {}) {
   if ('homeClientId' in patch) next.homeClientId = patch.homeClientId ? String(patch.homeClientId).trim() : null;
   if ('includeClientIds' in patch) next.includeClientIds = cleanIdList(patch.includeClientIds);
   if ('include' in patch) next.include = normalizeInclude(patch.include);
+  if ('demoMetrics' in patch) next.demoMetrics = normalizeDemoMetrics(patch.demoMetrics);
   if ('order' in patch) next.order = normalizeOrder(patch.order);
   if ('postPlatforms' in patch) next.postPlatforms = normalizePostPlatforms(patch.postPlatforms);
   if ('schedule' in patch) next.schedule = normalizeSchedule(patch.schedule);
@@ -438,6 +469,9 @@ module.exports = {
   POST_PLATFORM_KEYS,
   DEFAULT_POST_PLATFORMS,
   DEFAULT_MARKET_INSIGHT_SOURCE_PLATFORMS,
+  DEMO_METRIC_GROUPS,
+  DEMO_METRIC_KEYS,
+  DEFAULT_DEMO_METRICS,
   BRIEF_LINK_MODES,
   getDigestConfig,
   saveDigestConfig,

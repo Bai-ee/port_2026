@@ -21,6 +21,7 @@ const { logError, logInfo, logWarn } = require('../../../../api/_lib/observabili
 const digestConfig = require('../../../../features/intelligence/_digest-config.js');
 const mediaJobs = require('../../../../api/_lib/media-jobs.cjs');
 const mediaRecipe = require('../../../../api/_lib/media-recipe.cjs');
+const clipSelector = require('../../../../api/_lib/media-clip-selector.cjs');
 const {
   enqueueVideoJob,
   triggerWorker,
@@ -132,43 +133,6 @@ async function pickRandomArtistMix() {
   return { artist: artist.name, mixTitle };
 }
 
-function shuffled(values = []) {
-  const arr = [...values];
-  for (let i = arr.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
-
-/**
- * Clip names pinned by the last few video-remix jobs for this client+folder.
- * Best-effort memory for anti-repeat — any read failure returns an empty set
- * and selection degrades to the plain shuffle.
- */
-async function listRecentlyUsedClipNames(clientId, folder, lookbackJobs) {
-  if (!clientId || !lookbackJobs) return new Set();
-  try {
-    const jobs = await mediaJobs.listMediaJobs(clientId, { type: 'video-remix', limit: 12 });
-    const used = new Set();
-    let counted = 0;
-    for (const job of jobs || []) {
-      const order = job?.recipeFull?.videoOrder;
-      const jobFolders = job?.recipeFull?.sourceFolders;
-      if (!Array.isArray(order) || !order.length) continue;
-      if (!Array.isArray(jobFolders) || !jobFolders.includes(folder)) continue;
-      for (const item of order) {
-        if (item?.videoName) used.add(String(item.videoName));
-      }
-      counted += 1;
-      if (counted >= lookbackJobs) break;
-    }
-    return used;
-  } catch {
-    return new Set();
-  }
-}
-
 async function buildDailyEmailVideoOrder(sourceFolders, clientId, production = DAILY_EMAIL_VIDEO_PRODUCTION) {
   if (!production.videoOrder?.enabled) return null;
   if (!Array.isArray(sourceFolders) || sourceFolders.length !== 1) {
@@ -177,36 +141,28 @@ async function buildDailyEmailVideoOrder(sourceFolders, clientId, production = D
 
   const folder = sourceFolders[0];
   const segmentCount = Math.max(1, Number(production.videoOrder.segmentCount || 6));
-  const minSizeBytes = Math.max(0, Number(production.videoOrder.minSizeBytes || 0));
   const media = await listFolderMedia(folder, { limit: 120 });
   const files = Array.isArray(media?.files) ? media.files : [];
-  const eligible = files.filter((file) => (
-    file?.kind === 'video'
-    && file?.name
-    && Number(file.size || 0) >= minSizeBytes
-  ));
 
-  if (eligible.length < segmentCount) {
-    throw new Error(`not enough eligible videos in ${folder}: ${eligible.length}/${segmentCount}`);
-  }
-
-  // Anti-repeat: clips untouched by the recent runs go first (shuffled), and
-  // recently used clips only fill whatever slots remain. With enough footage
-  // in the folder, consecutive renders share zero clips.
-  const recentlyUsed = await listRecentlyUsedClipNames(
+  // Shuffle + anti-repeat now live in the shared selector so the Video Remix
+  // card gets identical treatment (see api/_lib/media-clip-selector.cjs).
+  const order = await clipSelector.buildVideoOrder({
     clientId,
     folder,
-    Math.max(0, Number(production.videoOrder.antiRepeatLookback || 0)),
-  );
-  const fresh = eligible.filter((file) => !recentlyUsed.has(String(file.name)));
-  const reused = eligible.filter((file) => recentlyUsed.has(String(file.name)));
+    files,
+    segmentCount,
+    minSizeBytes: Math.max(0, Number(production.videoOrder.minSizeBytes || 0)),
+    antiRepeatLookback: production.videoOrder.antiRepeatLookback,
+    deps: { listMediaJobs: mediaJobs.listMediaJobs },
+  });
 
-  return [...shuffled(fresh), ...shuffled(reused)]
-    .slice(0, segmentCount)
-    .map((file, index) => ({
-      segmentIndex: index,
-      videoName: file.name,
-    }));
+  // For the daily email an unfillable folder is fatal: better to report it than
+  // to silently hand the worker a folder-only recipe (which renders repetitively).
+  if (!order) {
+    const eligible = clipSelector.eligibleClips(files, production.videoOrder.minSizeBytes).length;
+    throw new Error(`not enough eligible videos in ${folder}: ${eligible}/${segmentCount}`);
+  }
+  return order;
 }
 
 async function buildDailyEmailRecipe(sourceFolders, clientId, production = DAILY_EMAIL_VIDEO_PRODUCTION) {
@@ -269,9 +225,15 @@ export async function triggerDailyEmailRemix(clientId) {
     ({ editJobId } = await enqueueVideoJob(recipe));
     await mediaJobs.setMediaJobEditRef(jobId, editJobId);
     // Kick the (throttled) EditVideos worker now so the render starts promptly.
-    triggerWorker().then((r) => {
-      if (!r?.triggered) logWarn('pre_digest_video_worker_not_triggered', { reason: r?.reason || r?.status });
-    }).catch(() => {});
+    // MUST be awaited: on Vercel the function instance can freeze the moment the
+    // response is returned, so a floating dispatch promise never reaches GitHub.
+    // That is why no repository_dispatch run ever appeared and every job waited
+    // hours for the throttled `schedule` cron instead — which in turn made the
+    // digest fall back to the previous day's video. Do not make this fire-and-forget.
+    const triggered = await triggerWorker().catch((err) => ({ triggered: false, reason: err?.message }));
+    if (!triggered?.triggered) {
+      logWarn('pre_digest_video_worker_not_triggered', { reason: triggered?.reason || triggered?.status });
+    }
   } catch (err) {
     // Job is queued; the backstop media-reconcile cron can still pick it up.
     logWarn('pre_digest_video_enqueue_failed', { error: err.message });

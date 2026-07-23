@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/worker/pre-digest-video",
-      "schedule": "45 11 * * *"
+      "schedule": "0 6 * * *"
     },
     {
       "path": "/api/worker/pre-digest-refresh",

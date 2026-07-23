@@ -567,9 +567,36 @@ async function getCalendarAccessToken() {
  *  (calendar_connections/{clientId}); falls back to the service-account-shared
  *  DIGEST_CALENDAR_ID. opts: { clientId, enabled }. When enabled === false
  *  (Market Signals "Calendar / Agenda" toggle off), the section is skipped. */
+const AGENDA_DAY_MS = 24 * 60 * 60 * 1000;
+const AGENDA_SPAN_DAYS = 5;
+
+/** The empty 5-day window (today .. today+4) in the digest timezone, ready for
+ *  events to be bucketed into. Shared by the real collector and the demo
+ *  agenda, so the demo strip carries genuine dates/weekdays. */
+function buildAgendaDayWindow(timestamp) {
+  const days = [];
+  for (let d = 0; d < AGENDA_SPAN_DAYS; d++) {
+    const inst = new Date(timestamp + d * AGENDA_DAY_MS);
+    days.push({
+      key: localDateStr(DIGEST_TIMEZONE, inst),
+      weekday: inst.toLocaleDateString('en-US', { weekday: 'short', timeZone: DIGEST_TIMEZONE }),
+      dateLabel: inst.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: DIGEST_TIMEZONE }),
+      isToday: d === 0,
+      events: [],
+    });
+  }
+  return days;
+}
+
+/** Demo agenda (Email Digest `demoMetrics.calendar`): the real 5-day window with
+ *  no events, so the section renders its full swipe strip with every day reading
+ *  as an OPEN slot instead of collapsing to a one-line "no events" card. */
+function buildDemoAgenda(timestamp) {
+  return { events: [], days: buildAgendaDayWindow(timestamp), tomorrowSummary: '', error: null, demo: true };
+}
+
 async function getCalendarAgenda(timestamp, opts = {}) {
-  const DAY_MS = 24 * 60 * 60 * 1000;
-  const SPAN_DAYS = 5;
+  const SPAN_DAYS = AGENDA_SPAN_DAYS;
   if (opts.enabled === false) {
     return { events: [], days: [], tomorrowSummary: '', error: null, disabled: true };
   }
@@ -577,18 +604,7 @@ async function getCalendarAgenda(timestamp, opts = {}) {
     const now = new Date(timestamp);
     const offset = tzOffset(DIGEST_TIMEZONE, now);
 
-    // Build the 5-day window (today .. today+4) in the digest timezone.
-    const days = [];
-    for (let d = 0; d < SPAN_DAYS; d++) {
-      const inst = new Date(timestamp + d * DAY_MS);
-      days.push({
-        key: localDateStr(DIGEST_TIMEZONE, inst),
-        weekday: inst.toLocaleDateString('en-US', { weekday: 'short', timeZone: DIGEST_TIMEZONE }),
-        dateLabel: inst.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: DIGEST_TIMEZONE }),
-        isToday: d === 0,
-        events: [],
-      });
-    }
+    const days = buildAgendaDayWindow(timestamp);
     const timeMin = `${days[0].key}T00:00:00${offset}`;
     const timeMax = `${days[SPAN_DAYS - 1].key}T23:59:59${offset}`;
 
@@ -606,7 +622,16 @@ async function getCalendarAgenda(timestamp, opts = {}) {
         }
       }
     } catch { /* fall back to service account below */ }
+    // Shared-calendar fallback (service-account DIGEST_CALENDAR_ID) belongs to the
+    // env/home digest client only. A scoped non-home client (e.g. a client in the
+    // daily fan-out) that has no OAuth connection of its own must NOT inherit it —
+    // that leaked the home owner's personal calendar into other clients' emails.
+    // Render the empty demo strip instead of another client's events.
+    if (!accessToken && opts.allowSharedCalendar === false) {
+      return buildDemoAgenda(timestamp);
+    }
     if (!accessToken) accessToken = await getCalendarAccessToken();
+    if (!accessToken) return buildDemoAgenda(timestamp);
 
     const url =
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events` +
@@ -819,7 +844,7 @@ function buildAgendaSection(agenda) {
           <span style="display:block;font-family:${DT.fMono};font-size:10px;font-weight:700;letter-spacing:.04em;color:${day.isToday ? DT.brand : DT.accent};margin-bottom:3px;">${escapeHtml(ev.timeLabel)}</span>
           ${escapeHtml(ev.summary)}${ev.location ? `<span style="display:block;margin-top:2px;font-size:11px;color:${DT.light};">${escapeHtml(ev.location)}</span>` : ''}
         </div>`).join('')
-      : `<div style="padding:14px;white-space:normal;font-family:${DT.fBody};font-size:12px;color:${DT.light};">No events</div>`;
+      : `<div style="padding:14px;white-space:normal;font-family:${DT.fBody};font-size:12px;color:${DT.light};">${agenda.demo ? 'Open' : 'No events'}</div>`;
 
     return `<div style="display:inline-block;vertical-align:top;white-space:normal;font-size:13px;line-height:normal;width:260px;max-width:80%;margin-right:10px;scroll-snap-align:start;background:${DT.card};border:1px solid ${day.isToday ? DT.brand : DT.line};border-radius:14px;overflow:hidden;box-sizing:border-box;">
       <div style="padding:11px 14px;border-bottom:1px solid ${DT.line};background:${day.isToday ? DT.brandTint : 'transparent'};">
@@ -832,7 +857,13 @@ function buildAgendaSection(agenda) {
   const hint = `<div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:${DT.light};margin:0 0 10px;">Swipe &rarr; ${days.length} day${days.length !== 1 ? 's' : ''}</div>`;
   const carousel = `<div style="max-width:100%;overflow:hidden;"><div style="overflow-x:auto;-webkit-overflow-scrolling:touch;white-space:nowrap;font-size:0;line-height:0;padding-bottom:8px;scroll-snap-type:x mandatory;">${dayCards}</div></div>`;
 
-  return dSection('Schedule', 'Agenda', `${hint}${carousel}`);
+  // Demo (Email Digest `demoMetrics.calendar`): the strip renders in full with
+  // every day OPEN, so the slot reads as available rather than as a dead day.
+  const demoNote = agenda.demo
+    ? `<div style="font-family:${DT.fBody};font-size:12px;color:${DT.light};margin-top:2px;">Not connected yet — connect your calendar and your real schedule fills these days.</div>`
+    : '';
+
+  return dSection('Schedule', 'Agenda', `${hint}${carousel}${demoNote}`);
 }
 
 /** Standalone Weather section (its own toggle: include.weather). Reads the
@@ -889,7 +920,11 @@ function buildHomepageAnalyticsSection(homepage) {
   }
 
   if (!homepage.totalEvents) {
-    return `<p style="font-family:${DT.fBody};font-size:13px;color:${DT.light};margin:0;">No interaction events in the last 24 hours.</p>`;
+    // `demo` = the zeroed fixture (Email Digest demo-metrics group): read as an
+    // available slot, not as "nothing happened today".
+    return `<p style="font-family:${DT.fBody};font-size:13px;color:${DT.light};margin:0;">${homepage.demo
+      ? 'Not connected yet — clicks, scroll depth and web vitals from your site land here once tracking is on.'
+      : 'No interaction events in the last 24 hours.'}</p>`;
   }
 
   const chips = homepage.byInteractionType
@@ -943,10 +978,16 @@ function buildVideoPostRow(item, kind = 'Video') {
   const caption = item.caption
     ? escapeHtml(item.caption)
     : `<span style="color:${DT.light};">Promo post generates on send.</span>`;
+  // A carried-over video (today's render wasn't ready) is labeled on the card.
+  // Silent reuse previously made a stalled pipeline look like a working one.
+  const staleBadge = item.stale
+    ? `<div style="margin-top:8px;font-family:${DT.fMono};font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#ffb454;">&#9888; from ${escapeHtml(item.staleLabel || 'an earlier run')}</div>`
+    : '';
   const videoCard = `<a href="${href}" style="text-decoration:none;display:block;">
     <div style="background:${DT.ink};border-radius:12px;text-align:center;padding:30px 12px;">
       <span style="display:inline-block;width:46px;height:46px;line-height:46px;border-radius:50%;background:${DT.brand};background-image:${DT.grad};color:#fff;font-size:16px;">&#9654;</span>
       <div style="margin-top:10px;font-family:${DT.fMono};font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,0.72);">${durLabel}</div>
+      ${staleBadge}
     </div>
   </a>`;
   const postCol = `<div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:${DT.light};margin:0 0 6px;">X &middot; Post</div>
@@ -1021,7 +1062,29 @@ const EMAIL_CAPS = {
 };
 const REPLY_TARGET_MAX_AGE_MS = 26 * 60 * 60 * 1000;
 const STRATEGY_PLAN_MAX_AGE_MS = 26 * 60 * 60 * 1000;
-const VIDEO_CAPTURE_MAX_AGE_MS = 30 * 60 * 60 * 1000;
+// Absolute cutoff for reusing an already-rendered video. 26h (not 30h) so the
+// fallback can only ever reach back to YESTERDAY's send, never the day before.
+// Reuse is no longer silent — see isSameDigestDay/staleVideoLabel below: a
+// carried-over video is labeled in the email and flagged in the run terminal,
+// because a silently repeated video is indistinguishable from a broken pipeline.
+const VIDEO_CAPTURE_MAX_AGE_MS = 26 * 60 * 60 * 1000;
+
+/** True when a capture was created on the same calendar day (digest timezone)
+ *  as this send — i.e. it is genuinely today's video, not a carried-over one. */
+function isSameDigestDay(value, nowMs = Date.now()) {
+  const ms = dateMs(value);
+  if (!Number.isFinite(ms)) return false;
+  return localDateStr(DIGEST_TIMEZONE, new Date(ms)) === localDateStr(DIGEST_TIMEZONE, new Date(nowMs));
+}
+
+/** "Mon, Jul 19" for a carried-over capture, used in the email's stale badge. */
+function staleVideoLabel(value) {
+  const ms = dateMs(value);
+  if (!Number.isFinite(ms)) return 'an earlier run';
+  return new Date(ms).toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric', timeZone: DIGEST_TIMEZONE,
+  });
+}
 
 function dateMs(value) {
   if (!value) return NaN;
@@ -1515,6 +1578,12 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
     day: 'numeric',
   });
 
+  // Demo (zeroed) groups render at 0 with "connect this" copy instead of the
+  // real "nothing happened in 24h" copy, so the section reads as an available
+  // slot rather than a dead result. `demo` is set on the zeroed fixture by the
+  // route (see DEMO_METRIC_GROUPS in _digest-config.js).
+  const emptyCopy = (source, demoMsg, realMsg) => (source && source.demo ? demoMsg : realMsg);
+
   const newUsersRows = firebase.newUsersList.length
     ? firebase.newUsersList
         .map(
@@ -1525,7 +1594,7 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
         </tr>`
         )
         .join('')
-    : `<tr><td colspan="3" style="${TDempty}">No new sign-ups in the last 24 hours</td></tr>`;
+    : `<tr><td colspan="3" style="${TDempty}">${emptyCopy(firebase, 'Not connected yet — your new sign-ups will be listed here.', 'No new sign-ups in the last 24 hours')}</td></tr>`;
 
   const recentRunsRows = firebase.recentRunsList.length
     ? firebase.recentRunsList
@@ -1537,7 +1606,7 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
         </tr>`
         )
         .join('')
-    : `<tr><td colspan="3" style="${TDempty}">No new dashboards created</td></tr>`;
+    : `<tr><td colspan="3" style="${TDempty}">${emptyCopy(firebase, 'Not connected yet — dashboards created for you will be listed here.', 'No new dashboards created')}</td></tr>`;
 
   const deploymentsRows = vercel.deployments?.length
     ? vercel.deployments
@@ -1549,7 +1618,7 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
         </tr>`
         )
         .join('')
-    : `<tr><td colspan="3" style="${TDempty}">No deployments in the last 24 hours</td></tr>`;
+    : `<tr><td colspan="3" style="${TDempty}">${emptyCopy(vercel, 'Not connected yet — connect your hosting to see each deploy here.', 'No deployments in the last 24 hours')}</td></tr>`;
 
   const statusBreakdown = Object.entries(firebase.statusCounts)
     .map(([status, count]) => dChip(escapeHtml(status), count))
@@ -1561,7 +1630,7 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
             <td style="${TDsub}max-width:300px;word-break:break-word;overflow-wrap:anywhere;">${escapeHtml(e.message)}</td>
             <td style="${TDnum}">${e.statusCode || '—'}</td>
           </tr>`).join('')
-    : `<tr><td colspan="3" style="${TDempty}">No runtime errors in the last 24 hours</td></tr>`;
+    : `<tr><td colspan="3" style="${TDempty}">${emptyCopy(vercel, 'Not connected yet — connect your hosting to catch runtime errors here.', 'No runtime errors in the last 24 hours')}</td></tr>`;
   const errorInner = dDataTable([{ label: 'Path' }, { label: 'Message' }, { label: 'Status', right: true }], errorRows);
 
   // ── Inner pieces for the brief-grouped sections (each a dSub under a header) ──
@@ -1578,7 +1647,7 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
         { num: ga4.overview.totalUsers, label: 'Visitors' },
         { num: ga4.overview.newUsers, label: 'New' },
         { num: `${ga4.overview.bounceRate}%`, label: 'Bounce' },
-      ], 5)}<div style="font-family:${DT.fMono};font-size:11px;color:${DT.soft};letter-spacing:.02em;">Avg session <strong style="color:${DT.ink};">${Math.floor(ga4.overview.avgSessionDuration / 60)}m ${ga4.overview.avgSessionDuration % 60}s</strong> &nbsp;&middot;&nbsp; Engaged <strong style="color:${DT.ink};">${ga4.overview.engagedSessions}</strong></div>`
+      ], 5)}<div style="font-family:${DT.fMono};font-size:11px;color:${DT.soft};letter-spacing:.02em;">Avg session <strong style="color:${DT.ink};">${Math.floor(ga4.overview.avgSessionDuration / 60)}m ${ga4.overview.avgSessionDuration % 60}s</strong> &nbsp;&middot;&nbsp; Engaged <strong style="color:${DT.ink};">${ga4.overview.engagedSessions}</strong></div>${ga4.demo ? `<div style="font-family:${DT.fBody};font-size:12px;color:${DT.light};margin-top:10px;">Not connected yet — connect Google Analytics and these fill with your real traffic each day.</div>` : ''}`
     : `<p style="font-family:${DT.fBody};font-size:13px;color:${ga4.error ? DT.accent : DT.light};margin:0;">${ga4.error ? `GA4 unavailable: ${escapeHtml(ga4.error)}` : 'No traffic recorded in the last 24 hours.'}</p>`;
   const topPagesTable = dDataTable(
     [{ label: 'Page' }, { label: 'Views', right: true }, { label: 'Users', right: true }],
@@ -1586,7 +1655,7 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
       <td style="${TD}max-width:300px;word-break:break-word;overflow-wrap:anywhere;">${escapeHtml(p.path)}</td>
       <td style="${TDnum}">${p.views}</td>
       <td style="${TDnum}color:${DT.soft};font-weight:400;">${p.users}</td>
-    </tr>`).join('') : `<tr><td colspan="3" style="${TDempty}">No page data in the last 24 hours</td></tr>`
+    </tr>`).join('') : `<tr><td colspan="3" style="${TDempty}">${emptyCopy(ga4, 'Not connected yet — your most-viewed pages will rank here.', 'No page data in the last 24 hours')}</td></tr>`
   );
   const sourcesTable = dDataTable(
     [{ label: 'Source / Medium' }, { label: 'Sessions', right: true }, { label: 'Users', right: true }],
@@ -1594,14 +1663,14 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
       <td style="${TD}">${escapeHtml(s.source)} <span style="color:${DT.light};">/ ${escapeHtml(s.medium)}</span></td>
       <td style="${TDnum}">${s.sessions}</td>
       <td style="${TDnum}color:${DT.soft};font-weight:400;">${s.users}</td>
-    </tr>`).join('') : `<tr><td colspan="3" style="${TDempty}">No traffic sources in the last 24 hours</td></tr>`
+    </tr>`).join('') : `<tr><td colspan="3" style="${TDempty}">${emptyCopy(ga4, 'Not connected yet — where your visitors come from will break down here.', 'No traffic sources in the last 24 hours')}</td></tr>`
   );
   const keyEventsInner = Object.keys(ga4.events || {}).length
     ? `<div>${Object.entries(ga4.events).map(([name, count]) => dChip(escapeHtml(name.replace(/_/g, ' ')), count)).join('')}</div>`
-    : `<span style="font-family:${DT.fBody};font-size:13px;color:${DT.light};">No key events in the last 24 hours</span>`;
+    : `<span style="font-family:${DT.fBody};font-size:13px;color:${DT.light};">${emptyCopy(ga4, 'Not connected yet — the actions you choose to track will count here.', 'No key events in the last 24 hours')}</span>`;
   const signupsTable = dDataTable([{ label: 'Email' }, { label: 'Website' }, { label: 'Time', right: true }], newUsersRows);
   const dashboardsTable = dDataTable([{ label: 'Website' }, { label: 'Status' }, { label: 'Time', right: true }], recentRunsRows);
-  const pipelineInner = `<div style="margin-bottom:10px;">${statusBreakdown || `<span style="color:${DT.light};font-family:${DT.fBody};font-size:13px;">No pipeline data</span>`}</div><div style="font-family:${DT.fMono};font-size:11px;color:${DT.soft};letter-spacing:.02em;">Total runs <strong style="color:${DT.ink};">${firebase.totalRuns}</strong> &nbsp;&middot;&nbsp; Clients <strong style="color:${DT.ink};">${firebase.totalClients}</strong></div>`;
+  const pipelineInner = `<div style="margin-bottom:10px;">${statusBreakdown || `<span style="color:${DT.light};font-family:${DT.fBody};font-size:13px;">${emptyCopy(firebase, 'Not connected yet — run status will break down here.', 'No pipeline data')}</span>`}</div><div style="font-family:${DT.fMono};font-size:11px;color:${DT.soft};letter-spacing:.02em;">Total runs <strong style="color:${DT.ink};">${firebase.totalRuns}</strong> &nbsp;&middot;&nbsp; Clients <strong style="color:${DT.ink};">${firebase.totalClients}</strong></div>`;
   const deploymentsInner = `${vercel.errors ? `<p style="font-family:${DT.fBody};color:${DT.accent};font-size:12px;margin:0 0 10px;">Note: ${escapeHtml(vercel.errors)}</p>` : ''}${dDataTable([{ label: 'Status' }, { label: 'Commit' }, { label: 'Time', right: true }], deploymentsRows)}`;
 
   // Per-section renderers, keyed by include key. Each returns its email block
@@ -1993,6 +2062,105 @@ function buildPlaceholderData(timestamp) {
 
 // ── Route handler ───────────────────────────────────────────────────────────
 
+/**
+ * Scheduled-cron fan-out. The Vercel cron hits this route with no ?clientId=,
+ * which resolves a SINGLE client (the env/admin-resolved one) and sends exactly
+ * one email — even though /api/worker/pre-digest-refresh already refreshes
+ * EVERY daily-enrolled client. Enrolled clients therefore had their
+ * intelligence rebuilt daily and never mailed.
+ *
+ * Re-enters this same route once per enrolled client with an explicit
+ * ?clientId=, which scopes config, briefs, stats and recipient to that client
+ * (the single-client path below is untouched). Each sub-send is its own
+ * invocation with its own timeout budget, and is still gated by that client's
+ * own schedule.enabled. Sequential on purpose: a send does heavy per-client
+ * reads and the parent must stay inside maxDuration.
+ *
+ * The client set mirrors pre-digest-refresh (home + enrolled) so send and
+ * refresh can never drift apart; a home client that is not enrolled is simply
+ * skipped by the gate in its own sub-request.
+ */
+async function fanOutScheduledSends(url) {
+  const startedAtMs = Date.now();
+  const FANOUT_BUDGET_MS = 270_000;
+
+  let clientIds = [];
+  try {
+    const configClientId = await digestConfig.resolveDigestClientId();
+    const cfg = await digestConfig.getDigestConfig(configClientId);
+    const homeClientId = cfg.homeClientId || configClientId;
+    const enrolledIds = await digestConfig.listCronEnrolledClientIds();
+    clientIds = [...new Set([homeClientId, ...enrolledIds].filter(Boolean))];
+  } catch (err) {
+    logError('daily_digest_fanout_resolve_error', { error: err.message });
+    return json({ error: `Could not resolve digest clients: ${err.message}` }, 500);
+  }
+  if (!clientIds.length) {
+    return json({ ok: true, skipped: true, reason: 'No clients enrolled in the daily digest.' });
+  }
+
+  // Sub-requests re-enter this route, so they must carry cron/worker auth.
+  const headers = { 'cache-control': 'no-store' };
+  if (process.env.CRON_SECRET) headers.authorization = `Bearer ${process.env.CRON_SECRET}`;
+  else if (WORKER_SECRET) headers['x-worker-secret'] = WORKER_SECRET;
+
+  // Re-enter the SAME deployment the cron hit. appOrigin() falls back to the
+  // production alias, so using it here would make a local-dev or preview-deploy
+  // fan-out fire its sub-sends at a different build than the one running.
+  const selfOrigin = url.origin || appOrigin();
+
+  logInfo('daily_digest_fanout_start', { clients: clientIds.length, clientIds, origin: selfOrigin });
+
+  const results = [];
+  for (const clientId of clientIds) {
+    if (results.length > 0 && Date.now() - startedAtMs > FANOUT_BUDGET_MS) {
+      logError('daily_digest_fanout_budget_exhausted', {
+        completed: results.length,
+        total: clientIds.length,
+        elapsedMs: Date.now() - startedAtMs,
+      });
+      break;
+    }
+    const target = new URL('/api/admin/daily-digest', selfOrigin);
+    // Carry through anything the cron/caller set (e.g. freshnessToken); the
+    // per-client id always wins.
+    url.searchParams.forEach((value, key) => {
+      if (key !== 'clientId') target.searchParams.set(key, value);
+    });
+    target.searchParams.set('clientId', clientId);
+
+    let entry;
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const res = await fetch(target.toString(), { headers, cache: 'no-store' });
+      // eslint-disable-next-line no-await-in-loop
+      const body = await res.json().catch(() => ({}));
+      entry = {
+        clientId,
+        status: res.status,
+        ok: res.ok && body?.ok !== false,
+        skipped: body?.skipped === true,
+        reason: body?.reason || null,
+        error: body?.error || null,
+      };
+    } catch (err) {
+      entry = { clientId, ok: false, error: err.message };
+    }
+    results.push(entry);
+    logInfo('daily_digest_fanout_client_done', entry);
+  }
+
+  const complete = results.length === clientIds.length;
+  const ok = complete && results.every((r) => r.ok);
+  logInfo('daily_digest_fanout_done', {
+    clients: clientIds.length,
+    completed: results.length,
+    sent: results.filter((r) => r.ok && !r.skipped).length,
+    ok,
+  });
+  return json({ ok, fanout: true, clientIds, complete, results });
+}
+
 export async function GET(request) {
   const url = new URL(request.url);
   const previewParam = url.searchParams.get('preview');
@@ -2017,6 +2185,18 @@ export async function GET(request) {
     for (const k of DIGEST_INCLUDE_KEYS) out[k] = on.has(k);
     return out;
   })();
+
+  // Optional `demo` override (preview only): csv of demo-metric group keys to
+  // render ZEROED, so the card previews its current (even unsaved) demo toggles.
+  // Present-but-empty (`demo=`) → every group real.
+  const demoOverride = (isPreview && url.searchParams.has('demo'))
+    ? (() => {
+        const on = new Set(String(url.searchParams.get('demo') || '').split(',').map((s) => s.trim()).filter(Boolean));
+        const out = {};
+        for (const k of digestConfig.DEMO_METRIC_KEYS) out[k] = on.has(k);
+        return out;
+      })()
+    : null;
 
   // Optional `contactUrl` override (preview only) so the typed-but-unsaved
   // Calendly URL appears in the live preview immediately, like include toggles.
@@ -2056,6 +2236,15 @@ export async function GET(request) {
     return json({ error: 'Unauthorized' }, 401);
   }
 
+  // The pure scheduled run (no ?clientId=) fans out to every enrolled client;
+  // each sub-request comes back here WITH a clientId and takes the normal
+  // single-client path below, so this never recurses.
+  const isScheduledRun = !isPreview && !isTemplate && !isSendNow;
+  const hasExplicitClient = Boolean(String(url.searchParams.get('clientId') || '').trim());
+  if (isScheduledRun && !hasExplicitClient) {
+    return fanOutScheduledSends(url);
+  }
+
   // Template preview: render the full layout with placeholder data only — no
   // live API/LLM calls, nothing sent. Instant; for reviewing/editing the email.
   if (isTemplate) {
@@ -2087,6 +2276,11 @@ export async function GET(request) {
     // single authority for whether the agenda is included (P2b migration).
     let homeClientId = null;
     let digestCfg = null;
+    // Whether THIS send may use the shared service-account calendar
+    // (DIGEST_CALENDAR_ID). Default true preserves the legacy/home behavior if
+    // resolution throws; a scoped non-home client is set false below so it can
+    // never inherit the home owner's calendar (see getCalendarAgenda).
+    let allowSharedCalendar = true;
     try {
       // Explicit ?clientId= (the Email Digest card passes its active client) scopes
       // the WHOLE send to that client — its digest config, briefs, stats, and
@@ -2094,13 +2288,17 @@ export async function GET(request) {
       // admin client. Never mix: resolving by admin email while viewing another
       // client's dashboard was the cross-client contamination path.
       const requestedDigestClientId = String(url.searchParams.get('clientId') || '').trim();
-      const configClientId = requestedDigestClientId || await digestConfig.resolveDigestClientId();
+      const envDigestClientId = await digestConfig.resolveDigestClientId();
+      const configClientId = requestedDigestClientId || envDigestClientId;
       digestCfg = await digestConfig.getDigestConfig(configClientId);
       digestCfg = {
         ...digestCfg,
         include: mergeCompatInclude(digestCfg?.include, await readRawDigestInclude(configClientId)),
       };
       homeClientId = (requestedDigestClientId ? configClientId : digestCfg.homeClientId) || configClientId;
+      // Unscoped run = the home/env send (shared calendar is legitimately its own).
+      // A scoped run gets the shared calendar only when it IS the env/home client.
+      allowSharedCalendar = !requestedDigestClientId || homeClientId === envDigestClientId;
     } catch { /* resolution failed — agenda falls back to the env calendar */ }
 
     // Gate the SCHEDULED send by the daily-email toggle (schedule.enabled). The
@@ -2179,19 +2377,72 @@ export async function GET(request) {
     const NEUTRAL_AGENDA = { events: [], days: [], tomorrowSummary: '', error: null };
     const NEUTRAL_HOMEPAGE = { totalEvents: 0, byEventName: [], byInteractionType: [], topTargets: [], outboundLinks: [], scrollDepths: [], webVitals: [], error: null };
 
+    // Demo (zeroed) fixtures. Same shapes as the NEUTRAL_* ones, but the stat-cell
+    // sources carry a real zeroed object instead of null/absent so the section
+    // renders its numbers AT 0 rather than collapsing to prose — the client sees
+    // the slot. `demo: true` switches each empty-state to "connect this" copy.
+    const ZERO_GA4 = {
+      overview: { sessions: 0, pageViews: 0, totalUsers: 0, newUsers: 0, bounceRate: 0, avgSessionDuration: 0, engagedSessions: 0 },
+      topPages: [], trafficSources: [], events: {}, error: null, demo: true,
+    };
+    const ZERO_VERCEL = { ...NEUTRAL_VERCEL, demo: true };
+    // Homepage + Platform demo groups render SAMPLE rows (not empty "connect this"
+    // copy) so a not-yet-connected client sees a populated, representative slot.
+    // Values are deliberately obvious placeholders (example.com) and carry
+    // `demo: true` so the summary LLM skips them (see _brief-summary compactData).
+    const now = timestamp;
+    const SAMPLE_HOMEPAGE = {
+      totalEvents: 42,
+      byEventName: [{ name: 'homepage_cta_click', count: 12 }, { name: 'homepage_scroll_depth', count: 18 }],
+      byInteractionType: [{ name: 'cta click', count: 12 }, { name: 'scroll', count: 18 }, { name: 'link click', count: 6 }],
+      topTargets: [{ name: 'Get Started (sample)', count: 9 }, { name: 'View Work (sample)', count: 5 }],
+      outboundLinks: [{ name: 'https://example.com (sample)', count: 4 }],
+      scrollDepths: [{ name: '50%', count: 20 }, { name: '75%', count: 14 }, { name: '100%', count: 6 }],
+      webVitals: [{ name: 'LCP', count: 30, average: 2100, poor: 0 }, { name: 'CLS', count: 30, average: 0.06, poor: 0 }],
+      error: null, demo: true,
+    };
+    const SAMPLE_FIREBASE = {
+      totalUsers: 128, newUsers: 3,
+      newUsersList: [
+        { email: 'sample.user@example.com', website: 'example.com', createdAt: new Date(now - 1_800_000).toISOString() },
+        { email: 'new.lead@example.com', website: 'example.org', createdAt: new Date(now - 5_400_000).toISOString() },
+        { email: 'placeholder@example.com', website: null, createdAt: new Date(now - 9_000_000).toISOString() },
+      ],
+      totalClients: 14, totalRuns: 320, recentRuns: 2,
+      recentRunsList: [
+        { id: 'sample-run-1', status: 'succeeded', website: 'example.com', createdAt: new Date(now - 2_700_000).toISOString() },
+        { id: 'sample-run-2', status: 'queued', website: 'example.org', createdAt: new Date(now - 6_300_000).toISOString() },
+      ],
+      statusCounts: { succeeded: 280, failed: 12, queued: 4 }, demo: true,
+    };
+
+    // Demo groups (Email Digest card) — see DEMO_METRIC_GROUPS in _digest-config.
+    // A demo group skips its collector entirely: no GA4/Vercel/Firestore cost.
+    const demoMetrics = demoOverride || digestCfg?.demoMetrics || { ...digestConfig.DEFAULT_DEMO_METRICS };
+    const demoWebPerf = demoMetrics.webPerformance === true;
+    const demoPlatform = demoMetrics.platform === true;
+    const demoDeployments = demoMetrics.deployments === true;
+    const demoCalendar = demoMetrics.calendar === true;
+
     // Derived group flags: only pay a collector's API cost when at least one of
-    // the granular sections it powers is enabled.
-    const needVercel = include.deployments !== false || include.runtimeErrors !== false;
-    const needGA4 = include.ga4Traffic !== false || include.topPages !== false
-      || include.trafficSources !== false || include.keyEvents !== false;
-    const needHomepage = include.homepage !== false && homepageEnabled;
+    // the granular sections it powers is enabled (and the group isn't demoed).
+    const needVercel = !demoDeployments && (include.deployments !== false || include.runtimeErrors !== false);
+    const needGA4 = !demoWebPerf && (include.ga4Traffic !== false || include.topPages !== false
+      || include.trafficSources !== false || include.keyEvents !== false);
+    const needHomepage = !demoWebPerf && include.homepage !== false && homepageEnabled;
 
     const [firebase, vercel, ga4, agenda, homepage] = await Promise.all([
-      getFirebaseMetrics(), // always — powers the subject line + platform stats
-      needVercel ? getVercelMetrics() : Promise.resolve(NEUTRAL_VERCEL),
-      needGA4 ? getGA4Metrics({ propertyId: ga4PropertyId, eventNames: ga4EventNames }) : Promise.resolve(NEUTRAL_GA4),
-      include.agenda !== false ? getCalendarAgenda(timestamp, { clientId: homeClientId, enabled: true }) : Promise.resolve(NEUTRAL_AGENDA),
-      needHomepage ? getHomepageAnalyticsMetrics() : Promise.resolve(NEUTRAL_HOMEPAGE),
+      // Firebase powers the subject line + platform stats. Demoed => zeroed, so a
+      // client's email never quotes our internal sign-up/dashboard counts.
+      demoPlatform ? Promise.resolve(SAMPLE_FIREBASE) : getFirebaseMetrics(),
+      needVercel ? getVercelMetrics() : Promise.resolve(demoDeployments ? ZERO_VERCEL : NEUTRAL_VERCEL),
+      needGA4 ? getGA4Metrics({ propertyId: ga4PropertyId, eventNames: ga4EventNames }) : Promise.resolve(demoWebPerf ? ZERO_GA4 : NEUTRAL_GA4),
+      include.agenda === false
+        ? Promise.resolve(NEUTRAL_AGENDA)
+        : demoCalendar
+          ? Promise.resolve(buildDemoAgenda(timestamp)) // no Google Calendar call
+          : getCalendarAgenda(timestamp, { clientId: homeClientId, enabled: true, allowSharedCalendar }),
+      needHomepage ? getHomepageAnalyticsMetrics() : Promise.resolve(demoWebPerf ? SAMPLE_HOMEPAGE : NEUTRAL_HOMEPAGE),
     ]);
 
     // Render flags: homepage block also honors the Web Stats homepage toggle.
@@ -2319,6 +2570,8 @@ export async function GET(request) {
           if (!probe.ok) {
             videoStatus.remix = `Video Remix link failed validation (${probe.reason || 'unknown'}).`;
             remixCap = null;
+          } else if (!isSameDigestDay(remixCap.createdAt, timestamp)) {
+            videoStatus.remix = `REUSED from ${staleVideoLabel(remixCap.createdAt)} — today's render was not ready in time.`;
           } else {
             videoStatus.remix = `ready · ${remixCap.createdAt || 'fresh capture'}`;
           }
@@ -2330,6 +2583,8 @@ export async function GET(request) {
           if (!probe.ok) {
             videoStatus.promo = `Video Promo link failed validation (${probe.reason || 'unknown'}).`;
             promoCap = null;
+          } else if (!isSameDigestDay(promoCap.createdAt, timestamp)) {
+            videoStatus.promo = `REUSED from ${staleVideoLabel(promoCap.createdAt)} — today's render was not ready in time.`;
           } else {
             videoStatus.promo = `ready · ${promoCap.createdAt || 'fresh capture'}`;
           }
@@ -2359,8 +2614,28 @@ export async function GET(request) {
           }
         }
         let ci = 0;
-        if (remixCap) videoItems.remix = { url: remixCap.downloadUrl, duration: remixCap.durationSeconds || 30, caption: captions[ci++] || '' };
-        if (promoCap) videoItems.promo = { url: promoCap.downloadUrl, duration: promoCap.durationSeconds || 0, caption: captions[ci++] || '' };
+        // `stale` = carried over from an earlier day; surfaced as a badge on the
+        // card so a repeated video is never mistaken for a fresh one.
+        if (remixCap) {
+          const stale = !isSameDigestDay(remixCap.createdAt, timestamp);
+          videoItems.remix = {
+            url: remixCap.downloadUrl,
+            duration: remixCap.durationSeconds || 30,
+            caption: captions[ci++] || '',
+            stale,
+            staleLabel: stale ? staleVideoLabel(remixCap.createdAt) : '',
+          };
+        }
+        if (promoCap) {
+          const stale = !isSameDigestDay(promoCap.createdAt, timestamp);
+          videoItems.promo = {
+            url: promoCap.downloadUrl,
+            duration: promoCap.durationSeconds || 0,
+            caption: captions[ci++] || '',
+            stale,
+            staleLabel: stale ? staleVideoLabel(promoCap.createdAt) : '',
+          };
+        }
       } catch (e) {
         logWarn('daily_digest_video_posts_failed', { error: e.message });
       }
@@ -2369,8 +2644,11 @@ export async function GET(request) {
     if (isRealSend && (wantRemix || wantPromo)) {
       const n = (videoItems.remix ? 1 : 0) + (videoItems.promo ? 1 : 0);
       step(n ? 'success' : 'info', n ? `Video · ${n} attached (remix:${videoItems.remix ? 'y' : 'n'} promo:${videoItems.promo ? 'y' : 'n'})` : 'No fresh video available yet');
-      if (wantRemix && videoStatus.remix) step(videoItems.remix ? 'success' : 'error', `Video Remix · ${videoStatus.remix}`);
-      if (wantPromo && videoStatus.promo) step(videoItems.promo ? 'success' : 'error', `Video Promo · ${videoStatus.promo}`);
+      // A reused (stale) video is NOT a success — it means today's render missed
+      // the send window and the reader is seeing yesterday's video again.
+      const stepLevel = (item) => (!item ? 'error' : (item.stale ? 'warn' : 'success'));
+      if (wantRemix && videoStatus.remix) step(stepLevel(videoItems.remix), `Video Remix · ${videoStatus.remix}`);
+      if (wantPromo && videoStatus.promo) step(stepLevel(videoItems.promo), `Video Promo · ${videoStatus.promo}`);
     }
 
     let xPostResult = null;

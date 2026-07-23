@@ -24,26 +24,36 @@ function compactData({ dateStr, agenda, ga4, firebase, homepage }) {
     lines.push("Today's calendar: nothing scheduled.");
   }
 
-  if (ga4?.overview) {
+  // `demo: true` marks a placeholder/sample fixture (Email Digest demo-metrics
+  // group) — it exists only so the email SECTION renders a populated slot for a
+  // not-yet-connected client. It must never reach the summary LLM, or the exec
+  // paragraph would narrate the sample numbers/emails as if they were real.
+  const ga4Real = ga4 && !ga4.demo;
+  const firebaseReal = firebase && !firebase.demo;
+  const homepageReal = homepage && !homepage.demo;
+
+  if (ga4Real && ga4.overview) {
     const o = ga4.overview;
     lines.push(
       `Site traffic (24h): ${o.sessions} sessions, ${o.totalUsers} visitors, ` +
         `${o.pageViews} pageviews, ${o.newUsers} new, bounce ${o.bounceRate}%.`
     );
   }
-  if (ga4?.topPages?.length) {
+  if (ga4Real && ga4.topPages?.length) {
     lines.push('Top pages: ' + ga4.topPages.slice(0, 5).map((p) => `${p.path} (${p.views})`).join(', '));
   }
 
-  lines.push(
-    `Platform (24h): ${firebase?.newUsers || 0} new sign-ups, ${firebase?.recentRuns || 0} dashboards created. ` +
-      `Totals: ${firebase?.totalUsers || 0} users, ${firebase?.totalClients || 0} clients.`
-  );
-  if (firebase?.newUsersList?.length) {
-    lines.push('New users: ' + firebase.newUsersList.slice(0, 8).map((u) => u.email).join(', '));
+  if (firebaseReal) {
+    lines.push(
+      `Platform (24h): ${firebase?.newUsers || 0} new sign-ups, ${firebase?.recentRuns || 0} dashboards created. ` +
+        `Totals: ${firebase?.totalUsers || 0} users, ${firebase?.totalClients || 0} clients.`
+    );
+    if (firebase?.newUsersList?.length) {
+      lines.push('New users: ' + firebase.newUsersList.slice(0, 8).map((u) => u.email).join(', '));
+    }
   }
 
-  if (homepage?.totalEvents) {
+  if (homepageReal && homepage.totalEvents) {
     const top = (homepage.topTargets || []).slice(0, 5).map((t) => `${t.name} (${t.count})`).join(', ');
     lines.push(`Homepage interactions (24h): ${homepage.totalEvents} events${top ? `. Top: ${top}` : ''}`);
   }
