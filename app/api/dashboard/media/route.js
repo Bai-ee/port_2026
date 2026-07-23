@@ -8,6 +8,7 @@ const fb = require('../../../../api/_lib/firebase-admin.cjs');
 const mediaJobs = require('../../../../api/_lib/media-jobs.cjs');
 const mediaAssets = require('../../../../api/_lib/media-assets.cjs');
 const { validateRemixRecipe } = require('../../../../api/_lib/media-recipe.cjs');
+const clipSelector = require('../../../../api/_lib/media-clip-selector.cjs');
 const {
   enqueueVideoJob,
   triggerWorker,
@@ -376,6 +377,34 @@ export async function POST(request) {
       return json({ error: err.message }, 400);
     }
 
+    // Randomize clips when the caller picked a folder but not an explicit clip
+    // order. Without this the EditVideos worker chooses for us, and its choice is
+    // effectively deterministic — so two renders from the same folder could ship
+    // the same footage. Same selector the daily-email worker uses (shuffle +
+    // anti-repeat against recent renders). Only applies to the single-folder,
+    // no-manual-order case: an explicit videoOrder is always respected, and
+    // multi-folder recipes are left to the worker (validateRemixRecipe rejects
+    // videoOrder unless there is exactly one folder).
+    if (!recipe.videoOrder && Array.isArray(recipe.sourceFolders) && recipe.sourceFolders.length === 1) {
+      try {
+        const folder = recipe.sourceFolders[0];
+        const media = await listFolderMedia(folder, { limit: 120 });
+        const order = await clipSelector.buildVideoOrder({
+          clientId: context.clientId,
+          folder,
+          files: Array.isArray(media?.files) ? media.files : [],
+          segmentCount: clipSelector.DEFAULT_SEGMENT_COUNT,
+          antiRepeatLookback: 3,
+          deps: { listMediaJobs: mediaJobs.listMediaJobs },
+        });
+        // A folder too small to fill the order falls through to the worker's own
+        // pick rather than failing the render.
+        if (order) recipe = validateRemixRecipe({ ...body, videoOrder: order });
+      } catch (selErr) {
+        console.warn(`[media] clip auto-selection skipped: ${selErr?.message}`);
+      }
+    }
+
     try {
       const { jobId } = await mediaJobs.createMediaJob({
         clientId: context.clientId,
@@ -391,10 +420,13 @@ export async function POST(request) {
         ({ editJobId } = await enqueueVideoJob(recipe));
         await mediaJobs.setMediaJobEditRef(jobId, editJobId);
         // Fire the EditVideos GitHub Action now — its cron is throttled (free
-        // tier), so without this the job sits queued. Best-effort, non-blocking.
-        triggerWorker().then((r) => {
-          if (!r.triggered) console.warn(`[media] EditVideos worker not triggered: ${r.reason || r.status}`);
-        }).catch(() => {});
+        // tier), so without this the job sits queued for hours. Awaited on
+        // purpose: Vercel can freeze the instance once the response is sent, so
+        // a floating dispatch promise never reaches GitHub (see pre-digest-video).
+        const triggered = await triggerWorker().catch((err) => ({ triggered: false, reason: err?.message }));
+        if (!triggered?.triggered) {
+          console.warn(`[media] EditVideos worker not triggered: ${triggered?.reason || triggered?.status}`);
+        }
       } catch (bridgeErr) {
         console.warn(`[media] EditVideos enqueue failed: ${bridgeErr?.message}`);
       }

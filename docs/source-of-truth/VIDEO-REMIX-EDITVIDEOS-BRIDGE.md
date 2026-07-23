@@ -65,6 +65,8 @@ Current locked daily-email recipe:
 - Strict source folder: `skyline` only.
 - Six explicit skyline clips are randomly selected and pinned into `videoOrder` before enqueueing.
   This avoids folder-only random renders that can become visually static after ~15s.
+  Selection is the **shared** `api/_lib/media-clip-selector.cjs` (see § Clip selection below) —
+  the card path uses the same module, so no queue path falls back to the worker's own pick.
 - Filter: `look_hard_bw_street_doc` at `0.8`.
 - Top logo: `ue_barcode_white.png`.
 - End logo: `mixtapes_white_square.png`.
@@ -73,6 +75,30 @@ Current locked daily-email recipe:
 
 Changing the daily email look should start in `DAILY_EMAIL_VIDEO_PRODUCTION` in that worker, not
 in the dashboard Video Remix UI.
+
+## Clip selection — shared, randomized, anti-repeating (2026-07-20)
+
+`api/_lib/media-clip-selector.cjs` is the ONE selector for every queue path. It filters to videos
+at/above a size floor, puts clips **not used by the last N renders first** (shuffled), lets recently
+used clips fill only leftover slots, and pins the result as an explicit `videoOrder`.
+
+- **Daily email** (`pre-digest-video`): `antiRepeatLookback: 3`, `minSizeBytes: 5MB`. An unfillable
+  folder is **fatal** (reported) — better than silently shipping a folder-only recipe.
+- **Card** (`create-video-remix`): when the caller sends **one folder and no manual clip order**, the
+  route auto-pins a randomized order (lookback 3). An explicit `videoOrder` is always respected;
+  multi-folder recipes are left to the worker (`validateRemixRecipe` rejects `videoOrder` unless
+  there is exactly one folder). A folder too small to fill 6 segments falls through to the worker's
+  own pick rather than failing the render.
+- ⚠️ **Why this matters:** the EditVideos worker's own clip pick is effectively **deterministic**
+  (same root cause as the pinned-audio behavior). Any path that omits `videoOrder` can therefore
+  render the same footage twice. Do not add a queue path that skips this selector.
+- ⚠️ Anti-repeat memory reads `media_jobs.recipeFull.videoOrder` **filtered to the same folder** —
+  jobs enqueued without a `videoOrder` contribute nothing. A failed Firestore read degrades to a
+  plain shuffle (still random), never throws.
+- ⚠️ `listFolderMedia` hard-clamps to **120 files** (`safeLimit = Math.min(120, …)`), slicing
+  bucket-lexicographic order. skyline is at 112 objects — past 120 the tail becomes permanently
+  unpickable. Paginate before folders grow further.
+- Tests: `api/_lib/__tests__/media-clip-selector.test.js` (rng injected for determinism).
 
 ## Files (Hitloop)
 
@@ -264,9 +290,21 @@ gracefully if absent (job queues, no render). Rotating these in EditVideos requi
 
 ## Gotchas / hard-won lessons (read before changing anything)
 
-1. **Always fire the dispatch trigger.** EditVideos' GitHub cron is throttled on free tier (observed
-   ~90 min stale). `triggerWorker()` (`repository_dispatch`) on enqueue is what makes a click render
-   in ~1 min. Without it, jobs sit `pending`.
+1. **Always fire the dispatch trigger — and `await` it.** EditVideos' GitHub cron is throttled on
+   free tier (observed **2h15m** between runs on 2026-07-20, despite `*/1` in the workflow).
+   `triggerWorker()` (`repository_dispatch`) on enqueue is what makes a click render in ~1 min.
+   Without it, jobs sit `pending` for hours.
+   ⚠️ **Fixed 2026-07-20:** both call sites fired it **fire-and-forget**
+   (`triggerWorker().then(…)`, unawaited). On Vercel the function instance can freeze the moment the
+   response is returned, so the `fetch` to GitHub never landed — **zero `repository_dispatch` runs
+   existed in the repo's entire history**; every job waited for the throttled `schedule` cron. For
+   the daily email that meant the render missed the 13:00 send and the digest silently re-served
+   *yesterday's* video. Both `pre-digest-video` and `dashboard/media` now `await` the dispatch.
+   **Never make this call fire-and-forget again.** Verify with
+   `gh run list --repo Bai-ee/arweave-video-generator` — healthy state shows `repository_dispatch`
+   rows, not only `schedule`.
+   `pre-digest-video` cron also moved `45 11` → **`0 6` UTC**: Vercel Hobby cron drift (~1h observed;
+   scheduled 11:45 actually fired 12:42–13:00) left 0–18 min before the `0 13` send.
 2. **Vercel Hobby cron = once/day max.** So reconcile is layered: poll-on-enqueue (live) +
    reconcile-on-job-GET (next dashboard load) + daily `/api/worker/media-reconcile` backstop. Do not
    assume per-minute cron.
@@ -277,6 +315,16 @@ gracefully if absent (job queues, no render). Rotating these in EditVideos requi
    so its shell video needs an explicit `pointer-events:auto` (see `dashboard.css`
    `.tile-intake-card--btns-only .tile-intake-placeholder-video-remix video`) or its native controls
    (volume/unmute) can't be clicked.
+4b. ⚠️ **App-init order is load-bearing (found 2026-07-20).** `api/_lib/firebase-admin.cjs`
+   `initAdminApp()` returns **`getApps()[0]`** — *whichever* firebase-admin app initialized first,
+   not the default app by name. The bridge's named `editvideos` app is a second app in the same
+   process, so **if the bridge initializes before the Hitloop app, `fb.adminDb` silently points at
+   `editvideos-63486`** and `media_jobs` reads/writes cross projects (observed in a standalone
+   script: `listMediaJobs` failed with a missing-index error naming the EV project). Production is
+   safe today only because `verifyRequestUser` → `fb.adminAuth` runs at the top of every
+   authenticated request, so Hitloop always wins the race. Any worker/script that touches the bridge
+   before Hitloop must touch `fb.adminDb` first. The durable fix is to resolve the default app by
+   name (`getApps().find((a) => a.name === '[DEFAULT]')`) — not yet done.
 5. **EditVideos folders are global/shared**, not per-client. Fine for single-operator. True
    multi-tenant means un-shelving `services/media-render` + client-scoped source paths.
    The SOURCE MEDIA upload tab currently writes to those same global/shared folders.
