@@ -9,103 +9,41 @@
 // language (GLASS tokens + RailCard) but is fully self-contained so the
 // fragile mockup-video code paths stay untouched.
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronRight, ChevronLeft, Download, Palette, Image as ImageIcon, Wind, Layers,
   RotateCcw, Zap, Video, Camera, SlidersHorizontal, Lightbulb, Disc, Focus,
-  Sparkles, Shuffle,
+  Sparkles, Shuffle, Undo2, Redo2,
 } from 'lucide-react';
-
-// ── UI tokens — mirror app/dashboard/studio/page.jsx GLASS/ui (kept local so
-// the page file needs no refactor; page files can't export shared helpers). ──
-const GLASS = {
-  bg: 'linear-gradient(180deg,#fefdf9 0%,#fbf8f0 60%,#fdfaf2 100%)',
-  accent: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)',
-  ink: '#1a1a1a',
-  inkSoft: '#444',
-  inkMute: '#8a8a8a',
-  hair: '#E4E4E4',
-  sans: '"Space Grotesk", system-ui, -apple-system, sans-serif',
-  mono: '"Space Mono", ui-monospace, monospace',
-};
-const ui = {
-  btn: (active = false) => ({
-    height: 40,
-    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-    background: active ? GLASS.ink : 'rgba(255,255,255,0.6)',
-    color: active ? '#fff' : GLASS.ink,
-    border: '1px solid ' + (active ? GLASS.ink : GLASS.hair),
-    boxShadow: active ? 'none' : '0 1px 2px rgba(0,0,0,0.04)',
-    borderRadius: 999, padding: '0 15px',
-    fontSize: 12, fontFamily: GLASS.sans, fontWeight: 600, letterSpacing: '0.01em',
-    cursor: 'pointer', whiteSpace: 'nowrap',
-    transition: 'background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease',
-  }),
-  cta: {
-    height: 40,
-    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-    background: GLASS.accent, color: '#fff', border: 'none', borderRadius: 999,
-    padding: '0 18px', fontSize: 12, fontFamily: GLASS.sans, fontWeight: 700,
-    letterSpacing: '0.01em', cursor: 'pointer', whiteSpace: 'nowrap',
-    boxShadow: '0 2px 8px rgba(140,70,255,0.25), inset 0 1px 0 rgba(255,255,255,0.3)',
-  },
-  label: {
-    fontSize: 9, fontFamily: GLASS.mono, letterSpacing: '0.12em',
-    textTransform: 'uppercase', color: GLASS.inkMute, fontWeight: 700,
-  },
-};
-
-// Rail card — same states as the mockup rail (ported from DashboardPage
-// .capability-nav-btn via page.jsx); class names match so the CSS below applies.
-function RailCard({ id, icon, title, subtitle, color, open, onToggle, badge, children, maxH = 2400 }) {
-  return (
-    <div id={id} className={'studio-rail-card' + (open ? ' studio-rail-card--active' : '')}>
-      <button
-        className="studio-rail-card-btn"
-        aria-expanded={open}
-        onClick={onToggle}
-        style={{
-          width: '100%', display: 'flex', alignItems: 'center', gap: 12,
-          padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
-        }}
-      >
-        <span className="studio-rail-card-content" style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: 1, minWidth: 0 }}>
-          <span style={{ fontFamily: GLASS.sans, fontSize: 15, fontWeight: 500, color: GLASS.ink, lineHeight: 1.15, letterSpacing: '-0.01em' }}>{title}</span>
-          {subtitle ? <span style={{ ...ui.label, fontSize: 10, letterSpacing: '0.06em', color: GLASS.inkMute }}>{subtitle}</span> : null}
-        </span>
-        {badge}
-        <span className="studio-rail-card-icon" style={{ flexShrink: 0, color, display: 'flex', alignItems: 'center' }}>{icon}</span>
-        <span aria-hidden="true" style={{
-          flexShrink: 0, color: GLASS.inkMute, display: 'flex', alignItems: 'center',
-          transform: open ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.25s ease',
-        }}>
-          <ChevronRight size={16} strokeWidth={2.5} />
-        </span>
-      </button>
-      <div style={{ maxHeight: open ? maxH : 0, overflow: 'hidden', transition: 'max-height 0.35s cubic-bezier(0.4,0,0.2,1)' }}>
-        <div style={{ padding: '2px 16px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {children}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Labelled range slider — the studio rail's standard control row.
-function Slider({ label, min, max, step, value, onChange, fmt = (v) => v.toFixed(2), disabled = false }) {
-  return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: 3, opacity: disabled ? 0.4 : 1 }}>
-      <span style={{ ...ui.label, display: 'flex', justifyContent: 'space-between' }}>
-        {label}<span style={{ color: GLASS.ink }}>{fmt(value)}</span>
-      </span>
-      <input
-        type="range" min={min} max={max} step={step} value={value} disabled={disabled}
-        onChange={(e) => onChange(Number(e.target.value))}
-        style={{ width: '100%', accentColor: GLASS.ink }}
-      />
-    </label>
-  );
-}
+import { GLASS, ui, RailCard, Slider } from './components/rail-ui';
+import { getElementDefinition, listElementDefinitions, MAX_EXTRA_INSTANCES } from './elements/catalog';
+import { normalizeElementInstance } from './elements/schema';
+import { mulberry32, deriveSeed, snapToStep } from './elements/randomize';
+import { budgetStatus, LIVE_PREVIEW_TIERS } from './elements/quality';
+import { createHistory, pushHistory, undoHistory, redoHistory } from './elements/history';
+import {
+  restoreExtraInstances, createSceneElement, duplicateInstance, removeInstance,
+  normalizeSelection, isRenderableInstance, applyPresetToInstance, randomizeInstanceFields,
+  randomizeAllElements, shouldReapplyInstance,
+} from './elements/scene-elements';
+import {
+  INTENSITY_TIERS, INTENSITY_META, DEFAULT_INTENSITY, isValidIntensity, rollNumeric, rollCategorical,
+} from './elements/intensity';
+import { OUTPUT_FORMATS as PLACEMENT_FORMATS, placementWarningForInstance, resolveEffectiveInstance } from './elements/placement';
+import { getFactory } from './elements/factories';
+import { createGLTFLoaderBundle, disposeGLTFLoaderBundle } from './elements/glb-loader';
+import {
+  SCENE_TEMPLATES_KEY, parseTemplateListJSON, serializeTemplateList, createSceneTemplate, addTemplate,
+  findTemplate, renameTemplate, updateTemplateRecipe, duplicateTemplate, archiveTemplate, unarchiveTemplate,
+  listActiveTemplates, listArchivedTemplates, exportTemplateJSON, importTemplateJSON,
+} from './elements/templates';
+import {
+  isFiniteNum, isHexColor, sanitizeMat, sanitizePhys, sanitizeAnim, sanitizeCam,
+  sanitizeGlass, sanitizeShotCam, sanitizeFx, sanitizeLightCans, sanitizeElementLocks,
+} from './elements/scene-recipe';
+import StudioElementsCard from './components/StudioElementsCard';
+import StudioElementInspector from './components/StudioElementInspector';
+import SceneTemplatesCard from './components/SceneTemplatesCard';
 
 // ── Config ───────────────────────────────────────────────────────────────────
 // v9 — user-approved opening material (white metallic-matte, full clearcoat);
@@ -126,6 +64,14 @@ const loadArtworkLib = () => {
 const loadSavedDefaults = () => {
   if (typeof window === 'undefined') return {};
   try { return JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || '{}') || {}; } catch { return {}; }
+};
+// Scene Templates — local-only persistence, elements/templates.js owns the
+// pure schema/validation; this is just the impure read/write pair at the
+// call boundary (that module's own header states it never touches
+// localStorage itself).
+const loadSavedTemplates = () => {
+  if (typeof window === 'undefined') return [];
+  try { return parseTemplateListJSON(window.localStorage.getItem(SCENE_TEMPLATES_KEY)); } catch { return []; }
 };
 
 // Cloth sheet aspect presets — world units (camera sits ~2.6 away).
@@ -440,7 +386,14 @@ void main(){
 
 // ── Glass form — abstract smooth refractive shell wrapped around the sheet
 // (transmission material genuinely refracts the flyer seen through it). ──
-const DEFAULT_GLASS = { on: false, scale: 1, rotate: true, rotSpeed: 0.4, tint: '#ffffff', clarity: 0.06 };
+// position: world-unit XYZ offset; rotationOffset: degrees, matches this
+// file's existing shotCam.az/el convention (converted to radians only where
+// applied to three.js — see the element position/rotation effect below).
+const DEFAULT_GLASS = { on: false, scale: 1, rotate: true, rotSpeed: 0.4, tint: '#ffffff', clarity: 0.06, position: [0, 0, 0], rotationOffset: [0, 0, 0] };
+// The one glass-petal-sphere instance that actually drives world.glassMesh —
+// see the "Element system" state block in ClothStudio() for why every other
+// instance (duplicates) is data-only.
+const PRIMARY_ELEMENT_ID = 'glass-petal-sphere-1';
 
 // ── Shot camera — a second, positionable camera; USE SHOT CAM renders through
 // it while the orbit view waits underneath. ──
@@ -866,7 +819,14 @@ if (uHoloIntensity > 0.001 || uSparkle > 0.001) {
 #endif
 `;
 
-export default function ClothStudio({ isNarrow = false, railW = 336 }) {
+const PIN_MODE_IDS = PIN_MODES.map((m) => m.id);
+const MATERIAL_PRESET_IDS = Object.keys(MATERIAL_PRESETS);
+// Look randomize's own per-tier jitter-scale multiplier (see randomizeFx's
+// doc comment) — 'remix' at scale 1 reproduces this function's pre-intensity
+// jitter formulas exactly.
+const LOOK_JITTER_SCALE = { refine: 0.35, remix: 1, transform: 1.8, wild: 2.6 };
+
+export default function ClothStudio({ isNarrow = false, railW = 336, isAdmin = false, authedFetch = null }) {
   const stageRef = useRef(null);
   const worldRef = useRef(null);
   const hudCanvasRef = useRef(null);
@@ -890,8 +850,464 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
     setLightTemplate('');
   }, []);
   // Glass form, shot camera, HUD overlay, capture frame.
-  const [glass, setGlass] = useState(() => ({ ...DEFAULT_GLASS, ...(saved.glass || {}) }));
+  const [glass, setGlass] = useState(() => ({
+    ...DEFAULT_GLASS,
+    position: [...DEFAULT_GLASS.position],
+    rotationOffset: [...DEFAULT_GLASS.rotationOffset],
+    ...(saved.glass || {}),
+  }));
   const setGlassKey = useCallback((key, val) => setGlass((g) => ({ ...g, [key]: val })), []);
+
+  // ── Element system — docs/plans/ORIGINAL-STUDIO-CINEMATIC-SETS-4K-PLAN.md.
+  // Phase 1 registered the existing glass shell (`glass-petal-sphere`,
+  // `singleInstanceRenderer: true` — driven entirely by the pre-existing
+  // `glass` state + its dedicated effects below, untouched). Phase 2 adds
+  // five real, multi-instance-capable types (elements/catalog.js +
+  // elements/factories.js) that live in `extraInstances` alongside any
+  // glass duplicates and ARE genuinely rendered — see the live-object sync
+  // effect further down, which builds/updates/disposes a three.js object per
+  // enabled real instance via its factory. `isRenderableInstance` (elements/
+  // scene-elements.js) is the one predicate that tells the two kinds of
+  // extraInstances entry apart everywhere (budget, active count, sync
+  // effect, UI) — nothing hardcodes a type list.
+  //
+  // Feature-gated: off by default for every visitor, so baseline Holo Paper
+  // behavior is unchanged unless explicitly enabled. Gate = env flag
+  // (production rollout) OR (admin AND the explicit query gate). `?elements=1`
+  // alone does nothing for a public visitor — a non-admin can never self-
+  // enable unfinished functionality by guessing a query param; only an admin
+  // session that ALSO opts in via the query gets the dev/preview surface.
+  // isAdmin alone (no query param) stays off too, so an admin's default view
+  // is identical to a public visitor's.
+  const [elementsQueryFlag] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try { return new URLSearchParams(window.location.search).get('elements') === '1'; } catch { return false; }
+  });
+  const elementsV1Enabled = process.env.NEXT_PUBLIC_STUDIO_ELEMENTS_V1 === '1' || (Boolean(isAdmin) && elementsQueryFlag);
+
+  // sceneSeed = the Elements scope's own seed (randomizeSelectedElement),
+  // round-tripped by elementHistoryRef/snapshotElementState below. lookSeed
+  // is the Look scope's independent seed (randomizeFx) — a Codex review
+  // (2026-07-23T18:24:04Z) found that BOTH scopes sharing one counter let an
+  // undo in one scope roll the shared counter backward past a point the
+  // OTHER scope's still-live state had already advanced beyond (Look ->
+  // Element -> Undo Look wrongly rewound the counter under the element's
+  // seed-3 result, and the next roll would reuse the look's own already-
+  // consumed seed 2). Per-scope-independent seeds are what the review itself
+  // named as the fix — each scope's history now only ever reads/writes its
+  // own counter, so an undo in one scope can never affect the other's.
+  const [sceneSeed, setSceneSeed] = useState(() => (Number.isFinite(saved.sceneSeed) ? saved.sceneSeed : 1));
+  const [lookSeed, setLookSeed] = useState(() => (Number.isFinite(saved.lookSeed) ? saved.lookSeed : 1));
+  const [elementLocks, setElementLocks] = useState(() => (saved.elementLocks && typeof saved.elementLocks === 'object' ? saved.elementLocks : {}));
+  // Randomization intensity (docs/plans/ORIGINAL-STUDIO-CINEMATIC-SETS-4K-PLAN.md
+  // "Seeded randomization system" § Intensity) — one shared creative-range
+  // preference for every randomize action (Look, Selected element, All
+  // elements), a persisted UI setting like elementFormatId/elementQualityTier
+  // rather than undoable state. 'remix' (the default) is BYTE-IDENTICAL to
+  // this codebase's pre-intensity randomize behavior on every call site —
+  // see elements/intensity.js's header.
+  const [randomizeIntensity, setRandomizeIntensity] = useState(() => (isValidIntensity(saved.randomizeIntensity) ? saved.randomizeIntensity : DEFAULT_INTENSITY));
+  // Exact-changed-groups reports (plan guardrail: "Show the exact seed and a
+  // concise list of changed groups") — transient UI feedback for the LAST
+  // randomize action, not part of any undo/redo snapshot or persisted recipe
+  // (matches templateStatus's own plain-useState, non-undoable precedent).
+  const [lookRandomizeReport, setLookRandomizeReport] = useState([]);
+  const [elementRandomizeReport, setElementRandomizeReport] = useState({});
+  // Which of the three named output formats (elements/placement.js) new
+  // elements default-place for, and what the safe-zone/frame warnings check
+  // against. Does NOT change the live canvas's actual camera/aspect — see
+  // placement.js's header comment for the exact scope of "format" here.
+  const [elementFormatId, setElementFormatId] = useState(() => (PLACEMENT_FORMATS[saved.elementFormatId] ? saved.elementFormatId : 'landscape'));
+  // The element system's own live-preview quality tier — independent of the
+  // cloth's own `perf` (high/medium/low mesh-density) selector above, which
+  // this deliberately does not touch or reinterpret. 'ultra' is excluded
+  // from the live selector (LIVE_PREVIEW_TIERS) — see quality.js.
+  const [elementQualityTier, setElementQualityTier] = useState(() => (LIVE_PREVIEW_TIERS.includes(saved.elementQualityTier) ? saved.elementQualityTier : 'draft'));
+  // Every non-primary instance — glass duplicates (data-only) AND real
+  // elements (added or duplicated), persisted with the rest of Studio
+  // settings (see the debounced save effect below).
+  //
+  // Restoration is validated (elements/scene-elements.js restoreExtraInstances):
+  // malformed entries, unsupported types, an entry claiming the primary's id,
+  // and repeat ids are all rejected; the batch is truncated to
+  // MAX_EXTRA_INSTANCES. IDs are collision-safe after reload by construction
+  // — nextDuplicateId/nextElementId always derive the next id from the
+  // currently-live id list, so there's no counter to reseed.
+  const [extraInstances, setExtraInstances] = useState(
+    () => restoreExtraInstances(saved.extraInstances, { primaryId: PRIMARY_ELEMENT_ID, maxCount: MAX_EXTRA_INSTANCES })
+  );
+  const [selectedElementId, setSelectedElementId] = useState(PRIMARY_ELEMENT_ID);
+  const [elementsOpen, setElementsOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+  // Scene Templates — LOCAL-only (localStorage) persistence of a full scene
+  // recipe (the exact same field set as the settings-save effect further
+  // down). captureSceneRecipe/applySceneRecipe live near applyFxPreset,
+  // below all the fields they read/write; this is just the list + its rail
+  // panel's open/closed state, declared alongside the other element-system
+  // UI state above for the same reason.
+  const [sceneTemplates, setSceneTemplates] = useState(loadSavedTemplates);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [templateNameDraft, setTemplateNameDraft] = useState('');
+  const [templateStatus, setTemplateStatus] = useState('');
+  // Undo/redo lives in a ref (not state) so pushes never themselves trigger a
+  // render; historyTick is the render trigger for canUndo/canRedo display.
+  // The push/undo/redo mechanics themselves are the pure, unit-tested
+  // functions in elements/history.js — this ref just holds the {undo,redo}
+  // shape they operate on.
+  const elementHistoryRef = useRef(createHistory());
+  const [, setHistoryTick] = useState(0);
+
+  // Studio's GLB asset library (Phase 3 — docs/plans/ORIGINAL-STUDIO-
+  // CINEMATIC-SETS-4K-PLAN.md "GLB import and asset safety"). This is the
+  // ONE shared source of truth: StudioElementInspector's GlbAssetControl
+  // reads it for the picker UI, and the live-object-sync effect below
+  // builds `ctx.glbAssetsById` from it for factories.js's glb-import
+  // factory to resolve an assetId -> readUrl — never two independent
+  // copies. Never persisted to localStorage (unlike every other piece of
+  // Studio state above) — it's a live mirror of the server-side admin-only
+  // library, always re-fetched, never assumed still valid from a prior
+  // session.
+  const [glbAssets, setGlbAssets] = useState([]);
+  const refreshGlbAssets = useCallback(async () => {
+    if (!authedFetch) return { assets: [] };
+    const res = await authedFetch('/api/dashboard/studio-assets?action=list');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    setGlbAssets(Array.isArray(data.assets) ? data.assets : []);
+    return data;
+  }, [authedFetch]);
+
+  // Proactive fetch — GlbAssetControl (StudioElementInspector) ALSO
+  // refreshes this on its own mount, but that only happens once the user
+  // actually opens a glb-import instance's Inspector panel. A saved scene
+  // reloads with `extraInstances` (and any glb-import assetId selection)
+  // already restored from localStorage BEFORE the user has clicked
+  // anything — without this, `glbAssets` stays empty through the live-
+  // object-sync effect's first run, that element's initial load attempt
+  // finds no URL to resolve and gives up (by design — see glbLoadAsset),
+  // and nothing else was ever going to prompt a retry. This closes that
+  // gap independently of whether the Inspector is ever opened.
+  //
+  // Gated on elementsV1Enabled for the SAME reason the live-object-sync
+  // effect is (below): the flag has to gate the WHOLE element system, not
+  // just rendering — a persisted glb-import instance sitting inert in
+  // `extraInstances` with the flag off must never trigger a live network
+  // call to the admin-only studio-assets endpoint, regardless of whether
+  // anything from it would ever actually render.
+  useEffect(() => {
+    if (!authedFetch || !elementsV1Enabled) return;
+    const hasGlbImportWithAsset = extraInstances.some((i) => i.type === 'glb-import' && i.appearance?.assetId);
+    if (hasGlbImportWithAsset && glbAssets.length === 0) {
+      refreshGlbAssets().catch(() => {}); // best-effort — an admin-only 401/403 here just means the element stays empty, same honest fallback as everywhere else
+    }
+    // Deliberately keyed on extraInstances/authedFetch/elementsV1Enabled
+    // only, not glbAssets itself — this only ever needs to FIRE the fetch
+    // once per "went from nothing selected to something selected" (or
+    // "flag just turned on"); refreshGlbAssets' own setGlbAssets call is
+    // what actually updates state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [extraInstances, authedFetch, elementsV1Enabled]);
+
+  const primaryInstance = useMemo(() => normalizeElementInstance({
+    id: PRIMARY_ELEMENT_ID,
+    enabled: glass.on,
+    depth: 'hero',
+    transform: { position: glass.position, rotation: glass.rotationOffset, scale: [glass.scale, glass.scale, glass.scale] },
+    material: { tint: glass.tint, clarity: glass.clarity },
+    motion: { rotate: glass.rotate, rotSpeed: glass.rotSpeed },
+    random: { locked: Boolean(elementLocks[PRIMARY_ELEMENT_ID]?.locked), groups: { transform: false, material: false, motion: false, appearance: false } },
+  }, 'glass-petal-sphere'), [glass, elementLocks]);
+
+  // Extras carry their own normalized snapshot from creation/duplicate-time;
+  // only their lock status stays live-bound to the shared `elementLocks` map
+  // (so the per-row lock icon behaves identically to the primary's).
+  const elementInstances = useMemo(() => [
+    primaryInstance,
+    ...extraInstances.map((inst) => ({ ...inst, random: { ...inst.random, locked: Boolean(elementLocks[inst.id]?.locked) } })),
+  ], [primaryInstance, extraInstances, elementLocks]);
+
+  const selectedInstance = useMemo(
+    () => elementInstances.find((i) => i.id === selectedElementId) || null,
+    [elementInstances, selectedElementId]
+  );
+
+  // Rendered = the primary, plus any extraInstances entry whose type isn't
+  // singleInstanceRenderer (real elements — see the live-object sync effect).
+  // A glass duplicate never counts toward either the active/rendered count
+  // or the performance budget, regardless of its own `enabled` flag, because
+  // it can't render at all.
+  const renderedElementInstances = useMemo(
+    () => elementInstances.filter((i) => isRenderableInstance(i, PRIMARY_ELEMENT_ID)),
+    [elementInstances]
+  );
+  // Follows the LIVE preview quality tier, not a hardcoded 'draft' — a
+  // higher tier has a higher max (quality.js QUALITY_TIERS), so the same
+  // scene can read "over budget" at Draft and comfortably under at Social.
+  const elementBudget = useMemo(() => budgetStatus(renderedElementInstances, elementQualityTier), [renderedElementInstances, elementQualityTier]);
+
+  // Per-instance placement check (elements/placement.js placementWarningForInstance)
+  // for the CURRENTLY selected format — 'outside-frame', 'overlaps-artwork',
+  // 'intentional-overlap' (kinetic-rings/glass — by design, not a mistake),
+  // or null. Keyed by id so the Elements card can badge every row and the
+  // Inspector can banner the selected one, from one computation. Every
+  // instance is checked (including the primary — its position/scale are
+  // user-editable too), using its EFFECTIVE (format-override-resolved)
+  // transform and its type's declared bounding-sphere radius — not just its
+  // center point (see placement.js's bounds-model comment).
+  const elementPlacementWarnings = useMemo(() => {
+    const map = {};
+    elementInstances.forEach((inst) => {
+      map[inst.id] = placementWarningForInstance(inst, elementFormatId, getElementDefinition(inst.type));
+    });
+    return map;
+  }, [elementInstances, elementFormatId]);
+
+  const snapshotElementState = useCallback(
+    () => ({ glass, elementLocks, sceneSeed, extraInstances }),
+    [glass, elementLocks, sceneSeed, extraInstances]
+  );
+
+  const pushElementHistory = useCallback(() => {
+    elementHistoryRef.current = pushHistory(elementHistoryRef.current, snapshotElementState());
+    setHistoryTick((t) => t + 1);
+  }, [snapshotElementState]);
+
+  // Mutations that go through applyElementMutation (and are therefore
+  // undoable): visibility toggle, lock toggle, randomize, reset, apply
+  // preset, add, duplicate, remove. Live slider/color drags in the Inspector
+  // go straight to state — matching the existing Glass card's un-undoable
+  // slider behavior — so dragging doesn't spam the history stack with one
+  // entry per pointermove.
+  const applyElementMutation = useCallback((mutate) => {
+    pushElementHistory();
+    mutate();
+  }, [pushElementHistory]);
+
+  // Selection is NOT part of the snapshot — it's normalized after every
+  // restore instead (normalizeSelection, elements/scene-elements.js): if the
+  // instance that was selected before an undo/redo no longer exists in the
+  // restored extraInstances (e.g. undoing past the moment it was created),
+  // selection falls back to the primary rather than pointing at nothing.
+  const restoreElementSnapshot = useCallback((snap) => {
+    setGlass(snap.glass);
+    setElementLocks(snap.elementLocks);
+    setSceneSeed(snap.sceneSeed);
+    const nextExtras = Array.isArray(snap.extraInstances) ? snap.extraInstances : [];
+    setExtraInstances(nextExtras);
+    setSelectedElementId((cur) => normalizeSelection(cur, nextExtras, PRIMARY_ELEMENT_ID));
+  }, []);
+
+  const undoElements = useCallback(() => {
+    const { history, snapshot } = undoHistory(elementHistoryRef.current, snapshotElementState());
+    if (!snapshot) return;
+    elementHistoryRef.current = history;
+    restoreElementSnapshot(snapshot);
+    setHistoryTick((t) => t + 1);
+  }, [snapshotElementState, restoreElementSnapshot]);
+
+  const redoElements = useCallback(() => {
+    const { history, snapshot } = redoHistory(elementHistoryRef.current, snapshotElementState());
+    if (!snapshot) return;
+    elementHistoryRef.current = history;
+    restoreElementSnapshot(snapshot);
+    setHistoryTick((t) => t + 1);
+  }, [snapshotElementState, restoreElementSnapshot]);
+
+  // Primary -> the real glass.on toggle. A real extraInstances element -> its
+  // own `enabled` flag (genuinely shows/hides its live three.js object via
+  // the sync effect). A glass duplicate -> no-op; the Elements card disables
+  // that row's control entirely (nothing to show/hide), so this is defense
+  // in depth, not the primary guard.
+  const toggleElementVisible = useCallback((id) => {
+    if (id === PRIMARY_ELEMENT_ID) {
+      applyElementMutation(() => setGlassKey('on', !glass.on));
+      return;
+    }
+    applyElementMutation(() => setExtraInstances((prev) => prev.map((i) => {
+      if (i.id !== id || !isRenderableInstance(i, PRIMARY_ELEMENT_ID)) return i;
+      return { ...i, enabled: !i.enabled };
+    })));
+  }, [applyElementMutation, glass.on, setGlassKey]);
+
+  const toggleElementLock = useCallback((id) => {
+    applyElementMutation(() => setElementLocks((prev) => ({ ...prev, [id]: { locked: !prev[id]?.locked } })));
+  }, [applyElementMutation]);
+
+  // Primary -> the existing glass-specific randomize (material/motion/scale;
+  // position/rotation untouched, same as before). A real extraInstances
+  // element -> the generic randomizeInstanceFields off its own catalog
+  // randomRanges. A glass duplicate is inert data with nothing on screen to
+  // vary, so this no-ops for it — `canRandomizeSelected` below keeps the UI
+  // control disabled for that case too. Intensity-aware via
+  // elements/intensity.js (Refine/Remix/Transform/Wild); 'remix' (the
+  // default, unless the user has touched the Intensity picker) is BYTE-
+  // IDENTICAL to this function's pre-intensity behavior.
+  const randomizeSelectedElement = useCallback(() => {
+    const inst = selectedInstance;
+    if (!inst || inst.random.locked) return;
+    const def = getElementDefinition(inst.type);
+    if (!def) return;
+    const nextSeed = sceneSeed + 1;
+    const intensity = randomizeIntensity;
+    if (inst.id === PRIMARY_ELEMENT_ID) {
+      const rand = mulberry32(deriveSeed(nextSeed, inst.id, 'randomize'));
+      const ranges = def.randomRanges;
+      const nextScale = snapToStep(rollNumeric(rand, glass.scale, ranges.scale, intensity), 0.02);
+      const nextRotSpeed = snapToStep(rollNumeric(rand, glass.rotSpeed, ranges.rotSpeed, intensity), 0.05);
+      const nextClarity = snapToStep(rollNumeric(rand, glass.clarity, ranges.clarity, intensity), 0.01);
+      const nextTint = rollCategorical(rand, glass.tint, ranges.tintPalette, intensity);
+      const changed = [];
+      if (nextScale !== glass.scale) changed.push('scale');
+      if (nextRotSpeed !== glass.rotSpeed) changed.push('rotate speed');
+      if (nextClarity !== glass.clarity) changed.push('clarity');
+      if (nextTint !== glass.tint) changed.push('tint');
+      applyElementMutation(() => {
+        setSceneSeed(nextSeed);
+        setGlass((g) => ({ ...g, scale: nextScale, rotSpeed: nextRotSpeed, clarity: nextClarity, tint: nextTint }));
+      });
+      setElementRandomizeReport({ [inst.id]: changed });
+      return;
+    }
+    if (!isRenderableInstance(inst, PRIMARY_ELEMENT_ID)) return; // glass duplicate — nothing to vary
+    const rand = mulberry32(deriveSeed(nextSeed, inst.id, 'randomize'));
+    const { instance: randomized, changedGroups } = randomizeInstanceFields(inst, def, rand, {
+      intensity, lockedGroups: inst.random?.groups || {},
+    });
+    applyElementMutation(() => {
+      setSceneSeed(nextSeed);
+      setExtraInstances((prev) => prev.map((i) => (i.id === inst.id ? randomized : i)));
+    });
+    setElementRandomizeReport({ [inst.id]: changedGroups });
+  }, [selectedInstance, sceneSeed, randomizeIntensity, glass, applyElementMutation]);
+
+  // "Elements only" randomization scope (plan § Randomization scopes) — every
+  // renderable, unlocked (whole-element AND per-group) instance in one
+  // atomic batch/undo step. The primary glass element is excluded (its
+  // randomRanges are flat, not bucketed — see randomizeAllElements's own doc
+  // comment in elements/scene-elements.js); "Randomize all" only ever
+  // touches real extraInstances entries.
+  const canRandomizeAllElements = extraInstances.some(
+    (i) => isRenderableInstance(i, PRIMARY_ELEMENT_ID) && !i.random?.locked
+  );
+  const randomizeAllElementsHandler = useCallback(() => {
+    const nextSeed = sceneSeed + 1;
+    const { instances: nextExtras, changedById } = randomizeAllElements(extraInstances, {
+      primaryId: PRIMARY_ELEMENT_ID,
+      intensity: randomizeIntensity,
+      deriveRand: (id) => mulberry32(deriveSeed(nextSeed, id, 'randomize')),
+    });
+    applyElementMutation(() => {
+      setSceneSeed(nextSeed);
+      setExtraInstances(nextExtras);
+    });
+    setElementRandomizeReport(changedById);
+  }, [sceneSeed, extraInstances, randomizeIntensity, applyElementMutation]);
+
+  const resetSelectedElement = useCallback(() => {
+    if (selectedElementId === PRIMARY_ELEMENT_ID) {
+      applyElementMutation(() => setGlass({
+        ...DEFAULT_GLASS,
+        position: [...DEFAULT_GLASS.position],
+        rotationOffset: [...DEFAULT_GLASS.rotationOffset],
+      }));
+      return;
+    }
+    // Data-only/real extraInstances reset alike — back to catalog defaults,
+    // keeping only id/name/enabled (a real element resetting shouldn't
+    // vanish from the scene if it was visible).
+    applyElementMutation(() => setExtraInstances((prev) => prev.map((i) => {
+      if (i.id !== selectedElementId) return i;
+      return normalizeElementInstance({ id: i.id, name: i.name, enabled: i.enabled }, i.type);
+    })));
+  }, [selectedElementId, applyElementMutation]);
+
+  // Primary -> the existing flat glass-preset merge (unchanged). A real
+  // extraInstances element -> applyPresetToInstance's nested transform/
+  // material/motion/appearance merge.
+  const applyElementPreset = useCallback((presetId) => {
+    const inst = selectedInstance;
+    if (!inst) return;
+    const def = getElementDefinition(inst.type);
+    const preset = def?.presets?.find((p) => p.id === presetId);
+    if (!preset) return;
+    if (inst.id === PRIMARY_ELEMENT_ID) {
+      applyElementMutation(() => setGlass((g) => ({ ...g, ...preset.values })));
+      return;
+    }
+    if (!isRenderableInstance(inst, PRIMARY_ELEMENT_ID)) return;
+    const applied = applyPresetToInstance(inst, preset);
+    applyElementMutation(() => setExtraInstances((prev) => prev.map((i) => (i.id === inst.id ? applied : i))));
+  }, [selectedInstance, applyElementMutation]);
+
+  // Live drag — not pushed to undo history (matches the existing Glass
+  // card's un-undoable slider behavior). Only for the primary/bound
+  // instance; the glass Inspector branch is the only caller.
+  const changeSelectedElementField = useCallback((field, value) => {
+    if (selectedElementId !== PRIMARY_ELEMENT_ID) return;
+    setGlassKey(field, value);
+  }, [selectedElementId, setGlassKey]);
+
+  // Live drag for a REAL extraInstances element's generic (bucket/key)
+  // controls — same un-undoable-drag convention as changeSelectedElementField.
+  const changeSceneElementField = useCallback((id, bucket, key, value) => {
+    setExtraInstances((prev) => prev.map((i) => {
+      if (i.id !== id || !isRenderableInstance(i, PRIMARY_ELEMENT_ID)) return i;
+      return { ...i, [bucket]: { ...i[bucket], [key]: value } };
+    }));
+  }, []);
+
+  const canDuplicateSelected = Boolean(selectedInstance) && extraInstances.length < MAX_EXTRA_INSTANCES;
+  const canRemoveSelected = selectedElementId !== PRIMARY_ELEMENT_ID;
+  const canRandomizeSelected = Boolean(selectedInstance) && !selectedInstance.random.locked
+    && isRenderableInstance(selectedInstance, PRIMARY_ELEMENT_ID);
+
+  const duplicateSelectedElement = useCallback(() => {
+    if (!canDuplicateSelected || !selectedInstance) return;
+    const next = duplicateInstance(
+      { extraInstances, selectedElementId },
+      { source: selectedInstance, primaryId: PRIMARY_ELEMENT_ID, maxCount: MAX_EXTRA_INSTANCES }
+    );
+    if (next.extraInstances === extraInstances) return; // pure no-op guard (at cap) — shouldn't hit given canDuplicateSelected above
+    applyElementMutation(() => {
+      setExtraInstances(next.extraInstances);
+      setSelectedElementId(next.selectedElementId);
+    });
+  }, [canDuplicateSelected, selectedInstance, extraInstances, selectedElementId, applyElementMutation]);
+
+  const removeSelectedElement = useCallback(() => {
+    if (!canRemoveSelected) return;
+    const next = removeInstance(
+      { extraInstances, elementLocks, selectedElementId },
+      selectedElementId,
+      { primaryId: PRIMARY_ELEMENT_ID }
+    );
+    applyElementMutation(() => {
+      setExtraInstances(next.extraInstances);
+      setElementLocks(next.elementLocks);
+      setSelectedElementId(next.selectedElementId);
+    });
+  }, [canRemoveSelected, extraInstances, elementLocks, selectedElementId, applyElementMutation]);
+
+  // "Add Element" — the Phase 2 affordance for a fresh instance of any real
+  // (non-singleton) catalog type. Never offered for glass-petal-sphere itself
+  // (the primary already exists; adding "another" of a singleInstanceRenderer
+  // type could only ever be the same data-only duplicate Duplicate already
+  // produces from the primary).
+  const addableElementTypes = useMemo(
+    () => listElementDefinitions().filter((d) => !d.singleInstanceRenderer),
+    []
+  );
+  const canAddElement = extraInstances.length < MAX_EXTRA_INSTANCES;
+  const addSceneElement = useCallback((type) => {
+    if (!canAddElement) return;
+    const next = createSceneElement({ extraInstances, selectedElementId }, type, { maxCount: MAX_EXTRA_INSTANCES, formatId: elementFormatId });
+    if (next.extraInstances === extraInstances) return;
+    applyElementMutation(() => {
+      setExtraInstances(next.extraInstances);
+      setSelectedElementId(next.selectedElementId);
+    });
+  }, [canAddElement, extraInstances, selectedElementId, elementFormatId, applyElementMutation]);
+
   const [shotCam, setShotCam] = useState(() => ({ ...DEFAULT_SHOTCAM, ...(saved.shotCam || {}) }));
   const setShotKey = useCallback((key, val) => setShotCam((s) => ({ ...s, [key]: val })), []);
   const [hudOn, setHudOn] = useState(saved.hudOn ?? true);
@@ -950,15 +1366,21 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   useEffect(() => {
     const id = setTimeout(() => {
       try {
-        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ perf, mat, phys, anim, cam, lightCans, lightTemplate, glass, shotCam, hudOn, frameId, envId, fx, fxPresetId, clothAspect, artworkRatio, artworkId, bgMode, bgColor, sceneId, envIntensity, videoSeconds, videoFormat }));
+        window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ perf, mat, phys, anim, cam, lightCans, lightTemplate, glass, shotCam, hudOn, frameId, envId, fx, fxPresetId, clothAspect, artworkRatio, artworkId, bgMode, bgColor, sceneId, envIntensity, videoSeconds, videoFormat, sceneSeed, lookSeed, elementLocks, extraInstances, elementFormatId, elementQualityTier, randomizeIntensity }));
       } catch { /* non-critical */ }
     }, 250);
     return () => clearTimeout(id);
-  }, [perf, mat, phys, anim, cam, lightCans, lightTemplate, glass, shotCam, hudOn, frameId, envId, fx, fxPresetId, clothAspect, artworkRatio, artworkId, bgMode, bgColor, sceneId, envIntensity, videoSeconds, videoFormat]);
+  }, [perf, mat, phys, anim, cam, lightCans, lightTemplate, glass, shotCam, hudOn, frameId, envId, fx, fxPresetId, clothAspect, artworkRatio, artworkId, bgMode, bgColor, sceneId, envIntensity, videoSeconds, videoFormat, sceneSeed, lookSeed, elementLocks, extraInstances, elementFormatId, elementQualityTier, randomizeIntensity]);
+
+  // Persist Scene Templates — infrequent (button-driven, not slider-drag), so
+  // no debounce needed (contrast the settings effect above).
+  useEffect(() => {
+    try { window.localStorage.setItem(SCENE_TEMPLATES_KEY, serializeTemplateList(sceneTemplates)); } catch { /* non-critical */ }
+  }, [sceneTemplates]);
 
   // Latest control state, readable from the render loop without re-init.
   const liveRef = useRef({});
-  liveRef.current = { phys, anim, glass, shotCam, hudOn, frameId, lightCans, fx };
+  liveRef.current = { phys, anim, glass, shotCam, hudOn, frameId, lightCans, fx, elementInstances };
 
   // ── World init — one scene per mount; controls mutate it in place. ──
   useEffect(() => {
@@ -969,10 +1391,16 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
 
     (async () => {
       const THREE = await import('three');
+      // RoundedBoxGeometry: Phase 2's Translucent Monoliths factory only —
+      // additive to this destructure, nothing existing changed.
+      // GLTFLoader/DRACOLoader/KTX2Loader/MeshoptDecoder: Phase 3 GLB import
+      // (elements/glb-loader.js) — same additive pattern.
       const {
         OrbitControls, RoomEnvironment, RGBELoader, mergeVertices,
-        EffectComposer, RenderPass, ShaderPass, UnrealBloomPass,
+        EffectComposer, RenderPass, ShaderPass, UnrealBloomPass, RoundedBoxGeometry,
+        GLTFLoader, DRACOLoader, KTX2Loader, MeshoptDecoder,
       } = await import('three-stdlib');
+      const stdlib = { RoundedBoxGeometry, GLTFLoader, DRACOLoader, KTX2Loader, MeshoptDecoder };
       if (disposed) return;
 
       const w = stage.clientWidth || 800;
@@ -986,6 +1414,12 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, PERF_LEVELS[perf].pr));
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.0;
+
+      // GLB loader bundle — Phase 3 GLB import. DRACOLoader/KTX2Loader spin
+      // up Web Workers, so this is built ONCE per world session (not per
+      // element, not per load — see glb-loader.js's own comment) and
+      // disposed in world.cleanup below.
+      const glbLoader = createGLTFLoaderBundle({ THREE, stdlib, renderer });
       // Shadows on from the start — scene sets drop the sheet's shadow on a
       // ground plane; enabling later would force material recompiles.
       renderer.shadowMap.enabled = true;
@@ -1119,6 +1553,16 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
       glassMesh.visible = false;
       scene.add(glassMesh);
 
+      // Phase 2 scene elements — one live three.js object per enabled REAL
+      // (non-singleInstanceRenderer) extraInstances entry, built/updated/
+      // disposed by its catalog factory (elements/factories.js). A single
+      // group + id-keyed Map, synced from React by a dedicated effect below
+      // (`syncElementObjects`) — additive alongside the glass mesh above,
+      // which this never touches.
+      const elementsGroup = new THREE.Group();
+      scene.add(elementsGroup);
+      const elementLiveObjects = new Map(); // id -> { type, object, factory }
+
       // Shot camera — positionable second camera; USE SHOT CAM renders it.
       const shotCamera = new THREE.PerspectiveCamera(40, w / h, 0.05, 60);
       shotCamera.position.set(0, 0, 3.2);
@@ -1236,8 +1680,9 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
       };
 
       const world = {
-        THREE, scene, camera, renderer, controls, pmrem, clothMat, clothBackMat, mirrorTex, holoUniforms, bumpTex,
+        THREE, stdlib, scene, camera, renderer, controls, pmrem, clothMat, clothBackMat, mirrorTex, holoUniforms, bumpTex,
         cans, ground, glassMesh, glassMat, shotCamera, activeCamera,
+        elementsGroup, elementLiveObjects, glbLoader,
         composer, renderPass, bloomPass, finishPass, fxActive, setEnvironment, syncFrameUniforms,
         // Capture-frame carousel: the HUD lays the frames out in a row and
         // eases `from` → `to` so switching crops slides instead of snapping.
@@ -1704,6 +2149,14 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
           glassMesh.rotation.z += gl.rotSpeed * 0.5 * dt;
           glassMesh.rotation.x += gl.rotSpeed * 0.17 * dt;
         }
+        // Phase 2 scene elements — per-frame motion for every live object,
+        // driven by its factory's own animate() and the CURRENT instance
+        // data (read fresh each frame via liveRef, not captured at create
+        // time, so a mid-drag motion-speed change takes effect immediately).
+        elementLiveObjects.forEach(({ object, factory }, id) => {
+          const inst = (liveRef.current.elementInstances || []).find((i) => i.id === id);
+          if (inst) factory.animate(object, inst, t, dt);
+        });
         controls.update();
         if (world.frameSlide.t < 1) world.frameSlide.t = Math.min(1, world.frameSlide.t + dt / 0.35);
         const cam = activeCamera();
@@ -1764,6 +2217,9 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
         clothBackMat.map?.dispose(); clothBackMat.bumpMap?.dispose();
         ground.geometry.dispose(); ground.material.dispose();
         petalGeos.forEach((g) => g.dispose()); glassMat.dispose();
+        elementLiveObjects.forEach(({ object, factory }) => factory.dispose(object));
+        elementLiveObjects.clear();
+        disposeGLTFLoaderBundle(glbLoader);
         world.bgTexture?.dispose();
         // FX chain — composer.dispose() only drops its two full-res buffers, so
         // the passes go too; PMREM output textures are ours to free as well.
@@ -1847,6 +2303,75 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
     m.needsUpdate = true;
   }, [fx.treatment, worldReady]);
 
+  // Look history — a second, independent undo/redo stack for the "global
+  // look" fields (docs/plans/ORIGINAL-STUDIO-CINEMATIC-SETS-4K-PLAN.md,
+  // Phase 5). Reuses the SAME generic elements/history.js primitive as the
+  // element system above (its own header states it's snapshot-shape-
+  // agnostic) rather than building a second mechanism. Field list mirrors
+  // exactly what applyFxPreset touches below — a full look, not just fx.
+  const lookHistoryRef = useRef(createHistory());
+  const [, setLookHistoryTick] = useState(0);
+
+  // lookSeed (NOT sceneSeed — see its declaration comment above) is part of
+  // this snapshot for the same reason sceneSeed is part of
+  // snapshotElementState: randomizeFx mutates it (so the seed keeps
+  // advancing on every roll), and an undoable action must round-trip every
+  // piece of state it mutates, not just the visible result — otherwise undo
+  // restores the look but leaves the seed counter stranded, and a future
+  // "same seed reproduces the same result" check (redo, or a Look preset
+  // built later) would draw from the wrong point in the seed sequence. Using
+  // a seed independent from the Elements scope's sceneSeed means an undo
+  // here can never roll back a seed the Element scope has already advanced
+  // past (the Codex-blocked cross-scope interference, 2026-07-23T18:24:04Z).
+  const snapshotLookState = useCallback(
+    () => ({ fx, fxPresetId, mat, envId, envIntensity, bgMode, bgColor, sceneId, lightCans, lightTemplate, lookSeed }),
+    [fx, fxPresetId, mat, envId, envIntensity, bgMode, bgColor, sceneId, lightCans, lightTemplate, lookSeed]
+  );
+
+  const pushLookHistory = useCallback(() => {
+    lookHistoryRef.current = pushHistory(lookHistoryRef.current, snapshotLookState());
+    setLookHistoryTick((t) => t + 1);
+  }, [snapshotLookState]);
+
+  // Same undoable-vs-live-drag split as applyElementMutation: preset select
+  // and randomize go through here; individual slider drags in the Material/
+  // Background/Lighting cards stay un-undoable (matches those cards' existing
+  // behavior — this doesn't turn every card into a Look-history participant).
+  const applyLookMutation = useCallback((mutate) => {
+    pushLookHistory();
+    mutate();
+  }, [pushLookHistory]);
+
+  const restoreLookSnapshot = useCallback((snap) => {
+    setFx(snap.fx);
+    setFxPresetId(snap.fxPresetId);
+    setMat(snap.mat);
+    setEnvId(snap.envId);
+    setEnvIntensity(snap.envIntensity);
+    setBgMode(snap.bgMode);
+    setBgColor(snap.bgColor);
+    setSceneId(snap.sceneId);
+    setLightCans(snap.lightCans);
+    setLightTemplate(snap.lightTemplate);
+    setLookSeed(snap.lookSeed);
+  }, []);
+
+  const undoLook = useCallback(() => {
+    const { history, snapshot } = undoHistory(lookHistoryRef.current, snapshotLookState());
+    if (!snapshot) return;
+    lookHistoryRef.current = history;
+    restoreLookSnapshot(snapshot);
+    setLookHistoryTick((t) => t + 1);
+  }, [snapshotLookState, restoreLookSnapshot]);
+
+  const redoLook = useCallback(() => {
+    const { history, snapshot } = redoHistory(lookHistoryRef.current, snapshotLookState());
+    if (!snapshot) return;
+    lookHistoryRef.current = history;
+    restoreLookSnapshot(snapshot);
+    setLookHistoryTick((t) => t + 1);
+  }, [snapshotLookState, restoreLookSnapshot]);
+
   // Switching treatment reuses the generic t1/t2/t3 slots, so clamp them into
   // the new look's ranges — otherwise a 420-line scanline count arrives as a
   // 420px halftone dot and the screen goes blank.
@@ -1878,25 +2403,185 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
   }, [applyLightTemplate]);
 
   // Randomize — a preset, then jitter its numbers so no two rolls match.
+  // Seeded (mulberry32/deriveSeed off lookSeed — this scope's OWN seed,
+  // independent of the element system's sceneSeed, see lookSeed's
+  // declaration comment above) so a given seed reproduces the exact same
+  // look, matching this codebase's "reproducible, not scattered
+  // Math.random()" rule. Pushed through the Look history as ONE undoable
+  // step (preset + jitter together), same one-push-per-user-action shape as
+  // applyElementMutation.
+  //
+  // Intensity-aware (elements/intensity.js): 'refine' "preserves composition"
+  // by NEVER swapping the current preset/treatment — it only nudges the
+  // existing fx numbers with a small jitter scale. Every other tier picks a
+  // look ('remix' may coincidentally repeat the current one — a real roll,
+  // exactly as before intensity tiers existed; 'transform'/'wild' always
+  // force a different one). LOOK_JITTER_SCALE multiplies this function's own
+  // pre-existing jitter formulas (0.28 spread / 0.2 grain / 0.25 vignette /
+  // 0.5 bloom) rather than reusing intensity.js's generic rollNumeric, since
+  // those formulas already predate the intensity system and 'remix' (scale
+  // 1) must reproduce them BYTE-IDENTICALLY for every already-approved call
+  // site that doesn't touch the new Intensity picker.
   const randomizeFx = useCallback(() => {
     const ids = Object.keys(FX_PRESETS);
-    const id = ids[Math.floor(Math.random() * ids.length)];
-    applyFxPreset(id);
-    const spec = TREATMENTS[FX_PRESETS[id].fx.treatment];
-    setFx((f) => {
-      const next = { ...f };
-      (spec?.params || []).forEach(([key, , min, max, step]) => {
-        const spread = (max - min) * 0.28;
-        const raw = Math.min(max, Math.max(min, f[key] + (Math.random() * 2 - 1) * spread));
-        next[key] = step >= 1 ? Math.round(raw / step) * step : Math.round(raw / step) * step;
-      });
-      next.grain = Math.min(1, Math.max(0, f.grain + (Math.random() - 0.5) * 0.2));
-      next.vignette = Math.min(1, Math.max(0, f.vignette + (Math.random() - 0.5) * 0.25));
-      if (f.bloom) next.bloomStrength = Math.min(2, Math.max(0.1, f.bloomStrength + (Math.random() - 0.5) * 0.5));
-      return next;
+    const nextSeed = lookSeed + 1;
+    const rand = mulberry32(deriveSeed(nextSeed, 'look', 'randomize'));
+    const intensity = randomizeIntensity;
+    const scale = LOOK_JITTER_SCALE[intensity] ?? LOOK_JITTER_SCALE[DEFAULT_INTENSITY];
+    const swapsLook = intensity !== 'refine';
+    const id = swapsLook ? rollCategorical(rand, fxPresetId, ids, intensity) : fxPresetId;
+    const baseFx = swapsLook && FX_PRESETS[id] ? { ...DEFAULT_FX, ...FX_PRESETS[id].fx } : fx;
+    const spec = TREATMENTS[baseFx.treatment];
+    const nextFx = { ...baseFx };
+    let filmChanged = false;
+    (spec?.params || []).forEach(([key, , min, max, step]) => {
+      const spread = (max - min) * 0.28 * scale;
+      const raw = Math.min(max, Math.max(min, baseFx[key] + (rand() * 2 - 1) * spread));
+      const rounded = Math.round(raw / step) * step;
+      if (rounded !== baseFx[key]) filmChanged = true;
+      nextFx[key] = rounded;
     });
-    setFxPresetId(id);
-  }, [applyFxPreset]);
+    const nextGrain = Math.min(1, Math.max(0, baseFx.grain + (rand() - 0.5) * 0.2 * scale));
+    if (nextGrain !== baseFx.grain) filmChanged = true;
+    nextFx.grain = nextGrain;
+    const nextVignette = Math.min(1, Math.max(0, baseFx.vignette + (rand() - 0.5) * 0.25 * scale));
+    if (nextVignette !== baseFx.vignette) filmChanged = true;
+    nextFx.vignette = nextVignette;
+    if (baseFx.bloom) {
+      const nextBloom = Math.min(2, Math.max(0.1, baseFx.bloomStrength + (rand() - 0.5) * 0.5 * scale));
+      if (nextBloom !== baseFx.bloomStrength) filmChanged = true;
+      nextFx.bloomStrength = nextBloom;
+    }
+    const changed = [];
+    if (swapsLook) changed.push('look');
+    if (filmChanged) changed.push('film');
+    applyLookMutation(() => {
+      setLookSeed(nextSeed);
+      if (swapsLook) applyFxPreset(id); // sets fx/mat/envId/envIntensity/bg/lights from the preset
+      setFx(nextFx); // supersedes applyFxPreset's own setFx with the jittered values
+      setFxPresetId(id);
+    });
+    setLookRandomizeReport(changed);
+  }, [lookSeed, randomizeIntensity, fx, fxPresetId, applyFxPreset, applyLookMutation]);
+
+  // ── Scene Templates ── (docs/plans/ORIGINAL-STUDIO-CINEMATIC-SETS-4K-PLAN.md
+  // "Template system" § Scene Template, Phase 5). LOCAL-only persistence —
+  // see elements/templates.js's header for the exact deferred scope (no
+  // Element/Look/Render preset kinds, no cloud/admin promotion yet).
+  // captureSceneRecipe mirrors the settings-save effect's field list exactly
+  // (same 29 keys, including both independent seeds) so "the same template +
+  // seed recreates the same preview"
+  // holds — a template is genuinely the same recipe the app itself persists
+  // as your next-visit defaults, just named and saved on demand.
+  const captureSceneRecipe = useCallback(() => ({
+    perf, mat, phys, anim, cam, lightCans, lightTemplate, glass, shotCam, hudOn, frameId, envId, fx, fxPresetId,
+    clothAspect, artworkRatio, artworkId, bgMode, bgColor, sceneId, envIntensity, videoSeconds, videoFormat,
+    sceneSeed, lookSeed, elementLocks, extraInstances, elementFormatId, elementQualityTier, randomizeIntensity,
+  }), [perf, mat, phys, anim, cam, lightCans, lightTemplate, glass, shotCam, hudOn, frameId, envId, fx, fxPresetId, clothAspect, artworkRatio, artworkId, bgMode, bgColor, sceneId, envIntensity, videoSeconds, videoFormat, sceneSeed, lookSeed, elementLocks, extraInstances, elementFormatId, elementQualityTier, randomizeIntensity]);
+
+  // Applies a loaded recipe field-by-field, through the SAME validity guard
+  // each field's own initial-load useState already uses (loadSavedDefaults
+  // above) — a template is exactly as untrusted as a hand-edited localStorage
+  // blob (it can be exported/imported as raw JSON), so every field falls
+  // back to its CURRENT value rather than being applied blind. Not pushed
+  // through either undo stack — loading a template is its own explicit,
+  // named action, not a slider tweak; see this round's as-built notes for
+  // why that's a deliberate scope line, not an oversight.
+  const applySceneRecipe = useCallback((r) => {
+    if (!r || typeof r !== 'object') return;
+    if (PERF_LEVELS[r.perf]) setPerf(r.perf);
+    if (r.mat && typeof r.mat === 'object') setMat(sanitizeMat(r.mat, mat, { finishes: FINISHES, presetIds: MATERIAL_PRESET_IDS }));
+    if (r.phys && typeof r.phys === 'object') setPhys(sanitizePhys(r.phys, phys, { pinModeIds: PIN_MODE_IDS }));
+    if (r.anim && typeof r.anim === 'object') setAnim(sanitizeAnim(r.anim, anim));
+    if (r.cam && typeof r.cam === 'object') setCam(sanitizeCam(r.cam, cam));
+    if (Array.isArray(r.lightCans) && r.lightCans.length === 4) setLightCans(sanitizeLightCans(r.lightCans, lightCans));
+    if (LIGHT_TEMPLATES[r.lightTemplate] || r.lightTemplate === '') setLightTemplate(r.lightTemplate);
+    if (r.glass && typeof r.glass === 'object') setGlass(sanitizeGlass(r.glass, glass));
+    if (r.shotCam && typeof r.shotCam === 'object') setShotCam(sanitizeShotCam(r.shotCam, shotCam));
+    if (typeof r.hudOn === 'boolean') setHudOn(r.hudOn);
+    if (FRAME_PRESETS[r.frameId]) setFrameId(r.frameId);
+    if (ENV_PRESETS[r.envId]) setEnvId(r.envId);
+    if (r.fx && typeof r.fx === 'object') setFx(sanitizeFx(r.fx, fx, { treatmentIds: Object.keys(TREATMENTS) }));
+    if (FX_PRESETS[r.fxPresetId] || r.fxPresetId === '') setFxPresetId(r.fxPresetId);
+    if (CLOTH_ASPECTS[r.clothAspect] || r.clothAspect === 'auto') setClothAspect(r.clothAspect);
+    if (r.artworkRatio == null || typeof r.artworkRatio === 'number') setArtworkRatio(r.artworkRatio ?? null);
+    if (typeof r.artworkId === 'string' && r.artworkId) setArtworkId(r.artworkId);
+    if (['scene', 'color', 'image', 'transparent'].includes(r.bgMode)) setBgMode(r.bgMode);
+    if (isHexColor(r.bgColor)) setBgColor(r.bgColor);
+    if (SCENE_PRESETS[r.sceneId]) setSceneId(r.sceneId);
+    if (isFiniteNum(r.envIntensity)) setEnvIntensity(r.envIntensity);
+    if (isFiniteNum(r.videoSeconds) && r.videoSeconds > 0) setVideoSeconds(r.videoSeconds);
+    if (VIDEO_FORMATS[r.videoFormat]) setVideoFormat(r.videoFormat);
+    if (Number.isFinite(r.sceneSeed)) setSceneSeed(r.sceneSeed);
+    if (Number.isFinite(r.lookSeed)) setLookSeed(r.lookSeed);
+    // extraInstances restored FIRST so elementLocks can be validated against
+    // the ids this recipe actually restores — not whatever happens to be
+    // live in the browser before loading (those are about to be replaced).
+    const nextExtras = restoreExtraInstances(r.extraInstances, { primaryId: PRIMARY_ELEMENT_ID, maxCount: MAX_EXTRA_INSTANCES });
+    setElementLocks(sanitizeElementLocks(r.elementLocks, [PRIMARY_ELEMENT_ID, ...nextExtras.map((i) => i.id)]));
+    setExtraInstances(nextExtras);
+    setSelectedElementId((cur) => normalizeSelection(cur, nextExtras, PRIMARY_ELEMENT_ID));
+    if (PLACEMENT_FORMATS[r.elementFormatId]) setElementFormatId(r.elementFormatId);
+    if (LIVE_PREVIEW_TIERS.includes(r.elementQualityTier)) setElementQualityTier(r.elementQualityTier);
+    if (isValidIntensity(r.randomizeIntensity)) setRandomizeIntensity(r.randomizeIntensity);
+  }, [mat, phys, anim, cam, lightCans, glass, shotCam, fx]);
+
+  const saveCurrentAsTemplate = useCallback(() => {
+    const now = Date.now();
+    const t = createSceneTemplate(sceneTemplates, { name: templateNameDraft, recipe: captureSceneRecipe(), now });
+    setSceneTemplates((prev) => addTemplate(prev, t));
+    setTemplateNameDraft('');
+    setTemplateStatus(`Saved "${t.name}".`);
+  }, [sceneTemplates, templateNameDraft, captureSceneRecipe]);
+
+  const loadTemplateById = useCallback((id) => {
+    const t = findTemplate(sceneTemplates, id);
+    if (!t) return;
+    applySceneRecipe(t.recipe);
+    setTemplateStatus(`Loaded "${t.name}".`);
+  }, [sceneTemplates, applySceneRecipe]);
+
+  const renameTemplateById = useCallback((id, name) => {
+    setSceneTemplates((prev) => renameTemplate(prev, id, name, Date.now()));
+  }, []);
+
+  const resaveTemplateById = useCallback((id) => {
+    const t = findTemplate(sceneTemplates, id);
+    if (!t) return;
+    setSceneTemplates((prev) => updateTemplateRecipe(prev, id, captureSceneRecipe(), Date.now()));
+    setTemplateStatus(`Updated "${t.name}" with the current scene.`);
+  }, [sceneTemplates, captureSceneRecipe]);
+
+  const duplicateTemplateById = useCallback((id) => {
+    setSceneTemplates((prev) => duplicateTemplate(prev, id, Date.now()));
+  }, []);
+
+  const archiveTemplateById = useCallback((id) => {
+    setSceneTemplates((prev) => archiveTemplate(prev, id, Date.now()));
+  }, []);
+
+  const unarchiveTemplateById = useCallback((id) => {
+    setSceneTemplates((prev) => unarchiveTemplate(prev, id, Date.now()));
+  }, []);
+
+  const exportTemplateById = useCallback((id) => {
+    const t = findTemplate(sceneTemplates, id);
+    if (!t || typeof window === 'undefined') return;
+    const blob = new Blob([exportTemplateJSON(t)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${t.name.replace(/[^a-z0-9-_]+/gi, '-') || 'scene-template'}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [sceneTemplates]);
+
+  const importTemplateFromJSON = useCallback((json) => {
+    const { list, error } = importTemplateJSON(sceneTemplates, json, Date.now());
+    if (error) { setTemplateStatus(error); return; }
+    setSceneTemplates(list);
+    setTemplateStatus('Imported.');
+  }, [sceneTemplates]);
 
   // ── Capture frame → start the HUD filmstrip slide from wherever it was. ──
   useEffect(() => {
@@ -1934,6 +2619,136 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
     world.glassMat.attenuationColor.set(glass.tint);
     world.glassMat.color.set('#ffffff');
   }, [glass, worldReady]);
+
+  // ── Element position/rotation offset (Phase 1 correction) → glass group.
+  // Deliberately a SEPARATE effect from the one above rather than folded into
+  // it: the auto-rotate loop continuously mutates
+  // world.glassMesh.rotation.x/z every frame (see the `raf` loop's
+  // `gl.rotate` block), so re-running `.rotation.set(...)` on every glass
+  // state change (e.g. dragging Clarity) would snap that continuous spin back
+  // to the base offset on every unrelated slider drag. Scoping the dependency
+  // array to exactly `glass.position`/`glass.rotationOffset` means this only
+  // fires when the user actually moves one of those two controls — object
+  // identity is preserved by setGlass's spread whenever an unrelated key
+  // changes, so React's dependency check correctly skips it otherwise.
+  // Position/rotation are always-safe Object3D properties (no geometry/
+  // material touched), default to [0,0,0] (identical to today's behavior),
+  // and this is pure ADDITION — the existing scale/tint/clarity effect and
+  // the animate loop's spin increment are both untouched.
+  useEffect(() => {
+    const world = worldRef.current;
+    if (!worldReady || !world?.glassMesh) return;
+    const [px, py, pz] = glass.position || [0, 0, 0];
+    world.glassMesh.position.set(px, py, pz);
+    const DEG = Math.PI / 180;
+    const [rx, ry, rz] = glass.rotationOffset || [0, 0, 0];
+    world.glassMesh.rotation.set(rx * DEG, ry * DEG, rz * DEG);
+  }, [glass.position, glass.rotationOffset, worldReady]);
+
+  // ── Scene-element sync — extraInstances (real, non-singleton types only)
+  // → live three.js objects in world.elementsGroup. ──
+  // One id-keyed entry per enabled real instance. create() runs once (first
+  // time an id appears); applyInstance() runs again ONLY when
+  // shouldReapplyInstance says the instance reference or the quality tier
+  // actually changed since the entry's last apply (elements/scene-elements.js)
+  // — editing one element does NOT re-touch every sibling's entry, and each
+  // factory further splits that call into a cheap transform/material update
+  // vs. a full geometry rebuild gated on its own topology signature (see
+  // factories.js). `resolveEffectiveInstance` (elements/placement.js) is
+  // applied right before the factory call, so a per-format transform
+  // override (none authored yet in this phase, but the mechanism is real)
+  // would take effect here. Disabling, removing, or a factory-less catalog
+  // type all fall through to the same disposal path below, so there is
+  // exactly one way an object leaves the scene, disposed exactly once. The
+  // glass mesh/material and its own dedicated effects are untouched — this
+  // only ever touches world.elementsGroup.
+  useEffect(() => {
+    const world = worldRef.current;
+    if (!worldReady || !world?.elementsGroup) return;
+    const { elementsGroup, elementLiveObjects } = world;
+    // The feature flag gates the WHOLE element system, not just the rail
+    // UI — a saved scene can carry `extraInstances` from an earlier
+    // session where the flag (or admin access) was on; visiting again
+    // with it off must reproduce ORIGINAL Studio behavior exactly (the
+    // Phase 0 exit gate), not silently keep rendering whatever was left
+    // over. Dispose anything already live and stop — never even look at
+    // extraInstances while the flag is off.
+    if (!elementsV1Enabled) {
+      Array.from(elementLiveObjects.keys()).forEach((id) => {
+        const entry = elementLiveObjects.get(id);
+        entry.factory.dispose(entry.object);
+        elementsGroup.remove(entry.object);
+        elementLiveObjects.delete(id);
+      });
+      return;
+    }
+    const { THREE, stdlib, glbLoader } = world;
+    // sceneSeed intentionally NOT in this effect's deps below — it's read
+    // fresh (current value, never stale) whenever this effect runs for any
+    // OTHER reason, but a sceneSeed change alone must not force every live
+    // element to reconcile; only homepage-particle-hero's spawn seeding
+    // (factories.js heroRebuild) reads it, and only at actual (re)creation.
+    // glbAssets IS in this effect's deps (below) — unlike sceneSeed, an
+    // asset-list change can matter to an ALREADY-existing entry: a
+    // glb-import instance whose FIRST load attempt found glbAssetsById
+    // still empty (e.g. right after a page reload, before the proactive
+    // fetch above resolves) gives up silently by design and has no other
+    // event to prompt a retry — see the `glbNeedsRetry` check below, which
+    // is what actually re-invokes applyInstance for that case (merely
+    // re-running this effect doesn't, since shouldReapplyInstance gates on
+    // instance-reference equality, which a library refresh alone can't
+    // change).
+    const glbAssetsById = {};
+    glbAssets.forEach((a) => { glbAssetsById[a.assetId] = a; });
+    const ctx = { THREE, stdlib, tier: elementQualityTier, sceneSeed, glbLoader, glbAssetsById };
+
+    const wantedIds = new Set();
+    extraInstances.forEach((inst) => {
+      if (!isRenderableInstance(inst, PRIMARY_ELEMENT_ID)) return; // glass duplicate — data-only, never gets a live object
+      const factory = getFactory(inst.type);
+      if (!factory) return; // catalog entry with no factory yet — selectable but honestly not-yet-renderable
+      if (!inst.enabled) return;
+      wantedIds.add(inst.id);
+      let entry = elementLiveObjects.get(inst.id);
+      if (!entry) {
+        const object = factory.create(ctx);
+        elementsGroup.add(object);
+        entry = { type: inst.type, object, factory, lastInstance: null, lastTier: null, lastFormatId: null };
+        elementLiveObjects.set(inst.id, entry);
+      }
+      // shouldReapplyInstance covers instance-reference + tier; format is
+      // checked alongside it (not folded into that helper, which is tested
+      // as a 2-input contract) because a format switch only matters at all
+      // once an instance actually carries a per-format override — today
+      // every instance's formatOverrides are empty, so resolveEffectiveInstance
+      // is a no-op regardless of format, but this keeps the reconciliation
+      // correct once authoring per-format overrides ships.
+      //
+      // glb-import needs one more trigger neither of those covers: an
+      // instance whose OWN reference hasn't changed but whose asset never
+      // actually loaded (glbAssetsById didn't have it yet on the attempt
+      // that ran) stays stuck empty forever otherwise — nothing about the
+      // instance itself changing again to naturally re-trigger a retry.
+      const glbNeedsRetry = inst.type === 'glb-import' && Boolean(inst.appearance?.assetId)
+        && (entry.object.userData.motion?.children.length || 0) === 0;
+      if (!glbNeedsRetry && !shouldReapplyInstance(entry, inst, elementQualityTier) && entry.lastFormatId === elementFormatId) return;
+      const effective = resolveEffectiveInstance(inst, elementFormatId);
+      factory.applyInstance(ctx, entry.object, effective);
+      entry.lastInstance = inst;
+      entry.lastTier = elementQualityTier;
+      entry.lastFormatId = elementFormatId;
+    });
+
+    // Disabled/removed since the last run — dispose and drop.
+    Array.from(elementLiveObjects.keys()).forEach((id) => {
+      if (wantedIds.has(id)) return;
+      const entry = elementLiveObjects.get(id);
+      entry.factory.dispose(entry.object);
+      elementsGroup.remove(entry.object);
+      elementLiveObjects.delete(id);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [extraInstances, worldReady, elementQualityTier, elementFormatId, glbAssets, elementsV1Enabled]);
 
   // ── Shot camera dials → position/fov; using it pauses orbit control. ──
   useEffect(() => {
@@ -2476,6 +3291,55 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
 
         <div id="cloth-studio-rail-inner" style={{ margin: 'auto 0', display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
 
+          {/* ELEMENTS + INSPECTOR — cinematic-set architecture, flag-gated.
+              Mirrors the existing Glass card below rather than replacing it (see
+              docs/plans/ORIGINAL-STUDIO-CINEMATIC-SETS-4K-PLAN.md). */}
+          {elementsV1Enabled ? (
+            <>
+              <StudioElementsCard
+                open={elementsOpen} onToggle={() => setElementsOpen((v) => !v)}
+                instances={elementInstances} selectedId={selectedElementId} onSelect={setSelectedElementId}
+                primaryElementId={PRIMARY_ELEMENT_ID}
+                onToggleVisible={toggleElementVisible} onToggleLock={toggleElementLock}
+                seed={sceneSeed} budget={elementBudget}
+                onRandomizeSelected={randomizeSelectedElement} onResetSelected={resetSelectedElement}
+                canRandomizeSelected={canRandomizeSelected}
+                onRandomizeAll={randomizeAllElementsHandler} canRandomizeAll={canRandomizeAllElements}
+                intensityTiers={INTENSITY_TIERS} intensityMeta={INTENSITY_META}
+                intensity={randomizeIntensity} onIntensityChange={setRandomizeIntensity}
+                randomizeReport={elementRandomizeReport}
+                onDuplicateSelected={duplicateSelectedElement} onRemoveSelected={removeSelectedElement}
+                canDuplicateSelected={canDuplicateSelected} canRemoveSelected={canRemoveSelected}
+                addableElementTypes={addableElementTypes} onAddElement={addSceneElement} canAddElement={canAddElement}
+                canUndo={elementHistoryRef.current.undo.length > 0} canRedo={elementHistoryRef.current.redo.length > 0}
+                onUndo={undoElements} onRedo={redoElements}
+                formats={PLACEMENT_FORMATS} formatId={elementFormatId} onFormatChange={setElementFormatId}
+                previewTiers={LIVE_PREVIEW_TIERS} qualityTier={elementQualityTier} onQualityTierChange={setElementQualityTier}
+                placementWarnings={elementPlacementWarnings}
+              />
+              <StudioElementInspector
+                open={inspectorOpen} onToggle={() => setInspectorOpen((v) => !v)}
+                instance={selectedInstance}
+                definition={getElementDefinition(selectedInstance?.type)}
+                isBound={selectedElementId === PRIMARY_ELEMENT_ID}
+                onFieldChange={changeSelectedElementField}
+                onGenericFieldChange={(bucket, key, value) => changeSceneElementField(selectedElementId, bucket, key, value)}
+                onApplyPreset={applyElementPreset}
+                placementWarning={selectedInstance ? elementPlacementWarnings[selectedInstance.id] : null}
+                authedFetch={authedFetch} glbAssets={glbAssets} onRefreshGlbAssets={refreshGlbAssets}
+              />
+              <SceneTemplatesCard
+                open={templatesOpen} onToggle={() => setTemplatesOpen((v) => !v)}
+                templates={sceneTemplates} nameDraft={templateNameDraft} onNameDraftChange={setTemplateNameDraft}
+                onSave={saveCurrentAsTemplate} onLoad={loadTemplateById} onResave={resaveTemplateById}
+                onRename={renameTemplateById} onDuplicate={duplicateTemplateById}
+                onArchive={archiveTemplateById} onUnarchive={unarchiveTemplateById}
+                onExport={exportTemplateById} onImportJSON={importTemplateFromJSON}
+                status={templateStatus}
+              />
+            </>
+          ) : null}
+
           {/* MATERIAL */}
           <RailCard
             id="cloth-material-panel" icon={<Layers size={18} strokeWidth={2} />} title="Material"
@@ -2563,12 +3427,12 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
           {/* FX — post-processing finish; renders through the composer. */}
           <RailCard
             id="cloth-fx-panel" icon={<Sparkles size={18} strokeWidth={2} />} title="Effects"
-            subtitle={FX_PRESETS[fxPresetId]?.label || [
+            subtitle={`${FX_PRESETS[fxPresetId]?.label || [
               TREATMENTS[fx.treatment]?.define ? TREATMENTS[fx.treatment].label : null,
               fx.bloom ? 'Bloom' : null,
               fx.grain > 0.001 ? `grain ${Math.round(fx.grain * 100)}%` : null,
               fx.vignette > 0.001 ? `vignette ${Math.round(fx.vignette * 100)}%` : null,
-            ].filter(Boolean).join(' · ') || 'Off'}
+            ].filter(Boolean).join(' · ') || 'Off'} · seed ${lookSeed}`}
             color="#a855f7" open={fxOpen} onToggle={() => setFxOpen((v) => !v)}
             maxH={3200}
           >
@@ -2576,7 +3440,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
               <span style={ui.label}>LOOK</span>
               <select
                 value={fxPresetId}
-                onChange={(e) => applyFxPreset(e.target.value)}
+                onChange={(e) => applyLookMutation(() => applyFxPreset(e.target.value))}
                 style={{ ...ui.btn(), appearance: 'none', width: '100%' }}
               >
                 {!fxPresetId ? <option value="">Custom…</option> : null}
@@ -2589,9 +3453,48 @@ export default function ClothStudio({ isNarrow = false, railW = 336 }) {
                 ))}
               </select>
             </label>
+            <label id="cloth-fx-look-intensity-row" style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <span style={ui.label}>RANDOMIZE INTENSITY</span>
+              <div style={{ display: 'flex', gap: 5 }}>
+                {INTENSITY_TIERS.map((tier) => (
+                  <button
+                    key={tier}
+                    title={INTENSITY_META[tier]?.description}
+                    style={{ ...ui.btn(randomizeIntensity === tier), height: 28, padding: '0 6px', fontSize: 10, flex: 1 }}
+                    onClick={() => setRandomizeIntensity(tier)}
+                  >
+                    {INTENSITY_META[tier]?.label || tier}
+                  </button>
+                ))}
+              </div>
+              <span style={{ fontFamily: GLASS.sans, fontSize: 10, lineHeight: 1.4, color: GLASS.inkMute }}>
+                Refine preserves the current look (nudges numbers only); Remix/Transform/Wild pick a new one, increasingly far from where you started. Shared with the Elements card's Randomize.
+              </span>
+            </label>
             <button id="cloth-fx-randomize-btn" style={{ ...ui.btn(), width: '100%' }} onClick={randomizeFx}>
               <Shuffle size={13} strokeWidth={2.5} style={{ marginRight: 6 }} />Randomize look
             </button>
+            {lookRandomizeReport.length ? (
+              <span style={{ ...ui.label, color: GLASS.inkMute }}>Changed: {lookRandomizeReport.join(', ')}</span>
+            ) : null}
+            <div id="cloth-fx-look-history-row" style={{ display: 'flex', gap: 8 }}>
+              <button
+                id="cloth-fx-look-undo-btn"
+                style={{ ...ui.btn(), height: 30, padding: '0 10px', fontSize: 10, flex: 1, opacity: lookHistoryRef.current.undo.length > 0 ? 1 : 0.4, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                disabled={lookHistoryRef.current.undo.length === 0}
+                onClick={undoLook}
+              >
+                <Undo2 size={12} strokeWidth={2.5} /> Undo look
+              </button>
+              <button
+                id="cloth-fx-look-redo-btn"
+                style={{ ...ui.btn(), height: 30, padding: '0 10px', fontSize: 10, flex: 1, opacity: lookHistoryRef.current.redo.length > 0 ? 1 : 0.4, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                disabled={lookHistoryRef.current.redo.length === 0}
+                onClick={redoLook}
+              >
+                <Redo2 size={12} strokeWidth={2.5} /> Redo look
+              </button>
+            </div>
             <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.5, color: GLASS.inkMute }}>A look sets the whole stage — treatment, film, material, environment light, backdrop and light rig. Tweak anything after and it becomes Custom.</span>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 4 }}>
               <span style={ui.label}>TREATMENT</span>

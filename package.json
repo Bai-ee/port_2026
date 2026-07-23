@@ -6,7 +6,7 @@
     "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
-    "test": "node --test 'features/**/__tests__/**/*.test.{js,mjs}' 'ai-seo-audit/src/__tests__/**/*.test.{js,mjs}' 'api/**/__tests__/**/*.test.{js,mjs}' 'lib/**/__tests__/**/*.test.{js,mjs}'",
+    "test": "node --test 'features/**/__tests__/**/*.test.{js,mjs}' 'ai-seo-audit/src/__tests__/**/*.test.{js,mjs}' 'api/**/__tests__/**/*.test.{js,mjs}' 'lib/**/__tests__/**/*.test.{js,mjs}' 'app/**/__tests__/**/*.test.{js,mjs}'",
     "scout:brief": "node ./features/not-the-rug-brief/run.js --client not-the-rug",
     "scout:brief:fresh": "node ./features/not-the-rug-brief/run.js --client not-the-rug --fresh",
     "scout:weather": "node ./features/not-the-rug-brief/weather.js --client not-the-rug",

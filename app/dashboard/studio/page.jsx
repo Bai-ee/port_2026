@@ -2189,7 +2189,7 @@ export default function StudioPage() {
           Stacks vertically on narrow screens; the board sits above, the UI below. */}
       <div id="studio-main-row" style={{ flex: 1, position: 'relative', minHeight: 0, display: isNarrow ? 'flex' : 'block', flexDirection: isNarrow ? 'column' : undefined }}>
         {tool === 'cloth' ? (
-          <ClothStudio isNarrow={isNarrow} railW={RAIL_W} />
+          <ClothStudio isNarrow={isNarrow} railW={RAIL_W} isAdmin={isAdmin} authedFetch={authedFetch} />
         ) : tool === 'mockup' ? (
         <>
         {/* Canvas/board — the page bg shows through as the board surface. Desktop:
