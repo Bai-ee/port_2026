@@ -161,9 +161,11 @@ export async function POST(request) {
   const redditSignals = collectRedditSignals(marketingBrief);
 
   // reply-pool recipes can run on watchlist data alone; agentData-recipes need it.
-  const needsAgentData = recipeIds.some((id) => !['reply-pool', 'reddit-signals'].includes(getRecipe(id)?.contentKind));
+  const needsAgentData = recipeIds.some((id) => !['reply-pool', 'reddit-signals', 'opportunity-pool'].includes(getRecipe(id)?.contentKind));
   const needsRedditSignals = recipeIds.some((id) => getRecipe(id)?.contentKind === 'reddit-signals');
   const wantsReplyPool = recipeIds.some((id) => getRecipe(id)?.contentKind === 'reply-pool');
+  const wantsOpportunityPool = recipeIds.some((id) => getRecipe(id)?.contentKind === 'opportunity-pool');
+  const opportunitySignals = marketingBrief?.opportunitySignals || null;
   if (needsAgentData && !agentData) {
     return json({ error: 'No stored market signals to analyze yet — run a brief (or refresh signals) first.' }, 409);
   }
@@ -172,6 +174,9 @@ export async function POST(request) {
   }
   if (wantsReplyPool && !agentData && !watchlistTimelines) {
     return json({ error: 'No reply candidates yet — run a brief or pull the Watchlist (Mentions on) first.' }, 409);
+  }
+  if (wantsOpportunityPool && !opportunitySignals?.items?.length) {
+    return json({ error: 'No Opportunity Signals to analyze yet — enable it in Market Insights and refresh signals first.' }, 409);
   }
   if (agentData) {
     const agentDataChars = (() => {
@@ -203,6 +208,7 @@ export async function POST(request) {
     const kind = getRecipe(recipeId)?.contentKind;
     if (kind === 'reply-pool') return replyPool;
     if (kind === 'reddit-signals') return buildRedditAnalysisContent(marketingBrief, nowMs);
+    if (kind === 'opportunity-pool') return opportunitySignals;
     return agentData;
   };
 
@@ -260,6 +266,8 @@ export async function POST(request) {
         reportSnapshot.instagramAnalysis = { text: result.analysis, generatedAt };
       } else if (result.recipeId === 'watchlist-analysis') {
         reportSnapshot.watchlistAnalysis = { text: result.analysis, generatedAt };
+      } else if (result.recipeId === 'opportunity-signals') {
+        reportSnapshot.opportunitySignalsAnalysis = { text: result.analysis, generatedAt };
       } else if (result.recipeId === 'reply-targets') {
         nextDigestRecipes = [
           ...nextDigestRecipes.filter((item) => item?.recipeId !== 'reply-targets'),

@@ -310,6 +310,77 @@ export function InstagramAnalysisBlock({ res }) {
   );
 }
 
+// Render the Opportunity Signals skill — public buying-signal scan. Read-only
+// review: each card is a candidate opportunity with its trigger, likely problem,
+// and a non-pitch response angle. No CRM controls, no send/draft actions — v1
+// proves signal quality only. See docs/plans/OPPORTUNITY-SIGNALS-MARKET-SIGNALS-PLAN.md.
+export function OpportunitySignalsBlock({ res }) {
+  const { data, prose } = parseRecipeAnalysis(res.analysis);
+  const dq = data?.dataQuality || null;
+  const conf = dq?.overallConfidence;
+  const opportunities = Array.isArray(data?.opportunities) ? data.opportunities : [];
+  return (
+    <div className="kit-paper" key={`recipe-brief-${res.recipeId}`} id="recipe-brief-opportunity-signals">
+      <h2 className="b-headline">Opportunity Signals</h2>
+
+      {dq ? (
+        <div className="meta-grid" style={{ marginBottom: 18 }}>
+          <div className="meta-tile"><div className="k">Items analyzed</div><div className="v">{dq.itemsAnalyzed != null ? dq.itemsAnalyzed : '—'}</div></div>
+          <div className="meta-tile"><div className="k">Confidence</div><div className="v">{conf || '—'}</div></div>
+          <div className="meta-tile"><div className="k">Cost</div><div className="v">{typeof res.costUsd === 'number' && res.costUsd > 0 ? `≈ $${res.costUsd.toFixed(3)}` : '—'}</div></div>
+        </div>
+      ) : null}
+
+      {opportunities.length ? (
+        <div className="b-stack">
+          {opportunities.map((o, i) => {
+            const who = [o.person, o.company].filter(Boolean).join(' / ') || 'Unknown';
+            return (
+              <div className="b-card" key={`opp-${i}`}>
+                <div className="b-theme-head">
+                  <span className="b-handle-name">{who}</span>
+                  <span className="b-tags">
+                    {o.platform ? <span className="dur">{o.platform}</span> : null}
+                    {o.score != null ? <span className="status-tag">{o.score}/10</span> : null}
+                    {o.confidence ? <span className="dur">{o.confidence}</span> : null}
+                    {o.url ? <a className="b-link" href={o.url} target="_blank" rel="noopener noreferrer">source</a> : null}
+                  </span>
+                </div>
+                {o.currentTrigger ? <p className="pull" style={{ margin: '12px 0 0', maxWidth: 'none' }}>“{o.currentTrigger}”</p> : null}
+                {o.likelyProblem ? <div className="b-sowhat"><span className="lbl">Likely problem</span>{o.likelyProblem}</div> : null}
+                {o.relevantService ? <p className="b-body" style={{ margin: '10px 0 0' }}><strong>Relevant to:</strong> {o.relevantService}</p> : null}
+                {o.possibleResponse ? <p className="b-body" style={{ margin: '6px 0 0' }}><strong>Angle:</strong> {o.possibleResponse}</p> : null}
+                {o.followUpSuggestion ? <div className="b-sowhat"><span className="lbl">Follow up</span>{o.followUpSuggestion}</div> : null}
+                {o.riskNotes ? <p className="b-body mono" style={{ fontSize: 11, margin: '8px 0 0', color: 'var(--ink-soft)' }}>⚠ {o.riskNotes}</p> : null}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="b-body">No opportunities found this run. Enable platforms/queries in Opportunity Signals settings and refresh Market Signals, then re-run this skill.</p>
+      )}
+
+      {Array.isArray(dq?.gaps) && dq.gaps.length ? (
+        <>
+          <div className="b-sec" style={{ marginTop: 22 }}>What we still don&apos;t know</div>
+          <div className="b-stack">
+            {dq.gaps.map((g, i) => (
+              <p className="b-body" key={`opp-gap-${i}`} style={{ margin: 0 }}>• {g}</p>
+            ))}
+          </div>
+        </>
+      ) : null}
+
+      {prose ? (
+        <>
+          <div className="b-sec" style={{ marginTop: 22 }}>Summary</div>
+          <div style={{ marginTop: 4 }}><Prose text={prose} keyPrefix="prose-opportunity-signals" /></div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 // Render one recipe synthesis as a brief-kit paper (UI-kit components only —
 // b-eyebrow / b-headline / meta-grid / b-grid / b-card / stat-row / pull / dur).
 export function RecipeBriefBlock({ res, recipeCatalog }) {

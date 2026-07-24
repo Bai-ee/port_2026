@@ -1519,6 +1519,37 @@ function buildInstagramBriefSection(analysisText) {
   return `${overviewHtml}${actionHtml}${threadCards}${spotlightHtml}${proseFallback}`;
 }
 
+/** Opportunity Signals brief — public buying-signal opportunities, each with a
+ *  trigger quote, likely problem, and a non-pitch response angle. Same JSON-first
+ *  persisted-analysis shape as the other platform briefs; capped to the top
+ *  high-confidence items for the email (full list lives in the dashboard REPORT
+ *  block). See docs/plans/OPPORTUNITY-SIGNALS-MARKET-SIGNALS-PLAN.md. */
+function buildOpportunitySignalsBriefSection(analysisText) {
+  const { data, prose } = parseRecipeAnalysis(analysisText);
+  if (!data && !prose) return '';
+
+  const sec = (t) => `<div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:${DT.light};margin:0 0 6px;">${t}</div>`;
+  const link = (url) => url ? `<a href="${escapeHtml(url)}" style="color:${DT.accent};font-family:${DT.fMono};font-size:10px;letter-spacing:.08em;text-transform:uppercase;">Source &rarr;</a>` : '';
+
+  const opportunities = (Array.isArray(data?.opportunities) ? data.opportunities : []).slice(0, 3);
+  const cards = opportunities.length
+    ? `<div style="margin-bottom:16px;">${sec('Opportunities')}<div style="font-size:0;line-height:0;">${opportunities.map((o) => {
+        const who = [o.person, o.company].filter(Boolean).join(' / ') || 'Unknown';
+        return `<div style="display:inline-block;vertical-align:top;width:48%;min-width:200px;margin:0 2% 10px 0;background:rgba(255,255,255,0.55);border:1px solid ${DT.line};border-radius:12px;padding:13px;box-sizing:border-box;">
+          <div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:${DT.light};margin-bottom:6px;">${escapeHtml(o.platform || 'signal')}${o.confidence ? ` &middot; ${escapeHtml(o.confidence)} confidence` : ''}</div>
+          <div style="font-family:${DT.fDisp};font-weight:900;font-size:17px;line-height:1.05;text-transform:uppercase;color:${DT.ink};">${escapeHtml(who)}</div>
+          ${o.currentTrigger ? `<p style="font-family:${DT.fBody};font-size:13px;line-height:1.5;color:${DT.soft};margin:8px 0 0;">&ldquo;${escapeHtml(String(o.currentTrigger).slice(0, 240))}&rdquo;</p>` : ''}
+          ${o.possibleResponse ? `<p style="font-family:${DT.fBody};font-size:12.5px;line-height:1.5;color:${DT.ink};margin:8px 0 0;"><strong>Angle:</strong> ${escapeHtml(String(o.possibleResponse).slice(0, 200))}</p>` : ''}
+          ${o.url ? `<div style="margin-top:10px;">${link(o.url)}</div>` : ''}
+        </div>`;
+      }).join('')}</div></div>` : '';
+
+  const proseFallback = (!data && prose)
+    ? `<p style="font-family:${DT.fBody};font-size:13.5px;line-height:1.55;color:${DT.ink};margin:0;">${escapeHtml(prose).replace(/\n{2,}/g, '<br><br>').replace(/\n/g, '<br>')}</p>` : '';
+
+  return `${cards}${proseFallback}`;
+}
+
 /** Creative Brief attachment — inlines the run onboarding-brief summary + a hero
  *  image in the digest's warm-cream style. Returns '' when nothing has run. */
 function buildCreativeBriefSection(creative) {
@@ -1569,6 +1600,10 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
     .join('');
   const instagramAnalysisSections = include.instagramAnalysis === false ? '' : briefList
     .map((b) => buildInstagramBriefSection(b.intel?.instagramAnalysis))
+    .filter((s) => s && s.trim())
+    .join('');
+  const opportunitySignalsSections = include.opportunitySignals === false ? '' : briefList
+    .map((b) => buildOpportunitySignalsBriefSection(b.intel?.opportunitySignalsAnalysis))
     .filter((s) => s && s.trim())
     .join('');
   const dateStr = new Date(timestamp).toLocaleDateString('en-US', {
@@ -1702,6 +1737,7 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
     watchlist: () => section('Market Signals', 'Happening on X', watchlistSections),
     redditAnalysis: () => section('Market Signals', 'Happening on Reddit', redditAnalysisSections || noDataBlock('Happening on Reddit is enabled, but no Reddit analysis has been saved for this client yet. Run Generate & Send with Reddit enabled in Market Insights so the Reddit analyzer can write this section.')),
     instagramAnalysis: () => section('Market Signals', 'Happening on Instagram', instagramAnalysisSections || noDataBlock('Happening on Instagram is enabled, but no Instagram analysis has been saved for this client yet. Run Generate & Send with Instagram enabled in Market Insights so the Instagram analyzer can write this section.')),
+    opportunitySignals: () => section('Market Signals', 'Opportunity Signals', opportunitySignalsSections || noDataBlock('Opportunity Signals is enabled, but no opportunities have been found yet. Refresh Market Signals with Opportunity Signals enabled so the scan can write this section.')),
     followerPosts: () => section('Market Signals', 'Follower Posts', buildFollowerPostsSection(briefs)),
     // Creative
     creativeBrief: () => section('Creative', 'Creative Brief', buildCreativeBriefSection(creative)),
@@ -1732,7 +1768,7 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
   const topSections = renderGroup(['agenda', 'weather']);
   const todaySection = renderGroup(['execSummary']);
   const postContentSection = renderGroup(['videoPosts', 'videoPromo']);
-  const marketSignalsSection = renderGroup(['humanBrief', 'opportunities', 'suggestedReplies', 'signals', 'watchlistAccounts', 'suggestedPosts', 'planPreview', 'watchlist', 'redditAnalysis', 'instagramAnalysis', 'followerPosts']);
+  const marketSignalsSection = renderGroup(['humanBrief', 'opportunities', 'suggestedReplies', 'signals', 'watchlistAccounts', 'suggestedPosts', 'planPreview', 'watchlist', 'redditAnalysis', 'instagramAnalysis', 'opportunitySignals', 'followerPosts']);
   const creativeSection = renderGroup(['creativeBrief']);
   const webPerfSection = renderGroup(['ga4Traffic', 'topPages', 'trafficSources', 'keyEvents', 'homepage']);
   const platformSection = renderGroup(['platformOverview', 'signups', 'dashboards', 'pipeline']);
@@ -2354,6 +2390,14 @@ export async function GET(request) {
         redditAnalysis: available.reddit === false ? false : include.redditAnalysis,
         instagramAnalysis: available.instagram === false ? false : include.instagramAnalysis,
       };
+    } catch { /* keep saved include if the config lookup fails */ }
+    // Opportunity Signals is its own opt-in feature (marketingBriefConfig.opportunitySignals),
+    // separate from platformAvailability — gate the email section on both the
+    // digest toggle AND the feature's own enabled/includeInEmail settings.
+    try {
+      const cfgSnap = await fb.adminDb.collection('client_configs').doc(homeClientId).get();
+      const osCfg = cfgSnap.exists ? (cfgSnap.data()?.marketingBriefConfig?.opportunitySignals || null) : null;
+      if (!osCfg?.enabled || osCfg?.includeInEmail === false) include = { ...include, opportunitySignals: false };
     } catch { /* keep saved include if the config lookup fails */ }
 
     // Web Stats card settings (Website Developer bucket) — per-home-client GA4

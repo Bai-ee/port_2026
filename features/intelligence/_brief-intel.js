@@ -151,6 +151,9 @@ function projectBrief(marketingBrief, state = null) {
     redditAnalysis: marketingBrief?.reportSnapshot?.redditAnalysis?.text || '',
     // Platform-analysis slot for "Happening on Instagram". Same pattern as reddit.
     instagramAnalysis: marketingBrief?.reportSnapshot?.instagramAnalysis?.text || '',
+    // Opportunity Signals slot (public buying-signal scan) — same persisted
+    // reportSnapshot pattern as reddit/instagram analysis.
+    opportunitySignalsAnalysis: marketingBrief?.reportSnapshot?.opportunitySignalsAnalysis?.text || '',
     // Reply-targets recipe output persisted by pre-digest-refresh. Array of
     // { ok, recipeId, analysis } — the email renders the reply-targets entry.
     digestRecipes: arr(marketingBrief?.reportSnapshot?.digestRecipes),

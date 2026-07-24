@@ -38,6 +38,7 @@ const { getDefaultModuleConfig } = require('../../../../features/scout-intake/mo
 const { FALLBACK_BRIEF_SITE } = require('../../../../api/_lib/brief-fallback.cjs');
 const { collectRedditSignals, collectInstagramSignals } = require('../../../../features/intelligence/_platform-signals.js');
 const { searchReddit: scSearchReddit, searchInstagram: scSearchInstagram, redditQueriesFromCustomRows: scRedditQueries, hasApiKey: scHasApiKey } = require('../../../../features/scout-intake/external-scouts/scrapecreators-client.js');
+const { refreshOpportunitySignals } = require('../../../../features/scout-intake/opportunity-signals-search.js');
 
 import { generateStrategyPlan } from '../../../../features/strategy-builder/generate-plan.js';
 import { generateBriefSummaries } from '../../../../features/scout-intake/brief-summary-runner.mjs';
@@ -572,6 +573,49 @@ async function refreshInstagramAnalysis(clientId) {
   }
 }
 
+/** Run the opportunity-signals recipe over the stored search pool (written by
+ *  refreshOpportunitySignals below) and persist reportSnapshot.opportunitySignalsAnalysis.
+ *  Skips cleanly (no LLM cost) when the feature is disabled or no items were found —
+ *  disabled clients pay no extra search or analyzer cost. Non-blocking: never throws. */
+async function refreshOpportunitySignalsAnalysis(clientId) {
+  if (!clientId) return { ok: false, skipped: true };
+  try {
+    const cfgSnap = await fb.adminDb.collection('client_configs').doc(clientId).get();
+    const cfg = cfgSnap.exists ? (cfgSnap.data()?.marketingBriefConfig?.opportunitySignals || null) : null;
+    if (!cfg?.enabled) return { ok: false, skipped: true, reason: 'disabled' };
+
+    const snap = await fb.adminDb.collection('dashboard_state').doc(clientId).get();
+    const marketingBrief = snap.exists ? (snap.data()?.marketingBrief || {}) : {};
+    const opportunitySignals = marketingBrief?.opportunitySignals || null;
+    if (!opportunitySignals?.items?.length) return { ok: false, skipped: true, reason: 'no-opportunity-items' };
+
+    const generatedAt = new Date().toISOString();
+    const contextParts = [];
+    try {
+      const posSnap = await fb.adminDb.collection('client_configs').doc(clientId).get();
+      const pos = posSnap.exists ? posSnap.data()?.scoutConfig?.positioningContext : null;
+      if (pos) contextParts.push(typeof pos === 'string' ? pos : JSON.stringify(pos));
+    } catch { /* non-fatal */ }
+    try {
+      const voiceCtx = await loadClientBrainContext(clientId, { useFor: 'copy', maxChars: 1600 });
+      if (voiceCtx) contextParts.push(voiceCtx);
+    } catch { /* non-fatal */ }
+    const result = await runAnalysisRecipe({ recipeId: 'opportunity-signals', content: opportunitySignals, context: contextParts.join('\n\n') });
+    await logRecipeUsage({ clientId, recipeId: 'opportunity-signals', result });
+    if (result?.analysis) {
+      await fb.adminDb.collection('dashboard_state').doc(clientId).set(
+        { marketingBrief: { reportSnapshot: { opportunitySignalsAnalysis: { text: result.analysis, generatedAt } } } },
+        { merge: true }
+      );
+    }
+    logInfo('pre_digest_opportunity_signals_analysis', { clientId, ok: result.ok, costUsd: result.costUsd, items: opportunitySignals.items.length });
+    return { ok: result.ok, recipeId: 'opportunity-signals', costUsd: result.costUsd, items: opportunitySignals.items.length };
+  } catch (err) {
+    logError('pre_digest_opportunity_signals_analysis_failed', { clientId, error: err.message });
+    return { ok: false, error: err.message };
+  }
+}
+
 /** Pull fresh Reddit + Instagram signals via the direct ScrapeCreators Node client
  *  and persist them to reportSnapshot.platformTests. This is the PRODUCTION source
  *  for those platforms — the last30days subprocess can't run on Vercel, so this
@@ -637,7 +681,7 @@ export async function refreshDigestClient(clientId, { freshnessToken = '', force
     || include.videoPromo !== false
     || include.videoPosts !== false;
   const execSummaryWanted = freshBriefWanted || include.execSummary !== false;
-  const [modules, scout, watchlist, platformSignals] = await Promise.all([
+  const [modules, scout, watchlist, platformSignals, opportunitySignalsRefresh] = await Promise.all([
     !wantModules ? phaseSkip() : (creativeWanted
       ? refreshSiteCreativeModules(clientId, freshnessToken, { source, actorUid })
       : Promise.resolve({ ok: true, skipped: true, reason: 'creative-sections-off' })),
@@ -647,12 +691,17 @@ export async function refreshDigestClient(clientId, { freshnessToken = '', force
     // Runs here so it completes before the analysis/reply steps read collect*Signals.
     // This is what makes Reddit/IG populate in PRODUCTION (last30days can't run there).
     wantSignals ? refreshPlatformSignals(clientId) : phaseSkip(),
+    // Opportunity Signals search (public buying-signal scan) — its own client
+    // toggle gate, own reddit/instagram search, own stored pool. See
+    // docs/plans/OPPORTUNITY-SIGNALS-MARKET-SIGNALS-PLAN.md.
+    wantSignals ? refreshOpportunitySignals(clientId) : phaseSkip(),
   ]);
-  const [strategy, replyTargets, redditAnalysis, instagramAnalysis] = await Promise.all([
+  const [strategy, replyTargets, redditAnalysis, instagramAnalysis, opportunitySignalsAnalysis] = await Promise.all([
     wantAnalysis ? refreshStrategyPlan(clientId) : phaseSkip(),
     wantAnalysis ? refreshReplyTargets(clientId) : phaseSkip(), // needs fresh watchlist timelines already written above
     wantAnalysis ? refreshRedditAnalysis(clientId) : phaseSkip(),
     wantAnalysis ? refreshInstagramAnalysis(clientId) : phaseSkip(),
+    wantAnalysis ? refreshOpportunitySignalsAnalysis(clientId) : phaseSkip(), // needs fresh opportunitySignals pool already written above
   ]);
   const briefSummaries = !wantAnalysis
     ? { ok: true, skipped: true, reason: 'other-phase' }
@@ -671,6 +720,7 @@ export async function refreshDigestClient(clientId, { freshnessToken = '', force
     summaries: briefSummaries?.written || [],
     redditAnalysisOk: Boolean(redditAnalysis?.ok),
     instagramAnalysisOk: Boolean(instagramAnalysis?.ok),
+    opportunitySignalsAnalysisOk: Boolean(opportunitySignalsAnalysis?.ok),
   };
   if (wantAnalysis) {
     await fb.adminDb.collection('dashboard_state').doc(clientId).set(
@@ -699,6 +749,8 @@ export async function refreshDigestClient(clientId, { freshnessToken = '', force
     replyTargets,
     redditAnalysis,
     instagramAnalysis,
+    opportunitySignalsRefresh,
+    opportunitySignalsAnalysis,
     executiveSummary: briefSummaries,
     digestFreshness,
     warnings: watchlistWarning ? [{ source: 'watchlist', message: watchlistWarning }] : [],

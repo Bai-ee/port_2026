@@ -61,7 +61,7 @@ import GbpReputationBlock from './components/dashboard/GbpReputationBlock';
 import { CrossDeviceTrioShell, StudioVideoShell } from './components/dashboard/DeliverableShellPreviews';
 import ScoutTestMetaRow from './components/dashboard/ScoutTestMetaRow';
 import MarketSignalsTermControl from './components/dashboard/MarketSignalsTermControl';
-import { ReplyTargetsBlock, RedditAnalysisBlock, InstagramAnalysisBlock, RecipeBriefBlock, WatchlistAnalysisBlock } from './components/dashboard/MarketSignalsReportBlocks';
+import { ReplyTargetsBlock, RedditAnalysisBlock, InstagramAnalysisBlock, OpportunitySignalsBlock, RecipeBriefBlock, WatchlistAnalysisBlock } from './components/dashboard/MarketSignalsReportBlocks';
 
 import { VIDEO_REMIX_FOLDER_FILE_CACHE_TTL_MS, VIDEO_REMIX_FOLDER_PAGE_SIZE, VIDEO_REMIX_FOLDER_PAGE_STEP, VIDEO_REMIX_FOLDER_PAGE_MAX, SAVED_REMIX_PAGE_SIZE, VIDEO_REMIX_MAX_COUNT, STANDARD_REMIX_DEFAULTS, buildRemixRecipe, sanitizeVideoRemixFolderPreview, formatVideoRemixBytes, readVideoRemixPendingJob, writeVideoRemixPendingJob, normalizeVideoRemixFolderDetails, uploadVideoRemixFileToSignedUrl } from './lib/dashboard/video-remix';
 import { parseBriefSuggestedPost, sanitizeBriefHtmlForStandalone, parseEstimateLineItems, buildDefaultEstimateBriefDraft, hydrateEstimateBriefDraft, buildEstimateBriefConfigPayload, briefSlugify, titlePdfFileName, withDownloadParam, buildCustomBriefStarterHtml } from './lib/dashboard/brief-drafts';
@@ -3227,6 +3227,136 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     saveMarketingBriefConfig({ override: next });
   }, [marketingBriefConfig, saveMarketingBriefConfig]);
 
+  // Opportunity Signals — Market Signals elevated search (public buying-signal
+  // scan). HITLOOP's six trigger categories are only the default TEMPLATE for
+  // "Restore default" — every client's rows are their own editable data.
+  // See docs/plans/OPPORTUNITY-SIGNALS-MARKET-SIGNALS-PLAN.md.
+  const DEFAULT_OPPORTUNITY_SIGNALS_QUERIES = [
+    { label: 'Launch or redesign', query: '"launching" OR "redesigning our website" OR "new product site"', enabled: true },
+    { label: 'Bad AI design', query: '"AI generated website" OR "AI design looks bad" OR "site looks generic"', enabled: true },
+    { label: 'Site not converting', query: '"website isn\'t converting" OR "traffic but no sales" OR "conversion rate is terrible"', enabled: true },
+    { label: 'Content consistency', query: '"struggling to post consistently" OR "can\'t keep up with content" OR "need a content system"', enabled: true },
+    { label: 'Hiring creative help', query: '"looking for a designer" OR "hiring a developer" OR "need an agency"', enabled: true },
+    { label: 'Praising a competitor', query: '"this site is so clean" OR "love this rebrand" OR "this launch looks great"', enabled: true },
+  ];
+  const OPPORTUNITY_SIGNALS_QUERY_MAX = 10;
+  const opportunitySignalsConfig = marketingBriefConfig?.opportunitySignals || null;
+  const opportunitySignalsEnabled = opportunitySignalsConfig?.enabled === true;
+  const opportunitySignalsPlatforms = opportunitySignalsConfig?.platforms || ['reddit', 'instagram'];
+  const opportunitySignalsQueries = opportunitySignalsConfig?.queries?.length ? opportunitySignalsConfig.queries : DEFAULT_OPPORTUNITY_SIGNALS_QUERIES;
+
+  const updateOpportunitySignals = useCallback((patch) => {
+    setMarketingBriefConfig((prev) => ({
+      ...(prev || {}),
+      opportunitySignals: {
+        enabled: false,
+        platforms: ['reddit', 'instagram'],
+        queries: DEFAULT_OPPORTUNITY_SIGNALS_QUERIES,
+        maxQueriesPerRun: 4,
+        maxItemsPerPlatform: 10,
+        includeInEmail: true,
+        ...(prev?.opportunitySignals || {}),
+        ...patch,
+      },
+    }));
+  }, []);
+
+  const toggleOpportunitySignalsEnabled = useCallback(() => {
+    if (!marketingBriefConfig) return;
+    const next = {
+      ...marketingBriefConfig,
+      opportunitySignals: {
+        enabled: false,
+        platforms: ['reddit', 'instagram'],
+        queries: DEFAULT_OPPORTUNITY_SIGNALS_QUERIES,
+        maxQueriesPerRun: 4,
+        maxItemsPerPlatform: 10,
+        includeInEmail: true,
+        ...(marketingBriefConfig?.opportunitySignals || {}),
+        enabled: !opportunitySignalsEnabled,
+      },
+    };
+    setMarketingBriefConfig(next);
+    saveMarketingBriefConfig({ override: next });
+  }, [marketingBriefConfig, opportunitySignalsEnabled, saveMarketingBriefConfig]);
+
+  const toggleOpportunitySignalsPlatform = useCallback((platform) => {
+    const current = opportunitySignalsPlatforms;
+    const next = current.includes(platform) ? current.filter((p) => p !== platform) : [...current, platform];
+    updateOpportunitySignals({ platforms: next });
+  }, [opportunitySignalsPlatforms, updateOpportunitySignals]);
+
+  const updateOpportunitySignalsQuery = useCallback((index, patch) => {
+    setMarketingBriefConfig((prev) => {
+      const queries = [...(prev?.opportunitySignals?.queries?.length ? prev.opportunitySignals.queries : DEFAULT_OPPORTUNITY_SIGNALS_QUERIES)];
+      queries[index] = { ...(queries[index] || {}), ...patch };
+      return {
+        ...(prev || {}),
+        opportunitySignals: {
+          enabled: false, platforms: ['reddit', 'instagram'], maxQueriesPerRun: 4, maxItemsPerPlatform: 10, includeInEmail: true,
+          ...(prev?.opportunitySignals || {}),
+          queries,
+        },
+      };
+    });
+  }, []);
+
+  const addOpportunitySignalsQuery = useCallback(() => {
+    setMarketingBriefConfig((prev) => {
+      const queries = prev?.opportunitySignals?.queries?.length ? prev.opportunitySignals.queries : DEFAULT_OPPORTUNITY_SIGNALS_QUERIES;
+      if (queries.length >= OPPORTUNITY_SIGNALS_QUERY_MAX) return prev || {};
+      return {
+        ...(prev || {}),
+        opportunitySignals: {
+          enabled: false, platforms: ['reddit', 'instagram'], maxQueriesPerRun: 4, maxItemsPerPlatform: 10, includeInEmail: true,
+          ...(prev?.opportunitySignals || {}),
+          queries: [...queries, { label: `CUSTOM ${queries.length + 1}`, query: '', enabled: true }],
+        },
+      };
+    });
+  }, []);
+
+  const removeOpportunitySignalsQuery = useCallback((index) => {
+    setMarketingBriefConfig((prev) => {
+      const queries = (prev?.opportunitySignals?.queries?.length ? prev.opportunitySignals.queries : DEFAULT_OPPORTUNITY_SIGNALS_QUERIES).filter((_, i) => i !== index);
+      return {
+        ...(prev || {}),
+        opportunitySignals: {
+          enabled: false, platforms: ['reddit', 'instagram'], maxQueriesPerRun: 4, maxItemsPerPlatform: 10, includeInEmail: true,
+          ...(prev?.opportunitySignals || {}),
+          queries,
+        },
+      };
+    });
+  }, []);
+
+  const restoreDefaultOpportunitySignalsQueries = useCallback(() => {
+    updateOpportunitySignals({ queries: DEFAULT_OPPORTUNITY_SIGNALS_QUERIES });
+  }, [updateOpportunitySignals]);
+
+  // Manual "Refresh Now" — the only dashboard-triggered path that searches X
+  // (paid, not tracked on the Operating Cost card). The daily cron refreshes
+  // Reddit/Instagram automatically but never X; this is how a client sees
+  // results right after enabling the feature, and how X search stays a
+  // deliberate, visible click rather than silent recurring spend.
+  const [opportunitySignalsRefresh, setOpportunitySignalsRefresh] = useState({ loading: false, result: null, error: '' });
+  const runOpportunitySignalsRefresh = useCallback(async () => {
+    if (!user) return;
+    setOpportunitySignalsRefresh({ loading: true, result: null, error: '' });
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(apiPath('/api/dashboard/opportunity-signals/refresh'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Refresh failed.');
+      setOpportunitySignalsRefresh({ loading: false, result: data, error: '' });
+    } catch (err) {
+      setOpportunitySignalsRefresh({ loading: false, result: null, error: err instanceof Error ? err.message : 'Refresh failed.' });
+    }
+  }, [user, apiPath]);
+
   // Calendar / Agenda inclusion is governed by the Email Digest admin card
   // (`include.calendar` on digest_config), not the Market Signals card. See
   // docs/source-of-truth/EMAIL-DIGEST-CARD.md (P2b migration).
@@ -3962,6 +4092,116 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           </div>
         </section>
 
+        <section className="sg-section" id="signals-opportunity-signals-section">
+          <div className="sg-head">
+            <span className="sg-index">06</span>
+            <div>
+              <h3>Opportunity Signals</h3>
+              <p>Scan public posts for buying-signal opportunities — a launch, an AI-design complaint, a site that isn&apos;t converting, someone hiring, or praise for a competitor. Read-only: finds and scores, never posts or drafts outreach. Renders in the <strong>REPORT</strong> tab.</p>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gap: 10 }} id="opportunity-signals-toggle-list">
+            <div className="sg-source" id="opportunity-signals-toggle">
+              <span className="sg-source-value">
+                <span>Opportunity Signals{!opportunitySignalsEnabled ? ' · off' : ''}<small>Search enabled platforms for the query rows below and score results as client opportunities.</small></span>
+              </span>
+              <span className="sg-source-actions">
+                <button type="button" className={`sg-btn ${opportunitySignalsEnabled ? 'sg-btn-on' : 'sg-btn-off'}`} style={{ minWidth: 52 }} onClick={toggleOpportunitySignalsEnabled}>{opportunitySignalsEnabled ? 'ON' : 'OFF'}</button>
+              </span>
+            </div>
+          </div>
+
+          {opportunitySignalsEnabled ? (
+            <div style={{ marginTop: 14 }} id="opportunity-signals-detail">
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '0 0 8px' }} id="opportunity-signals-platform-row">
+                {['x', 'reddit', 'instagram'].map((p) => {
+                  const on = opportunitySignalsPlatforms.includes(p);
+                  return (
+                    <button
+                      key={`os-platform-${p}`}
+                      type="button"
+                      className={`sg-btn ${on ? 'sg-btn-on' : 'sg-btn-off'}`}
+                      title={p === 'x' ? 'Uses the X API — paid per search, only runs from Refresh Now below (never the daily cron).' : ''}
+                      onClick={() => toggleOpportunitySignalsPlatform(p)}
+                    >
+                      {p === 'x' ? 'X' : p[0].toUpperCase() + p.slice(1)}
+                    </button>
+                  );
+                })}
+              </div>
+              {opportunitySignalsPlatforms.includes('x') ? (
+                <p className="sg-hint" style={{ margin: '0 0 12px' }} id="opportunity-signals-x-cost-note">
+                  X search uses the real X API — paid per query, not shown on the Operating Cost card yet. It only runs when you click <strong>Refresh Now</strong> below; the automated daily refresh never searches X.
+                </p>
+              ) : null}
+
+              <div className="mu-query-list" id="opportunity-signals-query-list">
+                {opportunitySignalsQueries.map((row, index) => (
+                  <div key={`os-query-${index}`} className="mu-query">
+                    <div className="mu-query-head">
+                      <span className="mu-query-num">{String(index + 1).padStart(2, '0')}</span>
+                      <button type="button" className={`sg-btn ${row.enabled !== false ? 'sg-btn-on' : 'sg-btn-off'}`} style={{ minWidth: 52 }} onClick={() => updateOpportunitySignalsQuery(index, { enabled: row.enabled === false })}>{row.enabled !== false ? 'ON' : 'OFF'}</button>
+                      <button type="button" className="mb-config-remove-btn" onClick={() => removeOpportunitySignalsQuery(index)} disabled={opportunitySignalsQueries.length <= 1}>Remove</button>
+                    </div>
+                    <label className="mu-field">
+                      <span className="mu-label">Label</span>
+                      <input className="mu-input" value={row.label || ''} placeholder="Launch or redesign" onChange={(e) => updateOpportunitySignalsQuery(index, { label: e.target.value })} />
+                    </label>
+                    <label className="mu-field">
+                      <span className="mu-label">Search query</span>
+                      <textarea className="mu-textarea" value={row.query || ''} placeholder='"launching" OR "redesigning our website"' onChange={(e) => updateOpportunitySignalsQuery(index, { query: e.target.value })} rows={2} spellCheck={false} />
+                    </label>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, margin: '10px 0 14px', flexWrap: 'wrap' }}>
+                <button type="button" className="mb-config-mini-btn" onClick={addOpportunitySignalsQuery} disabled={opportunitySignalsQueries.length >= OPPORTUNITY_SIGNALS_QUERY_MAX}>Add Row</button>
+                <button type="button" className="mb-config-mini-btn" onClick={restoreDefaultOpportunitySignalsQueries}>Restore Default Template</button>
+              </div>
+
+              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', margin: '0 0 14px' }}>
+                <label className="mu-field" style={{ maxWidth: 160 }}>
+                  <span className="mu-label">Max queries/run</span>
+                  <input className="mu-input" type="number" min={1} max={8} value={opportunitySignalsConfig?.maxQueriesPerRun ?? 4} onChange={(e) => updateOpportunitySignals({ maxQueriesPerRun: Number(e.target.value) || 4 })} />
+                </label>
+                <label className="mu-field" style={{ maxWidth: 160 }}>
+                  <span className="mu-label">Max items/platform</span>
+                  <input className="mu-input" type="number" min={1} max={30} value={opportunitySignalsConfig?.maxItemsPerPlatform ?? 10} onChange={(e) => updateOpportunitySignals({ maxItemsPerPlatform: Number(e.target.value) || 10 })} />
+                </label>
+                <div className="sg-source" style={{ flex: '1 1 260px' }}>
+                  <span className="sg-source-value">
+                    <span>Include in daily email{opportunitySignalsConfig?.includeInEmail === false ? ' · off' : ''}<small>Show the top opportunities in the automated digest when enabled there too.</small></span>
+                  </span>
+                  <span className="sg-source-actions">
+                    <button type="button" className={`sg-btn ${opportunitySignalsConfig?.includeInEmail !== false ? 'sg-btn-on' : 'sg-btn-off'}`} style={{ minWidth: 52 }} onClick={() => updateOpportunitySignals({ includeInEmail: opportunitySignalsConfig?.includeInEmail === false })}>{opportunitySignalsConfig?.includeInEmail !== false ? 'ON' : 'OFF'}</button>
+                  </span>
+                </div>
+              </div>
+
+              <div className="mu-footer" id="opportunity-signals-footer">
+                <button type="button" className="sg-btn" onClick={runOpportunitySignalsRefresh} disabled={opportunitySignalsRefresh.loading}>
+                  {opportunitySignalsRefresh.loading ? 'Refreshing…' : 'Refresh Now'}
+                </button>
+                <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 100 }} onClick={() => saveMarketingBriefConfig({ acknowledge: 'opportunity-signals' })} disabled={marketingBriefSaving}>
+                  <span>{marketingBriefSaving ? 'Saving…' : 'Save'}</span>
+                </button>
+              </div>
+              {opportunitySignalsRefresh.error ? (
+                <p className="sg-notice sg-notice-danger" style={{ marginTop: 10 }} id="opportunity-signals-refresh-error">{opportunitySignalsRefresh.error}</p>
+              ) : null}
+              {opportunitySignalsRefresh.result ? (
+                <p className="sg-hint" style={{ marginTop: 10 }} id="opportunity-signals-refresh-result">
+                  {opportunitySignalsRefresh.result.skipped
+                    ? `Nothing to search (${opportunitySignalsRefresh.result.reason || 'skipped'}).`
+                    : `Found ${opportunitySignalsRefresh.result.itemCount ?? 0} item${opportunitySignalsRefresh.result.itemCount === 1 ? '' : 's'} across ${(opportunitySignalsRefresh.result.platforms || []).join(', ') || 'no platforms'}.`}
+                  {(opportunitySignalsRefresh.result.warnings || []).length ? ` ${opportunitySignalsRefresh.result.warnings.join(' ')}` : ''}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
+
         {marketingBriefError ? <p className="sg-notice sg-notice-danger">{marketingBriefError}</p> : null}
       </div>
     );
@@ -4122,6 +4362,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             if (res.recipeId === 'reply-targets') return <ReplyTargetsBlock key={`recipe-brief-${res.recipeId}`} res={res} replyDraftState={replyDraftState} sendReplyTargetsToPostMe={sendReplyTargetsToPostMe} />;
             if (res.recipeId === 'reddit-analysis') return <RedditAnalysisBlock key={`recipe-brief-${res.recipeId}`} res={res} />;
             if (res.recipeId === 'instagram-analysis') return <InstagramAnalysisBlock key={`recipe-brief-${res.recipeId}`} res={res} />;
+            if (res.recipeId === 'opportunity-signals') return <OpportunitySignalsBlock key={`recipe-brief-${res.recipeId}`} res={res} />;
             return <RecipeBriefBlock key={`recipe-brief-${res.recipeId}`} res={res} recipeCatalog={recipeCatalog} />;
           })}
         </div>

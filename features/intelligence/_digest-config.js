@@ -27,6 +27,7 @@ const INCLUDE_KEYS = [
   'watchlist',        // "Happening on X" watchlist analysis
   'redditAnalysis',   // "Happening on Reddit" platform analysis
   'instagramAnalysis',// "Happening on Instagram" platform analysis
+  'opportunitySignals', // Opportunity Signals — public buying-signal scan
   'creativeBrief',    // Attached Creative Brief deliverable
   // Market Signals · Strategic-brief items (each individually toggled)
   'humanBrief',       // Human brief blurb
@@ -75,6 +76,7 @@ const DEFAULT_INCLUDE = {
   watchlist: false,
   redditAnalysis: false,
   instagramAnalysis: false,
+  opportunitySignals: false,
   creativeBrief: false,
   platformOverview: false,
   ga4Traffic: false,
@@ -96,7 +98,7 @@ const LEGACY_INCLUDE_EXPANSION = {
   webStats: ['ga4Traffic', 'topPages', 'trafficSources', 'keyEvents', 'homepage'],
   platformStats: ['platformOverview', 'signups', 'dashboards', 'pipeline'],
   deployments: ['deployments', 'runtimeErrors'],
-  marketingBrief: ['humanBrief', 'opportunities', 'suggestedReplies', 'signals', 'watchlistAccounts', 'suggestedPosts', 'planPreview', 'watchlist', 'redditAnalysis', 'instagramAnalysis'],
+  marketingBrief: ['humanBrief', 'opportunities', 'suggestedReplies', 'signals', 'watchlistAccounts', 'suggestedPosts', 'planPreview', 'watchlist', 'redditAnalysis', 'instagramAnalysis', 'opportunitySignals'],
   creativeBrief: ['creativeBrief'],
 };
 

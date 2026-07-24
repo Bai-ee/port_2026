@@ -53,6 +53,55 @@ function normalizeSearches(input) {
 const ALLOWED_SOURCE_PLATFORMS = new Set(['web', 'x', 'reddit', 'instagram', 'youtube', 'tiktok', 'hackernews']);
 const DEFAULT_SOURCE_PLATFORMS = ['web', 'x', 'reddit', 'hackernews', 'instagram'];
 
+// Opportunity Signals — Market Signals elevated search (public buying-signal
+// scan). HITLOOP's six trigger categories are only the default TEMPLATE; they
+// are copied into editable client config, never hardcoded into core logic.
+// See docs/plans/OPPORTUNITY-SIGNALS-MARKET-SIGNALS-PLAN.md.
+const OPPORTUNITY_SIGNALS_PLATFORMS = new Set(['x', 'reddit', 'instagram']);
+const OPPORTUNITY_SIGNALS_QUERY_MAX = 10;
+const DEFAULT_OPPORTUNITY_SIGNALS_QUERIES = [
+  { label: 'Launch or redesign', query: '"launching" OR "redesigning our website" OR "new product site"', enabled: true },
+  { label: 'Bad AI design', query: '"AI generated website" OR "AI design looks bad" OR "site looks generic"', enabled: true },
+  { label: 'Site not converting', query: '"website isn\'t converting" OR "traffic but no sales" OR "conversion rate is terrible"', enabled: true },
+  { label: 'Content consistency', query: '"struggling to post consistently" OR "can\'t keep up with content" OR "need a content system"', enabled: true },
+  { label: 'Hiring creative help', query: '"looking for a designer" OR "hiring a developer" OR "need an agency"', enabled: true },
+  { label: 'Praising a competitor', query: '"this site is so clean" OR "love this rebrand" OR "this launch looks great"', enabled: true },
+];
+const DEFAULT_OPPORTUNITY_SIGNALS = {
+  enabled: false,
+  platforms: ['reddit', 'instagram'],
+  queries: DEFAULT_OPPORTUNITY_SIGNALS_QUERIES,
+  maxQueriesPerRun: 4,
+  maxItemsPerPlatform: 10,
+  includeInEmail: true,
+};
+
+function normalizeOpportunitySignals(input, prior) {
+  const base = prior && typeof prior === 'object' ? prior : DEFAULT_OPPORTUNITY_SIGNALS;
+  if (!input || typeof input !== 'object') return base;
+  const platforms = Array.isArray(input.platforms)
+    ? Array.from(new Set(input.platforms.map((p) => String(p || '').trim().toLowerCase()).filter((p) => OPPORTUNITY_SIGNALS_PLATFORMS.has(p))))
+    : base.platforms;
+  const queries = Array.isArray(input.queries)
+    ? input.queries
+        .map((row) => ({
+          label: String(row?.label || '').trim().slice(0, 60),
+          query: String(row?.query || '').trim().slice(0, 400),
+          enabled: row?.enabled !== false,
+        }))
+        .filter((row) => row.query)
+        .slice(0, OPPORTUNITY_SIGNALS_QUERY_MAX)
+    : base.queries;
+  return {
+    enabled: Boolean(input.enabled),
+    platforms: platforms.length ? platforms : DEFAULT_OPPORTUNITY_SIGNALS.platforms,
+    queries: queries.length ? queries : DEFAULT_OPPORTUNITY_SIGNALS_QUERIES,
+    maxQueriesPerRun: Math.max(1, Math.min(8, Number(input.maxQueriesPerRun) || base.maxQueriesPerRun || 4)),
+    maxItemsPerPlatform: Math.max(1, Math.min(30, Number(input.maxItemsPerPlatform) || base.maxItemsPerPlatform || 10)),
+    includeInEmail: input.includeInEmail !== false,
+  };
+}
+
 function normalizeSourcePlatforms(input) {
   const rows = Array.isArray(input) ? input : DEFAULT_SOURCE_PLATFORMS;
   const normalized = rows
@@ -221,10 +270,12 @@ export async function POST(request) {
   let priorLocalSignals = [];
   let priorAuditSeed = null;
   let priorCalendar = null;
+  let priorOpportunitySignals = null;
   try {
     const priorSnap = await fb.adminDb.collection('client_configs').doc(context.clientId).get();
     priorWeather = priorSnap.data()?.marketingBriefConfig?.weather || null;
     priorCalendar = priorSnap.data()?.marketingBriefConfig?.calendar || null;
+    priorOpportunitySignals = priorSnap.data()?.marketingBriefConfig?.opportunitySignals || null;
     priorScoutConfig = priorSnap.data()?.scoutConfig || null;
     priorSourceWebsiteUrl = priorSnap.data()?.sourceInputs?.websiteUrl || null;
     const a = priorSnap.data()?.marketingBriefConfig?.acknowledgedCards;
@@ -306,6 +357,11 @@ export async function POST(request) {
       mentions: body?.watchlistDetail?.mentions !== false,
       latestOnly: body?.watchlistDetail?.latestOnly === true,
     },
+    // Opportunity Signals (Market Signals elevated search) — omitted body field
+    // preserves the prior saved settings, same convention as events/localSignals.
+    opportunitySignals: body?.opportunitySignals !== undefined
+      ? normalizeOpportunitySignals(body.opportunitySignals, priorOpportunitySignals)
+      : (priorOpportunitySignals || DEFAULT_OPPORTUNITY_SIGNALS),
     updatedAtIso: new Date().toISOString(),
   };
 

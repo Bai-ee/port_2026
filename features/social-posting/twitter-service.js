@@ -926,3 +926,58 @@ export async function fetchHandleTimelines(handles = [], opts = {}) {
 
   return { ok: items.length > 0, items, errors };
 }
+
+/** Recent-search the public X firehose for a keyword query (posts from the last
+ *  7 days) — a genuine keyword search, distinct from fetchHandleTimelines'
+ *  per-user timeline reads. ScrapeCreators has no X search endpoint (see
+ *  docs/x-content/README.md), so this is the only path for X keyword search.
+ *  Paid, tier-gated: X's Free tier has NO access to this endpoint at all —
+ *  expect a 403 if the app/account isn't entitled. Read
+ *  docs/source-of-truth/X-API-AND-PROFILE-OPERATIONS.md before calling this
+ *  from anywhere new; X API spend is not visible on the Operating Cost card. */
+export async function searchXPosts(query, { limit = 10 } = {}) {
+  const q = String(query || '').trim();
+  if (!q) return { ok: false, items: [], error: 'no query' };
+
+  let client;
+  try {
+    client = getTwitterClient();
+  } catch (err) {
+    return { ok: false, items: [], error: err.message || 'no X credentials' };
+  }
+
+  try {
+    // X requires max_results in [10, 100] for recent search.
+    const paginator = await client.v2.search(q, {
+      max_results: Math.max(10, Math.min(100, limit)),
+      'tweet.fields': 'created_at,public_metrics,author_id',
+      expansions: 'author_id',
+      'user.fields': 'username,name',
+    });
+    const tweets = (paginator.tweets || []).slice(0, limit);
+    const items = tweets.map((t) => {
+      const author = typeof paginator.includes?.author === 'function' ? paginator.includes.author(t) : null;
+      const username = author?.username || '';
+      return {
+        title: author?.name || (username ? `@${username}` : 'X post'),
+        url: username ? `https://x.com/${username}/status/${t.id}` : `https://x.com/i/status/${t.id}`,
+        summary: String(t.text || '').trim(),
+        tag: username ? `@${username}` : 'x',
+        handle: username ? `@${username}` : '',
+        author: author?.name || '',
+        createdAt: t.created_at || null,
+        metrics: t.public_metrics || null,
+        platform: 'x',
+      };
+    });
+    return { ok: true, items, error: null };
+  } catch (err) {
+    const code = err?.code || err?.status;
+    // 403 = tier lacks Search entitlement (Free tier has none) — same signal
+    // fetchHandleTimelines treats as a hard-stop, not a retry-worthy error.
+    const message = code === 403
+      ? 'X API 403 — not entitled to the Search endpoint (needs Basic tier or higher).'
+      : (err?.message || 'X search failed');
+    return { ok: false, items: [], error: message, code };
+  }
+}
