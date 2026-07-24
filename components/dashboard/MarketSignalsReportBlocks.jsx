@@ -314,7 +314,103 @@ export function InstagramAnalysisBlock({ res }) {
 // review: each card is a candidate opportunity with its trigger, likely problem,
 // and a non-pitch response angle. No CRM controls, no send/draft actions — v1
 // proves signal quality only. See docs/plans/OPPORTUNITY-SIGNALS-MARKET-SIGNALS-PLAN.md.
-export function OpportunitySignalsBlock({ res }) {
+// Proof Builder panel — the evidence-before-response layer for one opportunity.
+// Read-only/planning only: no send/draft buttons. When readiness !== 'ready'
+// it shows a weak-response banner rather than presenting the framework as
+// usable. See docs/plans/OPPORTUNITY-SIGNALS-PROOF-BUILDER-PLAN.md.
+function ProofBuilderPanel({ index, opportunity, state, onBuildProof, onUpdateProofAnswer }) {
+  const { loading, error, proofPlan } = state || {};
+  const rf = proofPlan?.responseFramework || null;
+  const weak = proofPlan && proofPlan.readiness !== 'ready';
+
+  return (
+    <div className="b-card" style={{ marginTop: 10, background: 'rgba(0,0,0,0.02)' }} id={`opportunity-signals-proof-panel-${index}`}>
+      {loading ? <p className="b-body" style={{ margin: 0 }}>Building proof plan…</p> : null}
+      {error ? <p className="sg-notice sg-notice-danger" style={{ margin: 0 }}>{error}</p> : null}
+
+      {proofPlan ? (
+        <>
+          {proofPlan.detectedProblem ? <div className="b-sowhat"><span className="lbl">Detected problem</span>{proofPlan.detectedProblem}</div> : null}
+          {proofPlan.trustRequirement ? <div className="b-sowhat" style={{ marginTop: 8 }}><span className="lbl">They need to believe</span>{proofPlan.trustRequirement}</div> : null}
+          {proofPlan.proofType ? <p className="b-body" style={{ margin: '10px 0 0' }}><strong>Best proof type:</strong> {String(proofPlan.proofType).replace(/_/g, ' ')}</p> : null}
+
+          {(proofPlan.possibleProof || []).length ? (
+            <>
+              <div className="b-sec" style={{ marginTop: 14 }}>Possible proof from existing work</div>
+              <div className="b-stack">
+                {proofPlan.possibleProof.map((p, i) => (
+                  <div className="b-bubble" key={`proof-${index}-${i}`}>
+                    <div className="txt"><strong>{p.title}</strong>{p.confidence ? ` · ${p.confidence} confidence` : ''}</div>
+                    {p.whyItFits ? <div className="txt" style={{ marginTop: 4 }}>{p.whyItFits}</div> : null}
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <p className="b-body" style={{ margin: '10px 0 0' }}>No matching proof found in approved Client Brain context yet — answer the questions below or add proof to Client Brain.</p>
+          )}
+
+          {(proofPlan.targetedQuestions || []).length ? (
+            <>
+              <div className="b-sec" style={{ marginTop: 14 }}>Targeted questions</div>
+              <div className="b-stack">
+                {proofPlan.targetedQuestions.map((q, i) => (
+                  <label className="mu-field" key={`proof-q-${index}-${i}`}>
+                    <span className="mu-label">{q}</span>
+                    <input
+                      className="mu-input"
+                      value={state?.answers?.[q] || ''}
+                      onChange={(e) => onUpdateProofAnswer(index, q, e.target.value)}
+                      placeholder="Answer to strengthen the proof plan…"
+                    />
+                  </label>
+                ))}
+              </div>
+            </>
+          ) : null}
+
+          {proofPlan.recommendedProofAsset ? (
+            <div className="b-sowhat" style={{ marginTop: 14 }}>
+              <span className="lbl">Recommended proof asset — {proofPlan.recommendedProofAsset.title} ({proofPlan.recommendedProofAsset.format}, {proofPlan.recommendedProofAsset.effort} effort)</span>
+              {(proofPlan.recommendedProofAsset.ingredients || []).join(' · ')}
+            </div>
+          ) : null}
+
+          {rf ? (
+            <>
+              <div className="b-sec" style={{ marginTop: 14 }}>Response framework</div>
+              {weak ? (
+                <p className="sg-notice sg-notice-danger" style={{ margin: '4px 0 8px' }}>Weak response: no concrete proof selected yet.</p>
+              ) : (
+                <p className="b-body mono" style={{ fontSize: 11, margin: '4px 0 8px', color: 'var(--ink-soft)' }}>Readiness: {proofPlan.readiness}</p>
+              )}
+              <div className="b-card">
+                {rf.observation ? <div className="b-sowhat"><span className="lbl">Observation</span>{rf.observation}</div> : null}
+                {rf.relevance ? <div className="b-sowhat" style={{ marginTop: 8 }}><span className="lbl">Relevance</span>{rf.relevance}</div> : null}
+                {rf.evidence ? <div className="b-sowhat" style={{ marginTop: 8 }}><span className="lbl">Evidence</span>{rf.evidence}</div> : null}
+                {rf.invitation ? <div className="b-sowhat" style={{ marginTop: 8 }}><span className="lbl">Invitation</span>{rf.invitation}</div> : null}
+              </div>
+            </>
+          ) : null}
+
+          {(proofPlan.riskNotes || []).filter((n) => !/weak response/i.test(n)).length ? (
+            <p className="b-body mono" style={{ fontSize: 11, margin: '10px 0 0', color: 'var(--ink-soft)' }}>
+              ⚠ {proofPlan.riskNotes.filter((n) => !/weak response/i.test(n)).join(' · ')}
+            </p>
+          ) : null}
+        </>
+      ) : null}
+
+      <div style={{ marginTop: 12 }}>
+        <button type="button" className="sg-btn sg-cta" disabled={loading} onClick={() => onBuildProof(opportunity, index, proofPlan ? 'finalize' : 'plan')}>
+          {loading ? 'Working…' : proofPlan ? 'Regenerate with answers' : 'Build Proof'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function OpportunitySignalsBlock({ res, proofBuilderState = {}, onBuildProof, onUpdateProofAnswer, onToggleProofPanel }) {
   const { data, prose } = parseRecipeAnalysis(res.analysis);
   const dq = data?.dataQuality || null;
   const conf = dq?.overallConfidence;
@@ -335,6 +431,7 @@ export function OpportunitySignalsBlock({ res }) {
         <div className="b-stack">
           {opportunities.map((o, i) => {
             const who = [o.person, o.company].filter(Boolean).join(' / ') || 'Unknown';
+            const panelState = proofBuilderState[i];
             return (
               <div className="b-card" key={`opp-${i}`}>
                 <div className="b-theme-head">
@@ -352,6 +449,22 @@ export function OpportunitySignalsBlock({ res }) {
                 {o.possibleResponse ? <p className="b-body" style={{ margin: '6px 0 0' }}><strong>Angle:</strong> {o.possibleResponse}</p> : null}
                 {o.followUpSuggestion ? <div className="b-sowhat"><span className="lbl">Follow up</span>{o.followUpSuggestion}</div> : null}
                 {o.riskNotes ? <p className="b-body mono" style={{ fontSize: 11, margin: '8px 0 0', color: 'var(--ink-soft)' }}>⚠ {o.riskNotes}</p> : null}
+                {onBuildProof ? (
+                  <div style={{ marginTop: 10 }}>
+                    <button type="button" className="sg-btn" onClick={() => onToggleProofPanel(i, o)}>
+                      {panelState?.open ? 'Hide Proof Builder' : 'Build Proof'}
+                    </button>
+                  </div>
+                ) : null}
+                {panelState?.open ? (
+                  <ProofBuilderPanel
+                    index={i}
+                    opportunity={o}
+                    state={panelState}
+                    onBuildProof={onBuildProof}
+                    onUpdateProofAnswer={onUpdateProofAnswer}
+                  />
+                ) : null}
               </div>
             );
           })}

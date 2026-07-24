@@ -12,7 +12,7 @@ A public buying-signal scan: searches a client's editable query rows (launch/red
 **It is NOT a standalone dashboard tile, not onboarding, and not leadgen discovery.** It ships as a **toggle inside the Market Signals card** ("06 · Opportunity Signals"), same pattern as GBP Reputation. **v1 is read-only** — it finds and scores, it never posts, replies, drafts outreach, or writes to `leadgen_prospects`/any CRM.
 
 Plan / build history: [`docs/plans/OPPORTUNITY-SIGNALS-MARKET-SIGNALS-PLAN.md`](../plans/OPPORTUNITY-SIGNALS-MARKET-SIGNALS-PLAN.md) (the implementation handoff + acceptance criteria). Earlier framing doc (superseded — kept for the original "why"): [`docs/plans/OPPORTUNITY-SCOUT-PLAN.md`](../plans/OPPORTUNITY-SCOUT-PLAN.md).
-Related: [`MARKET-SIGNALS-AND-SCOUT-PROJECTION.md`](./MARKET-SIGNALS-AND-SCOUT-PROJECTION.md) · [`SEARCHABLE-PLATFORMS.md`](./SEARCHABLE-PLATFORMS.md) · [`X-API-AND-PROFILE-OPERATIONS.md`](./X-API-AND-PROFILE-OPERATIONS.md) · [`EMAIL-DIGEST-CARD.md`](./EMAIL-DIGEST-CARD.md).
+Related: [`MARKET-SIGNALS-AND-SCOUT-PROJECTION.md`](./MARKET-SIGNALS-AND-SCOUT-PROJECTION.md) · [`SEARCHABLE-PLATFORMS.md`](./SEARCHABLE-PLATFORMS.md) · [`X-API-AND-PROFILE-OPERATIONS.md`](./X-API-AND-PROFILE-OPERATIONS.md) · [`EMAIL-DIGEST-CARD.md`](./EMAIL-DIGEST-CARD.md) · [`OPPORTUNITY-SIGNALS-PROOF-BUILDER.md`](./OPPORTUNITY-SIGNALS-PROOF-BUILDER.md) (the evidence-before-response layer built on top of this feature — read it before adding any reply/outreach behavior here).
 
 ## Where to find it (UI)
 

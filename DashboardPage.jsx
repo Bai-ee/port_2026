@@ -3357,6 +3357,61 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     }
   }, [user, apiPath]);
 
+  // Proof Builder — the evidence-before-response layer for one Opportunity
+  // Signals card (docs/plans/OPPORTUNITY-SIGNALS-PROOF-BUILDER-PLAN.md). State
+  // is keyed by opportunity index within the current recipe run: { open,
+  // loading, error, proofPlan, answers }. Read-only/planning only — no send or
+  // draft action lives here.
+  const [proofBuilderState, setProofBuilderState] = useState({});
+  const buildOpportunityProof = useCallback(async (opportunity, index, mode) => {
+    if (!user) return;
+    setProofBuilderState((prev) => ({
+      ...prev,
+      [index]: { ...(prev[index] || {}), open: true, loading: true, error: '' },
+    }));
+    try {
+      const token = await user.getIdToken();
+      const answers = proofBuilderState[index]?.answers || {};
+      const res = await fetch(apiPath('/api/dashboard/opportunity-signals/proof-builder'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ opportunity, answers, mode }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) throw new Error(data?.error || 'Proof Builder failed.');
+      setProofBuilderState((prev) => ({
+        ...prev,
+        [index]: { ...(prev[index] || {}), open: true, loading: false, error: '', proofPlan: data.proofPlan },
+      }));
+    } catch (err) {
+      setProofBuilderState((prev) => ({
+        ...prev,
+        [index]: { ...(prev[index] || {}), loading: false, error: err instanceof Error ? err.message : 'Proof Builder failed.' },
+      }));
+    }
+  }, [user, apiPath, proofBuilderState]);
+  // Opens/closes the panel. Opening for the first time (no plan yet, not
+  // already loading) also kicks off the initial "plan" build — a second click
+  // on an already-built card just toggles visibility without re-fetching.
+  const toggleOpportunityProofPanel = useCallback((index, opportunity) => {
+    const cur = proofBuilderState[index];
+    if (!cur?.open) {
+      if (!cur?.proofPlan && !cur?.loading) {
+        buildOpportunityProof(opportunity, index, 'plan');
+        return;
+      }
+      setProofBuilderState((prev) => ({ ...prev, [index]: { ...(prev[index] || {}), open: true } }));
+    } else {
+      setProofBuilderState((prev) => ({ ...prev, [index]: { ...(prev[index] || {}), open: false } }));
+    }
+  }, [proofBuilderState, buildOpportunityProof]);
+  const updateOpportunityProofAnswer = useCallback((index, question, value) => {
+    setProofBuilderState((prev) => {
+      const cur = prev[index] || {};
+      return { ...prev, [index]: { ...cur, answers: { ...(cur.answers || {}), [question]: value } } };
+    });
+  }, []);
+
   // Calendar / Agenda inclusion is governed by the Email Digest admin card
   // (`include.calendar` on digest_config), not the Market Signals card. See
   // docs/source-of-truth/EMAIL-DIGEST-CARD.md (P2b migration).
@@ -4362,7 +4417,16 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             if (res.recipeId === 'reply-targets') return <ReplyTargetsBlock key={`recipe-brief-${res.recipeId}`} res={res} replyDraftState={replyDraftState} sendReplyTargetsToPostMe={sendReplyTargetsToPostMe} />;
             if (res.recipeId === 'reddit-analysis') return <RedditAnalysisBlock key={`recipe-brief-${res.recipeId}`} res={res} />;
             if (res.recipeId === 'instagram-analysis') return <InstagramAnalysisBlock key={`recipe-brief-${res.recipeId}`} res={res} />;
-            if (res.recipeId === 'opportunity-signals') return <OpportunitySignalsBlock key={`recipe-brief-${res.recipeId}`} res={res} />;
+            if (res.recipeId === 'opportunity-signals') return (
+              <OpportunitySignalsBlock
+                key={`recipe-brief-${res.recipeId}`}
+                res={res}
+                proofBuilderState={proofBuilderState}
+                onBuildProof={buildOpportunityProof}
+                onUpdateProofAnswer={updateOpportunityProofAnswer}
+                onToggleProofPanel={toggleOpportunityProofPanel}
+              />
+            );
             return <RecipeBriefBlock key={`recipe-brief-${res.recipeId}`} res={res} recipeCatalog={recipeCatalog} />;
           })}
         </div>
