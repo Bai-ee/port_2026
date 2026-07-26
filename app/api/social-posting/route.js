@@ -9,6 +9,7 @@ import {
   getTwitterCredentialStatus,
   postNow,
   processDuePosts,
+  processDuePostsForAllClients,
   publishApprovedPost,
   readSocialQueue,
   rejectSocialPost,
@@ -28,6 +29,22 @@ const require = createRequire(import.meta.url);
 const { verifyRequestUser } = require('../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../api/_lib/client-provisioning.cjs');
 const { revokeApprovalsForClient, revokeApprovalsForPost } = require('../../../api/_lib/social-approval.cjs');
+const { getHeaderValue, safeSecretEquals } = require('../../../api/_lib/auth.cjs');
+
+// The due-sweep cron used to live at /api/social-posting/process-due, a thin
+// wrapper that only called processDuePostsForAllClients. It was folded in here
+// because Vercel Hobby caps a deployment at 12 function groups and the route
+// earned none of its own. Vercel crons issue GET with a bearer CRON_SECRET, so
+// the sweep hangs off GET ahead of the user-session path below.
+//
+// Fails closed in production: no CRON_SECRET configured means no cron access.
+function isCronRequest(request) {
+  const cronSecret = process.env.CRON_SECRET || process.env.SOCIAL_POSTING_CRON_SECRET || '';
+  const provided = getHeaderValue({ authorization: request.headers.get('authorization') }, 'authorization');
+  if (cronSecret) return safeSecretEquals(provided, `Bearer ${cronSecret}`);
+  if (process.env.VERCEL_ENV === 'production' || process.env.NODE_ENV === 'production') return false;
+  return request.headers.get('x-vercel-cron') === '1';
+}
 
 function makeReqShim(request) {
   return {
@@ -54,6 +71,18 @@ async function resolveContext(request) {
 }
 
 export async function GET(request) {
+  // Cron: publish everything that is due, across all clients. Checked before
+  // the session path because a cron carries no user token.
+  if (new URL(request.url).searchParams.get('action') === 'process-due') {
+    if (!isCronRequest(request)) return json({ error: 'Unauthorized.' }, 401);
+    try {
+      const result = await processDuePostsForAllClients();
+      return json({ ok: true, posted: result.posted.length, failed: result.failed.length });
+    } catch (err) {
+      return json({ error: err.message || 'Failed to process due social posts.' }, err.status || 500);
+    }
+  }
+
   let context;
   try {
     ({ context } = await resolveContext(request));

@@ -21,11 +21,11 @@
       "schedule": "30 13 * * *"
     },
     {
-      "path": "/api/worker/approval-rollup",
+      "path": "/api/admin/daily-digest?mode=approval-rollup",
       "schedule": "20 13 * * *"
     },
     {
-      "path": "/api/social-posting/process-due",
+      "path": "/api/social-posting?action=process-due",
       "schedule": "40 13 * * *"
     }
   ]
