@@ -26,7 +26,7 @@
     },
     {
       "path": "/api/social-posting/process-due",
-      "schedule": "*/30 * * * *"
+      "schedule": "40 13 * * *"
     }
   ]
 }

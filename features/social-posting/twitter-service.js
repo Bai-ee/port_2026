@@ -262,7 +262,12 @@ const DUE_STATUSES = new Set(['scheduled', 'queued', 'failed']);
 // — it's stale history. Without this, the FIRST run of a due-sweep cron would
 // flush the entire never-sent backlog to a live account in one go. Marked
 // 'expired' (not in DUE_STATUSES) and skipped rather than posted.
-const STALE_DUE_MS = 12 * 60 * 60 * 1000; // 12h
+// 26h, not 12h: on Vercel Hobby the due-sweep cron can only run ONCE A DAY, so
+// a 12h window would silently expire any post scheduled more than 12h before
+// that single daily tick — i.e. most of them. The window must exceed the cron
+// period. If this project moves to Vercel Pro and the cron goes back to a
+// sub-daily schedule (*/30), drop this to 12h.
+const STALE_DUE_MS = 26 * 60 * 60 * 1000; // 26h — must stay > the cron period
 
 async function readDuePosts(clientId = null) {
   const nowIso = new Date().toISOString();
