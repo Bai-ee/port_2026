@@ -122,7 +122,7 @@ async function buildRollupRow(post) {
   } catch { /* not connected */ }
 
   const { token } = await signApprovalToken({ postId: post.id, clientId, platform });
-  const approvalUrl = `${appOrigin()}/post-approval/${encodeURIComponent(token)}`;
+  const approvalUrl = `${appOrigin()}/post-approval?token=${encodeURIComponent(token)}`;
 
   return {
     item: { url: post.mediaUrl, duration: 0, caption: post.content, stale: false, staleLabel: '' },

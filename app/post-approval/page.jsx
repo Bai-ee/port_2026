@@ -1,10 +1,16 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 // Public, unauthenticated approval page for the "Post to X" email button.
 // Publishing happens ONLY on an explicit click here (a POST) — the emailed
 // link itself never publishes, so an email scanner prefetching it is inert.
+//
+// The token rides as ?token= rather than a /[token] path segment so this page
+// prerenders as STATIC. A dynamic segment would make it a serverless function,
+// and Vercel Hobby caps a deployment at 12. Nothing here needs the server: the
+// page fetches its own preview client-side.
 
 const STATE_COPY = {
   loading: { title: 'Loading…', body: '' },
@@ -19,18 +25,19 @@ const STATE_COPY = {
   error: { title: 'Something went wrong', body: 'Could not load this approval link. Try again in a moment.' },
 };
 
-export default function PostApprovalPage({ params }) {
-  const { token } = use(params);
+function PostApprovalView() {
+  const token = useSearchParams().get('token') || '';
   const [state, setState] = useState('loading');
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState('');
   const [posting, setPosting] = useState(false);
 
   useEffect(() => {
+    if (!token) { setState('invalid'); return undefined; }
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/api/public/social-approve/preview?token=${encodeURIComponent(token)}`, { cache: 'no-store' });
+        const res = await fetch(`/api/public/social-approve?token=${encodeURIComponent(token)}`, { cache: 'no-store' });
         const data = await res.json().catch(() => ({}));
         if (cancelled) return;
         setState(data.state || 'error');
@@ -96,6 +103,15 @@ export default function PostApprovalPage({ params }) {
         )}
       </div>
     </main>
+  );
+}
+
+// useSearchParams needs a Suspense boundary for the page to prerender.
+export default function PostApprovalPage() {
+  return (
+    <Suspense fallback={<main id="post-approval-page" style={styles.page}><div style={styles.card}><p style={styles.body}>Loading…</p></div></main>}>
+      <PostApprovalView />
+    </Suspense>
   );
 }
 

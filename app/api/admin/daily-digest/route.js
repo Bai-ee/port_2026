@@ -2117,7 +2117,7 @@ async function enqueueAutoPublishVideoPost({ clientId, platform, videoItems, tim
   try {
     const post = await createSocialPost(clientId, { content: caption, source, platform, status: 'awaiting_approval', ...media });
     const { token } = await signApprovalToken({ postId: post.id, clientId, platform });
-    const approvalUrl = `${appOrigin()}/post-approval/${encodeURIComponent(token)}`;
+    const approvalUrl = `${appOrigin()}/post-approval?token=${encodeURIComponent(token)}`;
     step?.('success', `Auto-publish · approval link minted (@${handle || platformLabel})`);
     logInfo('daily_digest_autopublish_approval_queued', { clientId, platform, postId: post.id });
     return { ...baseCtx, approvalUrl };
