@@ -190,6 +190,14 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
   const [ownerEmail, setOwnerEmail] = useState(''); // scoped client's signup email — recipient placeholder
   const [saveStatus, setSaveStatus] = useState(null);
   const [runState, setRunState] = useState({}); // { [clientId]: 'running' | 'done' | 'error: msg' }
+  const [socialAccountStatus, setSocialAccountStatus] = useState({}); // { x: {connected, username, ...} } for the loaded client
+
+  useEffect(() => {
+    if (!user || !clientId) { setSocialAccountStatus({}); return; }
+    authFetch(user, '/api/social-posting/x-oauth', { method: 'POST', body: JSON.stringify({ action: 'accounts-list', clientId }) })
+      .then((data) => setSocialAccountStatus(data.accounts || {}))
+      .catch(() => setSocialAccountStatus({}));
+  }, [user, clientId]);
 
   const loadSettings = useCallback(async () => {
     if (!user) return;
@@ -652,6 +660,60 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
                     Queue the suggested X post on a real send
                   </label>
                   <span className="hint">On Run &amp; Send / the daily cron, the suggested x_post is queued to the social-posting system (published when “Post due” runs). Off = never queued. Previews never post.</span>
+                </div>
+
+                <div id="digest-autopublish-section" className="field" style={{ display: 'grid', gap: 10 }}>
+                  <span className="label">Auto-Publish (daily video)</span>
+                  <span className="hint">Auto publishes with no human review. Approval emails a button and publishes nothing until it is clicked.</span>
+                  {['x', 'instagram'].map((platform) => {
+                    const live = platform === 'x';
+                    const p = form.autoPublish?.platforms?.[platform] || { mode: 'off', delayMinutes: 0, maxPerDay: 1 };
+                    const acct = socialAccountStatus?.[platform];
+                    const label = PLATFORM_SECTION_LABELS[platform] || platform;
+                    const patchPlatform = (fields) => setForm((f) => ({
+                      ...f,
+                      autoPublish: {
+                        ...(f.autoPublish || {}),
+                        platforms: { ...(f.autoPublish?.platforms || {}), [platform]: { ...p, ...fields } },
+                      },
+                    }));
+                    return (
+                      <div
+                        key={platform}
+                        id={`digest-autopublish-${platform}-row`}
+                        data-section="digest-autopublish"
+                        style={{ display: 'grid', gap: 8, padding: '10px 12px', border: '1px solid var(--vrk-line, rgba(42,36,32,0.12))', borderRadius: 10, opacity: live ? 1 : 0.5 }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                          <span className="label" style={{ margin: 0 }}>{label}</span>
+                          {live ? (
+                            <span className="hint" style={{ margin: 0 }}>
+                              {acct?.connected ? `Posts as @${acct.username || 'unknown'}` : 'Not connected — connect in Social Accounts'}
+                            </span>
+                          ) : <span className="hint" style={{ margin: 0 }}>Coming soon</span>}
+                        </div>
+                        <div className="segmented" role="group" aria-label={`${label} publish mode`}>
+                          {['off', 'auto', 'approval'].map((m) => (
+                            <button key={m} type="button" disabled={!live} className={(p.mode || 'off') === m ? 'is-active' : ''} onClick={() => patchPlatform({ mode: m })}>
+                              {m}
+                            </button>
+                          ))}
+                        </div>
+                        {live ? (
+                          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                              Delay (min)
+                              <input type="number" min={0} max={1440} value={p.delayMinutes ?? 0} onChange={(e) => patchPlatform({ delayMinutes: Number(e.target.value) || 0 })} style={{ width: 70 }} />
+                            </label>
+                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                              Daily cap
+                              <input type="number" min={1} max={10} value={p.maxPerDay ?? 1} onChange={(e) => patchPlatform({ maxPerDay: Number(e.target.value) || 1 })} style={{ width: 60 }} />
+                            </label>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {SECTION_GROUPS.map(([groupLabel, items]) => {

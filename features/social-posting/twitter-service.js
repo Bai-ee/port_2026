@@ -4,9 +4,12 @@ import { createRequire } from 'node:module';
 import { config as loadDotenv } from 'dotenv';
 import { TwitterApi } from 'twitter-api-v2';
 import { scoreXPost } from '../x-growth/index.js';
+import { compactTwitterError, mapTwitterError } from './twitter-errors.js';
+import { getAdapter } from './adapters/index.js';
 
 const require = createRequire(import.meta.url);
 const fb = require('../../api/_lib/firebase-admin.cjs');
+const { logUsage } = require('../../api/_lib/usage-logger.cjs');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
@@ -127,18 +130,11 @@ function getTwitterClient() {
   return twitterClient;
 }
 
-function compactTwitterError(error) {
-  return {
-    code: error?.code || null,
-    message: error?.message || null,
-    data: error?.data || null,
-    rateLimit: error?.rateLimit || null,
-  };
-}
-
 async function postViaV1Fallback(text, originalError) {
   try {
     const response = await getTwitterClient().v1.tweet(text);
+    // Call counts only, no fabricated dollar rate (see the v2 write below).
+    logUsage({ module: 'social-posting', action: 'x-write', provider: 'x-api', model: 'x-write', calls: 1, costUsd: 0, metadata: { apiVersion: 'v1.1', fallback: true } }).catch(() => {});
     return {
       twitterId: response?.id_str || response?.id || null,
       response,
@@ -236,7 +232,7 @@ export async function readSocialQueue(clientId) {
 }
 
 // Read a single post by id, scoped to its owning client. Null if missing/foreign.
-async function getPost(clientId, postId) {
+export async function getSocialPost(clientId, postId) {
   if (!postId) return null;
   const snap = await postsCol().doc(postId).get();
   if (!snap.exists) return null;
@@ -261,12 +257,39 @@ async function patchPost(postId, patch) {
 // scoped), keeping the index requirements minimal. Null scheduledAt (drafts)
 // are a different Firestore type than the ISO-string bound and are excluded.
 const DUE_STATUSES = new Set(['scheduled', 'queued', 'failed']);
+
+// A post whose scheduledAt slipped this far into the past is not "a bit late"
+// — it's stale history. Without this, the FIRST run of a due-sweep cron would
+// flush the entire never-sent backlog to a live account in one go. Marked
+// 'expired' (not in DUE_STATUSES) and skipped rather than posted.
+const STALE_DUE_MS = 12 * 60 * 60 * 1000; // 12h
+
 async function readDuePosts(clientId = null) {
   const nowIso = new Date().toISOString();
   let q = postsCol().where('scheduledAt', '<=', nowIso);
   if (clientId) q = q.where('clientId', '==', clientId);
   const snap = await q.get();
-  return snap.docs.map((doc) => doc.data()).filter((post) => DUE_STATUSES.has(post.status));
+
+  const due = [];
+  const expireWrites = [];
+  const now = Date.now();
+  const nowStamp = new Date(now).toISOString();
+  for (const doc of snap.docs) {
+    const post = doc.data();
+    if (!DUE_STATUSES.has(post.status)) continue;
+    const scheduledMs = Date.parse(post.scheduledAt);
+    if (Number.isFinite(scheduledMs) && now - scheduledMs > STALE_DUE_MS) {
+      expireWrites.push(patchPost(post.id, {
+        status: 'expired',
+        error: 'Scheduled time was more than 12h in the past when the due sweep ran — not posted.',
+        updatedAt: nowStamp,
+      }));
+      continue;
+    }
+    due.push(post);
+  }
+  if (expireWrites.length) await Promise.all(expireWrites);
+  return due;
 }
 
 function makeId() {
@@ -480,44 +503,6 @@ export function runPostingAgents(content, context = {}) {
   };
 }
 
-function mapTwitterError(error) {
-  let message = 'Failed to post to Twitter.';
-  let hint = null;
-  if (error?.code === 403) {
-    const detail = String(error?.data?.detail || '');
-    const reason = String(error?.data?.reason || '');
-    if (detail.includes('duplicate')) {
-      message = 'Tweet content appears to be a duplicate. Edit it and try again.';
-    } else if (reason === 'client-not-enrolled') {
-      message = 'X rejected the post because this developer app is not attached to an API Project.';
-      hint = 'In the X developer portal, attach this app to a Project with API access, then regenerate the Access Token and Access Secret for that app.';
-    } else {
-      message = 'Twitter rejected the request. Check API write permissions.';
-      hint = 'The OAuth token authenticated, but X rejected the write. Confirm the API key belongs to the Read and Write app shown in the developer portal, then regenerate the Access Token and Access Secret for that app.';
-    }
-  } else if (error?.code === 401) {
-    message = 'Twitter authentication failed. Check API credentials.';
-    hint = 'Use the Consumer Key, Consumer Secret, Access Token, and Access Token Secret from the same X app. Regenerate the OAuth 1.0a access token pair after changing app permissions or switching apps.';
-  } else if (error?.code === 429) {
-    message = 'Twitter rate limit exceeded. Wait before posting again.';
-    hint = 'Retry after the X API rate limit window resets.';
-  } else if (error?.code === 402) {
-    // X's credit-based API model: the enrolled developer account has no credits,
-    // so even text posts are rejected. This is a billing action on X's side.
-    message = 'X API posting is out of credits on this developer account.';
-    hint = 'Add credits / upgrade the X API plan at developer.x.com for the enrolled account, or use the web composer to post manually.';
-  } else if (error?.message) {
-    message = error.message;
-  }
-  const out = new Error(message);
-  out.status = error?.code === 429 ? 429 : error?.code === 402 ? 402 : 500;
-  out.code = error?.code || null;
-  out.details = error?.message;
-  out.hint = hint;
-  out.twitterError = compactTwitterError(error);
-  return out;
-}
-
 // X accepts MP4 for video and PNG/JPG/GIF/WEBP for images. WebM (the Studio
 // render output) is NOT accepted — it must be transcoded to MP4 first (Phase B).
 const X_VIDEO_TYPES = new Set(['video/mp4']);
@@ -564,7 +549,7 @@ async function uploadPostMedia(media) {
   return mediaId || null;
 }
 
-export async function postToTwitter(content, media = null) {
+export async function postToTwitter(content, media = null, { clientId, platform = 'x' } = {}) {
   const text = normalizePostText(content);
   if (!text) {
     const err = new Error('Post content is required.');
@@ -575,6 +560,13 @@ export async function postToTwitter(content, media = null) {
     const err = new Error('X posts must be 280 characters or fewer.');
     err.status = 400;
     throw err;
+  }
+
+  // A clientId routes through the per-client adapter (its own connected
+  // account, per platform). No clientId keeps today's env-credential path
+  // below, unchanged, for any caller that hasn't been made client-aware yet.
+  if (clientId) {
+    return getAdapter(platform).publish({ clientId, text, media });
   }
 
   // Upload any paired asset first so we can attach its media_id to the tweet.
@@ -588,6 +580,10 @@ export async function postToTwitter(content, media = null) {
     // payload object explicitly instead of relying on the string overload.
     const payload = mediaId ? { text, media: { media_ids: [mediaId] } } : { text };
     const response = await getTwitterClient().v2.tweet(payload);
+    // Call counts only, no fabricated dollar rate — X spend genuinely isn't
+    // knowable from the API (only developer.x.com has it). This just makes
+    // the write COUNTED on the Operating Cost card, not priced.
+    logUsage({ module: 'social-posting', action: 'x-write', provider: 'x-api', model: 'x-write', calls: 1, costUsd: 0, metadata: { apiVersion: 'v2', mediaAttached: !!mediaId } }).catch(() => {});
     return { twitterId: response?.data?.id || null, response, apiVersion: 'v2', mediaId };
   } catch (error) {
     // v1.1 fallback is text-only; a media post that fails v2 cannot downgrade.
@@ -627,7 +623,7 @@ export async function createSocialPost(clientId, payload) {
   const post = {
     id: makeId(),
     clientId,
-    platform: 'x',
+    platform: payload.platform || 'x',
     content,
     source: payload.source || 'manual',
     status,
@@ -668,7 +664,7 @@ export async function createSocialPost(clientId, payload) {
 export async function postNow(clientId, payload) {
   const draft = await createSocialPost(clientId, { ...payload, status: 'posting' });
   try {
-    const result = await postToTwitter(draft.content, postMedia(draft));
+    const result = await postToTwitter(draft.content, postMedia(draft), { clientId: draft.clientId, platform: draft.platform || 'x' });
     const updated = {
       ...draft,
       status: 'posted',
@@ -692,6 +688,113 @@ export async function postNow(clientId, payload) {
     await savePost(failed);
     throw error;
   }
+}
+
+// Publishes a post that already exists (status 'awaiting_approval'), created
+// by enqueueAutoPublishVideoPost for approval-mode. Called after the approval
+// token's single-use burn already succeeded — this only publishes + records
+// the result, it never re-checks the token.
+export async function publishApprovedPost(clientId, postId, { source = 'email' } = {}) {
+  const post = await getSocialPost(clientId, postId);
+  if (!post) {
+    const err = new Error('Post not found.');
+    err.status = 404;
+    throw err;
+  }
+  if (post.status !== 'awaiting_approval') {
+    // Guards the race between the email token and a dashboard action (or a
+    // second click of this same route): once a post has left awaiting_approval,
+    // publishing it again would double-post to a live account.
+    const err = new Error('This post is not awaiting approval — it may have already been handled.');
+    err.status = 409;
+    err.code = 'not-pending';
+    throw err;
+  }
+  const now = new Date().toISOString();
+  try {
+    const result = await postToTwitter(post.content, postMedia(post), { clientId, platform: post.platform || 'x' });
+    const updated = {
+      ...post,
+      status: 'posted',
+      twitterId: result.twitterId,
+      apiVersion: result.apiVersion || 'v2',
+      postedAt: now,
+      approvedAt: now,
+      approvalSource: source,
+      error: null,
+      updatedAt: now,
+    };
+    await savePost(updated);
+    return updated;
+  } catch (error) {
+    const failed = {
+      ...post,
+      status: 'failed',
+      error: error.message || 'Failed to post.',
+      errorHint: error.hint || null,
+      approvedAt: now,
+      approvalSource: source,
+      updatedAt: now,
+    };
+    await savePost(failed);
+    throw error;
+  }
+}
+
+// Pending-approval rows that outlived their approval token's TTL. Without this
+// sweep the roll-up re-lists every never-approved post forever, minting a fresh
+// token for it each day — and by then its EditVideos media URL is usually dead,
+// so the click burns a token only to hit media-unavailable. Same treatment
+// readDuePosts gives stale scheduled posts: mark 'expired' (not in
+// DUE_STATUSES, not awaiting_approval) and drop it from the live set.
+//
+// Returns only the rows still inside the window, so callers get the sweep and
+// the read in one pass.
+export async function listPendingApprovalPosts({ maxAgeMs, limit = 200 } = {}) {
+  const snap = await postsCol().where('status', '==', 'awaiting_approval').limit(limit).get();
+  const now = Date.now();
+  const nowStamp = new Date(now).toISOString();
+  const live = [];
+  const expireWrites = [];
+  for (const doc of snap.docs) {
+    const post = doc.data();
+    const createdMs = Date.parse(post.createdAt);
+    if (maxAgeMs && Number.isFinite(createdMs) && now - createdMs > maxAgeMs) {
+      expireWrites.push(patchPost(post.id, {
+        status: 'expired',
+        error: 'Approval window closed before anyone approved or rejected it — not posted.',
+        updatedAt: nowStamp,
+      }));
+      continue;
+    }
+    live.push(post);
+  }
+  if (expireWrites.length) await Promise.all(expireWrites);
+  return { posts: live, expired: expireWrites.length };
+}
+
+// Dashboard-side reject for an 'awaiting_approval' post — the counterpart to
+// the emailed approval link's Post button. Not in DUE_STATUSES, so a rejected
+// post is never picked up by the due sweep.
+export async function rejectSocialPost(clientId, postId) {
+  const post = await getSocialPost(clientId, postId);
+  if (!post) {
+    const err = new Error('Post not found.');
+    err.status = 404;
+    throw err;
+  }
+  if (post.status !== 'awaiting_approval') {
+    // Same guard as publishApprovedPost — must not be able to flip an already
+    // 'posted' row to 'rejected' and hide a tweet that is live on X.
+    const err = new Error('This post is not awaiting approval — it may have already been handled.');
+    err.status = 409;
+    err.code = 'not-pending';
+    throw err;
+  }
+  const now = new Date().toISOString();
+  const updated = { ...post, status: 'rejected', rejectedAt: now, updatedAt: now };
+  await savePost(updated);
+  return updated;
 }
 
 export async function schedulePost(clientId, payload) {
@@ -724,7 +827,7 @@ export async function attachMediaToPost(clientId, postId, payload) {
     err.status = 400;
     throw err;
   }
-  const post = await getPost(clientId, postId);
+  const post = await getSocialPost(clientId, postId);
   if (!post) {
     const err = new Error('Post not found.');
     err.status = 404;
@@ -757,7 +860,7 @@ export async function updateSocialPost(clientId, postId, payload = {}) {
     err.status = 400;
     throw err;
   }
-  const post = await getPost(clientId, postId);
+  const post = await getSocialPost(clientId, postId);
   if (!post) {
     const err = new Error('Post not found.');
     err.status = 404;
@@ -818,7 +921,7 @@ export async function updateSocialPost(clientId, postId, payload = {}) {
 // keep going past a single failure.
 async function postAndRecord(post) {
   try {
-    const result = await postToTwitter(post.content, postMedia(post));
+    const result = await postToTwitter(post.content, postMedia(post), { clientId: post.clientId, platform: post.platform || 'x' });
     const updated = {
       ...post,
       status: 'posted',

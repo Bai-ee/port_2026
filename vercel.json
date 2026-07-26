@@ -19,6 +19,14 @@
     {
       "path": "/api/worker/media-reconcile",
       "schedule": "30 13 * * *"
+    },
+    {
+      "path": "/api/worker/approval-rollup",
+      "schedule": "20 13 * * *"
+    },
+    {
+      "path": "/api/social-posting/process-due",
+      "schedule": "*/30 * * * *"
     }
   ]
 }

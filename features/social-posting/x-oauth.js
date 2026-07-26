@@ -1,8 +1,10 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import crypto from 'node:crypto';
 import { config as loadDotenv } from 'dotenv';
 import { TwitterApi } from 'twitter-api-v2';
+import { saveSocialAccount, getSocialAccount } from './social-accounts.js';
 
 const require = createRequire(import.meta.url);
 const fb = require('../../api/_lib/firebase-admin.cjs');
@@ -41,6 +43,10 @@ export const X_OAUTH_SCOPES = [
   'follows.read',
   'follows.write',
   'offline.access',
+  // media.write is required to upload video/image before a v2 tweet — added
+  // for the per-client publishing flow. The existing @bai_ee token predates
+  // this and lacks it; the card surfaces a reconnect notice when missing.
+  'media.write',
 ];
 
 let envLoaded = false;
@@ -97,6 +103,47 @@ function pendingRef() {
   return fb.adminDb.collection(FLAGS_COLLECTION).doc(PENDING_DOC);
 }
 
+// ── Per-client connect (Social Accounts card) ─────────────────────────────────
+// A second, parallel pending-state path keyed by clientId rather than the
+// single global doc above. The legacy no-clientId flow (X Command Center,
+// @bai_ee) is untouched by everything below.
+const CLIENT_PENDING_COLLECTION = 'social_oauth_pending';
+
+function clientPendingRef(clientId) {
+  loadEnv();
+  return fb.adminDb.collection(CLIENT_PENDING_COLLECTION).doc(clientId);
+}
+
+// The callback only receives (code, state) from X — no clientId. Signing the
+// clientId into `state` (same HMAC shape as api/_lib/calendar-oauth.cjs
+// signState/verifyState) lets the callback recover whose flow this is without
+// a client-supplied hint it could spoof.
+function signOAuthState(clientId) {
+  const { clientSecret } = getAppCredentials();
+  const nonce = crypto.randomBytes(8).toString('hex');
+  const ts = Date.now();
+  const payload = `${clientId}|${nonce}|${ts}`;
+  const sig = crypto.createHmac('sha256', clientSecret).update(payload).digest('hex');
+  return Buffer.from(`${payload}|${sig}`).toString('base64url');
+}
+
+function verifyOAuthState(state) {
+  try {
+    const { clientSecret } = getAppCredentials();
+    const decoded = Buffer.from(String(state || ''), 'base64url').toString('utf8');
+    const [clientId, nonce, ts, sig] = decoded.split('|');
+    if (!clientId || !nonce || !ts || !sig) return null;
+    const expected = crypto.createHmac('sha256', clientSecret).update(`${clientId}|${nonce}|${ts}`).digest('hex');
+    const a = Buffer.from(sig);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+    if (Date.now() - Number(ts) > PENDING_TTL_MS) return null;
+    return clientId;
+  } catch {
+    return null;
+  }
+}
+
 export function compactXOAuthError(error) {
   const code = error?.code || error?.status || null;
   const detail = error?.data?.detail || error?.data?.title || error?.message || 'X API error';
@@ -113,14 +160,20 @@ export function compactXOAuthError(error) {
   return { status: typeof code === 'number' ? code : 500, message: detail };
 }
 
-export async function startXOAuthFlow(redirectUri, startedBy = null) {
+export async function startXOAuthFlow(redirectUri, startedBy = null, clientId = null) {
   const client = getAppClient();
-  const { url, codeVerifier, state } = client.generateOAuth2AuthLink(redirectUri, { scope: X_OAUTH_SCOPES });
-  await pendingRef().set({
+  const stateOverride = clientId ? signOAuthState(clientId) : undefined;
+  const { url, codeVerifier, state } = client.generateOAuth2AuthLink(redirectUri, {
+    scope: X_OAUTH_SCOPES,
+    ...(stateOverride ? { state: stateOverride } : {}),
+  });
+  const ref = clientId ? clientPendingRef(clientId) : pendingRef();
+  await ref.set({
     codeVerifier,
     state,
     redirectUri,
     startedBy: startedBy || null,
+    clientId: clientId || null,
     createdAt: Date.now(),
   });
   return { url };
@@ -128,13 +181,19 @@ export async function startXOAuthFlow(redirectUri, startedBy = null) {
 
 export async function completeXOAuthFlow({ code, state }) {
   if (!code || !state) throw new Error('Missing code or state in the OAuth callback.');
-  const snap = await pendingRef().get();
+
+  // A per-client connect signs its clientId into `state`; the legacy global
+  // flow uses a plain random state that will not decode to anything here.
+  const clientId = verifyOAuthState(state);
+  const ref = clientId ? clientPendingRef(clientId) : pendingRef();
+
+  const snap = await ref.get();
   const pending = snap.exists ? snap.data() : null;
   if (!pending || pending.state !== state) {
     throw new Error('No matching in-progress connection — start the Connect flow again from the dashboard.');
   }
   if (Date.now() - (pending.createdAt || 0) > PENDING_TTL_MS) {
-    await pendingRef().delete();
+    await ref.delete();
     throw new Error('The connection attempt expired — start the Connect flow again from the dashboard.');
   }
 
@@ -148,7 +207,7 @@ export async function completeXOAuthFlow({ code, state }) {
   // One users.read call to pin down whose account this token controls.
   const me = await loggedClient.v2.me();
 
-  await tokensRef().set({
+  const tokenDoc = {
     accessToken,
     refreshToken: refreshToken || null,
     expiresAt: Date.now() + (expiresIn || 7200) * 1000,
@@ -158,8 +217,14 @@ export async function completeXOAuthFlow({ code, state }) {
     name: me?.data?.name || null,
     connectedBy: pending.startedBy || null,
     updatedAt: Date.now(),
-  });
-  await pendingRef().delete();
+  };
+
+  if (clientId) {
+    await saveSocialAccount(clientId, 'x', { ...tokenDoc, authMode: 'oauth2' });
+  } else {
+    await tokensRef().set(tokenDoc);
+  }
+  await ref.delete();
 
   return { username: me?.data?.username || null };
 }
@@ -172,10 +237,18 @@ async function readTokens() {
 // Returns a user-context OAuth2 client, refreshing the (single-use, rotating)
 // refresh token when the access token is near expiry. Single-admin usage —
 // concurrent refreshes are not guarded against.
-export async function getXOAuth2Client() {
-  let doc = await readTokens();
+//
+// clientId omitted (default): exact legacy behavior — the global @bai_ee
+// singleton in system_flags/x_oauth_tokens, used by the X Command Center.
+// clientId given: reads social_accounts/{clientId}.platforms.x, falling back
+// to the legacy global doc so an already-connected @bai_ee keeps working
+// before that client's first explicit per-client Connect.
+export async function getXOAuth2Client(clientId = null) {
+  let doc = clientId ? (await getSocialAccount(clientId, 'x')) || (await readTokens()) : await readTokens();
   if (!doc?.accessToken) {
-    const err = new Error('The X account is not connected yet — run Connect in the X Command Center card.');
+    const err = new Error(clientId
+      ? 'This client has no connected X account — connect one in the Social Accounts card.'
+      : 'The X account is not connected yet — run Connect in the X Command Center card.');
     err.status = 409;
     throw err;
   }
@@ -194,7 +267,8 @@ export async function getXOAuth2Client() {
       expiresAt: Date.now() + (expiresIn || 7200) * 1000,
       updatedAt: Date.now(),
     };
-    await tokensRef().set(doc);
+    if (clientId) await saveSocialAccount(clientId, 'x', { ...doc, authMode: 'oauth2' });
+    else await tokensRef().set(doc);
   }
   return { client: new TwitterApi(doc.accessToken), tokens: doc };
 }

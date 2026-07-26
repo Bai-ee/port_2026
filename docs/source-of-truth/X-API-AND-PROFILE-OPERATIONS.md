@@ -62,7 +62,7 @@ TWITTER_ACCESS_SECRET
 
 ## 2. Where the X API is called from
 
-There are exactly **three** X API surfaces (§2a app-runtime OAuth 1.0a, §2b CLI, §2d app-runtime OAuth 2.0). Do not add a fourth without reading this whole doc.
+There are exactly **four** X API surfaces (§2a app-runtime OAuth 1.0a, §2b CLI, §2d app-runtime OAuth 2.0, §2e per-client publishing). Do not add a fifth without reading this whole doc.
 
 ### 2a. App runtime — `features/social-posting/twitter-service.js`
 Backs the **Copywriter** and **Schedule Posts** cards.
@@ -89,6 +89,17 @@ Market Signals / Scout read X through **ScrapeCreators** (`features/scout-intake
 Backs the **X Command Center** card (`x-profile`, admin-only, social bucket) — added 2026-07-19 because bookmarks are unreachable over OAuth 1.0a (and invisible to ScrapeCreators — they're private to the authed user). PKCE flow against the HitLoop app's OAuth 2.0 client (`X_OAUTH_CLIENT_ID` / `X_OAUTH_CLIENT_SECRET` / `X_OAUTH_REDIRECT_URI` env; tokens + in-flight PKCE state in Firestore `system_flags/x_oauth_tokens` / `x_oauth_pending`; refresh tokens rotate on use). Routes: `app/api/social-posting/x-oauth` (admin-gated status/start/disconnect/verify-bookmarks) + `…/x-oauth/callback` + alias `app/api/auth/twitter/callback` (matches the portal-registered prod callback). Connected as `@bai_ee` with all 11 scopes (tweet/users/bookmark/like/follows + offline.access) 2026-07-19; bookmark read access **verified live**.
 
 Hard-won portal facts: authorize codes expire in ~30s (never route them through human copy-paste — the prod callback completes server-side); X rejects `localhost`/`127.0.0.1` OAuth 2.0 callbacks in practice; editing the callback list can transiently break the whole allowlist ("Something went wrong" on authorize) — re-save a single clean prod entry to repair. `GET /2/usage/tweets` works app-only (request counts vs monthly cap); dollar spend remains console-only.
+
+### 2e. App runtime — Social Auto-Publish (per-client publishing) — `features/social-posting/adapters/x.js` + `social-accounts.js`
+Added for the **Social Auto-Publish** feature (daily video → each client's own account, off/auto/approval modes). Unlike §2a–2d, this surface writes to accounts **other than @bai_ee** — every client can connect its own X account (its own OAuth 2.0 tokens under HitLoop's app, or its own OAuth 1.0a dev-app keys) via the **Social Accounts** card (`x-profile`, admin-only — the same card that used to be "X Command Center"; the legacy bookmarks/profile/engagement panels on that card still act as `@bai_ee` only, untouched by this).
+
+| Call | Purpose |
+|---|---|
+| `getPlatformClient(clientId, 'x')` | resolves the write client: per-client oauth1 override → per-client oauth2 tokens → (only the digest home client) global `TWITTER_*` env → `409 account-not-connected` |
+| `v1.uploadMedia` / `v2.uploadMedia` | media upload, split by which auth mode resolved |
+| `v2.tweet(payload)` | post |
+
+Full data model, the three publish modes, the approval-token contract, and the roll-up double-send guard: [`SOCIAL-AUTO-PUBLISH.md`](./SOCIAL-AUTO-PUBLISH.md). Every write here (this surface AND the legacy §2a path) is logged to `usage_events` with `provider:'x-api'` — call counts only, no dollar rate (see §3's blind-spot note, which now applies to a second account per client, not just @bai_ee).
 
 ---
 

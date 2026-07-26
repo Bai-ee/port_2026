@@ -4,8 +4,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AtSign, Bookmark, BookmarkX, Check, Copy, FilePlus2, Gauge, Heart, HeartOff,
   Link2, MessageCircle, Pin, RefreshCw, Repeat2, ShieldCheck, Trash2, Unplug,
-  UserMinus, UserPlus, UserRound,
+  UserMinus, UserPlus, UserRound, Users,
 } from 'lucide-react';
+import { SOCIAL_PLATFORMS } from '../../features/social-posting/platforms.js';
 
 // X Command Center — admin control surface for the live @bai_ee account over
 // OAuth 2.0 user-context (features/social-posting/x-oauth.js). Panels:
@@ -35,7 +36,7 @@ function parseTweetId(value) {
   return /^\d{5,}$/.test(raw) ? raw : null;
 }
 
-export default function XProfileCard({ getIdToken }) {
+export default function XProfileCard({ getIdToken, activeClientId, clientName }) {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
@@ -89,6 +90,109 @@ export default function XProfileCard({ getIdToken }) {
       pollRef.current = null;
     }
   }, []);
+
+  // ── Social Accounts — per-client identities (separate from the global
+  // @bai_ee connection managed by the rest of this card) ───────────────────
+  const [accounts, setAccounts] = useState(null);
+  const [accountsLoading, setAccountsLoading] = useState(true);
+  const [acctBusy, setAcctBusy] = useState('');
+  const [acctNotice, setAcctNotice] = useState(null);
+  const [oauth1Open, setOauth1Open] = useState(false);
+  const [oauth1Form, setOauth1Form] = useState({ appKey: '', appSecret: '', accessToken: '', accessSecret: '', username: '' });
+  const acctPollRef = useRef(null);
+
+  const loadAccounts = useCallback(async ({ silent = false } = {}) => {
+    if (!activeClientId) return null;
+    if (!silent) setAccountsLoading(true);
+    try {
+      const data = await apiFetch({ action: 'accounts-list', clientId: activeClientId });
+      setAccounts(data.accounts || null);
+      return data.accounts;
+    } catch (err) {
+      if (!silent) setAcctNotice({ kind: 'error', text: err.message });
+      return null;
+    } finally {
+      if (!silent) setAccountsLoading(false);
+    }
+  }, [apiFetch, activeClientId]);
+
+  useEffect(() => {
+    loadAccounts();
+    return () => {
+      if (acctPollRef.current) { clearInterval(acctPollRef.current); acctPollRef.current = null; }
+    };
+  }, [loadAccounts]);
+
+  function beginAccountPolling() {
+    if (acctPollRef.current) clearInterval(acctPollRef.current);
+    let tries = 0;
+    acctPollRef.current = setInterval(async () => {
+      tries += 1;
+      const accts = await loadAccounts({ silent: true });
+      if (accts?.x?.connected || tries >= POLL_MAX_TRIES) {
+        clearInterval(acctPollRef.current);
+        acctPollRef.current = null;
+        if (accts?.x?.connected) setAcctNotice({ kind: 'ok', text: `Connected as @${accts.x.username}.` });
+      }
+    }, POLL_INTERVAL_MS);
+  }
+
+  async function connectPlatform(platform) {
+    if (acctBusy || !activeClientId) return;
+    setAcctBusy(`connect:${platform}`);
+    setAcctNotice(null);
+    try {
+      const data = await apiFetch({ action: 'start', clientId: activeClientId });
+      window.open(data.url, '_blank', 'noopener');
+      setAcctNotice({ kind: 'ok', text: 'Authorize in the tab that just opened — this row updates itself when the callback lands.' });
+      beginAccountPolling();
+    } catch (err) {
+      setAcctNotice({ kind: 'error', text: err.message });
+    } finally {
+      setAcctBusy('');
+    }
+  }
+
+  async function disconnectPlatform(platform) {
+    if (acctBusy || !activeClientId) return;
+    setAcctBusy(`disconnect:${platform}`);
+    try {
+      await apiFetch({ action: 'account-disconnect', clientId: activeClientId, platform });
+      await loadAccounts();
+      setAcctNotice({ kind: 'ok', text: 'Disconnected.' });
+    } catch (err) {
+      setAcctNotice({ kind: 'error', text: err.message });
+    } finally {
+      setAcctBusy('');
+    }
+  }
+
+  async function saveOauth1Override() {
+    if (acctBusy || !activeClientId) return;
+    setAcctBusy('oauth1-save');
+    try {
+      await apiFetch({
+        action: 'oauth1-save',
+        clientId: activeClientId,
+        platform: 'x',
+        username: oauth1Form.username,
+        oauth1: {
+          appKey: oauth1Form.appKey,
+          appSecret: oauth1Form.appSecret,
+          accessToken: oauth1Form.accessToken,
+          accessSecret: oauth1Form.accessSecret,
+        },
+      });
+      setOauth1Form({ appKey: '', appSecret: '', accessToken: '', accessSecret: '', username: '' });
+      setOauth1Open(false);
+      await loadAccounts();
+      setAcctNotice({ kind: 'ok', text: 'OAuth 1.0a override saved — posts for this client now use it.' });
+    } catch (err) {
+      setAcctNotice({ kind: 'error', text: err.message });
+    } finally {
+      setAcctBusy('');
+    }
+  }
 
   const loadStatus = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setLoading(true);
@@ -211,6 +315,92 @@ export default function XProfileCard({ getIdToken }) {
         </section>
       ) : (
         <>
+          {/* ── Social Accounts — per-client publishing identities ──── */}
+          <section id="social-accounts-panel" className="xp-panel">
+            <div className="xp-head">
+              <span className="xp-kicker"><Users size={13} /> Social Accounts</span>
+              <small>{clientName || activeClientId || 'NO CLIENT LOADED'}</small>
+            </div>
+            <p className="xp-sub">
+              Each client publishes its own daily video under its own handle. Connect that client&apos;s account per platform below —
+              this is separate from the global <strong>@bai_ee</strong> connection managed by the rest of this card.
+            </p>
+            {!activeClientId ? (
+              <div className="xp-empty">No client loaded — switch to a client to manage its accounts.</div>
+            ) : accountsLoading ? (
+              <div className="xp-empty">Checking connections…</div>
+            ) : (
+              <div className="xp-social-rows">
+                {SOCIAL_PLATFORMS.map((p) => {
+                  const acct = accounts?.[p.key] || { connected: false };
+                  const missingMediaWrite = p.key === 'x' && acct.connected && acct.authMode === 'oauth2' && !(acct.scope || []).includes('media.write');
+                  if (!p.live) {
+                    return (
+                      <div id={`social-account-${p.key}-row`} key={p.key} className="xp-social-row xp-social-row-disabled">
+                        <span className="xp-social-platform">{p.label}</span>
+                        <span className="xp-chip xp-chip-muted">Coming soon</span>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div id={`social-account-${p.key}-row`} key={p.key} className="xp-social-row">
+                      <div className="xp-social-row-top">
+                        <span className="xp-social-platform">{p.label}</span>
+                        {acct.connected ? (
+                          <span className="xp-chip">Connected · {p.handlePrefix}{acct.username || 'unknown'} · {acct.authMode === 'oauth1' ? 'own app' : 'HitLoop app'}</span>
+                        ) : (
+                          <span className="xp-chip xp-chip-muted">Not connected</span>
+                        )}
+                      </div>
+                      <div className="xp-actions">
+                        {acct.connected ? (
+                          <button type="button" onClick={() => disconnectPlatform(p.key)} disabled={!!acctBusy}>
+                            {acctBusy === `disconnect:${p.key}` ? spinner : <Unplug size={14} />} Disconnect
+                          </button>
+                        ) : (
+                          <button type="button" className="xp-primary" onClick={() => connectPlatform(p.key)} disabled={!!acctBusy}>
+                            {acctBusy === `connect:${p.key}` ? spinner : <Link2 size={14} />} Connect
+                          </button>
+                        )}
+                        {p.key === 'x' ? (
+                          <button type="button" onClick={() => setOauth1Open((v) => !v)} disabled={!!acctBusy}>
+                            {oauth1Open ? 'Hide' : 'Use own dev app keys'}
+                          </button>
+                        ) : null}
+                      </div>
+                      {missingMediaWrite ? (
+                        <p className="xp-error" style={{ marginTop: 8 }}>Reconnect required for video — this token predates the media.write scope.</p>
+                      ) : null}
+                      {p.key === 'x' && oauth1Open ? (
+                        <div id="social-account-x-oauth1-row" className="xp-form" style={{ marginTop: 10 }}>
+                          <p className="xp-sub" style={{ margin: '0 0 4px' }}>
+                            Client&apos;s own X developer app (their own credits, OAuth 1.0a). Fields are write-only — saved secrets never redisplay.
+                          </p>
+                          <label><span>Display handle (optional)</span><input value={oauth1Form.username} onChange={(e) => setOauth1Form((f) => ({ ...f, username: e.target.value }))} placeholder="@clienthandle" /></label>
+                          <label><span>API key</span><input value={oauth1Form.appKey} onChange={(e) => setOauth1Form((f) => ({ ...f, appKey: e.target.value }))} /></label>
+                          <label><span>API secret</span><input type="password" value={oauth1Form.appSecret} onChange={(e) => setOauth1Form((f) => ({ ...f, appSecret: e.target.value }))} /></label>
+                          <label><span>Access token</span><input value={oauth1Form.accessToken} onChange={(e) => setOauth1Form((f) => ({ ...f, accessToken: e.target.value }))} /></label>
+                          <label><span>Access token secret</span><input type="password" value={oauth1Form.accessSecret} onChange={(e) => setOauth1Form((f) => ({ ...f, accessSecret: e.target.value }))} /></label>
+                          <div className="xp-actions">
+                            <button
+                              type="button"
+                              className="xp-primary"
+                              onClick={saveOauth1Override}
+                              disabled={!!acctBusy || !oauth1Form.appKey || !oauth1Form.appSecret || !oauth1Form.accessToken || !oauth1Form.accessSecret}
+                            >
+                              {acctBusy === 'oauth1-save' ? spinner : <ShieldCheck size={14} />} Save override
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {acctNotice ? <p className={`xp-notice xp-notice-${acctNotice.kind}`}>{acctNotice.text}</p> : null}
+          </section>
+
           {/* ── Connection ─────────────────────────────────────────── */}
           <section id="x-profile-connection-panel" className="xp-panel">
             <div className="xp-head">
@@ -569,6 +759,12 @@ export default function XProfileCard({ getIdToken }) {
         .xp-recs li { font-size: 12px; line-height: 1.45; color: rgba(42,36,32,0.72); }
         .xp-recs strong { color: #2a2420; }
         code { font-family: var(--font-mono); font-size: 11px; background: rgba(42,36,32,0.06); padding: 1px 5px; border-radius: 5px; color: #2a2420; }
+        /* Social Accounts */
+        .xp-social-rows { display: grid; gap: 10px; }
+        .xp-social-row { padding: 12px 14px; border: 1px solid rgba(42,36,32,0.14); border-radius: 12px; background: rgba(255,255,255,0.78); }
+        .xp-social-row-disabled { display: flex; align-items: center; justify-content: space-between; opacity: 0.6; }
+        .xp-social-row-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+        .xp-social-platform { font-family: var(--font-mono); font-size: 12px; font-weight: 700; letter-spacing: 0.04em; color: #2a2420; }
         /* Usage meter */
         .xp-usage-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
         .xp-usage-num { font-family: var(--font-mono); font-size: 28px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; color: #2a2420; }

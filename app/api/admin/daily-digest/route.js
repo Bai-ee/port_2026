@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 import {
+  createSocialPost,
+  generatePromoCopy,
+  postNow,
   readSocialQueue,
   runPostingAgents,
   schedulePost,
 } from '../../../../features/social-posting/twitter-service.js';
+import { getSocialAccount } from '../../../../features/social-posting/social-accounts.js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -19,6 +23,7 @@ const briefSummary = require('../../../../features/intelligence/_brief-summary.j
 const digestConfig = require('../../../../features/intelligence/_digest-config.js');
 const { getMarketInsightPlatformState } = require('../../../../features/intelligence/_market-insight-platform-state.js');
 const briefIntel = require('../../../../features/intelligence/_brief-intel.js');
+const { signApprovalToken } = require('../../../../api/_lib/social-approval.cjs');
 
 // ── Config ──────────────────────────────────────────────────────────────────
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
@@ -63,7 +68,7 @@ const DIGEST_INCLUDE_KEYS = Array.from(new Set([...(digestConfig.INCLUDE_KEYS ||
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-function appOrigin() {
+export function appOrigin() {
   const raw =
     process.env.NEXT_PUBLIC_APP_URL ||
     process.env.NEXT_PUBLIC_SITE_URL ||
@@ -106,7 +111,7 @@ function readAggregateCount(snapshot) {
   return typeof count === 'number' ? count : 0;
 }
 
-function escapeHtml(str) {
+export function escapeHtml(str) {
   return String(str || '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -719,7 +724,7 @@ async function getCalendarAgenda(timestamp, opts = {}) {
 // micro-labels, Space Grotesk body. Web fonts load via @import where supported
 // (Apple Mail); Gmail strips them and falls back to the monospace/sans stacks,
 // which preserves the data-terminal character.
-const DT = {
+export const DT = {
   bg: '#fbf8f0',
   card: '#fffdf7',
   ink: '#12100c',
@@ -746,7 +751,7 @@ const TDsub = `padding:11px 14px;border-bottom:1px dashed ${DT.dash};font-family
 const TDnum = `padding:11px 14px;border-bottom:1px dashed ${DT.dash};font-family:${DT.fMono};font-size:13px;font-weight:700;text-align:right;color:${DT.ink};`;
 const TDempty = `padding:18px;text-align:center;font-family:${DT.fBody};font-size:13px;color:${DT.light};`;
 
-function dKicker(text) {
+export function dKicker(text) {
   return `<div style="font-family:${DT.fMono};font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:${DT.light};margin:0 0 8px;">${text}</div>`;
 }
 
@@ -759,7 +764,7 @@ function dSectionHead(kicker, title) {
 }
 
 // Every section: top hairline divider + mono eyebrow + Doto display title + body
-function dSection(kicker, title, body) {
+export function dSection(kicker, title, body) {
   return `<div style="border-top:1px solid ${DT.line};padding-top:32px;margin-top:32px;">
     ${dSectionHead(kicker, title)}
     ${body}
@@ -966,11 +971,54 @@ const CALLOUT_COLORS = {
   Pipeline:   { bg: '#eceef1', fg: '#4a5568' },
 };
 
+/** Below the video/post table: the Social Auto-Publish attribution + action row.
+ *  ctx = {clientName, handle, mode, approvalUrl, publishedAt, platformLabel,
+ *  preview, skipped, error} — undefined/mode 'off' renders nothing (today's
+ *  row, byte-identical). Table-based, no flex, no JS (Outlook-safe). */
+function buildAutoPublishRow(ctx) {
+  if (!ctx || !ctx.mode || ctx.mode === 'off') return '';
+  const platformLabel = escapeHtml(ctx.platformLabel || 'X');
+  const attribution = ctx.clientName
+    ? `<div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:${DT.light};margin:10px 0 6px;">${escapeHtml(ctx.clientName)} &rarr; ${ctx.handle ? `@${escapeHtml(ctx.handle)}` : `<em style="font-style:normal;">not connected</em>`}</div>`
+    : '';
+
+  let action = '';
+  if (ctx.mode === 'approval' && ctx.approvalUrl) {
+    // Bulletproof-table CTA — no flex, no JS, Outlook-safe.
+    const href = escapeHtml(ctx.approvalUrl);
+    action = `<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border-radius:8px;background:${DT.ink};">
+      <a href="${href}" style="display:inline-block;padding:10px 18px;font-family:${DT.fMono};font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#fff;text-decoration:none;">POST TO ${platformLabel}</a>
+    </td></tr></table>`;
+  } else if (ctx.mode === 'approval') {
+    const line = ctx.preview
+      ? `Preview — the sent email includes a working Post button.`
+      : ctx.claimedByRollup
+        ? `Included in today's Pending Approval roll-up email instead.`
+        : ctx.skipped === 'not-connected'
+          ? `Not connected — connect ${platformLabel} for this client in Social Accounts.`
+          : `No pending approval right now.`;
+    action = `<div style="font-family:${DT.fBody};font-size:12px;color:${DT.soft};">${escapeHtml(line)}</div>`;
+  } else if (ctx.mode === 'auto') {
+    const line = ctx.publishedAt
+      ? `PUBLISHED &middot; @${escapeHtml(ctx.handle || '')} &middot; ${escapeHtml(new Date(ctx.publishedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }))}`
+      : ctx.preview
+        ? `Will auto-publish on send.`
+        : ctx.error
+          ? `Auto-publish failed &middot; ${escapeHtml(ctx.error)}`
+          : `Not published this run &middot; ${escapeHtml(ctx.skipped || 'unknown reason')}`;
+    action = `<div style="font-family:${DT.fMono};font-size:10px;letter-spacing:.06em;color:${ctx.publishedAt ? '#2f9e6b' : DT.soft};">${line}</div>`;
+  }
+
+  return `${attribution}${action}`;
+}
+
 /** ONE "Post content" row — [video play-card | X post copy]. Email-safe: the
  *  video column is a dark branded card (▶ + duration) LINKING to the MP4 (clients
  *  can't play video). Stacks to 1 column on mobile via the .vp-col-* classes.
- *  `kind` labels the source (Remix / Promo). Returns '' when there's no video. */
-function buildVideoPostRow(item, kind = 'Video') {
+ *  `kind` labels the source (Remix / Promo). Returns '' when there's no video.
+ *  `ctx` (Social Auto-Publish attribution + button) is undefined for Promo and
+ *  for any client with mode 'off' — renders the row byte-identical to before. */
+export function buildVideoPostRow(item, kind = 'Video', ctx = null) {
   if (!item || !item.url) return '';
   const href = escapeHtml(String(item.url));
   const secs = Number(item.duration) || 0;
@@ -992,7 +1040,8 @@ function buildVideoPostRow(item, kind = 'Video') {
   </a>`;
   const postCol = `<div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:${DT.light};margin:0 0 6px;">X &middot; Post</div>
     <p style="font-family:${DT.fBody};font-size:13px;line-height:1.5;color:${DT.ink};margin:0 0 10px;">${caption}</p>
-    <a href="${href}" style="color:${DT.brand};font-family:${DT.fMono};font-size:11px;letter-spacing:.06em;text-transform:uppercase;">&rarr; View video</a>`;
+    <a href="${href}" style="color:${DT.brand};font-family:${DT.fMono};font-size:11px;letter-spacing:.06em;text-transform:uppercase;">&rarr; View video</a>
+    ${buildAutoPublishRow(ctx)}`;
   return `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 4px;">
     <tr>
       <td class="vp-col-media" valign="top" width="42%" style="width:42%;vertical-align:top;">${videoCard}</td>
@@ -1565,7 +1614,7 @@ function buildCreativeBriefSection(creative) {
   return `${img}${generatedAt}<p style="font-family:${DT.fBody};font-size:14px;line-height:1.62;color:${DT.ink};margin:0;">${text}</p>`;
 }
 
-function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, include = {}, creative = null, briefUrl = null, contactUrl = '', videoItems = [], order = [], postPlatforms = {}, freshnessToken = '', videoStatus = {}) {
+function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, include = {}, creative = null, briefUrl = null, contactUrl = '', videoItems = [], order = [], postPlatforms = {}, freshnessToken = '', videoStatus = {}, videoPublishCtx = {}) {
   // Fallback target when no hosted brief is resolved (briefLinkMode 'off' /
   // 'latest' with nothing published / 'fresh' run failed): the dashboard modal.
   const executiveBriefUrl = appUrl('/dashboard?open=brief');
@@ -1724,7 +1773,7 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
     // Executive Summary / TODAY
     execSummary: () => section('Executive Summary', 'Today', buildSummaryBody(summary)),
     // Post Content
-    videoPosts: () => section('Post Content', 'Video Remix', buildVideoPostRow(videoItems?.remix, 'Remix') || noDataBlock(videoStatus?.remix || 'Video Remix is enabled, but no fresh completed video was ready when this email rendered.')),
+    videoPosts: () => section('Post Content', 'Video Remix', buildVideoPostRow(videoItems?.remix, 'Remix', videoPublishCtx?.x) || noDataBlock(videoStatus?.remix || 'Video Remix is enabled, but no fresh completed video was ready when this email rendered.')),
     videoPromo: () => section('Post Content', 'Video Promo', buildVideoPostRow(videoItems?.promo, 'Promo') || noDataBlock(videoStatus?.promo || 'Video Promo is enabled, but no fresh completed video was ready when this email rendered.')),
     // Market Signals
     humanBrief: () => section('Market Signals', 'Brief', sPart('humanBrief')),
@@ -1861,7 +1910,7 @@ a{text-decoration:none;}
 
 // ── Email sender ────────────────────────────────────────────────────────────
 
-async function sendEmail(subject, html, to = DIGEST_TO) {
+export async function sendEmail(subject, html, to = DIGEST_TO) {
   if (!RESEND_API_KEY) {
     logWarn('daily_digest_email_skipped_missing_api_key');
     return { skipped: true, reason: 'RESEND_API_KEY not configured' };
@@ -1965,6 +2014,118 @@ async function enqueueDigestSuggestedPost({ homeClientId, briefs, timestamp, ste
     scheduledAt,
   });
   return { ok: true, post };
+}
+
+// Social Auto-Publish — publishes (or queues for approval) the client's own
+// daily video to its own connected account. ONLY called on a real send (the
+// caller gates on isRealSend — this function assumes it, it does not re-check
+// email-vs-preview itself). Never throws: every exit is a return, and the
+// caller still wraps the call for defense in depth. Returns a ctx object
+// ready for buildVideoPostRow, or null when nothing applies (mode 'off').
+async function enqueueAutoPublishVideoPost({ clientId, platform, videoItems, timestamp, digestCfg, step }) {
+  const platformLabel = platform === 'x' ? 'X' : platform;
+  const platformCfg = digestCfg?.autoPublish?.platforms?.[platform];
+  const mode = platformCfg?.mode || 'off';
+  if (!clientId || mode === 'off') return null;
+
+  let clientName = clientId;
+  try {
+    const snap = await fb.adminDb.collection('clients').doc(clientId).get();
+    const data = snap.exists ? snap.data() : null;
+    clientName = data?.companyName || data?.name || data?.dashboardTitle || clientId;
+  } catch { /* fall back to the raw id */ }
+
+  let account = null;
+  try {
+    account = await getSocialAccount(clientId, platform);
+  } catch { /* treated as not-connected below */ }
+  const handle = account?.connected ? account.username : null;
+  const baseCtx = { clientName, handle, mode, platformLabel, approvalUrl: null, publishedAt: null };
+
+  const item = videoItems?.remix;
+  if (!item || !item.url) {
+    step?.('info', `Auto-publish · no fresh video this run (@${platformLabel})`);
+    return { ...baseCtx, skipped: 'no-video' };
+  }
+  // Hard gate, not a warning: a carried-over (stale) video must never reach a
+  // live account under either mode. The reader already sees the stale badge
+  // on the card itself.
+  if (item.stale) {
+    step?.('info', `Auto-publish · skipped, video is stale (@${platformLabel})`);
+    return { ...baseCtx, skipped: 'stale' };
+  }
+  if (!account?.connected) {
+    step?.('info', `Auto-publish · ${platformLabel} not connected for this client`);
+    return { ...baseCtx, skipped: 'not-connected' };
+  }
+
+  const dateKey = new Date(timestamp).toISOString().slice(0, 10);
+  const source = `daily-video:${platform}:${dateKey}`;
+  let existing = [];
+  try {
+    existing = await readSocialQueue(clientId);
+  } catch (err) {
+    logWarn('daily_digest_autopublish_queue_read_failed', { clientId, error: err.message });
+  }
+  const duplicate = existing.find((post) => post?.source === source);
+  if (duplicate) {
+    step?.('info', `Auto-publish · already queued for today (@${platformLabel})`);
+    return {
+      ...baseCtx,
+      approvalUrl: duplicate.approvalUrl || null,
+      publishedAt: duplicate.postedAt || null,
+      skipped: 'duplicate',
+    };
+  }
+  const todayPrefix = `daily-video:${platform}:`;
+  const maxPerDay = Math.max(1, Math.min(10, Number(platformCfg?.maxPerDay) || 1));
+  const publishedToday = existing.filter((post) => String(post?.source || '').startsWith(todayPrefix)).length;
+  if (publishedToday >= maxPerDay) {
+    step?.('info', `Auto-publish · daily cap reached (@${platformLabel})`);
+    return { ...baseCtx, skipped: 'max-per-day' };
+  }
+
+  // The caption is already generated upstream for the email card — reuse it
+  // (zero extra LLM cost). Only fall back to a fresh generation if it's empty.
+  let caption = String(item.caption || '').trim();
+  if (!caption) {
+    try {
+      caption = await generatePromoCopy({ name: clientName }, {});
+    } catch { /* leave empty — handled below */ }
+  }
+  if (!caption) {
+    step?.('info', `Auto-publish · no caption available (@${platformLabel})`);
+    return { ...baseCtx, skipped: 'no-caption' };
+  }
+
+  const media = { mediaUrl: item.url, mediaType: 'video', mediaContentType: 'video/mp4', mediaJobId: item.mediaJobId || null };
+
+  if (mode === 'auto') {
+    try {
+      const post = await postNow(clientId, { content: caption, source, platform, ...media });
+      step?.('success', `Auto-published · @${handle || platformLabel} · ${new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`);
+      logInfo('daily_digest_autopublish_posted', { clientId, platform, postId: post.id });
+      return { ...baseCtx, publishedAt: post.postedAt || new Date().toISOString() };
+    } catch (err) {
+      step?.('error', `Auto-publish failed · ${err.message}`);
+      logWarn('daily_digest_autopublish_failed', { clientId, platform, error: err.message });
+      return { ...baseCtx, skipped: 'publish-failed', error: err.message };
+    }
+  }
+
+  // mode === 'approval'
+  try {
+    const post = await createSocialPost(clientId, { content: caption, source, platform, status: 'awaiting_approval', ...media });
+    const { token } = await signApprovalToken({ postId: post.id, clientId, platform });
+    const approvalUrl = `${appOrigin()}/post-approval/${encodeURIComponent(token)}`;
+    step?.('success', `Auto-publish · approval link minted (@${handle || platformLabel})`);
+    logInfo('daily_digest_autopublish_approval_queued', { clientId, platform, postId: post.id });
+    return { ...baseCtx, approvalUrl };
+  } catch (err) {
+    step?.('error', `Auto-publish approval enqueue failed · ${err.message}`);
+    logWarn('daily_digest_autopublish_enqueue_failed', { clientId, platform, error: err.message });
+    return { ...baseCtx, skipped: 'enqueue-failed', error: err.message };
+  }
 }
 
 // ── Placeholder data (template preview) ───────────────────────────────────────
@@ -2708,6 +2869,57 @@ export async function GET(request) {
       }
     }
 
+    // Social Auto-Publish — the client's own daily video to its own account.
+    // isRealSend gates the WHOLE enqueue, not just the publish call inside it:
+    // a preview or template render must never write an 'awaiting_approval'
+    // post or mint a live approval token, so anything but a real send only
+    // describes the configured mode (read-only, no Firestore writes).
+    const videoPublishCtx = { x: null };
+    if (wantRemix && homeClientId) {
+      const publishPlatform = 'x';
+      const publishMode = digestCfg?.autoPublish?.platforms?.[publishPlatform]?.mode || 'off';
+      if (publishMode !== 'off') {
+        if (isRealSend) {
+          try {
+            const result = await enqueueAutoPublishVideoPost({
+              clientId: homeClientId, platform: publishPlatform, videoItems, timestamp, digestCfg, step,
+            });
+            // Double-send guard: this client's own digest lands in the same
+            // inbox as the approval-rollup worker (blank/DIGEST_EMAIL
+            // recipientEmail) — the rollup owns the visible button for this
+            // post, so strip it here rather than showing it twice in one
+            // inbox. The post itself (and its token) still exist; the rollup
+            // mints its own separate token when it sends.
+            if (result?.approvalUrl && digestConfig.isDigestClaimedByRollup(digestCfg)) {
+              step('info', `Auto-publish · button moved to the roll-up email (@${publishPlatform})`);
+              videoPublishCtx[publishPlatform] = { ...result, approvalUrl: null, claimedByRollup: true };
+            } else {
+              videoPublishCtx[publishPlatform] = result;
+            }
+          } catch (err) {
+            logWarn('daily_digest_autopublish_failed', { clientId: homeClientId, error: err.message });
+            step('error', `Auto-publish failed: ${err.message}`);
+          }
+        } else {
+          let handle = null;
+          let publishClientName = homeClientId;
+          try {
+            const acct = await getSocialAccount(homeClientId, publishPlatform);
+            handle = acct?.connected ? acct.username : null;
+          } catch { /* not connected */ }
+          try {
+            const snap = await fb.adminDb.collection('clients').doc(homeClientId).get();
+            const data = snap.exists ? snap.data() : null;
+            publishClientName = data?.companyName || data?.name || data?.dashboardTitle || homeClientId;
+          } catch { /* fall back to the raw id */ }
+          videoPublishCtx[publishPlatform] = {
+            clientName: publishClientName, handle, mode: publishMode, platformLabel: 'X',
+            approvalUrl: null, publishedAt: null, preview: true,
+          };
+        }
+      }
+    }
+
     const sessionStr = ga4.overview ? `, ${ga4.overview.sessions} session${ga4.overview.sessions !== 1 ? 's' : ''}` : '';
     // Subject carries the client's brand when the send is client-scoped, so two
     // clients' digests are distinguishable in the same inbox. Falls back to the
@@ -2747,7 +2959,7 @@ export async function GET(request) {
     if (isRealSend) step('info', `Executive Brief · ${briefUrl || 'dashboard fallback'}`);
     const sectionOrder = orderOverride || digestCfg?.order || digestConfig.DEFAULT_ORDER;
     const postPlatforms = postsOverride || digestCfg?.postPlatforms || {};
-    const html = buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, renderInclude, creative, briefUrl, contactUrl, videoItems, sectionOrder, postPlatforms, freshnessToken, videoStatus);
+    const html = buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, renderInclude, creative, briefUrl, contactUrl, videoItems, sectionOrder, postPlatforms, freshnessToken, videoStatus, videoPublishCtx);
     // Gmail clips messages past ~102KB of ENCODED body and hides the rest behind
     // "View entire message" — quoted-printable inflation means ~80KB of raw HTML
     // is the practical ceiling. Warn in the send terminal + prod logs when over.

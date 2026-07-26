@@ -13,7 +13,7 @@ import { createRequire } from 'module';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
+export const maxDuration = 240;
 
 const require = createRequire(import.meta.url);
 const { getHeaderValue, safeSecretEquals } = require('../../../../api/_lib/auth.cjs');
@@ -34,15 +34,18 @@ function json(body, status = 200) {
   return NextResponse.json(body, { status, headers: { 'cache-control': 'no-store' } });
 }
 
+// Every existing client's dailyVideo.sourceFolders is unset, so this default
+// preserves today's behavior exactly. Per-client override lives in
+// digest_config/{clientId}.dailyVideo.sourceFolders (Email Digest card).
+const DEFAULT_DAILY_VIDEO_SOURCE_FOLDERS = ['skyline'];
+
 // Code-owned production recipe for the DAILY EMAIL ONLY. This intentionally does
 // not read the Video Remix UI/card settings; tweak this object when the daily
 // email needs its own recurring look, source policy, or audio/branding.
+// strictSourceFolders is NOT set here — it's per-client (see triggerDailyEmailRemix).
 const DAILY_EMAIL_VIDEO_PRODUCTION = Object.freeze({
   name: 'hitloop-daily-email-v1',
   sourceFolderCount: 1,
-  // Strict source policy for daily email: do not sample from the UI-selected
-  // folder pool or any fallback bucket.
-  strictSourceFolders: ['skyline'],
   randomAudio: { enabled: true },
   // antiRepeatLookback: clips used by the last N video-remix jobs are only
   // re-picked after every unused eligible clip has had a turn, so runs cycle
@@ -181,9 +184,17 @@ async function buildDailyEmailRecipe(sourceFolders, clientId, production = DAILY
 /**
  * Enqueue ONE code-owned Daily Email Video render for a client. This is separate
  * from the UI-managed Video Remix card recipe. Returns a status object; never throws.
+ * `sourceFolders` is that client's digest_config.dailyVideo.sourceFolders — empty/
+ * unset falls back to DEFAULT_DAILY_VIDEO_SOURCE_FOLDERS (['skyline']), so the
+ * home client's behavior is unchanged unless explicitly configured otherwise.
  */
-export async function triggerDailyEmailRemix(clientId) {
+export async function triggerDailyEmailRemix(clientId, { sourceFolders } = {}) {
   if (!clientId) return { ok: false, error: 'no clientId' };
+
+  const strictSourceFolders = Array.isArray(sourceFolders) && sourceFolders.length
+    ? sourceFolders
+    : DEFAULT_DAILY_VIDEO_SOURCE_FOLDERS;
+  const production = { ...DAILY_EMAIL_VIDEO_PRODUCTION, strictSourceFolders };
 
   let folders = [];
   try {
@@ -198,7 +209,7 @@ export async function triggerDailyEmailRemix(clientId) {
 
   let picked;
   try {
-    picked = buildDailyEmailSourceFolders(folders);
+    picked = buildDailyEmailSourceFolders(folders, production);
   } catch (err) {
     return { ok: false, error: `source folder selection failed: ${err.message}` };
   }
@@ -208,7 +219,7 @@ export async function triggerDailyEmailRemix(clientId) {
   try {
     // Daily email recipe is code-owned here. Output is still locked by
     // validateRemixRecipe (720/30/30) to match the existing render contract.
-    recipe = await buildDailyEmailRecipe(picked, clientId);
+    recipe = await buildDailyEmailRecipe(picked, clientId, production);
   } catch (err) {
     return { ok: false, error: `recipe invalid: ${err.message}` };
   }
@@ -262,30 +273,54 @@ export async function triggerRandomRemix(clientId) {
   return triggerDailyEmailRemix(clientId);
 }
 
+// Same budget-guard shape as pre-digest-refresh's fan-out loop: bail after any
+// completed client rather than risk the whole batch to a function timeout.
+const FAN_OUT_BUDGET_MS = 200_000;
+
 async function handle(request) {
   if (!hasValidCronSecret(request)) return json({ error: 'Unauthorized.' }, 401);
+  const startedAtMs = Date.now();
 
   let homeClientId = null;
-  let cfg = null;
+  let clientIds = [];
   try {
     const configClientId = await digestConfig.resolveDigestClientId();
-    cfg = await digestConfig.getDigestConfig(configClientId);
+    const cfg = await digestConfig.getDigestConfig(configClientId);
     homeClientId = cfg.homeClientId || configClientId;
+    const enrolledIds = await digestConfig.listCronEnrolledClientIds();
+    clientIds = [...new Set([homeClientId, ...enrolledIds].filter(Boolean))];
   } catch (err) {
     logError('pre_digest_video_client_resolve_error', { error: err.message });
     return json({ error: `Could not resolve digest home client: ${err.message}` }, 500);
   }
   if (!homeClientId) return json({ error: 'No digest home client configured.' }, 404);
 
-  // Only prime a video when the feature that uses it is enabled.
-  if (cfg?.include?.videoPosts === false) {
-    return json({ ok: true, skipped: 'videoPosts off', clientId: homeClientId });
+  logInfo('pre_digest_video_start', { clientId: homeClientId, clients: clientIds.length });
+  const results = [];
+  for (const clientId of clientIds) {
+    if (results.length > 0 && Date.now() - startedAtMs > FAN_OUT_BUDGET_MS) {
+      logError('pre_digest_video_budget_exhausted', { completed: results.length, total: clientIds.length });
+      break;
+    }
+    // eslint-disable-next-line no-await-in-loop
+    const clientCfg = await digestConfig.getDigestConfig(clientId).catch(() => null);
+    // Only prime a video when the feature that uses it is enabled for THIS client.
+    if (clientCfg?.include?.videoPosts === false) {
+      results.push({ ok: true, skipped: 'videoPosts off', clientId });
+      continue;
+    }
+    // eslint-disable-next-line no-await-in-loop
+    const res = await triggerDailyEmailRemix(clientId, { sourceFolders: clientCfg?.dailyVideo?.sourceFolders });
+    results.push({ clientId, ...res });
+    logInfo('pre_digest_video_client_done', { clientId, ok: res.ok, jobId: res.jobId, production: res.production });
   }
+  logInfo('pre_digest_video_done', { clientId: homeClientId, completed: results.length, clients: clientIds.length });
 
-  logInfo('pre_digest_video_start', { clientId: homeClientId });
-  const res = await triggerDailyEmailRemix(homeClientId);
-  logInfo('pre_digest_video_done', { clientId: homeClientId, ok: res.ok, jobId: res.jobId, production: res.production });
-  return json(res, res.ok ? 200 : 207);
+  const primary = results.find((r) => r.clientId === homeClientId) || results[0] || null;
+  const ok = results.length === clientIds.length && results.every((r) => r.ok);
+  // Spread `primary` first (jobId, folders, recipe, ...) then pin the
+  // aggregate fields — primary.ok is this one client's result, not the batch's.
+  return json({ ...(primary || {}), clientId: homeClientId, clientIds, results, ok }, ok ? 200 : 207);
 }
 
 export async function GET(request) { return handle(request); }

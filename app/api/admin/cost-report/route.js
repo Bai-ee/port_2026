@@ -308,6 +308,11 @@ async function handle(request) {
 
   // 2. usage_events → per-module line items.
   let moduleUsd = 0;
+  // X API writes are counted here (logUsage, costUsd:0) but not priced — X
+  // spend genuinely isn't knowable per-call from the API. Tallied separately
+  // so the Cost-sources row below can say "N counted, not priced" honestly
+  // instead of implying $0 actually means free.
+  let xApiWriteCount = 0;
   try {
     const snap = await fb.adminDb.collection('usage_events').orderBy('createdAt', 'desc').limit(5000).get();
     snap.forEach((d) => {
@@ -322,6 +327,7 @@ async function handle(request) {
       const key = `${e.module || '?'}|${e.provider || '?'}|${e.model || '?'}`;
       const m = c.modules[key] = c.modules[key] || { module: e.module || '?', provider: e.provider || '?', model: e.model || '?', events: 0, usd: 0 };
       m.events++; m.usd += usd;
+      if (e.provider === 'x-api') xApiWriteCount++;
     });
   } catch { /* usage_events optional */ }
 
@@ -376,6 +382,7 @@ async function handle(request) {
     { key: 'last30days',   label: 'last30days · social search (ScrapeCreators)',           status: scrapeCreators.available ? 'estimate' : 'not-instrumented', usd: scrapeCreators.available ? round2(scrapeCreators.estUsd) : 0, note: scStatusNote },
     { key: 'recipes',      label: 'Analysis recipes',                                     status: 'tracked',         usd: 0,                      note: 'Logged to usage_events (recipe-run + pre-digest) — folded into Per-call above' },
     { key: 'kb_summaries', label: 'Knowledge-base chat',                                  status: 'not-instrumented', usd: 0,                      note: 'KB chat LLM calls still not routed through usage_events (brief/exec summaries now are)' },
+    { key: 'x_writes',     label: 'X API writes · Social Auto-Publish + Copywriter/Schedule Posts', status: 'not-instrumented', usd: 0, note: `${xApiWriteCount} write${xApiWriteCount === 1 ? '' : 's'} counted via usage_events in this window — X has no per-call price via the API, so it's counted but not priced. Dollar spend stays on developer.x.com.` },
   ];
 
   return json({

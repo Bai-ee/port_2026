@@ -9,7 +9,9 @@ import {
   getTwitterCredentialStatus,
   postNow,
   processDuePosts,
+  publishApprovedPost,
   readSocialQueue,
+  rejectSocialPost,
   runPostingAgents,
   schedulePost,
   updateSocialPost,
@@ -25,6 +27,7 @@ export const dynamic = 'force-dynamic';
 const require = createRequire(import.meta.url);
 const { verifyRequestUser } = require('../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../api/_lib/client-provisioning.cjs');
+const { revokeApprovalsForClient, revokeApprovalsForPost } = require('../../../api/_lib/social-approval.cjs');
 
 function makeReqShim(request) {
   return {
@@ -213,6 +216,32 @@ export async function POST(request) {
 
     if (action === 'process-due') {
       const result = await processDuePosts(context.clientId);
+      return json({ ok: true, ...result });
+    }
+
+    // Dashboard-side counterpart to the emailed approval link — approve/reject
+    // an 'awaiting_approval' post directly, or revoke every pending link for
+    // this client (e.g. before switching a platform back to 'off').
+    if (action === 'approve-post') {
+      const post = await publishApprovedPost(context.clientId, body.postId, { source: 'dashboard' });
+      // Retire any still-pending email token for this post — the publish above
+      // already happened, so a later click on that link must not double-post.
+      await revokeApprovalsForPost(body.postId).catch((err) => {
+        console.error('[social-posting] revokeApprovalsForPost failed after approve-post', body.postId, err?.message);
+      });
+      return json({ ok: true, post });
+    }
+
+    if (action === 'reject-post') {
+      const post = await rejectSocialPost(context.clientId, body.postId);
+      await revokeApprovalsForPost(body.postId).catch((err) => {
+        console.error('[social-posting] revokeApprovalsForPost failed after reject-post', body.postId, err?.message);
+      });
+      return json({ ok: true, post });
+    }
+
+    if (action === 'revoke-approvals') {
+      const result = await revokeApprovalsForClient(context.clientId);
       return json({ ok: true, ...result });
     }
 

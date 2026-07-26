@@ -131,6 +131,23 @@ export default function SocialPostingPanel({ getIdToken, sourceDraft, sourceLabe
     }
   }
 
+  // Dashboard-side counterpart to the emailed "Post to X" approval link —
+  // approve (publishes immediately) or reject an 'awaiting_approval' row.
+  async function handleApproval(postId, action) {
+    const busyKey = `${action}:${postId}`;
+    setBusy(busyKey);
+    setNotice(null);
+    try {
+      const data = await apiFetch({ action, postId });
+      setPosts((prev) => prev.map((p) => (p.id === data.post.id ? data.post : p)));
+      setNotice({ kind: 'ok', text: action === 'approve-post' ? 'Approved and published.' : 'Rejected.' });
+    } catch (err) {
+      setNotice({ kind: 'error', text: err.message || 'Action failed.' });
+    } finally {
+      setBusy('');
+    }
+  }
+
   const recent = posts.slice(0, 6);
 
   return (
@@ -228,6 +245,16 @@ export default function SocialPostingPanel({ getIdToken, sourceDraft, sourceLabe
               </div>
               <p>{post.content}</p>
               {post.error ? <small>{post.errorHint || post.error}</small> : null}
+              {post.status === 'awaiting_approval' ? (
+                <div id={`social-post-approval-row-${post.id}`} className="sp-approval-actions">
+                  <button type="button" onClick={() => handleApproval(post.id, 'approve-post')} disabled={!!busy}>
+                    {busy === `approve-post:${post.id}` ? 'Posting…' : 'Approve & Post'}
+                  </button>
+                  <button type="button" onClick={() => handleApproval(post.id, 'reject-post')} disabled={!!busy}>
+                    {busy === `reject-post:${post.id}` ? 'Rejecting…' : 'Reject'}
+                  </button>
+                </div>
+              ) : null}
             </article>
           )) : (
             <div className="sp-empty">No posts saved yet.</div>
@@ -271,6 +298,9 @@ export default function SocialPostingPanel({ getIdToken, sourceDraft, sourceLabe
         .sp-post span, .sp-post small { font-family: var(--font-mono); font-size: 10px; color: rgba(42,36,32,0.54); }
         .sp-post-posted { border-color: rgba(20,108,67,0.24); }
         .sp-post-failed { border-color: rgba(180,35,24,0.3); }
+        .sp-post-awaiting_approval { border-color: rgba(180,140,20,0.32); }
+        .sp-approval-actions { display: flex; gap: 6px; margin-top: 8px; }
+        .sp-approval-actions button { min-height: 28px; padding: 0 10px; font-size: 11px; }
         .sp-icon-btn { min-height: 26px; width: 28px; padding: 0; }
         .sp-queue-actions { display: inline-flex; gap: 6px; }
         @media (max-width: 760px) {

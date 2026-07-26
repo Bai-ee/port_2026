@@ -16,6 +16,8 @@ import {
   verifyBookmarkAccess,
 } from '../../../../features/social-posting/x-oauth.js';
 import { createSocialPost } from '../../../../features/social-posting/twitter-service.js';
+import { listSocialAccounts, saveSocialAccount, disconnectSocialAccount, toPublicAccount } from '../../../../features/social-posting/social-accounts.js';
+import { LIVE_PLATFORM_KEYS } from '../../../../features/social-posting/platforms.js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -88,11 +90,46 @@ export async function POST(request) {
   const action = body?.action || '';
   try {
     if (action === 'start') {
-      const { url } = await startXOAuthFlow(callbackRedirectUri(request), decoded?.email || null);
+      // clientId present = the Social Accounts card's per-client connect;
+      // absent = the legacy X Command Center connect for the global @bai_ee.
+      const clientId = body.clientId ? String(body.clientId) : null;
+      const { url } = await startXOAuthFlow(callbackRedirectUri(request), decoded?.email || null, clientId);
       return json({ ok: true, url });
     }
     if (action === 'disconnect') {
       await disconnectXOAuth();
+      return json({ ok: true });
+    }
+
+    // ── Social Accounts card — per-client identity management ─────────────
+    if (action === 'accounts-list') {
+      const clientId = String(body.clientId || '');
+      if (!clientId) return json({ error: 'clientId is required.' }, 400);
+      return json({ ok: true, accounts: await listSocialAccounts(clientId) });
+    }
+    if (action === 'oauth1-save') {
+      const clientId = String(body.clientId || '');
+      const platform = String(body.platform || '');
+      if (!clientId) return json({ error: 'clientId is required.' }, 400);
+      if (!LIVE_PLATFORM_KEYS.includes(platform)) return json({ error: `Platform "${platform}" is not live yet.` }, 400);
+      const { appKey, appSecret, accessToken, accessSecret } = body.oauth1 || {};
+      if (!appKey || !appSecret || !accessToken || !accessSecret) {
+        return json({ error: 'appKey, appSecret, accessToken, and accessSecret are all required.' }, 400);
+      }
+      const account = await saveSocialAccount(clientId, platform, {
+        authMode: 'oauth1',
+        oauth1: { appKey, appSecret, accessToken, accessSecret },
+        username: body.username ? String(body.username).replace(/^@/, '').trim().slice(0, 60) : null,
+        connectedBy: decoded?.email || null,
+      });
+      return json({ ok: true, account: toPublicAccount(account) });
+    }
+    if (action === 'account-disconnect') {
+      const clientId = String(body.clientId || '');
+      const platform = String(body.platform || '');
+      if (!clientId) return json({ error: 'clientId is required.' }, 400);
+      if (!LIVE_PLATFORM_KEYS.includes(platform)) return json({ error: `Platform "${platform}" is not live yet.` }, 400);
+      await disconnectSocialAccount(clientId, platform);
       return json({ ok: true });
     }
     if (action === 'verify-bookmarks') {

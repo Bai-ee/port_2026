@@ -162,6 +162,32 @@ function normalizePostPlatforms(value) {
   return out;
 }
 
+// Social Auto-Publish — per-platform publish mode for the auto-generated
+// daily video. Mirrors features/social-posting/platforms.js's SOCIAL_PLATFORMS
+// key list as a plain local array (not imported: this file is CJS and
+// platforms.js is ESM — Node cannot require() an ESM module synchronously).
+// Add a platform in BOTH places when a new one goes live.
+const AUTO_PUBLISH_PLATFORM_KEYS = ['x', 'instagram'];
+const AUTO_PUBLISH_MODES = ['off', 'auto', 'approval'];
+const DEFAULT_AUTO_PUBLISH_PLATFORM = { mode: 'off', delayMinutes: 0, maxPerDay: 1 };
+const DEFAULT_AUTO_PUBLISH = {
+  platforms: Object.fromEntries(AUTO_PUBLISH_PLATFORM_KEYS.map((k) => [k, { ...DEFAULT_AUTO_PUBLISH_PLATFORM }])),
+};
+function normalizeAutoPublish(value) {
+  const v = value && typeof value === 'object' ? value : {};
+  const vp = v.platforms && typeof v.platforms === 'object' ? v.platforms : {};
+  const platforms = {};
+  for (const key of AUTO_PUBLISH_PLATFORM_KEYS) {
+    const p = vp[key] && typeof vp[key] === 'object' ? vp[key] : {};
+    platforms[key] = {
+      mode: AUTO_PUBLISH_MODES.includes(p.mode) ? p.mode : 'off',
+      delayMinutes: clampInt(p.delayMinutes, 0, 1440, 0),
+      maxPerDay: clampInt(p.maxPerDay, 1, 10, 1),
+    };
+  }
+  return { platforms };
+}
+
 // Demo (zeroed) metric groups. The Web Performance / Platform / Deployments
 // sections are backed by HITLOOP-global collectors (our GA4 property, our
 // Firestore user counts, our Vercel project) — real numbers for the home client,
@@ -201,6 +227,14 @@ const DEFAULT_SCHEDULE = {
   timezone: 'America/Chicago',
 };
 
+// Per-client override for the pre-digest-video worker's strict EditVideos
+// source folder(s). Empty = the worker's own DEFAULT_DAILY_VIDEO_SOURCE_FOLDERS
+// (['skyline']) — every existing client keeps today's behavior unless set.
+const DEFAULT_DAILY_VIDEO = { sourceFolders: [] };
+function normalizeDailyVideo(value) {
+  return { sourceFolders: cleanIdList(value?.sourceFolders) };
+}
+
 const DEFAULTS = {
   summaryEnabled: true,
   tone: 'concise, professional, direct',
@@ -213,6 +247,8 @@ const DEFAULTS = {
   demoMetrics: { ...DEFAULT_DEMO_METRICS }, // render these groups zeroed (see DEMO_METRIC_GROUPS)
   order: [...DEFAULT_ORDER],
   postPlatforms: { ...DEFAULT_POST_PLATFORMS },
+  autoPublish: { ...DEFAULT_AUTO_PUBLISH },
+  dailyVideo: { ...DEFAULT_DAILY_VIDEO },
   schedule: { ...DEFAULT_SCHEDULE },
   briefLinkMode: DEFAULT_BRIEF_LINK_MODE, // how the Executive Brief link resolves
   contactUrl: '',          // "Contact Your Human" CTA target (Calendly etc.); env DIGEST_CONTACT_URL is the fallback
@@ -333,6 +369,8 @@ async function getDigestConfig(clientId) {
     demoMetrics: normalizeDemoMetrics(data.demoMetrics),
     order: normalizeOrder(data.order),
     postPlatforms: normalizePostPlatforms(data.postPlatforms),
+    autoPublish: normalizeAutoPublish(data.autoPublish),
+    dailyVideo: normalizeDailyVideo(data.dailyVideo),
     schedule: normalizeSchedule(data.schedule),
     briefLinkMode: normalizeBriefLinkMode(data.briefLinkMode),
     contactUrl: typeof data.contactUrl === 'string' ? data.contactUrl : '',
@@ -356,6 +394,8 @@ async function saveDigestConfig(clientId, patch = {}) {
   if ('demoMetrics' in patch) next.demoMetrics = normalizeDemoMetrics(patch.demoMetrics);
   if ('order' in patch) next.order = normalizeOrder(patch.order);
   if ('postPlatforms' in patch) next.postPlatforms = normalizePostPlatforms(patch.postPlatforms);
+  if ('autoPublish' in patch) next.autoPublish = normalizeAutoPublish(patch.autoPublish);
+  if ('dailyVideo' in patch) next.dailyVideo = normalizeDailyVideo(patch.dailyVideo);
   if ('schedule' in patch) next.schedule = normalizeSchedule(patch.schedule);
   if ('briefLinkMode' in patch) next.briefLinkMode = normalizeBriefLinkMode(patch.briefLinkMode);
   if (typeof patch.contactUrl === 'string') next.contactUrl = patch.contactUrl.trim().slice(0, 500);
@@ -364,6 +404,20 @@ async function saveDigestConfig(clientId, patch = {}) {
   next.updatedAt = fb.FieldValue.serverTimestamp();
   await configDocRef(clientId).set(next, { merge: true });
   return getDigestConfig(clientId);
+}
+
+// Shared by the per-client digest send (which suppresses its auto-publish
+// button when true) and the approval-rollup worker (which only includes
+// clients where this is true) — one predicate, read the same way on both
+// sides, so a pending post is visible in exactly one place: never both,
+// never neither. A client's own digest_config.recipientEmail blank/matching
+// DIGEST_EMAIL means that client's email already lands in the admin's inbox,
+// same as the roll-up — showing the same button in two same-inbox emails is
+// the case this guards against.
+function isDigestClaimedByRollup(digestCfg) {
+  const digestTo = String(process.env.DIGEST_EMAIL || 'bryanballi@gmail.com').toLowerCase();
+  const recipient = (String(digestCfg?.recipientEmail || '').trim() || digestTo).toLowerCase();
+  return recipient === digestTo;
 }
 
 /**
@@ -470,6 +524,12 @@ module.exports = {
   POST_PLATFORMS,
   POST_PLATFORM_KEYS,
   DEFAULT_POST_PLATFORMS,
+  AUTO_PUBLISH_PLATFORM_KEYS,
+  AUTO_PUBLISH_MODES,
+  DEFAULT_AUTO_PUBLISH,
+  normalizeAutoPublish,
+  DEFAULT_DAILY_VIDEO,
+  normalizeDailyVideo,
   DEFAULT_MARKET_INSIGHT_SOURCE_PLATFORMS,
   DEMO_METRIC_GROUPS,
   DEMO_METRIC_KEYS,
@@ -477,6 +537,7 @@ module.exports = {
   BRIEF_LINK_MODES,
   getDigestConfig,
   saveDigestConfig,
+  isDigestClaimedByRollup,
   isCronEnrolled,
   listCronEnrolledClientIds,
   ensureDailyOptInMigration,

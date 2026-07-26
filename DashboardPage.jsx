@@ -9218,8 +9218,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       category: 'social',
       number: 'XC',
       label: 'ACCOUNT',
-      title: 'X Command Center',
-      description: 'Connects and manages the live @bai_ee X account — bookmarks into content, profile, engagement — every credit-metered action behind an explicit confirm.',
+      title: 'Social Accounts',
+      description: 'Per-client publishing identities — connect each client\'s own X/Instagram account, plus the live @bai_ee command center (bookmarks, profile, engagement).',
       placeholderLabel: 'X\nACCOUNT',
       rows: [
         { key: 'xc-channel', label: 'Channel', value: 'X / Twitter — @bai_ee' },
@@ -15711,11 +15711,15 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 {activeTileModal.cardId === 'x-profile' && (
                   <div id="x-profile-modal-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
                     <div className="tile-detail-tabs">
-                      <button type="button" className="tile-detail-tab tile-detail-tab--active">X COMMAND CENTER</button>
+                      <button type="button" className="tile-detail-tab tile-detail-tab--active">SOCIAL ACCOUNTS</button>
                     </div>
                     <div className="tile-detail-tab-content">
                       <div className="tile-detail-tab-pane">
-                        <XProfileCard getIdToken={brandSystemGetIdToken} />
+                        <XProfileCard
+                          getIdToken={brandSystemGetIdToken}
+                          activeClientId={client?.clientId || client?.id || bootstrap?.effectiveClientId}
+                          clientName={client?.companyName || client?.name || client?.dashboardTitle || null}
+                        />
                       </div>
                     </div>
                   </div>
