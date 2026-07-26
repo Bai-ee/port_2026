@@ -3,7 +3,7 @@ import { createRequire } from 'module';
 
 // Agent-ready probes: 11 parallel HTTP calls, 5s timeout each.
 // Typically completes in 5–10s. 30s gives comfortable headroom.
-export const maxDuration = 30;
+export const maxDuration = 120;
 
 const require = createRequire(import.meta.url);
 const { runAgentReady } = require('../../../../features/scout-intake/agent-ready/index');

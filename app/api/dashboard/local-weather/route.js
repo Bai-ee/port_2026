@@ -6,7 +6,7 @@ const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../../api/_lib/client-provisioning.cjs');
 const { getClientWeather } = require('../../../../features/intelligence/_weather.js');
 
-export const maxDuration = 30;
+export const maxDuration = 120;
 
 function makeReqShim(request) {
   return {

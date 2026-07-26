@@ -13,7 +13,7 @@ const { runProofBuilder } = require('../../../../../features/intelligence/analys
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const RATE_LIMIT_WINDOW_SECONDS = 60 * 10;
 const RATE_LIMIT_REQUESTS_PER_CLIENT = 20; // generous — iterative plan/finalize is expected UX

@@ -12,7 +12,7 @@ const { logAnthropicCall } = require('../../../../../api/_lib/usage-logger.cjs')
 const MODEL = 'claude-haiku-4-5-20251001';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 function makeReqShim(request) {
   return {

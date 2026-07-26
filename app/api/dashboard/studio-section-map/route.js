@@ -7,7 +7,7 @@ const { getEffectiveClientContext } = require('../../../../api/_lib/client-provi
 const { getBrowserlessConfig } = require('../../../../api/_lib/browserless.cjs');
 const { validateUrl } = require('../../../../api/_lib/safe-fetch.cjs');
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 // Maps a target site's scroll landmarks (sections + media) with their position
 // as % down the page, so the Studio UI can offer "click a section to target it"

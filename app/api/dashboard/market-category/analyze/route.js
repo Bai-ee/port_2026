@@ -28,7 +28,7 @@ function cleanLabel(raw) {
     .slice(0, 60);
 }
 
-export const maxDuration = 90;
+export const maxDuration = 120;
 
 async function generateCategoryCardImage({ clientId, category, brandName, brandSummary, rationale }) {
   const apiKey = process.env.OPENAI_API_KEY;

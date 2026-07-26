@@ -5,7 +5,7 @@ const require = createRequire(import.meta.url);
 const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
 const { safeFetch } = require('../../../../api/_lib/safe-fetch.cjs');
 
-export const maxDuration = 20;
+export const maxDuration = 120;
 
 // Does this URL allow being embedded in an iframe? The Studio's live preview is
 // a CSS3D iframe; sites with X-Frame-Options: DENY/SAMEORIGIN or CSP

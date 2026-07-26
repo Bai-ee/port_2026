@@ -2,7 +2,7 @@ import { createRequire } from 'module';
 import { getGmailClient, buildMimeMessage } from '../../../../features/leadgen/gmail-client.js';
 import { renderOutreachEmail } from '../../../../features/leadgen/email-template.js';
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const require = createRequire(import.meta.url);
 const fb                      = require('../../../../api/_lib/firebase-admin.cjs');

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 
-export const maxDuration = 30;
+export const maxDuration = 120;
 
 const require = createRequire(import.meta.url);
 const fb                    = require('../../../../api/_lib/firebase-admin.cjs');

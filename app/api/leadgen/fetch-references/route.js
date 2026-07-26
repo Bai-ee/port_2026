@@ -7,7 +7,7 @@
 // generate-site will re-fetch images at generation time using LAZYWEB_TOKEN.
 
 import { createRequire } from 'module';
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const require = createRequire(import.meta.url);
 const fb                    = require('../../../../api/_lib/firebase-admin.cjs');

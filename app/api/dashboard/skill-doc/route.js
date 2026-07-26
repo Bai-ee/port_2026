@@ -4,7 +4,7 @@ import { createRequire } from 'module';
 // Serves a stored skill doc as a downloadable HTML file.
 // Backed by dashboard_state.artifacts.skillDocs[skillId] (inline HTML/markdown).
 // Vercel Hobby compatible — pure Firestore read, <1s.
-export const maxDuration = 10;
+export const maxDuration = 120;
 
 const require = createRequire(import.meta.url);
 const fb                    = require('../../../../api/_lib/firebase-admin.cjs');

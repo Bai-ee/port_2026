@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 
-// Vercel Hobby caps serverless functions at 60s.
+// Fluid Compute gives Hobby functions up to 300s. Use the shared 120s tier so
+// this route bundles with the rest of the standard API surface.
 // Typical single-skill run budget:
 //   auth + Firestore reads  ~1s
 //   site re-fetch            5–10s
 //   skill LLM call (Haiku)   3–8s
 //   Firestore write          <1s
 // Total: usually 10–20s. 60s gives us headroom for slow sites.
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const require = createRequire(import.meta.url);
 const fb                     = require('../../../../api/_lib/firebase-admin.cjs');

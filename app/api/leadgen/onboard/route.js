@@ -3,7 +3,7 @@ import { createRequire } from 'module';
 
 // Runs 4 analysis modules in parallel against a prospect's website.
 // Multi-device screenshots (Browserless) + PageSpeed is the bottleneck — ~40s worst case.
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const require = createRequire(import.meta.url);
 const fb                    = require('../../../../api/_lib/firebase-admin.cjs');

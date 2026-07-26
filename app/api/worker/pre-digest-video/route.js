@@ -13,12 +13,10 @@ import { createRequire } from 'module';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-// 60, not 240: Vercel Hobby caps every function at 60s, so a higher value buys
-// nothing here — and because Vercel groups functions by their config, a unique
-// maxDuration makes this route its OWN function group. At 240 it was the only
-// member of that group and pushed the deployment past Hobby's 12-group cap.
-// Keep this equal to some other route's value unless the plan changes.
-export const maxDuration = 60;
+// Keep this on the shared 120s Fluid tier. Unique maxDuration values create
+// separate bundles and can push this large Next.js app past Hobby's 12-function
+// deployment limit.
+export const maxDuration = 120;
 
 const require = createRequire(import.meta.url);
 const { getHeaderValue, safeSecretEquals } = require('../../../../api/_lib/auth.cjs');
@@ -280,7 +278,7 @@ export async function triggerRandomRemix(clientId) {
 
 // Same budget-guard shape as pre-digest-refresh's fan-out loop: bail after any
 // completed client rather than risk the whole batch to a function timeout.
-// Must fit inside maxDuration (60s on Hobby), with headroom for the in-flight
+// Must fit inside the route's own fan-out budget, with headroom for the in-flight
 // client to finish. Clients past the budget are skipped this run, not lost —
 // the next day's cron picks them up, and the digest falls back to the previous
 // video with a stale badge rather than silently shipping nothing.

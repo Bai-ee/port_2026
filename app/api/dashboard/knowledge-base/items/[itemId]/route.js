@@ -7,7 +7,7 @@ const require = createRequire(import.meta.url);
 const { verifyRequestUser } = require('../../../../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../../../../api/_lib/client-provisioning.cjs');
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 function makeReqShim(request) {
   return {

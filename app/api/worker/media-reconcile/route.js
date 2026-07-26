@@ -8,7 +8,7 @@ import { createRequire } from 'module';
 //
 // Auth mirrors app/api/worker/render-studio/route.js: worker secret, cron
 // secret, or an admin request.
-export const maxDuration = 60;
+export const maxDuration = 120;
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 

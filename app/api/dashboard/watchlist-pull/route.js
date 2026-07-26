@@ -10,7 +10,7 @@ const { checkRateLimit, getClientIp } = require('../../../../api/_lib/rate-limit
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const RATE_LIMIT_WINDOW_SECONDS = 60 * 60;
 const RATE_LIMIT_REQUESTS_PER_CLIENT = 12;

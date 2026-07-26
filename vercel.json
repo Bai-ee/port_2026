@@ -1,4 +1,11 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "fluid": true,
+  "functions": {
+    "app/api/**/*": {
+      "maxDuration": 120
+    }
+  },
   "crons": [
     {
       "path": "/api/worker/pre-digest-video",

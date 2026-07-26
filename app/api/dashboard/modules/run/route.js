@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 
-// Vercel Hobby caps serverless functions at 60s. Typical module run:
+// Keep this on the shared 120s Fluid configuration so Vercel can bundle the
+// API surface within Hobby's per-deployment function limit. Typical module run:
 //   fetch 2–5s · PSI 30–45s · AI SEO 2–5s · skill 5–10s · writes <1s
 // Usually fits; edge cases may truncate. For Pro/Enterprise, raise as needed.
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const require = createRequire(import.meta.url);
 const fb = require('../../../../../api/_lib/firebase-admin.cjs');

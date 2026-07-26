@@ -2,7 +2,7 @@ import { createRequire } from 'module';
 
 // Single-module runner with NDJSON progress streaming.
 // Streams {"type":"progress",...} lines then {"type":"done",...} or {"type":"error",...}.
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const require = createRequire(import.meta.url);
 const fb                    = require('../../../../api/_lib/firebase-admin.cjs');
