@@ -15,6 +15,12 @@ Brief link shipped** (§10).
 >   to a freshly-published hosted page (`briefLinkMode`). Previews never refresh/publish. See §10.
 > - **Preview = what sends.** EMAIL PREVIEW defaults to **live** mode; Run & Send **saves the
 >   settings first** so saved == previewed == sent.
+> - **Video routing is independent.** Generate & Send attaches the latest
+>   completed Video Remix selected by `dailyVideo.sourceClientId`; it does not
+>   start a new render. The X destination is independently selected with
+>   `autoPublish.platforms.x.accountClientId`, and `recipientEmail` independently
+>   selects who receives the email. This supports Hitloop video → client email →
+>   that client's connected X handle from one master control surface.
 > - **Daily is opt-in per client.** The card is scoped to the **loaded dashboard client**
 >   (`activeClientId` → `digest-config?clientId=`). Its **Daily-email toggle** (`schedule.enabled`,
 >   default **OFF**) is the SOLE gate for BOTH crons — `pre-digest-refresh` (12:35 refresh/crawl)

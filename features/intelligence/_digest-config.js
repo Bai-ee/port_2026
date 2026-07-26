@@ -183,6 +183,9 @@ function normalizeAutoPublish(value) {
       mode: AUTO_PUBLISH_MODES.includes(p.mode) ? p.mode : 'off',
       delayMinutes: clampInt(p.delayMinutes, 0, 1440, 0),
       maxPerDay: clampInt(p.maxPerDay, 1, 10, 1),
+      // Optional routing target. Blank preserves the legacy behavior: publish
+      // through the digest client's own connected account.
+      accountClientId: typeof p.accountClientId === 'string' ? p.accountClientId.trim().slice(0, 160) : '',
     };
   }
   return { platforms };
@@ -230,9 +233,14 @@ const DEFAULT_SCHEDULE = {
 // Per-client override for the pre-digest-video worker's strict EditVideos
 // source folder(s). Empty = the worker's own DEFAULT_DAILY_VIDEO_SOURCE_FOLDERS
 // (['skyline']) — every existing client keeps today's behavior unless set.
-const DEFAULT_DAILY_VIDEO = { sourceFolders: [] };
+const DEFAULT_DAILY_VIDEO = { sourceFolders: [], sourceClientId: '' };
 function normalizeDailyVideo(value) {
-  return { sourceFolders: cleanIdList(value?.sourceFolders) };
+  return {
+    sourceFolders: cleanIdList(value?.sourceFolders),
+    // Which client's latest completed Video Remix should ride in this email.
+    // Blank = the digest/home client.
+    sourceClientId: typeof value?.sourceClientId === 'string' ? value.sourceClientId.trim().slice(0, 160) : '',
+  };
 }
 
 const DEFAULTS = {
@@ -406,14 +414,10 @@ async function saveDigestConfig(clientId, patch = {}) {
   return getDigestConfig(clientId);
 }
 
-// Shared by the per-client digest send (which suppresses its auto-publish
-// button when true) and the approval-rollup worker (which only includes
-// clients where this is true) — one predicate, read the same way on both
-// sides, so a pending post is visible in exactly one place: never both,
-// never neither. A client's own digest_config.recipientEmail blank/matching
-// DIGEST_EMAIL means that client's email already lands in the admin's inbox,
-// same as the roll-up — showing the same button in two same-inbox emails is
-// the case this guards against.
+// Legacy helper retained for compatibility. The master roll-up now includes
+// every pending client approval and every per-client digest keeps its own
+// button, even when both messages land in the admin inbox. Multiple tokens for
+// one post are safe because redemption + post status allow only one publish.
 function isDigestClaimedByRollup(digestCfg) {
   const digestTo = String(process.env.DIGEST_EMAIL || 'bryanballi@gmail.com').toLowerCase();
   const recipient = (String(digestCfg?.recipientEmail || '').trim() || digestTo).toLowerCase();

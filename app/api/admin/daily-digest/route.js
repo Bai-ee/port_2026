@@ -2069,12 +2069,32 @@ async function enqueueAutoPublishVideoPost({ clientId, platform, videoItems, tim
   } catch (err) {
     logWarn('daily_digest_autopublish_queue_read_failed', { clientId, error: err.message });
   }
-  const duplicate = existing.find((post) => post?.source === source);
+  // A completed video is reusable across DIFFERENT destination clients, but
+  // the same destination must not publish identical media twice on later days.
+  const duplicate = existing.find((post) => (
+    post?.source === source
+    || (
+      post?.mediaUrl === item.url
+      && ['awaiting_approval', 'scheduled', 'posting', 'posted'].includes(post?.status)
+    )
+  ));
   if (duplicate) {
     step?.('info', `Auto-publish · already queued for today (@${platformLabel})`);
+    let approvalUrl = duplicate.approvalUrl || null;
+    // Approval URLs are intentionally not persisted on the post. A repeated
+    // digest send therefore mints a fresh token for the same still-pending post
+    // instead of silently rendering a video with no button.
+    if (mode === 'approval' && duplicate.status === 'awaiting_approval') {
+      try {
+        const { token } = await signApprovalToken({ postId: duplicate.id, clientId, platform });
+        approvalUrl = `${appOrigin()}/post-approval?token=${encodeURIComponent(token)}`;
+      } catch (err) {
+        logWarn('daily_digest_duplicate_approval_token_failed', { clientId, platform, postId: duplicate.id, error: err.message });
+      }
+    }
     return {
       ...baseCtx,
-      approvalUrl: duplicate.approvalUrl || null,
+      approvalUrl,
       publishedAt: duplicate.postedAt || null,
       skipped: 'duplicate',
     };
@@ -2361,12 +2381,14 @@ async function fanOutScheduledSends(url) {
 }
 
 // ── Admin approval roll-up (mode=approval-rollup) ────────────────────────────
-// One email listing every client's video that is awaiting_approval AND whose
-// own per-client digest is suppressed for it (isDigestClaimedByRollup — the
-// same predicate both sides read). Each row gets its OWN freshly-minted,
-// single-use token; a post still carrying an unused token from its original
-// per-client mint is left alone, because publishApprovedPost/rejectSocialPost
-// guard on post.status — only the first click of any link can publish.
+// Includes every client's pending video. Each per-client digest keeps its own
+// button too, giving the client recipient and the Hitloop admin independent
+// single-use links to the same one-publish post.
+// One email listing every client's video that is awaiting_approval. Each row
+// gets its OWN freshly-minted, single-use token; a post still carrying an unused
+// token from its recipient email is left alone, because
+// publishApprovedPost/rejectSocialPost guard on post.status — only the first
+// click of any link can publish.
 //
 // Lives in this route rather than its own because it already depended on six
 // of this file's helpers (DT, buildVideoPostRow, dKicker, dSection, escapeHtml,
@@ -2482,9 +2504,6 @@ async function runApprovalRollup(request) {
     }
 
     for (const [clientId, clientPosts] of byClient) {
-      // eslint-disable-next-line no-await-in-loop
-      const cfg = await digestConfig.getDigestConfig(clientId).catch(() => null);
-      if (!cfg || !digestConfig.isDigestClaimedByRollup(cfg)) continue;
       for (const post of clientPosts) {
         try {
           // eslint-disable-next-line no-await-in-loop
@@ -2885,14 +2904,25 @@ export async function GET(request) {
     const videoStatus = { remix: null, promo: null };
     if ((wantRemix || wantPromo) && homeClientId) {
       try {
+        // Content, recipient, video, and publish account are independent:
+        // dailyVideo.sourceClientId chooses whose latest completed remix rides
+        // in this email. Blank preserves the digest client's own latest video.
+        const videoSourceClientId = digestCfg?.dailyVideo?.sourceClientId || homeClientId;
         const readLatestCaptures = async () => {
-          const ds = (await fb.adminDb.collection('dashboard_state').doc(homeClientId).get()).data() || {};
-          const latestFresh = (items, type) => (Array.isArray(items) ? items : [])
-            .filter((c) => c?.type === type && isFreshVideoCapture(c))
+          const [videoSourceSnap, homeSnap] = await Promise.all([
+            fb.adminDb.collection('dashboard_state').doc(videoSourceClientId).get(),
+            videoSourceClientId === homeClientId
+              ? Promise.resolve(null)
+              : fb.adminDb.collection('dashboard_state').doc(homeClientId).get(),
+          ]);
+          const videoSourceState = videoSourceSnap.data() || {};
+          const homeState = homeSnap?.data?.() || videoSourceState;
+          const latestAvailable = (items, type, { requireFresh = false } = {}) => (Array.isArray(items) ? items : [])
+            .filter((c) => c?.type === type && c?.downloadUrl && (!requireFresh || isFreshVideoCapture(c)))
             .sort((a, b) => dateMs(b.createdAt) - dateMs(a.createdAt))[0] || null;
           return {
-            remix: wantRemix ? latestFresh(ds.mediaCaptures, 'video_remix') : null,
-            promo: wantPromo ? latestFresh(ds.studioCaptures, 'studio_video') : null,
+            remix: wantRemix ? latestAvailable(videoSourceState.mediaCaptures, 'video_remix') : null,
+            promo: wantPromo ? latestAvailable(homeState.studioCaptures, 'studio_video', { requireFresh: true }) : null,
           };
         };
 
@@ -2902,18 +2932,17 @@ export async function GET(request) {
             const { reconcileMediaJob } = require('../../../../api/_lib/media-reconcile.cjs');
             const inflight = await mediaJobsLib.listInFlightMediaJobs(20);
             for (const job of inflight) {
-              if (job?.clientId !== homeClientId) continue;
-              try { await reconcileMediaJob(job, homeClientId); } catch { /* per-job best-effort */ }
+              if (job?.clientId !== videoSourceClientId) continue;
+              try { await reconcileMediaJob(job, videoSourceClientId); } catch { /* per-job best-effort */ }
             }
           } catch (e) {
             logWarn('daily_digest_media_reconcile_failed', { error: e.message });
           }
         };
 
-        // Reconcile in-flight remix renders first (e.g. the one the pre-digest
-        // video cron primed) so a just-finished video lands before we read it.
-        // On real sends, wait briefly; on previews, keep it quick.
-        const deadline = Date.now() + (isRealSend ? 45_000 : 0);
+        // Reconcile once, then use the latest completed render immediately.
+        // Generate & Send does not start or wait for a new video render.
+        const deadline = Date.now();
         let caps = { remix: null, promo: null };
         do {
           if (wantRemix) await reconcileInFlight();
@@ -2930,13 +2959,9 @@ export async function GET(request) {
           if (!probe.ok) {
             videoStatus.remix = `Video Remix link failed validation (${probe.reason || 'unknown'}).`;
             remixCap = null;
-          } else if (!isSameDigestDay(remixCap.createdAt, timestamp)) {
-            videoStatus.remix = `REUSED from ${staleVideoLabel(remixCap.createdAt)} — today's render was not ready in time.`;
-          } else {
-            videoStatus.remix = `ready · ${remixCap.createdAt || 'fresh capture'}`;
-          }
+          } else videoStatus.remix = `latest rendered · ${staleVideoLabel(remixCap.createdAt)} · source ${videoSourceClientId}`;
         } else if (wantRemix) {
-          videoStatus.remix = 'Video Remix is still rendering or no fresh completed capture was found.';
+          videoStatus.remix = `No completed Video Remix was found for source client ${videoSourceClientId}.`;
         }
         if (promoCap) {
           const probe = await probeVideoUrl(promoCap.downloadUrl);
@@ -2974,16 +2999,17 @@ export async function GET(request) {
           }
         }
         let ci = 0;
-        // `stale` = carried over from an earlier day; surfaced as a badge on the
-        // card so a repeated video is never mistaken for a fresh one.
+        // The selected latest render is intentional, even when it predates
+        // today. It is therefore publishable (`stale:false`) rather than treated
+        // as an accidental daily-render fallback.
         if (remixCap) {
-          const stale = !isSameDigestDay(remixCap.createdAt, timestamp);
           videoItems.remix = {
             url: remixCap.downloadUrl,
             duration: remixCap.durationSeconds || 30,
             caption: captions[ci++] || '',
-            stale,
-            staleLabel: stale ? staleVideoLabel(remixCap.createdAt) : '',
+            stale: false,
+            staleLabel: '',
+            sourceClientId: videoSourceClientId,
           };
         }
         if (promoCap) {
@@ -3033,44 +3059,63 @@ export async function GET(request) {
     if (wantRemix && homeClientId) {
       const publishPlatform = 'x';
       const publishMode = digestCfg?.autoPublish?.platforms?.[publishPlatform]?.mode || 'off';
+      const publishClientId = digestCfg?.autoPublish?.platforms?.[publishPlatform]?.accountClientId || homeClientId;
       if (publishMode !== 'off') {
         if (isRealSend) {
           try {
             const result = await enqueueAutoPublishVideoPost({
-              clientId: homeClientId, platform: publishPlatform, videoItems, timestamp, digestCfg, step,
+              clientId: publishClientId, platform: publishPlatform, videoItems, timestamp, digestCfg, step,
             });
-            // Double-send guard: this client's own digest lands in the same
-            // inbox as the approval-rollup worker (blank/DIGEST_EMAIL
-            // recipientEmail) — the rollup owns the visible button for this
-            // post, so strip it here rather than showing it twice in one
-            // inbox. The post itself (and its token) still exist; the rollup
-            // mints its own separate token when it sends.
-            if (result?.approvalUrl && digestConfig.isDigestClaimedByRollup(digestCfg)) {
-              step('info', `Auto-publish · button moved to the roll-up email (@${publishPlatform})`);
-              videoPublishCtx[publishPlatform] = { ...result, approvalUrl: null, claimedByRollup: true };
-            } else {
-              videoPublishCtx[publishPlatform] = result;
-            }
+            // Every per-client digest keeps its own actionable button. The
+            // independent master roll-up also lists this pending post, so the
+            // client and the Hitloop admin can each act from their own email.
+            // Multiple tokens are safe: post status + token redemption enforce
+            // one publish total.
+            videoPublishCtx[publishPlatform] = result;
           } catch (err) {
             logWarn('daily_digest_autopublish_failed', { clientId: homeClientId, error: err.message });
             step('error', `Auto-publish failed: ${err.message}`);
           }
         } else {
           let handle = null;
-          let publishClientName = homeClientId;
+          let publishClientName = publishClientId;
           try {
-            const acct = await getSocialAccount(homeClientId, publishPlatform);
+            const acct = await getSocialAccount(publishClientId, publishPlatform);
             handle = acct?.connected ? acct.username : null;
           } catch { /* not connected */ }
           try {
-            const snap = await fb.adminDb.collection('clients').doc(homeClientId).get();
+            const snap = await fb.adminDb.collection('clients').doc(publishClientId).get();
             const data = snap.exists ? snap.data() : null;
-            publishClientName = data?.companyName || data?.name || data?.dashboardTitle || homeClientId;
+            publishClientName = data?.companyName || data?.name || data?.dashboardTitle || publishClientId;
           } catch { /* fall back to the raw id */ }
           videoPublishCtx[publishPlatform] = {
             clientName: publishClientName, handle, mode: publishMode, platformLabel: 'X',
             approvalUrl: null, publishedAt: null, preview: true,
           };
+        }
+      }
+    }
+
+    // Approval/auto mode promises an actionable daily-video row. Never send a
+    // misleading email without the video, without a connected client account,
+    // or (in approval mode) without the approval button. The admin can retry
+    // after the already-queued render finishes or connect the account first.
+    if (isRealSend && wantRemix && homeClientId) {
+      const publishMode = digestCfg?.autoPublish?.platforms?.x?.mode || 'off';
+      const publishResult = videoPublishCtx.x;
+      if (publishMode !== 'off') {
+        if (!videoItems.remix || videoItems.remix.stale) {
+          throw new Error(`No completed Video Remix is available for the selected video source; email was not sent.`);
+        }
+        if (publishResult?.skipped === 'not-connected') {
+          const targetClientId = digestCfg?.autoPublish?.platforms?.x?.accountClientId || homeClientId;
+          throw new Error(`X is not connected for publish target ${targetClientId}; email was not sent because no working approval/publish action could be created.`);
+        }
+        if (publishMode === 'approval' && !publishResult?.approvalUrl) {
+          throw new Error(`Approval link could not be created for ${homeClientId}; email was not sent.`);
+        }
+        if (publishResult?.skipped === 'enqueue-failed' || publishResult?.skipped === 'publish-failed') {
+          throw new Error(`Daily video ${publishMode} setup failed for ${homeClientId}; email was not sent.`);
         }
       }
     }

@@ -8,13 +8,19 @@ Publishes each client's automatically-generated daily video (Video Remix) to **t
 
 ## 1. The three modes
 
-Set per client, per platform, in the **Email Digest card** → SETTINGS → `#digest-autopublish-section`:
+Set per digest, per platform, in the **Email Digest card** → SETTINGS → `#digest-autopublish-section`:
 
 - `off` (default, every client, every platform) — nothing publishes.
 - `auto` — publishes at digest send, no human in the loop.
 - `approval` — the digest email carries a **Post to X** button; nothing publishes until it's clicked (or the admin clicks Approve in the dashboard).
 
-Config lives at `digest_config/{clientId}.autoPublish.platforms.{x,instagram}` = `{mode, delayMinutes, maxPerDay}` (`features/intelligence/_digest-config.js` — `DEFAULT_AUTO_PUBLISH`/`normalizeAutoPublish`; `AUTO_PUBLISH_PLATFORM_KEYS` is a plain local list mirroring `platforms.js`, not imported — this file is CJS, `platforms.js` is ESM, and Node can't `require()` an ESM module synchronously. Keep the two lists in sync by hand).
+Config lives at `digest_config/{clientId}.autoPublish.platforms.{x,instagram}` = `{mode, delayMinutes, maxPerDay, accountClientId}` (`features/intelligence/_digest-config.js` — `DEFAULT_AUTO_PUBLISH`/`normalizeAutoPublish`; `AUTO_PUBLISH_PLATFORM_KEYS` is a plain local list mirroring `platforms.js`, not imported — this file is CJS, `platforms.js` is ESM, and Node can't `require()` an ESM module synchronously. Keep the two lists in sync by hand).
+
+Each platform config also carries optional `accountClientId`. Blank means “post
+through this digest client's connected account” (legacy behavior). Setting it
+lets the master Hitloop digest route a video to another client's connected
+handle. The destination client owns the resulting `social_posts` row and
+approval token; the digest's content source and recipient remain independent.
 
 ## 2. Identity — the Social Accounts card
 
@@ -78,13 +84,22 @@ Dashboard counterpart (`app/api/social-posting/route.js` actions `approve-post`/
 - **This only runs when `isRealSend`.** Preview/template builds a read-only "dry" ctx instead (connected-account lookup only, no Firestore write, no token) — `isPreview` gates the *whole* enqueue, not just the publish call inside it.
 - `buildVideoPostRow(item, kind, ctx)` / `buildAutoPublishRow(ctx)` render the attribution line (`CLIENT NAME → @handle`) + either the bulletproof-table `POST TO X` button (approval mode, table-based, no flex/JS — Outlook) or a passive `PUBLISHED · @handle · time` badge (auto mode). `ctx` is `undefined` for Video Promo and for any client with mode `off` → byte-identical to the pre-existing row.
 
-**Double-send guard** (`isDigestClaimedByRollup(digestCfg)` in `_digest-config.js` — the one predicate both sides read): a client's pending post is *claimed* by the roll-up (its own per-client email suppresses the button — the post and its token still exist) **iff** that client's `recipientEmail` resolves to `DIGEST_EMAIL` (blank, or explicitly set to it) — i.e. its own digest already lands in the same inbox the roll-up sends to. A client with a real, distinct `recipientEmail` keeps its own button and never appears in the roll-up at all — the admin has no operational reason to see a paying client's own approval queue, and that client's contact already has a working button in their own email.
+Every per-client/destination email keeps its own approval button. The master
+Hitloop roll-up also includes **all** pending client approvals, regardless of
+recipient. Both emails may therefore hold separate tokens for the same post;
+this is safe because token redemption and the post-status guard permit one
+publish total.
 
-`app/api/worker/approval-rollup/route.js` (cron `20 13 * * *`, after the `0 13` digest fan-out's 270s budget; worker-secret/cron-secret/admin-gated): queries `social_posts` where `status == 'awaiting_approval'`, keeps only claimed clients, mints a **fresh** token per post (independent of any token already minted at digest-send time — safe, see §4), renders one email (reuses `buildVideoPostRow`/`DT`/`dSection`/`sendEmail` exported from `daily-digest/route.js` rather than duplicating the HTML — note: this does bundle that large route's dependencies into the roll-up function too, a bundle-size tradeoff, not a correctness one). Always sends, even with zero pending (explicit empty state — gate on existing, not on data presence, same rule as the digest's own sections).
+`app/api/worker/approval-rollup/route.js` (cron `20 13 * * *`, after the `0 13` digest fan-out's 270s budget; worker-secret/cron-secret/admin-gated): queries all `social_posts` where `status == 'awaiting_approval'`, mints a **fresh** token per post (independent of the per-recipient token — safe, see §4), and renders one master email. It reuses `buildVideoPostRow`/`DT`/`dSection`/`sendEmail` exported from `daily-digest/route.js` rather than duplicating the HTML. Always sends, even with zero pending.
 
 ## 6. `pre-digest-video` fan-out + `process-due` staleness guard
 
 - `app/api/worker/pre-digest-video/route.js` now loops `[homeClientId, ...listCronEnrolledClientIds()]` (was: one client) — required for any non-home enrolled client to have a video at all. Per-client `strictSourceFolders` comes from `digest_config/{clientId}.dailyVideo.sourceFolders` (`_digest-config.js` `DEFAULT_DAILY_VIDEO`/`normalizeDailyVideo`), defaulting to `['skyline']` — no config UI yet, Firestore-only (matches the plan's runbook step "Set `dailyVideo.sourceFolders` for the client (or accept `skyline`)"). `await triggerWorker()` is still awaited — Vercel can freeze the instance right after the response returns, so this must never become fire-and-forget.
+- Interactive **Generate & Send does not start a render**. It reads the latest
+  completed, still-downloadable Video Remix from
+  `dailyVideo.sourceClientId` (blank = digest/home client). This selector is in
+  the Email Digest card, so several destination emails can reuse Hitloop's
+  latest video or each can select a different client's latest video.
 - `app/api/social-posting/process-due` cron added (`*/30 * * * *`). **The 12h staleness guard shipped in the same change**: `twitter-service.js`'s `readDuePosts` marks any due post whose `scheduledAt` is more than 12h in the past as `expired` (not in `DUE_STATUSES`) and skips it, instead of posting it — without this, the cron's first run would flush the entire historical backlog of never-sent scheduled posts to a live account. Approval-mode publishing never depends on this cron (it publishes inline on the click).
 
 ## 7. How to add a platform

@@ -190,14 +190,15 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
   const [ownerEmail, setOwnerEmail] = useState(''); // scoped client's signup email — recipient placeholder
   const [saveStatus, setSaveStatus] = useState(null);
   const [runState, setRunState] = useState({}); // { [clientId]: 'running' | 'done' | 'error: msg' }
-  const [socialAccountStatus, setSocialAccountStatus] = useState({}); // { x: {connected, username, ...} } for the loaded client
+  const [socialAccountStatus, setSocialAccountStatus] = useState({}); // connected accounts for the selected publish target
+  const publishAccountClientId = form?.autoPublish?.platforms?.x?.accountClientId || clientId;
 
   useEffect(() => {
-    if (!user || !clientId) { setSocialAccountStatus({}); return; }
-    authFetch(user, '/api/social-posting/x-oauth', { method: 'POST', body: JSON.stringify({ action: 'accounts-list', clientId }) })
+    if (!user || !publishAccountClientId) { setSocialAccountStatus({}); return; }
+    authFetch(user, '/api/social-posting/x-oauth', { method: 'POST', body: JSON.stringify({ action: 'accounts-list', clientId: publishAccountClientId }) })
       .then((data) => setSocialAccountStatus(data.accounts || {}))
       .catch(() => setSocialAccountStatus({}));
-  }, [user, clientId]);
+  }, [user, publishAccountClientId]);
 
   const loadSettings = useCallback(async () => {
     if (!user) return;
@@ -665,6 +666,22 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
                 <div id="digest-autopublish-section" className="field" style={{ display: 'grid', gap: 10 }}>
                   <span className="label">Auto-Publish (daily video)</span>
                   <span className="hint">Auto publishes with no human review. Approval emails a button and publishes nothing until it is clicked.</span>
+                  <label className="field" style={{ display: 'grid', gap: 6 }}>
+                    <span className="label">Video source</span>
+                    <select
+                      value={form.dailyVideo?.sourceClientId || ''}
+                      onChange={(e) => setForm((f) => ({
+                        ...f,
+                        dailyVideo: { ...(f.dailyVideo || {}), sourceClientId: e.target.value },
+                      }))}
+                    >
+                      <option value="">This digest client’s latest rendered video</option>
+                      {clients.map((c) => (
+                        <option key={c.clientId} value={c.clientId}>{c.name} · latest rendered video</option>
+                      ))}
+                    </select>
+                    <span className="hint">No new render is started. Point several emails at Hitloop to reuse the same latest video, or choose each client for different videos.</span>
+                  </label>
                   {['x', 'instagram'].map((platform) => {
                     const live = platform === 'x';
                     const p = form.autoPublish?.platforms?.[platform] || { mode: 'off', delayMinutes: 0, maxPerDay: 1 };
@@ -694,13 +711,26 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
                         </div>
                         <div className="segmented" role="group" aria-label={`${label} publish mode`}>
                           {['off', 'auto', 'approval'].map((m) => (
-                            <button key={m} type="button" disabled={!live} className={(p.mode || 'off') === m ? 'is-active' : ''} onClick={() => patchPlatform({ mode: m })}>
+                            <button key={m} type="button" disabled={!live || (m !== 'off' && !acct?.connected)} className={(p.mode || 'off') === m ? 'is-active' : ''} onClick={() => patchPlatform({ mode: m })}>
                               {m}
                             </button>
                           ))}
                         </div>
                         {live ? (
-                          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+                          <div style={{ display: 'grid', gap: 8 }}>
+                            <label style={{ display: 'grid', gap: 5, fontSize: 13 }}>
+                              Post to connected account
+                              <select
+                                value={p.accountClientId || ''}
+                                onChange={(e) => patchPlatform({ accountClientId: e.target.value })}
+                              >
+                                <option value="">This digest client</option>
+                                {clients.map((c) => (
+                                  <option key={c.clientId} value={c.clientId}>{c.name}</option>
+                                ))}
+                              </select>
+                            </label>
+                            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
                             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
                               Delay (min)
                               <input type="number" min={0} max={1440} value={p.delayMinutes ?? 0} onChange={(e) => patchPlatform({ delayMinutes: Number(e.target.value) || 0 })} style={{ width: 70 }} />
@@ -709,6 +739,7 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
                               Daily cap
                               <input type="number" min={1} max={10} value={p.maxPerDay ?? 1} onChange={(e) => patchPlatform({ maxPerDay: Number(e.target.value) || 1 })} style={{ width: 60 }} />
                             </label>
+                            </div>
                           </div>
                         ) : null}
                       </div>
