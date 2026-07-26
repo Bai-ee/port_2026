@@ -28,3 +28,8 @@ data/
 input/
 output/
 public/ui-teasers/
+
+# Local review/test assets — never part of the production bundle.
+/2006.glb
+/Layout Example.jpg
+/docs/x-content/

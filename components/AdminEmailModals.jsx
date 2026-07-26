@@ -367,7 +367,7 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
           ];
           const STEP_KEYS = ['modules', 'scout', 'watchlist', 'strategy', 'replyTargets', 'redditAnalysis', 'instagramAnalysis', 'executiveSummary'];
           for (const cid of digestClientIds) {
-            const merged = { clientId: cid, ok: true, sendable: true };
+            const merged = { clientId: cid, ok: true, sendable: true, requestErrors: [] };
             for (const [phaseKey, phaseLabel] of REFRESH_PHASES) {
               advance('[REFRESH]', `Refresh · ${cid} · ${phaseKey} — ${phaseLabel}…`);
               const refreshStartedAt = Date.now();
@@ -377,17 +377,29 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
                   note(`Refresh (${phaseKey}) still running · ${cid} · ${elapsed}s elapsed`);
                 }, 30000);
               }
-              // eslint-disable-next-line no-await-in-loop
-              const refresh = await authFetch(user, `/api/worker/pre-digest-refresh?clientId=${encodeURIComponent(cid)}&freshnessToken=${encodeURIComponent(freshnessToken)}&force=1&phase=${phaseKey}`, { method: 'POST', body: '{}' });
-              if (refreshHeartbeat) {
-                window.clearInterval(refreshHeartbeat);
-                refreshHeartbeat = null;
-              }
-              const r = (Array.isArray(refresh?.results) ? refresh.results : [])[0] || {};
-              merged.ok = merged.ok && r.ok !== false;
-              merged.sendable = merged.sendable && r.sendable !== false;
-              for (const k of STEP_KEYS) {
-                if (r[k] && r[k].reason !== 'other-phase') merged[k] = r[k];
+              try {
+                // eslint-disable-next-line no-await-in-loop
+                const refresh = await authFetch(user, `/api/worker/pre-digest-refresh?clientId=${encodeURIComponent(cid)}&freshnessToken=${encodeURIComponent(freshnessToken)}&force=1&phase=${phaseKey}`, { method: 'POST', body: '{}' });
+                const r = (Array.isArray(refresh?.results) ? refresh.results : [])[0] || {};
+                merged.ok = merged.ok && r.ok !== false;
+                merged.sendable = merged.sendable && r.sendable !== false;
+                for (const k of STEP_KEYS) {
+                  if (r[k] && r[k].reason !== 'other-phase') merged[k] = r[k];
+                }
+              } catch (refreshError) {
+                // Refresh is best-effort. A mobile network drop or Vercel timeout
+                // must not prevent the fast send route from using last-good saved
+                // data (including the already-rendered approval video).
+                const message = refreshError?.message || 'Refresh request failed';
+                merged.ok = false;
+                merged.sendable = false;
+                merged.requestErrors.push({ phase: phaseKey, message });
+                note(`⚠ Refresh · ${cid} · ${phaseKey} failed (${message}); the email will use latest saved data.`);
+              } finally {
+                if (refreshHeartbeat && typeof window !== 'undefined') {
+                  window.clearInterval(refreshHeartbeat);
+                  refreshHeartbeat = null;
+                }
               }
             }
             refreshResults.push(merged);
@@ -401,19 +413,21 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
             const executiveSummary = r?.executiveSummary?.ok ? 'executive summary ok' : `executive summary issue${r?.executiveSummary?.error ? `: ${r.executiveSummary.error}` : ''}`;
             note(`Refresh · ${r?.clientId || 'client'} · ${modules} · ${scout} · ${watch} · ${reddit} · ${strategy} · ${executiveSummary}`);
           });
-          // Gate on `sendable` (core: fresh scout signals + executive summary), NOT `ok`.
-          // Bonus steps (strategy/plan, creative modules, watchlist) that fail just render
-          // their section's empty-state — they must not block an otherwise-good email.
+          // Refresh freshness is advisory for an interactive send. The fast send
+          // route intentionally reads last-good saved data and independently
+          // validates the recipient, selected video, approval URL, and target
+          // social account. Never strand an admin email because a long refresh
+          // request timed out or a content source was temporarily unavailable.
           const sendableResults = refreshResults.filter((r) => r?.sendable);
           if (!refreshResults.length || !sendableResults.length) {
-            setSendStatus({ kind: 'error', msg: 'Refresh failed; email not sent.' });
-            throw new Error('Refresh did not complete cleanly — scout signals or the executive summary failed. Email not sent; fix that and try again.');
+            note('⚠ Fresh refresh was unavailable; continuing with the latest saved digest data and last rendered video.');
           }
           // Non-critical issues (e.g. "strategy issue: No category set") warn but don't block.
           refreshResults
             .filter((r) => r?.sendable && !r?.ok)
             .forEach((r) => note(`⚠ Sending ${r?.clientId || 'client'} despite a non-critical issue above — that section shows its empty state.`));
-          note('Fresh digest data saved ✓');
+          const refreshedAllClients = refreshResults.length > 0 && refreshResults.every((r) => r?.sendable);
+          note(refreshedAllClients ? 'Fresh digest data saved ✓' : 'Using latest saved digest data ✓');
 
           advance('[STEP 2/2]', 'Rendering and sending email from saved data…');
           setSendStatus({ kind: 'pending', msg: 'Sending email from saved data…' });
@@ -424,8 +438,8 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
           const res = await authFetch(user, `/api/admin/daily-digest?send=1&skipRefresh=1&freshnessToken=${encodeURIComponent(freshnessToken)}${sendClientId ? `&clientId=${encodeURIComponent(sendClientId)}` : ''}`);
           (Array.isArray(res?.log) ? res.log : []).forEach((l) => note(l.text));
           if (res?.subject) note(`Subject · ${res.subject}`);
-          setSendStatus({ kind: 'ok', msg: 'Sent with freshly saved data.' });
-          return { doneText: 'Done ✓ — refreshed first, then sent' };
+          setSendStatus({ kind: 'ok', msg: refreshedAllClients ? 'Sent with freshly saved data.' : 'Sent with latest saved data.' });
+          return { doneText: refreshedAllClients ? 'Done ✓ — refreshed first, then sent' : 'Done ✓ — sent from latest saved data' };
         },
       });
     } catch (e) {

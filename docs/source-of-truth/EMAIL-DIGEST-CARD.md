@@ -410,7 +410,12 @@ Phase 3 (sequential):
   refreshBriefSummaries     — regenerate brief cover/analysis summaries (executive-daily + onboarding brief types)
 ```
 
-Failures in any phase are logged and never block later phases or the email (which falls back to last-good data).
+Failures in any phase are logged and never block later phases or the email (which falls back to
+last-good data). The interactive **Generate & Send** UI follows the same rule: if a phased refresh
+returns an error, times out at Vercel, or the browser reports a network failure such as Safari's
+`Load failed`, the terminal shows a warning and still calls the fast send route with
+`skipRefresh=1`. The send route remains strict about actual delivery prerequisites (recipient,
+selected rendered video, approval URL, and connected target social account).
 
 **Flow** (`app/api/admin/daily-digest/route.js` GET, main `try`):
 1. Resolve `homeClientId` + `digestCfg`; compute `briefClientIds = [home, ...includeClientIds]`.
