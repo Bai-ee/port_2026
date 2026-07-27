@@ -9,7 +9,7 @@ import {
   runPostingAgents,
   schedulePost,
 } from '../../../../features/social-posting/twitter-service.js';
-import { getSocialAccount } from '../../../../features/social-posting/social-accounts.js';
+import { getSocialAccount, toPublicAccount } from '../../../../features/social-posting/social-accounts.js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -2042,7 +2042,8 @@ async function enqueueAutoPublishVideoPost({ clientId, platform, videoItems, tim
   try {
     account = await getSocialAccount(clientId, platform);
   } catch { /* treated as not-connected below */ }
-  const handle = account?.connected ? account.username : null;
+  const publicAccount = toPublicAccount(account);
+  const handle = publicAccount.connected ? publicAccount.username : null;
   const baseCtx = { clientName, handle, mode, platformLabel, approvalUrl: null, publishedAt: null };
 
   const item = videoItems?.remix;
@@ -2057,7 +2058,7 @@ async function enqueueAutoPublishVideoPost({ clientId, platform, videoItems, tim
     step?.('info', `Auto-publish · skipped, video is stale (@${platformLabel})`);
     return { ...baseCtx, skipped: 'stale' };
   }
-  if (!account?.connected) {
+  if (!publicAccount.connected) {
     step?.('info', `Auto-publish · ${platformLabel} not connected for this client`);
     return { ...baseCtx, skipped: 'not-connected' };
   }
@@ -2468,7 +2469,8 @@ async function buildRollupRow(post) {
   let handle = null;
   try {
     const account = await getSocialAccount(clientId, platform);
-    handle = account?.connected ? account.username : null;
+    const publicAccount = toPublicAccount(account);
+    handle = publicAccount.connected ? publicAccount.username : null;
   } catch { /* not connected */ }
 
   const { token } = await signApprovalToken({ postId: post.id, clientId, platform });
@@ -3122,7 +3124,8 @@ export async function GET(request) {
           let publishClientName = publishClientId;
           try {
             const acct = await getSocialAccount(publishClientId, publishPlatform);
-            handle = acct?.connected ? acct.username : null;
+            const publicAccount = toPublicAccount(acct);
+            handle = publicAccount.connected ? publicAccount.username : null;
           } catch { /* not connected */ }
           try {
             const snap = await fb.adminDb.collection('clients').doc(publishClientId).get();
