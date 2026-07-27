@@ -364,17 +364,17 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
             if (saved?.marketInsights) setMarketInsights(saved.marketInsights);
           }
           note('Saved config ✓');
-          advance('[SEND]', 'Sending the latest saved digest with the last completed video…');
+          advance('[SEND]', 'Generating and sending the email with the latest completed video…');
           note('Manual send skips intelligence refresh and never starts a video render.');
-          setSendStatus({ kind: 'pending', msg: 'Sending last completed video…' });
+          setSendStatus({ kind: 'pending', msg: 'Generating and sending email…' });
           // Scope the send to this card's saved home client. The server separately
           // resolves the configured video source and destination social account.
           const sendClientId = savedConfig?.homeClientId || activeClientId || clientId || '';
           const res = await authFetch(user, `/api/admin/daily-digest?send=1&skipRefresh=1&freshnessToken=${encodeURIComponent(freshnessToken)}${sendClientId ? `&clientId=${encodeURIComponent(sendClientId)}` : ''}`);
           (Array.isArray(res?.log) ? res.log : []).forEach((l) => note(l.text));
           if (res?.subject) note(`Subject · ${res.subject}`);
-          setSendStatus({ kind: 'ok', msg: 'Sent with last completed video.' });
-          return { doneText: 'Done ✓ — last completed video sent' };
+          setSendStatus({ kind: 'ok', msg: 'Email sent with the latest completed video.' });
+          return { doneText: 'Done ✓ — email generated and sent' };
         },
       });
     } catch (e) {
@@ -884,11 +884,11 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
                 <span className="hint">{
                   sendStatus && sendStatus.kind !== 'error' ? sendStatus.msg
                     : saveStatus && saveStatus.kind !== 'error' ? saveStatus.msg
-                      : 'Send Last Video saves settings, then emails the latest saved digest data and completed video.'
+                      : 'Generate & Send Email saves settings, builds the email from saved digest data, and attaches the latest completed video.'
                 }</span>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                   <button type="button" className="btn btn-outline" onClick={save} disabled={saveStatus?.kind === 'pending' || sendStatus?.kind === 'pending'}>{saveStatus?.kind === 'pending' ? 'Saving…' : 'Save Config'}</button>
-                  <button type="button" className="btn" style={{ background: '#2a2420', color: '#fff', borderColor: '#2a2420' }} onClick={runAndSend} disabled={sendStatus?.kind === 'pending' || saveStatus?.kind === 'pending'}>{sendStatus?.kind === 'pending' ? 'Working…' : 'Send Last Video'}</button>
+                  <button type="button" className="btn" style={{ background: '#2a2420', color: '#fff', borderColor: '#2a2420' }} onClick={runAndSend} disabled={sendStatus?.kind === 'pending' || saveStatus?.kind === 'pending'}>{sendStatus?.kind === 'pending' ? 'Working…' : 'Generate & Send Email'}</button>
                 </div>
               </div>
             </div>

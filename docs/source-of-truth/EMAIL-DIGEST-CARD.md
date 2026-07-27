@@ -11,7 +11,7 @@ Brief link shipped** (§10).
 >   Sections are gated **purely by their toggle** with an explicit empty-state, so the EMAIL
 >   PREVIEW and the sent email hide/show identically.
 > - **Refresh and send are separate.** The scheduled pre-digest worker refreshes
->   intelligence before the daily cron. **Send Last Video** skips refresh and
+>   intelligence before the daily cron. **Generate & Send Email** skips refresh and
 >   immediately sends saved data plus the last completed video. See §10.
 > - **Preview = what sends.** EMAIL PREVIEW defaults to **live** mode; Run & Send **saves the
 >   settings first** so saved == previewed == sent.
@@ -63,7 +63,7 @@ Related SSOT: [`MARKET-SIGNALS-AND-SCOUT-PROJECTION.md`](MARKET-SIGNALS-AND-SCOU
 The Email Digest is a **read-only aggregator at render time** — `buildEmailHtml` reads
 finalized intelligence. The scheduled pre-digest worker refreshes Scout, strategy,
 and summaries into `dashboard_state`; the scheduled send then reads that saved
-state. Interactive **Send Last Video** intentionally skips refresh so it cannot
+state. Interactive **Generate & Send Email** intentionally skips refresh so it cannot
 sit in a long-running module loop. Previews stay fully read-only.
 The hosted **Executive Brief** linked from the email is a freshly-published page at
 `/briefs/{clientSlug}/{briefSlug}` (was `/dashboard?open=brief`; that's now only the fallback).
@@ -230,7 +230,7 @@ so the tab renders the card's *current, even unsaved* toggles (`form.include`); 
 = all off, param absent = saved config. **Run & Send saves the current settings first**, so
 `saved == previewed == sent`. Because every `buildEmailHtml` section is gated only by `include.*`
 (never by data presence — §3 parity rule), and `?preview=1` and `?send=1` share one code path,
-live preview and the sent email share the same renderer. Send Last Video uses
+live preview and the sent email share the same renderer. Generate & Send Email uses
 the same latest saved data rather than starting a refresh.
 
 ### 5b. Generate & Send run UX (as-built — shared global terminal)
@@ -414,7 +414,7 @@ Phase 3 (sequential):
 ```
 
 Failures in any scheduled refresh phase are logged and never block the eventual scheduled email,
-which falls back to last-good data. The interactive **Send Last Video** action does not call the
+which falls back to last-good data. The interactive **Generate & Send Email** action does not call the
 refresh worker at all: it saves the current settings and immediately calls the fast send route with
 `skipRefresh=1`, using the latest saved digest data and last completed video. The send route remains
 strict about actual delivery prerequisites (recipient, selected rendered video, approval URL, and
@@ -449,7 +449,7 @@ email delivery.
   `runClientPipeline` + a 90-min publish-reuse window — that caused a today-URL with yesterday's
   content. The refresh (step 2) is now the single source of freshness; the resolver only
   renders + publishes what's already fresh.
-- **Cost:** Send Last Video does not run Scout or module refreshes. Caption and
+- **Cost:** Generate & Send Email does not run Scout or module refreshes. Caption and
   fresh Executive Brief generation may still incur their existing model cost
   unless their respective settings skip those calls.
 - **Auth:** publishing writes Firestore directly via the admin SDK — it does NOT call the

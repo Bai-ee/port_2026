@@ -29,6 +29,7 @@ function PostApprovalView() {
   const token = useSearchParams().get('token') || '';
   const [state, setState] = useState('loading');
   const [preview, setPreview] = useState(null);
+  const [caption, setCaption] = useState('');
   const [error, setError] = useState('');
   const [posting, setPosting] = useState(false);
 
@@ -42,6 +43,7 @@ function PostApprovalView() {
         if (cancelled) return;
         setState(data.state || 'error');
         setPreview(data);
+        setCaption(typeof data.caption === 'string' ? data.caption : '');
         setError(data.error || '');
       } catch {
         if (!cancelled) setState('error');
@@ -52,12 +54,22 @@ function PostApprovalView() {
 
   async function handlePost() {
     if (posting) return;
+    const nextCaption = caption.trim();
+    if (!nextCaption) {
+      setError('Post copy is required.');
+      return;
+    }
+    if (nextCaption.length > 280) {
+      setError('X posts must be 280 characters or fewer.');
+      return;
+    }
     setPosting(true);
+    setError('');
     try {
       const res = await fetch('/api/public/social-approve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token }),
+        body: JSON.stringify({ token, content: nextCaption }),
       });
       const data = await res.json().catch(() => ({}));
       setState(data.state || 'error');
@@ -90,8 +102,35 @@ function PostApprovalView() {
             {preview?.videoUrl ? (
               <video id="post-approval-video" src={preview.videoUrl} controls playsInline style={styles.video} />
             ) : null}
-            <p style={styles.caption}>{preview?.caption}</p>
-            <button id="post-approval-action-shell" type="button" onClick={handlePost} disabled={posting} style={styles.button}>
+            <div style={styles.copyField}>
+              <div style={styles.copyMeta}>
+                <label htmlFor="post-approval-copy" style={styles.copyLabel}>Post copy</label>
+                <span style={{ ...styles.count, color: caption.length > 280 ? '#ff7b72' : styles.count.color }}>
+                  {caption.length}/280
+                </span>
+              </div>
+              <textarea
+                id="post-approval-copy"
+                value={caption}
+                onChange={(event) => {
+                  setCaption(event.target.value);
+                  if (error) setError('');
+                }}
+                maxLength={280}
+                rows={4}
+                spellCheck
+                style={styles.caption}
+              />
+              <p style={styles.copyHint}>Edit this copy before publishing. Changes are applied only when you press the final Post button.</p>
+              {error ? <p style={styles.inlineError}>{error}</p> : null}
+            </div>
+            <button
+              id="post-approval-action-shell"
+              type="button"
+              onClick={handlePost}
+              disabled={posting || !caption.trim() || caption.length > 280}
+              style={{ ...styles.button, opacity: posting || !caption.trim() || caption.length > 280 ? 0.55 : 1 }}
+            >
               {posting ? 'Posting…' : `Post to ${(preview?.platform || 'x').toUpperCase()}`}
             </button>
           </>
@@ -131,7 +170,13 @@ const styles = {
   title: { fontSize: 20, margin: '0 0 12px', letterSpacing: '0.01em' },
   targetLine: { fontSize: 14, lineHeight: 1.6, color: 'rgba(245,245,245,0.85)', margin: '0 0 16px' },
   body: { fontSize: 13, lineHeight: 1.6, color: 'rgba(245,245,245,0.7)' },
-  caption: { fontSize: 13, lineHeight: 1.6, color: 'rgba(245,245,245,0.85)', whiteSpace: 'pre-wrap', textAlign: 'left', background: 'rgba(255,255,255,0.06)', borderRadius: 10, padding: '12px 14px', margin: '0 0 20px' },
+  copyField: { margin: '0 0 20px', textAlign: 'left' },
+  copyMeta: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, margin: '0 2px 8px' },
+  copyLabel: { fontSize: 12, fontWeight: 700, color: 'rgba(245,245,245,0.88)' },
+  count: { fontSize: 11, color: 'rgba(245,245,245,0.5)', fontVariantNumeric: 'tabular-nums' },
+  caption: { boxSizing: 'border-box', display: 'block', width: '100%', resize: 'vertical', font: 'inherit', fontSize: 13, lineHeight: 1.6, color: 'rgba(245,245,245,0.9)', caretColor: '#f5f5f5', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', outline: 'none', borderRadius: 10, padding: '12px 14px', minHeight: 96 },
+  copyHint: { fontSize: 11, lineHeight: 1.5, color: 'rgba(245,245,245,0.5)', margin: '7px 2px 0' },
+  inlineError: { fontSize: 11, lineHeight: 1.5, color: '#ff7b72', margin: '7px 2px 0' },
   video: { width: '100%', borderRadius: 12, margin: '0 0 16px', background: '#000' },
   button: {
     width: '100%',

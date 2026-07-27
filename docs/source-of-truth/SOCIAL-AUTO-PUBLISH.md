@@ -91,6 +91,10 @@ Public surface, `app/api/public/social-approve/`:
 - `route.js` — **POST only** (`GET` → `405`); email scanners prefetching the link never publish. Rate-limited 30/hr/IP. Redeems, then `publishApprovedPost(...)`; success → `recordApprovalResult(tokenId,'posted')`; the `not-pending` race (dashboard beat this click by a hair) → recorded as anything-but-`'failed'` and reported as `already-posted`, not a false `failed`.
 - `preview/route.js` — **read-only**, also rate-limited 30/hr/IP (a leaked link is otherwise unlimited Firestore reads). Never redeems, never publishes.
 - `app/post-approval/[token]/page.jsx` — public, unauthenticated. States: `ready` (names the exact live account **above** the button — accepted product decision: anyone holding the link can publish, mitigated by 48h TTL + single-use + revoke + IP/UA audit) / `already-posted` / `expired` / `revoked` / `failed` / `server` (ops misconfig, not a bad link) / `not-found` / `invalid`.
+  In `ready`, the generated post copy is an editable 280-character textarea.
+  The edit is sent only with the explicit final POST, saved to the same
+  `awaiting_approval` row, and then published. Loading or typing never writes
+  or publishes.
 
 Dashboard counterpart (`app/api/social-posting/route.js` actions `approve-post`/`reject-post`/`revoke-approvals`; `SocialPostingPanel.jsx` renders Approve/Reject on `awaiting_approval` rows) publishes/rejects directly, then revokes that post's token.
 

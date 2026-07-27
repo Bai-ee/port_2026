@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
-import { getSocialPost, publishApprovedPost } from '../../../../features/social-posting/twitter-service.js';
+import { getSocialPost, publishApprovedPost, updateSocialPost } from '../../../../features/social-posting/twitter-service.js';
 import { getSocialAccount } from '../../../../features/social-posting/social-accounts.js';
 
 const require = createRequire(import.meta.url);
@@ -22,7 +22,8 @@ export const dynamic = 'force-dynamic';
 //
 //   GET  ?token=…  → read-only preview for the approval page. Never writes,
 //                    never redeems, never publishes.
-//   POST {token}   → redeems the single-use token, then publishes.
+//   POST {token, content?} → validates optional edited copy, redeems the
+//                            single-use token, saves the edit, then publishes.
 //
 // The security property is unchanged and is the one that matters: **a GET can
 // never publish.** Email scanners and link prefetchers issue GETs, so the
@@ -104,6 +105,16 @@ export async function POST(request) {
 
   const token = String(body?.token || '');
   if (!token) return json({ ok: false, state: 'error', error: 'Missing token.' }, 400);
+  let editedContent = null;
+  if (Object.prototype.hasOwnProperty.call(body || {}, 'content')) {
+    editedContent = String(body.content || '').trim();
+    if (!editedContent) {
+      return json({ ok: false, state: 'error', error: 'Post copy is required.' }, 400);
+    }
+    if (editedContent.length > 280) {
+      return json({ ok: false, state: 'error', error: 'X posts must be 280 characters or fewer.' }, 400);
+    }
+  }
 
   const ua = request.headers.get('user-agent') || null;
 
@@ -120,6 +131,9 @@ export async function POST(request) {
   // is recorded but the token is NOT un-burned (re-approve from the dashboard
   // is the recovery path, not a retried click on this link).
   try {
+    if (editedContent != null) {
+      await updateSocialPost(decoded.clientId, decoded.postId, { content: editedContent });
+    }
     await publishApprovedPost(decoded.clientId, decoded.postId, { source: 'email' });
     await recordApprovalResult(decoded.tokenId, 'posted');
     return json({ ok: true, state: 'posted' });
