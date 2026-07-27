@@ -183,9 +183,6 @@ function normalizeAutoPublish(value) {
       mode: AUTO_PUBLISH_MODES.includes(p.mode) ? p.mode : 'off',
       delayMinutes: clampInt(p.delayMinutes, 0, 1440, 0),
       maxPerDay: clampInt(p.maxPerDay, 1, 10, 1),
-      // Optional routing target. Blank preserves the legacy behavior: publish
-      // through the digest client's own connected account.
-      accountClientId: typeof p.accountClientId === 'string' ? p.accountClientId.trim().slice(0, 160) : '',
     };
   }
   return { platforms };
@@ -241,6 +238,13 @@ function normalizeDailyVideo(value) {
     // Blank = the digest/home client.
     sourceClientId: typeof value?.sourceClientId === 'string' ? value.sourceClientId.trim().slice(0, 160) : '',
   };
+}
+
+function resolveDailyVideoOwnerClientId(config, digestClientId) {
+  const selected = typeof config?.dailyVideo?.sourceClientId === 'string'
+    ? config.dailyVideo.sourceClientId.trim()
+    : '';
+  return selected || (typeof digestClientId === 'string' ? digestClientId.trim() : '');
 }
 
 const DEFAULTS = {
@@ -534,6 +538,7 @@ module.exports = {
   normalizeAutoPublish,
   DEFAULT_DAILY_VIDEO,
   normalizeDailyVideo,
+  resolveDailyVideoOwnerClientId,
   DEFAULT_MARKET_INSIGHT_SOURCE_PLATFORMS,
   DEMO_METRIC_GROUPS,
   DEMO_METRIC_KEYS,

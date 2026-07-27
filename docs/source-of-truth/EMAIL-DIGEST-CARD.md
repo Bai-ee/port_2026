@@ -10,17 +10,18 @@ Brief link shipped** (§10).
 > - **Every email section is on/off individually** via `include.*` (17 granular keys) — see §9.
 >   Sections are gated **purely by their toggle** with an explicit empty-state, so the EMAIL
 >   PREVIEW and the sent email hide/show identically.
-> - **A real send refreshes first.** Run & Send and the daily cron now run a **fresh brief**
->   for every digest client BEFORE building the email; the "Open Executive Brief" button links
->   to a freshly-published hosted page (`briefLinkMode`). Previews never refresh/publish. See §10.
+> - **Refresh and send are separate.** The scheduled pre-digest worker refreshes
+>   intelligence before the daily cron. **Send Last Video** skips refresh and
+>   immediately sends saved data plus the last completed video. See §10.
 > - **Preview = what sends.** EMAIL PREVIEW defaults to **live** mode; Run & Send **saves the
 >   settings first** so saved == previewed == sent.
-> - **Video routing is independent.** Generate & Send attaches the latest
->   completed Video Remix selected by `dailyVideo.sourceClientId`; it does not
->   start a new render. The X destination is independently selected with
->   `autoPublish.platforms.x.accountClientId`, and `recipientEmail` independently
->   selects who receives the email. This supports Hitloop video → client email →
->   that client's connected X handle from one master control surface.
+> - **The selected video client owns publishing.** Generate & Send attaches the
+>   latest completed Video Remix selected by `dailyVideo.sourceClientId`; it
+>   does not start a new render. That selected client also supplies the caption
+>   voice, approval policy, connected X account, post, and approval tokens.
+>   `recipientEmail` remains independent, so both the client's email and the
+>   Hitloop/admin email may approve the same owner-scoped post without creating
+>   a second X post.
 > - **Daily is opt-in per client.** The card is scoped to the **loaded dashboard client**
 >   (`activeClientId` → `digest-config?clientId=`). Its **Daily-email toggle** (`schedule.enabled`,
 >   default **OFF**) is the SOLE gate for BOTH crons — `pre-digest-refresh` (12:35 refresh/crawl)
@@ -57,11 +58,11 @@ Related SSOT: [`MARKET-SIGNALS-AND-SCOUT-PROJECTION.md`](MARKET-SIGNALS-AND-SCOU
 [Executive Brief]      → aggregates Marketing + Creative + operational intelligence
 ```
 
-The Email Digest is a **read-only aggregator at render time** — `buildEmailHtml` never reads
-the pipeline, only finalized intelligence. **But a real send is no longer purely read-only:**
-on Run & Send and the daily cron, the digest route first runs a **fresh refresh** of every
-digest client (Scout-only signals + strategy regen, persisted to `dashboard_state`) so the
-email reflects send-time data, then renders + sends (§10). Previews stay fully read-only.
+The Email Digest is a **read-only aggregator at render time** — `buildEmailHtml` reads
+finalized intelligence. The scheduled pre-digest worker refreshes Scout, strategy,
+and summaries into `dashboard_state`; the scheduled send then reads that saved
+state. Interactive **Send Last Video** intentionally skips refresh so it cannot
+sit in a long-running module loop. Previews stay fully read-only.
 The hosted **Executive Brief** linked from the email is a freshly-published page at
 `/briefs/{clientSlug}/{briefSlug}` (was `/dashboard?open=brief`; that's now only the fallback).
 
@@ -217,7 +218,7 @@ onto what already exists, just re-skinned as a card:
 |---|---|---|
 | Save config (`/api/dashboard/marketing-brief/config`) | `/api/admin/digest-config` (GET+POST) | ✅ |
 | IN BRIEF preview tab | preview HTML via `/api/admin/daily-digest?preview=1` (or `?preview=template` for layout-only) | ✅ |
-| Run (produces brief) | Send now (`?send=1`, **refreshes first** §10) + scheduled cron run | ✅ |
+| Run (produces brief) | Send now (`?send=1&skipRefresh=1`) + scheduled cron run over pre-refreshed data | ✅ |
 
 **Preview = what sends (as-built).** The EMAIL PREVIEW tab now defaults to **live** mode
 (`?preview=1`), not template — so what you see is exactly what sends (same route code, same
@@ -227,8 +228,8 @@ so the tab renders the card's *current, even unsaved* toggles (`form.include`); 
 = all off, param absent = saved config. **Run & Send saves the current settings first**, so
 `saved == previewed == sent`. Because every `buildEmailHtml` section is gated only by `include.*`
 (never by data presence — §3 parity rule), and `?preview=1` and `?send=1` share one code path,
-live preview and the sent email are byte-identical except for the fresh-run brief content (§10),
-which the preview deliberately skips (no cost).
+live preview and the sent email share the same renderer. Send Last Video uses
+the same latest saved data rather than starting a refresh.
 
 ### 5b. Generate & Send run UX (as-built — shared global terminal)
 
@@ -240,10 +241,10 @@ that **every** card run uses (Mockup Video, Market Signals). The helper is
 **prop-drilled** into `AdminEmailDigestView` (`runWithTerminal` prop). Inside `runAndSend`
 (`components/AdminEmailModals.jsx`) the run body is the `task({ advance, note })` callback:
 `advance(pfx, text)` = settle the prior line ✓ + open a new phase line; `note(text)` = a dim status
-line. Step map: `[SAVE]` save config → `[STEP 1/2]` refresh worker per client (`advance` per client,
-30s heartbeat `note`s) → per-client result rows (`note`) → `[STEP 2/2]` render + send from saved
-data → `note` the send log + subject → `return { doneText }`. A refresh that doesn't complete
-cleanly **throws**, which settles the terminal to ✗.
+line. Step map: `[SAVE]` save config → `[SEND]` call
+`/api/admin/daily-digest?send=1&skipRefresh=1` → render + send from saved data
+and the latest completed video → `note` the send log + subject →
+`return { doneText }`.
 
 - **No confirm gate.** Clicking Generate & Send runs immediately (the old `window.confirm` was
   removed). `sendStatus` still drives the button label (`Working…`) + the actionbar hint.
@@ -385,11 +386,11 @@ renders*; `summaryEnabled` (separate field, §02 of the UI) controls whether the
 
 ---
 
-## 10. Fresh-run-on-send + hosted Executive Brief link (as-built)
+## 10. Pre-refresh + fast send + hosted Executive Brief link (as-built)
 
-**The goal:** when the digest is sent (Run & Send OR the daily cron), every associated brief is
-run FRESH first, so the email + the linked Executive Brief are legitimate at send time. A
-preview never spends money.
+**The goal:** scheduled refresh work finishes before the daily send, while an
+interactive send remains fast and deterministic by using saved data. A preview
+never spends money.
 
 **`refreshDigestClient` pipeline** (`app/api/worker/pre-digest-refresh/route.js`):
 
@@ -417,14 +418,13 @@ refresh worker at all: it saves the current settings and immediately calls the f
 strict about actual delivery prerequisites (recipient, selected rendered video, approval URL, and
 connected target social account).
 
-**Flow** (`app/api/admin/daily-digest/route.js` GET, main `try`):
+**Send flow** (`app/api/admin/daily-digest/route.js` GET, main `try`):
 1. Resolve `homeClientId` + `digestCfg`; compute `briefClientIds = [home, ...includeClientIds]`.
-2. **Fresh-run gate:** `isRealSend = isSendNow || (!isPreview && !isTemplate)`. On a real send,
-   for each `briefClientIds`, `await refreshDigestClient(cid)` — dynamic-imported from
-   `app/api/worker/pre-digest-refresh/route.js`. Runs all 6 sub-refreshes above; persists
-   results to `dashboard_state/{cid}`. Failures are logged, never block the email.
+2. The route never runs Scout inline. `skipRefresh=1` identifies the interactive
+   fast path; scheduled sends use the latest state produced by
+   `/api/worker/pre-digest-refresh`.
 3. Collectors (GA4 / Vercel / Calendar / Firebase / homepage) run, gated by the group flags.
-4. Briefs are fetched from the (now fresh) `dashboard_state` via `getBriefForClient`.
+4. Briefs are fetched from saved `dashboard_state` via `getBriefForClient`.
 5. **Brief link:** if `execBriefLink` on and `briefLinkMode !== 'off'`,
    `resolveExecutiveBriefUrl({clientId:home, mode, origin, allowFreshRun:!isPreview})`:
    - `mode:'fresh'` + real send → `renderMarketingBriefHtml` over the fresh `dashboard_state`
@@ -437,21 +437,19 @@ connected target social account).
    - `mode:'off'` → null. Any null → `buildEmailHtml` falls back to `/dashboard?open=brief`.
 6. `buildEmailHtml(..., renderInclude, creative, briefUrl)` → preview returns it, send sends it.
 
-**Why the digest route does the refresh inline (not a separate cron).** `vercel.json` has ONE
-digest cron (`0 13 * * *` → `/api/admin/daily-digest`). Because the route refreshes on any real
-send, that single cron does refresh-then-send in one invocation (within `maxDuration=300`). The
-`pre-digest-refresh` route still exists as a standalone cron-secret endpoint, but is **not
-required** to be separately scheduled for the refresh to happen.
+**Why refresh is separate.** Running Scout/module refreshes inline caused
+time-boxed sends and orphaned `brief_runs`. The pre-digest worker owns refresh;
+the digest route owns bounded collection, rendering, approval creation, and
+email delivery.
 
 **⚠️ Gotchas for future edits:**
 - **Don't re-add a reuse window / second pipeline in the resolver.** It used to run its own
   `runClientPipeline` + a 90-min publish-reuse window — that caused a today-URL with yesterday's
   content. The refresh (step 2) is now the single source of freshness; the resolver only
   renders + publishes what's already fresh.
-- **Cost:** every real send runs the Scout-only refresh per client (LLM). Repeated Run & Send
-  clicks each re-run. If a user wants zero per-send cost, set `briefLinkMode:'latest'` (links the
-  newest published brief; still refreshes the brief data for the email body — to make sends fully
-  free you'd also need to skip step 2, not currently exposed).
+- **Cost:** Send Last Video does not run Scout or module refreshes. Caption and
+  fresh Executive Brief generation may still incur their existing model cost
+  unless their respective settings skip those calls.
 - **Auth:** publishing writes Firestore directly via the admin SDK — it does NOT call the
   admin-only `custom-briefs` POST route, so no JWT/worker-secret plumbing is needed in cron.
 - **Dynamic imports of route modules** (`refreshDigestClient`, `renderMarketingBriefHtml`) are

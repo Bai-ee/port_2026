@@ -975,7 +975,7 @@ const CALLOUT_COLORS = {
 
 /** Below the video/post table: the Social Auto-Publish attribution + action row.
  *  ctx = {clientName, handle, mode, approvalUrl, publishedAt, platformLabel,
- *  preview, skipped, error} — undefined/mode 'off' renders nothing (today's
+ *  preview, skipped, error, postContent} — undefined/mode 'off' renders nothing (today's
  *  row, byte-identical). Table-based, no flex, no JS (Outlook-safe). */
 function buildAutoPublishRow(ctx) {
   if (!ctx || !ctx.mode || ctx.mode === 'off') return '';
@@ -1025,8 +1025,9 @@ export function buildVideoPostRow(item, kind = 'Video', ctx = null) {
   const href = escapeHtml(String(item.url));
   const secs = Number(item.duration) || 0;
   const durLabel = secs > 0 ? `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')} &middot; ${escapeHtml(kind)}` : escapeHtml(kind);
-  const caption = item.caption
-    ? escapeHtml(item.caption)
+  const effectiveCaption = ctx?.postContent || item.caption;
+  const caption = effectiveCaption
+    ? escapeHtml(effectiveCaption)
     : `<span style="color:${DT.light};">Promo post generates on send.</span>`;
   // A carried-over video (today's render wasn't ready) is labeled on the card.
   // Silent reuse previously made a stalled pipeline look like a working one.
@@ -2069,8 +2070,8 @@ async function enqueueAutoPublishVideoPost({ clientId, platform, videoItems, tim
   } catch (err) {
     logWarn('daily_digest_autopublish_queue_read_failed', { clientId, error: err.message });
   }
-  // A completed video is reusable across DIFFERENT destination clients, but
-  // the same destination must not publish identical media twice on later days.
+  // Several emails may carry the owner's same completed video, but the owner
+  // must never publish identical media twice.
   const duplicate = existing.find((post) => (
     post?.source === source
     || (
@@ -2096,6 +2097,7 @@ async function enqueueAutoPublishVideoPost({ clientId, platform, videoItems, tim
       ...baseCtx,
       approvalUrl,
       publishedAt: duplicate.postedAt || null,
+      postContent: duplicate.content || item.caption || '',
       skipped: 'duplicate',
     };
   }
@@ -2127,7 +2129,7 @@ async function enqueueAutoPublishVideoPost({ clientId, platform, videoItems, tim
       const post = await postNow(clientId, { content: caption, source, platform, ...media });
       step?.('success', `Auto-published · @${handle || platformLabel} · ${new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`);
       logInfo('daily_digest_autopublish_posted', { clientId, platform, postId: post.id });
-      return { ...baseCtx, publishedAt: post.postedAt || new Date().toISOString() };
+      return { ...baseCtx, publishedAt: post.postedAt || new Date().toISOString(), postContent: caption };
     } catch (err) {
       step?.('error', `Auto-publish failed · ${err.message}`);
       logWarn('daily_digest_autopublish_failed', { clientId, platform, error: err.message });
@@ -2142,7 +2144,7 @@ async function enqueueAutoPublishVideoPost({ clientId, platform, videoItems, tim
     const approvalUrl = `${appOrigin()}/post-approval?token=${encodeURIComponent(token)}`;
     step?.('success', `Auto-publish · approval link minted (@${handle || platformLabel})`);
     logInfo('daily_digest_autopublish_approval_queued', { clientId, platform, postId: post.id });
-    return { ...baseCtx, approvalUrl };
+    return { ...baseCtx, approvalUrl, postContent: caption };
   } catch (err) {
     step?.('error', `Auto-publish approval enqueue failed · ${err.message}`);
     logWarn('daily_digest_autopublish_enqueue_failed', { clientId, platform, error: err.message });
@@ -2902,12 +2904,22 @@ export async function GET(request) {
     const wantRemix = include.videoPosts !== false;
     const wantPromo = include.videoPromo !== false;
     const videoStatus = { remix: null, promo: null };
+    // The selected Video Remix client is the single owner of the remix,
+    // caption, publish policy, connected account, post row, and approvals.
+    // The digest client only owns this email's layout and recipient.
+    const videoSourceClientId = digestConfig.resolveDailyVideoOwnerClientId(digestCfg, homeClientId);
+    let videoOwnerDigestCfg = videoSourceClientId === homeClientId ? digestCfg : null;
+    let videoOwnerConfigLoadFailed = false;
+    if (videoSourceClientId && videoSourceClientId !== homeClientId) {
+      try {
+        videoOwnerDigestCfg = await digestConfig.getDigestConfig(videoSourceClientId);
+      } catch (e) {
+        videoOwnerConfigLoadFailed = true;
+        logWarn('daily_digest_video_owner_config_failed', { clientId: videoSourceClientId, error: e.message });
+      }
+    }
     if ((wantRemix || wantPromo) && homeClientId) {
       try {
-        // Content, recipient, video, and publish account are independent:
-        // dailyVideo.sourceClientId chooses whose latest completed remix rides
-        // in this email. Blank preserves the digest client's own latest video.
-        const videoSourceClientId = digestCfg?.dailyVideo?.sourceClientId || homeClientId;
         const readLatestCaptures = async () => {
           const [videoSourceSnap, homeSnap] = await Promise.all([
             fb.adminDb.collection('dashboard_state').doc(videoSourceClientId).get(),
@@ -2977,28 +2989,46 @@ export async function GET(request) {
           videoStatus.promo = 'Video Promo is still rendering or no fresh completed capture was found.';
         }
 
-        // Caption the enabled videos (one Haiku call); skip on template (no cost).
-        const toCaption = [];
-        if (remixCap) toCaption.push(remixCap);
-        if (promoCap) toCaption.push(promoCap);
-        let captions = [];
-        if (!isTemplate && !skipLlm && toCaption.length) {
-          let brain = '';
-          try {
-            const { loadClientBrainContext } = require('../../../../features/client-brain/store.cjs');
-            brain = await loadClientBrainContext(homeClientId, { useFor: 'copy', maxChars: 1500 });
-          } catch { /* optional */ }
-          try {
-            captions = await briefSummary.generateVideoPromoPosts({
-              videos: toCaption.map((c) => ({ durationSeconds: c.durationSeconds, sourceFolders: c.sourceFolders })),
-              clientBrainContext: brain,
-              config: digestCfg || {},
-            });
-          } catch (e) {
-            logWarn('daily_digest_video_promo_failed', { error: e.message });
+        // Caption each video in its owner's voice. Grouping by owner preserves
+        // the single-call behavior when Remix and Promo belong to the same
+        // client, while a borrowed Remix never inherits the email client's
+        // Client Brain.
+        const captions = { remix: '', promo: '' };
+        if (!isTemplate && !skipLlm) {
+          const captionGroups = [];
+          const addCaptionTarget = (kind, capture, ownerClientId, ownerConfig) => {
+            if (!capture || !ownerClientId) return;
+            let group = captionGroups.find((entry) => entry.ownerClientId === ownerClientId);
+            if (!group) {
+              group = { ownerClientId, ownerConfig, targets: [] };
+              captionGroups.push(group);
+            }
+            group.targets.push({ kind, capture });
+          };
+          addCaptionTarget('remix', remixCap, videoSourceClientId, videoOwnerDigestCfg || {});
+          addCaptionTarget('promo', promoCap, homeClientId, digestCfg || {});
+
+          for (const group of captionGroups) {
+            let brain = '';
+            try {
+              const { loadClientBrainContext } = require('../../../../features/client-brain/store.cjs');
+              brain = await loadClientBrainContext(group.ownerClientId, { useFor: 'copy', maxChars: 1500 });
+            } catch { /* optional */ }
+            try {
+              const generated = await briefSummary.generateVideoPromoPosts({
+                videos: group.targets.map(({ capture }) => ({
+                  durationSeconds: capture.durationSeconds,
+                  sourceFolders: capture.sourceFolders,
+                })),
+                clientBrainContext: brain,
+                config: group.ownerConfig || {},
+              });
+              group.targets.forEach(({ kind }, index) => { captions[kind] = generated[index] || ''; });
+            } catch (e) {
+              logWarn('daily_digest_video_promo_failed', { clientId: group.ownerClientId, error: e.message });
+            }
           }
         }
-        let ci = 0;
         // The selected latest render is intentional, even when it predates
         // today. It is therefore publishable (`stale:false`) rather than treated
         // as an accidental daily-render fallback.
@@ -3006,7 +3036,7 @@ export async function GET(request) {
           videoItems.remix = {
             url: remixCap.downloadUrl,
             duration: remixCap.durationSeconds || 30,
-            caption: captions[ci++] || '',
+            caption: captions.remix,
             stale: false,
             staleLabel: '',
             sourceClientId: videoSourceClientId,
@@ -3017,7 +3047,7 @@ export async function GET(request) {
           videoItems.promo = {
             url: promoCap.downloadUrl,
             duration: promoCap.durationSeconds || 0,
-            caption: captions[ci++] || '',
+            caption: captions.promo,
             stale,
             staleLabel: stale ? staleVideoLabel(promoCap.createdAt) : '',
           };
@@ -3050,21 +3080,30 @@ export async function GET(request) {
       }
     }
 
-    // Social Auto-Publish — the client's own daily video to its own account.
+    // Social Auto-Publish — the selected video owner's daily video to that
+    // same owner's account, using that owner's publish policy.
     // isRealSend gates the WHOLE enqueue, not just the publish call inside it:
     // a preview or template render must never write an 'awaiting_approval'
     // post or mint a live approval token, so anything but a real send only
     // describes the configured mode (read-only, no Firestore writes).
     const videoPublishCtx = { x: null };
     if (wantRemix && homeClientId) {
+      if (isRealSend && videoOwnerConfigLoadFailed) {
+        throw new Error(`Publishing settings could not be loaded for video owner ${videoSourceClientId}; email was not sent.`);
+      }
       const publishPlatform = 'x';
-      const publishMode = digestCfg?.autoPublish?.platforms?.[publishPlatform]?.mode || 'off';
-      const publishClientId = digestCfg?.autoPublish?.platforms?.[publishPlatform]?.accountClientId || homeClientId;
+      const publishMode = videoOwnerDigestCfg?.autoPublish?.platforms?.[publishPlatform]?.mode || 'off';
+      const publishClientId = videoSourceClientId;
       if (publishMode !== 'off') {
         if (isRealSend) {
           try {
             const result = await enqueueAutoPublishVideoPost({
-              clientId: publishClientId, platform: publishPlatform, videoItems, timestamp, digestCfg, step,
+              clientId: publishClientId,
+              platform: publishPlatform,
+              videoItems,
+              timestamp,
+              digestCfg: videoOwnerDigestCfg,
+              step,
             });
             // Every per-client digest keeps its own actionable button. The
             // independent master roll-up also lists this pending post, so the
@@ -3073,7 +3112,7 @@ export async function GET(request) {
             // one publish total.
             videoPublishCtx[publishPlatform] = result;
           } catch (err) {
-            logWarn('daily_digest_autopublish_failed', { clientId: homeClientId, error: err.message });
+            logWarn('daily_digest_autopublish_failed', { clientId: publishClientId, error: err.message });
             step('error', `Auto-publish failed: ${err.message}`);
           }
         } else {
@@ -3101,21 +3140,20 @@ export async function GET(request) {
     // or (in approval mode) without the approval button. The admin can retry
     // after the already-queued render finishes or connect the account first.
     if (isRealSend && wantRemix && homeClientId) {
-      const publishMode = digestCfg?.autoPublish?.platforms?.x?.mode || 'off';
+      const publishMode = videoOwnerDigestCfg?.autoPublish?.platforms?.x?.mode || 'off';
       const publishResult = videoPublishCtx.x;
       if (publishMode !== 'off') {
         if (!videoItems.remix || videoItems.remix.stale) {
           throw new Error(`No completed Video Remix is available for the selected video source; email was not sent.`);
         }
         if (publishResult?.skipped === 'not-connected') {
-          const targetClientId = digestCfg?.autoPublish?.platforms?.x?.accountClientId || homeClientId;
-          throw new Error(`X is not connected for publish target ${targetClientId}; email was not sent because no working approval/publish action could be created.`);
+          throw new Error(`X is not connected for video owner ${videoSourceClientId}; email was not sent because no working approval/publish action could be created.`);
         }
         if (publishMode === 'approval' && !publishResult?.approvalUrl) {
-          throw new Error(`Approval link could not be created for ${homeClientId}; email was not sent.`);
+          throw new Error(`Approval link could not be created for video owner ${videoSourceClientId}; email was not sent.`);
         }
         if (publishResult?.skipped === 'enqueue-failed' || publishResult?.skipped === 'publish-failed') {
-          throw new Error(`Daily video ${publishMode} setup failed for ${homeClientId}; email was not sent.`);
+          throw new Error(`Daily video ${publishMode} setup failed for video owner ${videoSourceClientId}; email was not sent.`);
         }
       }
     }

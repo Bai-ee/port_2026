@@ -190,15 +190,32 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
   const [ownerEmail, setOwnerEmail] = useState(''); // scoped client's signup email — recipient placeholder
   const [saveStatus, setSaveStatus] = useState(null);
   const [runState, setRunState] = useState({}); // { [clientId]: 'running' | 'done' | 'error: msg' }
-  const [socialAccountStatus, setSocialAccountStatus] = useState({}); // connected accounts for the selected publish target
-  const publishAccountClientId = form?.autoPublish?.platforms?.x?.accountClientId || clientId;
+  const [socialAccountStatus, setSocialAccountStatus] = useState({}); // connected accounts owned by the selected video client
+  const [videoOwnerDigestConfig, setVideoOwnerDigestConfig] = useState(null);
+  const videoOwnerClientId = form?.dailyVideo?.sourceClientId || clientId;
+  const videoOwnerIsThisDigest = Boolean(videoOwnerClientId && videoOwnerClientId === clientId);
+  const effectiveVideoOwnerConfig = videoOwnerIsThisDigest ? form : videoOwnerDigestConfig;
+  const videoOwnerName = clients.find((c) => c.clientId === videoOwnerClientId)?.name || videoOwnerClientId || 'this client';
 
   useEffect(() => {
-    if (!user || !publishAccountClientId) { setSocialAccountStatus({}); return; }
-    authFetch(user, '/api/social-posting/x-oauth', { method: 'POST', body: JSON.stringify({ action: 'accounts-list', clientId: publishAccountClientId }) })
+    if (!user || !videoOwnerClientId) { setSocialAccountStatus({}); return; }
+    authFetch(user, '/api/social-posting/x-oauth', { method: 'POST', body: JSON.stringify({ action: 'accounts-list', clientId: videoOwnerClientId }) })
       .then((data) => setSocialAccountStatus(data.accounts || {}))
       .catch(() => setSocialAccountStatus({}));
-  }, [user, publishAccountClientId]);
+  }, [user, videoOwnerClientId]);
+
+  useEffect(() => {
+    if (!user || !videoOwnerClientId || videoOwnerIsThisDigest) {
+      setVideoOwnerDigestConfig(null);
+      return;
+    }
+    let cancelled = false;
+    setVideoOwnerDigestConfig(null);
+    authFetch(user, `/api/admin/digest-config?clientId=${encodeURIComponent(videoOwnerClientId)}`)
+      .then((data) => { if (!cancelled) setVideoOwnerDigestConfig(data.config || null); })
+      .catch(() => { if (!cancelled) setVideoOwnerDigestConfig(null); });
+    return () => { cancelled = true; };
+  }, [user, videoOwnerClientId, videoOwnerIsThisDigest]);
 
   const loadSettings = useCallback(async () => {
     if (!user) return;
@@ -611,11 +628,11 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
                         <option key={c.clientId} value={c.clientId}>{c.name} · latest rendered video</option>
                       ))}
                     </select>
-                    <span className="hint">No new render is started. Point several emails at Hitloop to reuse the same latest video, or choose each client for different videos.</span>
+                    <span className="hint">No new render is started. The selected client owns the video, caption, approval policy, and connected X account. This email only controls its recipients and layout.</span>
                   </label>
                   {['x', 'instagram'].map((platform) => {
                     const live = platform === 'x';
-                    const p = form.autoPublish?.platforms?.[platform] || { mode: 'off', delayMinutes: 0, maxPerDay: 1 };
+                    const p = effectiveVideoOwnerConfig?.autoPublish?.platforms?.[platform] || { mode: 'off', delayMinutes: 0, maxPerDay: 1 };
                     const acct = socialAccountStatus?.[platform];
                     const label = PLATFORM_SECTION_LABELS[platform] || platform;
                     const patchPlatform = (fields) => setForm((f) => ({
@@ -642,33 +659,26 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
                         </div>
                         <div className="segmented" role="group" aria-label={`${label} publish mode`}>
                           {['off', 'auto', 'approval'].map((m) => (
-                            <button key={m} type="button" disabled={!live || (m !== 'off' && !acct?.connected)} className={(p.mode || 'off') === m ? 'is-active' : ''} onClick={() => patchPlatform({ mode: m })}>
+                            <button key={m} type="button" disabled={!live || !videoOwnerIsThisDigest || (m !== 'off' && !acct?.connected)} className={(p.mode || 'off') === m ? 'is-active' : ''} onClick={() => patchPlatform({ mode: m })}>
                               {m}
                             </button>
                           ))}
                         </div>
                         {live ? (
                           <div style={{ display: 'grid', gap: 8 }}>
-                            <label style={{ display: 'grid', gap: 5, fontSize: 13 }}>
-                              Post to connected account
-                              <select
-                                value={p.accountClientId || ''}
-                                onChange={(e) => patchPlatform({ accountClientId: e.target.value })}
-                              >
-                                <option value="">This digest client</option>
-                                {clients.map((c) => (
-                                  <option key={c.clientId} value={c.clientId}>{c.name}</option>
-                                ))}
-                              </select>
-                            </label>
+                            <span className="hint">
+                              {videoOwnerIsThisDigest
+                                ? `Publishing is owned by ${videoOwnerName}.`
+                                : `${videoOwnerName} owns this publishing policy. Change it from that client’s Email Digest card.`}
+                            </span>
                             <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
                             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
                               Delay (min)
-                              <input type="number" min={0} max={1440} value={p.delayMinutes ?? 0} onChange={(e) => patchPlatform({ delayMinutes: Number(e.target.value) || 0 })} style={{ width: 70 }} />
+                              <input type="number" min={0} max={1440} disabled={!videoOwnerIsThisDigest} value={p.delayMinutes ?? 0} onChange={(e) => patchPlatform({ delayMinutes: Number(e.target.value) || 0 })} style={{ width: 70 }} />
                             </label>
                             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
                               Daily cap
-                              <input type="number" min={1} max={10} value={p.maxPerDay ?? 1} onChange={(e) => patchPlatform({ maxPerDay: Number(e.target.value) || 1 })} style={{ width: 60 }} />
+                              <input type="number" min={1} max={10} disabled={!videoOwnerIsThisDigest} value={p.maxPerDay ?? 1} onChange={(e) => patchPlatform({ maxPerDay: Number(e.target.value) || 1 })} style={{ width: 60 }} />
                             </label>
                             </div>
                           </div>
@@ -858,7 +868,7 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
                 <span className="hint">{
                   sendStatus && sendStatus.kind !== 'error' ? sendStatus.msg
                     : saveStatus && saveStatus.kind !== 'error' ? saveStatus.msg
-                      : 'Generate & Send saves settings, refreshes digest data, then emails from the saved result.'
+                      : 'Send Last Video saves settings, then emails the latest saved digest data and completed video.'
                 }</span>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                   <button type="button" className="btn btn-outline" onClick={save} disabled={saveStatus?.kind === 'pending' || sendStatus?.kind === 'pending'}>{saveStatus?.kind === 'pending' ? 'Saving…' : 'Save Config'}</button>

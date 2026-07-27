@@ -14,13 +14,25 @@ Set per digest, per platform, in the **Email Digest card** → SETTINGS → `#di
 - `auto` — publishes at digest send, no human in the loop.
 - `approval` — the digest email carries a **Post to X** button; nothing publishes until it's clicked (or the admin clicks Approve in the dashboard).
 
-Config lives at `digest_config/{clientId}.autoPublish.platforms.{x,instagram}` = `{mode, delayMinutes, maxPerDay, accountClientId}` (`features/intelligence/_digest-config.js` — `DEFAULT_AUTO_PUBLISH`/`normalizeAutoPublish`; `AUTO_PUBLISH_PLATFORM_KEYS` is a plain local list mirroring `platforms.js`, not imported — this file is CJS, `platforms.js` is ESM, and Node can't `require()` an ESM module synchronously. Keep the two lists in sync by hand).
+Config lives at `digest_config/{clientId}.autoPublish.platforms.{x,instagram}` = `{mode, delayMinutes, maxPerDay}` (`features/intelligence/_digest-config.js` — `DEFAULT_AUTO_PUBLISH`/`normalizeAutoPublish`; `AUTO_PUBLISH_PLATFORM_KEYS` is a plain local list mirroring `platforms.js`, not imported — this file is CJS, `platforms.js` is ESM, and Node can't `require()` an ESM module synchronously. Keep the two lists in sync by hand).
 
-Each platform config also carries optional `accountClientId`. Blank means “post
-through this digest client's connected account” (legacy behavior). Setting it
-lets the master Hitloop digest route a video to another client's connected
-handle. The destination client owns the resulting `social_posts` row and
-approval token; the digest's content source and recipient remain independent.
+### Video-owner invariant
+
+`dailyVideo.sourceClientId` is the single ownership selector. Blank means the
+digest client. When Hitloop's email selects Underground's video, Underground
+owns all of the following:
+
+- the completed Video Remix;
+- Client Brain voice used for its caption;
+- `autoPublish` mode, delay, and daily cap;
+- the connected X account;
+- the `social_posts` row and every approval token.
+
+The sending digest owns only its email layout and `recipientEmail`. There is no
+independent account destination. Legacy stored `accountClientId` values are
+ignored by normalization and runtime routing. In a digest that borrows another
+client's video, that owner's publish settings are displayed read-only; edit
+them from the owner's Email Digest card.
 
 ## 2. Identity — the Social Accounts card
 
@@ -80,6 +92,11 @@ Dashboard counterpart (`app/api/social-posting/route.js` actions `approve-post`/
 ## 5. Email wiring + the roll-up
 
 `app/api/admin/daily-digest/route.js`:
+- The selected Video Remix owner is resolved before captioning or publishing.
+  Its digest config and Client Brain drive the remix caption and X policy; its
+  client id is passed to the social adapter. Video Promo remains owned by the
+  email client. If a borrowed owner's config cannot be read, a real send fails
+  closed instead of silently using the wrong account or policy.
 - `enqueueAutoPublishVideoPost({clientId, platform, videoItems, timestamp, digestCfg, step})` — gates: `mode !== 'off'` → **hard** `!videoItems.remix.stale` (never republish yesterday's video — this is a block, not a warning) → account connected → dedupe on `source: daily-video:{platform}:{YYYY-MM-DD}` → under `maxPerDay`. Caption reuses `videoItems.remix.caption` (already generated upstream — zero extra LLM cost), falling back to `generatePromoCopy` only if empty. `auto` publishes inline (`postNow`); `approval` creates the post + mints a token + builds the approval URL. Never throws (the caller also wraps it) — a publish failure must never block the email.
 - **This only runs when `isRealSend`.** Preview/template builds a read-only "dry" ctx instead (connected-account lookup only, no Firestore write, no token) — `isPreview` gates the *whole* enqueue, not just the publish call inside it.
 - `buildVideoPostRow(item, kind, ctx)` / `buildAutoPublishRow(ctx)` render the attribution line (`CLIENT NAME → @handle`) + either the bulletproof-table `POST TO X` button (approval mode, table-based, no flex/JS — Outlook) or a passive `PUBLISHED · @handle · time` badge (auto mode). `ctx` is `undefined` for Video Promo and for any client with mode `off` → byte-identical to the pre-existing row.
@@ -98,8 +115,11 @@ publish total.
 - Interactive **Generate & Send does not start a render**. It reads the latest
   completed, still-downloadable Video Remix from
   `dailyVideo.sourceClientId` (blank = digest/home client). This selector is in
-  the Email Digest card, so several destination emails can reuse Hitloop's
-  latest video or each can select a different client's latest video.
+  the Email Digest card, so several emails can reuse one owner's latest video.
+  Each email gets an approval button for the same owner-scoped post. Dedupe
+  reuses that post and its stored caption while minting a fresh single-use
+  token; the post-status guard guarantees that only the first approval
+  publishes.
 - `app/api/social-posting/process-due` cron added (`*/30 * * * *`). **The 12h staleness guard shipped in the same change**: `twitter-service.js`'s `readDuePosts` marks any due post whose `scheduledAt` is more than 12h in the past as `expired` (not in `DUE_STATUSES`) and skips it, instead of posting it — without this, the cron's first run would flush the entire historical backlog of never-sent scheduled posts to a live account. Approval-mode publishing never depends on this cron (it publishes inline on the click).
 
 ## 7. How to add a platform
