@@ -2124,7 +2124,13 @@ async function enqueueAutoPublishVideoPost({ clientId, platform, videoItems, tim
   }
   const todayPrefix = `daily-video:${platform}:`;
   const maxPerDay = Math.max(1, Math.min(10, Number(platformCfg?.maxPerDay) || 1));
-  const publishedToday = existing.filter((post) => String(post?.source || '').startsWith(todayPrefix)).length;
+  // Failed/rejected/expired attempts are terminal and cannot publish. They
+  // must not consume the daily cap or a user could never mint the fresh
+  // approval required after a burned-link failure.
+  const publishedToday = existing.filter((post) => (
+    String(post?.source || '').startsWith(todayPrefix)
+    && reusableStatuses.includes(post?.status)
+  )).length;
   if (publishedToday >= maxPerDay) {
     step?.('info', `Auto-publish · daily cap reached (@${platformLabel})`);
     return { ...baseCtx, skipped: 'max-per-day' };
