@@ -324,7 +324,6 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
     if (!user || typeof runWithTerminal !== 'function') return;
     const freshnessToken = `digest-ui-${Date.now().toString(36)}`;
     setSendStatus({ kind: 'pending', msg: 'Saving settings…' });
-    let refreshHeartbeat = null;
     // Stream through the shared global run terminal — same modal + minimize/reopen
     // RUNNING badge every other card run uses. advance() = phase transition (settles
     // the prior line ✓ + opens a new active line); note() = a dim status line.
@@ -348,102 +347,20 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
             if (saved?.marketInsights) setMarketInsights(saved.marketInsights);
           }
           note('Saved config ✓');
-          advance('[STEP 1/2]', 'Refreshing site/creative modules, Scout, watchlist timelines, Strategy Builder, and Executive Summary…');
-          const digestClientIds = [...new Set([
-            savedConfig?.homeClientId || clientId,
-            ...((savedConfig?.includeClientIds || []).filter(Boolean)),
-          ].filter(Boolean))];
-          note(`Refreshing ${digestClientIds.length} digest client${digestClientIds.length === 1 ? '' : 's'} one at a time: ${digestClientIds.join(', ')}`);
-          setSendStatus({ kind: 'pending', msg: `Refreshing ${digestClientIds.length} digest client${digestClientIds.length === 1 ? '' : 's'}…` });
-          const refreshResults = [];
-          // The full refresh (~5-6 min cold) exceeds Vercel's 300s function limit, so
-          // it runs as THREE sequential phase requests per client — each well under
-          // the ceiling. Real (non-'other-phase') steps merge into one result per
-          // client so the summary line + send gate below work unchanged.
-          const REFRESH_PHASES = [
-            ['modules', 'site/creative modules'],
-            ['signals', 'Scout, watchlist, reddit + Instagram signals'],
-            ['analysis', 'strategy, replies, platform analysis, executive summary'],
-          ];
-          const STEP_KEYS = ['modules', 'scout', 'watchlist', 'strategy', 'replyTargets', 'redditAnalysis', 'instagramAnalysis', 'executiveSummary'];
-          for (const cid of digestClientIds) {
-            const merged = { clientId: cid, ok: true, sendable: true, requestErrors: [] };
-            for (const [phaseKey, phaseLabel] of REFRESH_PHASES) {
-              advance('[REFRESH]', `Refresh · ${cid} · ${phaseKey} — ${phaseLabel}…`);
-              const refreshStartedAt = Date.now();
-              if (typeof window !== 'undefined') {
-                refreshHeartbeat = window.setInterval(() => {
-                  const elapsed = Math.round((Date.now() - refreshStartedAt) / 1000);
-                  note(`Refresh (${phaseKey}) still running · ${cid} · ${elapsed}s elapsed`);
-                }, 30000);
-              }
-              try {
-                // eslint-disable-next-line no-await-in-loop
-                const refresh = await authFetch(user, `/api/worker/pre-digest-refresh?clientId=${encodeURIComponent(cid)}&freshnessToken=${encodeURIComponent(freshnessToken)}&force=1&phase=${phaseKey}`, { method: 'POST', body: '{}' });
-                const r = (Array.isArray(refresh?.results) ? refresh.results : [])[0] || {};
-                merged.ok = merged.ok && r.ok !== false;
-                merged.sendable = merged.sendable && r.sendable !== false;
-                for (const k of STEP_KEYS) {
-                  if (r[k] && r[k].reason !== 'other-phase') merged[k] = r[k];
-                }
-              } catch (refreshError) {
-                // Refresh is best-effort. A mobile network drop or Vercel timeout
-                // must not prevent the fast send route from using last-good saved
-                // data (including the already-rendered approval video).
-                const message = refreshError?.message || 'Refresh request failed';
-                merged.ok = false;
-                merged.sendable = false;
-                merged.requestErrors.push({ phase: phaseKey, message });
-                note(`⚠ Refresh · ${cid} · ${phaseKey} failed (${message}); the email will use latest saved data.`);
-              } finally {
-                if (refreshHeartbeat && typeof window !== 'undefined') {
-                  window.clearInterval(refreshHeartbeat);
-                  refreshHeartbeat = null;
-                }
-              }
-            }
-            refreshResults.push(merged);
-          }
-          refreshResults.forEach((r) => {
-            const modules = r?.modules?.ok ? `modules ok${Array.isArray(r?.modules?.modules) ? ` (${r.modules.modules.filter((m) => m.ok).length}/${r.modules.modules.length})` : ''}` : `modules issue${r?.modules?.error ? `: ${r.modules.error}` : ''}`;
-            const scout = r?.scout?.ok ? 'scout ok' : `scout issue${r?.scout?.error ? `: ${r.scout.error}` : ''}`;
-            const watch = r?.watchlist?.ok ? `watchlist ok${Number.isFinite(r?.watchlist?.handles) ? ` (${r.watchlist.handles} handles)` : ''}` : (r?.watchlist?.skipped ? `watchlist skipped (${r.watchlist.skipped})` : `watchlist issue${r?.watchlist?.error ? `: ${r.watchlist.error}` : ''}`);
-            const reddit = r?.redditAnalysis?.ok ? `reddit analysis ok${Number.isFinite(r?.redditAnalysis?.signals) ? ` (${r.redditAnalysis.signals} signals)` : ''}` : (r?.redditAnalysis?.skipped ? `reddit analysis skipped (${r.redditAnalysis.reason || 'no data'})` : `reddit analysis issue${r?.redditAnalysis?.error ? `: ${r.redditAnalysis.error}` : ''}`);
-            const strategy = r?.strategy?.ok ? 'strategy ok' : `strategy issue${r?.strategy?.error ? `: ${r.strategy.error}` : ''}`;
-            const executiveSummary = r?.executiveSummary?.ok ? 'executive summary ok' : `executive summary issue${r?.executiveSummary?.error ? `: ${r.executiveSummary.error}` : ''}`;
-            note(`Refresh · ${r?.clientId || 'client'} · ${modules} · ${scout} · ${watch} · ${reddit} · ${strategy} · ${executiveSummary}`);
-          });
-          // Refresh freshness is advisory for an interactive send. The fast send
-          // route intentionally reads last-good saved data and independently
-          // validates the recipient, selected video, approval URL, and target
-          // social account. Never strand an admin email because a long refresh
-          // request timed out or a content source was temporarily unavailable.
-          const sendableResults = refreshResults.filter((r) => r?.sendable);
-          if (!refreshResults.length || !sendableResults.length) {
-            note('⚠ Fresh refresh was unavailable; continuing with the latest saved digest data and last rendered video.');
-          }
-          // Non-critical issues (e.g. "strategy issue: No category set") warn but don't block.
-          refreshResults
-            .filter((r) => r?.sendable && !r?.ok)
-            .forEach((r) => note(`⚠ Sending ${r?.clientId || 'client'} despite a non-critical issue above — that section shows its empty state.`));
-          const refreshedAllClients = refreshResults.length > 0 && refreshResults.every((r) => r?.sendable);
-          note(refreshedAllClients ? 'Fresh digest data saved ✓' : 'Using latest saved digest data ✓');
-
-          advance('[STEP 2/2]', 'Rendering and sending email from saved data…');
-          setSendStatus({ kind: 'pending', msg: 'Sending email from saved data…' });
-          // Scope the send to THIS card's client (same anchor the refresh loop used) —
-          // without it the route falls back to the env-resolved admin client and a
-          // send from another client's dashboard emails the wrong digest.
-          const sendClientId = digestClientIds[0] || activeClientId || clientId || '';
+          advance('[SEND]', 'Sending the latest saved digest with the last completed video…');
+          note('Manual send skips intelligence refresh and never starts a video render.');
+          setSendStatus({ kind: 'pending', msg: 'Sending last completed video…' });
+          // Scope the send to this card's saved home client. The server separately
+          // resolves the configured video source and destination social account.
+          const sendClientId = savedConfig?.homeClientId || activeClientId || clientId || '';
           const res = await authFetch(user, `/api/admin/daily-digest?send=1&skipRefresh=1&freshnessToken=${encodeURIComponent(freshnessToken)}${sendClientId ? `&clientId=${encodeURIComponent(sendClientId)}` : ''}`);
           (Array.isArray(res?.log) ? res.log : []).forEach((l) => note(l.text));
           if (res?.subject) note(`Subject · ${res.subject}`);
-          setSendStatus({ kind: 'ok', msg: refreshedAllClients ? 'Sent with freshly saved data.' : 'Sent with latest saved data.' });
-          return { doneText: refreshedAllClients ? 'Done ✓ — refreshed first, then sent' : 'Done ✓ — sent from latest saved data' };
+          setSendStatus({ kind: 'ok', msg: 'Sent with last completed video.' });
+          return { doneText: 'Done ✓ — last completed video sent' };
         },
       });
     } catch (e) {
-      if (refreshHeartbeat && typeof window !== 'undefined') window.clearInterval(refreshHeartbeat);
       // runWithTerminal already rendered the ✗ error line; only set the button
       // status if the failing step didn't already set a specific message.
       setSendStatus((s) => (s?.kind === 'error' ? s : { kind: 'error', msg: e.message }));
@@ -945,7 +862,7 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
                 }</span>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                   <button type="button" className="btn btn-outline" onClick={save} disabled={saveStatus?.kind === 'pending' || sendStatus?.kind === 'pending'}>{saveStatus?.kind === 'pending' ? 'Saving…' : 'Save Config'}</button>
-                  <button type="button" className="btn" style={{ background: '#2a2420', color: '#fff', borderColor: '#2a2420' }} onClick={runAndSend} disabled={sendStatus?.kind === 'pending' || saveStatus?.kind === 'pending'}>{sendStatus?.kind === 'pending' ? 'Working…' : 'Generate & Send'}</button>
+                  <button type="button" className="btn" style={{ background: '#2a2420', color: '#fff', borderColor: '#2a2420' }} onClick={runAndSend} disabled={sendStatus?.kind === 'pending' || saveStatus?.kind === 'pending'}>{sendStatus?.kind === 'pending' ? 'Working…' : 'Send Last Video'}</button>
                 </div>
               </div>
             </div>
