@@ -234,6 +234,43 @@ async function readTokens() {
   return snap.exists ? snap.data() : null;
 }
 
+// One X user can be assigned to more than one Hitloop client (for example the
+// Underground account is the publishing owner while Hitloop is the admin
+// control surface). Re-authorizing that same X user can invalidate the older
+// rotating refresh token. Resolve every alias to the newest stored credential
+// for the same immutable X userId instead of letting those copies compete.
+async function readClientTokens(clientId) {
+  const direct = await getSocialAccount(clientId, 'x');
+  if (!direct?.userId) return { doc: direct, sourceClientId: clientId };
+  try {
+    const snap = await fb.adminDb.collection('social_accounts')
+      .where('platforms.x.userId', '==', direct.userId)
+      .limit(20)
+      .get();
+    const candidates = snap.docs
+      .map((row) => ({ sourceClientId: row.id, doc: row.data()?.platforms?.x || null }))
+      .filter((row) => row.doc?.accessToken)
+      .sort((a, b) => Number(b.doc.updatedAt || 0) - Number(a.doc.updatedAt || 0));
+    return candidates[0] || { doc: direct, sourceClientId: clientId };
+  } catch {
+    return { doc: direct, sourceClientId: clientId };
+  }
+}
+
+function invalidRefreshError(error) {
+  const err = new Error('The saved X authorization is no longer refreshable. Reconnect this X account once from either linked client dashboard, then generate a fresh approval email.');
+  err.status = 409;
+  err.code = 'x-reconnect-required';
+  err.details = error?.data || error?.message || null;
+  err.twitterError = {
+    code: error?.code || error?.status || null,
+    message: error?.message || null,
+    data: error?.data || null,
+    rateLimit: error?.rateLimit || null,
+  };
+  return err;
+}
+
 // Returns a user-context OAuth2 client, refreshing the (single-use, rotating)
 // refresh token when the access token is near expiry. Single-admin usage —
 // concurrent refreshes are not guarded against.
@@ -244,7 +281,10 @@ async function readTokens() {
 // to the legacy global doc so an already-connected @bai_ee keeps working
 // before that client's first explicit per-client Connect.
 export async function getXOAuth2Client(clientId = null) {
-  let doc = clientId ? (await getSocialAccount(clientId, 'x')) || (await readTokens()) : await readTokens();
+  let sourceClientId = clientId;
+  let resolved = clientId ? await readClientTokens(clientId) : { doc: await readTokens(), sourceClientId: null };
+  let doc = resolved.doc || (clientId ? await readTokens() : null);
+  sourceClientId = resolved.doc ? resolved.sourceClientId : null;
   if (!doc?.accessToken) {
     const err = new Error(clientId
       ? 'This client has no connected X account — connect one in the Social Accounts card.'
@@ -259,7 +299,28 @@ export async function getXOAuth2Client(clientId = null) {
       throw err;
     }
     const appClient = getAppClient();
-    const { accessToken, refreshToken, expiresIn } = await appClient.refreshOAuth2Token(doc.refreshToken);
+    let refreshed;
+    try {
+      refreshed = await appClient.refreshOAuth2Token(doc.refreshToken);
+    } catch (refreshError) {
+      // Rotating-token race: another invocation may have refreshed the shared
+      // alias milliseconds earlier. Re-read once and use the newer record if
+      // it changed; otherwise this authorization genuinely needs reconnecting.
+      if (clientId) {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        const latest = await readClientTokens(clientId);
+        if (
+          latest.doc?.accessToken
+          && Number(latest.doc.updatedAt || 0) > Number(doc.updatedAt || 0)
+        ) {
+          doc = latest.doc;
+          sourceClientId = latest.sourceClientId;
+          return { client: new TwitterApi(doc.accessToken), tokens: doc, sourceClientId };
+        }
+      }
+      throw invalidRefreshError(refreshError);
+    }
+    const { accessToken, refreshToken, expiresIn } = refreshed;
     doc = {
       ...doc,
       accessToken,
@@ -267,10 +328,10 @@ export async function getXOAuth2Client(clientId = null) {
       expiresAt: Date.now() + (expiresIn || 7200) * 1000,
       updatedAt: Date.now(),
     };
-    if (clientId) await saveSocialAccount(clientId, 'x', { ...doc, authMode: 'oauth2' });
+    if (clientId) await saveSocialAccount(sourceClientId || clientId, 'x', { ...doc, authMode: 'oauth2' });
     else await tokensRef().set(doc);
   }
-  return { client: new TwitterApi(doc.accessToken), tokens: doc };
+  return { client: new TwitterApi(doc.accessToken), tokens: doc, sourceClientId };
 }
 
 export async function getXOAuthStatus() {

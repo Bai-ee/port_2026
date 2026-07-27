@@ -2074,11 +2074,15 @@ async function enqueueAutoPublishVideoPost({ clientId, platform, videoItems, tim
   }
   // Several emails may carry the owner's same completed video, but the owner
   // must never publish identical media twice.
+  const reusableStatuses = ['awaiting_approval', 'scheduled', 'posting', 'posted'];
   const duplicate = existing.find((post) => (
-    post?.source === source
+    (
+      post?.source === source
+      && reusableStatuses.includes(post?.status)
+    )
     || (
       post?.mediaUrl === item.url
-      && ['awaiting_approval', 'scheduled', 'posting', 'posted'].includes(post?.status)
+      && reusableStatuses.includes(post?.status)
     )
   ));
   if (duplicate) {

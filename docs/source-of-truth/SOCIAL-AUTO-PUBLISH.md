@@ -61,11 +61,16 @@ Storage: `social_accounts/{clientId}.platforms.{x,instagram}` (`features/social-
 
 **Resolution order** for who actually posts (`getPlatformClient(clientId, platform)` in `social-accounts.js`):
 1. per-client `oauth1` override
-2. per-client `oauth2` tokens — routed through `x-oauth.js`'s `getXOAuth2Client(clientId)` (not a raw client) so a near-expiry token refreshes and writes back first
+2. per-client `oauth2` tokens — routed through `x-oauth.js`'s `getXOAuth2Client(clientId)` (not a raw client) so a near-expiry token refreshes and writes back first. If the same immutable X `userId` is connected under multiple Hitloop clients, the newest stored authorization is the canonical credential for all of those exact-account aliases. The post, approval, caption, and policy remain owned by the selected publishing client; only the credential is shared. This prevents X's rotating refresh tokens from competing after the same account is reconnected elsewhere.
 3. **only** when `clientId` is the digest home client (`resolveDigestClientId()`) — the global `TWITTER_*` env (preserves pre-existing behavior for that one client)
 4. else `409 account-not-connected`
 
 `x-oauth.js`'s OAuth2 connect flow is shared between the legacy global flow (no `clientId` — untouched) and this per-client flow: a per-client connect signs `clientId` into the PKCE `state` itself (HMAC, same shape as `calendar-oauth.cjs`'s `signState`/`verifyState`) since the callback only receives `(code, state)` and needs to recover whose flow it is. Per-client pending state lives in `social_oauth_pending/{clientId}`; legacy pending state is unchanged in `system_flags/x_oauth_pending`.
+
+If the canonical refresh token is no longer accepted, publishing fails before
+media upload with `409 x-reconnect-required`. Reconnect that X account once
+from either linked client, then use **Generate & Send Email** to create a fresh
+approval. A failed approval link is already burned and must never be retried.
 
 ## 3. Posting layer
 
@@ -117,7 +122,7 @@ Dashboard counterpart (`app/api/social-posting/route.js` actions `approve-post`/
   client id is passed to the social adapter. Video Promo remains owned by the
   email client. If a borrowed owner's config cannot be read, a real send fails
   closed instead of silently using the wrong account or policy.
-- `enqueueAutoPublishVideoPost({clientId, platform, videoItems, timestamp, digestCfg, step})` — gates: `mode !== 'off'` → **hard** `!videoItems.remix.stale` (never republish yesterday's video — this is a block, not a warning) → account connected → dedupe on `source: daily-video:{platform}:{YYYY-MM-DD}` → under `maxPerDay`. Remix caption defaults to the capture's factual `DJ — Mix` metadata (zero LLM cost). A repeated same-day send updates a reused pending post to that canonical copy. `auto` publishes inline (`postNow`); `approval` creates the post + mints a token + builds the approval URL. Never throws (the caller also wraps it) — a publish failure must never block the email.
+- `enqueueAutoPublishVideoPost({clientId, platform, videoItems, timestamp, digestCfg, step})` — gates: `mode !== 'off'` → **hard** `!videoItems.remix.stale` (never republish yesterday's video — this is a block, not a warning) → account connected → dedupe on `source: daily-video:{platform}:{YYYY-MM-DD}` → under `maxPerDay`. Remix caption defaults to the capture's factual `DJ — Mix` metadata (zero LLM cost). A repeated same-day send updates a reusable pending post to that canonical copy. Failed/rejected/expired posts are not reused: a later **Generate & Send Email** creates a fresh post and approval token. `auto` publishes inline (`postNow`); `approval` creates the post + mints a token + builds the approval URL. Never throws (the caller also wraps it) — a publish failure must never block the email.
 - **This only runs when `isRealSend`.** Preview/template builds a read-only "dry" ctx instead (connected-account lookup only, no Firestore write, no token) — `isPreview` gates the *whole* enqueue, not just the publish call inside it.
 - `buildVideoPostRow(item, kind, ctx)` / `buildAutoPublishRow(ctx)` render the attribution line (`CLIENT NAME → @handle`) + either the bulletproof-table `POST TO X` button (approval mode, table-based, no flex/JS — Outlook) or a passive `PUBLISHED · @handle · time` badge (auto mode). `ctx` is `undefined` for Video Promo and for any client with mode `off` → byte-identical to the pre-existing row.
 

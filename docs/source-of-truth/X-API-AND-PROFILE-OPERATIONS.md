@@ -99,6 +99,17 @@ Added for the **Social Auto-Publish** feature (daily video → each client's own
 | `v1.uploadMedia` / `v2.uploadMedia` | media upload, split by which auth mode resolved |
 | `v2.tweet(payload)` | post |
 
+OAuth 2.0 refresh tokens rotate. When the same immutable X `userId` is assigned
+to more than one Hitloop client, `getXOAuth2Client(clientId)` resolves all of
+those exact-account aliases to the newest stored authorization and writes each
+rotated token back to that canonical credential record. Publishing ownership
+does not move: the selected client still owns the post, approval, policy, and
+caption. Only the credential for the identical X account is shared. If X no
+longer accepts the newest refresh token, the operation stops before upload with
+`409 x-reconnect-required`; reconnect once from either linked dashboard and
+generate a new approval email. Never retry a failed email approval link because
+redemption burns it before publishing.
+
 Full data model, the three publish modes, the approval-token contract, and the roll-up double-send guard: [`SOCIAL-AUTO-PUBLISH.md`](./SOCIAL-AUTO-PUBLISH.md). Every write here (this surface AND the legacy §2a path) is logged to `usage_events` with `provider:'x-api'` — call counts only, no dollar rate (see §3's blind-spot note, which now applies to a second account per client, not just @bai_ee).
 
 ---

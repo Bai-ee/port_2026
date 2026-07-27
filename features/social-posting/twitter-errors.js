@@ -38,11 +38,25 @@ export function mapTwitterError(error) {
     // so even text posts are rejected. This is a billing action on X's side.
     message = 'X API posting is out of credits on this developer account.';
     hint = 'Add credits / upgrade the X API plan at developer.x.com for the enrolled account, or use the web composer to post manually.';
+  } else if (error?.code === 400) {
+    const detail = error?.data?.detail
+      || error?.data?.error_description
+      || error?.data?.title;
+    message = detail
+      ? `X rejected the request: ${detail}`
+      : 'X rejected the request as invalid.';
+    hint = 'Reconnect the account if this happened during authorization refresh; otherwise verify the media and post fields.';
   } else if (error?.message) {
     message = error.message;
   }
   const out = new Error(message);
-  out.status = error?.code === 429 ? 429 : error?.code === 402 ? 402 : 500;
+  out.status = error?.code === 429
+    ? 429
+    : error?.code === 402
+      ? 402
+      : error?.code === 400
+        ? 400
+        : 500;
   out.code = error?.code || null;
   out.details = error?.message;
   out.hint = hint;

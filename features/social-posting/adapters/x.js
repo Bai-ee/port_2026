@@ -51,15 +51,15 @@ async function uploadMedia(client, authMode, file) {
 }
 
 export async function publish({ clientId, text, media }) {
-  const { client, authMode } = await getPlatformClient(clientId, 'x');
-
-  let mediaId = null;
-  if (media?.mediaUrl) {
-    const file = await fetchAndValidateMedia(media);
-    mediaId = await uploadMedia(client, authMode, file);
-  }
-
   try {
+    const { client, authMode } = await getPlatformClient(clientId, 'x');
+
+    let mediaId = null;
+    if (media?.mediaUrl) {
+      const file = await fetchAndValidateMedia(media);
+      mediaId = await uploadMedia(client, authMode, file);
+    }
+
     const payload = mediaId ? { text, media: { media_ids: [mediaId] } } : { text };
     const response = await client.v2.tweet(payload);
     // Call counts only, no fabricated dollar rate — X spend genuinely isn't
@@ -68,6 +68,9 @@ export async function publish({ clientId, text, media }) {
     logUsage({ module: 'social-posting', action: 'x-write', provider: 'x-api', model: 'x-write', calls: 1, costUsd: 0, clientId, metadata: { authMode, apiVersion: 'v2', mediaAttached: !!mediaId } }).catch(() => {});
     return { twitterId: response?.data?.id || null, response, apiVersion: 'v2', mediaId };
   } catch (error) {
+    // Preserve intentionally mapped local/auth errors; map raw X client errors
+    // from credential resolution, media upload, and tweet creation uniformly.
+    if (error?.twitterError || error?.code === 'x-reconnect-required') throw error;
     throw mapTwitterError(error);
   }
 }
