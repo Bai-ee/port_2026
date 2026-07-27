@@ -18,15 +18,20 @@ Config lives at `digest_config/{clientId}.autoPublish.platforms.{x,instagram}` =
 
 ### Video-owner invariant
 
-`dailyVideo.sourceClientId` is the single ownership selector. Blank means the
-digest client. When Hitloop's email selects Underground's video, Underground
+`dailyVideo.sourceClientId` is the publishing-ownership selector. Blank means
+the digest client. `dailyVideo.assetSourceClientId` independently selects the
+dashboard whose completed Remix file is attached; blank means the publishing
+owner. This lets a centrally rendered Hitloop asset be piped into Underground's
+publishing flow without routing the post through Hitloop's social account.
+When Hitloop's email publishes for Underground, Underground
 owns all of the following:
 
-- the completed Video Remix;
 - Client Brain voice used for its caption;
 - `autoPublish` mode, delay, and daily cap;
 - the connected X account;
 - the `social_posts` row and every approval token.
+
+The selected asset source owns only the stored completed Video Remix file.
 
 The sending digest owns only its email layout and `recipientEmail`. There is no
 independent account destination. Legacy stored `accountClientId` values are
@@ -92,7 +97,8 @@ Dashboard counterpart (`app/api/social-posting/route.js` actions `approve-post`/
 ## 5. Email wiring + the roll-up
 
 `app/api/admin/daily-digest/route.js`:
-- The selected Video Remix owner is resolved before captioning or publishing.
+- The selected Video Remix publishing owner and file library are resolved
+  independently before captioning or publishing.
   Its digest config and Client Brain drive the remix caption and X policy; its
   client id is passed to the social adapter. Video Promo remains owned by the
   email client. If a borrowed owner's config cannot be read, a real send fails
@@ -114,8 +120,8 @@ publish total.
 - `app/api/worker/pre-digest-video/route.js` now loops `[homeClientId, ...listCronEnrolledClientIds()]` (was: one client) — required for any non-home enrolled client to have a video at all. Per-client `strictSourceFolders` comes from `digest_config/{clientId}.dailyVideo.sourceFolders` (`_digest-config.js` `DEFAULT_DAILY_VIDEO`/`normalizeDailyVideo`), defaulting to `['skyline']` — no config UI yet, Firestore-only (matches the plan's runbook step "Set `dailyVideo.sourceFolders` for the client (or accept `skyline`)"). `await triggerWorker()` is still awaited — Vercel can freeze the instance right after the response returns, so this must never become fire-and-forget.
 - Interactive **Generate & Send does not start a render**. It reads the latest
   completed, still-downloadable Video Remix from
-  `dailyVideo.sourceClientId` (blank = digest/home client). This selector is in
-  the Email Digest card, so several emails can reuse one owner's latest video.
+  `dailyVideo.assetSourceClientId` (blank = publishing owner). The publishing
+  owner remains `dailyVideo.sourceClientId` (blank = digest/home client).
   Each email gets an approval button for the same owner-scoped post. Dedupe
   reuses that post and its stored caption while minting a fresh single-use
   token; the post-status guard guarantees that only the first approval

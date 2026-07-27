@@ -615,7 +615,7 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
                   <span className="label">Auto-Publish (daily video)</span>
                   <span className="hint">Auto publishes with no human review. Approval emails a button and publishes nothing until it is clicked.</span>
                   <label className="field" style={{ display: 'grid', gap: 6 }}>
-                    <span className="label">Video source</span>
+                    <span className="label">Publish video for</span>
                     <select
                       value={form.dailyVideo?.sourceClientId || ''}
                       onChange={(e) => setForm((f) => ({
@@ -623,12 +623,28 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
                         dailyVideo: { ...(f.dailyVideo || {}), sourceClientId: e.target.value },
                       }))}
                     >
-                      <option value="">This digest client’s latest rendered video</option>
+                      <option value="">This digest client</option>
                       {clients.map((c) => (
-                        <option key={c.clientId} value={c.clientId}>{c.name} · latest rendered video</option>
+                        <option key={c.clientId} value={c.clientId}>{c.name}</option>
                       ))}
                     </select>
-                    <span className="hint">No new render is started. The selected client owns the video, caption, approval policy, and connected X account. This email only controls its recipients and layout.</span>
+                    <span className="hint">This client owns the caption, approval policy, connected X account, post, and approval links. This email only controls its recipients and layout.</span>
+                  </label>
+                  <label className="field" style={{ display: 'grid', gap: 6 }}>
+                    <span className="label">Take completed video from</span>
+                    <select
+                      value={form.dailyVideo?.assetSourceClientId || ''}
+                      onChange={(e) => setForm((f) => ({
+                        ...f,
+                        dailyVideo: { ...(f.dailyVideo || {}), assetSourceClientId: e.target.value },
+                      }))}
+                    >
+                      <option value="">Publishing client’s saved videos</option>
+                      {clients.map((c) => (
+                        <option key={c.clientId} value={c.clientId}>{c.name} · saved videos</option>
+                      ))}
+                    </select>
+                    <span className="hint">Select Hitloop when the admin created the Remix centrally. The file is borrowed; publishing still uses the client above. No new render is started.</span>
                   </label>
                   {['x', 'instagram'].map((platform) => {
                     const live = platform === 'x';

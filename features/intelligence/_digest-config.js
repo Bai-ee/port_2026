@@ -230,13 +230,18 @@ const DEFAULT_SCHEDULE = {
 // Per-client override for the pre-digest-video worker's strict EditVideos
 // source folder(s). Empty = the worker's own DEFAULT_DAILY_VIDEO_SOURCE_FOLDERS
 // (['skyline']) — every existing client keeps today's behavior unless set.
-const DEFAULT_DAILY_VIDEO = { sourceFolders: [], sourceClientId: '' };
+const DEFAULT_DAILY_VIDEO = { sourceFolders: [], sourceClientId: '', assetSourceClientId: '' };
 function normalizeDailyVideo(value) {
   return {
     sourceFolders: cleanIdList(value?.sourceFolders),
-    // Which client's latest completed Video Remix should ride in this email.
+    // Publishing owner: caption voice, policy, social account, post + approvals.
     // Blank = the digest/home client.
     sourceClientId: typeof value?.sourceClientId === 'string' ? value.sourceClientId.trim().slice(0, 160) : '',
+    // Physical file library. Blank = the publishing owner. This permits a
+    // centrally rendered file to be assigned to a client's publishing flow.
+    assetSourceClientId: typeof value?.assetSourceClientId === 'string'
+      ? value.assetSourceClientId.trim().slice(0, 160)
+      : '',
   };
 }
 
@@ -245,6 +250,13 @@ function resolveDailyVideoOwnerClientId(config, digestClientId) {
     ? config.dailyVideo.sourceClientId.trim()
     : '';
   return selected || (typeof digestClientId === 'string' ? digestClientId.trim() : '');
+}
+
+function resolveDailyVideoAssetClientId(config, digestClientId) {
+  const selected = typeof config?.dailyVideo?.assetSourceClientId === 'string'
+    ? config.dailyVideo.assetSourceClientId.trim()
+    : '';
+  return selected || resolveDailyVideoOwnerClientId(config, digestClientId);
 }
 
 const DEFAULTS = {
@@ -539,6 +551,7 @@ module.exports = {
   DEFAULT_DAILY_VIDEO,
   normalizeDailyVideo,
   resolveDailyVideoOwnerClientId,
+  resolveDailyVideoAssetClientId,
   DEFAULT_MARKET_INSIGHT_SOURCE_PLATFORMS,
   DEMO_METRIC_GROUPS,
   DEMO_METRIC_KEYS,

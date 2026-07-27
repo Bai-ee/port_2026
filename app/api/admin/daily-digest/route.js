@@ -2908,6 +2908,7 @@ export async function GET(request) {
     // caption, publish policy, connected account, post row, and approvals.
     // The digest client only owns this email's layout and recipient.
     const videoSourceClientId = digestConfig.resolveDailyVideoOwnerClientId(digestCfg, homeClientId);
+    const videoAssetClientId = digestConfig.resolveDailyVideoAssetClientId(digestCfg, homeClientId);
     let videoOwnerDigestCfg = videoSourceClientId === homeClientId ? digestCfg : null;
     let videoOwnerConfigLoadFailed = false;
     if (videoSourceClientId && videoSourceClientId !== homeClientId) {
@@ -2922,8 +2923,8 @@ export async function GET(request) {
       try {
         const readLatestCaptures = async () => {
           const [videoSourceSnap, homeSnap] = await Promise.all([
-            fb.adminDb.collection('dashboard_state').doc(videoSourceClientId).get(),
-            videoSourceClientId === homeClientId
+            fb.adminDb.collection('dashboard_state').doc(videoAssetClientId).get(),
+            videoAssetClientId === homeClientId
               ? Promise.resolve(null)
               : fb.adminDb.collection('dashboard_state').doc(homeClientId).get(),
           ]);
@@ -2944,8 +2945,8 @@ export async function GET(request) {
             const { reconcileMediaJob } = require('../../../../api/_lib/media-reconcile.cjs');
             const inflight = await mediaJobsLib.listInFlightMediaJobs(20);
             for (const job of inflight) {
-              if (job?.clientId !== videoSourceClientId) continue;
-              try { await reconcileMediaJob(job, videoSourceClientId); } catch { /* per-job best-effort */ }
+              if (job?.clientId !== videoAssetClientId) continue;
+              try { await reconcileMediaJob(job, videoAssetClientId); } catch { /* per-job best-effort */ }
             }
           } catch (e) {
             logWarn('daily_digest_media_reconcile_failed', { error: e.message });
@@ -2971,9 +2972,9 @@ export async function GET(request) {
           if (!probe.ok) {
             videoStatus.remix = `Video Remix link failed validation (${probe.reason || 'unknown'}).`;
             remixCap = null;
-          } else videoStatus.remix = `latest rendered · ${staleVideoLabel(remixCap.createdAt)} · source ${videoSourceClientId}`;
+          } else videoStatus.remix = `latest rendered · ${staleVideoLabel(remixCap.createdAt)} · file library ${videoAssetClientId} · publishes for ${videoSourceClientId}`;
         } else if (wantRemix) {
-          videoStatus.remix = `No completed Video Remix was found for source client ${videoSourceClientId}.`;
+          videoStatus.remix = `No completed Video Remix was found in file library ${videoAssetClientId}.`;
         }
         if (promoCap) {
           const probe = await probeVideoUrl(promoCap.downloadUrl);
@@ -3040,6 +3041,7 @@ export async function GET(request) {
             stale: false,
             staleLabel: '',
             sourceClientId: videoSourceClientId,
+            assetSourceClientId: videoAssetClientId,
           };
         }
         if (promoCap) {

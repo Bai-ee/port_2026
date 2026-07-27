@@ -16,8 +16,10 @@ Brief link shipped** (§10).
 > - **Preview = what sends.** EMAIL PREVIEW defaults to **live** mode; Run & Send **saves the
 >   settings first** so saved == previewed == sent.
 > - **The selected video client owns publishing.** Generate & Send attaches the
->   latest completed Video Remix selected by `dailyVideo.sourceClientId`; it
->   does not start a new render. That selected client also supplies the caption
+>   latest completed Video Remix selected by `dailyVideo.assetSourceClientId`
+>   (blank = publishing owner); it does not start a new render.
+>   `dailyVideo.sourceClientId` independently selects the publishing owner,
+>   which supplies the caption
 >   voice, approval policy, connected X account, post, and approval tokens.
 >   `recipientEmail` remains independent, so both the client's email and the
 >   Hitloop/admin email may approve the same owner-scoped post without creating

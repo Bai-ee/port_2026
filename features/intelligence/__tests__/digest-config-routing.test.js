@@ -6,6 +6,7 @@ const {
   normalizeAutoPublish,
   normalizeDailyVideo,
   resolveDailyVideoOwnerClientId,
+  resolveDailyVideoAssetClientId,
 } = require('../_digest-config.js');
 
 test('auto-publish ignores the legacy independent destination account', () => {
@@ -32,10 +33,12 @@ test('daily video preserves the client that owns the video and publishing', () =
     normalizeDailyVideo({
       sourceFolders: ['skyline', 'skyline'],
       sourceClientId: ' hitloop-master ',
+      assetSourceClientId: ' central-render-library ',
     }),
     {
       sourceFolders: ['skyline'],
       sourceClientId: 'hitloop-master',
+      assetSourceClientId: 'central-render-library',
     },
   );
 });
@@ -44,6 +47,22 @@ test('video ownership defaults to the digest client', () => {
   const autoPublish = normalizeAutoPublish({});
   assert.equal(Object.hasOwn(autoPublish.platforms.x, 'accountClientId'), false);
   assert.equal(normalizeDailyVideo({}).sourceClientId, '');
+  assert.equal(normalizeDailyVideo({}).assetSourceClientId, '');
+});
+
+test('render file source can differ from the publishing owner', () => {
+  const config = {
+    dailyVideo: {
+      sourceClientId: 'undergroundexistence-0CsKkpaq',
+      assetSourceClientId: 'bryan-balli-WUoltG84',
+    },
+  };
+  assert.equal(resolveDailyVideoOwnerClientId(config, 'email-client'), 'undergroundexistence-0CsKkpaq');
+  assert.equal(resolveDailyVideoAssetClientId(config, 'email-client'), 'bryan-balli-WUoltG84');
+  assert.equal(
+    resolveDailyVideoAssetClientId({ dailyVideo: { sourceClientId: 'undergroundexistence-0CsKkpaq' } }, 'email-client'),
+    'undergroundexistence-0CsKkpaq',
+  );
 });
 
 test('selected video source is the only publish owner even with a legacy account target', () => {
