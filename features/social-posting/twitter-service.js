@@ -308,7 +308,15 @@ function makeId() {
 function extractMedia(payload = {}) {
   const mediaUrl = payload.mediaUrl ? String(payload.mediaUrl).slice(0, 2000) : null;
   if (!mediaUrl) {
-    return { mediaUrl: null, mediaType: null, mediaStoragePath: null, mediaContentType: null, mediaJobId: null };
+    return {
+      mediaUrl: null,
+      mediaType: null,
+      mediaStoragePath: null,
+      mediaContentType: null,
+      mediaJobId: null,
+      mediaAssetClientId: null,
+      mediaMetadata: null,
+    };
   }
   const contentType = payload.mediaContentType ? String(payload.mediaContentType).slice(0, 80) : null;
   const inferredType = contentType
@@ -320,6 +328,10 @@ function extractMedia(payload = {}) {
     mediaStoragePath: payload.mediaStoragePath ? String(payload.mediaStoragePath).slice(0, 500) : null,
     mediaContentType: contentType,
     mediaJobId: payload.mediaJobId ? String(payload.mediaJobId).slice(0, 120) : null,
+    mediaAssetClientId: payload.mediaAssetClientId ? String(payload.mediaAssetClientId).slice(0, 160) : null,
+    mediaMetadata: payload.mediaMetadata && typeof payload.mediaMetadata === 'object'
+      ? JSON.parse(JSON.stringify(payload.mediaMetadata))
+      : null,
   };
 }
 
@@ -850,6 +862,101 @@ export async function attachMediaToPost(clientId, postId, payload) {
     ...media,
     agents,
     updatedAt: new Date().toISOString(),
+  };
+  await savePost(updated);
+  return updated;
+}
+
+// Approval-page remix lifecycle. These mutations are deliberately restricted
+// to awaiting_approval posts: a public approval token may prepare a replacement
+// asset, but it can never alter a post that is already publishing or live.
+export async function markApprovalRemixPending(clientId, postId, pending) {
+  const post = await getSocialPost(clientId, postId);
+  if (!post) {
+    const err = new Error('Post not found.');
+    err.status = 404;
+    throw err;
+  }
+  if (post.status !== 'awaiting_approval') {
+    const err = new Error('This post is no longer awaiting approval.');
+    err.status = 409;
+    throw err;
+  }
+  if (post.remixPending?.jobId && post.remixPending?.status !== 'failed') {
+    const err = new Error('A remix is already rendering for this post.');
+    err.status = 409;
+    err.code = 'remix-pending';
+    throw err;
+  }
+  const remixCount = Number(post.remixCount || 0);
+  if (remixCount >= 3) {
+    const err = new Error('This approval has reached its three-remix limit.');
+    err.status = 429;
+    err.code = 'remix-limit';
+    throw err;
+  }
+  const now = new Date().toISOString();
+  const updated = {
+    ...post,
+    remixPending: {
+      jobId: String(pending?.jobId || ''),
+      assetClientId: String(pending?.assetClientId || ''),
+      status: 'rendering',
+      queuedAt: now,
+    },
+    remixCount: remixCount + 1,
+    updatedAt: now,
+  };
+  await savePost(updated);
+  return updated;
+}
+
+export async function failApprovalRemix(clientId, postId, message) {
+  const post = await getSocialPost(clientId, postId);
+  if (!post || post.status !== 'awaiting_approval') return post;
+  const now = new Date().toISOString();
+  const updated = {
+    ...post,
+    remixPending: post.remixPending
+      ? { ...post.remixPending, status: 'failed', error: String(message || 'Remix failed.').slice(0, 300) }
+      : null,
+    updatedAt: now,
+  };
+  await savePost(updated);
+  return updated;
+}
+
+export async function completeApprovalRemix(clientId, postId, payload) {
+  const post = await getSocialPost(clientId, postId);
+  if (!post) {
+    const err = new Error('Post not found.');
+    err.status = 404;
+    throw err;
+  }
+  if (post.status !== 'awaiting_approval') {
+    const err = new Error('This post is no longer awaiting approval.');
+    err.status = 409;
+    throw err;
+  }
+  const media = extractMedia(payload);
+  if (!media.mediaUrl) {
+    const err = new Error('The completed remix has no video URL.');
+    err.status = 500;
+    throw err;
+  }
+  const content = normalizePostText(payload.content || post.content);
+  if (!content || content.length > 280) {
+    const err = new Error('The replacement post copy is invalid.');
+    err.status = 400;
+    throw err;
+  }
+  const now = new Date().toISOString();
+  const updated = {
+    ...post,
+    ...media,
+    content,
+    remixPending: null,
+    updatedAt: now,
   };
   await savePost(updated);
   return updated;

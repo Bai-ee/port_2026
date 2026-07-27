@@ -53,6 +53,17 @@ SOURCE MEDIA tab (Video Remix modal)
   → Uploaded folder is selected in the REMIX tab's `sourceFolders`.
 ```
 
+The public social approval page also exposes **Remix video** for an
+`awaiting_approval` post. It resolves the capture/job from the post's
+`mediaJobId` and `mediaAssetClientId` (with a dashboard-state/config fallback
+for older links), clones the validated `recipeFull`, drops the old
+`videoOrder`, and runs the same shared anti-repeat selector before enqueueing a
+new EditVideos job. Completion is reconciled through the existing bridge and
+replaces the media on the same social post; it never creates or publishes a
+second post. The page pins a DJ/mix if an older worker-random recipe did not
+record one, then exposes DJ, mix, folders, filter, and duration as approval
+metadata.
+
 ## Daily email video recipe
 
 The daily email does **not** use the Video Remix UI/card params. The morning cron calls

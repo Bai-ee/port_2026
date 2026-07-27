@@ -8,6 +8,7 @@ import {
   readSocialQueue,
   runPostingAgents,
   schedulePost,
+  updateSocialPost,
 } from '../../../../features/social-posting/twitter-service.js';
 import { getSocialAccount, toPublicAccount } from '../../../../features/social-posting/social-accounts.js';
 
@@ -2082,6 +2083,21 @@ async function enqueueAutoPublishVideoPost({ clientId, platform, videoItems, tim
   ));
   if (duplicate) {
     step?.('info', `Auto-publish · already queued for today (@${platformLabel})`);
+    // A repeated Generate & Send should still adopt the canonical metadata
+    // copy introduced for Remix approvals instead of preserving an older
+    // generated caption on the reused pending post.
+    if (
+      duplicate.status === 'awaiting_approval'
+      && item.caption
+      && duplicate.content !== item.caption
+    ) {
+      try {
+        const updated = await updateSocialPost(clientId, duplicate.id, { content: item.caption });
+        duplicate.content = updated.content;
+      } catch (err) {
+        logWarn('daily_digest_duplicate_caption_update_failed', { clientId, postId: duplicate.id, error: err.message });
+      }
+    }
     let approvalUrl = duplicate.approvalUrl || null;
     // Approval URLs are intentionally not persisted on the post. A repeated
     // digest send therefore mints a fresh token for the same still-pending post
@@ -2123,7 +2139,14 @@ async function enqueueAutoPublishVideoPost({ clientId, platform, videoItems, tim
     return { ...baseCtx, skipped: 'no-caption' };
   }
 
-  const media = { mediaUrl: item.url, mediaType: 'video', mediaContentType: 'video/mp4', mediaJobId: item.mediaJobId || null };
+  const media = {
+    mediaUrl: item.url,
+    mediaType: 'video',
+    mediaContentType: 'video/mp4',
+    mediaJobId: item.mediaJobId || null,
+    mediaAssetClientId: item.assetSourceClientId || null,
+    mediaMetadata: item.metadata || null,
+  };
 
   if (mode === 'auto') {
     try {
@@ -2996,7 +3019,15 @@ export async function GET(request) {
         // the single-call behavior when Remix and Promo belong to the same
         // client, while a borrowed Remix never inherits the email client's
         // Client Brain.
-        const captions = { remix: '', promo: '' };
+        // A remix approval starts with factual, editable metadata rather than
+        // invented lifestyle copy. The approval page can reset to this same
+        // canonical "DJ — Mix" line at any time.
+        const remixArtist = String(remixCap?.createdWith?.artist || '').trim();
+        const remixMix = String(remixCap?.createdWith?.mix || '').trim();
+        const captions = {
+          remix: [remixArtist, remixMix].filter(Boolean).join(' — ') || 'Video Remix',
+          promo: '',
+        };
         if (!isTemplate && !skipLlm) {
           const captionGroups = [];
           const addCaptionTarget = (kind, capture, ownerClientId, ownerConfig) => {
@@ -3008,7 +3039,6 @@ export async function GET(request) {
             }
             group.targets.push({ kind, capture });
           };
-          addCaptionTarget('remix', remixCap, videoSourceClientId, videoOwnerDigestCfg || {});
           addCaptionTarget('promo', promoCap, homeClientId, digestCfg || {});
 
           for (const group of captionGroups) {
@@ -3044,6 +3074,12 @@ export async function GET(request) {
             staleLabel: '',
             sourceClientId: videoSourceClientId,
             assetSourceClientId: videoAssetClientId,
+            mediaJobId: remixCap.jobId || null,
+            metadata: {
+              ...(remixCap.createdWith || {}),
+              sourceFolders: Array.isArray(remixCap.sourceFolders) ? remixCap.sourceFolders : [],
+              duration: remixCap.durationSeconds || remixCap.createdWith?.duration || 30,
+            },
           };
         }
         if (promoCap) {

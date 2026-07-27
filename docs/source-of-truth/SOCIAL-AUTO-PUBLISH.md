@@ -88,13 +88,23 @@ The Firestore doc `social_approvals/{tokenId}` (`tokenId = apv_{nonce}`) is the 
 **`publishApprovedPost`/`rejectSocialPost` (`twitter-service.js`) both guard `post.status !== 'awaiting_approval'` → `409 not-pending`.** This is what makes minting more than one valid token for the same post safe (see §5) — only the first click through *either* link can ever publish; the second always hits the status guard, never a live double-post.
 
 Public surface, `app/api/public/social-approve/`:
-- `route.js` — **POST only** (`GET` → `405`); email scanners prefetching the link never publish. Rate-limited 30/hr/IP. Redeems, then `publishApprovedPost(...)`; success → `recordApprovalResult(tokenId,'posted')`; the `not-pending` race (dashboard beat this click by a hair) → recorded as anything-but-`'failed'` and reported as `already-posted`, not a false `failed`.
-- `preview/route.js` — **read-only**, also rate-limited 30/hr/IP (a leaked link is otherwise unlimited Firestore reads). Never redeems, never publishes.
-- `app/post-approval/[token]/page.jsx` — public, unauthenticated. States: `ready` (names the exact live account **above** the button — accepted product decision: anyone holding the link can publish, mitigated by 48h TTL + single-use + revoke + IP/UA audit) / `already-posted` / `expired` / `revoked` / `failed` / `server` (ops misconfig, not a bad link) / `not-found` / `invalid`.
+- `route.js` — one Hobby-compatible function with method/action separation. `GET ?token=…` is read-only; email scanners prefetching the link never publish. `POST {action:'publish'}` redeems, then calls `publishApprovedPost(...)`. The non-publish POST actions (`refresh-copy`, `remix`, `remix-status`) require the same live pending token but never redeem it and never call X. All paths are rate-limited 30/hr/IP.
+- `app/post-approval/page.jsx?token=…` — public, unauthenticated. States: `ready` (names the exact live account **above** the button — accepted product decision: anyone holding the link can publish, mitigated by 48h TTL + single-use + revoke + IP/UA audit) / `already-posted` / `expired` / `revoked` / `failed` / `server` (ops misconfig, not a bad link) / `not-found` / `invalid`.
   In `ready`, the generated post copy is an editable 280-character textarea.
-  The edit is sent only with the explicit final POST, saved to the same
-  `awaiting_approval` row, and then published. Loading or typing never writes
-  or publishes.
+  Its default is the factual `DJ — Mix` captured with the selected video.
+  The ↻ control restores and saves that canonical metadata copy. The metadata
+  panel shows DJ, mix, source folder, look, and length.
+- **Remix video** queues a replacement through the same EditVideos bridge,
+  preserving the current validated recipe while reselecting clips through the
+  shared anti-repeat selector. Older recipes whose worker-random DJ was never
+  recorded get a pinned DJ/mix before enqueue. The page polls `remix-status`;
+  completion replaces the same pending post's media URL/job/metadata and resets
+  copy to the new `DJ — Mix`. It does not create a second social post.
+- A pending approval permits at most three remixes, only one at a time. The
+  final publish route refuses to burn the token while a remix is rendering,
+  preventing a stale tab from posting the old cut. Loading, typing, refreshing
+  copy, remixing, and polling never publish; **Post to X remains the only X
+  write**.
 
 Dashboard counterpart (`app/api/social-posting/route.js` actions `approve-post`/`reject-post`/`revoke-approvals`; `SocialPostingPanel.jsx` renders Approve/Reject on `awaiting_approval` rows) publishes/rejects directly, then revokes that post's token.
 
@@ -107,7 +117,7 @@ Dashboard counterpart (`app/api/social-posting/route.js` actions `approve-post`/
   client id is passed to the social adapter. Video Promo remains owned by the
   email client. If a borrowed owner's config cannot be read, a real send fails
   closed instead of silently using the wrong account or policy.
-- `enqueueAutoPublishVideoPost({clientId, platform, videoItems, timestamp, digestCfg, step})` — gates: `mode !== 'off'` → **hard** `!videoItems.remix.stale` (never republish yesterday's video — this is a block, not a warning) → account connected → dedupe on `source: daily-video:{platform}:{YYYY-MM-DD}` → under `maxPerDay`. Caption reuses `videoItems.remix.caption` (already generated upstream — zero extra LLM cost), falling back to `generatePromoCopy` only if empty. `auto` publishes inline (`postNow`); `approval` creates the post + mints a token + builds the approval URL. Never throws (the caller also wraps it) — a publish failure must never block the email.
+- `enqueueAutoPublishVideoPost({clientId, platform, videoItems, timestamp, digestCfg, step})` — gates: `mode !== 'off'` → **hard** `!videoItems.remix.stale` (never republish yesterday's video — this is a block, not a warning) → account connected → dedupe on `source: daily-video:{platform}:{YYYY-MM-DD}` → under `maxPerDay`. Remix caption defaults to the capture's factual `DJ — Mix` metadata (zero LLM cost). A repeated same-day send updates a reused pending post to that canonical copy. `auto` publishes inline (`postNow`); `approval` creates the post + mints a token + builds the approval URL. Never throws (the caller also wraps it) — a publish failure must never block the email.
 - **This only runs when `isRealSend`.** Preview/template builds a read-only "dry" ctx instead (connected-account lookup only, no Firestore write, no token) — `isPreview` gates the *whole* enqueue, not just the publish call inside it.
 - `buildVideoPostRow(item, kind, ctx)` / `buildAutoPublishRow(ctx)` render the attribution line (`CLIENT NAME → @handle`) + either the bulletproof-table `POST TO X` button (approval mode, table-based, no flex/JS — Outlook) or a passive `PUBLISHED · @handle · time` badge (auto mode). `ctx` is `undefined` for Video Promo and for any client with mode `off` → byte-identical to the pre-existing row.
 
