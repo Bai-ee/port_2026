@@ -2122,13 +2122,13 @@ async function enqueueAutoPublishVideoPost({ clientId, platform, videoItems, tim
       skipped: 'duplicate',
     };
   }
-  const todayPrefix = `daily-video:${platform}:`;
+  const todaySource = `daily-video:${platform}:${dateKey}`;
   const maxPerDay = Math.max(1, Math.min(10, Number(platformCfg?.maxPerDay) || 1));
   // Failed/rejected/expired attempts are terminal and cannot publish. They
   // must not consume the daily cap or a user could never mint the fresh
   // approval required after a burned-link failure.
   const publishedToday = existing.filter((post) => (
-    String(post?.source || '').startsWith(todayPrefix)
+    String(post?.source || '') === todaySource
     && reusableStatuses.includes(post?.status)
   )).length;
   if (publishedToday >= maxPerDay) {
