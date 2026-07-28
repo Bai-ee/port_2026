@@ -54,11 +54,17 @@ const DEFAULT_SCROLL_TO_END = { target: { percent: 100 }, startAt: 0.25, arriveA
 
 function normEnvironment(e) {
   if (!e) return { mode: 'gradient', preset: 'studio', color: '#11141a', blur: 0, hue: 0, saturation: 1, brightness: 1, reflections: true };
-  const mode = ['preset', 'color', 'site', 'gradient'].includes(e.mode) ? e.mode : 'gradient';
+  const mode = ['preset', 'color', 'site', 'image', 'gradient'].includes(e.mode) ? e.mode : 'gradient';
+  const imageDataUrl = typeof e.imageDataUrl === 'string'
+    && /^data:image\/(?:png|jpe?g|webp);base64,[a-z0-9+/=]+$/i.test(e.imageDataUrl)
+    && e.imageDataUrl.length <= 3_500_000
+    ? e.imageDataUrl
+    : '';
   return {
     mode,
     preset: ALLOWED_ENV_PRESETS.includes(e.preset) ? e.preset : 'studio',
     color: String(e.color || '#11141a').slice(0, 20),
+    imageDataUrl,
     blur: clamp(e.blur, 0, 48, 0),
     hue: clamp(e.hue, -180, 180, 0),
     saturation: clamp(e.saturation, 0, 3, 1),
@@ -131,7 +137,10 @@ export function normalizeRecipe(raw = {}) {
       fps: clamp(r.output?.fps, 24, 30, 30),
       width: clamp(r.output?.width, 640, 2560, 1920),
       height: clamp(r.output?.height, 360, 1600, 1200),
-      siteSpeed: clamp(r.output?.siteSpeed, 0.25, 4, 1),
+      // Site playback speed must stay fixed. scene.mjs maps rendered frames to
+      // captured scroll frames with modulo indexing; any non-1x value can skip
+      // the bottom or wrap back to the top mid-export.
+      siteSpeed: 1,
     },
     device: {
       viewport: ['desktop', 'mobile', 'tablet'].includes(r.device?.viewport) ? r.device.viewport : 'desktop',

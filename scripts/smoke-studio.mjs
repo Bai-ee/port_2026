@@ -1,4 +1,4 @@
-import { access, mkdir } from 'node:fs/promises';
+import { access, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
 
@@ -108,6 +108,11 @@ async function clickText(page, text) {
 
 async function main() {
   await mkdir(outDir, { recursive: true });
+  const backgroundFixturePath = path.join(outDir, 'studio-smoke-background.svg');
+  await writeFile(
+    backgroundFixturePath,
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675"><defs><linearGradient id="g" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#172033"/><stop offset="0.55" stop-color="#5b6ee1"/><stop offset="1" stop-color="#f59e0b"/></linearGradient></defs><rect width="1200" height="675" fill="url(#g)"/><circle cx="920" cy="160" r="110" fill="#ffffff" opacity="0.35"/><rect x="120" y="420" width="760" height="70" rx="35" fill="#ffffff" opacity="0.28"/></svg>'
+  );
 
   const chromeForTestingPath = path.join(
     process.env.HOME || '',
@@ -153,11 +158,51 @@ async function main() {
   await page.waitForTimeout(300);
 
   await clickText(page, 'Background');
+  let imageBackgroundReady = false;
   if (await page.getByText('Image', { exact: true }).count()) {
-    issues.push('unsupported Image background mode is visible in launch UI');
+    await clickText(page, 'Image');
+    await page.locator('#studio-background-panel input[type="file"]').setInputFiles(backgroundFixturePath);
+    await page.waitForTimeout(2000);
+    const backgroundPanelText = await page.locator('#studio-background-panel').innerText();
+    const toastText = await page.locator('#studio-render-toast').count()
+      ? await page.locator('#studio-render-toast').innerText()
+      : '';
+    imageBackgroundReady = backgroundPanelText.includes('Replace image');
+    if (!imageBackgroundReady) {
+      issues.push(`image background upload did not become ready${toastText ? `: ${toastText}` : ''}`);
+    }
   }
   if (await page.getByText('Site', { exact: true }).count()) {
     issues.push('unsupported Site background mode is visible in launch UI');
+  }
+  if (imageBackgroundReady) {
+    await page.locator('#studio-camera-template-select').selectOption('spiral-in');
+    await page.waitForTimeout(500);
+    page.once('dialog', async (dialog) => {
+      await dialog.accept('Smoke Template');
+    });
+    await page.locator('#studio-undercanvas-actions button').first().click();
+    await page.waitForFunction(
+      () => {
+        const saved = JSON.parse(window.localStorage.getItem('mockup-studio-custom-templates-v1') || '[]');
+        return saved.some((entry) => (
+          entry?.label === 'Smoke Template'
+          && entry?.settings?.bgMode === 'image'
+          && entry?.settings?.bgImageDataUrl
+          && entry?.settings?.formatId === 'reel'
+          && entry?.settings?.viewportId === 'desktop'
+        ));
+      },
+      null,
+      { timeout: 5000 }
+    );
+    await clickText(page, 'Color');
+    await page.locator('#studio-camera-template-select').selectOption({ label: 'Smoke Template' });
+    await page.waitForFunction(
+      () => document.querySelector('#studio-background-panel')?.innerText.includes('Replace image'),
+      null,
+      { timeout: 5000 }
+    );
   }
   await clickText(page, 'Color');
   await page.locator('input[type="color"]').fill('#172033');

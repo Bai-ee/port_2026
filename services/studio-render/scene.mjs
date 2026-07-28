@@ -71,6 +71,17 @@ export function buildSceneHtml(recipe, {
         }catch(err_){
           window.__envDiag.err=String(err_?.message||err_); x.fillStyle='#e8eaec'; x.fillRect(0,0,2048,1024);
         }
+      } else if(envMode==='image'&&ENV?.imageDataUrl){
+        x.filter=grade(ENV?.hue,ENV?.saturation,ENV?.brightness);
+        try{
+          const img=await new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=(e)=>rej(new Error('background img load failed: '+e?.type));im.src=ENV.imageDataUrl;});
+          x.fillStyle='#0c0e14'; x.fillRect(0,0,2048,1024);
+          const ar=(img.naturalWidth||img.width||1)/(img.naturalHeight||img.height||1);
+          let dw=2048,dh=2048/ar; if(dh<1024){dh=1024;dw=1024*ar;}
+          x.drawImage(img,(2048-dw)/2,(1024-dh)/2,dw,dh); window.__envDiag.loaded=true;
+        }catch(err_){
+          window.__envDiag.err=String(err_?.message||err_); x.fillStyle='#11141a'; x.fillRect(0,0,2048,1024);
+        }
       } else if(envMode==='preset'){
         const ENV_STOPS={'studio':[['#f4f3f0',0],['#e2dfd9',0.6],['#cfccc5',1]],'sunset':[['#241433',0],['#7a3b2e',0.5],['#e8a25a',0.82],['#f6d8a4',1]]};
         const stops=ENV_STOPS[ENV?.preset]||ENV_STOPS['studio'];

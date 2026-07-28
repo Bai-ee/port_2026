@@ -42,7 +42,7 @@ const BACKDROPS = {
 const BACKGROUND_MODES = [
   { id: 'env', label: 'Scene', launch: true },
   { id: 'color', label: 'Color', launch: true },
-  { id: 'image', label: 'Image', launch: false },
+  { id: 'image', label: 'Image', launch: true },
   { id: 'site', label: 'Site', launch: false },
 ];
 const LAUNCH_BACKGROUND_MODE_IDS = BACKGROUND_MODES.filter((mode) => mode.launch).map((mode) => mode.id);
@@ -89,6 +89,64 @@ const templatePose = (vp, [rF, az, el, txF = 0, tyF = 0]) => {
     tz: 0,
   };
 };
+
+const poseFromKeyframe = (vp, k) => {
+  const r = Math.hypot(k?.px || 0, k?.py || 0, k?.pz || 0) || 1;
+  const clampUnit = (n) => Math.max(-1, Math.min(1, n));
+  return [
+    r / vp.camZ,
+    Math.atan2(k?.px || 0, k?.pz || 0) / DEG,
+    Math.asin(clampUnit((k?.py || 0) / r)) / DEG,
+    (k?.tx || 0) / (vp.width * 0.5),
+    (k?.ty || 0) / (vp.height * 0.5),
+  ];
+};
+
+const keyframeFromPose = (vp, k, pose) => ({ ...k, ...templatePose(vp, pose) });
+
+const imageFileToBackgroundDataUrl = (file) => new Promise((resolve, reject) => {
+  const img = new Image();
+  const objectUrl = URL.createObjectURL(file);
+  img.onload = () => {
+    try {
+      const c = document.createElement('canvas');
+      c.width = 2048;
+      c.height = 1024;
+      const x = c.getContext('2d');
+      x.fillStyle = '#0c0e14';
+      x.fillRect(0, 0, c.width, c.height);
+      const ar = (img.naturalWidth || img.width || 1) / (img.naturalHeight || img.height || 1);
+      let dw = c.width;
+      let dh = c.width / ar;
+      if (dh < c.height) {
+        dh = c.height;
+        dw = c.height * ar;
+      }
+      x.drawImage(img, (c.width - dw) / 2, (c.height - dh) / 2, dw, dh);
+      resolve(c.toDataURL('image/jpeg', 0.88));
+    } catch (err) {
+      reject(err);
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  };
+  img.onerror = () => {
+    URL.revokeObjectURL(objectUrl);
+    reject(new Error('Could not read background image.'));
+  };
+  img.src = objectUrl;
+});
+
+const imageFromDataUrl = (dataUrl) => new Promise((resolve, reject) => {
+  if (!dataUrl) {
+    resolve(null);
+    return;
+  }
+  const img = new Image();
+  img.onload = () => resolve(img);
+  img.onerror = () => reject(new Error('Could not load saved background image.'));
+  img.src = dataUrl;
+});
 
 // Canonical OPEN view — the framing the studio and every template open on: a close,
 // front-left 3/4 view, slightly above, device centered and filling the frame (readable
@@ -446,6 +504,7 @@ export default function StudioPage() {
   const [bgColor, setBgColor] = useState(saved.bgColor || '#11141a');
   const [envPreset, setEnvPreset] = useState(saved.envPreset || 'studio');
   const [bgImageEl, setBgImageEl] = useState(null);
+  const [bgImageDataUrl, setBgImageDataUrl] = useState('');
   const [interactMode, setInteractMode] = useState(false);
   const [fullPage, setFullPage] = useState(false);
   // Gradient adjust — repaints the sky dome live for contrast control.
@@ -500,7 +559,6 @@ export default function StudioPage() {
   const [dirPreset, setDirPreset] = useState('push-rotate-flat');
   const [dirSeconds, setDirSeconds] = useState(8);
   const [dirFps, setDirFps] = useState(30);
-  const [dirSiteSpeed, setDirSiteSpeed] = useState(1);
   const [dirScrollMode, setDirScrollMode] = useState('none'); // none | selector | text | percent
   const [dirSelector, setDirSelector] = useState('');
   const [dirText, setDirText] = useState('');
@@ -520,6 +578,7 @@ export default function StudioPage() {
   const [capturesOpen, setCapturesOpen] = useState(false);
   // Expandable Export card open state.
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const previousViewportRef = useRef(viewportId);
 
   // Responsive: collapse the rail under the stage and let the frame fill width.
   const [isNarrow, setIsNarrow] = useState(false);
@@ -534,7 +593,7 @@ export default function StudioPage() {
 
   // Latest UI state, readable from the async three.js builder without re-running it.
   const stateRef = useRef({});
-  stateRef.current = { loadedUrl, viewportId, backdropId, interactMode, hue, sat, bright, loopCfg, templateId, bgMode, bgColor, envPreset };
+  stateRef.current = { loadedUrl, viewportId, backdropId, interactMode, hue, sat, bright, loopCfg, templateId, bgMode, bgColor, envPreset, bgImageDataUrl };
 
   useEffect(() => { keyframesRef.current = keyframes; }, [keyframes]);
 
@@ -709,20 +768,12 @@ export default function StudioPage() {
     // targetXFrac, targetYFrac]. Invert templatePose to convert. Falls back to
     // the named preset only when the timeline has < 2 keys.
     const vp = VIEWPORTS[viewportId] || VIEWPORTS.desktop;
-    const clampUnit = (n) => Math.max(-1, Math.min(1, n));
     const timelineKeys = [...keyframesRef.current].sort((a, b) => a.t - b.t);
     const cameraTrack = timelineKeys.length >= 2
       ? timelineKeys.map((k) => {
-          const r = Math.hypot(k.px || 0, k.py || 0, k.pz || 0) || 1;
           return {
             t: k.t,
-            pose: [
-              r / vp.camZ,                              // radiusFactor
-              Math.atan2(k.px || 0, k.pz || 0) / DEG,   // azimuth°
-              Math.asin(clampUnit((k.py || 0) / r)) / DEG, // elevation°
-              (k.tx || 0) / (vp.width * 0.5),           // targetXFrac
-              (k.ty || 0) / (vp.height * 0.5),          // targetYFrac
-            ],
+            pose: poseFromKeyframe(vp, k),
           };
         })
       : null;
@@ -731,25 +782,32 @@ export default function StudioPage() {
 
     // Always read live-stage state from stateRef at build time — never stale.
     const live = stateRef.current;
+    const environment = {
+      mode: live.bgMode === 'env' ? 'preset' : (live.bgMode === 'color' ? 'color' : live.bgMode === 'image' ? 'image' : 'gradient'),
+      preset: live.envPreset,
+      color: live.bgColor,
+      hue: live.hue,
+      saturation: live.sat,
+      brightness: live.bright,
+      reflections: true,
+    };
+    if (environment.mode === 'image' && live.bgImageDataUrl) {
+      environment.imageDataUrl = live.bgImageDataUrl;
+    }
     return {
       url,
       preset: dirPreset,
       ...(cameraTrack ? { cameraTrack } : {}),
-      output: { seconds, fps: dirFps, width: w, height: h, siteSpeed: dirSiteSpeed },
+      autoVary: false,
+      // Keep captured-site playback locked to 1x. Varying siteSpeed desyncs the
+      // scroll frame map in the renderer, causing early stops or wraparound.
+      output: { seconds, fps: dirFps, width: w, height: h, siteSpeed: 1 },
       device: { viewport: live.viewportId, backdrop: live.backdropId, loop: live.loopCfg.on },
       capture: { warmupMs: 400 },
-      environment: {
-        mode: live.bgMode === 'env' ? 'preset' : (live.bgMode === 'color' ? 'color' : 'gradient'),
-        preset: live.envPreset,
-        color: live.bgColor,
-        hue: live.hue,
-        saturation: live.sat,
-        brightness: live.bright,
-        reflections: true,
-      },
+      environment,
       scroll,
     };
-  }, [formatId, dirScrollMode, dirSelector, dirText, dirPercent, viewportId, totalSeconds, dirSeconds, dirPreset, dirFps, dirSiteSpeed]);
+  }, [formatId, dirScrollMode, dirSelector, dirText, dirPercent, viewportId, totalSeconds, dirSeconds, dirPreset, dirFps]);
 
   const generateCloudVideo = useCallback(async () => {
     if (dirRendering || busy) return;
@@ -858,6 +916,7 @@ export default function StudioPage() {
     try {
       const recipe = buildCurrentRecipe(loadedUrl || '');
       delete recipe.url;
+      delete recipe.autoVary;
       const res = await authedFetch('/api/dashboard/studio-default-recipe', { method: 'PUT', body: JSON.stringify({ recipe }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || `Save failed (HTTP ${res.status})`);
@@ -1502,6 +1561,21 @@ export default function StudioPage() {
     worldRef.current?.buildDevice?.(viewportId);
   }, [viewportId]);
 
+  useEffect(() => {
+    const prevViewportId = previousViewportRef.current;
+    if (prevViewportId === viewportId) return;
+    previousViewportRef.current = viewportId;
+    if (templateId) return;
+    const fromVp = VIEWPORTS[prevViewportId] || VIEWPORTS.desktop;
+    const toVp = VIEWPORTS[viewportId] || VIEWPORTS.desktop;
+    setKeyframes((prev) => {
+      if (prev.length < 2) return prev;
+      const next = prev.map((k) => keyframeFromPose(toVp, k, poseFromKeyframe(fromVp, k)));
+      keyframesRef.current = next;
+      return next;
+    });
+  }, [viewportId, templateId]);
+
   // Live background — dispatches to the active mode; color grade applies to all.
   useEffect(() => {
     const w = worldRef.current;
@@ -1592,15 +1666,50 @@ export default function StudioPage() {
     const w = worldRef.current;
     if (w) w.controls.enabled = true;
     setTemplateId('');
-    setKeyframes((tpl.keyframes || []).map((k) => ({ ...k })));
+    const savedSettings = tpl.settings || {};
+    const nextViewportId = VIEWPORTS[savedSettings.viewportId] ? savedSettings.viewportId : (VIEWPORTS[tpl.viewportId] ? tpl.viewportId : viewportId);
+    const fromVp = VIEWPORTS[tpl.viewportId] || VIEWPORTS[nextViewportId] || VIEWPORTS.desktop;
+    const toVp = VIEWPORTS[nextViewportId] || VIEWPORTS.desktop;
+    const loadedKeyframes = (tpl.keyframes || []).map((k) => keyframeFromPose(toVp, k, poseFromKeyframe(fromVp, k)));
+    if (OUTPUT_FORMATS.some((f) => f.id === savedSettings.formatId)) setFormatId(savedSettings.formatId);
+    if (VIEWPORTS[nextViewportId]) {
+      previousViewportRef.current = nextViewportId;
+      setViewportId(nextViewportId);
+    }
+    if (savedSettings.backdropId && BACKDROPS[savedSettings.backdropId]) setBackdropId(savedSettings.backdropId);
+    if (LAUNCH_BACKGROUND_MODE_IDS.includes(savedSettings.bgMode)) setBgMode(savedSettings.bgMode);
+    if (typeof savedSettings.bgColor === 'string') setBgColor(savedSettings.bgColor);
+    if (typeof savedSettings.envPreset === 'string') setEnvPreset(savedSettings.envPreset);
+    if (Number.isFinite(savedSettings.hue)) setHue(savedSettings.hue);
+    if (Number.isFinite(savedSettings.sat)) setSat(savedSettings.sat);
+    if (Number.isFinite(savedSettings.bright)) setBright(savedSettings.bright);
+    if (savedSettings.loopCfg && typeof savedSettings.loopCfg === 'object') setLoopCfg({ ...savedSettings.loopCfg });
+    if (typeof savedSettings.dirPreset === 'string') setDirPreset(savedSettings.dirPreset);
+    if (Number.isFinite(savedSettings.dirSeconds)) setDirSeconds(savedSettings.dirSeconds);
+    if (Number.isFinite(savedSettings.dirFps)) setDirFps(savedSettings.dirFps);
+    if (['none', 'selector', 'text', 'percent'].includes(savedSettings.dirScrollMode)) setDirScrollMode(savedSettings.dirScrollMode);
+    if (typeof savedSettings.dirSelector === 'string') setDirSelector(savedSettings.dirSelector);
+    if (typeof savedSettings.dirText === 'string') setDirText(savedSettings.dirText);
+    if (Number.isFinite(savedSettings.dirPercent)) setDirPercent(savedSettings.dirPercent);
+    if (savedSettings.bgImageDataUrl) {
+      imageFromDataUrl(savedSettings.bgImageDataUrl)
+        .then((img) => {
+          if (!img) return;
+          setBgImageDataUrl(savedSettings.bgImageDataUrl);
+          setBgImageEl(img);
+        })
+        .catch((err) => setRenderToast({ type: 'error', text: err?.message || 'Could not load saved background image.' }));
+    }
+    setKeyframes(loadedKeyframes);
+    keyframesRef.current = loadedKeyframes;
     setTotalSeconds(tpl.seconds || totalSeconds);
     setSelectedKeyId(null);
     setScrubVal(0);
-    const k0 = tpl.keyframes?.[0];
+    const k0 = loadedKeyframes[0];
     if (w && k0) { w.camera.position.set(k0.px, k0.py, k0.pz); w.controls.target.set(k0.tx, k0.ty, k0.tz); }
     setStatus(`Loaded saved template "${tpl.label}".`);
     try { window.localStorage.setItem(LAST_CUSTOM_TEMPLATE_KEY, id); } catch {}
-  }, [customTemplates, totalSeconds]);
+  }, [customTemplates, totalSeconds, viewportId]);
 
   // Auto-apply the last-used custom template once after world is ready.
   const didAutoCustomRef = useRef(false);
@@ -1615,14 +1724,40 @@ export default function StudioPage() {
     if (keyframes.length < 2) { setStatus('Add at least 2 keyframes before saving a template.'); return; }
     const name = (typeof window !== 'undefined' ? window.prompt('Name this template', 'My Template') : '') || '';
     if (!name.trim()) return;
-    const entry = { id: `custom-${Date.now()}`, label: name.trim(), seconds: totalSeconds, viewportId, keyframes: keyframes.map((k) => ({ ...k })) };
+    const entry = {
+      id: `custom-${Date.now()}`,
+      label: name.trim(),
+      seconds: totalSeconds,
+      viewportId,
+      keyframes: keyframes.map((k) => ({ ...k })),
+      settings: {
+        viewportId,
+        formatId,
+        backdropId,
+        bgMode,
+        bgColor,
+        envPreset,
+        bgImageDataUrl: bgMode === 'image' ? bgImageDataUrl : '',
+        hue,
+        sat,
+        bright,
+        loopCfg,
+        dirPreset,
+        dirSeconds,
+        dirFps,
+        dirScrollMode,
+        dirSelector,
+        dirText,
+        dirPercent,
+      },
+    };
     setCustomTemplates((prev) => {
       const next = [...prev, entry];
       try { window.localStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(next)); } catch { /* storage blocked is non-critical */ }
       return next;
     });
     setStatus(`Saved template "${entry.label}".`);
-  }, [keyframes, totalSeconds, viewportId]);
+  }, [keyframes, totalSeconds, viewportId, formatId, backdropId, bgMode, bgColor, envPreset, bgImageDataUrl, hue, sat, bright, loopCfg, dirPreset, dirSeconds, dirFps, dirScrollMode, dirSelector, dirText, dirPercent]);
 
   const scrubTo = useCallback((u) => {
     if (playing) return;
@@ -2651,11 +2786,22 @@ export default function StudioPage() {
                 <label style={{ ...ui.btn(), width: '100%', cursor: 'pointer' }}>
                   <Download size={14} strokeWidth={2.5} style={{ marginRight: 6, transform: 'rotate(180deg)' }} />
                   {bgImageEl ? 'Replace image' : 'Upload image'}
-                  <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => {
+                  <input type="file" accept="image/*" style={{ display: 'none' }} onChange={async (e) => {
                     const f = e.target.files?.[0]; if (!f) return;
-                    const img = new Image();
-                    img.onload = () => { setBgImageEl(img); setBgMode('image'); };
-                    img.src = URL.createObjectURL(f);
+                    try {
+                      const dataUrl = await imageFileToBackgroundDataUrl(f);
+                      const img = new Image();
+                      img.onload = () => {
+                        setBgImageDataUrl(dataUrl);
+                        setBgImageEl(img);
+                        setBgMode('image');
+                        setStatus('Background image loaded for preview and export.');
+                      };
+                      img.onerror = () => setRenderToast({ type: 'error', text: 'Could not load normalized background image.' });
+                      img.src = dataUrl;
+                    } catch (err) {
+                      setRenderToast({ type: 'error', text: err?.message || 'Could not load background image.' });
+                    }
                   }} />
                 </label>
                 {!bgImageEl ? <span style={{ fontFamily: GLASS.sans, fontSize: 11, color: GLASS.inkMute }}>Upload an image to wrap the scene + drive reflections.</span> : null}
@@ -2740,11 +2886,6 @@ export default function StudioPage() {
             </div>
 
             {/* Output size/format is chosen by the format selector at the top of the rail. */}
-
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-              <span style={{ ...ui.label, display: 'flex', justifyContent: 'space-between' }}>SITE SPEED<span style={{ color: GLASS.ink }}>{dirSiteSpeed.toFixed(2)}x</span></span>
-              <input type="range" min={0.25} max={4} step={0.05} value={dirSiteSpeed} onChange={(e) => setDirSiteSpeed(Number(e.target.value))} style={{ width: '100%', accentColor: GLASS.ink }} />
-            </label>
 
             <span style={{ ...ui.label, color: GLASS.ink, marginTop: 4 }}>SCROLL TARGET</span>
             <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>

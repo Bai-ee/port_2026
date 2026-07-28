@@ -412,6 +412,12 @@ export async function renderVideo(rawRecipe = {}) {
   if (!isValidUrl(recipe.url)) throw new Error('valid http(s) url required');
   console.log(`[env] mode=${recipe.environment.mode} preset=${recipe.environment.preset} hue=${recipe.environment.hue} sat=${recipe.environment.saturation} bright=${recipe.environment.brightness}`);
   const { seconds, width, height } = recipe.output;
+  const CAPTURE_VIEWPORTS = {
+    desktop: { width: 1440, height: 900, mobile: false, touch: false },
+    mobile: { width: 390, height: 844, mobile: true, touch: true },
+    tablet: { width: 768, height: 1024, mobile: true, touch: true },
+  };
+  const captureViewport = CAPTURE_VIEWPORTS[recipe.device.viewport] || CAPTURE_VIEWPORTS.desktop;
   const captureMs = Math.round(seconds * 1000 + 600);
   const userDataDirBase = `/tmp/studio-render-${process.pid}-${Date.now()}`;
 
@@ -436,6 +442,15 @@ export async function renderVideo(rawRecipe = {}) {
     await cdp.ready;
     const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
     const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
+    await cdp.send('Emulation.setDeviceMetricsOverride', {
+      width: captureViewport.width,
+      height: captureViewport.height,
+      deviceScaleFactor: 1,
+      mobile: captureViewport.mobile,
+      screenWidth: captureViewport.width,
+      screenHeight: captureViewport.height,
+    }, sessionId);
+    await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: captureViewport.touch }, sessionId).catch(() => {});
 
     // Screencast the live site.
     const live = [];
@@ -475,7 +490,13 @@ export async function renderVideo(rawRecipe = {}) {
     // NEAREST captured frame; too few captured frames → each repeats for several
     // output frames → visible chunky scroll). Capturing every frame keeps
     // playableCount ≥ output frames so the 1:1 mapping stays smooth to the bottom.
-    await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 85, maxWidth: 1440, maxHeight: 900, everyNthFrame: 1 }, sessionId);
+    await cdp.send('Page.startScreencast', {
+      format: 'jpeg',
+      quality: 85,
+      maxWidth: captureViewport.width,
+      maxHeight: captureViewport.height,
+      everyNthFrame: 1,
+    }, sessionId);
     if (recipe.scroll) {
       const startMs = Math.round(recipe.scroll.startAt * seconds * 1000);
       const arriveMs = Math.round(recipe.scroll.arriveAt * seconds * 1000);
