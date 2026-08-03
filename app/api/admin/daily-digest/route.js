@@ -11,6 +11,7 @@ import {
   updateSocialPost,
 } from '../../../../features/social-posting/twitter-service.js';
 import { getSocialAccount, toPublicAccount } from '../../../../features/social-posting/social-accounts.js';
+import { canonicalRemixCopy } from '../../../../features/social-posting/remix-copy.js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -1043,7 +1044,7 @@ export function buildVideoPostRow(item, kind = 'Video', ctx = null) {
     </div>
   </a>`;
   const postCol = `<div style="font-family:${DT.fMono};font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:${DT.light};margin:0 0 6px;">X &middot; Post</div>
-    <p style="font-family:${DT.fBody};font-size:13px;line-height:1.5;color:${DT.ink};margin:0 0 10px;">${caption}</p>
+    <p style="font-family:${DT.fBody};font-size:13px;line-height:1.5;color:${DT.ink};margin:0 0 10px;white-space:pre-line;">${caption}</p>
     <a href="${href}" style="color:${DT.brand};font-family:${DT.fMono};font-size:11px;letter-spacing:.06em;text-transform:uppercase;">&rarr; View video</a>
     ${buildAutoPublishRow(ctx)}`;
   return `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 4px;">
@@ -3029,13 +3030,10 @@ export async function GET(request) {
         // the single-call behavior when Remix and Promo belong to the same
         // client, while a borrowed Remix never inherits the email client's
         // Client Brain.
-        // A remix approval starts with factual, editable metadata rather than
-        // invented lifestyle copy. The approval page can reset to this same
-        // canonical "DJ — Mix" line at any time.
-        const remixArtist = String(remixCap?.createdWith?.artist || '').trim();
-        const remixMix = String(remixCap?.createdWith?.mix || '').trim();
+        // A remix approval starts with factual, editable metadata matching the
+        // lower-left video title block.
         const captions = {
-          remix: [remixArtist, remixMix].filter(Boolean).join(' — ') || 'Video Remix',
+          remix: canonicalRemixCopy(remixCap?.createdWith || {}),
           promo: '',
         };
         if (!isTemplate && !skipLlm) {

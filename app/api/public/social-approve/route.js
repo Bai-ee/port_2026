@@ -9,6 +9,7 @@ import {
   updateSocialPost,
 } from '../../../../features/social-posting/twitter-service.js';
 import { getSocialAccount } from '../../../../features/social-posting/social-accounts.js';
+import { canonicalRemixCopy } from '../../../../features/social-posting/remix-copy.js';
 
 const require = createRequire(import.meta.url);
 const {
@@ -58,12 +59,6 @@ async function limited(request, bucket, limit = 30) {
   const ip = getClientIp(request);
   const result = await checkRateLimit({ key: `${bucket}:ip:${ip}`, limit, windowSeconds: 3600 });
   return { ip, allowed: result.allowed };
-}
-
-function canonicalRemixCopy(metadata = {}) {
-  const artist = String(metadata.artist || '').trim();
-  const mix = String(metadata.mix || metadata.mixTitle || '').trim();
-  return [artist, mix].filter(Boolean).join(' — ') || 'Video Remix';
 }
 
 function metadataFrom({ post, capture, job }) {
