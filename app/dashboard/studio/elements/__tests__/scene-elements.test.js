@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import {
   nextDuplicateId, nextElementId, restoreExtraInstances, createSceneElement,
   duplicateInstance, removeInstance, normalizeSelection, isRenderableInstance,
-  applyPresetToInstance, randomizeInstanceFields, randomizeAllElements, shouldReapplyInstance,
+  applyPresetToInstance, randomizeInstanceFields, randomizeAllElements, shouldReapplyInstance, shouldSyncElementEntry,
+  heroDuplicateWarnings, mergeElementLocks, restoreElementLocks,
 } from '../scene-elements.js';
 import { createElementInstance } from '../schema.js';
 import { createHistory, pushHistory, undoHistory, redoHistory } from '../history.js';
-import { getElementDefinition } from '../catalog.js';
+import { getElementDefinition, getElementWeight } from '../catalog.js';
 import { mulberry32 } from '../randomize.js';
 import { DUPLICATE_OFFSET, defaultTransformForFormat } from '../placement.js';
 
@@ -349,4 +350,167 @@ test('shouldReapplyInstance: an unrelated sibling instance (untouched by a setEx
   const entryB = { lastInstance: b, lastTier: 'draft' };
   assert.equal(shouldReapplyInstance(entryA, nextArray[0], 'draft'), true); // a changed
   assert.equal(shouldReapplyInstance(entryB, nextArray[1], 'draft'), false); // b untouched
+});
+
+// ── shouldSyncElementEntry — the FULL production reconciliation-effect
+// gate (ClothStudio.jsx's scene-element sync effect calls this exact
+// function, not a hand-rolled inline expression), including the format
+// check and the two named exceptions (glb-import's unresolved-asset
+// retry, hanging-tshirt's logo-library recheck). Codex P2 review, Part B
+// round 3: this is the production-level reconciliation regression test
+// the review asked for — it exercises the ACTUAL gating logic the live
+// sync effect runs, proving a tshirt-model sitting in its factory's
+// 'error' state has no special-cased bypass here, distinct from (and in
+// addition to) factories.test.js's existing proof that a bare
+// applyInstance call never retries once IT is invoked. Together the two
+// close the full path: the reconciliation loop must decide NOT to touch
+// an unrelated errored entry at all, AND, on the rare occasion it does
+// legitimately decide to touch it (the entry's own data changed), the
+// factory call that follows must not retry either. ─────────────────────
+
+test('shouldSyncElementEntry: a brand-new entry always needs its first sync', () => {
+  assert.equal(shouldSyncElementEntry(undefined, { id: 'r-1' }, 'draft', 'landscape'), true);
+  assert.equal(shouldSyncElementEntry(null, { id: 'r-1' }, 'draft', 'landscape'), true);
+});
+
+test('shouldSyncElementEntry: false when nothing relevant changed — instance reference, tier, AND format all match', () => {
+  const instance = createElementInstance('tshirt-model', { id: 't-1' });
+  const entry = { lastInstance: instance, lastTier: 'draft', lastFormatId: 'landscape' };
+  assert.equal(shouldSyncElementEntry(entry, instance, 'draft', 'landscape'), false);
+});
+
+test('shouldSyncElementEntry: true when the instance reference changed (the entry itself was actually edited)', () => {
+  const a = createElementInstance('tshirt-model', { id: 't-1' });
+  const b = createElementInstance('tshirt-model', { id: 't-1' });
+  const entry = { lastInstance: a, lastTier: 'draft', lastFormatId: 'landscape' };
+  assert.equal(shouldSyncElementEntry(entry, b, 'draft', 'landscape'), true);
+});
+
+test('shouldSyncElementEntry: true when only the format changed', () => {
+  const instance = createElementInstance('tshirt-model', { id: 't-1' });
+  const entry = { lastInstance: instance, lastTier: 'draft', lastFormatId: 'landscape' };
+  assert.equal(shouldSyncElementEntry(entry, instance, 'draft', 'square'), true);
+});
+
+// The actual P2 regression: a tshirt-model entry whose live three.js
+// object sits in an 'error' state must NOT be resynced merely because
+// this reconciliation pass ran for a reason that has nothing to do with
+// THIS entry — its own instance/tier/format are all unchanged. An
+// earlier version of the reconciliation effect special-cased
+// `object.userData.loadState === 'error'` as an unconditional bypass of
+// this exact gate (routed through tshirtModelRetry once past it) — this
+// test proves shouldSyncElementEntry has no such branch: it takes no
+// three.js object or loadState at all, so there is nothing for a future
+// regression to even read.
+test('shouldSyncElementEntry: a tshirt-model with an unrelated, unchanged instance is NOT synced merely because the reconciliation effect reran for another reason — no error-state bypass exists', () => {
+  const instance = createElementInstance('tshirt-model', { id: 't-1' });
+  const entry = { lastInstance: instance, lastTier: 'draft', lastFormatId: 'landscape' };
+  // Simulates the effect rerunning because a DIFFERENT element was edited,
+  // the quality tier/format stayed put, and glbAssets/logoLibrary are
+  // irrelevant to a tshirt-model (fixed asset URL, no logo) — every input
+  // this function actually receives is identical to the "already synced"
+  // case above.
+  assert.equal(shouldSyncElementEntry(entry, instance, 'draft', 'landscape'), false, 'an untouched, already-failed tshirt-model must stay untouched — only its own Retry action may resync it');
+});
+
+test('shouldSyncElementEntry: glbNeedsRetry and tshirtLogoNeedsRecheck still force a sync even when the instance/tier/format are all unchanged (the two real, narrow exceptions)', () => {
+  const instance = createElementInstance('glb-import', { id: 'g-1' });
+  const entry = { lastInstance: instance, lastTier: 'draft', lastFormatId: 'landscape' };
+  assert.equal(shouldSyncElementEntry(entry, instance, 'draft', 'landscape', { glbNeedsRetry: true }), true);
+  assert.equal(shouldSyncElementEntry(entry, instance, 'draft', 'landscape', { tshirtLogoNeedsRecheck: true }), true);
+  assert.equal(shouldSyncElementEntry(entry, instance, 'draft', 'landscape', {}), false, 'sanity: without either flag, an unchanged entry stays unsynced');
+});
+
+// ── heroDuplicateWarnings (Slice 1 guardrail: no duplicate hero elements) ──
+
+test('heroDuplicateWarnings: a single enabled hero-depth instance (no primary hero) is not flagged', () => {
+  const glb = createElementInstance('glb-import', { id: 'glb-1', enabled: true, depth: 'hero' });
+  assert.deepEqual(heroDuplicateWarnings([glb], { primaryIsHero: false }), {});
+});
+
+test('heroDuplicateWarnings: two enabled hero-depth extraInstances are both flagged', () => {
+  const a = createElementInstance('glb-import', { id: 'glb-1', enabled: true, depth: 'hero' });
+  const b = createElementInstance('glb-import', { id: 'glb-2', enabled: true, depth: 'hero' });
+  assert.deepEqual(heroDuplicateWarnings([a, b], { primaryIsHero: false }), { 'glb-1': true, 'glb-2': true });
+});
+
+test('heroDuplicateWarnings: primaryIsHero folds the primary glass sphere into the count — one extra hero instance is now a collision', () => {
+  const glb = createElementInstance('glb-import', { id: 'glb-1', enabled: true, depth: 'hero' });
+  assert.deepEqual(heroDuplicateWarnings([glb], { primaryIsHero: true }), { 'glb-1': true });
+});
+
+test('heroDuplicateWarnings: a disabled hero-depth instance never counts toward the collision', () => {
+  const a = createElementInstance('glb-import', { id: 'glb-1', enabled: false, depth: 'hero' });
+  const b = createElementInstance('glb-import', { id: 'glb-2', enabled: true, depth: 'hero' });
+  assert.deepEqual(heroDuplicateWarnings([a, b], { primaryIsHero: false }), {}, 'only 1 enabled hero occupant — no collision');
+});
+
+test('heroDuplicateWarnings: non-hero-depth instances are never flagged regardless of count', () => {
+  const a = createElementInstance('kinetic-rings', { id: 'r-1', enabled: true });
+  const b = createElementInstance('kinetic-rings', { id: 'r-2', enabled: true });
+  assert.deepEqual(heroDuplicateWarnings([a, b], { primaryIsHero: true }), {});
+});
+
+// ── getElementWeight (weighted-category schema stub, deferred to Slice 2) ──
+
+test('getElementWeight: defaults to 1 for every current catalog entry (none declare a weight yet)', () => {
+  assert.equal(getElementWeight('glass-petal-sphere'), 1);
+  assert.equal(getElementWeight('kinetic-rings'), 1);
+});
+
+test('getElementWeight: an unknown type also defaults to 1, never throws', () => {
+  assert.equal(getElementWeight('not-a-real-type'), 1);
+});
+
+// ── mergeElementLocks / restoreElementLocks (Codex-blocked P1: whole-element
+// lock was never actually applied to the batch "Elements only"/"All" path) ──
+
+test('mergeElementLocks: sets random.locked from the elementLocks map, overriding the instance\'s own (always-false) value', () => {
+  const inst = createElementInstance('kinetic-rings', { id: 'r1', enabled: true });
+  assert.equal(inst.random.locked, false, 'sanity: schema default is false');
+  const merged = mergeElementLocks([inst], { r1: { locked: true } });
+  assert.equal(merged[0].random.locked, true);
+});
+
+test('mergeElementLocks: an id absent from elementLocks merges to locked:false', () => {
+  const inst = createElementInstance('kinetic-rings', { id: 'r1', enabled: true });
+  const merged = mergeElementLocks([inst], {});
+  assert.equal(merged[0].random.locked, false);
+});
+
+test('mergeElementLocks: empty/missing instances or elementLocks never throw', () => {
+  assert.deepEqual(mergeElementLocks([], { r1: { locked: true } }), []);
+  assert.deepEqual(mergeElementLocks(undefined, { r1: { locked: true } }), []);
+  const inst = createElementInstance('kinetic-rings', { id: 'r1', enabled: true });
+  assert.equal(mergeElementLocks([inst], undefined)[0].random.locked, false);
+});
+
+test('restoreElementLocks: restores the ORIGINAL random block by position, discarding whatever the merged/processed value became', () => {
+  const original = [createElementInstance('kinetic-rings', { id: 'r1', enabled: true, random: { locked: false, groups: { motion: true } } })];
+  const merged = mergeElementLocks(original, { r1: { locked: true } });
+  assert.equal(merged[0].random.locked, true);
+  const restored = restoreElementLocks(merged, original);
+  assert.deepEqual(restored[0].random, original[0].random, 'the per-group locks and the real (unmerged) locked:false must both come back exactly as they were');
+});
+
+test('mergeElementLocks -> randomizeAllElements -> restoreElementLocks: THE exact regression — a whole-element-locked non-primary instance is skipped, and elementLocks never leaks into the persisted instance', () => {
+  const locked = createElementInstance('kinetic-rings', { id: 'r1', enabled: true });
+  const unlocked = createElementInstance('chrome-ribbon', { id: 'c1', enabled: true });
+  const original = [locked, unlocked];
+  const elementLocks = { r1: { locked: true } };
+
+  const merged = mergeElementLocks(original, elementLocks);
+  const { instances: processed, changedById } = randomizeAllElements(merged, {
+    primaryId: 'glass-petal-sphere-1', intensity: 'wild', deriveRand: (id) => mulberry32(id.length + 7),
+  });
+  const restored = restoreElementLocks(processed, original);
+
+  assert.deepEqual(restored[0].material, locked.material, 'locked instance untouched by the batch randomize');
+  assert.equal(changedById.r1, undefined, 'locked instance never appears in the changed report');
+  assert.ok(changedById.c1?.length, 'the unlocked sibling still randomizes normally');
+  // The fix's whole point: elementLocks must never get baked into the
+  // instance's own stored random.locked — it stays exactly what schema.js
+  // always defaults it to (false), not what the merge temporarily set.
+  assert.equal(restored[0].random.locked, false);
+  assert.equal(restored[1].random.locked, false);
 });

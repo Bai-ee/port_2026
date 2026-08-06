@@ -1,0 +1,93 @@
+# CPU-only deterministic Proof/Final Render service (Phase 3,
+# STUDIO-DETERMINISTIC-FINAL-RENDER-SONNET-HANDOFF.md). Completely separate
+# from ./Dockerfile (the GPU Video Promo service — untouched by this file,
+# non-negotiable #1 in the handoff): no NVIDIA driver injection, no Vulkan
+# ICD, no GPU flags. Headless Chromium here renders via its default
+# software path (SwiftShader/ANGLE-GL) — slower than a real GPU, fine for a
+# deterministic fixed-timestep capture that already isn't racing real time.
+#
+# Chromium is installed from Debian, same as the GPU Dockerfile, but WITHOUT
+# any of its GL/EGL/Vulkan userspace libs — this container never talks to a
+# GPU at all. ffmpeg (encode) + ffprobe (validate, same apt package) are the
+# only other binaries art-render.mjs shells out to.
+
+FROM node:22-bookworm-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      chromium \
+      ffmpeg \
+      fonts-liberation fonts-noto-color-emoji fonts-noto-cjk \
+      libnss3 libatk-bridge2.0-0 libgtk-3-0 libgbm1 libasound2 \
+      libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 libxshmfence1 \
+      ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# The apt-installed system Chromium, not Playwright's own bundled download —
+# art-render.mjs's `chromium.launch({ executablePath: process.env.CHROME_PATH })`
+# already branches on this exact env var (see that file's own comment).
+ENV CHROME_PATH=/usr/bin/chromium
+ENV PORT=8080
+
+WORKDIR /app
+# package-lock.json (P2-3, "render container lacks reproducible
+# dependencies") — committed alongside package.json specifically so `npm ci`
+# below installs the EXACT resolved dependency tree every build, not
+# whatever `npm install` happens to resolve against the registry at build
+# time. `npm ci` also refuses to run (fails loudly) if package.json and
+# package-lock.json ever drift out of sync, instead of silently
+# re-resolving — the failure mode this fix exists to close.
+COPY package.json package-lock.json ./
+# PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: the `playwright` npm package (needed for
+# its Node API surface — chromium.launch()/page.evaluate()/etc.) would
+# otherwise try to download its OWN several-hundred-MB bundled Chromium on
+# `npm install`; CHROME_PATH above means it's never used (this image
+# launches the APT-installed system `chromium` package below via
+# executablePath, never Playwright's own download), so skip it entirely
+# rather than wasting build time/bandwidth on a browser this image never
+# launches. `three` (the OTHER real dependency) is what actually provides
+# three.module.min.js AND the RoomEnvironment.js/RGBELoader.js addon files
+# art-render.mjs copies at runtime (Phase 5, environment/IBL — see
+# BUILTIN_ENV_HDR_ASSETS' own comment) — this install is what makes
+# node_modules/three/{build,examples/jsm}/ actually exist inside the image;
+# no separate COPY line needed for them.
+#
+# `playwright` is pinned to an EXACT version (package.json — no `^` range)
+# chosen to match the Chromium build this image's own `apt-get install
+# chromium` line actually installs: verified by a real local build
+# (2026-08-02) — Debian bookworm's `chromium` package resolved to
+# 151.0.7922.71; playwright@1.62.1 is the newest version whose OWN bundled-
+# Chromium expectation (151.0.7922.34, from playwright-core's browsers.json
+# — never actually downloaded here, PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD skips
+# that, but its version metadata is still what Playwright's CDP client was
+# built/tested against) is the closest match — same major.minor.build
+# (151.0.7922), patch-level difference only. The previous unpinned
+# `^1.61.0` range could just as easily have resolved to playwright@1.61.x
+# on a different build day, which expects Chromium 149.0.7827.55 — a real
+# two-major-version gap from what this image actually ships. Re-verify this
+# alignment (and re-pin if apt's chromium package has moved on) whenever
+# playwright is next upgraded here.
+RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci --omit=dev
+
+# ── Proof/Final Render pipeline (Phase 0-3, environment/IBL Phase 5) ──────
+COPY proof-server.mjs proof-render-worker.mjs ./
+COPY art-render.mjs art-render-validation.mjs art-scene.mjs art-recipe.mjs art-scene-def.mjs live-site-capture.mjs ./
+# assets/hdr/ (Phase 5) and assets/artwork/ (fast-follow fix) — committed
+# copies of the 4 real environment .hdr files and the 2 builtin artwork
+# images (not public/hdr/ or public/img/ — see BUILTIN_ENV_HDR_ASSETS'/
+# BUILTIN_ARTWORK_ASSETS' own comments for the packaging-boundary
+# reasoning), both picked up automatically by this one wholesale COPY.
+COPY assets/ ./assets/
+# Two SEPARATE vendored dependency closures (see each script's own header
+# comment for why they're not merged into one): scripts/vendor-elements.mjs
+# (Studio scene/element logic, art-recipe.mjs's own dependency) and
+# scripts/vendor-api-lib.mjs (Firestore/Storage job-queue modules,
+# proof-render-worker.mjs's own dependency). Both land under vendor/, one
+# COPY line covers both — deploy-cloud-run-proof.sh re-runs BOTH scripts
+# immediately before every deploy as a freshness guarantee, same discipline
+# deploy-cloud-run.sh already established for vendor-elements.mjs alone.
+COPY vendor/ ./vendor/
+
+EXPOSE 8080
+CMD ["node", "proof-server.mjs"]

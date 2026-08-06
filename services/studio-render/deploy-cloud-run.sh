@@ -6,6 +6,12 @@ set -euo pipefail
 # repo root made Cloud Run buildpacks ship `next start` to the render service.
 cd "$(dirname "$0")"
 
+# Freshen the vendored elements/ dependency closure (art-recipe.mjs, Slice 4a)
+# right before every deploy — belt-and-suspenders on top of the committed
+# copy, so a deploy never ships stale vendored logic even if a developer
+# forgot to re-run this after editing app/dashboard/studio/elements/*.js.
+node scripts/vendor-elements.mjs
+
 SERVICE_NAME="${SERVICE_NAME:-studio-render}"
 REGION="${REGION:-us-central1}"
 MAX_INSTANCES="${MAX_INSTANCES:-1}"

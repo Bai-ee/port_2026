@@ -51,8 +51,16 @@ ENV PORT=8080
 
 WORKDIR /app
 COPY package.json ./
-COPY server.mjs render.mjs scene.mjs recipe.mjs ./
+COPY server.mjs render.mjs scene.mjs recipe.mjs live-site-capture.mjs ./
 COPY assets/ ./assets/
+# art-scene-v2 recipe contract (Slice 4a) + its vendored, service-local
+# elements/ dependency closure — see art-recipe.mjs's own header comment and
+# scripts/vendor-elements.mjs for why this is vendored rather than reaching
+# outside this build context. Not yet imported by server.mjs/render.mjs
+# (that's a later slice); copied now so the packaging is already correct
+# once it is.
+COPY art-recipe.mjs art-scene-def.mjs ./
+COPY vendor/ ./vendor/
 
 EXPOSE 8080
 CMD ["node", "server.mjs"]

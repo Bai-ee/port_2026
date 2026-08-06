@@ -15,7 +15,7 @@ test('createElementInstance: glass-petal-sphere gets full catalog defaults', () 
   assert.equal(inst.material.tint, '#ffffff');
   assert.equal(inst.motion.rotate, true);
   assert.equal(inst.previewSupported, true);
-  assert.equal(inst.finalRenderSupported, false);
+  assert.equal(inst.finalRenderSupported, true, 'flipped by the Phase 5 glass-parity pass — the server renderer consumes the primary glass now');
 });
 
 test('normalizeElementInstance: known overrides win', () => {
@@ -43,7 +43,7 @@ test('normalizeElementInstance: unknown NESTED fields in every bucket are stripp
   assert.equal(inst.appearance.evilInject, undefined);
   assert.equal(inst.transform.evilInject, undefined);
   assert.equal(inst.random.groups.evilInject, undefined);
-  assert.deepEqual(Object.keys(inst.material).sort(), ['clarity', 'tint']);
+  assert.deepEqual(Object.keys(inst.material).sort(), ['clarity', 'tint', 'transmission']);
   assert.deepEqual(Object.keys(inst.motion).sort(), ['rotSpeed', 'rotate']);
   assert.deepEqual(Object.keys(inst.appearance).sort(), []);
   assert.deepEqual(Object.keys(inst.transform).sort(), ['position', 'rotation', 'scale']);
@@ -101,6 +101,62 @@ test('normalizeElementInstance: settings-migration case — old saved state with
 test('getElementDefaults: mirrors the catalog field spec defaults', () => {
   const defaults = getElementDefaults('glass-petal-sphere');
   assert.deepEqual(defaults.transform.position, [0, 0, 0]);
-  assert.deepEqual(defaults.material, { tint: '#ffffff', clarity: 0.06 });
+  assert.deepEqual(defaults.material, { tint: '#ffffff', clarity: 0.06, transmission: 1 });
   assert.equal(getElementDefaults('not-a-type'), null);
+});
+
+// ── transmission (TRANSPARENCY) — Codex visual-correction round. Same
+// schema/catalog wiring every other material field already goes through;
+// these prove `transmission` specifically reached that boundary correctly. ─
+
+test('createElementInstance: glass-petal-sphere defaults material.transmission to 1 — the backward-compatible "as transparent as the material was already hardcoded to" value', () => {
+  const inst = createElementInstance('glass-petal-sphere', { id: 'g1' });
+  assert.equal(inst.material.transmission, 1);
+});
+
+test('normalizeElementInstance: transmission overrides win and are clamped to the catalog\'s [0,1] bound, independently of clarity', () => {
+  const inst = normalizeElementInstance({ material: { transmission: 0.35, clarity: 0.02 } }, 'glass-petal-sphere');
+  assert.equal(inst.material.transmission, 0.35);
+  assert.equal(inst.material.clarity, 0.02);
+  const clamped = normalizeElementInstance({ material: { transmission: 5 } }, 'glass-petal-sphere');
+  assert.equal(clamped.material.transmission, 1, 'transmission clamps to its catalog max, same as every other bounded numeric field');
+});
+
+// ── device-mockup captureSourceUrl/captureViewport (Recovery round 2,
+// Defect 1) — the element-instance equivalent of devicePrimary's own
+// capture-provenance fields (ClothStudio.jsx DEFAULT_DEVICE_PRIMARY). Same
+// fieldSpec/normalize treatment captureUrl/uploadAssetId already get. ──
+
+test('createElementInstance: device-mockup defaults captureSourceUrl/captureViewport to empty strings, alongside captureUrl/uploadAssetId', () => {
+  const inst = createElementInstance('device-mockup', { id: 'd1' });
+  assert.equal(inst.appearance.captureUrl, '');
+  assert.equal(inst.appearance.uploadAssetId, '');
+  assert.equal(inst.appearance.captureSourceUrl, '');
+  assert.equal(inst.appearance.captureViewport, '');
+});
+
+test('normalizeElementInstance: device-mockup captureSourceUrl/captureViewport round-trip through normalize exactly like captureUrl', () => {
+  const inst = normalizeElementInstance({
+    appearance: { captureUrl: '/api/public/studio-device-capture?id=x', captureSourceUrl: 'https://example.com', captureViewport: 'mobile' },
+  }, 'device-mockup');
+  assert.equal(inst.appearance.captureUrl, '/api/public/studio-device-capture?id=x');
+  assert.equal(inst.appearance.captureSourceUrl, 'https://example.com');
+  assert.equal(inst.appearance.captureViewport, 'mobile');
+});
+
+test('normalizeElementInstance: device-mockup — a legacy instance saved BEFORE this round (no captureSourceUrl/captureViewport keys at all) normalizes to the safe empty-string default, never throws or leaves them undefined', () => {
+  const inst = normalizeElementInstance({
+    appearance: { viewport: 'desktop', captureUrl: '/api/public/studio-device-capture?id=legacy', uploadAssetId: '' },
+  }, 'device-mockup');
+  assert.equal(inst.appearance.captureUrl, '/api/public/studio-device-capture?id=legacy', 'the legacy field itself is untouched');
+  assert.equal(inst.appearance.captureSourceUrl, '', 'absent provenance normalizes to the safe default, never undefined');
+  assert.equal(inst.appearance.captureViewport, '');
+});
+
+test('normalizeElementInstance: device-mockup captureSourceUrl is length-capped (2048) and captureViewport (16), same bounded-string discipline as every other free string field', () => {
+  const inst = normalizeElementInstance({
+    appearance: { captureSourceUrl: 'x'.repeat(3000), captureViewport: 'y'.repeat(50) },
+  }, 'device-mockup');
+  assert.equal(inst.appearance.captureSourceUrl.length, 2048);
+  assert.equal(inst.appearance.captureViewport.length, 16);
 });

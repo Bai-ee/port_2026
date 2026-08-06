@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { estimateSceneCost, budgetStatus, QUALITY_TIERS, detailForTier, scaleSegments, LIVE_PREVIEW_TIERS } from '../quality.js';
+import {
+  estimateSceneCost, budgetStatus, QUALITY_TIERS, detailForTier, scaleSegments, LIVE_PREVIEW_TIERS,
+  transmissionSurchargeFor, shadowSurchargeFor, estimateSceneCostDetailed,
+} from '../quality.js';
 import { createElementInstance } from '../schema.js';
+import { getElementDefinition } from '../catalog.js';
 
 test('estimateSceneCost: only counts enabled instances', () => {
   const on = createElementInstance('glass-petal-sphere', { id: 'g1', enabled: true });
@@ -73,4 +77,40 @@ test('budgetStatus: the same scene can read overBudget at a lower tier and comfo
   assert.equal(budgetStatus(instances, 'draft').overBudget, true);
   assert.equal(budgetStatus(instances, 'proof').overBudget, false);
   assert.equal(budgetStatus(instances, 'social').overBudget, false);
+});
+
+// ── Transmission/shadow surcharge (Slice 1 guardrail) — additive only; must
+// never change estimateSceneCost/budgetStatus's existing numbers.
+test('transmissionSurchargeFor: a transmissive (glass-category) enabled instance carries the surcharge; disabled or non-glass do not', () => {
+  const glassDef = getElementDefinition('glass-petal-sphere');
+  const ringsDef = getElementDefinition('kinetic-rings'); // category: 'geometry', not transmissive
+  const on = createElementInstance('glass-petal-sphere', { id: 'g1', enabled: true });
+  const off = createElementInstance('glass-petal-sphere', { id: 'g2', enabled: false });
+  assert.ok(transmissionSurchargeFor(on, glassDef) > 0);
+  assert.equal(transmissionSurchargeFor(off, glassDef), 0, 'disabled instance carries no surcharge');
+  assert.equal(transmissionSurchargeFor(on, ringsDef), 0, 'non-glass category carries no surcharge');
+});
+
+test('shadowSurchargeFor: always 0 today — no factory casts real shadows yet', () => {
+  const on = createElementInstance('glass-petal-sphere', { id: 'g1', enabled: true });
+  assert.equal(shadowSurchargeFor(on, getElementDefinition('glass-petal-sphere')), 0);
+});
+
+test('estimateSceneCostDetailed: base matches estimateSceneCost; transmission/shadow break out separately; total sums all three', () => {
+  const glass = createElementInstance('glass-petal-sphere', { id: 'g1', enabled: true });
+  const rings = createElementInstance('kinetic-rings', { id: 'r1', enabled: true });
+  const instances = [glass, rings];
+  const definitions = { 'glass-petal-sphere': getElementDefinition('glass-petal-sphere'), 'kinetic-rings': getElementDefinition('kinetic-rings') };
+  const detailed = estimateSceneCostDetailed(instances, definitions);
+  assert.equal(detailed.base, estimateSceneCost(instances), 'base must match the existing, unchanged estimateSceneCost');
+  assert.ok(detailed.transmission > 0, 'the glass instance contributes a transmission surcharge');
+  assert.equal(detailed.shadow, 0);
+  assert.equal(detailed.total, detailed.base + detailed.transmission + detailed.shadow);
+});
+
+test('estimateSceneCostDetailed: missing definitions map entry is treated as non-transmissive, never throws', () => {
+  const glass = createElementInstance('glass-petal-sphere', { id: 'g1', enabled: true });
+  const detailed = estimateSceneCostDetailed([glass], {});
+  assert.equal(detailed.transmission, 0);
+  assert.equal(detailed.base, glass.quality.estimatedCost);
 });

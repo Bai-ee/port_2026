@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   isFiniteNum, isHexColor, isBool, sanitizeVec3,
   sanitizeMat, sanitizePhys, sanitizeAnim, sanitizeCam, sanitizeGlass, sanitizeShotCam,
-  sanitizeFx, sanitizeCan, sanitizeLightCans, sanitizeElementLocks,
+  sanitizeFx, sanitizeCan, sanitizeLightCans, sanitizeElementLocks, sanitizeDiffusionCamera,
 } from '../scene-recipe.js';
 
 // Regression for the Codex-blocked crash (2026-07-23T17:58:38Z): an imported
@@ -102,7 +102,7 @@ test('sanitizeCam: only real booleans accepted per axis', () => {
   assert.deepEqual(sanitizeCam({ rotX: false, rotY: 'yes', pan: 0 }, fb), { rotX: false, rotY: true, pan: true });
 });
 
-const FALLBACK_GLASS = { on: false, scale: 1, rotate: true, rotSpeed: 0.4, tint: '#ffffff', clarity: 0.06, position: [0, 0, 0], rotationOffset: [0, 0, 0] };
+const FALLBACK_GLASS = { on: false, scale: 1, rotate: true, rotSpeed: 0.4, tint: '#ffffff', clarity: 0.06, transmission: 1, position: [0, 0, 0], rotationOffset: [0, 0, 0] };
 
 test('sanitizeGlass: position/rotationOffset validated as vec3s, tint as hex', () => {
   const out = sanitizeGlass({ position: [1, 2, 3], rotationOffset: 'bad', tint: 'not-hex', scale: 2 }, FALLBACK_GLASS);
@@ -116,6 +116,39 @@ test('sanitizeGlass: does not alias the fallback position/rotationOffset arrays'
   const out = sanitizeGlass(null, FALLBACK_GLASS);
   out.position[0] = 99;
   assert.deepEqual(FALLBACK_GLASS.position, [0, 0, 0]);
+});
+
+// ── transmission (TRANSPARENCY) — Codex visual-correction round. ────────
+
+test('sanitizeGlass: a scene saved BEFORE transmission existed (no key at all) falls back to the fallback\'s own transmission — the backward-compatibility guarantee', () => {
+  const oldSavedBlob = { on: true, scale: 1.2, tint: '#ffffff', clarity: 0.1 }; // genuinely no `transmission` key
+  const out = sanitizeGlass(oldSavedBlob, FALLBACK_GLASS);
+  assert.equal(out.transmission, FALLBACK_GLASS.transmission, 'missing transmission must inherit the CURRENT/fallback value (1, matching the material\'s own pre-existing hardcoded default), never silently become 0 or undefined');
+});
+
+test('sanitizeGlass: a valid numeric transmission passes through', () => {
+  const out = sanitizeGlass({ transmission: 0.4 }, FALLBACK_GLASS);
+  assert.equal(out.transmission, 0.4);
+});
+
+test('sanitizeGlass: transmission is clamped to [0,1] — out-of-range values are bounded, not rejected outright or passed through raw', () => {
+  assert.equal(sanitizeGlass({ transmission: 1.5 }, FALLBACK_GLASS).transmission, 1);
+  assert.equal(sanitizeGlass({ transmission: -0.3 }, FALLBACK_GLASS).transmission, 0);
+});
+
+test('sanitizeGlass: invalid transmission types (string/NaN/null) fall back to the current value, same discipline as every other field here', () => {
+  assert.equal(sanitizeGlass({ transmission: 'transparent' }, FALLBACK_GLASS).transmission, FALLBACK_GLASS.transmission);
+  assert.equal(sanitizeGlass({ transmission: NaN }, FALLBACK_GLASS).transmission, FALLBACK_GLASS.transmission);
+  assert.equal(sanitizeGlass({ transmission: null }, FALLBACK_GLASS).transmission, FALLBACK_GLASS.transmission);
+});
+
+test('sanitizeGlass: transmission and clarity round-trip as fully independent fields — an opaque transmission with a sharp (low) clarity, and a transparent transmission with a frosted (high) clarity, both survive intact', () => {
+  const opaqueSharp = sanitizeGlass({ transmission: 0, clarity: 0.02 }, FALLBACK_GLASS);
+  assert.equal(opaqueSharp.transmission, 0);
+  assert.equal(opaqueSharp.clarity, 0.02);
+  const clearFrosted = sanitizeGlass({ transmission: 1, clarity: 0.4 }, FALLBACK_GLASS);
+  assert.equal(clearFrosted.transmission, 1);
+  assert.equal(clearFrosted.clarity, 0.4);
 });
 
 test('sanitizeShotCam: use flag + numeric fields', () => {
@@ -231,4 +264,81 @@ test('sanitizeElementLocks: null/non-object raw, or an empty valid-id list, both
   assert.deepEqual(sanitizeElementLocks(null, VALID_IDS), {});
   assert.deepEqual(sanitizeElementLocks('garbage', VALID_IDS), {});
   assert.deepEqual(sanitizeElementLocks({ 'glass-petal-sphere-1': { locked: true } }, []), {});
+});
+
+const FALLBACK_DIFFUSION_CAMERA = {
+  enabled: false, locked: false, focalTarget: 'origin',
+  focusDistance: 2.2, aperture: 0.4, falloff: 0.5, diffusionRadius: 0.3,
+  highlightBloom: 0.2, foregroundBias: 0, backgroundBias: 0,
+};
+
+test('sanitizeDiffusionCamera: valid booleans/focalTarget/numeric fields pass through independently', () => {
+  const out = sanitizeDiffusionCamera(
+    { enabled: true, focalTarget: 'kinetic-rings-1', aperture: 0.8, falloff: 'soft' },
+    FALLBACK_DIFFUSION_CAMERA,
+  );
+  assert.equal(out.enabled, true);
+  assert.equal(out.focalTarget, 'kinetic-rings-1');
+  assert.equal(out.aperture, 0.8);
+  assert.equal(out.falloff, FALLBACK_DIFFUSION_CAMERA.falloff, 'invalid numeric field falls back to the current value');
+});
+
+test('sanitizeDiffusionCamera: locked is a real standalone boolean, not coerced from truthy', () => {
+  const out = sanitizeDiffusionCamera({ locked: 'yes' }, FALLBACK_DIFFUSION_CAMERA);
+  assert.equal(out.locked, FALLBACK_DIFFUSION_CAMERA.locked, 'non-boolean locked must fall back, never be treated as truthy');
+});
+
+test('sanitizeDiffusionCamera: blank/non-string focalTarget falls back to the current reference', () => {
+  assert.equal(sanitizeDiffusionCamera({ focalTarget: '' }, FALLBACK_DIFFUSION_CAMERA).focalTarget, FALLBACK_DIFFUSION_CAMERA.focalTarget);
+  assert.equal(sanitizeDiffusionCamera({ focalTarget: 42 }, FALLBACK_DIFFUSION_CAMERA).focalTarget, FALLBACK_DIFFUSION_CAMERA.focalTarget);
+});
+
+test('sanitizeDiffusionCamera: null/non-object raw returns the fallback unchanged', () => {
+  assert.deepEqual(sanitizeDiffusionCamera(null, FALLBACK_DIFFUSION_CAMERA), FALLBACK_DIFFUSION_CAMERA);
+  assert.deepEqual(sanitizeDiffusionCamera('garbage', FALLBACK_DIFFUSION_CAMERA), FALLBACK_DIFFUSION_CAMERA);
+});
+
+// focalTarget stayed a plain, generically-validated string reference
+// throughout the Codex visual-correction round — 'manual' and
+// 'primary-artwork' (diffusion-focus.js) needed no sanitizer change at
+// all, same "reference, not catalog-fixed data" precedent this function's
+// own header comment already documents.
+test('sanitizeDiffusionCamera: the new focalTarget values (manual, primary-artwork) pass through exactly like any other target reference', () => {
+  assert.equal(sanitizeDiffusionCamera({ focalTarget: 'manual' }, FALLBACK_DIFFUSION_CAMERA).focalTarget, 'manual');
+  assert.equal(sanitizeDiffusionCamera({ focalTarget: 'primary-artwork' }, FALLBACK_DIFFUSION_CAMERA).focalTarget, 'primary-artwork');
+});
+
+// ── Diffusion Camera and Glass are fully independent state slices (Codex
+// visual-correction round requirement: "Diffusion controls do not alter
+// glass material state and glass controls do not alter diffusion state").
+// Structural proof rather than a live-render assertion (no WebGL context
+// exists here): each sanitizer only ever reads/writes its OWN field set —
+// feeding sanitizeGlass a payload stuffed with every diffusionCamera key
+// (and vice versa) must change NOTHING beyond each function's own domain. ─
+
+test("sanitizeGlass ignores every diffusionCamera-shaped key even when raw is stuffed with them — glass state stays fully isolated from Diffusion Camera's own fields", () => {
+  const raw = {
+    tint: '#123456', transmission: 0.5, // real glass fields — should apply
+    enabled: true, focalTarget: 'manual', aperture: 0.9, falloff: 0.9, // diffusionCamera-shaped — must be ignored here
+  };
+  const out = sanitizeGlass(raw, FALLBACK_GLASS);
+  assert.equal(out.tint, '#123456');
+  assert.equal(out.transmission, 0.5);
+  assert.equal(Object.prototype.hasOwnProperty.call(out, 'focalTarget'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(out, 'aperture'), false);
+  assert.deepEqual(Object.keys(out).sort(), Object.keys(FALLBACK_GLASS).sort(), 'the sanitized shape must exactly match glass\'s own field set, nothing borrowed from diffusionCamera');
+});
+
+test("sanitizeDiffusionCamera ignores every glass-shaped key even when raw is stuffed with them — Diffusion Camera state stays fully isolated from Glass's own fields", () => {
+  const raw = {
+    focalTarget: 'primary-artwork', aperture: 0.7, // real diffusionCamera fields — should apply
+    tint: '#123456', transmission: 0.5, clarity: 0.3, // glass-shaped — must be ignored here
+  };
+  const out = sanitizeDiffusionCamera(raw, FALLBACK_DIFFUSION_CAMERA);
+  assert.equal(out.focalTarget, 'primary-artwork');
+  assert.equal(out.aperture, 0.7);
+  assert.equal(Object.prototype.hasOwnProperty.call(out, 'tint'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(out, 'transmission'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(out, 'clarity'), false);
+  assert.deepEqual(Object.keys(out).sort(), Object.keys(FALLBACK_DIFFUSION_CAMERA).sort(), 'the sanitized shape must exactly match diffusionCamera\'s own field set, nothing borrowed from glass');
 });

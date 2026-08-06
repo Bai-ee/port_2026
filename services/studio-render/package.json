@@ -6,9 +6,15 @@
   "description": "GPU headless render service for Mockup Studio videos (Creative Director).",
   "scripts": {
     "start": "node server.mjs",
-    "render:local": "node render-cli.mjs"
+    "start:proof": "node proof-server.mjs",
+    "render:local": "node render-cli.mjs",
+    "drain:proof": "node scripts/drain-proof-queue.mjs"
   },
   "engines": {
     "node": ">=22"
+  },
+  "dependencies": {
+    "playwright": "1.62.1",
+    "three": "0.165.0"
   }
 }

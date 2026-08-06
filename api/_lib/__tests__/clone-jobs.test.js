@@ -70,12 +70,16 @@ test('claimCloneJob refuses a job that is already actively leased', async () => 
 test('claimNextCloneJob claims the oldest runnable job and lets independent jobs run concurrently', async () => {
   const a = await jobs.createCloneJob({ clientId: 'c1', targetUrl: 'https://a.com', ownershipAttested: true });
   const b = await jobs.createCloneJob({ clientId: 'c1', targetUrl: 'https://b.com', ownershipAttested: true });
+  // Both jobs are usually created within the same millisecond, so their
+  // createdAt tiebreak falls back to the random job-ID suffix — WHICH one
+  // counts as "oldest" is not deterministic here. The invariant under test:
+  // each claim takes exactly one runnable job, and both distinct jobs get
+  // claimed concurrently (no shared exclusive resource, unlike media_jobs).
   const claimedA = await jobs.claimNextCloneJob({ workerId: 'w1' });
-  assert.equal(claimedA.jobId, a.jobId, 'oldest job claimed first');
-  // Unlike media_jobs' singleton lock, a second independent job claims fine
-  // while the first is still in flight — no shared exclusive resource.
+  assert.ok([a.jobId, b.jobId].includes(claimedA.jobId), 'first claim must take one of the two queued jobs');
   const claimedB = await jobs.claimNextCloneJob({ workerId: 'w2' });
-  assert.equal(claimedB.jobId, b.jobId);
+  assert.ok([a.jobId, b.jobId].includes(claimedB.jobId), 'second claim must take the remaining queued job');
+  assert.notEqual(claimedB.jobId, claimedA.jobId, 'the second claim must never re-claim the job already leased in flight');
 });
 
 test('markCloneJobVerifying transitions status without touching the lease', async () => {

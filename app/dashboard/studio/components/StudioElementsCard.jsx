@@ -25,7 +25,7 @@ export default function StudioElementsCard({
   open, onToggle,
   instances, selectedId, onSelect, primaryElementId,
   onToggleVisible, onToggleLock,
-  seed, budget,
+  seed, budget, costDetail,
   onRandomizeSelected, onResetSelected, canRandomizeSelected,
   onRandomizeAll, canRandomizeAll,
   intensityTiers, intensityMeta, intensity, onIntensityChange,
@@ -36,6 +36,7 @@ export default function StudioElementsCard({
   formats, formatId, onFormatChange,
   previewTiers, qualityTier, onQualityTierChange,
   placementWarnings,
+  heroWarnings,
 }) {
   const selected = instances.find((i) => i.id === selectedId) || null;
   // "Active" reflects what actually renders — a glass duplicate can't render
@@ -143,6 +144,11 @@ export default function StudioElementsCard({
                   <Info size={13} strokeWidth={2.5} />
                 </span>
               ) : null}
+              {heroWarnings?.[inst.id] ? (
+                <span title="No duplicate hero elements — this is one of 2+ enabled hero-depth elements sharing the frame" style={{ display: 'inline-flex', color: '#f59e0b' }}>
+                  <TriangleAlert size={13} strokeWidth={2.5} />
+                </span>
+              ) : null}
               {capabilityLabel ? (
                 <span style={{ ...ui.label, fontSize: 8, color: GLASS.inkMute }}>{capabilityLabel}</span>
               ) : null}
@@ -177,6 +183,11 @@ export default function StudioElementsCard({
         PERFORMANCE BUDGET
         <span>{budget.cost} / {budget.max}{budget.overBudget ? ' · OVER' : ''}</span>
       </span>
+      {costDetail?.transmission > 0 ? (
+        <span style={{ fontFamily: GLASS.sans, fontSize: 10, lineHeight: 1.4, color: GLASS.inkMute }} title="Transmissive (glass-category) materials cost more to render than their flat budget number alone implies.">
+          Includes +{costDetail.transmission} transmission surcharge (glass-category materials)
+        </span>
+      ) : null}
 
       <div style={{ display: 'flex', gap: 6 }}>
         <button
@@ -257,7 +268,7 @@ export default function StudioElementsCard({
         </button>
       </div>
       <span style={{ fontFamily: GLASS.sans, fontSize: 11, lineHeight: 1.5, color: GLASS.inkMute }}>
-        The Glass Petal Sphere is the one existing element; its duplicates persist as data only and never render. Everything added via ADD ELEMENT genuinely renders, placed with a deliberate per-format default sized to clear the artwork and stay framed. Kinetic Rings (and Glass) intentionally overlap the artwork by design — shown as a neutral notice, not a warning. Randomize Intensity applies to both Randomize and All. Per-parameter-group locks and additional scopes (Lighting/Camera/Motion/Colors only, Entire set) ship in a later round.
+        The Glass Petal Sphere is the one existing element; its duplicates persist as data only and never render. Everything added via ADD ELEMENT genuinely renders, placed with a deliberate per-format default sized to clear the artwork and stay framed. Kinetic Rings (and Glass) intentionally overlap the artwork by design — shown as a neutral notice, not a warning. Randomize Intensity applies to both Randomize and All. Per-parameter-group locks are in the Inspector below (select an element with material/motion/appearance ranges). The Randomize card above covers the other scopes — Lighting/Camera/Motion/Colors only, Entire set, and Unlocked values only.
       </span>
     </RailCard>
   );

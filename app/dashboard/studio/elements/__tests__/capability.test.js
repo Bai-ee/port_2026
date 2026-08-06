@@ -3,8 +3,14 @@ import assert from 'node:assert/strict';
 import { getCapabilityState, getCapabilityLabel, CAPABILITY_STATES } from '../capability.js';
 import { getElementDefinition } from '../catalog.js';
 
-test('getCapabilityState: preview-supported + final-render-unsupported -> preview-only (glass-petal-sphere today)', () => {
+test('getCapabilityState: glass-petal-sphere is FULL since the Phase 5 glass-parity pass (server art-scene renders the primary glass)', () => {
   const def = getElementDefinition('glass-petal-sphere');
+  assert.equal(getCapabilityState(def), CAPABILITY_STATES.FULL);
+  assert.equal(getCapabilityLabel(def), null, 'fully supported elements carry no capability badge');
+});
+
+test('getCapabilityState: preview-supported + final-render-unsupported -> preview-only', () => {
+  const def = { previewSupported: true, finalRenderSupported: false };
   assert.equal(getCapabilityState(def), CAPABILITY_STATES.PREVIEW_ONLY);
   assert.equal(getCapabilityLabel(def), 'PREVIEW ONLY');
 });

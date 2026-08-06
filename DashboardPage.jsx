@@ -6667,8 +6667,66 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     () => getMarketingBriefSearchStats(marketingBriefConfig, client),
     [marketingBriefConfig, client]
   );
+  const strategyPostPool = useMemo(() => {
+    const pool = [];
+    const pushPost = (entry) => {
+      const text = String(entry?.text || entry?.content || entry?.post || entry?.idea || '').trim();
+      if (!text) return;
+      pool.push({
+        id: entry?.id || `strategy-post-${pool.length}`,
+        text: text.slice(0, 280),
+        date: entry?.date || String(entry?.scheduledAt || '').slice(0, 10),
+        scheduledAt: entry?.scheduledAt || '',
+        theme: entry?.theme || entry?.kind || entry?.angle || '',
+        rationale: entry?.rationale || entry?.why || '',
+        source: entry?.source || 'strategy',
+      });
+    };
+
+    (strategyBuilderTodayPosts || []).forEach((post, index) => pushPost({
+      ...post,
+      id: post?.id || `strategy-builder-today-${index}`,
+      date: strategyBuilderToday?.date || String(post?.scheduledAt || '').slice(0, 10),
+      scheduledAt: post?.scheduledAt || new Date().toISOString(),
+      source: 'today',
+    }));
+
+    (strategyBuilderItems || [])
+      .slice()
+      .sort((a, b) => String(a?.scheduledAt || '').localeCompare(String(b?.scheduledAt || '')))
+      .forEach((item) => pushPost({ ...item, source: 'strategy-builder' }));
+
+    if (strategy30?.today?.post) {
+      pushPost({
+        id: 'strategy30-today',
+        text: strategy30.today.post,
+        date: new Date().toISOString().slice(0, 10),
+        theme: strategy30.today.angle,
+        rationale: strategy30.today.rationale,
+        source: '30-day-today',
+      });
+    }
+
+    (Array.isArray(strategy30?.days) ? strategy30.days : []).forEach((day, index) => pushPost({
+      id: `strategy30-${day?.date || index}`,
+      text: day?.post || day?.idea,
+      date: day?.date,
+      theme: day?.theme,
+      source: day?.source === 'user' ? '30-day-edited' : '30-day',
+    }));
+
+    const seen = new Set();
+    return pool.filter((item) => {
+      const key = item.text.toLowerCase().replace(/\s+/g, ' ');
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(0, 60);
+  }, [strategyBuilderItems, strategyBuilderToday?.date, strategyBuilderTodayPosts, strategy30]);
+
   const socialGeneratedDraft =
-    marketingBrief?.content?.x_post
+    strategyPostPool[0]?.text
+    || marketingBrief?.content?.x_post
     || marketingBrief?.content?.primary_post
     || dashboardState?.summaryCards?.find((c) => c.type === 'content_post')?.value
     || resolvedDraftPost
@@ -9206,7 +9264,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       rows: [
         { key: 'smp-channel', label: 'Channel', value: 'X / Twitter' },
         { key: 'smp-agent-system', label: 'Agents', value: 'Content Creator · Hashtag Specialist · Engagement Optimizer' },
-        { key: 'smp-source', label: 'Creative Source', value: hasSocialGeneratedDraft ? 'Creative Builder output available' : 'Manual composer ready' },
+        { key: 'smp-source', label: 'Creative Source', value: strategyPostPool.length ? `${strategyPostPool.length} strategy post${strategyPostPool.length === 1 ? '' : 's'} available` : hasSocialGeneratedDraft ? 'Creative Builder output available' : 'Manual composer ready' },
         { key: 'smp-knowledge-base', label: 'Source Library', value: knowledgeBaseSourceSummary },
       ],
       footerLeft: 'Ready',
@@ -15737,6 +15795,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                           getIdToken={brandSystemGetIdToken}
                           sourceDraft={socialGeneratedDraft}
                           sourceLabel={hasSocialGeneratedDraft ? 'creative-builder' : 'manual'}
+                          strategyPostPool={strategyPostPool}
                         />
                       </div>
                     </div>

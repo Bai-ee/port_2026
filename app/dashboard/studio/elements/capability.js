@@ -8,7 +8,14 @@
 //   'preview-only'           — previewSupported is true but finalRenderSupported
 //     is false (glass-petal-sphere's actual state today: it's the real,
 //     already-shipping glass mesh, but the Cloud Run final-frame renderer
-//     doesn't consume it yet). Controls work; exports won't include it yet.
+//     doesn't consume it yet). Controls work; the element IS included in a
+//     browser MP4/WebM export (that path just captures the live canvas —
+//     it never reads this flag, see elements/video-export.js) — only the
+//     separate, server-side Proof Render (Cloud Run final-frame) pipeline
+//     doesn't consume it yet. CORRECTION (Codex review): the UI copy this
+//     drives previously said "exports don't include this element yet",
+//     which is only true of Proof Render, not of the browser export most
+//     users actually mean by "export" — see StudioElementInspector.jsx.
 //   'full'                   — both preview and final render are supported.
 //
 // Pure logic — no React — so it's unit-testable on its own.

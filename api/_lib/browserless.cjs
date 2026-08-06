@@ -2,9 +2,19 @@
 
 const path = require('path');
 const { randomUUID } = require('crypto');
-const fb = require('./firebase-admin.cjs');
+const realFb = require('./firebase-admin.cjs');
 const { saveBufferArtifact } = require('./storage-artifacts.cjs');
 const { validateUrl } = require('./safe-fetch.cjs');
+
+// Test-only DI seam (same precedent as studio-device-capture.cjs/
+// studio-screen-stills.cjs `__setTestContext`) — lets unit tests substitute
+// a fake Firestore context so captureScreenshotBuffer's request-logging can
+// be exercised with zero live Firestore/network access. Production code
+// always resolves to the real firebase-admin.cjs singleton (`ctx() === realFb`
+// whenever no override is set).
+let _ctx = null;
+function __setTestContext(ctxOverride) { _ctx = ctxOverride; }
+function ctx() { return _ctx || realFb; }
 
 const DEFAULT_BASE_URL = 'https://production-sfo.browserless.io';
 const DEFAULT_REQUEST_TIMEOUT_MS = 45000;
@@ -163,7 +173,7 @@ function buildWarning(code, message, extra = {}) {
 
 async function createBrowserlessRequestLog({ clientId, runId, websiteUrl, endpoint, requestTimeoutMs, variant }) {
   const requestId = randomUUID();
-  const requestRef = fb.adminDb.collection('browserless_requests').doc(requestId);
+  const requestRef = ctx().adminDb.collection('browserless_requests').doc(requestId);
 
   await requestRef.set({
     requestId,
@@ -177,8 +187,8 @@ async function createBrowserlessRequestLog({ clientId, runId, websiteUrl, endpoi
     viewport: variant?.viewport || null,
     status: 'started',
     requestTimeoutMs,
-    createdAt: fb.FieldValue.serverTimestamp(),
-    updatedAt: fb.FieldValue.serverTimestamp(),
+    createdAt: ctx().FieldValue.serverTimestamp(),
+    updatedAt: ctx().FieldValue.serverTimestamp(),
   });
 
   return { requestId, requestRef };
@@ -189,7 +199,7 @@ async function finalizeBrowserlessRequestLog(requestRef, update) {
   await requestRef.set(
     {
       ...update,
-      updatedAt: fb.FieldValue.serverTimestamp(),
+      updatedAt: ctx().FieldValue.serverTimestamp(),
     },
     { merge: true }
   );
@@ -202,22 +212,76 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * @param {object} args
+ * @param {function} [args.onAttempt] - called before retries 2..N of the PRIMARY variant.
+ * @param {number} [args.maxAttempts] - caps (never raises) the primary variant's own
+ *   retry ladder above BROWSERLESS_MAX_ATTEMPTS. A caller that only wants ONE attempt
+ *   (e.g. a single long-timeout attempt instead of several short escalating ones) can
+ *   pass `maxAttempts: 1` — the 1s/2s backoff-and-retry loop below never runs a second
+ *   time. Absent/invalid -> BROWSERLESS_MAX_ATTEMPTS, byte-identical to before this option
+ *   existed.
+ * @param {number} [args.requestTimeoutMs] - explicit per-call override for the Browserless
+ *   `timeout` query param (and the outer AbortSignal), bypassing BOTH the config default
+ *   AND the shared BROWSERLESS_MAX_REQUEST_TIMEOUT_MS ceiling for every attempt of THIS
+ *   call. Opt-in only — every existing caller omits it and gets the exact prior
+ *   config×attemptMultiplier-capped-at-60s behavior. Applied to every primary-variant
+ *   attempt (not re-escalated per attempt — a caller wanting escalation can still omit
+ *   this and rely on the existing multiplier ladder).
+ * @param {number} [args.gotoTimeoutMs] - explicit per-call override for gotoOptions.timeout
+ *   / waitForFunction.timeout, same opt-in-only contract as requestTimeoutMs.
+ * @param {object} [args.fallbackVariant] - when the primary variant's retry ladder is fully
+ *   exhausted (or hits a non-retryable failure), ONE additional capture attempt is made at
+ *   this variant — never a second retry ladder, so this adds exactly one more paid
+ *   Browserless call in the worst case. Absent (default) -> no fallback, byte-identical to
+ *   before this option existed. The route wires this to a viewport-only variant as a
+ *   LAST-RESORT fallback after a full-page attempt exhausts its own (longer) budget — never
+ *   the default/expected path.
+ * @param {number} [args.fallbackRequestTimeoutMs] - requestTimeoutMs override for the
+ *   fallback attempt only (independent of the primary variant's own override/default).
+ * @param {number} [args.fallbackGotoTimeoutMs] - gotoTimeoutMs override for the fallback
+ *   attempt only.
+ * @param {boolean} [args.waitForContent] - opt-in: additionally wait for the page to have
+ *   actually RENDERED something (text/media in the DOM) before capturing, not just for
+ *   fonts to resolve. For client-rendered apps, `domcontentloaded` + fonts.ready can both
+ *   be satisfied while the app root is still empty. Default false = the exact fonts-only
+ *   wait every existing caller has always sent. Deliberately an ADAPTIVE signal rather
+ *   than a longer fixed `waitForTimeout`: it returns the moment content exists, so a
+ *   fast-rendering page pays nothing, and a slow one does not eat a fixed slice out of
+ *   the same request-timeout budget the page render itself has to fit inside.
+ */
 async function captureScreenshotBuffer(args) {
-  const { onAttempt = null } = args || {};
+  const {
+    onAttempt = null,
+    maxAttempts = BROWSERLESS_MAX_ATTEMPTS,
+    requestTimeoutMs = null,
+    gotoTimeoutMs = null,
+    fallbackVariant = null,
+    fallbackRequestTimeoutMs = null,
+    fallbackGotoTimeoutMs = null,
+  } = args || {};
+  // Never allows MORE attempts than the shared ladder (safety ceiling for every
+  // caller); a caller may only ever ask for FEWER (e.g. maxAttempts: 1).
+  const attempts = Math.max(1, Math.min(BROWSERLESS_MAX_ATTEMPTS, Number(maxAttempts) || BROWSERLESS_MAX_ATTEMPTS));
   let lastResult = null;
   let lastError = null;
-  for (let attempt = 1; attempt <= BROWSERLESS_MAX_ATTEMPTS; attempt += 1) {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
     if (typeof onAttempt === 'function' && attempt > 1) {
-      try { await onAttempt({ attempt, total: BROWSERLESS_MAX_ATTEMPTS }); } catch {}
+      try { await onAttempt({ attempt, total: attempts }); } catch {}
     }
     let result;
     try {
       // eslint-disable-next-line no-await-in-loop
-      result = await captureScreenshotBufferOnce({ ...args, attempt });
+      result = await captureScreenshotBufferOnce({ ...args, attempt, requestTimeoutMs, gotoTimeoutMs });
     } catch (err) {
-      // Transport-level failures (AbortSignal timeout, network error) — retry.
+      // Transport-level failures (AbortSignal timeout, network error) — retry
+      // within this variant's own ladder; on the FINAL attempt, break (not
+      // throw) so an optional fallback attempt below still gets a chance. A
+      // caller with no fallbackVariant sees the exact same outcome as before
+      // (lastResult stays null, so the function falls through to `throw
+      // lastError` at the bottom either way).
       lastError = err;
-      if (attempt >= BROWSERLESS_MAX_ATTEMPTS) throw err;
+      if (attempt >= attempts) break;
       // eslint-disable-next-line no-await-in-loop
       await sleep(1000 * attempt);
       continue;
@@ -232,15 +296,74 @@ async function captureScreenshotBuffer(args) {
       code === 'browserless_empty_response' ||
       (code === 'browserless_http_error' && RETRYABLE_BROWSERLESS_STATUSES.has(status));
 
-    if (!isRetryable || attempt >= BROWSERLESS_MAX_ATTEMPTS) break;
+    if (!isRetryable || attempt >= attempts) break;
     // eslint-disable-next-line no-await-in-loop
     await sleep(1000 * attempt); // 1s, 2s backoff
   }
+
+  // Primary variant's retry ladder is exhausted (or hit a non-retryable
+  // failure). Optional, opt-in, single LAST-RESORT fallback attempt at a
+  // DIFFERENT variant — never a second retry ladder, so this adds exactly
+  // ONE more paid Browserless call, never more.
+  if (fallbackVariant) {
+    let fallbackResult = null;
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      fallbackResult = await captureScreenshotBufferOnce({
+        ...args,
+        variant: fallbackVariant,
+        attempt: 1,
+        requestTimeoutMs: fallbackRequestTimeoutMs,
+        gotoTimeoutMs: fallbackGotoTimeoutMs,
+      });
+    } catch (err) {
+      fallbackResult = {
+        ok: false,
+        warning: buildWarning('browserless_timeout', `Fallback capture failed: ${err.message}`),
+      };
+    }
+    if (fallbackResult.ok) {
+      return { ...fallbackResult, fellBackFromVariant: args?.variant?.id || null };
+    }
+    // Both the primary and the fallback failed — report the PRIMARY
+    // variant's own failure (the underlying, more informative reason, e.g.
+    // the real Browserless HTTP 408) with the fallback's own outcome
+    // attached for observability, never silently swallowed.
+    if (lastResult) return { ...lastResult, fallbackAttempted: true, fallbackWarning: fallbackResult.warning || null };
+    if (lastError) throw lastError;
+  }
+
   if (lastResult) return lastResult;
   throw lastError || new Error('Browserless capture failed without a result.');
 }
 
-async function captureScreenshotBufferOnce({ clientId, runId, targetUrl, variant, attempt = 1 }) {
+// Fonts-only page wait — what every caller has always sent.
+const FONTS_READY_FN = 'async()=>{try{await document.fonts.ready;return true}catch{return true}}';
+// Opt-in fonts + RENDERED-CONTENT wait (Phase 6). `domcontentloaded` and
+// document.fonts.ready can BOTH be satisfied while a client-rendered app's
+// root element is still empty, so this additionally polls (bounded, and
+// always resolving true so bestAttempt:true still yields a screenshot) for
+// the document to actually contain text or media.
+const CONTENT_READY_MAX_WAIT_MS = 6000;
+const FONTS_AND_CONTENT_READY_FN =
+  `async()=>{try{await document.fonts.ready}catch{}` +
+  `const painted=()=>{const b=document.body;if(!b)return false;` +
+  `const t=(b.innerText||'').trim().length;` +
+  // Deliberately NOT counting inline <svg>: a bare app shell usually ships a
+  // logo svg before hydration, which would satisfy this instantly and defeat
+  // the whole point.
+  `const m=document.querySelectorAll('img,canvas,video').length;` +
+  `return t>120||m>0};` +
+  `const t0=Date.now();` +
+  `while(!painted()&&Date.now()-t0<${CONTENT_READY_MAX_WAIT_MS}){` +
+  `await new Promise(r=>setTimeout(r,250))}return true}`;
+
+async function captureScreenshotBufferOnce({
+  clientId, runId, targetUrl, variant, attempt = 1,
+  requestTimeoutMs: requestTimeoutOverride = null,
+  gotoTimeoutMs: gotoTimeoutOverride = null,
+  waitForContent = false,
+}) {
   try {
     await validateUrl(targetUrl);
   } catch (err) {
@@ -269,12 +392,17 @@ async function captureScreenshotBufferOnce({ clientId, runId, targetUrl, variant
   }
 
   // Give slow sites more time on retries — bump goto + request timeouts by 50% per attempt.
+  // An explicit per-call override (opt-in — requestTimeoutMs/gotoTimeoutMs args) bypasses
+  // BOTH the config default and the shared 60s ceiling entirely, applied as-is regardless
+  // of attempt number. Every existing caller omits these, so this branch is new and the
+  // else branch is byte-identical to before it existed.
   const attemptMultiplier = 1 + 0.5 * (attempt - 1);
-  const effectiveRequestTimeoutMs = Math.min(
-    BROWSERLESS_MAX_REQUEST_TIMEOUT_MS,
-    Math.round(config.requestTimeoutMs * attemptMultiplier)
-  );
-  const effectiveGotoTimeoutMs = Math.round(config.gotoTimeoutMs * attemptMultiplier);
+  const effectiveRequestTimeoutMs = Number.isFinite(requestTimeoutOverride) && requestTimeoutOverride > 0
+    ? requestTimeoutOverride
+    : Math.min(BROWSERLESS_MAX_REQUEST_TIMEOUT_MS, Math.round(config.requestTimeoutMs * attemptMultiplier));
+  const effectiveGotoTimeoutMs = Number.isFinite(gotoTimeoutOverride) && gotoTimeoutOverride > 0
+    ? gotoTimeoutOverride
+    : Math.round(config.gotoTimeoutMs * attemptMultiplier);
 
   const endpoint = buildEndpointUrl(
     config.baseUrl,
@@ -326,12 +454,23 @@ async function captureScreenshotBufferOnce({ clientId, runId, targetUrl, variant
         // (e.g. vivaacid.com). document.fonts.ready resolves once all faces are
         // loaded/applied. bestAttempt:true above keeps a timeout here non-fatal —
         // a slow/blocked font still yields a screenshot after the timeout.
+        // `waitForContent` (opt-in, default false) swaps in a wait that ALSO
+        // requires the page to have rendered something — see
+        // FONTS_AND_CONTENT_READY_FN. Every existing caller omits it and
+        // sends the byte-identical fonts-only function.
         waitForFunction: {
-          fn: 'async()=>{try{await document.fonts.ready;return true}catch{return true}}',
+          fn: waitForContent ? FONTS_AND_CONTENT_READY_FN : FONTS_READY_FN,
           timeout: effectiveGotoTimeoutMs,
         },
         // Extra paint buffer after fonts resolve, for JS-heavy late layout.
         waitForTimeout: config.postLoadWaitMs,
+        // Opt-in per variant (Device Mockup full-page captures): scroll the
+        // whole page before capturing so scroll-triggered lazy loading
+        // actually renders — without it a full-page shot of a lazy-loading
+        // site (e.g. vercel.com) comes back mostly BLANK below the fold.
+        // Spread-guarded so every existing caller's request body is
+        // byte-identical to before this option existed.
+        ...(variant?.scrollPage ? { scrollPage: true } : null),
         options: {
           fullPage: Boolean(variant?.fullPage),
           type: 'jpeg',
@@ -344,7 +483,7 @@ async function captureScreenshotBufferOnce({ clientId, runId, targetUrl, variant
       const snippet = (await response.text().catch(() => '')).slice(0, 300);
       await finalizeBrowserlessRequestLog(requestLog?.requestRef, {
         status: 'failed',
-        completedAt: fb.FieldValue.serverTimestamp(),
+        completedAt: ctx().FieldValue.serverTimestamp(),
         durationMs: Date.now() - startedAt,
         httpStatus: response.status,
         ok: false,
@@ -371,7 +510,7 @@ async function captureScreenshotBufferOnce({ clientId, runId, targetUrl, variant
     if (!buffer.length) {
       await finalizeBrowserlessRequestLog(requestLog?.requestRef, {
         status: 'failed',
-        completedAt: fb.FieldValue.serverTimestamp(),
+        completedAt: ctx().FieldValue.serverTimestamp(),
         durationMs: Date.now() - startedAt,
         httpStatus: response.status,
         ok: false,
@@ -389,7 +528,7 @@ async function captureScreenshotBufferOnce({ clientId, runId, targetUrl, variant
 
     await finalizeBrowserlessRequestLog(requestLog?.requestRef, {
       status: 'succeeded',
-      completedAt: fb.FieldValue.serverTimestamp(),
+      completedAt: ctx().FieldValue.serverTimestamp(),
       durationMs: Date.now() - startedAt,
       httpStatus: response.status,
       ok: true,
@@ -409,7 +548,7 @@ async function captureScreenshotBufferOnce({ clientId, runId, targetUrl, variant
   } catch (error) {
     await finalizeBrowserlessRequestLog(requestLog?.requestRef, {
       status: 'failed',
-      completedAt: fb.FieldValue.serverTimestamp(),
+      completedAt: ctx().FieldValue.serverTimestamp(),
       durationMs: Date.now() - startedAt,
       ok: false,
       errorMessage: error.message,
@@ -773,7 +912,7 @@ async function renderPdfBuffer({ clientId, runId, html, pdfMode = 'default' }) {
       const snippet = (await response.text().catch(() => '')).slice(0, 300);
       await finalizeBrowserlessRequestLog(requestLog?.requestRef, {
         status: 'failed',
-        completedAt: fb.FieldValue.serverTimestamp(),
+        completedAt: ctx().FieldValue.serverTimestamp(),
         durationMs: Date.now() - startedAt,
         httpStatus: response.status,
         ok: false,
@@ -795,7 +934,7 @@ async function renderPdfBuffer({ clientId, runId, html, pdfMode = 'default' }) {
     if (!buffer.length) {
       await finalizeBrowserlessRequestLog(requestLog?.requestRef, {
         status: 'failed',
-        completedAt: fb.FieldValue.serverTimestamp(),
+        completedAt: ctx().FieldValue.serverTimestamp(),
         durationMs: Date.now() - startedAt,
         httpStatus: response.status,
         ok: false,
@@ -813,7 +952,7 @@ async function renderPdfBuffer({ clientId, runId, html, pdfMode = 'default' }) {
 
     await finalizeBrowserlessRequestLog(requestLog?.requestRef, {
       status: 'succeeded',
-      completedAt: fb.FieldValue.serverTimestamp(),
+      completedAt: ctx().FieldValue.serverTimestamp(),
       durationMs: Date.now() - startedAt,
       httpStatus: response.status,
       ok: true,
@@ -831,7 +970,7 @@ async function renderPdfBuffer({ clientId, runId, html, pdfMode = 'default' }) {
   } catch (error) {
     await finalizeBrowserlessRequestLog(requestLog?.requestRef, {
       status: 'failed',
-      completedAt: fb.FieldValue.serverTimestamp(),
+      completedAt: ctx().FieldValue.serverTimestamp(),
       durationMs: Date.now() - startedAt,
       ok: false,
       errorMessage: error.message,
@@ -1011,9 +1150,12 @@ module.exports = {
   SCREENSHOT_VARIANTS,
   VIEWPORT_SCREENSHOT_VARIANTS,
   FULL_PAGE_SCREENSHOT_VARIANTS,
+  BROWSERLESS_MAX_ATTEMPTS,
+  BROWSERLESS_MAX_REQUEST_TIMEOUT_MS,
   captureScreenshotBuffer,
   persistWebsiteScreenshotArtifact,
   renderPdfBuffer,
   persistBriefPdfArtifact,
   fetchBrowserlessContent,
+  __setTestContext,
 };

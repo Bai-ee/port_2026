@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import * as stdlib from 'three-stdlib';
-import { FACTORIES, getFactory, clearGroup } from '../factories.js';
+import { FACTORIES, getFactory, clearGroup, tshirtModelRetry } from '../factories.js';
 import { createElementInstance } from '../schema.js';
 import { listElementDefinitions, getElementDefinition } from '../catalog.js';
 import { scaleSegments } from '../quality.js';
@@ -23,21 +23,32 @@ test('getFactory: returns null for an unknown/unregistered type', () => {
   assert.equal(getFactory('glass-petal-sphere'), null); // singleInstanceRenderer — intentionally has no factory
 });
 
-test('every non-singleInstanceRenderer catalog type has a matching factory (and vice versa)', () => {
+// hanging-tshirt is the one documented exception to the "non-
+// singleInstanceRenderer <=> has a factory" rule below: it's
+// singleInstanceRenderer (it's now the PRIMARY T-shirt cloth shape, not an
+// addable extra — see catalog.js's own comment on the entry), but it keeps a
+// REAL FACTORIES entry, unlike glass-petal-sphere, because ClothStudio.jsx's
+// primary-shape lifecycle effect directly reuses getFactory('hanging-
+// tshirt') to build/update/animate/dispose the primary garment through the
+// exact same contract a real extraInstances entry would use.
+test('every non-singleInstanceRenderer catalog type has a matching factory, plus the one documented singleton exception (hanging-tshirt)', () => {
   const renderableTypes = listElementDefinitions().filter((d) => !d.singleInstanceRenderer).map((d) => d.type);
-  assert.deepEqual([...renderableTypes].sort(), Object.keys(FACTORIES).sort());
+  const expectedFactoryKeys = [...renderableTypes, 'hanging-tshirt'];
+  assert.deepEqual([...expectedFactoryKeys].sort(), Object.keys(FACTORIES).sort());
 });
 
-// glb-import is deliberately excluded from the generic per-type loop below:
-// every other type's default instance renders REAL synchronous geometry the
-// instant applyInstance runs. glb-import's default (no asset selected yet)
-// renders NOTHING — an empty motion group is the correct, honest state, not
-// a bug — and once an asset IS selected, loading is genuinely async (a
-// network fetch). Neither fits the loop's "applyInstance -> synchronous
-// content" assumption, so it gets its own dedicated block (see "GLB
-// IMPORT" below), the same treatment already given to glass-petal-sphere
-// (excluded via its null getFactory()).
-const GENERIC_LOOP_TYPES = Object.keys(FACTORIES).filter((t) => t !== 'glb-import');
+// glb-import and tshirt-model are deliberately excluded from the generic
+// per-type loop below: every other type's default instance renders REAL
+// synchronous geometry the instant applyInstance runs. glb-import's default
+// (no asset selected yet) renders NOTHING — an empty motion group is the
+// correct, honest state, not a bug — and once an asset IS selected, loading
+// is genuinely async (a network fetch). tshirt-model has no "no asset
+// selected" state (its URL is fixed), but its load is equally async. Neither
+// fits the loop's "applyInstance -> synchronous content" assumption, so each
+// gets its own dedicated block (see "GLB IMPORT" and "TSHIRT MODEL" below),
+// the same treatment already given to glass-petal-sphere (excluded via its
+// null getFactory()).
+const GENERIC_LOOP_TYPES = Object.keys(FACTORIES).filter((t) => t !== 'glb-import' && t !== 'tshirt-model');
 
 for (const type of GENERIC_LOOP_TYPES) {
   test(`${type}: create -> applyInstance builds content under root.userData.motion`, () => {
@@ -213,8 +224,8 @@ test('kinetic-rings: same instance reference re-applied twice does not double-co
   assert.equal(root.userData.motion.children.length, before);
 });
 
-test('kinetic-rings, translucent-monoliths, logo-sculpture, light-tubes, wireframe-sculpture, portal-plane, cloth-banners, particle-ribbon, caustic-water-light, volumetric-light-cone, topographic-floor, metaball-bloom, kinetic-type-totem, and echo-feedback-tunnel: changing quality tier rebuilds their (tier-dependent) geometry', () => {
-  ['kinetic-rings', 'translucent-monoliths', 'logo-sculpture', 'light-tubes', 'wireframe-sculpture', 'portal-plane', 'cloth-banners', 'particle-ribbon', 'caustic-water-light', 'volumetric-light-cone', 'topographic-floor', 'metaball-bloom', 'kinetic-type-totem', 'echo-feedback-tunnel'].forEach((type) => {
+test('kinetic-rings, translucent-monoliths, logo-sculpture, light-tubes, wireframe-sculpture, portal-plane, cloth-banners, particle-ribbon, caustic-water-light, volumetric-light-cone, topographic-floor, metaball-bloom, kinetic-type-totem, echo-feedback-tunnel, and hanging-tshirt: changing quality tier rebuilds their (tier-dependent) geometry', () => {
+  ['kinetic-rings', 'translucent-monoliths', 'logo-sculpture', 'light-tubes', 'wireframe-sculpture', 'portal-plane', 'cloth-banners', 'particle-ribbon', 'caustic-water-light', 'volumetric-light-cone', 'topographic-floor', 'metaball-bloom', 'kinetic-type-totem', 'echo-feedback-tunnel', 'hanging-tshirt'].forEach((type) => {
     const factory = getFactory(type);
     const instance = createElementInstance(type, { id: `${type}-1`, enabled: true });
     const root = factory.create(ctx('draft'));
@@ -1344,6 +1355,446 @@ test('glb-import: disposing while a load is still in flight discards the late-ar
   });
 });
 
+// ── TSHIRT MODEL — Part B (pivot round). The real downloaded GLB
+// (public/models/merch/tshirt.glb) as an optional, standalone 3D merch
+// element — separate from the procedural Primary T-Shirt Cloth
+// (tshirt-mesh.test.js covers that one). Same async-load shape as glb-import
+// above, simplified: no assetId lookup (the URL is fixed), no animation-clip
+// selection (the source file has none) — so applyInstance fires the load
+// unconditionally on first call rather than waiting on a user pick. ───────
+
+function tshirtModelCtx() {
+  return { THREE, stdlib, tier: 'draft', glbLoader: createGLTFLoaderBundle({ THREE, stdlib }) };
+}
+
+// Same ctx, plus an onTshirtModelStatus that records every status report in
+// order — the same bridge ClothStudio.jsx wires into `ctx` in production,
+// exercised directly here so the CALLBACK contract itself (not just the
+// resulting userData) is under test: correct id, correct state sequence,
+// and — critically — that it never fires for a superseded/disposed load.
+function tshirtModelCtxWithLog() {
+  const log = [];
+  const ctx = {
+    THREE, stdlib, tier: 'draft', glbLoader: createGLTFLoaderBundle({ THREE, stdlib }),
+    onTshirtModelStatus: (id, status) => log.push({ id, ...status }),
+  };
+  return { ctx, log };
+}
+
+test('tshirt-model: create() builds an empty root/motion pair, no crash', () => {
+  const factory = getFactory('tshirt-model');
+  const root = factory.create(tshirtModelCtx());
+  assert.ok(root.isObject3D);
+  assert.ok(root.userData.motion?.isObject3D);
+  assert.equal(root.userData.motion.children.length, 0);
+});
+
+test('tshirt-model: applyInstance fetches the canonical fixed URL, not an asset-library lookup', async () => {
+  const buffer = await buildGLBArrayBuffer();
+  let requestedUrl = null;
+  await withMockFetch(async (url) => { requestedUrl = url; return { ok: true, arrayBuffer: async () => buffer }; }, async () => {
+    const factory = getFactory('tshirt-model');
+    const instance = createElementInstance('tshirt-model', { id: 't1', enabled: true });
+    const root = factory.create(tshirtModelCtx());
+    factory.applyInstance(tshirtModelCtx(), root, instance);
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(requestedUrl, '/models/merch/tshirt.glb');
+    assert.ok(root.userData.motion.children.length > 0, 'the fixed asset should load without any assetId being set');
+  });
+});
+
+test('tshirt-model: successful load normalizes the mesh to the documented bounding-sphere radius', async () => {
+  const buffer = await buildGLBArrayBuffer();
+  await withMockFetch(fetchOkWith(buffer), async () => {
+    const factory = getFactory('tshirt-model');
+    const instance = createElementInstance('tshirt-model', { id: 't1', enabled: true });
+    const root = factory.create(tshirtModelCtx());
+    factory.applyInstance(tshirtModelCtx(), root, instance);
+    await new Promise((r) => setTimeout(r, 20));
+    const box = new THREE.Box3().setFromObject(root.userData.motion);
+    const sphere = box.getBoundingSphere(new THREE.Sphere());
+    assert.ok(sphere.radius <= 0.46 + 1e-6, `normalized radius should not exceed 0.46, got ${sphere.radius}`);
+    assert.ok(sphere.radius > 0, 'should have real, non-degenerate geometry');
+  });
+});
+
+test('tshirt-model: a failed fetch is caught, leaves an honest empty state, and records loadError instead of throwing', async () => {
+  await withMockFetch(async () => { throw new Error('network down'); }, async () => {
+    const factory = getFactory('tshirt-model');
+    const instance = createElementInstance('tshirt-model', { id: 't1', enabled: true });
+    const root = factory.create(tshirtModelCtx());
+    assert.doesNotThrow(() => factory.applyInstance(tshirtModelCtx(), root, instance));
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(root.userData.motion.children.length, 0);
+    assert.ok(root.userData.loadError, 'a failed load should be recorded as an honest error state');
+  });
+});
+
+// ── Async-state defect regression (Codex P1 review, Part B — two rounds).
+// Round 1 replaced the original "motion.children.length === 0 means retry"
+// inference with an idle/loading/loaded/error state machine, but that
+// state machine still had a gap: `tshirtModelRetry` unconditionally reset
+// straight to 'idle' regardless of current state, so two rapid Retry
+// clicks (or the Inspector's own re-render lagging behind a fast click)
+// could each independently reset to idle and each launch their own fetch
+// — parallel requests, exactly the failure mode the whole fix exists to
+// prevent, just reachable from Retry instead of a transform drag. Round 2
+// (this one) closes that gap (tshirtModelRetry now no-ops while already
+// 'loading'), adds an explicit 'disposed' state so a disposed root can
+// never be reactivated by a late reconciliation call, and replaces the
+// Inspector's polling bridge with a push-based callback
+// (ctx.onTshirtModelStatus) so status changes reach React immediately
+// instead of on up to a 400ms delay. ───────────────────────────────────────
+
+test('tshirt-model: while a load is in flight, repeated applyInstance calls (e.g. a transform drag) never launch a second concurrent fetch', async () => {
+  const buffer = await buildGLBArrayBuffer();
+  let fetchCalls = 0;
+  let resolveFetch;
+  const slowFetch = () => { fetchCalls += 1; return new Promise((resolve) => { resolveFetch = resolve; }); };
+  await withMockFetch(slowFetch, async () => {
+    const factory = getFactory('tshirt-model');
+    const root = factory.create(tshirtModelCtx());
+    // Simulate a drag: several applyInstance calls with different transforms
+    // while the very first load is still unresolved.
+    for (let i = 0; i < 5; i += 1) {
+      const instance = createElementInstance('tshirt-model', { id: 't1', enabled: true, transform: { position: [i * 0.1, 0, 0] } });
+      factory.applyInstance(tshirtModelCtx(), root, instance);
+    }
+    assert.equal(fetchCalls, 1, 'only the very first applyInstance call while idle should start a fetch — later calls while loading must not start another');
+    assert.equal(root.userData.loadState, 'loading');
+    // The transform from the LAST call during the drag must still have
+    // taken effect even though no fetch fired for it.
+    assert.equal(root.position.x, 0.4, 'transform must keep applying live even while the asset is still loading');
+    resolveFetch({ ok: true, arrayBuffer: async () => buffer });
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(root.userData.loadState, 'loaded');
+    assert.ok(root.userData.motion.children.length > 0);
+    // The transform edits made mid-load must SURVIVE resolution — the
+    // load itself never touches root.position.
+    assert.equal(root.position.x, 0.4, 'the last transform applied during loading must still hold after the load resolves');
+  });
+});
+
+test('tshirt-model: a successful resolution transitions loading → loaded and clears any error, reported through the status callback in order', async () => {
+  const buffer = await buildGLBArrayBuffer();
+  await withMockFetch(fetchOkWith(buffer), async () => {
+    const factory = getFactory('tshirt-model');
+    const { ctx, log } = tshirtModelCtxWithLog();
+    const root = factory.create(ctx);
+    const instance = createElementInstance('tshirt-model', { id: 't1', enabled: true });
+    factory.applyInstance(ctx, root, instance);
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(root.userData.loadState, 'loaded');
+    assert.equal(root.userData.loadError, null);
+    assert.deepEqual(log, [
+      { id: 't1', state: 'loading', error: null },
+      { id: 't1', state: 'loaded', error: null },
+    ], 'the status callback must report the exact loading → loaded sequence, for the correct instance id, with no error');
+  });
+});
+
+test('tshirt-model: a failed resolution transitions loading → error, reported through the status callback with the failure message', async () => {
+  await withMockFetch(async () => { throw new Error('network down'); }, async () => {
+    const factory = getFactory('tshirt-model');
+    const { ctx, log } = tshirtModelCtxWithLog();
+    const root = factory.create(ctx);
+    const instance = createElementInstance('tshirt-model', { id: 't1', enabled: true });
+    factory.applyInstance(ctx, root, instance);
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(root.userData.loadState, 'error');
+    assert.deepEqual(log, [
+      { id: 't1', state: 'loading', error: null },
+      { id: 't1', state: 'error', error: 'network down' },
+    ]);
+  });
+});
+
+test('tshirt-model: once a load fails, a bare applyInstance call (an unrelated instance edit) does NOT silently retry — only tshirtModelRetry does', async () => {
+  const factory = getFactory('tshirt-model');
+  const root = factory.create(tshirtModelCtx());
+  let fetchCalls = 0;
+  await withMockFetch(async () => { fetchCalls += 1; throw new Error('network down'); }, async () => {
+    const instance = createElementInstance('tshirt-model', { id: 't1', enabled: true });
+    factory.applyInstance(tshirtModelCtx(), root, instance);
+    await new Promise((r) => setTimeout(r, 20));
+  });
+  assert.equal(fetchCalls, 1);
+  assert.equal(root.userData.loadState, 'error');
+  assert.ok(root.userData.loadError, 'the failure must be recorded for the Inspector to read');
+
+  await withMockFetch(async () => { fetchCalls += 1; throw new Error('network down'); }, async () => {
+    // An edit unrelated to retrying (e.g. moving the element) — must NOT
+    // itself re-fire the fetch.
+    const movedButStillBroken = createElementInstance('tshirt-model', { id: 't1', enabled: true, transform: { position: [1, 0, 0] } });
+    factory.applyInstance(tshirtModelCtx(), root, movedButStillBroken);
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(fetchCalls, 1, 'a plain applyInstance call after a failure must not itself retry the fetch');
+    assert.equal(root.userData.loadState, 'error', 'state must stay error — nothing here should have "fixed" it');
+    assert.equal(root.position.x, 1, 'the transform edit itself must still take effect even though the model stays broken');
+  });
+
+  const buffer = await buildGLBArrayBuffer();
+  await withMockFetch(async () => { fetchCalls += 1; return { ok: true, arrayBuffer: async () => buffer }; }, async () => {
+    const retryInstance = createElementInstance('tshirt-model', { id: 't1', enabled: true, transform: { position: [1, 0, 0] } });
+    tshirtModelRetry(tshirtModelCtx(), root, retryInstance); // the ONLY sanctioned way out of 'error'
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(root.userData.loadState, 'loaded');
+    assert.ok(root.userData.motion.children.length > 0, 'an explicit retry should succeed once the asset is reachable again');
+  });
+  // Retry after failure performed exactly ONE additional fetch — total is
+  // the original failed attempt (1) plus the one retry attempt (1) = 2,
+  // never more.
+  assert.equal(fetchCalls, 2);
+});
+
+test('tshirt-model: repeated Retry actions while the retry request is pending do not create parallel fetches', async () => {
+  const factory = getFactory('tshirt-model');
+  const root = factory.create(tshirtModelCtx());
+  await withMockFetch(async () => { throw new Error('network down'); }, async () => {
+    const instance = createElementInstance('tshirt-model', { id: 't1', enabled: true });
+    factory.applyInstance(tshirtModelCtx(), root, instance);
+    await new Promise((r) => setTimeout(r, 20));
+  });
+  assert.equal(root.userData.loadState, 'error');
+
+  const buffer = await buildGLBArrayBuffer();
+  let fetchCalls = 0;
+  let resolveFetch;
+  const slowFetch = () => { fetchCalls += 1; return new Promise((resolve) => { resolveFetch = resolve; }); };
+  await withMockFetch(slowFetch, async () => {
+    const retryInstance = createElementInstance('tshirt-model', { id: 't1', enabled: true });
+    // Simulate several rapid Retry clicks landing before the first retry
+    // has resolved (or before the UI has re-rendered to hide the button).
+    tshirtModelRetry(tshirtModelCtx(), root, retryInstance);
+    tshirtModelRetry(tshirtModelCtx(), root, retryInstance);
+    tshirtModelRetry(tshirtModelCtx(), root, retryInstance);
+    assert.equal(fetchCalls, 1, 'only the FIRST retry click should start a fetch — the others must no-op while one is already in flight');
+    assert.equal(root.userData.loadState, 'loading');
+    resolveFetch({ ok: true, arrayBuffer: async () => buffer });
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(root.userData.loadState, 'loaded');
+    assert.equal(fetchCalls, 1, 'still exactly one fetch for the whole retry burst');
+  });
+});
+
+test('tshirt-model: a material change made WHILE the load is still in flight is applied using the latest settings once the load lands, not a stale snapshot from load-start', async () => {
+  const buffer = await buildGLBArrayBuffer();
+  let resolveFetch;
+  const slowFetch = () => new Promise((resolve) => { resolveFetch = resolve; });
+  await withMockFetch(slowFetch, async () => {
+    const factory = getFactory('tshirt-model');
+    const root = factory.create(tshirtModelCtx());
+    const initial = createElementInstance('tshirt-model', { id: 't1', enabled: true });
+    factory.applyInstance(tshirtModelCtx(), root, initial);
+    assert.equal(root.userData.loadState, 'loading');
+
+    // Instance changes mid-flight (e.g. the user toggled material override
+    // while the 10MB asset was still downloading) — applyInstance must
+    // record it without starting a second fetch.
+    const overridden = createElementInstance('tshirt-model', {
+      id: 't1', enabled: true,
+      material: { overrideEnabled: true, tint: '#ff0000', metalness: 0.9, roughness: 0.1 },
+    });
+    factory.applyInstance(tshirtModelCtx(), root, overridden);
+    assert.equal(root.userData.loadState, 'loading', 'still only one request in flight');
+
+    resolveFetch({ ok: true, arrayBuffer: async () => buffer });
+    await new Promise((r) => setTimeout(r, 20));
+
+    let target = null;
+    root.userData.motion.traverse((c) => { if (c.isMesh && !target) target = c; });
+    assert.ok(target, 'sanity: the mesh did load');
+    // buildGLBArrayBuffer's fixture mesh is authored at color 0x336699 —
+    // the override's tint (#ff0000) must have been applied on top of the
+    // freshly-loaded mesh, proving the material call after load used the
+    // LATEST instance (captured mid-flight), not whatever was current when
+    // the load first started.
+    assert.notEqual(target.material.color.getHex(), 0x336699, 'the override made mid-load should be applied once the load actually lands, not the stale pre-edit settings');
+  });
+});
+
+test('tshirt-model: disposing while a load is still in flight transitions to \'disposed\', frees the late-arriving GLB\'s own geometry/material, and never reports status for it', async () => {
+  const factory = getFactory('tshirt-model');
+  const buffer = await buildGLBArrayBuffer();
+  let resolveFetch;
+  const slowFetch = () => new Promise((resolve) => { resolveFetch = resolve; });
+  await withMockFetch(slowFetch, async () => {
+    const { ctx, log } = tshirtModelCtxWithLog();
+    const instance = createElementInstance('tshirt-model', { id: 't1', enabled: true });
+    const root = factory.create(ctx);
+    factory.applyInstance(ctx, root, instance);
+    factory.dispose(root); // dispose BEFORE the in-flight fetch resolves
+    assert.equal(root.userData.loadState, 'disposed');
+    resolveFetch({ ok: true, arrayBuffer: async () => buffer });
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(root.userData.motion.children.length, 0, 'a load that resolves after disposal must not splice content into the disposed root');
+    assert.deepEqual(log, [{ id: 't1', state: 'loading', error: null }], 'the late success must never report a status — only the pre-dispose "loading" entry should exist');
+    // A disposed root must be fully inert — a later reconciliation call
+    // (which shouldn't happen in production, but must be safe if it did)
+    // must not reactivate it.
+    factory.applyInstance(ctx, root, createElementInstance('tshirt-model', { id: 't1', enabled: true, transform: { position: [5, 0, 0] } }));
+    assert.equal(root.position.x, 0, 'applyInstance on a disposed root must be a complete no-op, including transform');
+    assert.equal(root.userData.loadState, 'disposed');
+  });
+});
+
+test('tshirt-model: removing an instance mid-load (dispose) prevents a stale async completion from restoring its status or scene content — including a FAILED late resolution', async () => {
+  const factory = getFactory('tshirt-model');
+  let rejectFetch;
+  const slowFetch = () => new Promise((_resolve, reject) => { rejectFetch = reject; });
+  await withMockFetch(slowFetch, async () => {
+    const { ctx, log } = tshirtModelCtxWithLog();
+    const instance = createElementInstance('tshirt-model', { id: 't1', enabled: true });
+    const root = factory.create(ctx);
+    factory.applyInstance(ctx, root, instance);
+    factory.dispose(root); // the element was removed from the scene while its load was still in flight
+    rejectFetch(new Error('late failure after removal'));
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(root.userData.loadState, 'disposed', 'must stay disposed — a late FAILURE must not flip it to error');
+    assert.equal(root.userData.loadError, null, 'a late failure after disposal must not populate loadError either');
+    assert.deepEqual(log, [{ id: 't1', state: 'loading', error: null }], 'no error status may be reported for a load that resolved after its element was removed');
+  });
+});
+
+test('tshirt-model: material override mutates the loaded mesh material in place and restores it exactly when disabled', async () => {
+  const buffer = await buildGLBArrayBuffer();
+  await withMockFetch(fetchOkWith(buffer), async () => {
+    const factory = getFactory('tshirt-model');
+    const instance = createElementInstance('tshirt-model', { id: 't1', enabled: true });
+    const root = factory.create(tshirtModelCtx());
+    factory.applyInstance(tshirtModelCtx(), root, instance);
+    await new Promise((r) => setTimeout(r, 20));
+    let target = null;
+    root.userData.motion.traverse((c) => { if (c.isMesh && !target) target = c; });
+    assert.ok(target, 'sanity: a real mesh loaded');
+    const originalColor = target.material.color.getHex();
+
+    const overridden = createElementInstance('tshirt-model', {
+      id: 't1', enabled: true,
+      material: { overrideEnabled: true, tint: '#ff0000', metalness: 0.9, roughness: 0.1 },
+    });
+    factory.applyInstance(tshirtModelCtx(), root, overridden);
+    assert.notEqual(target.material.color.getHex(), originalColor, 'override should mutate the material color');
+
+    const restored = createElementInstance('tshirt-model', { id: 't1', enabled: true });
+    factory.applyInstance(tshirtModelCtx(), root, restored);
+    assert.equal(target.material.color.getHex(), originalColor, 'disabling the override should restore the original material color exactly');
+  });
+});
+
+test('tshirt-model: turntable spin is OFF by default and only rotates root.userData.motion (never root.rotation directly) when enabled', async () => {
+  const buffer = await buildGLBArrayBuffer();
+  await withMockFetch(fetchOkWith(buffer), async () => {
+    const factory = getFactory('tshirt-model');
+    const instance = createElementInstance('tshirt-model', { id: 't1', enabled: true });
+    assert.equal(instance.motion.rotate, false, 'turntable spin must default to off');
+    const root = factory.create(tshirtModelCtx());
+    factory.applyInstance(tshirtModelCtx(), root, instance);
+    await new Promise((r) => setTimeout(r, 20));
+
+    factory.animate(root, instance, 1, 1 / 60);
+    assert.equal(root.userData.motion.rotation.y, 0, 'no spin while rotate is off');
+    assert.equal(root.rotation.y, 0, 'animate() must never touch root.rotation directly');
+
+    const spinning = createElementInstance('tshirt-model', { id: 't1', enabled: true, motion: { rotate: true, speed: 1 } });
+    factory.animate(root, spinning, 1, 1 / 60);
+    assert.ok(root.userData.motion.rotation.y > 0, 'enabling rotate should spin root.userData.motion');
+    assert.equal(root.rotation.y, 0, 'animate() must still never touch root.rotation directly');
+  });
+});
+
+test('tshirt-model: disposing while a load is still in flight discards the late-arriving result instead of leaking or reviving the removed element', async () => {
+  const factory = getFactory('tshirt-model');
+  const buffer = await buildGLBArrayBuffer();
+  let resolveFetch;
+  const slowFetch = () => new Promise((resolve) => { resolveFetch = resolve; });
+  await withMockFetch(slowFetch, async () => {
+    const instance = createElementInstance('tshirt-model', { id: 't1', enabled: true });
+    const root = factory.create(tshirtModelCtx());
+    factory.applyInstance(tshirtModelCtx(), root, instance);
+    factory.dispose(root); // dispose BEFORE the in-flight fetch resolves
+    resolveFetch({ ok: true, arrayBuffer: async () => buffer });
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(root.userData.motion.children.length, 0, 'a load that resolves after disposal must not splice content into the disposed root');
+  });
+});
+
+test('tshirt-model: two duplicated instances load and dispose independently (own root, own token, no cross-talk)', async () => {
+  const buffer = await buildGLBArrayBuffer();
+  await withMockFetch(fetchOkWith(buffer), async () => {
+    const factory = getFactory('tshirt-model');
+    const instanceA = createElementInstance('tshirt-model', { id: 't1', enabled: true });
+    const instanceB = createElementInstance('tshirt-model', { id: 't2', enabled: true });
+    const rootA = factory.create(tshirtModelCtx());
+    const rootB = factory.create(tshirtModelCtx());
+    factory.applyInstance(tshirtModelCtx(), rootA, instanceA);
+    factory.applyInstance(tshirtModelCtx(), rootB, instanceB);
+    await new Promise((r) => setTimeout(r, 20));
+    assert.ok(rootA.userData.motion.children.length > 0);
+    assert.ok(rootB.userData.motion.children.length > 0);
+    assert.notEqual(rootA, rootB);
+
+    let meshA = null;
+    rootA.userData.motion.traverse((c) => { if (c.isMesh && !meshA) meshA = c; });
+    const geoDisposeCount = spyDispose(meshA.geometry);
+    factory.dispose(rootA);
+    assert.strictEqual(geoDisposeCount(), 1, 'disposing A should free its own geometry exactly once');
+    assert.ok(rootB.userData.motion.children.length > 0, 'B must stay intact after A is disposed — no shared state between duplicated instances');
+    factory.dispose(rootB);
+  });
+});
+
+test('tshirt-model: two duplicated instances maintain fully independent lifecycle states — one failing and retrying never touches the other, and status callbacks never cross ids', async () => {
+  const factory = getFactory('tshirt-model');
+  const { ctx, log } = tshirtModelCtxWithLog();
+  const instanceA = createElementInstance('tshirt-model', { id: 't1', enabled: true });
+  const instanceB = createElementInstance('tshirt-model', { id: 't2', enabled: true });
+  const rootA = factory.create(ctx);
+  const rootB = factory.create(ctx);
+
+  // A fails, B succeeds — same tick, same shared ctx/callback.
+  await withMockFetch(async () => { throw new Error('A network down'); }, async () => {
+    factory.applyInstance(ctx, rootA, instanceA);
+    await new Promise((r) => setTimeout(r, 20));
+  });
+  const buffer = await buildGLBArrayBuffer();
+  await withMockFetch(fetchOkWith(buffer), async () => {
+    factory.applyInstance(ctx, rootB, instanceB);
+    await new Promise((r) => setTimeout(r, 20));
+  });
+
+  assert.equal(rootA.userData.loadState, 'error');
+  assert.equal(rootB.userData.loadState, 'loaded');
+  assert.deepEqual(log, [
+    { id: 't1', state: 'loading', error: null },
+    { id: 't1', state: 'error', error: 'A network down' },
+    { id: 't2', state: 'loading', error: null },
+    { id: 't2', state: 'loaded', error: null },
+  ], 'every status report must carry the correct id — A\'s failure must never appear under t2 or vice versa');
+
+  // Retrying A must not touch B at all.
+  await withMockFetch(fetchOkWith(buffer), async () => {
+    tshirtModelRetry(ctx, rootA, instanceA);
+    await new Promise((r) => setTimeout(r, 20));
+  });
+  assert.equal(rootA.userData.loadState, 'loaded', 'A should recover independently via its own retry');
+  assert.equal(rootB.userData.loadState, 'loaded', 'B must be completely unaffected by A\'s retry');
+  assert.deepEqual(log.slice(-2), [
+    { id: 't1', state: 'loading', error: null },
+    { id: 't1', state: 'loaded', error: null },
+  ], 'A\'s retry must report only under t1');
+
+  factory.dispose(rootA);
+  factory.dispose(rootB);
+});
+
+test('tshirt-model catalog entry: not singleInstanceRenderer, so it gets full standard add/duplicate behavior — never auto-appears with the primary cloth', () => {
+  const def = getElementDefinition('tshirt-model');
+  assert.ok(def, 'catalog entry must exist');
+  assert.notEqual(def.singleInstanceRenderer, true, 'tshirt-model must support normal add/duplicate — it is not the primary-cloth singleton');
+  assert.notEqual(def.type, 'hanging-tshirt', 'must be a distinct internal type from the primary cloth');
+});
+
 // ── clearGroup — shared-GPU-resource de-duplication (gate review
 // correction). Every one of the six procedural factories happens to give
 // each mesh its own unique geometry/material, so these cases never arose
@@ -1456,4 +1907,780 @@ test('clearGroup: geometry/material identity is preserved for de-dup detection A
     factory.applyInstance(c, root, second);
     assert.strictEqual(geoDisposeCount(), 1, 'switching assets must dispose the OLD shared geometry exactly once, not once per mesh that referenced it');
   });
+});
+
+// ── HANGING T-SHIRT ─────────────────────────────────────────────────────
+// The base garment (no logo) is fully synchronous real geometry, so it
+// already runs through the generic per-type loop above. These tests cover
+// what that loop can't: front+back panel structure, the hanger toggle,
+// per-instance sim independence, the pin line actually holding through the
+// real factory (not just tshirt-mesh.js in isolation), motion pause/resume
+// freezing the whole simulation, and the logo load/dispose wiring. A real
+// image decode (THREE.TextureLoader -> browser Image element) has no DOM in
+// plain node:test, so the "successfully loads and shows a logo" path is
+// live-browser-verified instead (see the Studio SSOT checkpoint) — these
+// tests cover every code path that doesn't require an actual decoded image.
+
+function tshirtCtx(overrides = {}) {
+  return { THREE, stdlib, tier: 'draft', ...overrides };
+}
+
+test('hanging-tshirt: builds distinct front and back meshes plus a hanger group under motion', () => {
+  const factory = getFactory('hanging-tshirt');
+  const instance = createElementInstance('hanging-tshirt', { id: 't1', enabled: true });
+  const root = factory.create(tshirtCtx());
+  factory.applyInstance(tshirtCtx(), root, instance);
+  const meshes = root.userData.motion.children.filter((c) => c.isMesh);
+  assert.equal(meshes.length, 2, 'front + back panel meshes');
+  assert.notEqual(meshes[0].geometry, meshes[1].geometry, 'front/back are separate geometries');
+  assert.notEqual(meshes[0].material, meshes[1].material, 'front/back are separate materials (only front carries the logo shader)');
+  assert.ok(root.userData.hanger?.isObject3D, 'hanger group exists');
+});
+
+test('hanging-tshirt: SHOW HANGER toggle controls hanger visibility without a rebuild', () => {
+  const factory = getFactory('hanging-tshirt');
+  const root = factory.create(tshirtCtx());
+  const shown = createElementInstance('hanging-tshirt', { id: 't1', enabled: true, appearance: { hangerVisible: true } });
+  factory.applyInstance(tshirtCtx(), root, shown);
+  const geoBefore = root.userData.frontGeo;
+  assert.equal(root.userData.hanger.visible, true);
+  const hidden = createElementInstance('hanging-tshirt', { id: 't1', enabled: true, appearance: { hangerVisible: false } });
+  factory.applyInstance(tshirtCtx(), root, hidden);
+  assert.equal(root.userData.hanger.visible, false);
+  assert.equal(root.userData.frontGeo, geoBefore, 'toggling the hanger must not rebuild the garment geometry');
+});
+
+test('hanging-tshirt: two instances own independent simulation state (duplication isolation)', () => {
+  const factory = getFactory('hanging-tshirt');
+  const a = factory.create(tshirtCtx());
+  const b = factory.create(tshirtCtx());
+  const instance = createElementInstance('hanging-tshirt', { id: 't1', enabled: true });
+  factory.applyInstance(tshirtCtx(), a, instance);
+  factory.applyInstance(tshirtCtx(), b, instance);
+  assert.notEqual(a.userData.sim, b.userData.sim, 'distinct sim objects');
+  assert.notEqual(a.userData.sim.position, b.userData.sim.position, 'distinct position buffers');
+  for (let i = 0; i < 40; i += 1) {
+    factory.animate(a, instance, i * 0.016, 0.016);
+  }
+  assert.notDeepEqual(Array.from(a.userData.sim.position), Array.from(b.userData.sim.position), 'animating one instance must never affect the other');
+});
+
+test('hanging-tshirt: pinned shoulder/sleeve vertices never move through the real factory, across many animate() frames', () => {
+  const factory = getFactory('hanging-tshirt');
+  const root = factory.create(tshirtCtx());
+  const instance = createElementInstance('hanging-tshirt', { id: 't1', enabled: true, motion: { rotate: true, speed: 1 } });
+  factory.applyInstance(tshirtCtx(), root, instance);
+  const { sim } = root.userData;
+  const pinSample = [...sim.pinIndices].slice(0, 5);
+  const before = pinSample.map((i) => [sim.position[i * 3], sim.position[i * 3 + 1], sim.position[i * 3 + 2]]);
+  for (let f = 0; f < 60; f += 1) factory.animate(root, instance, f * 0.016, 0.016);
+  pinSample.forEach((i, idx) => {
+    assert.deepEqual([sim.position[i * 3], sim.position[i * 3 + 1], sim.position[i * 3 + 2]], before[idx], `pinned vertex ${i} must stay exactly at its hanger position`);
+  });
+});
+
+test('hanging-tshirt: motion.rotate=false (MOTION off) freezes the entire simulation exactly where it is', () => {
+  const factory = getFactory('hanging-tshirt');
+  const root = factory.create(tshirtCtx());
+  const running = createElementInstance('hanging-tshirt', { id: 't1', enabled: true, motion: { rotate: true, speed: 1 } });
+  factory.applyInstance(tshirtCtx(), root, running);
+  for (let f = 0; f < 20; f += 1) factory.animate(root, running, f * 0.016, 0.016); // let it settle into a non-rest drape
+  const settled = Array.from(root.userData.sim.position);
+  const paused = createElementInstance('hanging-tshirt', { id: 't1', enabled: true, motion: { rotate: false, speed: 1 } });
+  factory.applyInstance(tshirtCtx(), root, paused);
+  for (let f = 0; f < 30; f += 1) factory.animate(root, paused, f * 0.016, 0.016);
+  assert.deepEqual(Array.from(root.userData.sim.position), settled, 'paused motion must not advance the simulation at all');
+});
+
+test('hanging-tshirt: an unresolved logoAssetId (not in ctx.logoAssetsById) stays honestly empty, no crash', async () => {
+  const factory = getFactory('hanging-tshirt');
+  const root = factory.create(tshirtCtx({ logoAssetsById: {} }));
+  const instance = createElementInstance('hanging-tshirt', { id: 't1', enabled: true, appearance: { logoAssetId: 'does-not-exist' } });
+  assert.doesNotThrow(() => factory.applyInstance(tshirtCtx({ logoAssetsById: {} }), root, instance));
+  await new Promise((r) => setTimeout(r, 10));
+  assert.equal(root.userData.logoUniforms.uHasLogo.value, 0);
+  assert.equal(root.userData.logoTexture, undefined);
+});
+
+test('hanging-tshirt: clearing logoAssetId (remove logo) turns uHasLogo back off', async () => {
+  const factory = getFactory('hanging-tshirt');
+  const root = factory.create(tshirtCtx({ logoAssetsById: {} }));
+  const withId = createElementInstance('hanging-tshirt', { id: 't1', enabled: true, appearance: { logoAssetId: 'ghost' } });
+  factory.applyInstance(tshirtCtx({ logoAssetsById: {} }), root, withId);
+  await new Promise((r) => setTimeout(r, 10));
+  const removed = createElementInstance('hanging-tshirt', { id: 't1', enabled: true, appearance: { logoAssetId: '' } });
+  factory.applyInstance(tshirtCtx({ logoAssetsById: {} }), root, removed);
+  assert.equal(root.userData.logoUniforms.uHasLogo.value, 0);
+});
+
+test('hanging-tshirt: dispose() never throws when no logo was ever loaded', () => {
+  const factory = getFactory('hanging-tshirt');
+  const root = factory.create(tshirtCtx());
+  const instance = createElementInstance('hanging-tshirt', { id: 't1', enabled: true });
+  factory.applyInstance(tshirtCtx(), root, instance);
+  assert.doesNotThrow(() => factory.dispose(root));
+  assert.equal(root.children.length, 0);
+});
+
+test('hanging-tshirt: dispose() frees a resolved logo texture exactly once', () => {
+  const factory = getFactory('hanging-tshirt');
+  const root = factory.create(tshirtCtx());
+  const instance = createElementInstance('hanging-tshirt', { id: 't1', enabled: true });
+  factory.applyInstance(tshirtCtx(), root, instance);
+  let disposeCalls = 0;
+  root.userData.logoTexture = { dispose: () => { disposeCalls += 1; } };
+  factory.dispose(root);
+  assert.equal(disposeCalls, 1);
+});
+
+// ── Codex review regressions (2026-07-29): logo library deletion did not
+// reconcile shirts that never got their OWN instance reference changed, and
+// a failed/in-flight replacement logo could show the PREVIOUS logo under
+// the new selection. Real image decode has no DOM in plain node:test (see
+// the header comment on this HANGING T-SHIRT block), so both tests inject
+// a "previously loaded" state directly (same technique as the dispose test
+// above) rather than going through a real successful TextureLoader decode —
+// this is legitimate here because both bugs are about what happens to an
+// ALREADY-loaded texture when the wanted state changes out from under it,
+// not about the decode itself.
+
+test('hanging-tshirt: a logo deleted from the library is cleared on the next applyInstance, even with the SAME instance reference (duplicate-shirt reconciliation)', async () => {
+  const factory = getFactory('hanging-tshirt');
+  const root = factory.create(tshirtCtx({ logoAssetsById: { 'logo-1': { dataUrl: 'data:image/png;base64,fake' } } }));
+  const instance = createElementInstance('hanging-tshirt', { id: 't1', enabled: true, appearance: { logoAssetId: 'logo-1' } });
+  factory.applyInstance(tshirtCtx({ logoAssetsById: { 'logo-1': { dataUrl: 'data:image/png;base64,fake' } } }), root, instance);
+  // Simulate a previously-successful decode (real decode has no DOM in Node) —
+  // this is the state the shirt would be in right after a real upload.
+  let disposeCalls = 0;
+  const fakeTexture = { dispose: () => { disposeCalls += 1; } };
+  root.userData.logoUrlLoaded = 'data:image/png;base64,fake';
+  root.userData.logoTexture = fakeTexture;
+  root.userData.logoUniforms.uHasLogo.value = 1;
+  root.userData.logoUniforms.uLogoMap.value = fakeTexture;
+
+  // The library entry is gone (deleted), but `instance` itself — same
+  // object reference — never changed. This is exactly the state a
+  // duplicated, non-selected shirt is in after the Inspector deletes a
+  // logo out from under it.
+  const emptyCtx = tshirtCtx({ logoAssetsById: {} });
+  factory.applyInstance(emptyCtx, root, instance);
+  await new Promise((r) => setTimeout(r, 10));
+
+  assert.equal(root.userData.logoUniforms.uHasLogo.value, 0, 'must stop showing the deleted logo');
+  assert.equal(root.userData.logoUrlLoaded, null);
+  assert.equal(disposeCalls, 1, 'the deleted texture must actually be disposed, not just detached');
+  assert.equal(root.userData.logoUniforms.uLogoMap.value, null, 'Codex review: the shader uniform must not keep pointing at the now-disposed texture');
+});
+
+test('hanging-tshirt: a failed replacement logo load clears the PREVIOUS logo instead of leaving it visible under the new (broken) selection', async () => {
+  const factory = getFactory('hanging-tshirt');
+  const root = factory.create(tshirtCtx());
+  const a = createElementInstance('hanging-tshirt', { id: 't1', enabled: true, appearance: { logoAssetId: 'logo-a' } });
+  factory.applyInstance(tshirtCtx({ logoAssetsById: {} }), root, a);
+  // Simulate logo A having previously decoded successfully.
+  let disposeCalls = 0;
+  const fakeTextureA = { dispose: () => { disposeCalls += 1; } };
+  root.userData.logoUrlLoaded = 'data:image/png;base64,logo-a-bytes';
+  root.userData.logoTexture = fakeTextureA;
+  root.userData.logoUniforms.uHasLogo.value = 1;
+  root.userData.logoUniforms.uLogoMap.value = fakeTextureA;
+
+  // Switch to logo B. Its URL resolves (so tshirtApplyInstance fires a real
+  // load attempt), but THREE.TextureLoader always rejects in plain Node (no
+  // DOM Image element) — the same real failure path a genuinely broken/
+  // corrupt upload would hit in the browser.
+  const b = createElementInstance('hanging-tshirt', { id: 't1', enabled: true, appearance: { logoAssetId: 'logo-b' } });
+  const bCtx = tshirtCtx({ logoAssetsById: { 'logo-b': { dataUrl: 'data:image/png;base64,logo-b-bytes' } } });
+  factory.applyInstance(bCtx, root, b);
+  await new Promise((r) => setTimeout(r, 10));
+
+  assert.equal(root.userData.logoUniforms.uHasLogo.value, 0, 'must not keep showing logo A under the logo-B selection');
+  assert.equal(root.userData.logoUrlLoaded, null);
+  assert.equal(disposeCalls, 1, 'logo A\'s texture must be disposed, not left dangling');
+  assert.equal(root.userData.logoUniforms.uLogoMap.value, null, 'Codex review: the shader uniform must not keep pointing at the now-disposed logo A texture');
+});
+
+test('hanging-tshirt: quality tier bounds vertex/constraint counts (performance safeguard)', () => {
+  const factory = getFactory('hanging-tshirt');
+  const instance = createElementInstance('hanging-tshirt', { id: 't1', enabled: true });
+  const draftRoot = factory.create(tshirtCtx());
+  factory.applyInstance(tshirtCtx(), draftRoot, instance);
+  const ultraRoot = factory.create(tshirtCtx({ tier: 'ultra' }));
+  factory.applyInstance(tshirtCtx({ tier: 'ultra' }), ultraRoot, instance);
+  const draftVerts = draftRoot.userData.sim.vertexCount;
+  const ultraVerts = ultraRoot.userData.sim.vertexCount;
+  assert.ok(draftVerts > 0 && draftVerts < 1200, 'draft tier stays well bounded');
+  assert.ok(ultraVerts > draftVerts && ultraVerts < 3200, 'ultra tier is larger but still bounded');
+});
+
+// ── DEVICE MOCKUP — beyond the generic loop above: viewport topology
+// switches, accent-driven screen redraw, scroll animation semantics, and
+// the material-update-without-rebuild guarantee. ─────────────────────────
+
+test('device-mockup: each viewport builds its distinctive hardware (stand for desktop, camera pod for mobile/tablet)', () => {
+  const factory = getFactory('device-mockup');
+  const counts = {};
+  for (const viewport of ['desktop', 'mobile', 'tablet']) {
+    const instance = createElementInstance('device-mockup', { id: `dm-${viewport}`, enabled: true, appearance: { viewport } });
+    const root = factory.create(ctx());
+    factory.applyInstance(ctx(), root, instance);
+    const device = root.userData.motion.children[0];
+    counts[viewport] = device.children.length;
+    factory.dispose(root);
+  }
+  // body + face + screen = 3; desktop adds arm+foot (5); mobile/tablet add pod+lens (5)
+  assert.equal(counts.desktop, 5, 'desktop: body+face+arm+foot+screen');
+  assert.equal(counts.mobile, 5, 'mobile: body+face+pod+lens+screen');
+  assert.equal(counts.tablet, 5, 'tablet: body+face+pod+lens+screen');
+});
+
+test('device-mockup: changing viewport rebuilds; changing body tone does NOT rebuild; changing accent DOES (screen texture is baked)', () => {
+  const factory = getFactory('device-mockup');
+  const instance = createElementInstance('device-mockup', { id: 'dm-1', enabled: true });
+  const root = factory.create(ctx());
+  factory.applyInstance(ctx(), root, instance);
+  const firstTex = root.userData.screenTexture;
+
+  const toneChanged = createElementInstance('device-mockup', { id: 'dm-1', enabled: true, material: { color: '#1c1d20' } });
+  factory.applyInstance(ctx(), root, toneChanged);
+  assert.equal(root.userData.screenTexture, firstTex, 'body-tone change must not rebuild');
+  assert.equal(root.userData.alumMaterial.color.getHexString(), '1c1d20', 'body tone must live-update the aluminum material');
+
+  const accentChanged = createElementInstance('device-mockup', { id: 'dm-1', enabled: true, material: { accent: '#2d6b8a' } });
+  factory.applyInstance(ctx(), root, accentChanged);
+  assert.notEqual(root.userData.screenTexture, firstTex, 'accent change must redraw the screen texture');
+
+  const sigBefore = root.userData.topologySignature;
+  const viewportChanged = createElementInstance('device-mockup', { id: 'dm-1', enabled: true, material: { accent: '#2d6b8a' }, appearance: { viewport: 'mobile' } });
+  factory.applyInstance(ctx(), root, viewportChanged);
+  assert.notEqual(root.userData.topologySignature, sigBefore, 'viewport change must rebuild');
+  factory.dispose(root);
+});
+
+test('device-mockup: scroll animates texture offset down the page; scroll off parks at the top; sway respects motion.rotate', () => {
+  const factory = getFactory('device-mockup');
+  const instance = createElementInstance('device-mockup', {
+    id: 'dm-1', enabled: true,
+    appearance: { scroll: true, scrollSpeed: 1 }, motion: { rotate: true, speed: 1 },
+  });
+  const root = factory.create(ctx());
+  factory.applyInstance(ctx(), root, instance);
+  const tex = root.userData.screenTexture;
+  const top = tex.offset.y;
+  assert.ok(top > 0, 'page texture starts offset to the top of the page');
+
+  factory.animate(root, instance, 2.0, 0.016); // mid ping-pong: must have scrolled down
+  assert.ok(tex.offset.y < top, `scroll must move the offset down the page, got ${tex.offset.y} vs top ${top}`);
+  assert.ok(tex.offset.y >= 0, 'offset never scrolls past the bottom of the page');
+  assert.notEqual(root.userData.motion.rotation.y, 0, 'sway must move the motion group when rotate is on');
+
+  const parked = createElementInstance('device-mockup', {
+    id: 'dm-1', enabled: true,
+    appearance: { scroll: false, scrollSpeed: 1 }, motion: { rotate: false, speed: 1 },
+  });
+  root.userData.motion.rotation.y = 0;
+  factory.animate(root, parked, 2.0, 0.016);
+  assert.equal(tex.offset.y, top, 'scroll off must park at the top of the page');
+  assert.equal(root.userData.motion.rotation.y, 0, 'sway off must leave the motion group untouched');
+  factory.dispose(root);
+});
+
+test('device-mockup: deviceScreenRepeatFraction — viewport-shaped window onto a captured page, clamped for short pages', async () => {
+  const { deviceScreenRepeatFraction } = await import('../factories.js');
+  // Desktop screen is 1.44×0.9 wu; a 1440px-wide, 3-screen-tall capture
+  // (3×900=2700px) shows exactly one third at a time.
+  assert.ok(Math.abs(deviceScreenRepeatFraction('desktop', 1440, 2700) - (1 / 3)) < 1e-9);
+  // Mobile: 390×844 wu screen; a 780px-wide capture (deviceScaleFactor 2)
+  // of a 3-screen page (3×1688) likewise shows one third.
+  assert.ok(Math.abs(deviceScreenRepeatFraction('mobile', 780, 3 * 1688) - (1 / 3)) < 1e-9);
+  // A page SHORTER than one screen clamps to 1 — fills the screen, no scroll range.
+  assert.equal(deviceScreenRepeatFraction('desktop', 1440, 500), 1);
+  // Garbage dims fall back to the placeholder's own fraction, never NaN.
+  assert.ok(deviceScreenRepeatFraction('desktop', 0, 0) > 0);
+});
+
+test('device-mockup: empty captureUrl keeps the synchronous placeholder; animate scrolls with the stored per-capture fraction', () => {
+  const factory = getFactory('device-mockup');
+  const instance = createElementInstance('device-mockup', { id: 'dm-cap', enabled: true, appearance: { scroll: true, scrollSpeed: 1 } });
+  const root = factory.create(ctx());
+  factory.applyInstance(ctx(), root, instance);
+  assert.equal(root.userData.screenMaterial.map, root.userData.screenTexture, 'no captureUrl -> the placeholder stays on the screen material');
+  // A capture load stores its own visible fraction — animate must honor it
+  // (simulate the loader's write; the real network path is browser-only).
+  root.userData.screenRepeatY = 0.25;
+  factory.animate(root, instance, 0, 0.016);
+  const tex = root.userData.screenMaterial.map;
+  assert.ok(Math.abs(tex.offset.y - 0.75) < 1e-6, `at the top of a 0.25-fraction page, offset.y must be 0.75, got ${tex.offset.y}`);
+  factory.dispose(root);
+});
+
+test('device-mockup: deviceWantedScreenSource — upload wins over capture; a missing library entry falls back to PLACEHOLDER (never the stale capture)', async () => {
+  const { deviceWantedScreenSource } = await import('../factories.js');
+  const inst = createElementInstance('device-mockup', {
+    id: 'dm-src', enabled: true,
+    appearance: { captureUrl: '/api/public/studio-device-capture?id=abc', uploadAssetId: 'devscr-x' },
+  });
+  const lib = { 'devscr-x': { assetId: 'devscr-x', dataUrl: 'data:image/png;base64,AAA' } };
+  assert.deepEqual(deviceWantedScreenSource(inst, { deviceScreenAssetsById: lib }),
+    { key: 'upload:devscr-x', url: 'data:image/png;base64,AAA' }, 'upload must take priority over capture');
+  assert.deepEqual(deviceWantedScreenSource(inst, { deviceScreenAssetsById: {} }),
+    { key: '', url: null }, 'a selected-but-missing upload must fall back to the placeholder, not the older capture');
+  const captureOnly = createElementInstance('device-mockup', {
+    id: 'dm-src2', enabled: true, appearance: { captureUrl: '/api/public/studio-device-capture?id=abc' },
+  });
+  assert.deepEqual(deviceWantedScreenSource(captureOnly, {}),
+    { key: 'capture:/api/public/studio-device-capture?id=abc', url: '/api/public/studio-device-capture?id=abc' });
+  const neither = createElementInstance('device-mockup', { id: 'dm-src3', enabled: true });
+  assert.deepEqual(deviceWantedScreenSource(neither, {}), { key: '', url: null });
+});
+
+test('device-mockup: captureUrl + uploadAssetId survive a normalize round trip (what scene templates/local settings actually persist)', async () => {
+  const { normalizeElementInstance } = await import('../schema.js');
+  const inst = createElementInstance('device-mockup', {
+    id: 'dm-rt', enabled: true,
+    appearance: { viewport: 'tablet', captureUrl: '/api/public/studio-device-capture?id=deadbeef', uploadAssetId: 'devscr-abc123' },
+  });
+  const revived = normalizeElementInstance(JSON.parse(JSON.stringify(inst)));
+  assert.equal(revived.appearance.captureUrl, '/api/public/studio-device-capture?id=deadbeef');
+  assert.equal(revived.appearance.uploadAssetId, 'devscr-abc123');
+  assert.equal(revived.appearance.viewport, 'tablet');
+});
+
+test('device-mockup: shouldSyncElementEntry re-syncs on deviceScreenNeedsRecheck, same contract as the tshirt logo flag', async () => {
+  const { shouldSyncElementEntry } = await import('../scene-elements.js');
+  const inst = createElementInstance('device-mockup', { id: 'dm-sync', enabled: true });
+  const settled = { type: 'device-mockup', object: null, lastInstance: inst, lastTier: 'draft', lastFormatId: 'off' };
+  assert.equal(shouldSyncElementEntry(settled, inst, 'draft', 'off', {}), false, 'a settled entry with no flags must not re-sync');
+  assert.equal(shouldSyncElementEntry(settled, inst, 'draft', 'off', { deviceScreenNeedsRecheck: true }), true);
+});
+
+test('device-mockup: AUTO SCROLL off holds the SCROLL POSITION dial; the timeline userData override wins while present and releases cleanly', () => {
+  const factory = getFactory('device-mockup');
+  const instance = createElementInstance('device-mockup', {
+    id: 'dm-pos', enabled: true,
+    appearance: { scroll: false, scrollPosition: 0.5 },
+  });
+  const root = factory.create(ctx());
+  factory.applyInstance(ctx(), root, instance);
+  const tex = root.userData.screenMaterial.map;
+  const repeatY = root.userData.screenRepeatY;
+
+  factory.animate(root, instance, 1.0, 0.016);
+  const atHalf = (1 - repeatY) * 0.5;
+  assert.ok(Math.abs(tex.offset.y - atHalf) < 1e-9, `dial at 50% must park mid-page, got ${tex.offset.y} want ${atHalf}`);
+
+  root.userData.scrollPositionOverride = 1; // timeline blending a move to the bottom
+  factory.animate(root, instance, 2.0, 0.016);
+  assert.ok(Math.abs(tex.offset.y - 0) < 1e-9, 'override=1 (bottom) must beat the dial while present');
+
+  root.userData.scrollPositionOverride = undefined; // playback stopped
+  factory.animate(root, instance, 3.0, 0.016);
+  assert.ok(Math.abs(tex.offset.y - atHalf) < 1e-9, 'clearing the override must return to the dial value');
+  factory.dispose(root);
+});
+
+test('device-mockup: devicePrimary.scrollPosition is in the timeline lerp whitelist (keyframed page moves blend smoothly)', async () => {
+  const { TIMELINE_LERP_WHITELIST } = await import('../../timeline.js');
+  assert.ok(TIMELINE_LERP_WHITELIST.includes('devicePrimary.scrollPosition'));
+});
+
+test('image-layer: plane always matches the image aspect — longest edge pinned, never skewed', async () => {
+  const { imageLayerPlaneSize } = await import('../factories.js');
+  assert.deepEqual(imageLayerPlaneSize(1000, 1000), { width: 0.9, height: 0.9 });
+  const wide = imageLayerPlaneSize(1600, 900);
+  assert.ok(Math.abs(wide.width - 0.9) < 1e-9 && Math.abs(wide.height - 0.9 * (900 / 1600)) < 1e-9, 'wide image keeps 16:9');
+  const tall = imageLayerPlaneSize(600, 2400);
+  assert.ok(Math.abs(tall.height - 0.9) < 1e-9 && Math.abs(tall.width - 0.225) < 1e-9, 'tall image keeps 1:4');
+  assert.deepEqual(imageLayerPlaneSize(0, 0), { width: 0.9, height: 0.9 }, 'garbage dims fall back to a square, never NaN');
+});
+
+test('image-layer: no upload -> placeholder plane renders synchronously; opacity live-updates without rebuild', () => {
+  const factory = getFactory('image-layer');
+  const instance = createElementInstance('image-layer', { id: 'il-1', enabled: true, material: { opacity: 0.6 } });
+  const root = factory.create(ctx());
+  factory.applyInstance(ctx(), root, instance);
+  assert.ok(root.userData.layerMesh, 'placeholder plane must exist without any upload');
+  assert.equal(root.userData.layerMaterial.opacity, 0.6);
+  const meshBefore = root.userData.layerMesh;
+  const dimmer = createElementInstance('image-layer', { id: 'il-1', enabled: true, material: { opacity: 0.2 } });
+  factory.applyInstance(ctx(), root, dimmer);
+  assert.equal(root.userData.layerMaterial.opacity, 0.2);
+  assert.equal(root.userData.layerMesh, meshBefore, 'an opacity change must not rebuild the mesh');
+  factory.dispose(root);
+});
+
+test('device-mockup: deviceBottomLocalY — per-viewport contact point (post-nf), desktop lowest (stand foot), unknown falls back to desktop', async () => {
+  const { deviceBottomLocalY } = await import('../factories.js');
+  assert.ok(Math.abs(deviceBottomLocalY('desktop') - (-0.77 * 0.6)) < 1e-9);
+  assert.ok(Math.abs(deviceBottomLocalY('mobile') - (-0.44 * 1.0)) < 1e-9);
+  assert.ok(Math.abs(deviceBottomLocalY('tablet') - (-0.536 * 0.84)) < 1e-9);
+  assert.equal(deviceBottomLocalY('vr-goggles'), deviceBottomLocalY('desktop'), 'unknown viewport falls back to desktop');
+  // Seat math sanity: at the 79-set desk height (-0.68) and default scale
+  // 1.45, every device's computed root Y keeps its bottom exactly on the
+  // floor: rootY + bottom*scale === groundY.
+  ['desktop', 'mobile', 'tablet'].forEach((vp) => {
+    const rootY = -0.68 - deviceBottomLocalY(vp) * 1.45;
+    assert.ok(Math.abs((rootY + deviceBottomLocalY(vp) * 1.45) - (-0.68)) < 1e-12, `${vp} seats on the floor`);
+  });
+});
+
+test('device-mockup: models + finish — clay is one matte recolorable material, model swaps shell, seat bottoms track stand type', async () => {
+  const { deviceBottomLocalY, DEVICE_MODELS, deviceResolveModel } = await import('../factories.js');
+  // Default models ARE the original geometry — bottoms unchanged.
+  assert.equal(deviceBottomLocalY('desktop', 'studio'), deviceBottomLocalY('desktop', ''), 'blank model = family default');
+  assert.equal(deviceResolveModel('mobile', 'retro'), DEVICE_MODELS.mobile.flagship, 'wrong-family id falls back to the family default');
+  // Stand types order sanely: arm reaches lowest, wedge is the shallowest support, slabs sit on the body edge.
+  const arm = deviceBottomLocalY('desktop', 'studio');
+  const column = deviceBottomLocalY('desktop', 'edge');
+  const wedge = deviceBottomLocalY('desktop', 'retro');
+  assert.ok(column < arm && arm < wedge, `column(${column}) < arm(${arm}) < wedge(${wedge})`);
+  assert.ok(deviceBottomLocalY('mobile', 'minimal') > deviceBottomLocalY('mobile', 'compact'), 'thicker bezel slab reaches lower');
+
+  const factory = getFactory('device-mockup');
+  const c = { THREE, stdlib, tier: 'medium' };
+  // Clay finish: shell material is matte (metalness 0), face shares the SAME material, color follows BODY TONE.
+  const clayInst = createElementInstance('device-mockup', {
+    id: 'dv-1', enabled: true,
+    material: { color: '#d6d8da', clayColor: '#ff6644', claySoftness: 0.72 },
+    appearance: { viewport: 'mobile', model: 'minimal', finish: 'clay' },
+  });
+  const root = factory.create(c);
+  factory.applyInstance(c, root, clayInst);
+  const shell = root.userData.alumMaterial;
+  assert.equal(shell.metalness, 0, 'clay has no metalness');
+  assert.ok(Math.abs(shell.roughness - 0.72) < 1e-9, 'claySoftness drives roughness');
+  assert.equal(shell.color.getHexString(), 'ff6644');
+  // CLAY SOFTNESS is a live dial — same topology signature, roughness updates without rebuild.
+  const softer = createElementInstance('device-mockup', {
+    id: 'dv-1', enabled: true,
+    material: { color: '#d6d8da', clayColor: '#ff6644', claySoftness: 0.95 },
+    appearance: { viewport: 'mobile', model: 'minimal', finish: 'clay' },
+  });
+  factory.applyInstance(c, root, softer);
+  assert.equal(root.userData.alumMaterial, shell, 'no rebuild on softness change');
+  assert.ok(Math.abs(shell.roughness - 0.95) < 1e-9);
+  // Finish swap realistic -> rebuild: physical metal shell returns.
+  const real = createElementInstance('device-mockup', {
+    id: 'dv-1', enabled: true,
+    material: { color: '#ff6644' },
+    appearance: { viewport: 'mobile', model: 'minimal', finish: 'realistic' },
+  });
+  factory.applyInstance(c, root, real);
+  assert.notEqual(root.userData.alumMaterial, shell, 'finish change rebuilds');
+  assert.ok(root.userData.alumMaterial.metalness > 0.5, 'realistic is metal again');
+  factory.dispose(root);
+});
+
+test('device-mockup: shell textures + clay color + new bases', async () => {
+  const { deviceBottomLocalY, DEVICE_SHELL_TEXTURES } = await import('../factories.js');
+  // New bases each land at their own drop; float has no stand (slab edge).
+  const studio = deviceBottomLocalY('desktop', 'studio');
+  const orbit = deviceBottomLocalY('desktop', 'orbit');
+  const frame = deviceBottomLocalY('desktop', 'frame');
+  const float = deviceBottomLocalY('desktop', 'float');
+  assert.ok(orbit < studio, 'ring base reaches lower than the arm');
+  assert.ok(float > frame && frame > studio === false ? true : frame > orbit, 'legs sit between ring and slab');
+  assert.ok(float > frame, 'float (no stand) is the shallowest');
+  assert.ok(deviceBottomLocalY('tablet', 'dock') < deviceBottomLocalY('tablet', 'slate'), 'dock cradle drops below the slab edge');
+  assert.deepEqual(Object.keys(DEVICE_SHELL_TEXTURES), ['smooth', 'speckle', 'brushed', 'fabric', 'grip']);
+
+  const factory = getFactory('device-mockup');
+  const c = { THREE, stdlib, tier: 'medium' };
+  // Textured clay with its own clayColor — body tone untouched.
+  const inst = createElementInstance('device-mockup', {
+    id: 'dv-2', enabled: true,
+    material: { color: '#d6d8da', clayColor: '#9caf88', claySoftness: 0.8 },
+    appearance: { viewport: 'desktop', model: 'orbit', finish: 'clay', shellTexture: 'speckle' },
+  });
+  const root = factory.create(c);
+  factory.applyInstance(c, root, inst);
+  const shell = root.userData.alumMaterial;
+  assert.equal(shell.color.getHexString(), '9caf88', 'clay uses clayColor, not BODY TONE');
+  assert.ok(shell.bumpMap, 'speckle applies a bump map');
+  assert.equal(shell.bumpMap.wrapS, THREE.RepeatWrapping);
+  // clayColor is a live dial — same signature, color updates without rebuild.
+  const recolored = createElementInstance('device-mockup', {
+    id: 'dv-2', enabled: true,
+    material: { color: '#d6d8da', clayColor: '#7fa8c9', claySoftness: 0.8 },
+    appearance: { viewport: 'desktop', model: 'orbit', finish: 'clay', shellTexture: 'speckle' },
+  });
+  factory.applyInstance(c, root, recolored);
+  assert.equal(root.userData.alumMaterial, shell, 'no rebuild on clayColor change');
+  assert.equal(shell.color.getHexString(), '7fa8c9');
+  // Texture change -> rebuild; smooth clears the bump.
+  const smooth = createElementInstance('device-mockup', {
+    id: 'dv-2', enabled: true,
+    material: { color: '#d6d8da', clayColor: '#7fa8c9' },
+    appearance: { viewport: 'desktop', model: 'orbit', finish: 'clay', shellTexture: 'smooth' },
+  });
+  factory.applyInstance(c, root, smooth);
+  assert.notEqual(root.userData.alumMaterial, shell, 'texture change rebuilds');
+  assert.equal(root.userData.alumMaterial.bumpMap, null);
+  // Realistic keeps BODY TONE even with clayColor set.
+  const real = createElementInstance('device-mockup', {
+    id: 'dv-2', enabled: true,
+    material: { color: '#d6d8da', clayColor: '#7fa8c9' },
+    appearance: { viewport: 'desktop', model: 'orbit', finish: 'realistic', shellTexture: 'brushed' },
+  });
+  factory.applyInstance(c, root, real);
+  assert.equal(root.userData.alumMaterial.color.getHexString(), 'd6d8da', 'realistic ignores clayColor');
+  assert.ok(root.userData.alumMaterial.bumpMap, 'brushed bump on metal');
+  factory.dispose(root);
+});
+
+test('image-layer: renders color-exact — toneMapped off, full opacity by default', () => {
+  const factory = getFactory('image-layer');
+  const instance = createElementInstance('image-layer', { id: 'il-2', enabled: true });
+  const root = factory.create(ctx());
+  factory.applyInstance(ctx(), root, instance);
+  assert.equal(root.userData.layerMaterial.toneMapped, false, 'flat artwork must skip ACES (same rule as the device screen)');
+  assert.equal(root.userData.layerMaterial.opacity, 1, 'default opacity is fully opaque');
+  factory.dispose(root);
+});
+
+test('image-layer: imageLayerAlphaFixScale — well-formed PNGs untouched, globally-faded alpha solidifies', async () => {
+  const { imageLayerAlphaFixScale } = await import('../factories.js');
+  assert.equal(imageLayerAlphaFixScale(255), 1, 'an image with any fully-opaque pixel passes through untouched');
+  assert.equal(imageLayerAlphaFixScale(0), 1, 'fully transparent image untouched (nothing to solidify)');
+  assert.equal(imageLayerAlphaFixScale(NaN), 1);
+  // The owner's grass PNG case: max ~250, solid fill ~242 -> lands at 255.
+  const s = imageLayerAlphaFixScale(250);
+  assert.ok(Math.min(255, Math.round(242 * s)) === 255, 'the ~95% solid fill becomes fully opaque');
+  // Genuinely soft edge pixels keep RELATIVE softness (scaled, not clamped to 1).
+  assert.ok(Math.round(100 * s) < 255, 'a 40%-of-max soft edge stays soft');
+});
+
+test('image-layer: imageLayerSolidAlphaScale — >=60% alpha lands opaque, cutout edges stay soft, keyed for re-process', async () => {
+  const { imageLayerSolidAlphaScale } = await import('../factories.js');
+  const s = imageLayerSolidAlphaScale(255);
+  assert.equal(Math.min(255, Math.round(153 * s)), 255, '60% pattern pixel becomes fully opaque');
+  assert.equal(Math.min(255, Math.round(200 * s)), 255, 'the grass tuft case (~78%) becomes fully opaque');
+  assert.ok(Math.min(255, Math.round(76 * s)) < 255, 'a 30% cutout edge stays translucent');
+  assert.equal(imageLayerSolidAlphaScale(0), 1);
+  // solid participates in the texture dedupe key so the toggle re-runs the canvas pass
+  const factory = getFactory('image-layer');
+  const base = createElementInstance('image-layer', { id: 'il-3', enabled: true, appearance: { uploadAssetId: 'a1' } });
+  const solid = createElementInstance('image-layer', { id: 'il-3', enabled: true, appearance: { uploadAssetId: 'a1', solid: true } });
+  const c = { THREE, stdlib, tier: 'medium', deviceScreenAssetsById: { a1: { dataUrl: 'data:image/png;base64,x' } } };
+  const root = factory.create(c);
+  factory.applyInstance(c, root, base);
+  const k1 = root.userData.appliedImageKey;
+  factory.applyInstance(c, root, solid);
+  assert.notEqual(root.userData.appliedImageKey, k1, 'solid toggle changes the applied key');
+  factory.dispose(root);
+});
+
+// ── Device screen-source load failure, made observable (export-restore
+// Phase 5) ────────────────────────────────────────────────────────────────
+// The TextureLoader error callback used to swallow its failure entirely:
+// the procedural placeholder silently stayed on the screen mesh and no
+// caller could distinguish "still loading" from "will never load". The
+// export guard then burned its whole deadline and recorded the placeholder
+// — the reported "it records an example domain". The loader itself needs a
+// DOM Image, so the observable surface is these pure userData helpers.
+
+import {
+  classifyScreenSourceUrl, recordScreenCaptureLoadFailure, clearScreenCaptureLoadError,
+} from '../factories.js';
+
+test('classifyScreenSourceUrl: recognizes the studio\'s own same-origin capture route, browser-local data: URLs, and everything else as foreign', () => {
+  assert.equal(classifyScreenSourceUrl('/api/public/studio-device-capture?id=abc&v=1'), 'route');
+  assert.equal(classifyScreenSourceUrl('data:image/png;base64,AAAA'), 'data');
+  assert.equal(classifyScreenSourceUrl('https://storage.googleapis.com/bucket/shot.jpg'), 'foreign');
+  assert.equal(classifyScreenSourceUrl(''), 'foreign');
+  assert.equal(classifyScreenSourceUrl(undefined), 'foreign');
+});
+
+test('recordScreenCaptureLoadFailure: a failed load is RECORDED on userData (url + classified reason), not swallowed', () => {
+  const userData = { appliedScreenKey: 'capture:/api/public/studio-device-capture?id=abc' };
+  const recorded = recordScreenCaptureLoadFailure(userData, {
+    key: 'capture:/api/public/studio-device-capture?id=abc',
+    url: '/api/public/studio-device-capture?id=abc',
+  });
+  assert.deepEqual(recorded, { url: '/api/public/studio-device-capture?id=abc', reason: 'route' });
+  assert.deepEqual(userData.screenCaptureError, recorded, 'the marker the export guard reads must be observable on userData');
+});
+
+test('recordScreenCaptureLoadFailure: clears appliedScreenKey ONLY while the failed load is still the current selection (a newer selection must never be un-applied by a stale failure)', () => {
+  const current = { appliedScreenKey: 'capture:a' };
+  recordScreenCaptureLoadFailure(current, { key: 'capture:a', url: 'a' });
+  assert.equal(current.appliedScreenKey, null, 'a retry of the same source must actually re-attempt');
+
+  const superseded = { appliedScreenKey: 'capture:b' };
+  recordScreenCaptureLoadFailure(superseded, { key: 'capture:a', url: 'a' });
+  assert.equal(superseded.appliedScreenKey, 'capture:b', 'a stale failure must not disturb a newer selection');
+});
+
+test('recordScreenCaptureLoadFailure: never nulls screenCaptureTexture — the readiness predicate compares it against the live map and would otherwise misreport a still-valid earlier capture', () => {
+  const tex = { marker: 'earlier-capture' };
+  const userData = { appliedScreenKey: 'capture:new', screenCaptureTexture: tex };
+  recordScreenCaptureLoadFailure(userData, { key: 'capture:new', url: '/api/public/studio-device-capture?id=new' });
+  assert.equal(userData.screenCaptureTexture, tex);
+});
+
+test('clearScreenCaptureLoadError: a later success (or a deliberate switch back to the placeholder) resolves the marker', () => {
+  const userData = { screenCaptureError: { url: 'x', reason: 'route' } };
+  clearScreenCaptureLoadError(userData);
+  assert.equal(userData.screenCaptureError, null);
+});
+
+test('the screen-source failure helpers are total — a null userData is a safe no-op, never a throw inside a texture callback', () => {
+  assert.equal(recordScreenCaptureLoadFailure(null, { key: 'k', url: 'u' }), null);
+  assert.doesNotThrow(() => clearScreenCaptureLoadError(null));
+  assert.doesNotThrow(() => clearScreenCaptureLoadError({}));
+});
+
+// ── SHARE TAB screen source (Phase 9) ────────────────────────────────────
+// A getDisplayMedia stream, decoded by a detached <video> and wrapped in a
+// THREE.VideoTexture by ClothStudio, enters the factory as an EXTERNALLY
+// OWNED texture on ctx.deviceShare. It must resolve through the same screen-
+// source path every other texture uses (so a topology rebuild re-applies it),
+// must never be disposed by this factory, and must never be scrolled — it is
+// a live viewport-shaped window, not a tall page.
+
+test('deviceScreenAspect: reports each viewport\'s real screen shape and falls back to desktop for anything unknown', async () => {
+  const { deviceScreenAspect } = await import('../factories.js');
+  assert.ok(Math.abs(deviceScreenAspect('desktop') - (1.44 / 0.9)) < 1e-12);
+  assert.ok(Math.abs(deviceScreenAspect('mobile') - (0.39 / 0.844)) < 1e-12);
+  assert.ok(Math.abs(deviceScreenAspect('tablet') - (0.768 / 1.024)) < 1e-12);
+  assert.ok(deviceScreenAspect('mobile') < 1, 'the phone screen is taller than it is wide');
+  for (const bogus of ['nope', '', undefined, null, '__proto__', 'constructor']) {
+    assert.equal(deviceScreenAspect(bogus), deviceScreenAspect('desktop'), String(bogus));
+  }
+});
+
+test('isDeviceShareScreenKey: only the share source\'s own key prefix matches', async () => {
+  const { isDeviceShareScreenKey, DEVICE_SHARE_SCREEN_KEY_PREFIX } = await import('../factories.js');
+  assert.equal(isDeviceShareScreenKey(`${DEVICE_SHARE_SCREEN_KEY_PREFIX}1920x1080`), true);
+  assert.equal(isDeviceShareScreenKey('capture:/api/public/studio-device-capture?id=abc'), false);
+  assert.equal(isDeviceShareScreenKey('upload:devscr-x'), false);
+  assert.equal(isDeviceShareScreenKey(''), false);
+  assert.equal(isDeviceShareScreenKey(null), false);
+});
+
+test('deviceWantedScreenSource: an active share OUTRANKS a coexisting upload and capture, and keys on the source dimensions', async () => {
+  const { deviceWantedScreenSource } = await import('../factories.js');
+  const inst = createElementInstance('device-mockup', {
+    id: 'dm-share', enabled: true,
+    appearance: { captureUrl: '/api/public/studio-device-capture?id=abc', uploadAssetId: 'devscr-x' },
+  });
+  const texture = { fake: 'video-texture' };
+  const lib = { 'devscr-x': { assetId: 'devscr-x', dataUrl: 'data:image/png;base64,AAA' } };
+  const wanted = deviceWantedScreenSource(inst, {
+    deviceScreenAssetsById: lib,
+    deviceShare: { texture, sourceWidth: 1920, sourceHeight: 1080, fit: { repeat: { x: 0.9, y: 1 }, offset: { x: 0.05, y: 0 } } },
+  });
+  assert.equal(wanted.key, 'share:1920x1080');
+  assert.equal(wanted.texture, texture);
+  assert.equal(wanted.url, null, 'the share source is never a URL to load — it is handed in ready');
+  // A surface switch to a different-sized tab must produce a DIFFERENT key,
+  // or appliedScreenKey would dedupe the re-fit away.
+  const switched = deviceWantedScreenSource(inst, {
+    deviceScreenAssetsById: lib, deviceShare: { texture, sourceWidth: 1280, sourceHeight: 800 },
+  });
+  assert.notEqual(switched.key, wanted.key);
+});
+
+test('deviceWantedScreenSource: ctx WITHOUT a share texture behaves exactly as before (server render passes none)', async () => {
+  const { deviceWantedScreenSource } = await import('../factories.js');
+  const inst = createElementInstance('device-mockup', {
+    id: 'dm-noshare', enabled: true, appearance: { captureUrl: '/api/public/studio-device-capture?id=abc' },
+  });
+  for (const share of [undefined, null, {}, { texture: null }]) {
+    assert.deepEqual(
+      deviceWantedScreenSource(inst, { deviceScreenAssetsById: {}, deviceShare: share }),
+      { key: 'capture:/api/public/studio-device-capture?id=abc', url: '/api/public/studio-device-capture?id=abc' },
+      JSON.stringify(share)
+    );
+  }
+});
+
+test('device-mockup: an active share becomes the screen material\'s map with the cover-fit crop applied — a NORMAL texture, never the alpha hole', () => {
+  const factory = getFactory('device-mockup');
+  const instance = createElementInstance('device-mockup', { id: 'dm-share-apply', enabled: true });
+  const root = factory.create(ctx());
+  factory.applyInstance(ctx(), root, instance);
+  const placeholder = root.userData.screenTexture;
+  assert.equal(root.userData.screenMaterial.map, placeholder);
+
+  const shareTex = new THREE.Texture();
+  let disposed = 0;
+  shareTex.addEventListener('dispose', () => { disposed += 1; });
+  const shareCtx = {
+    ...ctx(),
+    deviceShare: {
+      texture: shareTex, sourceWidth: 1920, sourceHeight: 1080,
+      fit: { repeat: { x: 0.9, y: 1 }, offset: { x: 0.05, y: 0 } },
+    },
+  };
+  factory.applyInstance(shareCtx, root, instance);
+  assert.equal(root.userData.screenMaterial.map, shareTex, 'the share texture is the screen map');
+  assert.equal(root.userData.screenExternalTexture, shareTex, 'it is recorded as externally owned');
+  assert.ok(Math.abs(shareTex.repeat.x - 0.9) < 1e-12);
+  assert.equal(shareTex.repeat.y, 1);
+  assert.ok(Math.abs(shareTex.offset.x - 0.05) < 1e-12);
+  assert.equal(disposed, 0, 'installing the share must never dispose the placeholder\'s replacement');
+
+  // Dropping the share puts the factory's own placeholder back and STILL
+  // never disposes the caller's texture (ClothStudio owns the MediaStream
+  // behind it and disposes it in stopDeviceScreenShare).
+  factory.applyInstance(ctx(), root, instance);
+  assert.equal(root.userData.screenMaterial.map, placeholder, 'without a share the placeholder returns');
+  assert.equal(root.userData.screenExternalTexture, null);
+  assert.equal(disposed, 0, 'the factory must NEVER dispose an externally-owned share texture');
+  factory.dispose(root);
+});
+
+test('device-mockup: a topology rebuild (viewport change) re-applies the share texture instead of disposing it', () => {
+  const factory = getFactory('device-mockup');
+  const desktop = createElementInstance('device-mockup', { id: 'dm-share-rebuild', enabled: true, appearance: { viewport: 'desktop' } });
+  const mobile = createElementInstance('device-mockup', { id: 'dm-share-rebuild', enabled: true, appearance: { viewport: 'mobile' } });
+  const shareTex = new THREE.Texture();
+  let disposed = 0;
+  shareTex.addEventListener('dispose', () => { disposed += 1; });
+  const shareCtx = (fit) => ({ ...ctx(), deviceShare: { texture: shareTex, sourceWidth: 1920, sourceHeight: 1080, fit } });
+
+  const root = factory.create(ctx());
+  factory.applyInstance(shareCtx({ repeat: { x: 0.9, y: 1 }, offset: { x: 0.05, y: 0 } }), root, desktop);
+  assert.equal(root.userData.screenMaterial.map, shareTex);
+  // Viewport change rebuilds the whole device (clearGroup disposes every
+  // texture it finds on a material — which is exactly why the share texture
+  // is detached before that happens).
+  factory.applyInstance(shareCtx({ repeat: { x: 1, y: 0.26 }, offset: { x: 0, y: 0.37 } }), root, mobile);
+  assert.equal(disposed, 0, 'the rebuild must not dispose the caller\'s live video texture');
+  assert.equal(root.userData.screenMaterial.map, shareTex, 'the share is re-applied to the freshly built screen');
+  assert.ok(Math.abs(shareTex.repeat.y - 0.26) < 1e-12, 'and re-stamped with the caller\'s NEW cover-fit for the phone screen');
+  factory.dispose(root);
+});
+
+test('device-mockup: animate never scrolls a share texture — a live tab is a window, not a page (SWAY still applies)', () => {
+  const factory = getFactory('device-mockup');
+  const instance = createElementInstance('device-mockup', {
+    id: 'dm-share-anim', enabled: true,
+    motion: { rotate: true, speed: 1 },
+    appearance: { scroll: true, scrollSpeed: 1 },
+  });
+  const shareTex = new THREE.Texture();
+  const shareCtx = {
+    ...ctx(),
+    deviceShare: {
+      texture: shareTex, sourceWidth: 1920, sourceHeight: 1080,
+      fit: { repeat: { x: 0.9, y: 1 }, offset: { x: 0.05, y: 0 } },
+    },
+  };
+  const root = factory.create(ctx());
+  factory.applyInstance(shareCtx, root, instance);
+  const offsetY = shareTex.offset.y;
+  const offsetX = shareTex.offset.x;
+  factory.animate(root, instance, 1.7, 0.016);
+  assert.equal(shareTex.offset.y, offsetY, 'AUTO SCROLL must not slide the live crop off the frame');
+  assert.equal(shareTex.offset.x, offsetX);
+  assert.notEqual(root.userData.motion.rotation.y, 0, 'SWAY is a transform and still applies');
+  // The manual SCROLL POSITION dial is equally inert against a live share.
+  const parked = createElementInstance('device-mockup', {
+    id: 'dm-share-anim', enabled: true, appearance: { scroll: false, scrollPosition: 1 },
+  });
+  factory.animate(root, parked, 2.2, 0.016);
+  assert.equal(shareTex.offset.y, offsetY);
+  factory.dispose(root);
 });

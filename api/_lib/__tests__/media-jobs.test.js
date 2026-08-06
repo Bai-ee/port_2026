@@ -66,16 +66,20 @@ test('getMediaJob is client-scoped (foreign client cannot read)', async () => {
   assert.equal(await jobs.getMediaJob('missing', 'owner'), null);
 });
 
-test('claimNextMediaJob claims the oldest queued job and increments attempts', async () => {
+test('claimNextMediaJob claims exactly one queued job and increments attempts', async () => {
   const a = await jobs.createMediaJob({ clientId: 'c1', recipe: RECIPE });
   const b = await jobs.createMediaJob({ clientId: 'c1', recipe: RECIPE });
   const claimed = await jobs.claimNextMediaJob({ workerId: 'w1' });
-  assert.equal(claimed.jobId, a.jobId, 'oldest job claimed first');
+  // Both jobs are usually created within the same millisecond, so the
+  // createdAt "oldest" tiebreak falls back to the random job-ID suffix —
+  // WHICH job wins is not deterministic. Invariant: exactly one claimed,
+  // the other left queued and untouched.
+  assert.ok([a.jobId, b.jobId].includes(claimed.jobId), 'the claim must take one of the two queued jobs');
   assert.equal(claimed.status, 'processing');
   assert.equal(claimed.attempts, 1);
   assert.ok(claimed.workerLease.leaseExpiresAt);
-  // job b untouched
-  assert.equal((await jobs.getMediaJob(b.jobId, 'c1')).status, 'queued');
+  const otherId = claimed.jobId === a.jobId ? b.jobId : a.jobId;
+  assert.equal((await jobs.getMediaJob(otherId, 'c1')).status, 'queued');
 });
 
 test('singleton lease blocks a second concurrent claim', async () => {
@@ -88,8 +92,8 @@ test('singleton lease blocks a second concurrent claim', async () => {
 });
 
 test('completeMediaJob stores output, clears lease, frees the queue', async () => {
-  await jobs.createMediaJob({ clientId: 'c1', recipe: RECIPE });
-  const queued = await jobs.createMediaJob({ clientId: 'c1', recipe: RECIPE });
+  const first = await jobs.createMediaJob({ clientId: 'c1', recipe: RECIPE });
+  const second = await jobs.createMediaJob({ clientId: 'c1', recipe: RECIPE });
   const claimed = await jobs.claimNextMediaJob({ workerId: 'w1' });
   const output = { type: 'video_remix', variant: 'video', storagePath: 'clients/c1/media/generated/x.mp4' };
   await jobs.completeMediaJob(claimed.jobId, output);
@@ -97,9 +101,11 @@ test('completeMediaJob stores output, clears lease, frees the queue', async () =
   assert.equal(done.status, 'done');
   assert.equal(done.output.storagePath, 'clients/c1/media/generated/x.mp4');
   assert.equal(done.workerLease, null);
-  // queue lease freed → next job is now claimable
+  // queue lease freed → the OTHER job (same-millisecond createdAt means
+  // which was claimed first is random-ID-tiebreak territory) is claimable.
+  const otherId = claimed.jobId === first.jobId ? second.jobId : first.jobId;
   const next = await jobs.claimNextMediaJob({ workerId: 'w2' });
-  assert.equal(next.jobId, queued.jobId);
+  assert.equal(next.jobId, otherId);
 });
 
 test('failMediaJob marks failed and frees the queue', async () => {
