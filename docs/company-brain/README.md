@@ -23,12 +23,13 @@ Read in this order:
 
 1. `STUDIO_INTELLIGENCE_STANDARD.md` — locked v1.0 rule: research is never runtime; approved decisions live in `CLIENT_BRAIN.md`.
 2. `COMPANY_BRAIN_DOCUMENT_STANDARD.md` — established runtime Brain document standard, using Bryan's locked Brain as the reference implementation.
-3. `HITLOOP_STUDIO_METHODOLOGY.md` — how Studio work should create better Client Brain intelligence outside the code.
-4. `CLIENT_BRAIN_MARKDOWN_STANDARD.md` — the canonical editable `CLIENT_BRAIN.md` source format.
-5. `CLIENT_BRAIN_SCHEMA.md` — the compiled runtime shape stored in Firestore.
-6. `CLIENT_BRAIN_DECISION_ENGINE.md` — how decisions, card defaults, overrides, and feedback work.
-7. `DECISION_ACQUISITION.md`, `DISCOVERY_INTELLIGENCE.md`, and `CLIENT_BRAIN_COMPLETION.md` — enrichment, discovery, and scoring layers.
-8. `playbooks/` — field research guides for each intelligence domain.
+3. `CLIENT_BRAIN_DEEP_RESEARCH_MASTER_PROMPT.md` — copy-ready prompt for producing a complete upload-ready Brain from deep research.
+4. `HITLOOP_STUDIO_METHODOLOGY.md` — how Studio work should create better Client Brain intelligence outside the code.
+5. `CLIENT_BRAIN_MARKDOWN_STANDARD.md` — the canonical editable `CLIENT_BRAIN.md` source format.
+6. `CLIENT_BRAIN_SCHEMA.md` — the compiled runtime shape stored in Firestore.
+7. `CLIENT_BRAIN_DECISION_ENGINE.md` — how decisions, card defaults, overrides, and feedback work.
+8. `DECISION_ACQUISITION.md`, `DISCOVERY_INTELLIGENCE.md`, and `CLIENT_BRAIN_COMPLETION.md` — enrichment, discovery, and scoring layers.
+9. `playbooks/` — field research guides for each intelligence domain.
 
 ## Current Runtime
 
@@ -83,6 +84,7 @@ The first structured default integration is Marketing Brief / Market Signals con
 - `README.md` — this index and current status.
 - `STUDIO_INTELLIGENCE_STANDARD.md` — locked v1.0 Studio workspace standard and document responsibilities.
 - `COMPANY_BRAIN_DOCUMENT_STANDARD.md` — established runtime Brain document standard and validation checklist.
+- `CLIENT_BRAIN_DEEP_RESEARCH_MASTER_PROMPT.md` — master prompt for assigning deep research and receiving an upload-ready `CLIENT_BRAIN.md`.
 - `CLIENT_BRAIN_MARKDOWN_STANDARD.md` — source file format.
 - `HITLOOP_STUDIO_METHODOLOGY.md` — outside-code Studio methodology for building the best possible Client Brain.
 - `CLIENT_BRAIN_DECISION_ENGINE.md` — decision-grade intelligence model.

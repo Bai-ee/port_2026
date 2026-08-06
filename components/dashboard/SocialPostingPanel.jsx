@@ -16,8 +16,33 @@ function formatDate(value) {
   return d.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
-export default function SocialPostingPanel({ getIdToken, sourceDraft, sourceLabel = 'dashboard' }) {
-  const [content, setContent] = useState(sourceDraft || '');
+export default function SocialPostingPanel({ getIdToken, sourceDraft, sourceLabel = 'dashboard', strategyPostPool = [] }) {
+  const strategySuggestions = useMemo(() => {
+    const seen = new Set();
+    return (Array.isArray(strategyPostPool) ? strategyPostPool : [])
+      .map((item, index) => {
+        const text = String(item?.text || item?.content || '').trim();
+        if (!text) return null;
+        const key = text.toLowerCase().replace(/\s+/g, ' ');
+        if (seen.has(key)) return null;
+        seen.add(key);
+        return {
+          id: item?.id || `strategy-${index}`,
+          text: text.slice(0, 280),
+          date: item?.date || '',
+          theme: item?.theme || item?.kind || '',
+          rationale: item?.rationale || item?.angle || '',
+          scheduledAt: item?.scheduledAt || '',
+          source: item?.source || 'strategy',
+        };
+      })
+      .filter(Boolean);
+  }, [strategyPostPool]);
+  const [strategyIndex, setStrategyIndex] = useState(0);
+  const selectedStrategyPost = strategySuggestions[strategyIndex % Math.max(strategySuggestions.length, 1)] || null;
+  const activeSourceDraft = selectedStrategyPost?.text || sourceDraft || '';
+  const activeSourceLabel = selectedStrategyPost ? `strategy:${selectedStrategyPost.source || '30-day'}` : sourceLabel;
+  const [content, setContent] = useState(activeSourceDraft || '');
   const [scheduledAt, setScheduledAt] = useState(() => toDatetimeLocal());
   const [posts, setPosts] = useState([]);
   const [agents, setAgents] = useState(null);
@@ -27,8 +52,12 @@ export default function SocialPostingPanel({ getIdToken, sourceDraft, sourceLabe
   const [notice, setNotice] = useState(null);
 
   useEffect(() => {
-    if (sourceDraft && !content.trim()) setContent(sourceDraft);
-  }, [sourceDraft]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (strategyIndex >= strategySuggestions.length && strategySuggestions.length > 0) setStrategyIndex(0);
+  }, [strategyIndex, strategySuggestions.length]);
+
+  useEffect(() => {
+    if (activeSourceDraft && !content.trim()) setContent(activeSourceDraft);
+  }, [activeSourceDraft]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const charCount = content.length;
   const canSubmit = content.trim().length > 0 && charCount <= 280;
@@ -67,13 +96,40 @@ export default function SocialPostingPanel({ getIdToken, sourceDraft, sourceLabe
     return credentials.hasApiKey && credentials.hasApiSecret && credentials.hasAccessToken && credentials.hasAccessSecret;
   }, [credentials]);
 
+  function loadStrategySuggestion(item = selectedStrategyPost) {
+    if (!item?.text) return;
+    setContent(item.text);
+    if (item.scheduledAt) setScheduledAt(toDatetimeLocal(item.scheduledAt));
+  }
+
+  function refreshStrategySuggestion() {
+    if (!strategySuggestions.length) return;
+    const currentTheme = String(selectedStrategyPost?.theme || '').trim().toLowerCase();
+    const similarIndexes = strategySuggestions
+      .map((item, index) => ({ item, index }))
+      .filter(({ item, index }) => (
+        index !== strategyIndex
+        && currentTheme
+        && String(item.theme || '').trim().toLowerCase() === currentTheme
+      ))
+      .map(({ index }) => index);
+    const candidates = similarIndexes.length
+      ? similarIndexes
+      : strategySuggestions.map((_, index) => index).filter((index) => index !== strategyIndex);
+    const nextIndex = candidates.length
+      ? candidates[Math.floor(Math.random() * candidates.length)]
+      : strategyIndex;
+    setStrategyIndex(nextIndex);
+    loadStrategySuggestion(strategySuggestions[nextIndex]);
+  }
+
   async function runAction(action) {
     if (!canSubmit && action !== 'process-due') return;
     setBusy(action);
     setNotice(null);
     try {
       if (action === 'optimize') {
-        const data = await apiFetch({ action: 'optimize', content, source: sourceLabel });
+        const data = await apiFetch({ action: 'optimize', content, source: activeSourceLabel });
         setContent(data.optimized || content);
         setAgents(data.agents || null);
         setNotice({ kind: 'ok', text: 'Agents optimized the draft.' });
@@ -91,7 +147,7 @@ export default function SocialPostingPanel({ getIdToken, sourceDraft, sourceLabe
       }
 
       if (action === 'post-now') {
-        const data = await apiFetch({ action, content, source: sourceLabel, agents });
+        const data = await apiFetch({ action, content, source: activeSourceLabel, agents });
         setPosts((prev) => [data.post, ...prev.filter((post) => post.id !== data.post.id)]);
         setContent('');
         setAgents(null);
@@ -103,7 +159,7 @@ export default function SocialPostingPanel({ getIdToken, sourceDraft, sourceLabe
         const data = await apiFetch({
           action,
           content,
-          source: sourceLabel,
+          source: activeSourceLabel,
           scheduledAt: new Date(scheduledAt).toISOString(),
           agents,
         });
@@ -113,7 +169,7 @@ export default function SocialPostingPanel({ getIdToken, sourceDraft, sourceLabe
       }
 
       if (action === 'draft') {
-        const data = await apiFetch({ action, content, source: sourceLabel, agents });
+        const data = await apiFetch({ action, content, source: activeSourceLabel, agents });
         setPosts((prev) => [data.post, ...prev.filter((post) => post.id !== data.post.id)]);
         setNotice({ kind: 'ok', text: 'Saved as a draft.' });
         return;
@@ -164,7 +220,29 @@ export default function SocialPostingPanel({ getIdToken, sourceDraft, sourceLabe
             placeholder="Write the X post you want published..."
             rows={7}
           />
-          {sourceDraft ? (
+          {selectedStrategyPost ? (
+            <div className="sp-strategy-card">
+              <div className="sp-strategy-head">
+                <span>30-day strategy draft</span>
+                <small>{strategyIndex + 1}/{strategySuggestions.length}</small>
+              </div>
+              <p>{selectedStrategyPost.text}</p>
+              <div className="sp-strategy-meta">
+                {selectedStrategyPost.date ? <span>{selectedStrategyPost.date}</span> : null}
+                {selectedStrategyPost.theme ? <span>{selectedStrategyPost.theme}</span> : null}
+                {selectedStrategyPost.source ? <span>{selectedStrategyPost.source}</span> : null}
+              </div>
+              {selectedStrategyPost.rationale ? <small className="sp-strategy-rationale">{selectedStrategyPost.rationale}</small> : null}
+              <div className="sp-strategy-actions">
+                <button type="button" className="sp-link-btn" onClick={() => loadStrategySuggestion()}>
+                  Use this post
+                </button>
+                <button type="button" className="sp-link-btn" onClick={refreshStrategySuggestion}>
+                  <RefreshCw size={13} /> Refresh similar
+                </button>
+              </div>
+            </div>
+          ) : sourceDraft ? (
             <button type="button" className="sp-link-btn" onClick={() => setContent(sourceDraft)}>
               Use generated dashboard creative
             </button>
@@ -278,6 +356,14 @@ export default function SocialPostingPanel({ getIdToken, sourceDraft, sourceLabe
         button:disabled { opacity: 0.48; cursor: not-allowed; }
         .sp-primary { background: #24211e; color: #f7f4ef; }
         .sp-link-btn { margin-top: 8px; min-height: 28px; padding: 0; border: 0; background: transparent; color: #4a7c7e; font-size: 12px; }
+        .sp-strategy-card { margin-top: 10px; display: grid; gap: 7px; border: 1px solid rgba(42,36,32,0.1); border-radius: 8px; background: rgba(250,247,242,0.78); padding: 10px; }
+        .sp-strategy-head, .sp-strategy-meta, .sp-strategy-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+        .sp-strategy-head span { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(42,36,32,0.66); }
+        .sp-strategy-head small, .sp-strategy-meta span { font-family: var(--font-mono); font-size: 10px; color: rgba(42,36,32,0.54); }
+        .sp-strategy-card p { margin: 0; font-size: 12px; line-height: 1.4; color: #211d1a; }
+        .sp-strategy-rationale { font-size: 11px; line-height: 1.35; color: rgba(42,36,32,0.56); }
+        .sp-strategy-actions { justify-content: flex-start; }
+        .sp-strategy-actions .sp-link-btn { margin-top: 0; display: inline-flex; align-items: center; gap: 5px; }
         .sp-schedule-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; margin-top: 10px; }
         label { display: flex; flex-direction: column; gap: 6px; }
         label span { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 800; text-transform: uppercase; color: rgba(42,36,32,0.64); }
