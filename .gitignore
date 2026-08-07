@@ -65,3 +65,7 @@ skills-lock.json
 
 # Site Recreate engine — local CLI run output (per-job recreated sites + zips)
 services/site-clone/.out/
+
+# Stray local reference files at repo root (unreferenced by any code)
+/2006.glb
+/Layout Example.jpg
