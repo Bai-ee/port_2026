@@ -36,7 +36,7 @@ const { runWatchlistPull } = require('../../../../features/scout-intake/watchlis
 const { buildModuleBriefs } = require('../../../../features/scout-intake/module-brief-builder.js');
 const { getDefaultModuleConfig } = require('../../../../features/scout-intake/module-registry');
 const { FALLBACK_BRIEF_SITE } = require('../../../../api/_lib/brief-fallback.cjs');
-const { collectRedditSignals, collectInstagramSignals } = require('../../../../features/intelligence/_platform-signals.js');
+const { collectRedditSignals, collectInstagramSignals, collectXMarketTalkSignals, filterRelevantSignals } = require('../../../../features/intelligence/_platform-signals.js');
 const { searchReddit: scSearchReddit, searchInstagram: scSearchInstagram, redditQueriesFromCustomRows: scRedditQueries, hasApiKey: scHasApiKey } = require('../../../../features/scout-intake/external-scouts/scrapecreators-client.js');
 const { refreshOpportunitySignals } = require('../../../../features/scout-intake/opportunity-signals-search.js');
 
@@ -70,8 +70,8 @@ function addVelocity(it, nowMs) {
   };
 }
 
-function buildRedditAnalysisContent(marketingBrief = {}, nowMs = Date.now()) {
-  const redditSignals = collectRedditSignals(marketingBrief).map((it) => addVelocity(it, nowMs));
+function buildRedditAnalysisContent(marketingBrief = {}, nowMs = Date.now(), relevance = null) {
+  const redditSignals = collectRedditSignals(marketingBrief, { relevance }).map((it) => addVelocity(it, nowMs));
   return {
     generatedAt: new Date(nowMs).toISOString(),
     source: 'marketingBrief.scoutBrief.agentData.redditSignals + marketingBrief.reportSnapshot.platformTests.reddit',
@@ -85,8 +85,23 @@ function buildRedditAnalysisContent(marketingBrief = {}, nowMs = Date.now()) {
   };
 }
 
-function buildInstagramAnalysisContent(marketingBrief = {}, nowMs = Date.now()) {
-  const instagramSignals = collectInstagramSignals(marketingBrief).map((it) => addVelocity(it, nowMs));
+function buildXMarketTalkContent(marketingBrief = {}, nowMs = Date.now()) {
+  const xMarketTalkSignals = collectXMarketTalkSignals(marketingBrief).map((it) => addVelocity(it, nowMs));
+  return {
+    generatedAt: new Date(nowMs).toISOString(),
+    source: 'marketingBrief.reportSnapshot.platformTests.xMarketTalk',
+    xMarketTalkSignals,
+    dataQuality: {
+      itemsAvailable: xMarketTalkSignals.length,
+      note: xMarketTalkSignals.length
+        ? 'Analyze only these supplied X posts. They are search results for the brand handle and brand keywords — treat them as what the market is saying, not as the brand\'s own posts.'
+        : 'No X market-talk posts are currently available in stored Market Insights data.',
+    },
+  };
+}
+
+function buildInstagramAnalysisContent(marketingBrief = {}, nowMs = Date.now(), relevance = null) {
+  const instagramSignals = collectInstagramSignals(marketingBrief, { relevance }).map((it) => addVelocity(it, nowMs));
   return {
     generatedAt: new Date(nowMs).toISOString(),
     source: 'marketingBrief.scoutBrief.agentData.instagramSignals + marketingBrief.reportSnapshot.platformTests.instagram',
@@ -498,6 +513,24 @@ async function refreshReplyTargets(clientId) {
   }
 }
 
+/** Brand/category terms for the relevance guard, from the client's Market Signals
+ *  config. Returns null when no brand terms are configured, which leaves the
+ *  collect*Signals call unfiltered (previous behavior). */
+async function loadRelevanceTerms(clientId) {
+  try {
+    const snap = await fb.adminDb.collection('client_configs').doc(clientId).get();
+    const mbc = (snap.exists ? (snap.data() || {}) : {}).marketingBriefConfig || {};
+    const brandTerms = [
+      ...(Array.isArray(mbc.brandKeywords) ? mbc.brandKeywords : []),
+      String(mbc.brandName || '').trim(),
+    ].filter(Boolean);
+    if (!brandTerms.length) return null;
+    return { brandTerms, categoryTerms: Array.isArray(mbc.categoryTerms) ? mbc.categoryTerms : [] };
+  } catch {
+    return null;
+  }
+}
+
 /** Run the Reddit platform analysis over stored redditSignals and persist it to
  *  marketingBrief.reportSnapshot.redditAnalysis so email/brief renderers can read
  *  it without re-running LLM calls. Non-blocking: never throws. */
@@ -510,11 +543,12 @@ async function refreshRedditAnalysis(clientId) {
     }
     const snap = await fb.adminDb.collection('dashboard_state').doc(clientId).get();
     const marketingBrief = snap.exists ? (snap.data()?.marketingBrief || {}) : {};
-    const redditSignals = collectRedditSignals(marketingBrief);
+    const relevance = await loadRelevanceTerms(clientId);
+    const redditSignals = collectRedditSignals(marketingBrief, { relevance });
     if (!redditSignals.length) return { ok: false, skipped: true, reason: 'no-reddit-signals' };
 
     const generatedAt = new Date().toISOString();
-    const content = buildRedditAnalysisContent(marketingBrief, Date.now());
+    const content = buildRedditAnalysisContent(marketingBrief, Date.now(), relevance);
     const contextParts = [];
     try {
       const voiceCtx = await loadClientBrainContext(clientId, { useFor: 'copy', maxChars: 1600 });
@@ -536,6 +570,45 @@ async function refreshRedditAnalysis(clientId) {
   }
 }
 
+/** Runs the x-market-talk recipe over the stored X search results and persists
+ *  reportSnapshot.xMarketTalkAnalysis for the email's "Market Talk on X" section.
+ *  Reads only already-stored posts — no X API spend happens here (the paid search
+ *  is refreshXMarketTalk, in the signals phase). Never throws. */
+async function refreshXMarketTalkAnalysis(clientId) {
+  if (!clientId) return { ok: false, skipped: true };
+  try {
+    const platformState = await getMarketInsightPlatformState(clientId);
+    if (platformState?.platformAvailability?.x === false) {
+      return { ok: false, skipped: true, reason: 'x-disabled' };
+    }
+    const snap = await fb.adminDb.collection('dashboard_state').doc(clientId).get();
+    const marketingBrief = snap.exists ? (snap.data()?.marketingBrief || {}) : {};
+    const signals = collectXMarketTalkSignals(marketingBrief);
+    if (!signals.length) return { ok: false, skipped: true, reason: 'no-x-market-talk' };
+
+    const generatedAt = new Date().toISOString();
+    const content = buildXMarketTalkContent(marketingBrief, Date.now());
+    const contextParts = [];
+    try {
+      const voiceCtx = await loadClientBrainContext(clientId, { useFor: 'copy', maxChars: 1600 });
+      if (voiceCtx) contextParts.push(voiceCtx);
+    } catch { /* non-fatal */ }
+    const result = await runAnalysisRecipe({ recipeId: 'x-market-talk', content, context: contextParts.join('\n\n') });
+    await logRecipeUsage({ clientId, recipeId: 'x-market-talk', result });
+    if (result?.analysis) {
+      await fb.adminDb.collection('dashboard_state').doc(clientId).set(
+        { marketingBrief: { reportSnapshot: { xMarketTalkAnalysis: { text: result.analysis, generatedAt } } } },
+        { merge: true }
+      );
+    }
+    logInfo('pre_digest_x_market_talk_analysis', { clientId, ok: result.ok, costUsd: result.costUsd, signals: signals.length });
+    return { ok: result.ok, recipeId: 'x-market-talk', costUsd: result.costUsd, signals: signals.length };
+  } catch (err) {
+    logError('pre_digest_x_market_talk_analysis_failed', { clientId, error: err.message });
+    return { ok: false, error: err.message };
+  }
+}
+
 /** Instagram mirror of refreshRedditAnalysis. Runs the instagram-analysis recipe
  *  over stored instagramSignals and persists reportSnapshot.instagramAnalysis. */
 async function refreshInstagramAnalysis(clientId) {
@@ -547,11 +620,12 @@ async function refreshInstagramAnalysis(clientId) {
     }
     const snap = await fb.adminDb.collection('dashboard_state').doc(clientId).get();
     const marketingBrief = snap.exists ? (snap.data()?.marketingBrief || {}) : {};
-    const instagramSignals = collectInstagramSignals(marketingBrief);
+    const relevance = await loadRelevanceTerms(clientId);
+    const instagramSignals = collectInstagramSignals(marketingBrief, { relevance });
     if (!instagramSignals.length) return { ok: false, skipped: true, reason: 'no-instagram-signals' };
 
     const generatedAt = new Date().toISOString();
-    const content = buildInstagramAnalysisContent(marketingBrief, Date.now());
+    const content = buildInstagramAnalysisContent(marketingBrief, Date.now(), relevance);
     const contextParts = [];
     try {
       const voiceCtx = await loadClientBrainContext(clientId, { useFor: 'copy', maxChars: 1600 });
@@ -621,7 +695,65 @@ async function refreshOpportunitySignalsAnalysis(clientId) {
  *  for those platforms — the last30days subprocess can't run on Vercel, so this
  *  Vercel-native HTTP client is what populates Reddit/Instagram for the cron. Runs
  *  before the analysis/reply steps so collect*Signals see fresh data. Never throws. */
-async function refreshPlatformSignals(clientId) {
+/** X "market talk" — a brand SEARCH (the client's own handle + brand keywords),
+ *  distinct from the watchlist handle timelines. Answers "who is talking about us
+ *  on X right now", and lands in its own `platformTests.xMarketTalk` slot.
+ *
+ *  ⚠️ SPEND GATE. There is no ScrapeCreators X search endpoint, so this is the
+ *  PAID X API (`searchXPosts`), billed per call and invisible to the Operating
+ *  Cost card — see docs/source-of-truth/X-API-AND-PROFILE-OPERATIONS.md. It runs
+ *  ONLY when the caller passes allowX, which only the interactive Generate & Send
+ *  does; the daily cron passes nothing and therefore never spends here. Queries
+ *  are capped at 3 to bound the per-send cost. Never throws. */
+async function refreshXMarketTalk(clientId, { brandXHandle = '', brandKeywords = [], categoryTerms = [] } = {}) {
+  const handle = String(brandXHandle || '').replace(/^@+/, '').trim();
+  if (!clientId || !handle) return { ok: false, skipped: true, reason: 'no-x-handle' };
+  try {
+    const platformState = await getMarketInsightPlatformState(clientId);
+    if (platformState?.platformAvailability?.x === false) return { ok: false, skipped: true, reason: 'x-disabled' };
+    const { searchXPosts } = await import('../../../../features/social-posting/twitter-service.js');
+    // Handle first (the "who is talking about us" query), then the most
+    // distinctive brand keywords. Capped at 3 — each is a paid API call.
+    const keywords = Array.isArray(brandKeywords) ? brandKeywords : [];
+    const queries = [...new Set([`@${handle}`, ...keywords.map((k) => String(k || '').trim())].filter(Boolean))].slice(0, 3);
+    const collected = [];
+    const errors = [];
+    const results = await Promise.all(queries.map((q) => searchXPosts(q, { limit: 10 })));
+    results.forEach((r, i) => {
+      if (!r?.ok) { errors.push(`${queries[i]}: ${r?.error || 'failed'}`); return; }
+      collected.push(...(r.items || []));
+    });
+    if (!collected.length) {
+      return { ok: false, skipped: true, reason: errors.length ? `x-search-failed: ${errors[0]}` : 'no-x-results', queries };
+    }
+    const brandTerms = [...keywords, handle].filter(Boolean);
+    const relevant = filterRelevantSignals(collected, { brandTerms, categoryTerms });
+    const dropped = collected.length - relevant.length;
+    await fb.adminDb.collection('dashboard_state').doc(clientId).set({
+      marketingBrief: { reportSnapshot: { platformTests: { xMarketTalk: JSON.parse(JSON.stringify({
+        items: relevant.slice(0, 20),
+        count: relevant.length,
+        costUsd: 0, // X API spend is credit-based and not reported per call
+        ms: null,
+        meta: {
+          source: 'X API · search (market talk)',
+          queriesTried: queries,
+          warnings: errors,
+          relevanceFiltered: dropped > 0 ? { kept: relevant.length, dropped } : null,
+        },
+        generatedAt: new Date().toISOString(),
+      })) } } },
+      updatedAt: fb.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    logInfo('pre_digest_x_market_talk', { clientId, queries: queries.length, kept: relevant.length, dropped });
+    return { ok: true, kept: relevant.length, dropped, queries };
+  } catch (err) {
+    logError('pre_digest_x_market_talk_failed', { clientId, error: err.message });
+    return { ok: false, error: err.message };
+  }
+}
+
+async function refreshPlatformSignals(clientId, { allowX = false } = {}) {
   if (!clientId || !scHasApiKey()) return { ok: false, skipped: true, reason: 'no-key' };
   try {
     const cfgSnap = await fb.adminDb.collection('client_configs').doc(clientId).get();
@@ -629,10 +761,25 @@ async function refreshPlatformSignals(clientId) {
     const sources = new Set((Array.isArray(mbc.sourcePlatforms) ? mbc.sourcePlatforms : []).map((s) => String(s || '').toLowerCase()));
     const brand = String(mbc.brandName || '').replace(/^["']+|["']+$/g, '').trim();
     const cats = Array.isArray(mbc.categoryTerms) ? mbc.categoryTerms.filter(Boolean) : [];
+    // Relevance guard. The query set is intentionally broad (brand row + category
+    // rows), so raw results mix real brand signal with generic category chatter.
+    // Filter BEFORE persisting: every reader of platformTests treats stored items
+    // as already-relevant, and this keeps off-topic threads out of the analyzers,
+    // the email sections, and the brief in one place. Brand terms come from
+    // brandKeywords (falling back to brandName) — see filterRelevantSignals for
+    // the "never empty a section" safety valves.
+    const brandTerms = [
+      ...(Array.isArray(mbc.brandKeywords) ? mbc.brandKeywords : []),
+      brand,
+    ].filter(Boolean);
     const persist = async (platform, items, meta) => {
+      const relevant = filterRelevantSignals(items || [], { brandTerms, categoryTerms: cats });
+      const dropped = (items || []).length - relevant.length;
+      if (dropped > 0) logInfo('pre_digest_platform_signals_filtered', { clientId, platform, kept: relevant.length, dropped });
       const entry = JSON.parse(JSON.stringify({
-        items: (items || []).slice(0, 20), count: (items || []).length, costUsd: 0, ms: null,
-        meta: meta || null, generatedAt: new Date().toISOString(),
+        items: relevant.slice(0, 20), count: relevant.length, costUsd: 0, ms: null,
+        meta: { ...(meta || {}), relevanceFiltered: dropped > 0 ? { kept: relevant.length, dropped } : null },
+        generatedAt: new Date().toISOString(),
       }));
       await fb.adminDb.collection('dashboard_state').doc(clientId).set(
         { marketingBrief: { reportSnapshot: { platformTests: { [platform]: entry } } }, updatedAt: fb.FieldValue.serverTimestamp() },
@@ -649,6 +796,15 @@ async function refreshPlatformSignals(clientId) {
     const out = {};
     if (r) { if (r.ok && r.items.length) await persist('reddit', r.items, r.meta); out.reddit = r.ok ? r.items.length : `err:${r.error}`; }
     if (ig) { if (ig.ok && ig.items.length) await persist('instagram', ig.items, ig.meta); out.instagram = ig.ok ? ig.items.length : `err:${ig.error}`; }
+    // Paid X search — opt-in per call, so the cron never spends. See refreshXMarketTalk.
+    if (allowX && sources.has('x')) {
+      const xr = await refreshXMarketTalk(clientId, {
+        brandXHandle: mbc.brandXHandle,
+        brandKeywords: Array.isArray(mbc.brandKeywords) ? mbc.brandKeywords : [],
+        categoryTerms: cats,
+      });
+      out.xMarketTalk = xr.ok ? xr.kept : `skip:${xr.reason || xr.error}`;
+    }
     logInfo('pre_digest_platform_signals', { clientId, ...out });
     return { ok: true, ...out };
   } catch (err) {
@@ -659,7 +815,7 @@ async function refreshPlatformSignals(clientId) {
 
 /** Refresh one client's scout brief + watchlist timelines + strategy plan.
  *  Sequential (strategy reads fresh scout). Never throws. */
-export async function refreshDigestClient(clientId, { freshnessToken = '', force = false, source = 'cron-scheduled', actorUid = null, include = {}, briefLinkMode = 'fresh', phase = 'all' } = {}) {
+export async function refreshDigestClient(clientId, { freshnessToken = '', force = false, source = 'cron-scheduled', actorUid = null, include = {}, briefLinkMode = 'fresh', phase = 'all', allowX = false } = {}) {
   if (!clientId) return { ok: false, error: 'no clientId' };
   // Phases: the FULL refresh (~5-6 min for a cold client) exceeds Vercel's 300s
   // function ceiling, so the interactive Run & Send calls this route three times —
@@ -690,17 +846,18 @@ export async function refreshDigestClient(clientId, { freshnessToken = '', force
     // Reddit/Instagram via the direct ScrapeCreators client → platformTests.
     // Runs here so it completes before the analysis/reply steps read collect*Signals.
     // This is what makes Reddit/IG populate in PRODUCTION (last30days can't run there).
-    wantSignals ? refreshPlatformSignals(clientId) : phaseSkip(),
+    wantSignals ? refreshPlatformSignals(clientId, { allowX }) : phaseSkip(),
     // Opportunity Signals search (public buying-signal scan) — its own client
     // toggle gate, own reddit/instagram search, own stored pool. See
     // docs/plans/OPPORTUNITY-SIGNALS-MARKET-SIGNALS-PLAN.md.
     wantSignals ? refreshOpportunitySignals(clientId) : phaseSkip(),
   ]);
-  const [strategy, replyTargets, redditAnalysis, instagramAnalysis, opportunitySignalsAnalysis] = await Promise.all([
+  const [strategy, replyTargets, redditAnalysis, instagramAnalysis, xMarketTalkAnalysis, opportunitySignalsAnalysis] = await Promise.all([
     wantAnalysis ? refreshStrategyPlan(clientId) : phaseSkip(),
     wantAnalysis ? refreshReplyTargets(clientId) : phaseSkip(), // needs fresh watchlist timelines already written above
     wantAnalysis ? refreshRedditAnalysis(clientId) : phaseSkip(),
     wantAnalysis ? refreshInstagramAnalysis(clientId) : phaseSkip(),
+    wantAnalysis ? refreshXMarketTalkAnalysis(clientId) : phaseSkip(),
     wantAnalysis ? refreshOpportunitySignalsAnalysis(clientId) : phaseSkip(), // needs fresh opportunitySignals pool already written above
   ]);
   const briefSummaries = !wantAnalysis
@@ -720,6 +877,7 @@ export async function refreshDigestClient(clientId, { freshnessToken = '', force
     summaries: briefSummaries?.written || [],
     redditAnalysisOk: Boolean(redditAnalysis?.ok),
     instagramAnalysisOk: Boolean(instagramAnalysis?.ok),
+    xMarketTalkAnalysisOk: Boolean(xMarketTalkAnalysis?.ok),
     opportunitySignalsAnalysisOk: Boolean(opportunitySignalsAnalysis?.ok),
   };
   if (wantAnalysis) {
@@ -745,10 +903,12 @@ export async function refreshDigestClient(clientId, { freshnessToken = '', force
     modules,
     scout,
     watchlist,
+    platformSignals,
     strategy,
     replyTargets,
     redditAnalysis,
     instagramAnalysis,
+    xMarketTalkAnalysis,
     opportunitySignalsRefresh,
     opportunitySignalsAnalysis,
     executiveSummary: briefSummaries,
@@ -767,6 +927,10 @@ async function handle(request) {
   // explicitly want a fresh full scout (the daily cron sends no params, so it
   // gets the cost-saving skip when a brief is already <6h old).
   const forceScout = url.searchParams.get('force') === '1' || url.searchParams.get('forceScout') === '1';
+  // allowX=1 opts THIS call into the paid X search (refreshXMarketTalk). Only the
+  // interactive Generate & Send sets it; the scheduled cron sends no params, so
+  // the cron can never spend X credits. See X-API-AND-PROFILE-OPERATIONS.md.
+  const allowX = url.searchParams.get('allowX') === '1';
   // phase=modules|signals|analysis splits the refresh across three sub-300s
   // requests (the interactive Run & Send path). No/invalid phase = full refresh.
   const rawPhase = String(url.searchParams.get('phase') || '').trim().toLowerCase();
@@ -806,13 +970,16 @@ async function handle(request) {
       const configClientId = await digestConfig.resolveDigestClientId();
       const cfg = await digestConfig.getDigestConfig(configClientId);
       homeClientId = cfg.homeClientId || configClientId;
-      // Opt-in only: the daily crawl runs for the home client plus every client
-      // whose Email Digest card has the daily toggle on — NOT a global
-      // includeClientIds fan-out. The one-time migration turns legacy daily-on
-      // configs OFF (except home) so this set starts as just the home client.
+      // Opt-in only: the daily crawl runs for every client whose Email Digest
+      // card has the daily toggle on — NOT a global includeClientIds fan-out.
       await digestConfig.ensureDailyOptInMigration(homeClientId);
-      const enrolledIds = await digestConfig.listCronEnrolledClientIds();
-      clientIds = [...new Set([homeClientId, ...enrolledIds].filter(Boolean))];
+      // Enrolled clients ONLY. Home used to be prepended unconditionally, so a
+      // home client with its own toggle OFF still ran a full paid scout every
+      // day (and, being first, consumed the budget that the clients who WERE
+      // enrolled needed). Home is included here exactly when it is enrolled.
+      // Least-recently-refreshed first so a short run rotates instead of always
+      // serving the same client.
+      clientIds = await digestConfig.listCronEnrolledClientIdsByStaleness('refresh');
     }
   } catch (err) {
     logError('pre_digest_refresh_client_resolve_error', { error: err.message });
@@ -822,27 +989,90 @@ async function handle(request) {
 
   logInfo('pre_digest_refresh_start', { clientId: homeClientId, clients: clientIds.length });
 
+  // ── Multi-client dispatch ──────────────────────────────────────────────────
+  // A full refresh for ONE client can alone exceed this function's 300s ceiling
+  // (scout + watchlist + strategy + recipes + summaries). Running the enrolled
+  // clients in-process therefore meant client #1 consumed the whole budget and
+  // the rest were dropped by a silent `break` — enrolled clients went unrefreshed
+  // for weeks. Instead the scheduled run re-enters this same route once per
+  // client with ?clientId=, concurrently: each client gets its OWN 300s
+  // invocation and the parent only waits. The explicit-clientId path below is
+  // the single-client worker and is unchanged.
+  if (!requestedClientId && clientIds.length > 0) {
+    const headers = { 'cache-control': 'no-store' };
+    if (process.env.CRON_SECRET) headers.authorization = `Bearer ${process.env.CRON_SECRET}`;
+    else if (process.env.WORKER_SECRET) headers['x-worker-secret'] = process.env.WORKER_SECRET;
+    // Re-enter the SAME deployment this run is executing on, never a fixed alias.
+    const selfOrigin = url.origin;
+
+    const refreshOne = async (clientId) => {
+      const target = new URL('/api/worker/pre-digest-refresh', selfOrigin);
+      url.searchParams.forEach((value, key) => {
+        if (key !== 'clientId') target.searchParams.set(key, value);
+      });
+      target.searchParams.set('clientId', clientId);
+      let entry;
+      try {
+        const res = await fetch(target.toString(), { headers, cache: 'no-store' });
+        const body = await res.json().catch(() => ({}));
+        entry = { clientId, status: res.status, ok: res.ok && body?.ok !== false, reason: body?.error || null, ...body };
+      } catch (err) {
+        entry = { clientId, ok: false, reason: err.message };
+      }
+      await digestConfig.stampCronRun(clientId, 'refresh', entry);
+      logInfo('pre_digest_refresh_client_done', { clientId, ok: entry.ok, status: entry.status || null, reason: entry.reason || null });
+      return entry;
+    };
+
+    const DISPATCH_CONCURRENCY = 3;
+    const dispatched = [];
+    const droppedIds = [];
+    for (let i = 0; i < clientIds.length; i += DISPATCH_CONCURRENCY) {
+      if (dispatched.length > 0 && Date.now() - startedAtMs > REFRESH_RESPONSE_BUDGET_MS) {
+        droppedIds.push(...clientIds.slice(i));
+        break;
+      }
+      // eslint-disable-next-line no-await-in-loop
+      const wave = await Promise.all(clientIds.slice(i, i + DISPATCH_CONCURRENCY).map(refreshOne));
+      dispatched.push(...wave);
+    }
+    if (droppedIds.length) {
+      logError('pre_digest_refresh_budget_exhausted', {
+        completed: dispatched.length,
+        total: clientIds.length,
+        droppedIds,
+        elapsedMs: Date.now() - startedAtMs,
+      });
+      await Promise.all(droppedIds.map((clientId) => {
+        const entry = { clientId, ok: false, skipped: true, reason: 'Refresh budget exhausted before this client ran.' };
+        dispatched.push(entry);
+        return digestConfig.stampCronRun(clientId, 'refresh', entry);
+      }));
+    }
+    const dispatchComplete = droppedIds.length === 0;
+    const dispatchOk = dispatchComplete && dispatched.every((entry) => entry.ok);
+    logInfo('pre_digest_refresh_done', {
+      dispatcher: true, clients: clientIds.length, completed: dispatched.length - droppedIds.length,
+      dropped: droppedIds.length, ok: dispatchOk,
+    });
+    return json({
+      ok: dispatchOk, dispatcher: true, clientIds, complete: dispatchComplete,
+      dropped: droppedIds, results: dispatched,
+    }, dispatchOk ? 200 : 207);
+  }
+
   // Use the single refresh path (scout → watchlist → strategy) so the scheduled
   // cron and manual Generate & Send produce identical fresh data — including
   // followed-handle timelines — and can never drift apart again.
   const results = [];
   for (const clientId of clientIds) {
-    if (!requestedClientId && results.length > 0 && Date.now() - startedAtMs > REFRESH_RESPONSE_BUDGET_MS) {
-      logError('pre_digest_refresh_budget_exhausted', {
-        clientId: homeClientId,
-        completed: results.length,
-        total: clientIds.length,
-        elapsedMs: Date.now() - startedAtMs,
-      });
-      break;
-    }
     // eslint-disable-next-line no-await-in-loop
     // Per-client digest config: each client's OWN include toggles + brief-link
     // mode gate its expensive compute (see cost gate in refreshDigestClient) —
     // never another client's config. Defaults apply when the client has no doc.
     // eslint-disable-next-line no-await-in-loop
     const clientCfg = await digestConfig.getDigestConfig(clientId).catch(() => null);
-    const result = await refreshDigestClient(clientId, { freshnessToken, force: forceScout, source: triggerSource, actorUid, include: clientCfg?.include || {}, briefLinkMode: clientCfg?.briefLinkMode || 'fresh', phase });
+    const result = await refreshDigestClient(clientId, { freshnessToken, force: forceScout, source: triggerSource, actorUid, include: clientCfg?.include || {}, briefLinkMode: clientCfg?.briefLinkMode || 'fresh', phase, allowX });
     results.push(result);
     logInfo('pre_digest_refresh_client_done', {
       clientId,

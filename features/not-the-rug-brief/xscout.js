@@ -234,10 +234,17 @@ function stripUngroundedUrls(agentData) {
   };
   const out = { ...agentData };
   for (const key of [
-    'brandMentions', 'competitorIntel', 'categoryTrends',
+    'brandMentions', 'competitorIntel', 'categoryTrends', 'pressCoverage',
     'kolActivity', 'redditSignals', 'reviewInsights', 'localDemandSignals',
   ]) {
     if (Array.isArray(out[key])) out[key] = stripList(out[key]);
+  }
+  // Press coverage is a citation surface by definition: an article nobody can
+  // open is the exact failure this section exists to fix (coverage used to land
+  // as unlinked prose inside competitorIntel/categoryTrends). Other sections
+  // keep the finding and lose the link; here an uncitable item is dropped.
+  if (Array.isArray(out.pressCoverage)) {
+    out.pressCoverage = out.pressCoverage.filter((item) => item && typeof item === 'object' && item.url);
   }
   if (out.viralOpportunities && Array.isArray(out.viralOpportunities.opportunities)) {
     out.viralOpportunities = {
@@ -255,7 +262,7 @@ function stripUngroundedUrls(agentData) {
 }
 
 const SIGNAL_ARRAY_FIELDS = [
-  'brandMentions', 'competitorIntel', 'categoryTrends',
+  'brandMentions', 'competitorIntel', 'categoryTrends', 'pressCoverage',
   'kolActivity', 'redditSignals', 'localDemandSignals', 'contentOpportunities',
 ];
 
@@ -596,6 +603,7 @@ function buildBriefPrompt(config, compactContext, previousBrief, weatherReport =
   "brandMentions": [{"source":"...","author":"...","content":"...","sentiment":"positive|neutral|negative","reach":"high|medium|low","url":"..."}],
   "competitorIntel": [{"competitor":"...","finding":"...","impact":"high|medium|low","url":"..."}],
   "categoryTrends": [{"trend":"...","relevance":"high|medium|low","detail":"..."}],
+  "pressCoverage": [{"headline":"...","publication":"...","summary":"...","angle":"brand|competitor|category","sentiment":"positive|neutral|negative","publishedAt":"<ISO date if known>","ageHours":0,"url":"<direct article URL — REQUIRED>"}],
   "kolActivity": [{"name":"...","platform":"x","content":"...","followers":"...","sentiment":"...","url":"..."}],
   "escalations": [{"level":"CRITICAL|IMPORTANT|QUIET","status":"NEW|CHANGED|ESCALATED|RESOLVED","summary":"..."}],
   "viralOpportunities": {

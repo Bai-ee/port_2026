@@ -159,6 +159,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   const redditSignals = projected.redditSignals || [];
   const localDemandSignals = projected.localDemandSignals || [];
   const brandMentions = projected.brandMentions || [];
+  const coverage = projected.coverage || [];
   const headline = projected.headline || 'Founder marketing brief';
   const scoutBrief = projected.humanBrief || 'No Scout brief text was stored for this run.';
   const guardian = marketingBrief?.guardianFlags || null;
@@ -797,6 +798,28 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     </div>
   </section>`;
 
+  // Press Coverage — articles about the brand, its competitors, or its category.
+  // Distinct from Market Signals (social posts): every row here is a real
+  // publication with an openable link, so an empty section means "no coverage
+  // found", never "coverage found but unlinkable".
+  const pressCoverageRows = compactList(coverage, (item) => buildRow({
+    label: item.headline || 'Coverage',
+    value: [item.summary, item.publishedAt ? `(${item.publishedAt})` : ''].filter(Boolean).join(' '),
+    url: item.url || '',
+    profileUrl: '',
+    platform: item.publication || '',
+  }), Infinity);
+
+  const pressCoverageSection = `
+  <section class="page">
+    <div class="sec-num">PC</div>
+    ${kicker('Marketing Director')}
+    <h2 class="headline">Press<br/>Coverage.</h2>
+    <div class="card">
+      ${renderRows(pressCoverageRows, 'No press coverage surfaced this run.')}
+    </div>
+  </section>`;
+
   const competitorSnapshotSection = `
   <section class="page">
     <div class="sec-num">03</div>
@@ -908,6 +931,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     'search-parameters': researchBriefSection,
     'local-weather': weatherSection,
     'market-signals': marketSignalsSection,
+    'press-coverage': pressCoverageSection,
     'watchlist': watchlistSection,
     'competitor-snapshot': competitorSnapshotSection,
     'local-signals': localSignalsSection,

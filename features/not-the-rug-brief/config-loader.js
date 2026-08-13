@@ -44,6 +44,7 @@ const DEFAULT_AGENT_DATA_TEMPLATE = `{
   "brandMentions": [{"source":"...","author":"...","content":"...","sentiment":"positive|neutral|negative","reach":"high|medium|low","signalType":"LIVE|BACKGROUND","ageHours":0,"url":"<post permalink — not profile or homepage>"}],
   "competitorIntel": [{"competitor":"...","finding":"...","impact":"high|medium|low","signalType":"LIVE|BACKGROUND","ageHours":0,"url":"<post permalink — not profile or homepage>"}],
   "categoryTrends": [{"trend":"...","relevance":"high|medium|low","detail":"...","ageHours":0,"url":"<post or article permalink, optional>"}],
+  "pressCoverage": [{"headline":"<the article's actual headline>","publication":"<publication or site name, e.g. CoinDesk>","summary":"<what it says and why it matters to this brand>","angle":"brand|competitor|category","sentiment":"positive|neutral|negative","publishedAt":"<ISO date if known>","ageHours":0,"url":"<direct article URL — REQUIRED, omit the whole item if you cannot cite it>"}],
   "contentOpportunities": {
     "found": true,
     "opportunities": [{"topic":"...","whyNow":"...","format":"...","priority":"high|medium|low","source":"...","url":"<post permalink — not profile or homepage>"}],
@@ -62,6 +63,7 @@ const MARKETING_BRIEF_AGENT_DATA_TEMPLATE = `{
   "brandMentions": [{"source":"...","author":"...","content":"...","sentiment":"positive|neutral|negative","reach":"high|medium|low","signalType":"LIVE|BACKGROUND","ageHours":0,"url":"<post permalink — not profile or homepage>"}],
   "competitorIntel": [{"competitor":"...","finding":"...","impact":"high|medium|low","signalType":"LIVE|BACKGROUND","ageHours":0,"url":"<post permalink — not profile or homepage>"}],
   "categoryTrends": [{"trend":"...","relevance":"high|medium|low","detail":"...","ageHours":0,"url":"<post or article permalink, optional>"}],
+  "pressCoverage": [{"headline":"<the article's actual headline>","publication":"<publication or site name, e.g. CoinDesk>","summary":"<what it says and why it matters to this brand>","angle":"brand|competitor|category","sentiment":"positive|neutral|negative","publishedAt":"<ISO date if known>","ageHours":0,"url":"<direct article URL — REQUIRED, omit the whole item if you cannot cite it>"}],
   "kolActivity": [{"name":"...","platform":"x","content":"...","followers":"...","sentiment":"positive|neutral|negative","signalType":"LIVE|BACKGROUND","ageHours":0,"url":"<post permalink — the specific tweet/comment, not the profile>","profileUrl":"<author profile URL, optional>"}],
   "escalations": [{"level":"CRITICAL|IMPORTANT|QUIET","status":"NEW|CHANGED|ESCALATED|RESOLVED","summary":"...","url":"<source permalink, optional>"}],
   "viralOpportunities": {

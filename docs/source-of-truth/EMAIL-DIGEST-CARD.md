@@ -388,6 +388,37 @@ renders*; `summaryEnabled` (separate field, §02 of the UI) controls whether the
 
 ---
 
+## 9a. Press Coverage section + the THREE hardcoded lists (added 2026-08-13)
+
+`pressCoverage` is a Market-Signals-group section rendering `projectBrief`'s `coverage` (articles: publication · date · headline · link, cap `EMAIL_CAPS.pressCoverage`). **Default ON**, and deliberately absent from `LEGACY_INCLUDE_EXPANSION` so a legacy coarse `marketingBrief: false` can't silently switch it off. Gated only by its toggle, with an explicit empty state, per §9's rule.
+
+⚠️ **Adding a digest section means editing FOUR places — three of them hardcoded lists.** Missing any one renders nothing, silently:
+1. `INCLUDE_KEYS` + `DEFAULT_INCLUDE` (`features/intelligence/_digest-config.js`) — `ORDERABLE_KEYS`/`DEFAULT_ORDER` derive from it automatically.
+2. The `RENDER` map in `daily-digest/route.js` (the section renderer itself).
+3. **The `renderGroup([...])` call for that group** (`marketSignalsSection = renderGroup([...])`). This is the one that bit: the key was in `INCLUDE_KEYS`, in `RENDER`, enabled in config, in the order — and still rendered nothing, because group membership is a separate hardcoded array.
+4. The toggle rows in `components/AdminEmailModals.jsx` (also hardcoded, not generated from `INCLUDE_KEYS`).
+
+`normalizeOrder` now inserts a key the saved order predates **next to its canonical neighbour** instead of appending it, so a new section lands beside its group (Press Coverage after Signals) rather than at the bottom of every existing client's email.
+
+---
+
+## 9b. Multi-client fan-out — only enrolled clients, concurrently (fixed 2026-08-13)
+
+**The bug:** both daily crons served exactly one client — for months. Evidence: `bryan-balli-WUoltG84` had a `pre-digest-refresh` run every single day; two other clients with `schedule.enabled: true` had **never** had one (one enrolled 12 days earlier). Every `usage_event` in the 12:00–14:30 UTC cron window across 5 days belonged to that one client.
+
+**Two causes, both fixed:**
+
+1. **Home was prepended unconditionally.** Both routes built `clientIds = [homeClientId, ...enrolledIds]`. The send route's per-client gate (`isCronEnrolled`) meant home was never actually *mailed* when its toggle was off — but `pre-digest-refresh` had **no such gate in its loop**, so home ran a full paid scout every day regardless of its toggle, and being first it consumed the budget the enrolled clients needed. Both routes now take **enrolled clients only** (`listCronEnrolledClientIdsByStaleness`), so home appears exactly when its own toggle is on, like everyone else.
+2. **Sequential fan-out under a budget smaller than one client's work.** Both loops ran clients one at a time and `break`-ed at `270_000`ms — but a single client's refresh alone exceeds that, so client #2 was never reached, and the silent `break` still returned `ok`. Both now run **bounded-concurrency waves** (`send: 4`, `refresh: 3`); each sub-request is its own invocation with its own `maxDuration`, so wall-clock is the slowest client per wave rather than the sum. `pre-digest-refresh` gained a **dispatcher mode**: with no `?clientId=` it re-enters itself once per client (the explicit-clientId path is the unchanged single-client worker).
+
+**Observability (this is why it hid for so long).** Nothing recorded a refresh or a send anywhere. `digestConfig.stampCronRun(clientId, 'refresh'|'send', outcome)` now writes `lastCronRefreshAt/Status/Reason` + `lastCronSendAt/Status/Reason` onto `digest_config/{clientId}`. Dropped clients are stamped `skipped` and logged as an **error** (`*_budget_exhausted` with `droppedIds`), never a quiet break, and the response carries `dropped: []`. Ordering is **least-recently-served first**, so a short run rotates instead of starving the same client every day.
+
+⚠️ Vercel Hobby retains runtime logs ~1h, so cron-time logs are gone by the time anyone investigates — the Firestore stamps are the durable record. Check those first.
+
+⚠️ `schedule.sendHour` / `timezone` are stored, clamped, and rendered in the card but **read by nothing**. Actual send time is fixed by `vercel.json` (`0 13 * * *` UTC) and Hobby allows daily crons only, so per-client hours are not achievable as built. Either honor it or retire the input — it currently promises something the system cannot do.
+
+---
+
 ## 10. Pre-refresh + fast send + hosted Executive Brief link (as-built)
 
 **The goal:** scheduled refresh work finishes before the daily send, while an

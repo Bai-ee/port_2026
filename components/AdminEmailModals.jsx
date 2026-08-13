@@ -57,12 +57,14 @@ const SECTION_GROUPS = [
     ['opportunities', 'Post Opportunities', 'Conversation / angle to enter', 'signals'],
     ['suggestedReplies', 'Suggested Replies', 'Drafted reply per opportunity', 'signals'],
     ['signals', 'Signals', 'KOLs, competitors, narratives', 'signals'],
+    ['pressCoverage', 'Press Coverage', 'Articles about you, competitors, or the category — each with a working link', 'signals'],
     ['watchlistAccounts', 'Watchlist Accounts', 'Tracked accounts, name-for-name', 'signals'],
     ['suggestedPosts', 'Suggested Posts', 'Drafted posts for today', 'signals'],
     ['planPreview', '30-Day Plan', 'Upcoming scheduled posts', 'signals'],
     ['watchlist', 'Happening on X', 'Watchlist analysis', 'signals', 'x'],
     ['redditAnalysis', 'Happening on Reddit', 'Reddit platform analysis', 'signals', 'reddit'],
     ['instagramAnalysis', 'Happening on Instagram', 'Instagram platform analysis', 'signals', 'instagram'],
+    ['xMarketTalk', 'Market Talk on X', 'What the market is saying about you on X — a brand-handle search. Paid X API; runs on Generate & Send only.', 'signals', 'x'],
     ['followerPosts', 'Follower Posts', '1 post from each followed handle', 'signals'],
   ]],
   ['Creative brief', [
@@ -134,7 +136,7 @@ const EST_SECTION_KB = {
   execBriefLink: 1, contactHuman: 1,
   humanBrief: 2, opportunities: 7, suggestedReplies: 9, signals: 14,
   watchlistAccounts: 9, suggestedPosts: 5, planPreview: 3, watchlist: 7,
-  redditAnalysis: 8, instagramAnalysis: 8, followerPosts: 7,
+  redditAnalysis: 8, instagramAnalysis: 8, xMarketTalk: 8, followerPosts: 7,
   creativeBrief: 6,
   ga4Traffic: 3, topPages: 2, trafficSources: 2, keyEvents: 1, homepage: 4,
   platformOverview: 2, signups: 2, dashboards: 2, pipeline: 2,
@@ -165,6 +167,7 @@ function guardIncludeForAvailability(include = {}, availability = {}) {
   if (availability.x === false) next.watchlist = false;
   if (availability.reddit === false) next.redditAnalysis = false;
   if (availability.instagram === false) next.instagramAnalysis = false;
+  if (availability.x === false) next.xMarketTalk = false;
   return next;
 }
 
@@ -364,12 +367,50 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
             if (saved?.marketInsights) setMarketInsights(saved.marketInsights);
           }
           note('Saved config ✓');
-          advance('[SEND]', 'Generating and sending the email with the latest completed video…');
-          note('Manual send skips intelligence refresh and never starts a video render.');
-          setSendStatus({ kind: 'pending', msg: 'Generating and sending email…' });
-          // Scope the send to this card's saved home client. The server separately
+          // Scope everything to this card's saved home client. The server separately
           // resolves the configured video source and destination social account.
           const sendClientId = savedConfig?.homeClientId || activeClientId || clientId || '';
+
+          // Refresh intelligence BEFORE sending, so the email renders today's data
+          // rather than whatever the last cron left behind. The send route itself
+          // never refreshes inline (that caused time-boxed sends + orphaned
+          // "running" brief_runs — commit 71312f8b split the paths), so we drive
+          // the worker's phases from here, each one a separate sub-300s request.
+          //
+          // We run `signals` + `analysis` only, NOT `modules`: the modules phase
+          // renders creative/video, and a manual send must never kick off a video
+          // render. `signals` re-runs Scout + the Reddit/Instagram/web searches;
+          // `analysis` runs the platform analyzers that write the fields the email
+          // actually reads (reportSnapshot.redditAnalysis etc.) — without it the
+          // section renders its empty state even with fresh search results stored.
+          // No `force`: Scout keeps its <6h freshness skip, same as the cron.
+          const refreshPhase = async (phase, label) => {
+            try {
+              // allowX only on the signals phase: it opts this send into the PAID X
+              // brand search (refreshXMarketTalk). The daily cron never sends it.
+              const allowX = phase === 'signals' ? '&allowX=1' : '';
+              const res = await authFetch(user, `/api/worker/pre-digest-refresh?phase=${phase}&clientId=${encodeURIComponent(sendClientId)}&freshnessToken=${encodeURIComponent(freshnessToken)}${allowX}`, { method: 'POST' });
+              const r = Array.isArray(res?.results) ? res.results[0] : null;
+              if (phase === 'signals') {
+                note(`· scout ${r?.scout?.ok ? '✓' : '✗'} · watchlist ${r?.watchlist?.ok ? '✓' : '✗'} · X market talk ${r?.platformSignals?.xMarketTalk ?? 'n/a'}`);
+              } else {
+                note(`· reddit brief ${r?.redditAnalysis?.ok ? '✓' : (r?.redditAnalysis?.reason || 'skipped')} · X market talk ${r?.xMarketTalkAnalysis?.ok ? '✓' : (r?.xMarketTalkAnalysis?.reason || 'skipped')} · exec summary ${r?.executiveSummary?.ok ? '✓' : 'skipped'}`);
+              }
+            } catch (err) {
+              // A failed refresh must not block the send — the email falls back to
+              // the last saved data and the affected sections show their empty state.
+              note(`· ${label} refresh failed — sending from last saved data (${err.message})`);
+            }
+          };
+          advance('[REFRESH]', 'Re-running searches — scout, watchlist, Reddit/Instagram/web…');
+          setSendStatus({ kind: 'pending', msg: 'Refreshing intelligence…' });
+          await refreshPhase('signals', 'signals');
+          advance('[ANALYZE]', 'Running the platform briefs over the fresh signals…');
+          await refreshPhase('analysis', 'analysis');
+
+          advance('[SEND]', 'Generating and sending the email with the latest completed video…');
+          note('Manual send refreshes intelligence but never starts a video render.');
+          setSendStatus({ kind: 'pending', msg: 'Generating and sending email…' });
           const res = await authFetch(user, `/api/admin/daily-digest?send=1&skipRefresh=1&freshnessToken=${encodeURIComponent(freshnessToken)}${sendClientId ? `&clientId=${encodeURIComponent(sendClientId)}` : ''}`);
           (Array.isArray(res?.log) ? res.log : []).forEach((l) => note(l.text));
           if (res?.subject) note(`Subject · ${res.subject}`);

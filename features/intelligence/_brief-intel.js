@@ -108,7 +108,22 @@ function projectBrief(marketingBrief, state = null) {
       trend: t.trend || t.topic || 'Trend',
       detail: t.detail || '',
       relevance: t.relevance || '',
+      url: t.url || '',
     })),
+    // Press/article coverage. Its own section because an article is a different
+    // object from a social post: it has a headline, a publication and a date,
+    // and it is only useful when it can be opened. Before this existed, web
+    // search results were melted into categoryTrends/competitorIntel prose
+    // ("Criticized in CoinDesk coverage as…") with the URL nowhere.
+    coverage: arr(agentData.pressCoverage).map((p) => ({
+      headline: p.headline || p.title || 'Coverage',
+      publication: p.publication || p.source || '',
+      summary: p.summary || p.detail || '',
+      angle: p.angle || '',
+      sentiment: p.sentiment || '',
+      publishedAt: p.publishedAt || '',
+      url: p.url || '',
+    })).filter((p) => p.url),
     brandMentions: arr(agentData.brandMentions).map((m) => ({
       source: m.source || '',
       author: m.author || '',
@@ -151,6 +166,10 @@ function projectBrief(marketingBrief, state = null) {
     redditAnalysis: marketingBrief?.reportSnapshot?.redditAnalysis?.text || '',
     // Platform-analysis slot for "Happening on Instagram". Same pattern as reddit.
     instagramAnalysis: marketingBrief?.reportSnapshot?.instagramAnalysis?.text || '',
+    // "Market Talk on X" — analysis of a brand SEARCH on X (handle + brand
+    // keywords). Distinct from watchlistAnalysis, which covers the tracked
+    // handles' own timelines. Same persisted reportSnapshot pattern.
+    xMarketTalkAnalysis: marketingBrief?.reportSnapshot?.xMarketTalkAnalysis?.text || '',
     // Opportunity Signals slot (public buying-signal scan) — same persisted
     // reportSnapshot pattern as reddit/instagram analysis.
     opportunitySignalsAnalysis: marketingBrief?.reportSnapshot?.opportunitySignalsAnalysis?.text || '',

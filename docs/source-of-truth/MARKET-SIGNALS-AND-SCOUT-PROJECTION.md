@@ -72,6 +72,19 @@ runClientPipeline
 - **Email digest** (`app/api/admin/daily-digest/route.js`) via `getBriefIntelligence` (a thin Firebase-reading wrapper around `projectBrief`) + `briefIntelToText`.
 - **Executive brief** (`renderMarketingBriefHtml` in `app/api/dashboard/brief-preview/route.js`) calls `projectBrief(marketingBrief)` for its signal arrays.
 
+### `pressCoverage` → `projected.coverage` (added 2026-08-13)
+
+Articles are a different object from social posts — headline, publication, date — and are only useful when openable. Before this section existed, web-search results were melted into `categoryTrends` / `competitorIntel` prose with the link nowhere (a real run cited *"Criticized in CoinDesk coverage as…"* and stored 25 URLs, every one of them x.com/t.co/reddit.com). Web search was running and being paid for; the findings just had no place to land.
+
+The chain, in the order to touch it when changing it:
+1. **Schema** — `pressCoverage` in `DEFAULT_AGENT_DATA_TEMPLATE` + `MARKETING_BRIEF_AGENT_DATA_TEMPLATE` (`features/not-the-rug-brief/config-loader.js`), the inline fallback in `xscout.js`, and the card default in `lib/dashboard/marketing-brief-config.js`. ⚠️ Existing clients have their template **saved in Firestore** and `config-loader.js:445` prefers the saved copy — a code-only change does nothing for them. Backfill the stored template too (the save route caps it at 6000 chars).
+2. **Grounding** — `stripUngroundedUrls` in `xscout.js` **drops** `pressCoverage` items with no surviving URL, rather than keeping the finding and losing the link like every other section. An article nobody can open is the exact failure this section fixes. `validatePostUrl` already accepts news/blog hosts, so nothing else was blocking article links.
+3. **Projection** — `projectBrief` → `coverage` (url-filtered). The same pass also stopped `narratives` from dropping `categoryTrends[].url`, which the brief renderer was already trying to read.
+4. **Render** — brief section id `press-coverage` (`sectionHtmlById` in `brief-preview/route.js`, in the `executive-daily` + `marketing-director` compositions), the Signals rows in the digest email (`EMAIL_CAPS.signalsCoverage`, press leads the section), `#signals-press-coverage-section` in the dashboard REPORT tab, and the run-terminal counts.
+5. **Cover summary** — `SECTION_EVIDENCE['press-coverage']` in `brief-summarizer.js`.
+
+⚠️ Coverage only appears if the freshness window allows it: `marketingBriefConfig.freshnessDays` (the **card** value, which overrides `scoutConfig.scout.freshnessDays`) was `1` on a launching client, so every article older than 24h was excluded.
+
 **Rule for agents:** when a new `agentData` field needs to surface anywhere, **extend `projectBrief`** — never re-read `agentData` directly in a consumer. The two surfaces previously hand-mirrored each other and drifted (different fields survived in each); the projection exists to prevent that. `renderMarketingBriefHtml` field refs accept the projection's normalized names with the raw names as fallback (e.g. `item.detail || item.content`).
 
 ---

@@ -3536,8 +3536,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         ad = fresh?.dashboardState?.marketingBrief?.scoutBrief?.agentData || {};
       } catch { try { doBootstrap(); } catch { /* best-effort */ } }
       termPhaseClose([
-        { type: 'dim', prefix: '·', text: `${termArrCount(ad.categoryTrends)} trends · ${termArrCount(ad.competitorIntel)} competitors · ${termArrCount(ad.contentOpportunities)} angles · ${termArrCount(ad.redditSignals)} reddit · ${termArrCount(ad.kolActivity)} KOL posts · ${termArrCount(ad.brandMentions)} brand` },
+        { type: 'dim', prefix: '·', text: `${termArrCount(ad.categoryTrends)} trends · ${termArrCount(ad.pressCoverage)} press · ${termArrCount(ad.competitorIntel)} competitors · ${termArrCount(ad.contentOpportunities)} angles · ${termArrCount(ad.redditSignals)} reddit · ${termArrCount(ad.kolActivity)} KOL posts · ${termArrCount(ad.brandMentions)} brand` },
         ...termItemLines(ad.categoryTrends, '· web'),
+        ...termItemLines(ad.pressCoverage, '· press'),
         ...termItemLines(ad.competitorIntel, '· comp'),
         ...termItemLines(ad.redditSignals, '· rdt'),
       ]);
@@ -3624,8 +3625,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         ad = fresh?.dashboardState?.marketingBrief?.scoutBrief?.agentData || {};
       } catch { /* best-effort */ }
       termPhaseClose([
-        { type: 'dim', prefix: '·', text: `${termArrCount(ad.categoryTrends)} trends · ${termArrCount(ad.competitorIntel)} competitors · ${termArrCount(ad.contentOpportunities)} angles · ${termArrCount(ad.redditSignals)} reddit · ${termArrCount(ad.kolActivity)} KOL posts` },
+        { type: 'dim', prefix: '·', text: `${termArrCount(ad.categoryTrends)} trends · ${termArrCount(ad.pressCoverage)} press · ${termArrCount(ad.competitorIntel)} competitors · ${termArrCount(ad.contentOpportunities)} angles · ${termArrCount(ad.redditSignals)} reddit · ${termArrCount(ad.kolActivity)} KOL posts` },
         ...termItemLines(ad.categoryTrends, '· web'),
+        ...termItemLines(ad.pressCoverage, '· press'),
         ...termItemLines(ad.competitorIntel, '· comp'),
       ]);
 
@@ -4281,6 +4283,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     );
     const reddit = scoutTestState?.reddit?.items || [];
     const web = scoutTestState?.web?.items || [];
+    // Press coverage from the stored Scout run — articles, not social posts.
+    // Every item is guaranteed to carry a URL (uncitable ones are dropped in
+    // xscout's stripUngroundedUrls), so the card always has a working link.
+    const pressCoverageItems = (dashboardState?.marketingBrief?.scoutBrief?.agentData?.pressCoverage || [])
+      .filter((p) => p && p.url && (p.headline || p.summary));
     const instagram = scoutTestState?.instagram?.items || [];
     const total = handleTotal + reddit.length + web.length + instagram.length;
     const recipeResults = (recipeRun.results || []).filter((r) => r.ok && r.analysis);
@@ -4294,6 +4301,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     const mentionsTotal = (watchlistPull.handles || []).reduce((n, h) => n + (h.mentions?.length || 0), 0);
     const coverage = [
       { lbl: 'Web trends', n: cnt(ad.categoryTrends) },
+      { lbl: 'Press coverage', n: cnt(ad.pressCoverage) },
       { lbl: 'Content ops', n: cnt(ad.contentOpportunities) },
       { lbl: 'Competitors', n: cnt(ad.competitorIntel) },
       { lbl: 'Brand mentions', n: cnt(ad.brandMentions) },
@@ -4395,6 +4403,22 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   </div>
                 );
               })}
+
+              {pressCoverageItems.length ? (
+                <>
+                  <div className="b-sec" style={{ marginTop: 16 }} id="signals-press-coverage-section">Press Coverage</div>
+                  <div className="b-stack">
+                    {pressCoverageItems.map((p, i) => (
+                      <div className="b-card" key={`press-${i}`}>
+                        <div className="stat-row"><div className="k">Headline</div><div className="v">{p.headline}</div></div>
+                        {p.publication ? <div className="stat-row"><div className="k">Publication</div><div className="v">{p.publication}{p.publishedAt ? ` · ${p.publishedAt}` : ''}</div></div> : null}
+                        {p.summary ? <div className="stat-row"><div className="k">Why it matters</div><div className="v">{p.summary}</div></div> : null}
+                        <div className="stat-row"><div className="k">Source</div><div className="v"><a className="b-link" href={p.url} target="_blank" rel="noopener noreferrer">↗ {hostOf(p.url) || 'article'}</a></div></div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : null}
 
               {web.length ? (
                 <>

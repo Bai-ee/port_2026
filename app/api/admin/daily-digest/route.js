@@ -67,7 +67,7 @@ const DIGEST_CALENDAR_ID = process.env.DIGEST_CALENDAR_ID || DIGEST_TO;
 const DIGEST_TIMEZONE = process.env.DIGEST_TIMEZONE || 'America/Chicago';
 const DIGEST_X_HANDLE = String(process.env.DIGEST_X_HANDLE || 'bai_ee').replace(/^@+/, '');
 const DIGEST_X_POST_DELAY_MINUTES = Math.max(1, Math.min(60, Number(process.env.DIGEST_X_POST_DELAY_MINUTES) || 2));
-const COMPAT_INCLUDE_KEYS = ['redditAnalysis', 'instagramAnalysis', 'suggestedReplies'];
+const COMPAT_INCLUDE_KEYS = ['redditAnalysis', 'instagramAnalysis', 'xMarketTalk', 'suggestedReplies'];
 const DIGEST_INCLUDE_KEYS = Array.from(new Set([...(digestConfig.INCLUDE_KEYS || []), ...COMPAT_INCLUDE_KEYS]));
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -1105,6 +1105,7 @@ const EMAIL_CAPS = {
   signalsKols: 5,
   signalsCompetitors: 4,
   signalsNarratives: 4,
+  pressCoverage: 6,        // article rows in the Press Coverage section
   signalsText: 240,        // finding/detail text per Signals row
   opportunities: 6,
   suggestedReplies: 3,
@@ -1398,10 +1399,23 @@ function buildStrategicParts(intel, postPlatforms = {}) {
       </tr>`).join(''))
     : '';
 
+  // Press Coverage — its own section, not a row type inside Signals. Every item
+  // is an article with a publication, a date and a working link (projectBrief
+  // drops uncitable ones), so it reads as a source list rather than a finding.
+  const coverageAll = intel.coverage || [];
+  const coverageShown = coverageAll.slice(0, EMAIL_CAPS.pressCoverage);
+  const coverageHtml = coverageShown.length
+    ? coverageShown.map((p) => `<tr>
+        <td style="${TD}width:120px;font-family:${DT.fMono};font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:${DT.light};vertical-align:top;">${escapeHtml(p.publication || 'Press')}${p.publishedAt ? `<div style="margin-top:3px;letter-spacing:.04em;text-transform:none;">${escapeHtml(String(p.publishedAt).slice(0, 10))}</div>` : ''}</td>
+        <td style="${TD}"><strong>${escapeHtml(p.headline)}</strong>${linkBit(p.url)}<div style="margin-top:2px;color:${DT.soft};font-size:12px;">${escapeHtml(String(p.summary || '').slice(0, EMAIL_CAPS.signalsText))}</div></td>
+      </tr>`).join('') + emailOverflowRow(coverageAll.length - coverageShown.length, 'articles', 2)
+    : '';
+
   return {
     humanBrief: intel.humanBrief
       ? `<div style="background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:18px 20px;font-family:${DT.fBody};font-size:14px;line-height:1.6;color:${DT.ink};">${escapeHtml(intel.humanBrief)}</div>`
       : '',
+    pressCoverage: coverageHtml ? dDataTable([{ label: 'Publication' }, { label: 'Article' }], coverageHtml) : '',
     opportunities: oppRows ? dDataTable([{ label: 'Conversation / angle' }], oppRows) : '',
     suggestedReplies: repliesHtml,
     signals: signalsHtml ? dDataTable([{ label: 'Type' }, { label: 'Finding' }], signalsHtml) : '',
@@ -1656,6 +1670,13 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
     .map((b) => buildInstagramBriefSection(b.intel?.instagramAnalysis))
     .filter((s) => s && s.trim())
     .join('');
+  // "Market Talk on X" reuses buildInstagramBriefSection: same analyzer JSON schema
+  // (overview/spotlight/threads) and that renderer already labels each item with an
+  // @handle, which is the right shape for X posts. No separate builder needed.
+  const xMarketTalkSections = include.xMarketTalk === false ? '' : briefList
+    .map((b) => buildInstagramBriefSection(b.intel?.xMarketTalkAnalysis))
+    .filter((s) => s && s.trim())
+    .join('');
   const opportunitySignalsSections = include.opportunitySignals === false ? '' : briefList
     .map((b) => buildOpportunitySignalsBriefSection(b.intel?.opportunitySignalsAnalysis))
     .filter((s) => s && s.trim())
@@ -1785,11 +1806,13 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
     opportunities: () => section('Market Signals', 'Post Opportunities', sPart('opportunities')),
     suggestedReplies: () => section('Market Signals', 'Suggested Replies', sPart('suggestedReplies') || noDataBlock('Suggested Replies is enabled, but no drafted replies were found in the current Market Signals data yet. Run Generate & Send after Market Insights has fresh opportunities or reply targets.')),
     signals: () => section('Market Signals', 'Signals', sPart('signals')),
+    pressCoverage: () => section('Market Signals', 'Press Coverage', sPart('pressCoverage') || noDataBlock('Press Coverage is enabled, but no articles were captured in the latest Scout run. Coverage only appears when a search finds a real article inside the freshness window — widen freshnessDays if launch-week pieces are being excluded.')),
     watchlistAccounts: () => section('Market Signals', 'Watchlist Accounts', sPart('watchlistAccounts')),
     suggestedPosts: () => section('Market Signals', 'Suggested Posts', sPart('suggestedPosts')),
     planPreview: () => section('Market Signals', '30-Day Plan', sPart('planPreview')),
     watchlist: () => section('Market Signals', 'Happening on X', watchlistSections),
     redditAnalysis: () => section('Market Signals', 'Happening on Reddit', redditAnalysisSections || noDataBlock('Happening on Reddit is enabled, but no Reddit analysis has been saved for this client yet. Run Generate & Send with Reddit enabled in Market Insights so the Reddit analyzer can write this section.')),
+    xMarketTalk: () => section('Market Signals', 'Market Talk on X', xMarketTalkSections || noDataBlock('Market Talk on X is enabled, but no X brand-search analysis has been saved for this client yet. Run Generate &amp; Send — that is what performs the X brand search (paid X API). The daily cron never runs it.')),
     instagramAnalysis: () => section('Market Signals', 'Happening on Instagram', instagramAnalysisSections || noDataBlock('Happening on Instagram is enabled, but no Instagram analysis has been saved for this client yet. Run Generate & Send with Instagram enabled in Market Insights so the Instagram analyzer can write this section.')),
     opportunitySignals: () => section('Market Signals', 'Opportunity Signals', opportunitySignalsSections || noDataBlock('Opportunity Signals is enabled, but no opportunities have been found yet. Refresh Market Signals with Opportunity Signals enabled so the scan can write this section.')),
     followerPosts: () => section('Market Signals', 'Follower Posts', buildFollowerPostsSection(briefs)),
@@ -1822,7 +1845,11 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
   const topSections = renderGroup(['agenda', 'weather']);
   const todaySection = renderGroup(['execSummary']);
   const postContentSection = renderGroup(['videoPosts', 'videoPromo']);
-  const marketSignalsSection = renderGroup(['humanBrief', 'opportunities', 'suggestedReplies', 'signals', 'watchlistAccounts', 'suggestedPosts', 'planPreview', 'watchlist', 'redditAnalysis', 'instagramAnalysis', 'opportunitySignals', 'followerPosts']);
+  // ⚠️ Hardcoded group membership — a key in INCLUDE_KEYS + RENDER still renders
+  // NOTHING until it is listed here. This is the third hardcoded list a new
+  // digest section has to be added to (INCLUDE_KEYS, the AdminEmailModals
+  // toggle rows, and this group).
+  const marketSignalsSection = renderGroup(['humanBrief', 'opportunities', 'suggestedReplies', 'signals', 'pressCoverage', 'watchlistAccounts', 'suggestedPosts', 'planPreview', 'watchlist', 'redditAnalysis', 'instagramAnalysis', 'xMarketTalk', 'opportunitySignals', 'followerPosts']);
   const creativeSection = renderGroup(['creativeBrief']);
   const webPerfSection = renderGroup(['ga4Traffic', 'topPages', 'trafficSources', 'keyEvents', 'homepage']);
   const platformSection = renderGroup(['platformOverview', 'signups', 'dashboards', 'pipeline']);
@@ -2329,12 +2356,15 @@ function buildPlaceholderData(timestamp) {
  * ?clientId=, which scopes config, briefs, stats and recipient to that client
  * (the single-client path below is untouched). Each sub-send is its own
  * invocation with its own timeout budget, and is still gated by that client's
- * own schedule.enabled. Sequential on purpose: a send does heavy per-client
- * reads and the parent must stay inside maxDuration.
+ * own schedule.enabled.
  *
- * The client set mirrors pre-digest-refresh (home + enrolled) so send and
- * refresh can never drift apart; a home client that is not enrolled is simply
- * skipped by the gate in its own sub-request.
+ * Runs in bounded-concurrency waves. It was sequential, which meant one slow
+ * client burned the parent's whole budget and every client behind it was
+ * dropped by a silent `break` — for months the only client ever served was
+ * whichever sorted first. Wall-clock is now the slowest client per wave.
+ *
+ * The client set mirrors pre-digest-refresh (enrolled only, least-recently-sent
+ * first) so send and refresh can never drift apart.
  */
 async function fanOutScheduledSends(url) {
   const startedAtMs = Date.now();
@@ -2342,11 +2372,12 @@ async function fanOutScheduledSends(url) {
 
   let clientIds = [];
   try {
-    const configClientId = await digestConfig.resolveDigestClientId();
-    const cfg = await digestConfig.getDigestConfig(configClientId);
-    const homeClientId = cfg.homeClientId || configClientId;
-    const enrolledIds = await digestConfig.listCronEnrolledClientIds();
-    clientIds = [...new Set([homeClientId, ...enrolledIds].filter(Boolean))];
+    // Enrolled clients ONLY, least-recently-sent first. The home client used to
+    // be prepended unconditionally: it was never mailed (its own enrollment gate
+    // skips it) but it always consumed the first slot, so with a sequential
+    // fan-out no other client was ever reached. Home appears here now exactly
+    // when its own daily toggle is on, like every other client.
+    clientIds = await digestConfig.listCronEnrolledClientIdsByStaleness('send');
   } catch (err) {
     logError('daily_digest_fanout_resolve_error', { error: err.message });
     return json({ error: `Could not resolve digest clients: ${err.message}` }, 500);
@@ -2367,16 +2398,7 @@ async function fanOutScheduledSends(url) {
 
   logInfo('daily_digest_fanout_start', { clients: clientIds.length, clientIds, origin: selfOrigin });
 
-  const results = [];
-  for (const clientId of clientIds) {
-    if (results.length > 0 && Date.now() - startedAtMs > FANOUT_BUDGET_MS) {
-      logError('daily_digest_fanout_budget_exhausted', {
-        completed: results.length,
-        total: clientIds.length,
-        elapsedMs: Date.now() - startedAtMs,
-      });
-      break;
-    }
+  const sendOne = async (clientId) => {
     const target = new URL('/api/admin/daily-digest', selfOrigin);
     // Carry through anything the cron/caller set (e.g. freshnessToken); the
     // per-client id always wins.
@@ -2387,9 +2409,7 @@ async function fanOutScheduledSends(url) {
 
     let entry;
     try {
-      // eslint-disable-next-line no-await-in-loop
       const res = await fetch(target.toString(), { headers, cache: 'no-store' });
-      // eslint-disable-next-line no-await-in-loop
       const body = await res.json().catch(() => ({}));
       entry = {
         clientId,
@@ -2402,19 +2422,54 @@ async function fanOutScheduledSends(url) {
     } catch (err) {
       entry = { clientId, ok: false, error: err.message };
     }
-    results.push(entry);
+    await digestConfig.stampCronRun(clientId, 'send', entry);
     logInfo('daily_digest_fanout_client_done', entry);
+    return entry;
+  };
+
+  // Concurrent, in waves. Each sub-request is its own invocation with its own
+  // maxDuration, so wall-clock here is the slowest client per wave, not the sum
+  // of every client. Sequentially, one slow client consumed the whole budget
+  // and every client behind it was dropped — silently, since the run still
+  // returned ok. Capped so a large enrollment can't open 50 sockets at once.
+  const FANOUT_CONCURRENCY = 4;
+  const results = [];
+  const droppedIds = [];
+  for (let i = 0; i < clientIds.length; i += FANOUT_CONCURRENCY) {
+    if (results.length > 0 && Date.now() - startedAtMs > FANOUT_BUDGET_MS) {
+      droppedIds.push(...clientIds.slice(i));
+      break;
+    }
+    // eslint-disable-next-line no-await-in-loop
+    const wave = await Promise.all(clientIds.slice(i, i + FANOUT_CONCURRENCY).map(sendOne));
+    results.push(...wave);
+  }
+  // A dropped client is a failure to report, not a quiet break. Stamped too, so
+  // staleness ordering puts it first next run.
+  if (droppedIds.length) {
+    logError('daily_digest_fanout_budget_exhausted', {
+      completed: results.length,
+      total: clientIds.length,
+      droppedIds,
+      elapsedMs: Date.now() - startedAtMs,
+    });
+    await Promise.all(droppedIds.map((clientId) => {
+      const entry = { clientId, ok: false, skipped: true, reason: 'Fan-out budget exhausted before this client ran.' };
+      results.push(entry);
+      return digestConfig.stampCronRun(clientId, 'send', entry);
+    }));
   }
 
-  const complete = results.length === clientIds.length;
+  const complete = droppedIds.length === 0;
   const ok = complete && results.every((r) => r.ok);
   logInfo('daily_digest_fanout_done', {
     clients: clientIds.length,
-    completed: results.length,
+    completed: results.length - droppedIds.length,
+    dropped: droppedIds.length,
     sent: results.filter((r) => r.ok && !r.skipped).length,
     ok,
   });
-  return json({ ok, fanout: true, clientIds, complete, results });
+  return json({ ok, fanout: true, clientIds, complete, dropped: droppedIds, results });
 }
 
 // ── Admin approval roll-up (mode=approval-rollup) ────────────────────────────
@@ -2762,6 +2817,7 @@ export async function GET(request) {
         watchlist: available.x === false ? false : include.watchlist,
         redditAnalysis: available.reddit === false ? false : include.redditAnalysis,
         instagramAnalysis: available.instagram === false ? false : include.instagramAnalysis,
+        xMarketTalk: available.x === false ? false : include.xMarketTalk,
       };
     } catch { /* keep saved include if the config lookup fails */ }
     // Opportunity Signals is its own opt-in feature (marketingBriefConfig.opportunitySignals),
@@ -2890,7 +2946,7 @@ export async function GET(request) {
       // posts — fetch if ANY brief-derived section is enabled.
       const needBrief = [
         'humanBrief', 'opportunities', 'suggestedReplies', 'signals', 'watchlistAccounts', 'suggestedPosts',
-        'planPreview', 'watchlist', 'redditAnalysis', 'instagramAnalysis', 'followerPosts', 'weather',
+        'planPreview', 'watchlist', 'redditAnalysis', 'instagramAnalysis', 'xMarketTalk', 'followerPosts', 'weather',
       ].some((k) => include[k] !== false);
       if (needBrief) {
         briefs = (await Promise.all(briefIds.map((cid) => briefIntel.getBriefForClient(cid)))).filter(Boolean);
@@ -3261,11 +3317,15 @@ export async function GET(request) {
       const hasSuggestedReplies = html.includes('Suggested Replies');
       const hasRedditAnalysis = html.includes('Happening on Reddit');
       const hasInstagramAnalysis = html.includes('Happening on Instagram');
+      const hasXMarketTalk = html.includes('Market Talk on X');
       if (include.suggestedReplies !== false) {
         step(hasSuggestedReplies ? 'success' : 'error', hasSuggestedReplies ? 'Verified section · Suggested Replies included in final email HTML' : 'Missing section · Suggested Replies was enabled but absent from final email HTML');
       }
       if (include.redditAnalysis !== false) {
         step(hasRedditAnalysis ? 'success' : 'error', hasRedditAnalysis ? 'Verified section · Happening on Reddit included in final email HTML' : 'Missing section · Happening on Reddit was enabled but absent from final email HTML');
+      }
+      if (include.xMarketTalk !== false) {
+        step(hasXMarketTalk ? 'success' : 'error', hasXMarketTalk ? 'Verified section · Market Talk on X included in final email HTML' : 'Missing section · Market Talk on X was enabled but absent from final email HTML');
       }
       if (include.instagramAnalysis !== false) {
         step(hasInstagramAnalysis ? 'success' : 'error', hasInstagramAnalysis ? 'Verified section · Happening on Instagram included in final email HTML' : 'Missing section · Happening on Instagram was enabled but absent from final email HTML');

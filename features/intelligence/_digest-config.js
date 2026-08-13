@@ -27,6 +27,7 @@ const INCLUDE_KEYS = [
   'watchlist',        // "Happening on X" watchlist analysis
   'redditAnalysis',   // "Happening on Reddit" platform analysis
   'instagramAnalysis',// "Happening on Instagram" platform analysis
+  'xMarketTalk',      // "Market Talk on X" — brand-search analysis (paid X API)
   'opportunitySignals', // Opportunity Signals — public buying-signal scan
   'creativeBrief',    // Attached Creative Brief deliverable
   // Market Signals · Strategic-brief items (each individually toggled)
@@ -34,6 +35,7 @@ const INCLUDE_KEYS = [
   'opportunities',    // Post opportunities (Conversation / angle)
   'suggestedReplies', // Suggested replies (drafted reply per opportunity)
   'signals',          // KOLs / competitors / narratives
+  'pressCoverage',    // Press Coverage — articles about the brand/competitors/category
   'watchlistAccounts',// Watchlist accounts (name-for-name)
   'suggestedPosts',   // Suggested posts
   'planPreview',      // 30-day plan preview
@@ -70,12 +72,18 @@ const DEFAULT_INCLUDE = {
   opportunities: false,
   suggestedReplies: true,
   signals: false,
+  // ON by default: press coverage is the one strategic-brief item that is
+  // always a real external event (a publication wrote about you), and it is
+  // deliberately absent from LEGACY_INCLUDE_EXPANSION so a legacy coarse
+  // `marketingBrief: false` can never silently switch it off.
+  pressCoverage: true,
   watchlistAccounts: false,
   suggestedPosts: false,
   planPreview: false,
   watchlist: false,
   redditAnalysis: false,
   instagramAnalysis: false,
+  xMarketTalk: false,
   opportunitySignals: false,
   creativeBrief: false,
   platformOverview: false,
@@ -98,7 +106,7 @@ const LEGACY_INCLUDE_EXPANSION = {
   webStats: ['ga4Traffic', 'topPages', 'trafficSources', 'keyEvents', 'homepage'],
   platformStats: ['platformOverview', 'signups', 'dashboards', 'pipeline'],
   deployments: ['deployments', 'runtimeErrors'],
-  marketingBrief: ['humanBrief', 'opportunities', 'suggestedReplies', 'signals', 'watchlistAccounts', 'suggestedPosts', 'planPreview', 'watchlist', 'redditAnalysis', 'instagramAnalysis', 'opportunitySignals'],
+  marketingBrief: ['humanBrief', 'opportunities', 'suggestedReplies', 'signals', 'watchlistAccounts', 'suggestedPosts', 'planPreview', 'watchlist', 'redditAnalysis', 'instagramAnalysis', 'xMarketTalk', 'opportunitySignals'],
   creativeBrief: ['creativeBrief'],
 };
 
@@ -129,7 +137,20 @@ function normalizeOrder(value) {
       if (ORDERABLE_KEYS.includes(k) && !seen.has(k)) { seen.add(k); out.push(k); }
     }
   }
-  for (const k of ORDERABLE_KEYS) if (!seen.has(k)) out.push(k); // append any missing
+  // Place a key the saved order predates NEXT TO its canonical neighbour rather
+  // than appending it. A newly added section should land where the code says it
+  // belongs (Press Coverage beside Signals) instead of being dumped at the
+  // bottom of every existing client's email. Saved relative order is untouched.
+  for (const k of ORDERABLE_KEYS) {
+    if (seen.has(k)) continue;
+    seen.add(k);
+    let at = out.length;
+    for (let i = ORDERABLE_KEYS.indexOf(k) - 1; i >= 0; i -= 1) {
+      const prevIdx = out.indexOf(ORDERABLE_KEYS[i]);
+      if (prevIdx !== -1) { at = prevIdx + 1; break; }
+    }
+    out.splice(at, 0, k);
+  }
   return out;
 }
 
@@ -330,6 +351,53 @@ function normalizeSchedule(value) {
 // on and not 'off'. This is the single gate both crons (refresh + send) honor.
 function isCronEnrolled(schedule) {
   return Boolean(schedule) && schedule.enabled === true && schedule.frequency !== 'off';
+}
+
+/**
+ * Stamp what the daily crons actually did for a client. Before this there was
+ * no record of a refresh or a send anywhere, which is why enrolled clients
+ * could be starved by the fan-out for weeks without anyone noticing: a run
+ * that served one client and silently dropped the rest reported `ok`.
+ *
+ * @param {string} clientId
+ * @param {'refresh'|'send'} kind
+ * @param {{ ok: boolean, skipped?: boolean, reason?: string|null }} outcome
+ */
+async function stampCronRun(clientId, kind, outcome = {}) {
+  if (!clientId || (kind !== 'refresh' && kind !== 'send')) return;
+  const prefix = kind === 'refresh' ? 'lastCronRefresh' : 'lastCronSend';
+  try {
+    await fb.adminDb.collection('digest_config').doc(clientId).set({
+      [`${prefix}At`]: new Date().toISOString(),
+      [`${prefix}Status`]: outcome.skipped ? 'skipped' : (outcome.ok ? 'ok' : 'failed'),
+      [`${prefix}Reason`]: outcome.reason || null,
+    }, { merge: true });
+  } catch { /* telemetry only — never fail a run on a stamp write */ }
+}
+
+/**
+ * Enrolled clients, least-recently-served first. If a run is ever cut short,
+ * the clients it dropped lead the next one instead of the same client winning
+ * every day purely because of list order.
+ *
+ * @param {'refresh'|'send'} kind - which stamp to order by
+ */
+async function listCronEnrolledClientIdsByStaleness(kind = 'refresh') {
+  const field = kind === 'send' ? 'lastCronSendAt' : 'lastCronRefreshAt';
+  try {
+    const snap = await fb.adminDb.collection('digest_config').limit(500).get();
+    const rows = [];
+    snap.forEach((doc) => {
+      const data = doc.data() || {};
+      if (!isCronEnrolled(normalizeSchedule(data.schedule))) return;
+      // Never served => '' sorts first.
+      rows.push({ id: doc.id, at: typeof data[field] === 'string' ? data[field] : '' });
+    });
+    rows.sort((a, b) => (a.at || '').localeCompare(b.at || '') || a.id.localeCompare(b.id));
+    return rows.map((r) => r.id);
+  } catch {
+    return [];
+  }
 }
 
 // All clients currently enrolled in the daily crons (scans digest_config).
@@ -562,6 +630,8 @@ module.exports = {
   isDigestClaimedByRollup,
   isCronEnrolled,
   listCronEnrolledClientIds,
+  listCronEnrolledClientIdsByStaleness,
+  stampCronRun,
   ensureDailyOptInMigration,
   getMarketInsightPlatformState,
   resolveDigestClientId,
