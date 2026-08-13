@@ -388,6 +388,24 @@ renders*; `summaryEnabled` (separate field, §02 of the UI) controls whether the
 
 ---
 
+## 9c. Generate & Send always scouts fresh (2026-08-13)
+
+Scout has a **6-hour freshness skip** (`SCOUT_FRESH_WINDOW_MS`, `pre-digest-refresh/route.js:150`): a refresh with no `force` returns `{ ok: true, skipped: 'fresh', ageMinutes }` without spending anything when the stored brief is under 6h old.
+
+The card's **Generate & Send** now passes **`force=1`** on its `signals` phase, so a human clicking it always gets a real scout. Previously it inherited the cron's skip, which meant a send within 6h of the last run silently reused the old `agentData` — and the run terminal printed `scout ✓` either way, so config changes looked like they had no effect. The terminal now prints `scout skipped (fresh, 276m old)` when the gate trips anywhere it still can.
+
+**The daily cron deliberately keeps the skip** — unattended, once a day, ~24h since the last run, so the gate rarely trips and the saving is real. Only the human-triggered path forces.
+
+Path summary:
+
+| Path | Refreshes | 6h gate |
+|---|---|---|
+| Market Signals → Generate Report (`marketing-brief/run`) | yes | no gate exists on this route |
+| Email Digest → Generate & Send | yes | **bypassed via `force=1`** |
+| Daily cron (`12:35` UTC) | yes | yes — intentional |
+
+---
+
 ## 9a. Press Coverage section + the THREE hardcoded lists (added 2026-08-13)
 
 `pressCoverage` is a Market-Signals-group section rendering `projectBrief`'s `coverage` (articles: publication · date · headline · link, cap `EMAIL_CAPS.pressCoverage`). **Default ON**, and deliberately absent from `LEGACY_INCLUDE_EXPANSION` so a legacy coarse `marketingBrief: false` can't silently switch it off. Gated only by its toggle, with an explicit empty state, per §9's rule.

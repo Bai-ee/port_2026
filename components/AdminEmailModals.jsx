@@ -383,16 +383,30 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
           // `analysis` runs the platform analyzers that write the fields the email
           // actually reads (reportSnapshot.redditAnalysis etc.) — without it the
           // section renders its empty state even with fresh search results stored.
-          // No `force`: Scout keeps its <6h freshness skip, same as the cron.
+          //
+          // `force=1` on the signals phase: a human clicking Generate & Send is
+          // explicitly asking for a fresh report, so it bypasses Scout's <6h
+          // freshness skip. Without it the button silently reused whatever the
+          // last run stored and reported "scout ✓" for a scout that never ran —
+          // config changes appeared to have no effect. The daily cron still
+          // sends no `force` and keeps the skip, which is where the cost saving
+          // actually matters (unattended, once a day, ~24h since the last run).
           const refreshPhase = async (phase, label) => {
             try {
-              // allowX only on the signals phase: it opts this send into the PAID X
-              // brand search (refreshXMarketTalk). The daily cron never sends it.
-              const allowX = phase === 'signals' ? '&allowX=1' : '';
-              const res = await authFetch(user, `/api/worker/pre-digest-refresh?phase=${phase}&clientId=${encodeURIComponent(sendClientId)}&freshnessToken=${encodeURIComponent(freshnessToken)}${allowX}`, { method: 'POST' });
+              // allowX + force only on the signals phase: allowX opts this send
+              // into the PAID X brand search (refreshXMarketTalk). The daily
+              // cron never sends either.
+              const signalsOnly = phase === 'signals' ? '&allowX=1&force=1' : '';
+              const res = await authFetch(user, `/api/worker/pre-digest-refresh?phase=${phase}&clientId=${encodeURIComponent(sendClientId)}&freshnessToken=${encodeURIComponent(freshnessToken)}${signalsOnly}`, { method: 'POST' });
               const r = Array.isArray(res?.results) ? res.results[0] : null;
               if (phase === 'signals') {
-                note(`· scout ${r?.scout?.ok ? '✓' : '✗'} · watchlist ${r?.watchlist?.ok ? '✓' : '✗'} · X market talk ${r?.platformSignals?.xMarketTalk ?? 'n/a'}`);
+                // Distinguish "scouted" from "skipped as fresh" — they used to
+                // render identically as "scout ✓", which is what made a skipped
+                // scout impossible to spot from the terminal.
+                const scoutMark = r?.scout?.skipped
+                  ? `skipped (${r.scout.skipped}${r.scout.ageMinutes != null ? `, ${r.scout.ageMinutes}m old` : ''})`
+                  : (r?.scout?.ok ? '✓' : '✗');
+                note(`· scout ${scoutMark} · watchlist ${r?.watchlist?.ok ? '✓' : '✗'} · X market talk ${r?.platformSignals?.xMarketTalk ?? 'n/a'}`);
               } else {
                 note(`· reddit brief ${r?.redditAnalysis?.ok ? '✓' : (r?.redditAnalysis?.reason || 'skipped')} · X market talk ${r?.xMarketTalkAnalysis?.ok ? '✓' : (r?.xMarketTalkAnalysis?.reason || 'skipped')} · exec summary ${r?.executiveSummary?.ok ? '✓' : 'skipped'}`);
               }
