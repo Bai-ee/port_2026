@@ -707,10 +707,32 @@ async function refreshOpportunitySignalsAnalysis(clientId) {
  *  are capped at 3 to bound the per-send cost. Never throws. */
 async function refreshXMarketTalk(clientId, { brandXHandle = '', brandKeywords = [], categoryTerms = [] } = {}) {
   const handle = String(brandXHandle || '').replace(/^@+/, '').trim();
-  if (!clientId || !handle) return { ok: false, skipped: true, reason: 'no-x-handle' };
+  // Persist WHY this ran or didn't. Previously a failure was logged and thrown
+  // away, so the email's empty state could only say "run Generate & Send" —
+  // which read as user error when the real cause was the X API returning 402
+  // Payment Required on every call. Hobby keeps runtime logs ~1h, so the log
+  // line was gone before anyone looked.
+  const saveStatus = async (status) => {
+    if (!clientId) return;
+    try {
+      await fb.adminDb.collection('dashboard_state').doc(clientId).set({
+        marketingBrief: { reportSnapshot: { platformStatus: { xMarketTalk: {
+          ...status,
+          at: new Date().toISOString(),
+        } } } },
+      }, { merge: true });
+    } catch { /* status telemetry only — never fail the refresh on it */ }
+  };
+  if (!clientId || !handle) {
+    await saveStatus({ ok: false, reason: 'no-x-handle' });
+    return { ok: false, skipped: true, reason: 'no-x-handle' };
+  }
   try {
     const platformState = await getMarketInsightPlatformState(clientId);
-    if (platformState?.platformAvailability?.x === false) return { ok: false, skipped: true, reason: 'x-disabled' };
+    if (platformState?.platformAvailability?.x === false) {
+      await saveStatus({ ok: false, reason: 'x-disabled' });
+      return { ok: false, skipped: true, reason: 'x-disabled' };
+    }
     const { searchXPosts } = await import('../../../../features/social-posting/twitter-service.js');
     // Handle first (the "who is talking about us" query), then the most
     // distinctive brand keywords. Capped at 3 — each is a paid API call.
@@ -724,7 +746,13 @@ async function refreshXMarketTalk(clientId, { brandXHandle = '', brandKeywords =
       collected.push(...(r.items || []));
     });
     if (!collected.length) {
-      return { ok: false, skipped: true, reason: errors.length ? `x-search-failed: ${errors[0]}` : 'no-x-results', queries };
+      // 402 = the X API refused on billing (credit-based, see
+      // X-API-AND-PROFILE-OPERATIONS.md). Flagged distinctly because it is an
+      // account state the admin must fix, not a "no results" finding.
+      const billing = errors.some((e) => /\b402\b/.test(e));
+      const reason = errors.length ? `x-search-failed: ${errors[0]}` : 'no-x-results';
+      await saveStatus({ ok: false, reason, billing, detail: errors[0] || null, queries });
+      return { ok: false, skipped: true, reason, billing, queries };
     }
     const brandTerms = [...keywords, handle].filter(Boolean);
     const relevant = filterRelevantSignals(collected, { brandTerms, categoryTerms });
@@ -746,9 +774,11 @@ async function refreshXMarketTalk(clientId, { brandXHandle = '', brandKeywords =
       updatedAt: fb.FieldValue.serverTimestamp(),
     }, { merge: true });
     logInfo('pre_digest_x_market_talk', { clientId, queries: queries.length, kept: relevant.length, dropped });
+    await saveStatus({ ok: true, kept: relevant.length, dropped, queries });
     return { ok: true, kept: relevant.length, dropped, queries };
   } catch (err) {
     logError('pre_digest_x_market_talk_failed', { clientId, error: err.message });
+    await saveStatus({ ok: false, reason: 'x-search-threw', detail: err.message });
     return { ok: false, error: err.message };
   }
 }

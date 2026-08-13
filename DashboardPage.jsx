@@ -8960,7 +8960,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         ? [
             { key: 'sf-focus', label: 'Focus', value: marketingBriefConfig.sourceFocus ? 'Configured' : 'Not set' },
             { key: 'sf-instructions', label: 'Instructions', value: marketingBriefConfig.scoutInstructions ? 'Custom' : 'Default' },
-            { key: 'sf-freshness', label: 'Freshness', value: `${marketingBriefConfig.freshnessDays || 1}d` },
+            { key: 'sf-freshness', label: 'Freshness', value: `${marketingBriefConfig.freshnessDays || 7}d` },
           ]
         : buildWorkNeededRows('Loading Scout config…'),
       footerLeft: marketingBriefConfig ? 'Editable' : 'Loading',
@@ -14672,7 +14672,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                           </label>
                           <label className="mu-field" style={{ maxWidth: 220 }}>
                             <span className="mu-label">Freshness window (days)</span>
-                            <input className="mu-input" type="number" min="1" max="30" value={marketingBriefConfig.freshnessDays || 1} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), freshnessDays: Number(e.target.value || 1) }))} />
+                            <input className="mu-input" type="number" min="1" max="30" value={marketingBriefConfig.freshnessDays || 7} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), freshnessDays: Number(e.target.value || 7) }))} />
                           </label>
                           {marketingBriefError ? <p className="mu-notice mu-notice--danger">{marketingBriefError}</p> : null}
                           <div className="mu-footer">
@@ -15228,7 +15228,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                               <div className="mb-config-summary" aria-label="Scout configuration summary">
                                 <span className="mb-config-summary-item">
                                   <span className="mb-config-summary-key">Freshness</span>
-                                  <span className="mb-config-summary-val">{marketingBriefConfig.freshnessDays || 1}d</span>
+                                  <span className="mb-config-summary-val">{marketingBriefConfig.freshnessDays || 7}d</span>
                                 </span>
 	                                <span className="mb-config-summary-item">
 	                                  <span className="mb-config-summary-key">Search mode</span>
@@ -15417,7 +15417,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                 <div className="mu-field-grid">
                                   <label className="mu-field">
                                     <span className="mu-label">Freshness window in days</span>
-                                    <input className="mu-input" type="number" min="1" max="30" value={marketingBriefConfig.freshnessDays || 1} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), freshnessDays: Number(e.target.value || 1) }))} aria-label="Freshness days" />
+                                    <input className="mu-input" type="number" min="1" max="30" value={marketingBriefConfig.freshnessDays || 7} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), freshnessDays: Number(e.target.value || 7) }))} aria-label="Freshness days" />
                                   </label>
                                   <label className="mu-field">
                                     <span className="mu-label">KOL search mode</span>

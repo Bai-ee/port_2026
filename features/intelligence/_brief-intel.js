@@ -170,6 +170,10 @@ function projectBrief(marketingBrief, state = null) {
     // keywords). Distinct from watchlistAnalysis, which covers the tracked
     // handles' own timelines. Same persisted reportSnapshot pattern.
     xMarketTalkAnalysis: marketingBrief?.reportSnapshot?.xMarketTalkAnalysis?.text || '',
+    // Why the X brand search last ran or didn't (written by refreshXMarketTalk).
+    // Lets the email's empty state name the real cause — a 402 from the paid X
+    // API is an account state to fix, not "you forgot to run it".
+    xMarketTalkStatus: marketingBrief?.reportSnapshot?.platformStatus?.xMarketTalk || null,
     // Opportunity Signals slot (public buying-signal scan) — same persisted
     // reportSnapshot pattern as reddit/instagram analysis.
     opportunitySignalsAnalysis: marketingBrief?.reportSnapshot?.opportunitySignalsAnalysis?.text || '',

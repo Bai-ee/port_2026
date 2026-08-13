@@ -1677,6 +1677,19 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
     .map((b) => buildInstagramBriefSection(b.intel?.xMarketTalkAnalysis))
     .filter((s) => s && s.trim())
     .join('');
+  // Empty-state copy for Market Talk on X, derived from the persisted run
+  // status. "Run Generate & Send" is only correct when the search never ran —
+  // saying it after the X API returned 402 blames the admin for a billing
+  // state, which is exactly what happened on 2026-08-13.
+  const xMarketTalkEmptyCopy = () => {
+    const st = briefList.map((b) => b.intel?.xMarketTalkStatus).find(Boolean);
+    if (!st) return 'Market Talk on X is enabled, but the X brand search has not run for this client yet. Run Generate & Send — that is what performs the search (paid X API). The daily cron never runs it.';
+    if (st.billing) return `The X API refused the brand search with 402 Payment Required${st.at ? ` (last tried ${String(st.at).slice(0, 16).replace('T', ' ')} UTC)` : ''}. This is an account balance issue, not a configuration one — top up X API credits, then run Generate & Send again.`;
+    if (st.reason === 'x-disabled') return 'Market Talk on X is enabled in the email, but X is switched off as a source in the Market Signals card. Turn X on there first.';
+    if (st.reason === 'no-x-handle') return 'Market Talk on X needs a brand X handle. Set one in the Market Signals card, then run Generate & Send.';
+    if (st.reason === 'no-x-results') return `The X brand search ran${st.at ? ` (${String(st.at).slice(0, 16).replace('T', ' ')} UTC)` : ''} and returned no posts matching this brand. That is a real finding, not an error — nobody is talking about the brand on X inside the search window.`;
+    return `The X brand search did not complete: ${st.detail || st.reason || 'unknown reason'}. Run Generate & Send to retry.`;
+  };
   const opportunitySignalsSections = include.opportunitySignals === false ? '' : briefList
     .map((b) => buildOpportunitySignalsBriefSection(b.intel?.opportunitySignalsAnalysis))
     .filter((s) => s && s.trim())
@@ -1812,7 +1825,7 @@ function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summ
     planPreview: () => section('Market Signals', '30-Day Plan', sPart('planPreview')),
     watchlist: () => section('Market Signals', 'Happening on X', watchlistSections),
     redditAnalysis: () => section('Market Signals', 'Happening on Reddit', redditAnalysisSections || noDataBlock('Happening on Reddit is enabled, but no Reddit analysis has been saved for this client yet. Run Generate & Send with Reddit enabled in Market Insights so the Reddit analyzer can write this section.')),
-    xMarketTalk: () => section('Market Signals', 'Market Talk on X', xMarketTalkSections || noDataBlock('Market Talk on X is enabled, but no X brand-search analysis has been saved for this client yet. Run Generate &amp; Send — that is what performs the X brand search (paid X API). The daily cron never runs it.')),
+    xMarketTalk: () => section('Market Signals', 'Market Talk on X', xMarketTalkSections || noDataBlock(xMarketTalkEmptyCopy())),
     instagramAnalysis: () => section('Market Signals', 'Happening on Instagram', instagramAnalysisSections || noDataBlock('Happening on Instagram is enabled, but no Instagram analysis has been saved for this client yet. Run Generate & Send with Instagram enabled in Market Insights so the Instagram analyzer can write this section.')),
     opportunitySignals: () => section('Market Signals', 'Opportunity Signals', opportunitySignalsSections || noDataBlock('Opportunity Signals is enabled, but no opportunities have been found yet. Refresh Market Signals with Opportunity Signals enabled so the scan can write this section.')),
     followerPosts: () => section('Market Signals', 'Follower Posts', buildFollowerPostsSection(briefs)),
