@@ -33,3 +33,12 @@ public/ui-teasers/
 /2006.glb
 /Layout Example.jpg
 /docs/x-content/
+
+# Studio scene binaries (HDR / textures / models, ~114MB) + the sample render.
+# Several Vercel routes import CODE from services/studio-render (art-recipe.mjs,
+# art-render-validation.mjs, art-timeline.mjs), which makes Vercel trace the whole
+# directory and pulled these into the function bundle — api/leadgen/prepare-brief
+# hit 471MB against a 250MB limit. Only the Cloud Run render service reads these
+# at runtime, and it deploys separately (this file does not affect that deploy).
+services/studio-render/assets/
+services/studio-render/service-render.webm
