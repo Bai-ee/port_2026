@@ -298,6 +298,12 @@ const DEFAULTS = {
   briefLinkMode: DEFAULT_BRIEF_LINK_MODE, // how the Executive Brief link resolves
   contactUrl: '',          // "Contact Your Human" CTA target (Calendly etc.); env DIGEST_CONTACT_URL is the fallback
   autoPostX: true,         // on a REAL send, queue the suggested x_post to the social-posting system. Default ON (as-built); off = skip.
+  // Let the DAILY CRON run the paid X brand search (refreshXMarketTalk), which
+  // fills "Market Talk on X". Default OFF: that search is the one unattended
+  // spend path into the credit-billed X API, invisible to the Operating Cost
+  // card (X-API-AND-PROFILE-OPERATIONS.md). Interactive Generate & Send always
+  // runs it regardless; this only governs the cron. Capped at 3 queries/run.
+  dailyXSearch: false,
   recipientEmail: '',      // where THIS client's daily email is sent. Blank = the admin address (DIGEST_EMAIL) — a client is never emailed until this is set.
 };
 
@@ -467,6 +473,7 @@ async function getDigestConfig(clientId) {
     briefLinkMode: normalizeBriefLinkMode(data.briefLinkMode),
     contactUrl: typeof data.contactUrl === 'string' ? data.contactUrl : '',
     autoPostX: data.autoPostX !== false,
+    dailyXSearch: data.dailyXSearch === true,
     recipientEmail: typeof data.recipientEmail === 'string' ? data.recipientEmail : '',
     updatedAt: data.updatedAt?.toDate?.()?.toISOString?.() || null,
   };
@@ -492,6 +499,7 @@ async function saveDigestConfig(clientId, patch = {}) {
   if ('briefLinkMode' in patch) next.briefLinkMode = normalizeBriefLinkMode(patch.briefLinkMode);
   if (typeof patch.contactUrl === 'string') next.contactUrl = patch.contactUrl.trim().slice(0, 500);
   if (typeof patch.autoPostX === 'boolean') next.autoPostX = patch.autoPostX;
+  if (typeof patch.dailyXSearch === 'boolean') next.dailyXSearch = patch.dailyXSearch;
   if (typeof patch.recipientEmail === 'string') next.recipientEmail = patch.recipientEmail.trim().slice(0, 200);
   next.updatedAt = fb.FieldValue.serverTimestamp();
   await configDocRef(clientId).set(next, { merge: true });

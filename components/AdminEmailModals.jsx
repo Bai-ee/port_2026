@@ -666,6 +666,20 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
                   <span className="hint">On Run &amp; Send / the daily cron, the suggested x_post is queued to the social-posting system (published when “Post due” runs). Off = never queued. Previews never post.</span>
                 </div>
 
+                <div id="digest-daily-x-search-section" className="field" style={{ display: 'grid', gap: 6 }}>
+                  <span className="label">Market Talk on X in the daily email</span>
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+                    <input
+                      type="checkbox"
+                      checked={form.dailyXSearch === true}
+                      onChange={() => setForm((f) => ({ ...f, dailyXSearch: f.dailyXSearch !== true }))}
+                      style={{ width: 16, minHeight: 16 }}
+                    />
+                    Let the daily cron run the paid X brand search
+                  </label>
+                  <span className="hint">⚠️ Spends X API credits unattended — up to 3 search calls per day, billed on the X credit model and not visible on the Operating Cost card. Off = the section only fills when you press Generate &amp; Send, which always runs the search.</span>
+                </div>
+
                 <div id="digest-autopublish-section" className="field" style={{ display: 'grid', gap: 10 }}>
                   <span className="label">Auto-Publish (daily video)</span>
                   <span className="hint">Auto publishes with no human review. Approval emails a button and publishes nothing until it is clicked.</span>

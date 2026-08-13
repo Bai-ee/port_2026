@@ -1102,7 +1102,13 @@ async function handle(request) {
     // never another client's config. Defaults apply when the client has no doc.
     // eslint-disable-next-line no-await-in-loop
     const clientCfg = await digestConfig.getDigestConfig(clientId).catch(() => null);
-    const result = await refreshDigestClient(clientId, { freshnessToken, force: forceScout, source: triggerSource, actorUid, include: clientCfg?.include || {}, briefLinkMode: clientCfg?.briefLinkMode || 'fresh', phase, allowX });
+    // Paid X brand search on the UNATTENDED cron is per-client opt-in
+    // (digest_config.dailyXSearch, default false). An interactive Generate &
+    // Send passes ?allowX=1 and always runs it. Kept per-client rather than a
+    // global flag so enrolling another client can never silently start
+    // spending X credits on a schedule. Cost: ≤3 search calls per client/day.
+    const clientAllowX = allowX || clientCfg?.dailyXSearch === true;
+    const result = await refreshDigestClient(clientId, { freshnessToken, force: forceScout, source: triggerSource, actorUid, include: clientCfg?.include || {}, briefLinkMode: clientCfg?.briefLinkMode || 'fresh', phase, allowX: clientAllowX });
     results.push(result);
     logInfo('pre_digest_refresh_client_done', {
       clientId,
