@@ -208,6 +208,7 @@ const EXECUTIVE_SECTIONS = [
   'site-performance',
   'creative-system',
   'market-signals',
+  'press-coverage',
   'watchlist',
   'competitor-snapshot',
   'local-signals',
@@ -232,7 +233,7 @@ const BRIEF_COMPOSITIONS = {
   },
   'marketing-director': {
     label: 'Market Brief',
-    sections: ['scout-found', 'market-signals', 'local-signals', 'viral-windows', 'watchlist', 'competitor-snapshot', 'local-weather'],
+    sections: ['scout-found', 'market-signals', 'press-coverage', 'local-signals', 'viral-windows', 'watchlist', 'competitor-snapshot', 'local-weather'],
   },
   'creative-director': {
     label: 'Creative Director Brief',

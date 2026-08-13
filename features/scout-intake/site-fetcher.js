@@ -96,18 +96,61 @@ function extractNavLabels(html) {
   return [...new Set(results)].slice(0, 14);
 }
 
+// CTA detection signals. A candidate needs at least one of these — the word
+// list alone used to be the only gate, which missed every product-specific CTA
+// ("Mine", "Play Game", "Connect Wallet", "Stake") and left newsletter
+// "Subscribe" as the only captured CTA on real sites.
+const CTA_TRIGGER = /\b(get|get\s*started|start|try|sign\s*up|sign\s*in|log\s*in|join|book|schedule|learn\s*more|read\s*more|see\s*how|contact|call|quote|free|demo|buy|shop|order|checkout|request|apply|register|subscribe|download|explore|discover|view|watch|play|enter|open|launch|connect|claim|stake|mine|mint|swap|trade|earn|invest|donate|upgrade|install|create|build)\b/i;
+// role="button" / class="…btn…|…cta…" — the markup shape of a styled CTA that
+// is an <a>, not a <button>.
+const CTA_ELEMENT_HINT = /(?:role\s*=\s*['"]button['"]|class\s*=\s*['"][^'"]*(?:\bbtn\b|button|\bcta\b|call-to-action)[^'"]*['"])/i;
+// Conversion-shaped destinations.
+const CTA_HREF_HINT = /href\s*=\s*['"][^'"]*\/(?:signup|sign-up|register|get-started|start|demo|book|booking|contact|pricing|buy|checkout|cart|shop|order|apply|subscribe|download|join|trial|app|play|game|mint|stake|mine|pre-mine|launch|dashboard)\b/i;
+
+/**
+ * Pull CTA-ish labels out of raw HTML.
+ *
+ * A candidate is any <a> or <button>. It is kept when the element LOOKS like a
+ * CTA (a <button>, role="button", a btn/cta class, or a conversion-shaped href)
+ * OR its label reads like one (CTA_TRIGGER). Label text comes from the visible
+ * inner text; when that is empty (icon-only) or too long to be a label (an
+ * anchor wrapping a whole hero block), the element's aria-label is used
+ * instead. Results are ranked so word+shape matches land before shape-only
+ * matches — the cap is small and nav/footer buttons should not crowd out the
+ * real primary CTAs.
+ */
 function extractCtaTexts(html) {
-  const CTA_TRIGGER = /\b(get|start|try|sign\s*up|join|book|schedule|learn\s*more|contact|free|demo|buy|shop|order|request|apply|register|subscribe|download|explore|see\s*how)\b/i;
-  const re = /<(?:button|a)[^>]*>([\s\S]*?)<\/(?:button|a)>/gi;
-  const results = [];
+  const re = /<(button|a)\b([^>]*)>([\s\S]*?)<\/\1>/gi;
+  const candidates = [];
+  const seen = new Set();
   let m;
   while ((m = re.exec(html)) !== null) {
-    const text = stripTags(m[1]);
-    if (text.length > 2 && text.length < 80 && CTA_TRIGGER.test(text)) {
-      results.push(text.slice(0, 80));
-    }
+    const attrs = m[2] || '';
+    const innerText = stripTags(m[3]);
+    const ariaMatch = attrs.match(/aria-label\s*=\s*['"]([^'"]{2,80})['"]/i);
+    const aria = ariaMatch ? decodeEntities(ariaMatch[1]).trim() : '';
+    const usable = (t) => t.length > 2 && t.length <= 80;
+    const text = usable(innerText) ? innerText : (usable(aria) ? aria : '');
+    if (!text) continue;
+    if (/^https?:\/\//i.test(text)) continue; // bare URL, not a label
+
+    const byWord = CTA_TRIGGER.test(text);
+    const byShape = m[1].toLowerCase() === 'button'
+      || CTA_ELEMENT_HINT.test(attrs)
+      || CTA_HREF_HINT.test(attrs);
+    if (!byWord && !byShape) continue;
+
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    // 0 = word + CTA markup, 1 = CTA wording only, 2 = CTA markup only
+    candidates.push({ text: text.slice(0, 80), rank: byWord && byShape ? 0 : (byWord ? 1 : 2) });
   }
-  return [...new Set(results)].slice(0, MAX_CTA);
+  return candidates
+    .map((c, i) => ({ ...c, i }))
+    .sort((a, b) => a.rank - b.rank || a.i - b.i) // stable: document order within a rank
+    .slice(0, MAX_CTA)
+    .map((c) => c.text);
 }
 
 function extractBodyParagraphs(html) {
@@ -506,4 +549,4 @@ async function fetchSiteEvidence(websiteUrl, { onPageFetched } = {}) {
   };
 }
 
-module.exports = { fetchSiteEvidence, extractSiteMeta };
+module.exports = { fetchSiteEvidence, extractSiteMeta, extractCtaTexts };

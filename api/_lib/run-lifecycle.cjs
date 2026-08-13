@@ -866,6 +866,13 @@ function projectScreenshotArtifacts(update, artifactRefs = []) {
 // Firestore's top-level-only merge replacing the entire snapshot map and wiping
 // unrelated fields like snapshot.brandOverview.
 function projectModuleResult(update, result, snapshotPatch) {
+  // Trimmed crawl evidence rides on the social-preview envelope — that module
+  // is the page fetch on the narrow Creative Brief run. Projected before the ok
+  // gate: a crawl that succeeded but found no meta tags still proves what the
+  // page says, and the Creative Brief needs that to tell "the site lacks this"
+  // apart from "we never read the page".
+  if (result?.siteEvidence) deepSet(update, ['evidence'], result.siteEvidence);
+
   if (!result?.ok) return;
 
   if (result.cardId === 'multi-device-view') {

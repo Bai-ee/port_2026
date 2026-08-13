@@ -50,6 +50,90 @@ function line(label, value, max = 200) {
   return label ? `${label} — ${v}` : v;
 }
 
+// ── Page content + capture status (Creative Brief only) ───────────────────────
+
+/** Modules whose absence the Creative Brief is allowed to reason about. */
+const CREATIVE_MODULE_IDS = [
+  'multi-device-view', 'social-preview', 'style-guide',
+  'design-evaluation', 'seo-performance', 'agent-readiness',
+];
+
+/**
+ * Actual page content captured by site-fetcher.js (dashboard_state.evidence):
+ * headings, nav, CTA text, body copy, social links, contact clues.
+ *
+ * This is the ground truth for "What's Missing". Without it the Creative Brief
+ * only ever saw meta tags plus one-line module roll-ups, so it reported real
+ * on-page CTAs, copy and social links as absent from the site.
+ */
+function pageEvidenceLines(data, { maxPages = 3 } = {}) {
+  const evidence = data.evidence;
+  const pages = arr(evidence?.pages).slice(0, maxPages);
+  if (!pages.length) return [];
+
+  const lines = [
+    line('Pages read', pages.map((p) => `${p.type || 'page'} (${p.url || '?'})`).join(' · '), 300),
+  ];
+  for (const page of pages) {
+    const where = page.type || 'page';
+    const join = (list, max) => arr(list).filter(Boolean).slice(0, max).join(' · ');
+    lines.push(
+      line(`Title (${where})`, page.title, 160),
+      line(`H1 (${where})`, join(page.h1, 6), 240),
+      line(`H2 (${where})`, join(page.h2, 8), 300),
+      line(`Nav labels (${where})`, join(page.navLabels, 12), 200),
+      // Explicit empty state: "none" is a real finding, an absent line is not.
+      `CTA text (${where}) — ${join(page.ctaTexts, 6) || 'none found in the static HTML'}`,
+      line(`Body copy (${where})`, join(page.bodyParagraphs, 5), 700),
+      line(`Social links (${where})`, join(page.socialLinks, 6), 240),
+      line(`Contact signals (${where})`, join(page.contactClues, 4), 160),
+    );
+  }
+  return lines.filter(Boolean);
+}
+
+/**
+ * What this run could and could not read. Keeps the Creative Brief from
+ * reporting a pipeline gap ("no CTA copy captured") as a site gap ("the site
+ * has no CTA") — the two need different advice and only one is the client's
+ * problem.
+ */
+function captureStatusLines(data) {
+  const lines = [];
+  const evidence = data.evidence;
+  const pageCount = arr(evidence?.pages).length;
+
+  if (!evidence || !pageCount) {
+    lines.push('Page crawl — DID NOT RUN this run. No on-page copy, headings, CTAs or links were read. Their absence below is UNPROVEN.');
+  } else if (evidence.thin) {
+    lines.push(`Page crawl — ran (${pageCount} page(s)) but returned almost no static text; the site is JS-rendered, so on-page copy and CTAs COULD NOT BE READ. Their absence is UNPROVEN.`);
+  } else {
+    lines.push(`Page crawl — ran and read ${pageCount} page(s) of real content. On-page copy, headings, CTAs and links below are COMPLETE for the static HTML.`);
+  }
+  for (const warning of arr(evidence?.warnings).slice(0, 3)) {
+    lines.push(line('Crawl warning', warning, 160));
+  }
+
+  // Module coverage: failed and never-ran modules produce no findings, which is
+  // not the same as the site lacking what they measure.
+  const modules = data.modules && typeof data.modules === 'object' ? data.modules : {};
+  const failed = [];
+  const notRun = [];
+  for (const moduleId of CREATIVE_MODULE_IDS) {
+    const status = str(modules[moduleId]?.status);
+    if (!status || status === 'queued' || status === 'running' || status === 'pending') {
+      notRun.push(`${moduleId}${status ? ` (${status})` : ' (never ran)'}`);
+    } else if (status === 'failed') {
+      const code = str(modules[moduleId]?.lastErrorCode);
+      failed.push(`${moduleId}${code ? ` (${code})` : ''}`);
+    }
+  }
+  if (failed.length) lines.push(line('Modules that FAILED this run — their findings are missing, not negative', failed.join(' · '), 240));
+  if (notRun.length) lines.push(line('Modules that NEVER RAN this run — say nothing about what they measure', notRun.join(' · '), 240));
+
+  return lines.filter(Boolean);
+}
+
 /**
  * Per-section evidence builders. Each takes the same `data` bag the brief
  * renderer reads (app/api/dashboard/brief-preview/route.js) and returns an
@@ -146,6 +230,16 @@ const SECTION_EVIDENCE = {
       ...arr(data.signalsCore).slice(0, 3)
         .map((s) => line(s.label || s.topic || 'Intake signal', s.summary || s.detail)),
     ].filter(Boolean);
+  },
+
+  'press-coverage'(data) {
+    const agentData = data.marketingBrief?.scoutBrief?.agentData || {};
+    return arr(agentData.pressCoverage).slice(0, 4)
+      .map((p) => line(
+        [p.publication, p.headline].filter(Boolean).join(' — ') || 'Coverage',
+        p.summary || p.detail,
+      ))
+      .filter(Boolean);
   },
 
   'watchlist'(data) {
@@ -256,10 +350,16 @@ function moduleLines(data, sectionKey) {
  * brief's composition, each as a titled group of compact lines. Sections
  * with no data are listed under "NO DATA" so the model knows what to skip.
  *
+ * The Creative Brief ('onboarding') additionally gets two blocks that are not
+ * brief sections: CAPTURE STATUS (what this run could read) and site-content
+ * (the page copy site-fetcher.js actually captured). It is the only brief that
+ * makes claims about what a site does or does not have, so it is the only one
+ * that needs them — every other composition is unchanged.
+ *
  * @param {string} briefType - Composition key (or alias) from brief-sections.cjs
  * @param {object} data - Same bag the brief renderer reads:
  *   { marketingBrief, company, researchConfig, strategyData, signalsCore,
- *     socialQueue, moduleBriefs, watchlistKols, weather }
+ *     socialQueue, moduleBriefs, watchlistKols, weather, evidence, modules }
  * @returns {{ label: string, briefType: string, evidenceText: string, sectionCount: number }}
  */
 function buildBriefSummaryEvidence(briefType, data = {}) {
@@ -267,6 +367,22 @@ function buildBriefSummaryEvidence(briefType, data = {}) {
   const composition = getComposition(resolved);
   const blocks = [];
   const empty = [];
+
+  // Creative Brief only: capture status first (it qualifies everything below),
+  // then the real page content.
+  let pageBlockCount = 0;
+  if (resolved === 'onboarding') {
+    const statusLines = captureStatusLines(data);
+    if (statusLines.length) {
+      blocks.push(`## CAPTURE STATUS\n${statusLines.map((l) => `- ${l}`).join('\n')}`);
+    }
+    const contentLines = pageEvidenceLines(data);
+    if (contentLines.length) {
+      blocks.push(`## site-content (what the page actually says — everything here IS on the site)\n${contentLines.map((l) => `- ${l}`).join('\n')}`);
+      pageBlockCount = 1;
+    }
+  }
+
   for (const sectionId of composition.sections) {
     const build = SECTION_EVIDENCE[sectionId];
     const lines = build ? build(data) : [];
@@ -283,7 +399,9 @@ function buildBriefSummaryEvidence(briefType, data = {}) {
     label: composition.label,
     briefType: resolved,
     evidenceText: blocks.join('\n\n').slice(0, MAX_EVIDENCE_CHARS),
-    sectionCount: composition.sections.length - empty.length,
+    // Page content alone is enough to write a Creative Brief, even when every
+    // module section came back empty.
+    sectionCount: composition.sections.length - empty.length + pageBlockCount,
   };
 }
 
@@ -407,6 +525,12 @@ RULES
 - Call out weak, unclear, or inconsistent signals directly — do not soften it.
 - Punchy and concrete over soft and complete. Short sentences. No filler.
 - Sections listed under NO DATA produced nothing this run — treat them as missing inputs, never invent findings for them.
+
+CAPTURED vs MISSING — THIS IS THE MOST IMPORTANT RULE
+The CAPTURE STATUS block states what this run was able to read. Two different things look identical in the evidence and must never be confused:
+- ON THE SITE: anything present in the site-content block IS on the site. Never list it under What's Missing. If a CTA, heading, body line, or social link appears there, it exists — cite it by name.
+- NOT CAPTURED: when CAPTURE STATUS says the page crawl did not run, or returned almost no static text, or a module FAILED / NEVER RAN, you have no evidence either way. Do NOT claim the site lacks what those inputs would have shown. Say it plainly instead — "not captured this run" — and keep it out of Headline and Biggest Risk. Build those on what WAS read.
+- Only call something missing when the input that would have found it ran successfully and came back empty (e.g. crawl read real content and the CTA line says "none found").
 
 USE ONLY THESE INPUTS
 Page titles, meta descriptions; H1/H2 and body copy; navigation labels and structure; CTA text and conversion paths; page types and layout; contact/trust signals; social links and metadata; OG tags and share previews; screenshots and device captures; visual system, color, typography; motion/video cues; performance or technical signals if provided.
@@ -558,7 +682,7 @@ async function summarizeBriefCover(briefType, data = {}, { clientId = null, clie
           {
             role: 'user',
             content: [
-              `WEBSITE EVIDENCE BUNDLE${clientName ? ` for ${clientName}` : ''}${websiteUrl ? ` (${websiteUrl})` : ''}. Produce the website-only Creative Brief using ONLY this evidence.`,
+              `WEBSITE EVIDENCE BUNDLE${clientName ? ` for ${clientName}` : ''}${websiteUrl ? ` (${websiteUrl})` : ''}. Produce the website-only Creative Brief using ONLY this evidence. Read CAPTURE STATUS first — it tells you which absences are real findings about the site and which are just inputs this run could not read.`,
               ...brainBlock,
               '',
               evidenceText,

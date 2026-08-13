@@ -2,6 +2,7 @@
 
 const { runSiteFetch } = require('./shared/site-fetch');
 const { runSiteMeta } = require('./shared/site-meta');
+const { summarizeEvidencePages } = require('../normalize');
 
 const CARD_ID = 'social-preview';
 
@@ -32,6 +33,14 @@ async function runSocialPreview({ websiteUrl, onProgress = null }) {
     warningCodes.push(fetchResult.warning.code);
   }
   const evidence = fetchResult.evidence;
+  // The crawl this module already performs is the only page fetch on the narrow
+  // Creative Brief run (signup / creative-brief triggers run just this module
+  // and multi-device-view). Hand the trimmed page evidence back on the envelope
+  // so run-lifecycle can persist dashboard_state.evidence — without it the
+  // Creative Brief has no on-page copy or CTAs to read and reports them as
+  // missing from the site. Envelope-only: updateModuleState writes a fixed set
+  // of fields, so this never lands inside modules['social-preview'].
+  const siteEvidence = summarizeEvidencePages(evidence);
 
   // Step 2: extract site meta
   await emit('analyze', 'Extract social metadata…');
@@ -46,6 +55,7 @@ async function runSocialPreview({ websiteUrl, onProgress = null }) {
       errorMessage: 'No social meta tags found on this page.',
       warningCodes: [...warningCodes, code],
       artifacts: [],
+      siteEvidence,
     };
   }
 
@@ -57,6 +67,7 @@ async function runSocialPreview({ websiteUrl, onProgress = null }) {
     status: 'succeeded',
     warningCodes,
     artifacts: [],
+    siteEvidence,
     result: { siteMeta },
   };
 }

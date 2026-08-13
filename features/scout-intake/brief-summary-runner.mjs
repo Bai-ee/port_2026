@@ -90,6 +90,12 @@ export async function generateBriefSummaries({ clientId, runId, briefTypes = ALL
     socialQueue,
     moduleBriefs: dash.moduleBriefs?.items || [],
     siteMeta: dash.siteMeta || null,
+    // Page content captured by site-fetcher.js + per-module run status. The
+    // Creative Brief needs both: `evidence` is the only place real on-page
+    // copy/CTAs/links live (without it the brief called present CTAs missing),
+    // and `modules` is how it tells a failed module apart from a real gap.
+    evidence: dash.evidence || null,
+    modules: dash.modules || null,
     watchlistKols: Array.isArray(clientConfig?.marketingBriefConfig?.kols)
       ? clientConfig.marketingBriefConfig.kols
       : [],

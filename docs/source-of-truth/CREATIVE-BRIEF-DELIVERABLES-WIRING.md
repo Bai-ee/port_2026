@@ -72,12 +72,22 @@ Not every card comes from the scout module pipeline. There are exactly three pro
 |---|---|---|---|---|
 | `multi-device-view` | A | `module-registry.js:4` (deps: site-fetch, screenshots, device-mockup) | `run-lifecycle.cjs:825` → `projectScreenshotArtifacts :784` → `artifacts.homepageScreenshot` / `homepageScreenshots` / `fullPageScreenshots` / `homepageDeviceMockup` | `artifacts.homepageDeviceMockup` + `fullPageScreenshots` |
 | `cross-device-images` | A (no own module) | — reuses `multi-device-view` output | same as above (`fullPageScreenshots`) | `artifacts.fullPageScreenshots` |
-| `social-preview` | A | `module-registry.js:14` (deps: site-fetch, site-meta) | `run-lifecycle.cjs:830` → `siteMeta` + `onboard.socialPreview` | `siteMeta` |
+| `social-preview` | A | `module-registry.js:14` (deps: site-fetch, site-meta) | `projectModuleResult` → `siteMeta` + `onboard.socialPreview`; also `evidence` (page crawl, see below) | `siteMeta` |
 | `style-guide` | A | `module-registry.js:44` (deps: design-system-extractor, style-guide-synthesizer) | `run-lifecycle.cjs:841` → `snapshot.visualIdentity.styleGuide`; verifications via `design-evaluation` → `analyzerOutputs['design-evaluation']` (`:849`) | `snapshot.visualIdentity.styleGuide` + `analyzerOutputs['design-evaluation']` |
 | `mockup-studio` (Video Promo) | B | — (studio recipe, not a scout module) | `studio-render-core.cjs:37 appendCaptureRef` → `studioCaptures` | `studioCaptures` (latest video) |
 | `post-me` | B + C (derived) | — | reads B `studioCaptures` + C `briefSummaries` + `siteMeta`; composed in-card `buildPostMeCaption` ~`DashboardPage.jsx:4737` | composed |
 | `onboarding-brief` (Creative Brief) | C | — | `brief-summarizer.js` → `briefSummaries.onboarding`; readiness also keys off A artifacts + B studioCaptures | `briefSummaries.onboarding` + artifacts + studioCaptures |
 | `marketing-brief` (Executive Brief) | C | — | scout-brief pipeline → `marketingBrief` | `marketingBrief.*` |
+
+### What the Creative Brief is allowed to call "missing" (2026-08-12)
+
+The Creative Brief cover (`briefSummaries.onboarding`) is the only brief that makes claims about what a client's site does or does not have, so its evidence bundle is built differently from every other composition. Three things feed it, and all three had to be fixed together:
+
+1. **Page content** — `dashboard_state.evidence` (h1/h2/nav/CTA/body/social/contact per page). Previously the summarizer's data bag never included it (`brief-summary-runner.mjs`), so the brief saw only meta tags plus one-line module roll-ups and reported real on-page CTAs, copy and social links as absent from the site. The bag now passes `evidence` + `modules`, and `buildBriefSummaryEvidence` emits a `## site-content` block for `onboarding` only — every other brief type is byte-identical.
+2. **Where that evidence comes from on a signup run** — the narrow Creative Brief run (`trigger: 'signup' | 'creative-brief'`) runs only `multi-device-view` + `social-preview` (`app/api/worker/run-brief/route.js`), so `runIntakePipeline`'s crawl never happens. `social-preview` already fetches the page for its meta tags; it now returns the trimmed crawl on its envelope as `siteEvidence` and `projectModuleResult` writes it to `dashboard_state.evidence`. Envelope-only — `updateModuleState` persists a fixed field set, so it never lands inside `modules['social-preview']`.
+3. **Captured vs missing** — a `## CAPTURE STATUS` block states whether the crawl ran, came back thin (JS-rendered site), or never ran, plus which modules failed or never ran. The system prompt forbids reporting a non-captured input as a site gap. ⚠️ A JS-rendered site (client-rendered SPA) yields a `thin` crawl no matter what — the brief will correctly say "not captured", but reading those sites needs a rendered/browserless fetch, which is not built.
+
+Rule of thumb when editing any of this: something is only "missing from the site" when the input that would have found it ran successfully and came back empty.
 
 > Note the asymmetry: `style-guide`/`design-evaluation` both write `snapshot.visualIdentity.styleGuide` (the second keeps it in sync — `run-lifecycle.cjs:851`), which is the "dual-source" divergence risk noted above. The projection uses `ref.update()` with dot-paths (not `set(merge)`) so a `snapshot.*` write doesn't wipe sibling fields like `snapshot.brandOverview` — see the comment at `run-lifecycle.cjs:818`.
 
