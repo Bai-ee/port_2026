@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dashboard Feature Inventory — every card, verified</title>
+<style>
+  :root{
+    --bg:#0b0c0e; --panel:#131519; --panel2:#171a1f; --line:#262a31;
+    --ink:#e8eaed; --soft:#9aa1ab; --faint:#646b76;
+    --x:#1d9bf0;           /* config — a settings surface */
+    --ok:#5ad1a0;          /* live — real flow, real data */
+    --derived:#a78bfa;     /* derived — renders another run's output */
+    --warn:#f0c64c;        /* locked / gated */
+    --bad:#e0556b;         /* placeholder — nothing wired */
+    --mono:'SF Mono',ui-monospace,'Cascadia Code','Roboto Mono',Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;
+    -webkit-font-smoothing:antialiased;padding:0 0 90px}
+  .wrap{max-width:1320px;margin:0 auto;padding:0 24px}
+  a{color:var(--x);text-decoration:none}
+  a:hover{text-decoration:underline}
+  code,.mono{font-family:var(--mono)}
+
+  header{border-bottom:1px solid var(--line);padding:40px 0 32px;margin-bottom:40px;
+    background:radial-gradient(1200px 300px at 20% -40%,rgba(90,209,160,.10),transparent)}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.32em;text-transform:uppercase;
+    color:var(--ok);margin-bottom:14px}
+  h1{font-size:38px;line-height:1.08;letter-spacing:-.02em;font-weight:680;max-width:22ch}
+  .sub{color:var(--soft);margin-top:14px;max-width:78ch;font-size:15px}
+  .sub b{color:var(--ink)}
+
+  h2{font-size:13px;letter-spacing:.22em;text-transform:uppercase;color:var(--faint);
+    font-family:var(--mono);margin:0 0 18px;font-weight:600}
+  section{margin-bottom:56px}
+
+  /* summary tiles */
+  .tiles{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
+  @media(max-width:1000px){.tiles{grid-template-columns:repeat(3,1fr)}}
+  @media(max-width:560px){.tiles{grid-template-columns:repeat(2,1fr)}}
+  .tile{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px 16px;position:relative;overflow:hidden}
+  .tile .bar{position:absolute;top:0;left:0;width:100%;height:3px}
+  .tile .n{font-size:28px;font-weight:680;letter-spacing:-.02em;line-height:1}
+  .tile .l{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--faint);margin-top:8px}
+  .tile .d{color:var(--soft);font-size:11.5px;margin-top:7px;line-height:1.45}
+
+  /* legend */
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin:-4px 0 24px;font-size:12.5px;color:var(--soft)}
+  .legend span{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono)}
+  .dot{width:10px;height:10px;border-radius:3px;display:inline-block;flex:none}
+  .d-ok{background:var(--ok)} .d-cfg{background:var(--x)} .d-der{background:var(--derived)}
+  .d-lock{background:var(--warn)} .d-ph{background:var(--bad)} .d-static{background:var(--faint)}
+
+  /* filters */
+  .filters{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:18px}
+  .fbtn{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+    background:var(--panel2);border:1px solid var(--line);color:var(--soft);
+    padding:6px 12px;border-radius:20px;cursor:pointer;transition:.14s}
+  .fbtn:hover{color:var(--ink);border-color:#3a4049}
+  .fbtn.on{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:700}
+
+  /* table */
+  .tablewrap{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .scroll{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;min-width:1080px}
+  thead th{font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--faint);text-align:left;padding:13px 14px;border-bottom:1px solid var(--line);
+    background:var(--panel2);white-space:nowrap;font-weight:600;position:sticky;top:0;z-index:2}
+  tbody td{padding:12px 14px;border-bottom:1px solid rgba(38,42,49,.6);font-size:13px;vertical-align:top}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:rgba(255,255,255,.018)}
+  tbody tr.bucket-head td{background:var(--panel2);border-bottom:1px solid var(--line)}
+  .bh{display:flex;align-items:center;gap:11px;flex-wrap:wrap}
+  .bh .swatch{width:4px;height:16px;border-radius:2px;flex:none}
+  .bh .name{font-weight:680;font-size:13.5px;letter-spacing:-.01em}
+  .bh .meta{font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:.1em;text-transform:uppercase}
+  .bh .navflag{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;padding:2px 8px;border-radius:20px;
+    color:var(--bad);border:1px solid rgba(224,85,107,.4)}
+
+  .c-name{font-weight:620;font-size:13.5px;letter-spacing:-.005em}
+  .c-id{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:3px}
+  .pill{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
+    padding:3px 9px;border-radius:20px;white-space:nowrap;display:inline-block}
+  .p-ok{color:var(--ok);border:1px solid rgba(90,209,160,.4)}
+  .p-cfg{color:var(--x);border:1px solid rgba(29,155,240,.4)}
+  .p-der{color:var(--derived);border:1px solid rgba(167,139,250,.4)}
+  .p-lock{color:var(--warn);border:1px solid rgba(240,198,76,.4)}
+  .p-ph{color:var(--bad);border:1px solid rgba(224,85,107,.4)}
+  .p-static{color:var(--faint);border:1px solid var(--line)}
+  .acc{font-family:var(--mono);font-size:10.5px;color:var(--soft);white-space:nowrap}
+  .acc.admin{color:var(--warn)}
+  .acc.open{color:var(--ok)}
+  .src{color:var(--soft);font-size:12.5px;line-height:1.45}
+  .src code{color:var(--ink);font-size:11.5px}
+  .ev{font-family:var(--mono);font-size:11px;color:var(--faint);white-space:nowrap}
+  .doc{font-family:var(--mono);font-size:11px;line-height:1.5}
+  .doc .none{color:var(--faint)}
+
+  /* notes / findings */
+  .findings{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:860px){.findings{grid-template-columns:1fr}}
+  .flag{background:linear-gradient(180deg,rgba(240,198,76,.06),transparent);
+    border:1px solid var(--line);border-left:3px solid var(--warn);border-radius:10px;padding:16px 18px}
+  .flag.gap{background:linear-gradient(180deg,rgba(224,85,107,.07),transparent);border-left-color:var(--bad)}
+  .flag.info{background:linear-gradient(180deg,rgba(29,155,240,.06),transparent);border-left-color:var(--x)}
+  .flag .h{font-weight:660;font-size:14px;margin-bottom:7px;display:flex;align-items:center;gap:8px}
+  .flag p{color:var(--soft);font-size:13px;line-height:1.55}
+  .flag p b{color:var(--ink)} .flag code{color:var(--ink);font-size:12px}
+  .flag p + p{margin-top:8px}
+
+  /* nested features */
+  .nest{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 22px}
+  .nest .row{display:flex;gap:14px;padding:12px 0;border-bottom:1px dashed var(--line);align-items:flex-start}
+  .nest .row:last-child{border-bottom:none}
+  .nest .host{font-family:var(--mono);font-size:11px;color:var(--ok);width:150px;flex:none;padding-top:2px}
+  .nest .txt{font-size:13.5px;color:var(--soft);line-height:1.5}
+  .nest .txt b{color:var(--ink)}
+
+  footer{border-top:1px solid var(--line);padding-top:22px;color:var(--faint);font-size:12px;font-family:var(--mono);line-height:1.7}
+  footer b{color:var(--soft)}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="eyebrow">Dashboard · Feature Inventory</div>
+    <h1>Every dashboard card, and what actually works</h1>
+    <p class="sub">All <b>86 card definitions</b> in <code>DashboardPage.jsx</code>, read from code — not from prior docs.
+    Each row carries its bucket, access gate, verified status, backing data source, and a line reference you can open.
+    The existing SSOT covers 8 of these (the June launch scope); this is the whole surface.</p>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- SUMMARY -->
+  <section>
+    <h2>At a glance</h2>
+    <div class="tiles">
+      <div class="tile"><div class="bar" style="background:var(--ok)"></div><div class="n">38</div><div class="l">Live</div><div class="d">Real trigger, real data, working flow</div></div>
+      <div class="tile"><div class="bar" style="background:var(--x)"></div><div class="n">6</div><div class="l">Config</div><div class="d">Settings surface that persists</div></div>
+      <div class="tile"><div class="bar" style="background:var(--derived)"></div><div class="n">13</div><div class="l">Derived</div><div class="d">Shows another run's output; no own trigger</div></div>
+      <div class="tile"><div class="bar" style="background:var(--warn)"></div><div class="n">4</div><div class="l">Locked</div><div class="d">Tier or prerequisite gated</div></div>
+      <div class="tile"><div class="bar" style="background:var(--bad)"></div><div class="n">8</div><div class="l">Placeholder</div><div class="d">Nothing wired — permanent empty state</div></div>
+      <div class="tile"><div class="bar" style="background:var(--faint)"></div><div class="n">17</div><div class="l">Static</div><div class="d">Hardcoded copy / CTA only</div></div>
+    </div>
+    <p class="sub" style="margin-top:16px;font-size:13px">86 unique card definitions. The table below shows <b>91 rows</b> — four cards
+    (<code>onboarding-brief</code>, <code>mockup-studio</code>, <code>social-preview</code>, <code>multi-device-view</code>) are cross-listed via
+    <code>extraCategories</code> and appear in each bucket they render in, plus <code>past-briefs</code>, which is a step that renders run
+    documents rather than a card.</p>
+  </section>
+
+  <!-- LEGEND + FILTERS + TABLE -->
+  <section>
+    <h2>The inventory</h2>
+    <div class="legend">
+      <span><i class="dot d-ok"></i>LIVE — own run/open path + real data</span>
+      <span><i class="dot d-cfg"></i>CONFIG — editable settings, persisted</span>
+      <span><i class="dot d-der"></i>DERIVED — reads another card's run</span>
+      <span><i class="dot d-lock"></i>LOCKED — tier / prereq gated</span>
+      <span><i class="dot d-ph"></i>PLACEHOLDER — no source wired</span>
+      <span><i class="dot d-static"></i>STATIC — hardcoded rows only</span>
+    </div>
+
+    <div class="filters" id="card-inventory-filters">
+      <button class="fbtn on" data-f="all">All rows</button>
+      <button class="fbtn" data-f="live">Live</button>
+      <button class="fbtn" data-f="config">Config</button>
+      <button class="fbtn" data-f="derived">Derived</button>
+      <button class="fbtn" data-f="locked">Locked</button>
+      <button class="fbtn" data-f="placeholder">Placeholder</button>
+      <button class="fbtn" data-f="static">Static</button>
+      <button class="fbtn" data-f="admin">Admin-only</button>
+      <button class="fbtn" data-f="unreachable">Unreachable</button>
+    </div>
+
+    <div class="tablewrap">
+      <div class="scroll">
+      <table id="card-inventory-table">
+        <thead>
+          <tr>
+            <th style="width:20%">Card</th>
+            <th style="width:9%">Status</th>
+            <th style="width:9%">Access</th>
+            <th style="width:32%">Data source / trigger</th>
+            <th style="width:12%">Evidence</th>
+            <th style="width:18%">Source-of-truth doc</th>
+          </tr>
+        </thead>
+        <tbody>
+
+          <!-- ══ DELIVERABLES ══ -->
+          <tr class="bucket-head"><td colspan="6"><div class="bh">
+            <i class="swatch" style="background:#14b8a6"></i>
+            <span class="name">Deliverables</span>
+            <span class="meta">6 cards · the only bucket open to non-admins</span>
+          </div></td></tr>
+
+          <tr data-s="live" data-a="open"><td><div class="c-name">Creative Brief</div><div class="c-id">onboarding-brief</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc open">All users</td>
+            <td class="src">POST <code>/api/dashboard/creative-brief/run</code> → <code>runCreativeBrief</code>; readiness from <code>briefSummaries.onboarding</code> + artifacts</td>
+            <td class="ev">DashboardPage.jsx:9038</td>
+            <td class="doc"><a href="../source-of-truth/CREATIVE-BRIEF-DELIVERABLES-WIRING.md">CREATIVE-BRIEF-DELIVERABLES-WIRING</a></td></tr>
+
+          <tr data-s="live" data-a="open"><td><div class="c-name">Video Promo / Mockup Studio</div><div class="c-id">mockup-studio</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc open">All users</td>
+            <td class="src">POST <code>/api/dashboard/studio-render</code> → Cloud Run GPU; reads <code>studioCaptures</code>; per-run variation engine</td>
+            <td class="ev">DashboardPage.jsx:7699</td>
+            <td class="doc"><a href="../features/studio/VIDEO_PROMO_VARIATION_ENGINE.md">VIDEO_PROMO_VARIATION_ENGINE</a></td></tr>
+
+          <tr data-s="live" data-a="open"><td><div class="c-name">Social Preview</div><div class="c-id">social-preview</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc open">All users</td>
+            <td class="src">Module runner (<code>html-fetch</code> + <code>meta-parser</code>) → <code>siteMeta</code>; registered in <code>module-registry.js</code></td>
+            <td class="ev">DashboardPage.jsx:8023</td>
+            <td class="doc"><a href="../source-of-truth/CREATIVE-BRIEF-DELIVERABLES-WIRING.md">CREATIVE-BRIEF-DELIVERABLES-WIRING</a></td></tr>
+
+          <tr data-s="live" data-a="open"><td><div class="c-name">Multi-Device Mock</div><div class="c-id">multi-device-view</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc open">All users</td>
+            <td class="src">Module runner (<code>browserless</code> + <code>python-mockup</code>) → <code>artifacts.homepageDeviceMockup</code></td>
+            <td class="ev">DashboardPage.jsx:8135</td>
+            <td class="doc"><a href="../source-of-truth/CREATIVE-BRIEF-DELIVERABLES-WIRING.md">CREATIVE-BRIEF-DELIVERABLES-WIRING</a></td></tr>
+
+          <tr data-s="live" data-a="open"><td><div class="c-name">Full Page Images</div><div class="c-id">cross-device-images</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc open">All users</td>
+            <td class="src">Reads <code>deviceScreenshots</code> (desktop/tablet/mobile) from the same capture run; bulk download</td>
+            <td class="ev">DashboardPage.jsx:8185</td>
+            <td class="doc"><a href="../source-of-truth/CREATIVE-BRIEF-DELIVERABLES-WIRING.md">CREATIVE-BRIEF-DELIVERABLES-WIRING</a></td></tr>
+
+          <tr data-s="live" data-a="open"><td><div class="c-name">Post Me</div><div class="c-id">post-me</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc open">All users</td>
+            <td class="src">Client-side X composer intent; caption via <code>buildPostMeCaption()</code> — 4-source fallback chain</td>
+            <td class="ev">DashboardPage.jsx:8234</td>
+            <td class="doc"><a href="../source-of-truth/CREATIVE-BRIEF-DELIVERABLES-WIRING.md">CREATIVE-BRIEF-DELIVERABLES-WIRING</a></td></tr>
+
+          <!-- ══ EXECUTIVE BRIEF ══ -->
+          <tr class="bucket-head"><td colspan="6"><div class="bh">
+            <i class="swatch" style="background:#2a2420"></i>
+            <span class="name">Executive Brief · Daily Stand Up</span>
+            <span class="meta">6 cards + 1 virtual step</span>
+          </div></td></tr>
+
+          <tr data-s="live" data-a="all"><td><div class="c-name">Executive Brief</div><div class="c-id">marketing-brief</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc">All users</td>
+            <td class="src">POST <code>/api/dashboard/marketing-brief/run</code> → Scout · Scribe · Guardian pipeline</td>
+            <td class="ev">DashboardPage.jsx:9004</td>
+            <td class="doc"><a href="../source-of-truth/MARKET-SIGNALS-AND-SCOUT-PROJECTION.md">MARKET-SIGNALS-AND-SCOUT-PROJECTION</a></td></tr>
+
+          <tr data-s="live" data-a="all"><td><div class="c-name">Creative Brief <span class="acc">(cross-listed)</span></div><div class="c-id">onboarding-brief</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc">All users</td>
+            <td class="src">Same card as Deliverables lead; <code>extraCategories:['deliverables']</code></td>
+            <td class="ev">DashboardPage.jsx:9038</td>
+            <td class="doc"><a href="../source-of-truth/CREATIVE-BRIEF-DELIVERABLES-WIRING.md">CREATIVE-BRIEF-DELIVERABLES-WIRING</a></td></tr>
+
+          <tr data-s="locked" data-a="all"><td><div class="c-name">Market Brief</div><div class="c-id">brief-marketing</div></td>
+            <td><span class="pill p-lock">Locked</span></td><td class="acc">Tier-gated</td>
+            <td class="src"><code>runMarketingBrief('marketing-director')</code> — Scout-only refresh. Gate: <code>briefCardLocked()</code> vs <code>allowedBriefs</code></td>
+            <td class="ev">DashboardPage.jsx:9167 · gate :4966</td>
+            <td class="doc"><a href="../source-of-truth/EXECUTIVE-BRIEFS-RUN-BRIEFS-WIRING.md">EXECUTIVE-BRIEFS-RUN-BRIEFS-WIRING</a></td></tr>
+
+          <tr data-s="locked" data-a="all"><td><div class="c-name">Strategy Brief</div><div class="c-id">brief-strategy</div></td>
+            <td><span class="pill p-lock">Locked</span></td><td class="acc">Tier-gated</td>
+            <td class="src"><code>runMarketingBrief('social-media-manager')</code> — strategy roller + day-of post; reads <code>strategy30</code></td>
+            <td class="ev">DashboardPage.jsx:9189</td>
+            <td class="doc"><a href="../source-of-truth/EXECUTIVE-BRIEFS-RUN-BRIEFS-WIRING.md">EXECUTIVE-BRIEFS-RUN-BRIEFS-WIRING</a></td></tr>
+
+          <tr data-s="locked" data-a="all"><td><div class="c-name">Website Developer Brief</div><div class="c-id">brief-performance</div></td>
+            <td><span class="pill p-lock">Locked</span></td><td class="acc">Tier-gated</td>
+            <td class="src"><code>runBriefProducers('website-developer','brief-performance')</code></td>
+            <td class="ev">DashboardPage.jsx:9218</td>
+            <td class="doc"><a href="../source-of-truth/EXECUTIVE-BRIEFS-RUN-BRIEFS-WIRING.md">EXECUTIVE-BRIEFS-RUN-BRIEFS-WIRING</a></td></tr>
+
+          <tr data-s="live" data-a="admin"><td><div class="c-name">Submit Custom Brief</div><div class="c-id">submit-custom-brief</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc admin">Admin only</td>
+            <td class="src"><code>/api/dashboard/custom-briefs</code> (+ <code>/vercel</code>); publishes HTML + generated PDF into the selected dashboard</td>
+            <td class="ev">DashboardPage.jsx:9294</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <tr data-s="live" data-a="all"><td><div class="c-name">Past Briefs <span class="acc">(virtual step, not a card)</span></div><div class="c-id">past-briefs</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc">All users</td>
+            <td class="src">Renders <code>recentRuns</code> filtered to <code>pipelineType==='scout-brief' &amp;&amp; status==='succeeded'</code> as a document list</td>
+            <td class="ev">DashboardPage.jsx:12028</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <!-- ══ KNOWLEDGE OFFICER ══ -->
+          <tr class="bucket-head"><td colspan="6"><div class="bh">
+            <i class="swatch" style="background:#3b82f6"></i>
+            <span class="name">Knowledge Officer</span>
+            <span class="meta">8 cards</span>
+          </div></td></tr>
+
+          <tr data-s="live" data-a="all"><td><div class="c-name">Founder Q&amp;A</div><div class="c-id">survey-status</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc">All users</td>
+            <td class="src"><code>/api/dashboard/onboarding</code> → <code>onboardingSummary</code> (answered / total, completedAt)</td>
+            <td class="ev">DashboardPage.jsx:7262</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <tr data-s="derived" data-a="all"><td><div class="c-name">Business Model</div><div class="c-id">business-model</div></td>
+            <td><span class="pill p-der">Derived</span></td><td class="acc">All users</td>
+            <td class="src">Reads <code>resolvedBusinessModel</code> from intake analysis. No own run — populated by the brief pipeline</td>
+            <td class="ev">DashboardPage.jsx:7286</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <tr data-s="live" data-a="all"><td><div class="c-name">Market Category</div><div class="c-id">industry</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc">All users</td>
+            <td class="src">POST <code>/api/dashboard/market-category/analyze</code> (own RUN button) + <code>/config</code> for manual set</td>
+            <td class="ev">DashboardPage.jsx:7303</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <tr data-s="derived" data-a="open"><td><div class="c-name">Data Coverage</div><div class="c-id">audit-summary</div></td>
+            <td><span class="pill p-der">Derived</span></td><td class="acc open">All users</td>
+            <td class="src">Aggregate scorecard over every other card's fields (captured / missing / upgrade tiers). Pure computation</td>
+            <td class="ev">DashboardPage.jsx:7339</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <tr data-s="live" data-a="all"><td><div class="c-name">Company Brain</div><div class="c-id">client-brain</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc">All users</td>
+            <td class="src"><code>/api/dashboard/client-brain/{route,sources,generate,approve,export}</code>; store <code>features/client-brain/store.cjs</code></td>
+            <td class="ev">DashboardPage.jsx:7577</td>
+            <td class="doc"><a href="../company-brain/IMPLEMENTATION_PLAN.md">company-brain/IMPLEMENTATION_PLAN</a></td></tr>
+
+          <tr data-s="live" data-a="all"><td><div class="c-name">Source Library</div><div class="c-id">knowledge-base</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc">All users</td>
+            <td class="src"><code>/api/dashboard/knowledge-base/*</code> — ingest URL/text/PDF, upload, reindex, vector search (100 items/client)</td>
+            <td class="ev">DashboardPage.jsx:7600</td>
+            <td class="doc"><a href="../features/knowledge-base/BRAIN_FEATURE_PLAN.md">features/knowledge-base/BRAIN_FEATURE_PLAN</a></td></tr>
+
+          <tr data-s="live" data-a="admin"><td><div class="c-name">Archive / Publishing</div><div class="c-id">archive-publishing</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc admin">Admin only</td>
+            <td class="src">Archive actions in <code>/api/dashboard/media</code> → EditVideos bridge → Arweave; <code>dashboardState.archivePublishing</code></td>
+            <td class="ev">DashboardPage.jsx:8417</td>
+            <td class="doc"><a href="../source-of-truth/ARCHIVE-PUBLISHING-CARD.md">ARCHIVE-PUBLISHING-CARD</a></td></tr>
+
+          <tr data-s="live" data-a="all"><td><div class="c-name">Google Calendar</div><div class="c-id">calendar-connect</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc">All users</td>
+            <td class="src"><code>/api/dashboard/calendar/{connect,callback,status,disconnect}</code> — read-only OAuth; feeds digest agenda</td>
+            <td class="ev">DashboardPage.jsx:8446</td>
+            <td class="doc"><a href="../source-of-truth/EMAIL-DIGEST-CARD.md">EMAIL-DIGEST-CARD</a> (agenda toggle)</td></tr>
+
+          <!-- ══ MARKETING DIRECTOR ══ -->
+          <tr class="bucket-head"><td colspan="6"><div class="bh">
+            <i class="swatch" style="background:#10b981"></i>
+            <span class="name">Marketing Director</span>
+            <span class="meta">14 cards · 5 of them are Scout config surfaces</span>
+          </div></td></tr>
+
+          <tr data-s="live" data-a="all"><td><div class="c-name">Market Signals</div><div class="c-id">signals</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc">All users</td>
+            <td class="src">The control panel: <code>scout-run</code>, <code>scout-test</code>, <code>recipe-run</code>, <code>watchlist-pull</code>, <code>opportunity-signals/*</code>. Hosts 4 sub-features (below)</td>
+            <td class="ev">DashboardPage.jsx:8592</td>
+            <td class="doc"><a href="../source-of-truth/MARKET-SIGNALS-GENERATE-REPORT-FLOW.md">MARKET-SIGNALS-GENERATE-REPORT-FLOW</a></td></tr>
+
+          <tr data-s="derived" data-a="all"><td><div class="c-name">Competitor Snapshot</div><div class="c-id">competitor-info</div></td>
+            <td><span class="pill p-der">Derived</span></td><td class="acc">All users</td>
+            <td class="src">Reads <code>competitorIntelItems</code> from the Executive Brief run. No own trigger</td>
+            <td class="ev">DashboardPage.jsx:8610</td>
+            <td class="doc"><a href="../source-of-truth/MARKET-SIGNALS-AND-SCOUT-PROJECTION.md">MARKET-SIGNALS-AND-SCOUT-PROJECTION</a></td></tr>
+
+          <tr data-s="placeholder" data-a="all"><td><div class="c-name">Local Signals</div><div class="c-id">local-signals</div></td>
+            <td><span class="pill p-ph">Placeholder</span></td><td class="acc">All users</td>
+            <td class="src">Unconditional <code>buildWorkNeededRows</code>. Code comment states it plainly: "No local-market data source is wired to this card yet — running a brief won't populate it"</td>
+            <td class="ev">DashboardPage.jsx:8628</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <tr data-s="derived" data-a="all"><td><div class="c-name">Day-of Post</div><div class="c-id">priority-signal</div></td>
+            <td><span class="pill p-der">Derived</span></td><td class="acc">All users</td>
+            <td class="src">Reads <code>strategyBuilderPrimaryPost</code> → <code>strategy30.today</code> → <code>marketingBrief.headline</code> fallback chain. Cross-listed into Knowledge</td>
+            <td class="ev">DashboardPage.jsx:8652</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <tr data-s="locked" data-a="all"><td><div class="c-name">Custom Post Strategy</div><div class="c-id">strategy-builder</div></td>
+            <td><span class="pill p-lock">Locked</span></td><td class="acc">Needs brief</td>
+            <td class="src"><code>/api/dashboard/strategy-builder/{config,generate,push}</code>. <code>locked: !hasMarketingBriefData</code> — unlocks after one Executive Brief</td>
+            <td class="ev">DashboardPage.jsx:8696</td>
+            <td class="doc"><a href="../source-of-truth/STRATEGY-BUILDER-EDITORIAL-PACK.md">STRATEGY-BUILDER-EDITORIAL-PACK</a></td></tr>
+
+          <tr data-s="derived" data-a="all"><td><div class="c-name">30-Day Strategy</div><div class="c-id">strategy-30</div></td>
+            <td><span class="pill p-der">Derived</span></td><td class="acc">All users</td>
+            <td class="src">Renders <code>strategyBuilderItems</code> / <code>strategy30.days</code>; editable via <code>/api/dashboard/strategy-30/config</code>. Regenerated on each brief run</td>
+            <td class="ev">DashboardPage.jsx:8732</td>
+            <td class="doc"><a href="../source-of-truth/STRATEGY-BUILDER-EDITORIAL-PACK.md">STRATEGY-BUILDER-EDITORIAL-PACK</a></td></tr>
+
+          <tr data-s="config" data-a="all"><td><div class="c-name">Global Weather &amp; Events</div><div class="c-id">local-weather</div></td>
+            <td><span class="pill p-cfg">Config</span></td><td class="acc">All users</td>
+            <td class="src"><code>/api/dashboard/local-weather</code> + <code>/events-search</code>; toggle persists to <code>marketingBriefConfig.weather</code></td>
+            <td class="ev">DashboardPage.jsx:8840</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <tr data-s="placeholder" data-a="all"><td><div class="c-name">Newsletter Roll-up</div><div class="c-id">newsletter</div></td>
+            <td><span class="pill p-ph">Placeholder</span></td><td class="acc">Hard-locked</td>
+            <td class="src"><code>locked: true</code> unconditionally. <code>runNewsletterPipeline</code> has <b>no caller</b> and <code>newsletter</code> is not in <code>MODULE_RUNNERS</code> — its Data Coverage rows were removed for reading Missing forever</td>
+            <td class="ev">DashboardPage.jsx:8856 · note :7419</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <tr data-s="live" data-a="all"><td><div class="c-name">Conversation Intake</div><div class="c-id">conversation-intake</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc">All users</td>
+            <td class="src"><code>/api/dashboard/conversation-intake</code> — paste team chat, tags into campaign/social/brief signals</td>
+            <td class="ev">DashboardPage.jsx:8874</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <tr data-s="config" data-a="all"><td><div class="c-name">Search Parameters</div><div class="c-id">brand-keywords</div></td>
+            <td><span class="pill p-cfg">Config</span></td><td class="acc">All users</td>
+            <td class="src"><code>/api/dashboard/marketing-brief/config</code> → brand name, exact identifiers, priority themes, est. search count</td>
+            <td class="ev">DashboardPage.jsx:8894</td>
+            <td class="doc"><a href="../source-of-truth/MARKET-SIGNALS-AND-SCOUT-PROJECTION.md">MARKET-SIGNALS-AND-SCOUT-PROJECTION</a></td></tr>
+
+          <tr data-s="config" data-a="all"><td><div class="c-name">Research Focus</div><div class="c-id">scout-focus</div></td>
+            <td><span class="pill p-cfg">Config</span></td><td class="acc">All users</td>
+            <td class="src">Same config route → <code>sourceFocus</code>, <code>scoutInstructions</code>, <code>freshnessDays</code></td>
+            <td class="ev">DashboardPage.jsx:8928</td>
+            <td class="doc"><a href="../source-of-truth/MARKET-SIGNALS-AND-SCOUT-PROJECTION.md">MARKET-SIGNALS-AND-SCOUT-PROJECTION</a></td></tr>
+
+          <tr data-s="config" data-a="all"><td><div class="c-name">Watchlist &amp; Competitors</div><div class="c-id">watchlist</div></td>
+            <td><span class="pill p-cfg">Config</span></td><td class="acc">All users</td>
+            <td class="src">Config route → <code>kols</code>, <code>kolSearchMode</code>, <code>competitors</code>. Pulled by <code>/api/dashboard/watchlist-pull</code></td>
+            <td class="ev">DashboardPage.jsx:8946</td>
+            <td class="doc"><a href="../source-of-truth/MARKET-SIGNALS-AND-SCOUT-PROJECTION.md">MARKET-SIGNALS-AND-SCOUT-PROJECTION</a></td></tr>
+
+          <tr data-s="config" data-a="all"><td><div class="c-name">Web Search + Platforms</div><div class="c-id">platform-search</div></td>
+            <td><span class="pill p-cfg">Config</span></td><td class="acc">All users</td>
+            <td class="src"><code>sourcePlatforms</code> selection. Web is the free default; the 22 directory sources render <b>locked</b> (upgrade tier)</td>
+            <td class="ev">DashboardPage.jsx:8964</td>
+            <td class="doc"><a href="../source-of-truth/SEARCHABLE-PLATFORMS.md">SEARCHABLE-PLATFORMS</a></td></tr>
+
+          <tr data-s="config" data-a="all"><td><div class="c-name">Social Media Signals</div><div class="c-id">social-signals</div></td>
+            <td><span class="pill p-cfg">Config</span></td><td class="acc">All users</td>
+            <td class="src"><code>sourcePlatforms</code> for social. X · Reddit free; Instagram wired; the rest locked</td>
+            <td class="ev">DashboardPage.jsx:8984</td>
+            <td class="doc"><a href="../source-of-truth/SEARCHABLE-PLATFORMS.md">SEARCHABLE-PLATFORMS</a></td></tr>
+
+          <!-- ══ CREATIVE TEAM ══ -->
+          <tr class="bucket-head"><td colspan="6"><div class="bh">
+            <i class="swatch" style="background:#14b8a6"></i>
+            <span class="name">Creative Team</span>
+            <span class="meta">11 cards</span>
+          </div></td></tr>
+
+          <tr data-s="derived" data-a="all"><td><div class="c-name">Voice &amp; Tone</div><div class="c-id">brand-voice</div></td>
+            <td><span class="pill p-der">Derived</span></td><td class="acc">All users</td>
+            <td class="src">Reads <code>brandTone</code> inferred by the intake pipeline. No own trigger</td>
+            <td class="ev">DashboardPage.jsx:7620</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <tr data-s="live" data-a="all"><td><div class="c-name">Visual DNA</div><div class="c-id">visual-dna</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc">All users</td>
+            <td class="src"><code>openVisualDna</code> → reference-image upload + subject profiles; <code>clientProspect.visualDna</code></td>
+            <td class="ev">DashboardPage.jsx:7646</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <tr data-s="live" data-a="open"><td><div class="c-name">Mockup Studio <span class="acc">(cross-listed)</span></div><div class="c-id">mockup-studio</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc open">All users</td>
+            <td class="src">Same card as the Deliverables Video Promo</td>
+            <td class="ev">DashboardPage.jsx:7699</td>
+            <td class="doc"><a href="../features/studio/VIDEO_PROMO_VARIATION_ENGINE.md">VIDEO_PROMO_VARIATION_ENGINE</a></td></tr>
+
+          <tr data-s="live" data-a="open"><td><div class="c-name">Holo Paper Studio</div><div class="c-id">holo-cloth</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc open">All users</td>
+            <td class="src">Opens <code>/dashboard/studio?tool=cloth</code> in a new tab — cloth sim, foil/iridescence, PNG + WebM export</td>
+            <td class="ev">DashboardPage.jsx:7751</td>
+            <td class="doc"><a href="../plans/ORIGINAL-STUDIO-CINEMATIC-SETS-4K-PLAN.md">ORIGINAL-STUDIO-CINEMATIC-SETS-4K-PLAN</a></td></tr>
+
+          <tr data-s="live" data-a="open"><td><div class="c-name">Visual Audit</div><div class="c-id">style-guide</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc open">All users</td>
+            <td class="src">Module runner (<code>css-parser</code>) → <code>snapshot.visualIdentity.styleGuide</code>, cross-checked against <code>design-evaluation</code> verifications (✓/! chips)</td>
+            <td class="ev">DashboardPage.jsx:7772</td>
+            <td class="doc"><a href="../source-of-truth/CREATIVE-BRIEF-DELIVERABLES-WIRING.md">CREATIVE-BRIEF-DELIVERABLES-WIRING</a></td></tr>
+
+          <tr data-s="live" data-a="all"><td><div class="c-name">Brand System</div><div class="c-id">brand-system</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc">All users</td>
+            <td class="src"><code>/api/brand-system</code> via its own terminal modal (<code>BrandSystemBuildModal</code>) — master prompt + brand JSON. Not the module runner</td>
+            <td class="ev">DashboardPage.jsx:7883</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <tr data-s="live" data-a="all"><td><div class="c-name">Design Brief</div><div class="c-id">client-brief</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc">All users</td>
+            <td class="src">POST <code>/api/leadgen/prepare-brief</code> → DESIGN.MD + scraped content JSON</td>
+            <td class="ev">DashboardPage.jsx:7923</td>
+            <td class="doc"><a href="../source-of-truth/LAUNCH-DATA-PIPELINE.md">LAUNCH-DATA-PIPELINE</a></td></tr>
+
+          <tr data-s="live" data-a="all"><td><div class="c-name">Homepage Mockup <span class="acc">(duplicate)</span></div><div class="c-id">client-mockup-creative</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc">All users</td>
+            <td class="src">POST <code>/api/leadgen/generate-mockup</code>. <b>Byte-identical to <code>client-mockup</code></b> in the Website bucket — same route, same rows, different id</td>
+            <td class="ev">DashboardPage.jsx:7964</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <tr data-s="live" data-a="all"><td><div class="c-name">Media Library</div><div class="c-id">media-library</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc">All users<br><span class="acc admin">writes admin</span></td>
+            <td class="src"><code>/api/dashboard/media</code> (<code>media-index</code>, <code>move-media</code>, rename/delete/create folder) + <code>media_assets</code> index. Component <code>MediaLibraryCard.jsx</code></td>
+            <td class="ev">DashboardPage.jsx:8280</td>
+            <td class="doc"><a href="../source-of-truth/VIDEO-REMIX-EDITVIDEOS-BRIDGE.md">VIDEO-REMIX-EDITVIDEOS-BRIDGE</a></td></tr>
+
+          <tr data-s="live" data-a="all"><td><div class="c-name">Video Remix</div><div class="c-id">video-remix</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc">All users</td>
+            <td class="src"><code>media_jobs</code> queue → <code>editvideos-bridge.cjs</code> → EditVideos worker → reconcile. Look/filters live in the worker repo, not here</td>
+            <td class="ev">DashboardPage.jsx:8310</td>
+            <td class="doc"><a href="../source-of-truth/VIDEO-REMIX-EDITVIDEOS-BRIDGE.md">VIDEO-REMIX-EDITVIDEOS-BRIDGE</a></td></tr>
+
+          <tr data-s="static" data-a="admin"><td><div class="c-name">UI Teaser Video</div><div class="c-id">ui-teaser</div></td>
+            <td><span class="pill p-lock">Local only</span></td><td class="acc admin">Admin only</td>
+            <td class="src"><code>/api/dashboard/ui-teaser</code> → headless GPU Playwright on <b>this machine</b>. Code comment: "POST 501s in prod" — hidden from clients entirely rather than locked</td>
+            <td class="ev">DashboardPage.jsx:8372</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <!-- ══ WEBSITE DEVELOPER ══ -->
+          <tr class="bucket-head"><td colspan="6"><div class="bh">
+            <i class="swatch" style="background:#0ea5e9"></i>
+            <span class="name">Website Developer</span>
+            <span class="meta">14 cards · holds 5 of the 6 registered scout modules</span>
+          </div></td></tr>
+
+          <tr data-s="live" data-a="all"><td><div class="c-name">SEO + Performance Snapshot</div><div class="c-id">seo-performance</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc">All users</td>
+            <td class="src">Module runner (<code>pagespeed-insights</code> + <code>anthropic</code>). Registered in <code>module-registry.js</code>. DOM: <code>#intake-card-seo-performance</code></td>
+            <td class="ev">DashboardPage.jsx:7997</td>
+            <td class="doc"><a href="../source-of-truth/LAUNCH-DATA-PIPELINE.md">LAUNCH-DATA-PIPELINE</a></td></tr>
+
+          <tr data-s="derived" data-a="all"><td><div class="c-name">Site Performance</div><div class="c-id">site-performance</div></td>
+            <td><span class="pill p-der">Derived</span></td><td class="acc">All users</td>
+            <td class="src"><code>seoAuditRows.slice(0, 6)</code> — literally the first 6 rows of the card above. No own run, no module, no route</td>
+            <td class="ev">DashboardPage.jsx:8011</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <tr data-s="live" data-a="open"><td><div class="c-name">Social Preview Check <span class="acc">(cross-listed)</span></div><div class="c-id">social-preview</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc open">All users</td>
+            <td class="src">Same card as the Deliverables Social Preview; <code>extraCategories:['knowledge','deliverables']</code></td>
+            <td class="ev">DashboardPage.jsx:8023</td>
+            <td class="doc"><a href="../source-of-truth/CREATIVE-BRIEF-DELIVERABLES-WIRING.md">CREATIVE-BRIEF-DELIVERABLES-WIRING</a></td></tr>
+
+          <tr data-s="live" data-a="all"><td><div class="c-name">AI Agent Readiness</div><div class="c-id">agent-readiness</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc">All users</td>
+            <td class="src">Module runner (<code>agent-ready-checks</code>, <code>ai-seo-audit</code>). Absorbed the old Visibility Snapshot data</td>
+            <td class="ev">DashboardPage.jsx:8067</td>
+            <td class="doc"><a href="../seo/">docs/seo/</a></td></tr>
+
+          <tr data-s="live" data-a="all"><td><div class="c-name">Design Evaluation</div><div class="c-id">design-evaluation</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc">All users</td>
+            <td class="src">Module runner → DESIGN.md audit; emits <code>verifications[]</code> that the Visual Audit card renders as ✓/! chips</td>
+            <td class="ev">DashboardPage.jsx:8081</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <tr data-s="live" data-a="admin"><td><div class="c-name">Recreate My Site</div><div class="c-id">site-recreate</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc admin">Admin only</td>
+            <td class="src"><code>/api/dashboard/site-clone</code> → <code>clone_jobs</code> → Cloud Run worker (deployed). Component <code>SiteRecreateCard.jsx</code>; no <code>moduleControls</code> by design</td>
+            <td class="ev">DashboardPage.jsx:8118</td>
+            <td class="doc"><a href="../source-of-truth/SITE-RECREATE-CARD.md">SITE-RECREATE-CARD</a></td></tr>
+
+          <tr data-s="live" data-a="open"><td><div class="c-name">Cross-Device Layouts <span class="acc">(cross-listed)</span></div><div class="c-id">multi-device-view</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc open">All users</td>
+            <td class="src">Same card as the Deliverables Multi-Device Mock; title/copy swap per active bucket</td>
+            <td class="ev">DashboardPage.jsx:8135</td>
+            <td class="doc"><a href="../source-of-truth/CREATIVE-BRIEF-DELIVERABLES-WIRING.md">CREATIVE-BRIEF-DELIVERABLES-WIRING</a></td></tr>
+
+          <tr data-s="placeholder" data-a="all"><td><div class="c-name">Conversion Readiness</div><div class="c-id">website-landing</div></td>
+            <td><span class="pill p-ph">Placeholder</span></td><td class="acc">All users</td>
+            <td class="src">Unconditional <code>buildWorkNeededRows</code> — "requires page evidence with CTA and value proposition data" that no producer writes</td>
+            <td class="ev">DashboardPage.jsx:8462</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <tr data-s="live" data-a="all"><td><div class="c-name">Homepage Mockup</div><div class="c-id">client-mockup</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc">All users</td>
+            <td class="src">POST <code>/api/leadgen/generate-mockup</code>. Duplicated as <code>client-mockup-creative</code> in Creative Team</td>
+            <td class="ev">DashboardPage.jsx:8478</td>
+            <td class="doc"><a href="../source-of-truth/LAUNCH-DATA-PIPELINE.md">LAUNCH-DATA-PIPELINE</a></td></tr>
+
+          <tr data-s="live" data-a="all"><td><div class="c-name">Build &amp; Deploy Site</div><div class="c-id">client-site</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc">All users</td>
+            <td class="src">POST <code>/api/leadgen/generate-site</code> → Claude Sonnet build + Vercel deploy; before/after AI-readiness comparison</td>
+            <td class="ev">DashboardPage.jsx:8514</td>
+            <td class="doc"><a href="../source-of-truth/LAUNCH-DATA-PIPELINE.md">LAUNCH-DATA-PIPELINE</a></td></tr>
+
+          <tr data-s="live" data-a="all"><td><div class="c-name">Publish Client Estimate</div><div class="c-id">client-estimate</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc">All users</td>
+            <td class="src">POST <code>/api/leadgen/create-estimate</code> → estimate JSON + PDF artifact + proof preview URL</td>
+            <td class="ev">DashboardPage.jsx:8557</td>
+            <td class="doc"><a href="../source-of-truth/LAUNCH-DATA-PIPELINE.md">LAUNCH-DATA-PIPELINE</a></td></tr>
+
+          <tr data-s="placeholder" data-a="all"><td><div class="c-name">Search &amp; Social Visibility</div><div class="c-id">visibility-snapshot</div></td>
+            <td><span class="pill p-ph">Placeholder</span></td><td class="acc">All users</td>
+            <td class="src">Retired in place — row text reads "AI Visibility data has moved to the AI Agent Readiness card." Still renders as a tile</td>
+            <td class="ev">DashboardPage.jsx:8640</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <tr data-s="placeholder" data-a="all"><td><div class="c-name">Trust &amp; Credibility</div><div class="c-id">trust-credibility</div></td>
+            <td><span class="pill p-ph">Placeholder</span></td><td class="acc">All users</td>
+            <td class="src">Unconditional <code>buildWorkNeededRows</code> — "requires contact clues, about page, and schema markup data"</td>
+            <td class="ev">DashboardPage.jsx:8763</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <tr data-s="derived" data-a="all"><td><div class="c-name">Search Opportunities</div><div class="c-id">search-opportunities</div></td>
+            <td><span class="pill p-der">Derived</span></td><td class="acc">All users</td>
+            <td class="src">Renders <code>resolvedOpportunities</code> from the intake/brief run</td>
+            <td class="ev">DashboardPage.jsx:8775</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <!-- ══ SOCIAL MEDIA MANAGER ══ -->
+          <tr class="bucket-head"><td colspan="6"><div class="bh">
+            <i class="swatch" style="background:#6366f1"></i>
+            <span class="name">Social Media Manager</span>
+            <span class="meta">6 cards</span>
+          </div></td></tr>
+
+          <tr data-s="placeholder" data-a="all"><td><div class="c-name">Platform Coverage</div><div class="c-id">platform-coverage</div></td>
+            <td><span class="pill p-ph">Placeholder</span></td><td class="acc">All users</td>
+            <td class="src">Unconditional <code>buildWorkNeededRows</code> — "requires social link data from crawled pages." <b>It is the bucket's first step anchor</b> in <code>CAP_STEPS.social</code></td>
+            <td class="ev">DashboardPage.jsx:8793</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <tr data-s="derived" data-a="all"><td><div class="c-name">Copy &amp; Creative</div><div class="c-id">creative-builder</div></td>
+            <td><span class="pill p-der">Derived</span></td><td class="acc">All users</td>
+            <td class="src">Shows <code>socialGeneratedDraft</code>. Media row is explicit: "Video/audio generation queued for next phase"</td>
+            <td class="ev">DashboardPage.jsx:8805</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <tr data-s="derived" data-a="all"><td><div class="c-name">Ready-to-Post Drafts</div><div class="c-id">draft-post</div></td>
+            <td><span class="pill p-der">Derived</span></td><td class="acc">All users</td>
+            <td class="src">Renders <code>resolvedDraftPost</code> from the brief run</td>
+            <td class="ev">DashboardPage.jsx:8823</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <tr data-s="live" data-a="all"><td><div class="c-name">Copywriter</div><div class="c-id">copywriter</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc">All users</td>
+            <td class="src"><code>/api/social-posting</code> actions <code>score</code> (deterministic, no LLM) · <code>update</code> · <code>enhance</code> (Claude Sonnet, 2 rewrites). Shares <code>social_posts</code> with Schedule Posts</td>
+            <td class="ev">DashboardPage.jsx:9240</td>
+            <td class="doc"><a href="../source-of-truth/COPYWRITER-CARD.md">COPYWRITER-CARD</a></td></tr>
+
+          <tr data-s="live" data-a="all"><td><div class="c-name">Schedule Posts</div><div class="c-id">social-media-posting</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc">All users</td>
+            <td class="src"><code>/api/social-posting</code> draft/schedule/post-now + <code>process-due</code> cron (*/30, 12h staleness guard). Component <code>SocialPostingPanel.jsx</code></td>
+            <td class="ev">DashboardPage.jsx:9257</td>
+            <td class="doc"><a href="../source-of-truth/SOCIAL-AUTO-PUBLISH.md">SOCIAL-AUTO-PUBLISH</a></td></tr>
+
+          <tr data-s="live" data-a="admin"><td><div class="c-name">Social Accounts</div><div class="c-id">x-profile</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc admin">Admin only</td>
+            <td class="src">Per-client X/Instagram identities + the live <code>@bai_ee</code> command center. <b>⚠️ Paid X API writes</b> — spend gate applies</td>
+            <td class="ev">DashboardPage.jsx:9275</td>
+            <td class="doc"><a href="../source-of-truth/X-API-AND-PROFILE-OPERATIONS.md">X-API-AND-PROFILE-OPERATIONS</a></td></tr>
+
+          <!-- ══ ADMIN ══ -->
+          <tr class="bucket-head"><td colspan="6"><div class="bh">
+            <i class="swatch" style="background:#a855f7"></i>
+            <span class="name">Admin</span>
+            <span class="meta">5 cards · nav bucket only rendered for admins</span>
+          </div></td></tr>
+
+          <tr data-s="live" data-a="admin"><td><div class="c-name">Email Digest</div><div class="c-id">email-digest</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc admin">Admin only</td>
+            <td class="src"><code>/api/admin/daily-digest</code> + <code>digest_config/{clientId}</code>; 28 granular include toggles; real send runs <code>pre-digest-refresh</code> first. Hosts the auto-publish modes</td>
+            <td class="ev">DashboardPage.jsx:9070</td>
+            <td class="doc"><a href="../source-of-truth/EMAIL-DIGEST-CARD.md">EMAIL-DIGEST-CARD</a></td></tr>
+
+          <tr data-s="live" data-a="admin"><td><div class="c-name">Brief Composer</div><div class="c-id">creative-brief-composer</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc admin">Admin only</td>
+            <td class="src"><code>/api/admin/creative-brief-config</code> → global <code>system_flags/creative_brief_config</code>. Applies to every Creative Brief render</td>
+            <td class="ev">DashboardPage.jsx:9087</td>
+            <td class="doc"><a href="../source-of-truth/CREATIVE-BRIEF-COMPOSER.md">CREATIVE-BRIEF-COMPOSER</a></td></tr>
+
+          <tr data-s="live" data-a="admin"><td><div class="c-name">Create Client</div><div class="c-id">create-client</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc admin">Admin only</td>
+            <td class="src"><code>/api/clients/provision</code> — website-less workspace, fed by Brain uploads + manual briefs</td>
+            <td class="ev">DashboardPage.jsx:9104</td>
+            <td class="doc"><a href="../source-of-truth/ONBOARDING-UX-AND-ACCOUNT-GUARDRAILS.md">ONBOARDING-UX-AND-ACCOUNT-GUARDRAILS</a></td></tr>
+
+          <tr data-s="static" data-a="admin"><td><div class="c-name">GPU Render Service</div><div class="c-id">gpu-render-service</div></td>
+            <td><span class="pill p-static">Static</span></td><td class="acc admin">Admin only</td>
+            <td class="src">Hardcoded measured facts (host, perf, cost, scaling). <b>Deliberately not a live ping</b> — hitting the service cold-starts the GPU (~1-min billing minimum)</td>
+            <td class="ev">DashboardPage.jsx:9124</td>
+            <td class="doc"><a href="../features/studio/VIDEO_PROMO_VARIATION_ENGINE.md">VIDEO_PROMO_VARIATION_ENGINE</a></td></tr>
+
+          <tr data-s="live" data-a="admin"><td><div class="c-name">Operating Cost</div><div class="c-id">operating-cost</div></td>
+            <td><span class="pill p-ok">Live</span></td><td class="acc admin">Admin only</td>
+            <td class="src"><code>/api/admin/cost-report</code> ← <code>brief_runs.providerUsage.stageCosts</code> + <code>usage_events</code> + <code>browserless_requests</code>. <b>X API spend is invisible here</b></td>
+            <td class="ev">DashboardPage.jsx:9147</td>
+            <td class="doc"><a href="../source-of-truth/OPERATING-COST-CARD.md">OPERATING-COST-CARD</a></td></tr>
+
+          <!-- ══ AUTOMATION ══ -->
+          <tr class="bucket-head"><td colspan="6"><div class="bh">
+            <i class="swatch" style="background:#6366f1"></i>
+            <span class="name">Automation &amp; Systems</span>
+            <span class="meta">3 cards · nav bucket visible, contents largely unbuilt</span>
+          </div></td></tr>
+
+          <tr data-s="derived" data-a="all"><td><div class="c-name">Content Engine</div><div class="c-id">content-engine</div></td>
+            <td><span class="pill p-der">Derived</span></td><td class="acc">All users</td>
+            <td class="src">Lists <code>resolvedContentAngle</code> + top 3 <code>resolvedOpportunities</code> when present; otherwise "Coming Soon"</td>
+            <td class="ev">DashboardPage.jsx:9332</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <tr data-s="placeholder" data-a="all"><td><div class="c-name">Automation Opportunities</div><div class="c-id">automation-opportunities</div></td>
+            <td><span class="pill p-ph">Coming soon</span></td><td class="acc">All users</td>
+            <td class="src">Unconditional <code>buildWorkNeededRows('Automation analysis is coming soon.')</code></td>
+            <td class="ev">DashboardPage.jsx:9351</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <tr data-s="placeholder" data-a="all"><td><div class="c-name">Reporting &amp; Insights</div><div class="c-id">reporting-insights</div></td>
+            <td><span class="pill p-ph">Coming soon</span></td><td class="acc">All users</td>
+            <td class="src">Unconditional <code>buildWorkNeededRows('Reporting and insights tracking is coming soon.')</code></td>
+            <td class="ev">DashboardPage.jsx:9363</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <!-- ══ ONBOARDING (hidden) ══ -->
+          <tr class="bucket-head"><td colspan="6"><div class="bh">
+            <i class="swatch" style="background:#7b5fff"></i>
+            <span class="name">Onboarding · Data Visualization</span>
+            <span class="meta">2 cards</span>
+            <span class="navflag">Nav entry commented out :12252</span>
+          </div></td></tr>
+
+          <tr data-s="derived unreachable" data-a="all"><td><div class="c-name">Client Brief</div><div class="c-id">brief</div></td>
+            <td><span class="pill p-der">Derived</span></td><td class="acc">Unreachable</td>
+            <td class="src">Reads <code>brandOverview</code> / <code>marketingBrief</code>. In <code>CUSTOM_DETAIL_CARD_IDS</code>, so it has a real detail panel — but no nav route reaches it</td>
+            <td class="ev">DashboardPage.jsx:7229</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <tr data-s="derived unreachable" data-a="all"><td><div class="c-name">Brief Document</div><div class="c-id">marketing-brief-doc</div></td>
+            <td><span class="pill p-der">Derived</span></td><td class="acc">Unreachable</td>
+            <td class="src">Renders the latest <code>marketingBrief</code> as a readable document. Same nav problem</td>
+            <td class="ev">DashboardPage.jsx:9312</td>
+            <td class="doc"><span class="none">— none</span></td></tr>
+
+          <!-- ══ SERVICES (hidden) ══ -->
+          <tr class="bucket-head"><td colspan="6"><div class="bh">
+            <i class="swatch" style="background:#ec4899"></i>
+            <span class="name">Work With Me · Services</span>
+            <span class="meta">15 cards · all static CTA rows, no backend</span>
+            <span class="navflag">Nav entry commented out :12262</span>
+          </div></td></tr>
+
+          <tr data-s="static unreachable" data-a="all"><td><div class="c-name">Contact Your Human</div><div class="c-id">contact</div></td><td><span class="pill p-static">Static</span></td><td class="acc">Unreachable</td><td class="src">Hardcoded CTA row. Also a <code>CAP_STEPS.services</code> anchor</td><td class="ev">DashboardPage.jsx:9377</td><td class="doc"><span class="none">— none</span></td></tr>
+          <tr data-s="static unreachable" data-a="all"><td><div class="c-name">Fix This</div><div class="c-id">fix-this</div></td><td><span class="pill p-static">Static</span></td><td class="acc">Unreachable</td><td class="src">Hardcoded CTA row</td><td class="ev">DashboardPage.jsx:9389</td><td class="doc"><span class="none">— none</span></td></tr>
+          <tr data-s="static unreachable" data-a="all"><td><div class="c-name">Run My Marketing</div><div class="c-id">run-my-marketing</div></td><td><span class="pill p-static">Static</span></td><td class="acc">Unreachable</td><td class="src">Hardcoded CTA row. <code>CAP_STEPS.services</code> anchor</td><td class="ev">DashboardPage.jsx:9401</td><td class="doc"><span class="none">— none</span></td></tr>
+          <tr data-s="static unreachable" data-a="all"><td><div class="c-name">Creative Work</div><div class="c-id">creative-work</div></td><td><span class="pill p-static">Static</span></td><td class="acc">Unreachable</td><td class="src">Hardcoded CTA row</td><td class="ev">DashboardPage.jsx:9413</td><td class="doc"><span class="none">— none</span></td></tr>
+          <tr data-s="static unreachable" data-a="all"><td><div class="c-name">Build a Page</div><div class="c-id">build-a-page</div></td><td><span class="pill p-static">Static</span></td><td class="acc">Unreachable</td><td class="src">Hardcoded CTA row. <code>CAP_STEPS.services</code> anchor</td><td class="ev">DashboardPage.jsx:9425</td><td class="doc"><span class="none">— none</span></td></tr>
+          <tr data-s="static unreachable" data-a="all"><td><div class="c-name">Short-Form Video</div><div class="c-id">short-form-video</div></td><td><span class="pill p-static">Static</span></td><td class="acc">Unreachable</td><td class="src">Scope/includes/CTA rows, hardcoded</td><td class="ev">DashboardPage.jsx:9439</td><td class="doc"><span class="none">— none</span></td></tr>
+          <tr data-s="static unreachable" data-a="all"><td><div class="c-name">Long-Form Video</div><div class="c-id">long-form-video</div></td><td><span class="pill p-static">Static</span></td><td class="acc">Unreachable</td><td class="src">Scope/includes/CTA rows, hardcoded</td><td class="ev">DashboardPage.jsx:9455</td><td class="doc"><span class="none">— none</span></td></tr>
+          <tr data-s="static unreachable" data-a="all"><td><div class="c-name">Single Graphic</div><div class="c-id">single-graphic</div></td><td><span class="pill p-static">Static</span></td><td class="acc">Unreachable</td><td class="src">Scope/CTA rows, hardcoded</td><td class="ev">DashboardPage.jsx:9473</td><td class="doc"><span class="none">— none</span></td></tr>
+          <tr data-s="static unreachable" data-a="all"><td><div class="c-name">Carousel Kit</div><div class="c-id">carousel-kit</div></td><td><span class="pill p-static">Static</span></td><td class="acc">Unreachable</td><td class="src">Scope/CTA rows, hardcoded</td><td class="ev">DashboardPage.jsx:9488</td><td class="doc"><span class="none">— none</span></td></tr>
+          <tr data-s="static unreachable" data-a="all"><td><div class="c-name">Social Management</div><div class="c-id">social-management</div></td><td><span class="pill p-static">Static</span></td><td class="acc">Unreachable</td><td class="src">Scope/CTA rows, hardcoded</td><td class="ev">DashboardPage.jsx:9505</td><td class="doc"><span class="none">— none</span></td></tr>
+          <tr data-s="static unreachable" data-a="all"><td><div class="c-name">Logo &amp; Brand Refresh</div><div class="c-id">logo-brand-refresh</div></td><td><span class="pill p-static">Static</span></td><td class="acc">Unreachable</td><td class="src">Scope/CTA rows, hardcoded</td><td class="ev">DashboardPage.jsx:9522</td><td class="doc"><span class="none">— none</span></td></tr>
+          <tr data-s="static unreachable" data-a="all"><td><div class="c-name">Landing Page Build</div><div class="c-id">landing-page-build</div></td><td><span class="pill p-static">Static</span></td><td class="acc">Unreachable</td><td class="src">Scope/CTA rows, hardcoded</td><td class="ev">DashboardPage.jsx:9539</td><td class="doc"><span class="none">— none</span></td></tr>
+          <tr data-s="static unreachable" data-a="all"><td><div class="c-name">Email Campaign</div><div class="c-id">email-campaign</div></td><td><span class="pill p-static">Static</span></td><td class="acc">Unreachable</td><td class="src">Scope/CTA rows, hardcoded</td><td class="ev">DashboardPage.jsx:9556</td><td class="doc"><span class="none">— none</span></td></tr>
+          <tr data-s="static unreachable" data-a="all"><td><div class="c-name">UI Screen Design</div><div class="c-id">ui-screen-design</div></td><td><span class="pill p-static">Static</span></td><td class="acc">Unreachable</td><td class="src">Scope/CTA rows, hardcoded</td><td class="ev">DashboardPage.jsx:9573</td><td class="doc"><span class="none">— none</span></td></tr>
+          <tr data-s="static unreachable" data-a="all"><td><div class="c-name">UI Flow Design</div><div class="c-id">ui-flow-design</div></td><td><span class="pill p-static">Static</span></td><td class="acc">Unreachable</td><td class="src">Scope/CTA rows, hardcoded</td><td class="ev">DashboardPage.jsx:9588</td><td class="doc"><span class="none">— none</span></td></tr>
+
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- NESTED FEATURES -->
+  <section>
+    <h2>Features that are not cards</h2>
+    <p class="sub" style="margin:-6px 0 20px">Four documented subsystems ship as <b>toggles inside a host card</b>, not as their own tiles. They
+    don't appear in the table above because they have no card id — but each has an SSOT doc and its own failure modes.</p>
+    <div class="nest">
+      <div class="row"><div class="host">signals → 04</div><div class="txt"><b>Analysis Skills</b> — swappable prompt recipes (<code>features/intelligence/analysis-recipes/</code>) run over stored <code>scoutBrief.agentData</code> as the final Generate Report phase. Includes <code>reply-targets</code>, which feeds drafts to Post Me. <a href="../source-of-truth/MARKET-SIGNALS-AND-SCOUT-PROJECTION.md">§8</a></div></div>
+      <div class="row"><div class="host">signals → 05</div><div class="txt"><b>Local Reputation (GBP)</b> — reviews needing replies, profile health, local-SEO gaps. Diagnostic + reply drafts only, never publishes. ⚠️ UI reads the precomputed ESM <code>lib/gbpReputationReport.js</code>, not the CJS analyzer. <a href="../source-of-truth/GBP-REPUTATION-CARD.md">GBP-REPUTATION-CARD</a></div></div>
+      <div class="row"><div class="host">signals → 06</div><div class="txt"><b>Opportunity Signals</b> — public buying-signal scan across X/Reddit/Instagram. ⚠️ X search is dashboard-triggered only (paid API, invisible on Operating Cost); the daily cron never touches X. <a href="../source-of-truth/OPPORTUNITY-SIGNALS-CARD.md">OPPORTUNITY-SIGNALS-CARD</a></div></div>
+      <div class="row"><div class="host">↳ per-opportunity</div><div class="txt"><b>Proof Builder</b> — evidence-before-response layer; deliberately <b>not</b> registered in the <code>RECIPES</code> catalog so it stays per-opportunity rather than a report-wide toggle. <a href="../source-of-truth/OPPORTUNITY-SIGNALS-PROOF-BUILDER.md">OPPORTUNITY-SIGNALS-PROOF-BUILDER</a></div></div>
+      <div class="row"><div class="host">email-digest</div><div class="txt"><b>Social Auto-Publish</b> — per-client off/auto/approval publishing of the daily video via <code>#digest-autopublish-section</code>. 4th X API write surface, writing to accounts other than <code>@bai_ee</code>. <a href="../source-of-truth/SOCIAL-AUTO-PUBLISH.md">SOCIAL-AUTO-PUBLISH</a></div></div>
+    </div>
+  </section>
+
+  <!-- FINDINGS -->
+  <section>
+    <h2>What the sweep turned up</h2>
+    <div class="findings">
+
+      <div class="flag gap">
+        <div class="h">🚫 17 cards are unreachable</div>
+        <p>Two nav buckets are commented out in the nav array — <code>services</code> (<b>:12262</b>) and <code>onboarding</code> (<b>:12252</b>).
+        Their 15 + 2 card definitions still build on every render and still resolve analyzers, but no nav path reaches them.</p>
+        <p><b>Decision needed:</b> delete, or restore the nav entries.</p>
+      </div>
+
+      <div class="flag gap">
+        <div class="h">🚫 8 cards render a permanent empty state</div>
+        <p><code>local-signals</code> · <code>website-landing</code> · <code>trust-credibility</code> · <code>platform-coverage</code> ·
+        <code>visibility-snapshot</code> · <code>newsletter</code> · <code>automation-opportunities</code> · <code>reporting-insights</code>.
+        Each calls <code>buildWorkNeededRows</code> unconditionally with no producer behind it.</p>
+        <p><b>Worst placement:</b> <code>platform-coverage</code> is the first step anchor of the Social bucket — the bucket opens on a card that can never fill.</p>
+      </div>
+
+      <div class="flag">
+        <div class="h">⚠️ Dead allowlist entry</div>
+        <p><code>submit-custom-brief</code> is listed in <code>NON_ADMIN_UNLOCKED_CARD_IDS</code>
+        (<code>tier-access-config.js:61</code>) but its card definition is inside an <code>...(isAdmin ? [...] : [])</code> spread
+        (<b>:9293</b>). Non-admins are allowlisted for a card that never exists for them.</p>
+      </div>
+
+      <div class="flag">
+        <div class="h">⚠️ One card defined twice</div>
+        <p><code>client-mockup</code> (Website, <b>:8478</b>) and <code>client-mockup-creative</code> (Creative Team, <b>:7964</b>)
+        are the same card — same title, same rows, same <code>/api/leadgen/generate-mockup</code> endpoint, same <code>moduleId</code>.
+        Only the id and bucket differ.</p>
+      </div>
+
+      <div class="flag">
+        <div class="h">⚠️ Two cards with no independent run</div>
+        <p><code>site-performance</code> renders <code>seoAuditRows.slice(0, 6)</code> — the first six rows of
+        <code>seo-performance</code>. <code>visibility-snapshot</code> announces its own retirement in its row text.
+        Both read as standalone tiles in the grid.</p>
+      </div>
+
+      <div class="flag info">
+        <div class="h">📤 Only 6 cards are registered scout modules</div>
+        <p><code>module-registry.js</code> lists <code>seo-performance</code>, <code>social-preview</code>, <code>multi-device-view</code>,
+        <code>style-guide</code>, <code>design-evaluation</code>, <code>agent-readiness</code>. Everything else that runs does so through a
+        bespoke route or its own component — worth knowing before assuming the runner pipeline covers a card.</p>
+      </div>
+
+      <div class="flag info">
+        <div class="h">📤 Docs coverage: 8 of 86 certified</div>
+        <p>The June launch audit (<code>CREATIVE-BRIEF-DELIVERABLES-WIRING.md</code>) verified 8 cards with a status column.
+        20 more have an SSOT doc written since. <b>~58 cards have no doc at all</b> — mostly derived and placeholder tiles,
+        which is defensible, but it also means no prior document would have surfaced the findings above.</p>
+      </div>
+
+      <div class="flag">
+        <div class="h">⚠️ Spend surfaces that hide from the cost card</div>
+        <p><code>x-profile</code> and Opportunity Signals' Refresh Now both spend real X API credit, and
+        <code>/api/admin/cost-report</code> cannot see it. Treat the Operating Cost card as
+        <b>LLM + image + search spend only</b>.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <footer>
+    <b>Method:</b> card definitions parsed from <code>DashboardPage.jsx</code> lines 7226–9601, cross-checked against
+    <code>lib/dashboard/tier-access-config.js</code> (buckets, gating), <code>lib/dashboard/tile-config.js</code>
+    (custom detail panels), <code>features/scout-intake/module-registry.js</code> (runner modules), and the
+    <code>app/api/</code> route tree (131 routes).<br>
+    <b>Status is a code claim, not a runtime claim</b> — "Live" means the trigger and data path exist in code. It does not
+    certify a successful production run. Verify anything operational against the live system.<br>
+    <b>Generated:</b> 2026-08-06 · branch <code>feat/social-auto-publish</code> · 86 card definitions
+  </footer>
+
+</div>
+
+<script>
+  (function () {
+    var table = document.getElementById('card-inventory-table');
+    var rows = Array.prototype.slice.call(table.querySelectorAll('tbody tr'));
+    var buttons = Array.prototype.slice.call(document.querySelectorAll('#card-inventory-filters .fbtn'));
+
+    function apply(filter) {
+      rows.forEach(function (row) {
+        if (row.classList.contains('bucket-head')) { row.classList.remove('hidden'); return; }
+        var status = row.getAttribute('data-s') || '';
+        var access = row.getAttribute('data-a') || '';
+        var show =
+          filter === 'all' ? true :
+          filter === 'admin' ? access === 'admin' :
+          filter === 'unreachable' ? status.indexOf('unreachable') !== -1 :
+          status.split(' ').indexOf(filter) !== -1;
+        row.classList.toggle('hidden', !show);
+      });
+      // Hide a bucket header whose rows are all filtered out.
+      var head = null, seen = 0;
+      rows.forEach(function (row) {
+        if (row.classList.contains('bucket-head')) {
+          if (head && seen === 0) head.classList.add('hidden');
+          head = row; seen = 0;
+        } else if (!row.classList.contains('hidden')) {
+          seen++;
+        }
+      });
+      if (head && seen === 0) head.classList.add('hidden');
+    }
+
+    buttons.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        buttons.forEach(function (b) { b.classList.remove('on'); });
+        btn.classList.add('on');
+        apply(btn.getAttribute('data-f'));
+      });
+    });
+  })();
+</script>
+
+</body>
+</html>

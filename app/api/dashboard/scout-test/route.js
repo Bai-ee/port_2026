@@ -6,6 +6,7 @@ const fb = require('../../../../api/_lib/firebase-admin.cjs');
 const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../../api/_lib/client-provisioning.cjs');
 const { runScoutTest } = require('../../../../features/scout-intake/scout-test');
+const { filterRelevantSignals } = require('../../../../features/intelligence/_platform-signals.js');
 
 function makeReqShim(request) {
   return {
@@ -67,12 +68,28 @@ export async function POST(request) {
       // hiccup can never break the test response. `updatedAt` stays outside the
       // round-trip to preserve the serverTimestamp sentinel.
       try {
+        // Relevance guard — same gate the production refresh applies, so a Test
+        // run and a real refresh store the SAME shape of data and the analyzers
+        // never see off-topic category chatter from whichever wrote last. The
+        // RESPONSE stays unfiltered on purpose: the operator testing a query
+        // should see exactly what it returned, including the noise this drops.
+        const mbc = clientConfig.marketingBriefConfig || {};
+        const brandTerms = [
+          ...(Array.isArray(mbc.brandKeywords) ? mbc.brandKeywords : []),
+          String(mbc.brandName || '').replace(/^["']+|["']+$/g, '').trim(),
+        ].filter(Boolean);
+        const rawItems = Array.isArray(result.items) ? result.items : [];
+        const relevant = filterRelevantSignals(rawItems, {
+          brandTerms,
+          categoryTerms: Array.isArray(mbc.categoryTerms) ? mbc.categoryTerms : [],
+        });
+        const dropped = rawItems.length - relevant.length;
         const entry = JSON.parse(JSON.stringify({
-          items: Array.isArray(result.items) ? result.items.slice(0, 20) : [],
-          count: Number.isFinite(result.count) ? result.count : (Array.isArray(result.items) ? result.items.length : 0),
+          items: relevant.slice(0, 20),
+          count: relevant.length,
           costUsd: Number.isFinite(result.costUsd) ? result.costUsd : 0,
           ms: Number.isFinite(result.ms) ? result.ms : null,
-          meta: result.meta || null,
+          meta: { ...(result.meta || {}), relevanceFiltered: dropped > 0 ? { kept: relevant.length, dropped } : null },
           generatedAt: new Date().toISOString(),
         }));
         await fb.adminDb.collection('dashboard_state').doc(clientId).set({

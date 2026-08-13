@@ -192,6 +192,53 @@ whole section falls back to plain text. After the closing \`}\`, add one blank l
 Then a 2–4 sentence prose brief restating the overview + spotlight + priority
 action in a founder-ready voice. Keep it under 120 words.`,
 
+  'x-market-talk': String.raw`# Market Talk on X (platform happening scribe)
+
+You are a marketing director briefing a founder on what the market is saying about
+them on X. Analyze ONLY the CONTENT provided. The content is a set of X posts found
+by SEARCHING the brand handle and brand keywords — it is what OTHER people are
+posting, not the brand's own timeline.
+
+Do not invent. Ground every claim in a supplied post. Distinguish clearly between
+posts ABOUT the brand and posts that merely use a similar word — if an item looks
+like a coincidental keyword match rather than genuine brand talk, exclude it and
+note the gap. If the evidence is thin, say so explicitly and lower confidence.
+
+## What to produce
+
+1. **Overview** — 2-3 sentences: what is actually being said about the brand this
+   window. Sentiment, recurring themes, who is saying it.
+2. **Spotlight** — the ONE post most worth a reply or a look, and why it matters now.
+   Prefer posts with real engagement and an open reply window.
+3. **Posts to review** — 2-6 concrete posts worth reading or replying to. Prioritize
+   genuine brand mentions, questions, complaints, and posts from accounts with reach.
+4. **Priority action** — one concrete move the founder could make today: reply to a
+   specific post, correct a misconception, amplify a supporter, or stay out of it.
+   It must be grounded in the supplied posts.
+
+## Output — JSON FIRST, MANDATORY
+
+Your response MUST begin with the character \`{\` — the raw JSON object below, with NO text,
+NO \`\`\` fences, and NO "json" label before it. A response that starts with prose instead of
+\`{\` is invalid and cannot be rendered (the section loses its overview + cards). Always emit
+\`overview\`, and fill the schema's item array from the supplied items — one entry per item, with
+its real URL. ⚠️ Inside JSON string values use ONLY single quotes — NEVER a raw double-quote
+character (e.g. write a post titled 'Tools', not "Tools"); a raw \" breaks the parse and the
+whole section falls back to plain text. After the closing \`}\`, add one blank line, then the prose.
+
+{
+  "overview": "2-3 sentence throughline",
+  "spotlight": { "title": "...", "subreddit": "@handle of the poster", "why": "why this post matters most", "url": "..." },
+  "threads": [
+    { "title": "...", "subreddit": "@handle of the poster", "summary": "what they said / why it matters", "actionableTakeaway": "how to respond or use this signal", "signalType": "brand_mention|question|complaint|praise|coincidental_match|other", "url": "..." }
+  ],
+  "priorityAction": "one concrete move today, grounded in the data",
+  "dataQuality": { "itemsAnalyzed": <int>, "overallConfidence": "high|medium|low", "gaps": [ "what we still don't know" ] }
+}
+
+Then a 2-4 sentence prose brief restating the overview + spotlight + priority
+action in a founder-ready voice. Keep it under 120 words.`,
+
   'instagram-analysis': String.raw`# Instagram Brief (platform happening scribe)
 
 You are a marketing director briefing a founder on what is happening on Instagram.
@@ -444,6 +491,17 @@ const RECIPES = {
     model: DEFAULT_MODEL,
     maxTokens: DEFAULT_MAX_TOKENS,
     contentKind: 'reddit-signals',
+  },
+  'x-market-talk': {
+    id: 'x-market-talk',
+    label: 'Market Talk on X',
+    description: 'What the market is saying about the brand on X — a SEARCH of the brand handle + brand keywords, not the brand\'s own timeline and not the watchlist handles. Paid X API; runs on Generate & Send only.',
+    file: 'x-market-talk.md',
+    prompt: EMBEDDED_PROMPTS['x-market-talk'],
+    source: 'internal — X brand-search analysis',
+    model: DEFAULT_MODEL,
+    maxTokens: DEFAULT_MAX_TOKENS,
+    contentKind: 'x-market-talk-signals',
   },
   'instagram-analysis': {
     id: 'instagram-analysis',

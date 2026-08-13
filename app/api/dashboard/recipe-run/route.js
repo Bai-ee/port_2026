@@ -10,7 +10,7 @@ const { runAnalysisRecipe } = require('../../../../features/intelligence/analysi
 const { checkRateLimit, getClientIp } = require('../../../../api/_lib/rate-limit.cjs');
 const { loadClientBrainContext } = require('../../../../features/client-brain/store.cjs');
 const { logUsage } = require('../../../../api/_lib/usage-logger.cjs');
-const { collectRedditSignals } = require('../../../../features/intelligence/_platform-signals.js');
+const { collectRedditSignals, collectXMarketTalkSignals } = require('../../../../features/intelligence/_platform-signals.js');
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -94,6 +94,23 @@ function buildRedditAnalysisContent(marketingBrief = {}, nowMs = Date.now()) {
   };
 }
 
+/** Interactive mirror of the worker's buildXMarketTalkContent. Reads the STORED
+ *  X search results only — the paid X search itself never runs from this route. */
+function buildXMarketTalkContent(marketingBrief = {}, nowMs = Date.now()) {
+  const xMarketTalkSignals = collectXMarketTalkSignals(marketingBrief).map((it) => withVelocity(it, nowMs));
+  return {
+    generatedAt: new Date(nowMs).toISOString(),
+    source: 'marketingBrief.reportSnapshot.platformTests.xMarketTalk',
+    xMarketTalkSignals,
+    dataQuality: {
+      itemsAvailable: xMarketTalkSignals.length,
+      note: xMarketTalkSignals.length
+        ? 'Analyze only these supplied X posts. They are search results for the brand handle and brand keywords — what the market is saying, not the brand\'s own posts.'
+        : 'No X market-talk posts are stored yet. Run Generate & Send, which is what performs the paid X brand search.',
+    },
+  };
+}
+
 async function resolveClient(request) {
   const decoded = await verifyRequestUser(makeReqShim(request));
   const context = await getEffectiveClientContext({ uid: decoded.uid, email: decoded.email, request });
@@ -161,7 +178,7 @@ export async function POST(request) {
   const redditSignals = collectRedditSignals(marketingBrief);
 
   // reply-pool recipes can run on watchlist data alone; agentData-recipes need it.
-  const needsAgentData = recipeIds.some((id) => !['reply-pool', 'reddit-signals', 'opportunity-pool'].includes(getRecipe(id)?.contentKind));
+  const needsAgentData = recipeIds.some((id) => !['reply-pool', 'reddit-signals', 'x-market-talk-signals', 'opportunity-pool'].includes(getRecipe(id)?.contentKind));
   const needsRedditSignals = recipeIds.some((id) => getRecipe(id)?.contentKind === 'reddit-signals');
   const wantsReplyPool = recipeIds.some((id) => getRecipe(id)?.contentKind === 'reply-pool');
   const wantsOpportunityPool = recipeIds.some((id) => getRecipe(id)?.contentKind === 'opportunity-pool');
@@ -208,6 +225,7 @@ export async function POST(request) {
     const kind = getRecipe(recipeId)?.contentKind;
     if (kind === 'reply-pool') return replyPool;
     if (kind === 'reddit-signals') return buildRedditAnalysisContent(marketingBrief, nowMs);
+    if (kind === 'x-market-talk-signals') return buildXMarketTalkContent(marketingBrief, nowMs);
     if (kind === 'opportunity-pool') return opportunitySignals;
     return agentData;
   };
@@ -264,6 +282,8 @@ export async function POST(request) {
         reportSnapshot.redditAnalysis = { text: result.analysis, generatedAt };
       } else if (result.recipeId === 'instagram-analysis') {
         reportSnapshot.instagramAnalysis = { text: result.analysis, generatedAt };
+      } else if (result.recipeId === 'x-market-talk') {
+        reportSnapshot.xMarketTalkAnalysis = { text: result.analysis, generatedAt };
       } else if (result.recipeId === 'watchlist-analysis') {
         reportSnapshot.watchlistAnalysis = { text: result.analysis, generatedAt };
       } else if (result.recipeId === 'opportunity-signals') {

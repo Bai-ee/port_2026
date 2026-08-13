@@ -271,11 +271,13 @@ export async function POST(request) {
   let priorAuditSeed = null;
   let priorCalendar = null;
   let priorOpportunitySignals = null;
+  let priorBrandXHandle = '';
   try {
     const priorSnap = await fb.adminDb.collection('client_configs').doc(context.clientId).get();
     priorWeather = priorSnap.data()?.marketingBriefConfig?.weather || null;
     priorCalendar = priorSnap.data()?.marketingBriefConfig?.calendar || null;
     priorOpportunitySignals = priorSnap.data()?.marketingBriefConfig?.opportunitySignals || null;
+    priorBrandXHandle = String(priorSnap.data()?.marketingBriefConfig?.brandXHandle || '').trim();
     priorScoutConfig = priorSnap.data()?.scoutConfig || null;
     priorSourceWebsiteUrl = priorSnap.data()?.sourceInputs?.websiteUrl || null;
     const a = priorSnap.data()?.marketingBriefConfig?.acknowledgedCards;
@@ -310,6 +312,14 @@ export async function POST(request) {
     ...(priorAuditSeed ? { auditSeed: priorAuditSeed } : {}),
     acknowledgedCards: { ...priorAcknowledged, ...incomingAck },
     brandName: String(body?.brandName || '').trim().slice(0, 120),
+    // The client's OWN X handle — subject of the "Market Talk on X" brand search
+    // (refreshXMarketTalk), NOT one of the watchlist `kols`. Stored bare, no @.
+    // This object is a whitelist rebuilt from the request body on every save, so
+    // a field missing here is silently wiped; preserve the prior value when the
+    // caller omits the key so a partial save can't drop it.
+    brandXHandle: body?.brandXHandle !== undefined
+      ? String(body.brandXHandle || '').trim().replace(/^@+/, '').slice(0, 40)
+      : priorBrandXHandle,
     brandKeywords: splitTerms(body?.brandKeywords, 12),
     categoryTerms: splitTerms(body?.categoryTerms, 12),
     sourceFocus: String(body?.sourceFocus || '').trim().slice(0, 1000),
