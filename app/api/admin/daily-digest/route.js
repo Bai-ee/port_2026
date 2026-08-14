@@ -2424,13 +2424,16 @@ async function fanOutScheduledSends(url) {
     try {
       const res = await fetch(target.toString(), { headers, cache: 'no-store' });
       const body = await res.json().catch(() => ({}));
+      const emailSkipped = body?.email?.skipped === true || body?.emailSkipped === true;
+      const emailId = body?.email?.id || null;
       entry = {
         clientId,
         status: res.status,
-        ok: res.ok && body?.ok !== false,
-        skipped: body?.skipped === true,
-        reason: body?.reason || null,
+        ok: res.ok && body?.ok !== false && !emailSkipped && Boolean(emailId),
+        skipped: body?.skipped === true || emailSkipped,
+        reason: body?.reason || body?.email?.reason || body?.error || (!emailId ? 'Email provider did not return an id.' : null),
         error: body?.error || null,
+        emailId,
       };
     } catch (err) {
       entry = { clientId, ok: false, error: err.message };
@@ -3364,20 +3367,29 @@ export async function GET(request) {
     // Blank recipientEmail means a client is never emailed — it goes to you.
     const digestRecipient = (digestCfg?.recipientEmail || '').trim() || DIGEST_TO;
     const emailResult = await sendEmail(subject, html, digestRecipient);
-    step(emailResult?.skipped ? 'info' : 'success', emailResult?.skipped ? `Email not sent: ${emailResult?.reason || 'no transport configured'}` : `Email sent → ${digestRecipient}`);
+    const emailSkipped = Boolean(emailResult?.skipped);
+    const emailAccepted = !emailSkipped && Boolean(emailResult?.id);
+    const emailFailureReason = emailSkipped
+      ? (emailResult?.reason || 'no transport configured')
+      : (!emailAccepted ? 'Email provider did not return an id.' : null);
+    step(emailAccepted ? 'success' : 'error', emailAccepted ? `Email sent → ${digestRecipient}` : `Email not sent: ${emailFailureReason}`);
     logInfo('daily_digest_complete', {
       timestamp: new Date(timestamp).toISOString(),
       newUsers: firebase.newUsers,
       recentRuns: firebase.recentRuns,
-      emailSkipped: Boolean(emailResult?.skipped),
+      emailSkipped: !emailAccepted,
+      emailId: emailResult?.id || null,
+      emailFailureReason,
     });
 
     return json({
-      ok: true,
+      ok: emailAccepted,
       timestamp: new Date(timestamp).toISOString(),
       summary: summary?.paragraph || null,
       metrics: { firebase, vercel: { totalDeployments: vercel.totalDeployments, errorCount: vercel.errorLogs?.length || 0 }, ga4: { overview: ga4.overview, topPagesCount: ga4.topPages?.length, sourcesCount: ga4.trafficSources?.length, events: ga4.events, error: ga4.error || null }, agenda: { eventCount: agenda.events?.length || 0, error: agenda.error || null }, homepage: { totalEvents: homepage.totalEvents, byInteractionType: homepage.byInteractionType, topTargets: homepage.topTargets, error: homepage.error || null } },
       email: emailResult,
+      emailSkipped: !emailAccepted,
+      reason: emailFailureReason,
       xPost: xPostResult ? {
         ok: Boolean(xPostResult.ok),
         skipped: xPostResult.skipped || null,
@@ -3406,7 +3418,7 @@ export async function GET(request) {
           creativeGeneratedAt: creative?.generatedAt || null,
         },
       },
-    });
+    }, emailAccepted ? 200 : 502);
   } catch (err) {
     logError('daily_digest_route_error', { error: err });
     return json({ error: err.message || 'Internal error' }, 500);
