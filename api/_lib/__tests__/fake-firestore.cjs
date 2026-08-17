@@ -54,14 +54,34 @@ function snapshot(ref, data) {
   };
 }
 
+function matchesFilter(data, f) {
+  const fv = data?.[f.field];
+  if (f.op === '==') return fv === f.value; // unchanged original behavior
+  // Range operators: Firestore excludes documents where the field is
+  // missing/null from an inequality query on that field — matters here
+  // because dueSortKey is deliberately null for every stage that isn't
+  // currently actionable.
+  if (fv === undefined || fv === null) return false;
+  if (f.op === '<=') return fv <= f.value;
+  if (f.op === '<') return fv < f.value;
+  if (f.op === '>=') return fv >= f.value;
+  if (f.op === '>') return fv > f.value;
+  return false;
+}
+
 class Query {
   constructor(store, collection) {
     this._store = store; this._collection = collection;
     this._filters = []; this._limit = Infinity; this._order = null; this._startAfterId = null;
   }
+  // Supports '==' (original) plus range operators — added for the
+  // digest-delivery.cjs `dueSortKey` pattern (a single-field range query +
+  // orderBy on that SAME field, which real Firestore serves off the
+  // automatic single-field index with no composite index required).
   where(field, op, value) {
-    if (op !== '==') throw new Error(`fake-firestore only supports '==' (got ${op})`);
-    this._filters.push({ field, value }); return this;
+    const SUPPORTED = ['==', '<', '<=', '>', '>='];
+    if (!SUPPORTED.includes(op)) throw new Error(`fake-firestore only supports ${SUPPORTED.join(', ')} (got ${op})`);
+    this._filters.push({ field, op, value }); return this;
   }
   orderBy(field, dir = 'asc') { this._order = { field, dir }; return this; }
   limit(n) { this._limit = n; return this; }
@@ -79,7 +99,7 @@ class Query {
   _rows() {
     const map = this._store.get(this._collection) || new Map();
     let rows = [...map.entries()].map(([id, data]) => ({ id, data }));
-    rows = rows.filter(({ data }) => this._filters.every((f) => data?.[f.field] === f.value));
+    rows = rows.filter(({ data }) => this._filters.every((f) => matchesFilter(data, f)));
     if (this._order) {
       const { field, dir } = this._order;
       const ms = (d) => (d?.[field]?.toMillis ? d[field].toMillis() : Date.parse(d?.[field] || 0) || 0);

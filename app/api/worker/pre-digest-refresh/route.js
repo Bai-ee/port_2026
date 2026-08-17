@@ -33,6 +33,8 @@ const { getRecipe } = require('../../../../features/intelligence/analysis-recipe
 const { loadClientBrainContext } = require('../../../../features/client-brain/store.cjs');
 const { logUsage } = require('../../../../api/_lib/usage-logger.cjs');
 const { runWatchlistPull } = require('../../../../features/scout-intake/watchlist-pull');
+const digestDelivery = require('../../../../api/_lib/digest-delivery.cjs');
+const { checkDigestRefreshPreflight } = require('../../../../api/_lib/digest-refresh-preflight.cjs');
 const { buildModuleBriefs } = require('../../../../features/scout-intake/module-brief-builder.js');
 const { getDefaultModuleConfig } = require('../../../../features/scout-intake/module-registry');
 const { FALLBACK_BRIEF_SITE } = require('../../../../api/_lib/brief-fallback.cjs');
@@ -153,7 +155,7 @@ const SCOUT_FRESH_WINDOW_MS = 6 * 60 * 60 * 1000;
  *  never throws — failures are reported so strategy generation still proceeds.
  *  Skips the run (no LLM/web_search cost) when a successful scout brief is newer
  *  than SCOUT_FRESH_WINDOW_MS, unless force is set. */
-async function refreshScoutBrief(clientId, { force = false, source = 'cron-scheduled', actorUid = null } = {}) {
+async function refreshScoutBrief(clientId, { force = false, source = 'cron-scheduled', actorUid = null, dateKey = null } = {}) {
   let clientConfig;
   try {
     const configSnap = await fb.adminDb.collection('client_configs').doc(clientId).get();
@@ -179,79 +181,107 @@ async function refreshScoutBrief(clientId, { force = false, source = 'cron-sched
     } catch { /* freshness read failed — fall through and refresh */ }
   }
 
-  const runRef = fb.adminDb.collection('brief_runs').doc();
-  const runId = runRef.id;
-  const now = fb.FieldValue.serverTimestamp();
-  const payload = {
-    runId,
-    id: runId,
-    clientId,
-    requestedByUid: actorUid,
-    trigger: 'pre-digest-refresh',
-    source,
-    status: 'queued',
-    pipelineType: 'scout-brief',
-    scope: 'marketing-director',
-    attempts: 0,
-    workerLease: null,
-    startedAt: null,
-    completedAt: null,
-    error: null,
-    summary: null,
-    artifactRefs: [],
-    providerUsage: null,
-    moduleSnapshot: null,
-    sourceUrl: clientConfig?.sourceInputs?.websiteUrl || clientConfig?.websiteUrl || null,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  try {
-    await Promise.all([
-      runRef.set(payload),
-      fb.adminDb.collection('clients').doc(clientId).collection('brief_runs').doc(runId).set(payload),
-    ]);
-  } catch (err) {
-    return { ok: false, error: `run doc create failed: ${err.message}` };
-  }
-
-  let claimedRun;
-  try {
-    claimedRun = await claimRun(runId);
-    await appendRunEvent(runId, clientId, {
-      stage: 'marketing-brief',
-      progressLabel: 'Pre-digest refresh — fresh market signals (Scout only)…',
-    }).catch(() => {});
-  } catch (err) {
-    return { ok: false, runId, error: `claimRun failed: ${err.message}` };
+  // Concurrency guard — prevents two overlapping paid Scout runs for the
+  // same client on the same digest day (a rapid double-click on "Generate &
+  // Send", which always passes force=1 and so bypasses the freshness skip
+  // above, or a manual retry racing the scheduled cron). Not a substitute
+  // for the freshness skip: this only blocks genuinely concurrent runs, not
+  // spaced-out ones. See docs/source-of-truth/EMAIL-DIGEST-CARD.md's
+  // incident checkpoint — Aug 12/13 usage_events showed the same client's
+  // reddit-analysis/reply-targets/brief-summarizer block running 2-3 times
+  // within a few hours, which this closes off for the concurrent case.
+  const lockDateKey = dateKey || digestDelivery.localDateKey();
+  // acquireRefreshLock is atomic (Firestore transaction) and FAILS CLOSED —
+  // it never returns acquired:true as an error fallback, so no .catch()
+  // override is applied here. A read/write error during acquisition simply
+  // means acquired:false, which correctly blocks this paid call.
+  const lock = await digestDelivery.acquireRefreshLock(clientId, lockDateKey, { source });
+  if (!lock.acquired) {
+    logInfo('pre_digest_scout_skip_concurrent', { clientId, lockError: lock.error || null });
+    return { ok: true, skipped: 'concurrent-refresh-locked' };
   }
 
   try {
-    const { runClientPipeline } = getPipeline();
-    const result = await runClientPipeline({
+    const runRef = fb.adminDb.collection('brief_runs').doc();
+    const runId = runRef.id;
+    const now = fb.FieldValue.serverTimestamp();
+    const payload = {
+      runId,
+      id: runId,
       clientId,
-      clientConfig,
+      requestedByUid: actorUid,
+      trigger: 'pre-digest-refresh',
+      source,
+      status: 'queued',
+      pipelineType: 'scout-brief',
       scope: 'marketing-director',
-      priorScoutBrief: null,
-    });
-    if (result.status === 'failed') {
-      const pipelineErr = new Error(result.error || 'Marketing brief pipeline failed.');
-      pipelineErr.stage = result.failedStage || 'pipeline';
-      await failRun(runId, clientId, pipelineErr, claimedRun.attempts, {
-        artifactRefs: result.artifactRefs,
-        warnings: result.warnings,
-      });
-      return { ok: false, runId, error: pipelineErr.message, stage: pipelineErr.stage };
-    }
-    await completeRun(runId, clientId, { ...result, pipelineType: 'scout-brief' });
-    return { ok: true, runId };
-  } catch (err) {
-    const pipelineErr = new Error(err.message || 'Marketing brief pipeline threw.');
-    pipelineErr.stage = 'pipeline';
+      attempts: 0,
+      workerLease: null,
+      startedAt: null,
+      completedAt: null,
+      error: null,
+      summary: null,
+      artifactRefs: [],
+      providerUsage: null,
+      moduleSnapshot: null,
+      sourceUrl: clientConfig?.sourceInputs?.websiteUrl || clientConfig?.websiteUrl || null,
+      createdAt: now,
+      updatedAt: now,
+    };
+
     try {
-      await failRun(runId, clientId, pipelineErr, claimedRun.attempts, {});
-    } catch { /* failRun best-effort */ }
-    return { ok: false, runId, error: pipelineErr.message };
+      await Promise.all([
+        runRef.set(payload),
+        fb.adminDb.collection('clients').doc(clientId).collection('brief_runs').doc(runId).set(payload),
+      ]);
+    } catch (err) {
+      return { ok: false, error: `run doc create failed: ${err.message}` };
+    }
+
+    let claimedRun;
+    try {
+      claimedRun = await claimRun(runId);
+      await appendRunEvent(runId, clientId, {
+        stage: 'marketing-brief',
+        progressLabel: 'Pre-digest refresh — fresh market signals (Scout only)…',
+      }).catch(() => {});
+    } catch (err) {
+      return { ok: false, runId, error: `claimRun failed: ${err.message}` };
+    }
+
+    try {
+      const { runClientPipeline } = getPipeline();
+      const result = await runClientPipeline({
+        clientId,
+        clientConfig,
+        scope: 'marketing-director',
+        priorScoutBrief: null,
+      });
+      if (result.status === 'failed') {
+        const pipelineErr = new Error(result.error || 'Marketing brief pipeline failed.');
+        pipelineErr.stage = result.failedStage || 'pipeline';
+        await failRun(runId, clientId, pipelineErr, claimedRun.attempts, {
+          artifactRefs: result.artifactRefs,
+          warnings: result.warnings,
+        });
+        return { ok: false, runId, error: pipelineErr.message, stage: pipelineErr.stage };
+      }
+      await completeRun(runId, clientId, { ...result, pipelineType: 'scout-brief' });
+      return { ok: true, runId };
+    } catch (err) {
+      const pipelineErr = new Error(err.message || 'Marketing brief pipeline threw.');
+      pipelineErr.stage = 'pipeline';
+      try {
+        await failRun(runId, clientId, pipelineErr, claimedRun.attempts, {});
+      } catch { /* failRun best-effort */ }
+      return { ok: false, runId, error: pipelineErr.message };
+    }
+  } finally {
+    // Fenced release: only clears the lock if it's still owned by THIS
+    // acquisition (lock.ownerId) — an old/slow invocation can never clear a
+    // newer owner's lock (e.g. if this call somehow outlived the TTL and a
+    // fresh acquirer already took over).
+    await digestDelivery.releaseRefreshLock(lock.deliveryId, lock.ownerId).catch(() => {});
   }
 }
 
@@ -847,6 +877,68 @@ async function refreshPlatformSignals(clientId, { allowX = false } = {}) {
  *  Sequential (strategy reads fresh scout). Never throws. */
 export async function refreshDigestClient(clientId, { freshnessToken = '', force = false, source = 'cron-scheduled', actorUid = null, include = {}, briefLinkMode = 'fresh', phase = 'all', allowX = false } = {}) {
   if (!clientId) return { ok: false, error: 'no clientId' };
+
+  // Delivery identity uses the CLIENT'S configured digest timezone (not
+  // UTC) so "today's" record matches the calendar day the client actually
+  // expects their email on. Falls back to the module default (America/
+  // Chicago, matching DIGEST_TIMEZONE) if the config read fails.
+  let refreshTimeZone = 'America/Chicago';
+  try {
+    const cfg = await digestConfig.getDigestConfig(clientId);
+    refreshTimeZone = cfg?.schedule?.timezone || refreshTimeZone;
+  } catch { /* keep default */ }
+  const dateKey = digestDelivery.localDateKey(Date.now(), refreshTimeZone);
+
+  // Spend gate — checked BEFORE any Scout/LLM call. FAILS CLOSED on its own
+  // (see digest-refresh-preflight.cjs — no .catch() override needed here).
+  // Blocks refresh entirely when the global kill switch is set,
+  // RESEND_API_KEY is missing (nothing paid for here could ever be
+  // delivered), this client's delivery breaker is paused after repeated
+  // consecutive delivery failures, OR an EARLIER (different day) delivery
+  // for this client is still unresolved — never pile another paid morning
+  // on top of a backlog nobody has received yet. See
+  // docs/source-of-truth/EMAIL-DIGEST-CARD.md incident checkpoint.
+  const preflight = await checkDigestRefreshPreflight(clientId);
+  if (!preflight.ok) {
+    logInfo('pre_digest_refresh_preflight_blocked', { clientId, reason: preflight.reason });
+    return {
+      ok: false, sendable: false, skipped: true, reason: preflight.reason, phase, clientId,
+      modules: { ok: false, skipped: true, reason: 'other-phase' },
+      scout: { ok: false, skipped: true, reason: preflight.reason },
+      watchlist: { ok: false, skipped: true, reason: 'other-phase' },
+      strategy: { ok: false, skipped: true, reason: 'other-phase' },
+      executiveSummary: { ok: false, skipped: true, reason: 'other-phase' },
+      digestFreshness: null,
+      warnings: [],
+    };
+  }
+  // Idempotent, transactional, create-only — a durable record exists from
+  // before any paid work starts. markStage's own transition guard makes the
+  // 'refreshing' mark a safe no-op if the record has already moved further
+  // (e.g. a concurrent invocation already progressed it).
+  //
+  // FAIL CLOSED: if the durable record cannot even be created (e.g. a
+  // Firestore outage), paid work must NOT proceed anyway — an unrecorded
+  // refresh can't be tracked against the breaker or the unresolved-prior-
+  // delivery guard, which defeats the whole point of this gate.
+  let preflightDelivery;
+  try {
+    preflightDelivery = await digestDelivery.getOrCreateDelivery({ clientId, dateKey, source });
+  } catch (err) {
+    logInfo('pre_digest_refresh_preflight_blocked', { clientId, reason: `delivery record create failed: ${err.message}` });
+    return {
+      ok: false, sendable: false, skipped: true, reason: `delivery record create failed: ${err.message}`, phase, clientId,
+      modules: { ok: false, skipped: true, reason: 'other-phase' },
+      scout: { ok: false, skipped: true, reason: 'delivery record unavailable' },
+      watchlist: { ok: false, skipped: true, reason: 'other-phase' },
+      strategy: { ok: false, skipped: true, reason: 'other-phase' },
+      executiveSummary: { ok: false, skipped: true, reason: 'other-phase' },
+      digestFreshness: null,
+      warnings: [],
+    };
+  }
+  await digestDelivery.markStage(preflightDelivery.id, 'refreshing', { note: `refresh started (${source})` }).catch(() => {});
+
   // Phases: the FULL refresh (~5-6 min for a cold client) exceeds Vercel's 300s
   // function ceiling, so the interactive Run & Send calls this route three times —
   // phase=modules | signals | analysis — each comfortably under the limit. Steps
@@ -871,7 +963,7 @@ export async function refreshDigestClient(clientId, { freshnessToken = '', force
     !wantModules ? phaseSkip() : (creativeWanted
       ? refreshSiteCreativeModules(clientId, freshnessToken, { source, actorUid })
       : Promise.resolve({ ok: true, skipped: true, reason: 'creative-sections-off' })),
-    wantSignals ? refreshScoutBrief(clientId, { force, source, actorUid }) : phaseSkip(),
+    wantSignals ? refreshScoutBrief(clientId, { force, source, actorUid, dateKey }) : phaseSkip(),
     wantSignals ? refreshWatchlist(clientId) : phaseSkip(),
     // Reddit/Instagram via the direct ScrapeCreators client → platformTests.
     // Runs here so it completes before the analysis/reply steps read collect*Signals.

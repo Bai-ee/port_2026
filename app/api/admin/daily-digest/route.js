@@ -28,6 +28,9 @@ const { getMarketInsightPlatformState } = require('../../../../features/intellig
 const briefIntel = require('../../../../features/intelligence/_brief-intel.js');
 const { signApprovalToken, APPROVAL_TTL_MS } = require('../../../../api/_lib/social-approval.cjs');
 const { hasValidWorkerSecret } = require('../../../../api/_lib/auth.cjs');
+const digestDelivery = require('../../../../api/_lib/digest-delivery.cjs');
+const { checkDigestRefreshPreflight } = require('../../../../api/_lib/digest-refresh-preflight.cjs');
+const { sendViaResend } = require('../../../../api/_lib/resend-transport.cjs');
 
 // ── Config ──────────────────────────────────────────────────────────────────
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
@@ -2379,7 +2382,32 @@ function buildPlaceholderData(timestamp) {
  * The client set mirrors pre-digest-refresh (enrolled only, least-recently-sent
  * first) so send and refresh can never drift apart.
  */
+/** Transport call used by every durable-delivery retry (scheduled sweep or
+ *  manual admin click). Reuses the SAME idempotency key on every attempt —
+ *  Resend returns the original result for a duplicate key rather than
+ *  sending twice. Never regenerates content: `sendFn` only ever receives
+ *  what digest-delivery.cjs already has stored. */
+function digestSendFn({ subject, html, to, idempotencyKey }) {
+  return sendViaResend({ apiKey: RESEND_API_KEY, from: DIGEST_FROM, to, subject, html, idempotencyKey });
+}
+
+/** Runs once per scheduled cron tick (the fan-out entry point), before any
+ *  client is touched. Retries every digest whose backoff has elapsed using
+ *  its STORED render — no Anthropic call, no re-render, just a transport
+ *  retry — and updates each client's circuit breaker on a terminal outcome. */
+async function sweepDigestDeliveries() {
+  try {
+    const { swept, results } = await digestDelivery.sweepDueRetries({
+      sendFn: digestSendFn,
+    });
+    if (swept) logInfo('daily_digest_delivery_sweep', { swept, sent: results.filter((r) => r.stage === 'sent').length });
+  } catch (err) {
+    logWarn('daily_digest_delivery_sweep_failed', { error: err.message });
+  }
+}
+
 async function fanOutScheduledSends(url) {
+  await sweepDigestDeliveries();
   const startedAtMs = Date.now();
   const FANOUT_BUDGET_MS = 270_000;
 
@@ -2648,6 +2676,13 @@ export async function GET(request) {
   const isTemplate = previewParam === 'template';
   const isSendNow = url.searchParams.get('send') === '1';
   const freshnessToken = String(url.searchParams.get('freshnessToken') || '').trim().slice(0, 160);
+  // Stable per-user-action id for a manual send (P1-2 fix). The Email Digest
+  // card generates this ONCE per "Generate & Send" click (crypto.randomUUID())
+  // and holds it across any retry of that SAME click — see
+  // components/AdminEmailModals.jsx's runAndSend. Used to derive a
+  // deterministic manual delivery id so a resubmitted click (e.g. after an
+  // HTTP timeout) resolves to the SAME record instead of sending twice.
+  const requestId = String(url.searchParams.get('requestId') || '').trim().slice(0, 120);
   const returnHtml = url.searchParams.get('returnHtml') === '1';
   // Preview-only `noLlm=1`: render from saved data with ZERO LLM calls (skips
   // the executive summary + video captions). Free way to check email size and
@@ -2804,6 +2839,28 @@ export async function GET(request) {
     // time-boxed sends and orphaned "running" brief_runs; fresh data must be
     // produced by /api/worker/pre-digest-refresh before this route sends.
     const isRealSend = isSendNow || (!isPreview && !isTemplate);
+
+    // Delivery identity (P1-C + P1-2 fixes), resolved once, early. Uses the
+    // CLIENT'S configured digest timezone — not UTC — so "today" matches
+    // the day the client actually expects the email. Read-only at this
+    // point (never creates a record), so it's safe to compute even for a
+    // request that turns out to be a preview. A manual send NEVER shares
+    // identity with the scheduled cron occurrence, and its id is derived
+    // deterministically from `requestId` (not wall-clock time) whenever the
+    // card supplies one — see api/_lib/digest-delivery.cjs's
+    // resolveDeliveryIdentity for exactly what that buys: a resubmitted
+    // click (same requestId) resolves to the SAME record instead of
+    // sending twice, and two different concurrent clicks (different
+    // requestIds) always get two distinct records, never a silent collapse.
+    const deliveryClientId = homeClientId || 'unscoped';
+    const deliverySource = isSendNow ? 'manual-admin' : 'cron-scheduled';
+    const deliveryTimeZone = digestCfg?.schedule?.timezone || 'America/Chicago';
+    const deliveryIdentity = isRealSend
+      ? await digestDelivery.resolveDeliveryIdentity({
+          clientId: deliveryClientId, timestampMs: timestamp, timeZone: deliveryTimeZone, source: deliverySource, requestId,
+        })
+      : null;
+
     const skipInlineRefresh = url.searchParams.get('skipRefresh') === '1' || url.searchParams.get('refresh') === '0';
     const forceInlineRefresh = url.searchParams.get('refresh') === 'inline';
     // Execution log returned to the Email Digest card's terminal so the admin can
@@ -3297,14 +3354,32 @@ export async function GET(request) {
     // (LLM cost) only happens on a real send — never on a preview reload.
     let briefUrl = null;
     const briefLinkMode = digestCfg?.briefLinkMode || 'fresh';
+    // Spend gate for the fresh-brief-link render specifically: a fresh brief
+    // is its own paid LLM render (see docs/source-of-truth/EMAIL-DIGEST-CARD.md
+    // §10). Never run it when the global kill switch is set or this client's
+    // delivery breaker is paused — falls back to the resolver's own 'latest'
+    // behavior (same as a preview) rather than spending on content tied to a
+    // send that keeps failing to deliver.
+    let briefLinkPreflight = { ok: true, reason: null };
+    if (isRealSend && homeClientId && briefLinkMode === 'fresh') {
+      // Fails closed on its own (digest-refresh-preflight.cjs) — no .catch()
+      // override needed. The current render is not unresolved yet, so no
+      // exclusion is necessary; an existing same-day failure must block
+      // another paid brief just like an older failure does.
+      briefLinkPreflight = await checkDigestRefreshPreflight(homeClientId);
+    }
     if (include.execBriefLink !== false && briefLinkMode !== 'off' && homeClientId) {
       try {
         const { resolveExecutiveBriefUrl } = require('../../../../features/intelligence/_digest-brief-link.js');
+        const allowFreshRun = !isPreview && briefLinkPreflight.ok; // preview tab never triggers a paid run
+        if (isRealSend && briefLinkMode === 'fresh' && !briefLinkPreflight.ok) {
+          step('warn', `Fresh Executive Brief skipped (${briefLinkPreflight.reason}) — using latest published brief instead.`);
+        }
         briefUrl = await resolveExecutiveBriefUrl({
           clientId: homeClientId,
           mode: briefLinkMode,
           origin: appOrigin(),
-          allowFreshRun: !isPreview, // preview tab never triggers a paid run
+          allowFreshRun,
           freshnessToken,
         });
       } catch (err) {
@@ -3366,20 +3441,52 @@ export async function GET(request) {
     // Recipient: the client's configured recipientEmail, else the admin address.
     // Blank recipientEmail means a client is never emailed — it goes to you.
     const digestRecipient = (digestCfg?.recipientEmail || '').trim() || DIGEST_TO;
-    const emailResult = await sendEmail(subject, html, digestRecipient);
-    const emailSkipped = Boolean(emailResult?.skipped);
-    const emailAccepted = !emailSkipped && Boolean(emailResult?.id);
-    const emailFailureReason = emailSkipped
-      ? (emailResult?.reason || 'no transport configured')
-      : (!emailAccepted ? 'Email provider did not return an id.' : null);
-    step(emailAccepted ? 'success' : 'error', emailAccepted ? `Email sent → ${digestRecipient}` : `Email not sent: ${emailFailureReason}`);
+
+    // ── Durable, idempotent delivery ────────────────────────────────────────
+    // Store the rendered HTML BEFORE attempting delivery (immutable once
+    // set — a second call for the SAME delivery id is a safe no-op, never
+    // an overwrite), then send under a deterministic idempotency key. A
+    // transport failure here no longer discards the render: the delivery
+    // lands in `retry-wait` and the next wake-up (see
+    // docs/source-of-truth/EMAIL-DIGEST-CARD.md §12b — daily fan-out sweep,
+    // opportunistic admin-GET sweep, and the documented sub-daily pinger)
+    // resends this EXACT stored content under the SAME idempotency key —
+    // never a re-render, never a second Anthropic call. `sendFirstAttempt`
+    // claims the delivery atomically before touching the transport, so a
+    // racing duplicate request can never send the same delivery twice.
+    const delivery = await digestDelivery.getOrCreateDelivery({
+      clientId: deliveryClientId,
+      dateKey: deliveryIdentity.dateKey,
+      source: deliverySource,
+      deliveryId: deliveryIdentity.deliveryId,
+    });
+    await digestDelivery.markStage(delivery.id, 'generated', { note: 'email rendered' }).catch(() => {});
+    await digestDelivery.storeRenderedHtml(delivery.id, { html, subject, recipient: digestRecipient });
+    const sendResult = await digestDelivery.sendFirstAttempt(delivery.id, digestSendFn);
+    const updatedDelivery = await digestDelivery.getDelivery(delivery.id);
+
+    const emailResult = sendResult;
+    const emailAccepted = Boolean(sendResult.ok);
+    const emailSkipped = Boolean(sendResult.skipped);
+    const willRetry = updatedDelivery.stage === 'retry-wait';
+    const emailFailureReason = emailAccepted ? null : (sendResult.reason || 'Email provider did not return an id.');
+    step(
+      emailAccepted ? 'success' : (willRetry ? 'warn' : 'error'),
+      emailAccepted
+        ? `Email sent → ${digestRecipient}`
+        : willRetry
+          ? `Email not sent yet (${emailFailureReason}) — durable retry queued for ${updatedDelivery.nextRetryAt}`
+          : `Email not sent: ${emailFailureReason}`,
+    );
     logInfo('daily_digest_complete', {
       timestamp: new Date(timestamp).toISOString(),
       newUsers: firebase.newUsers,
       recentRuns: firebase.recentRuns,
       emailSkipped: !emailAccepted,
-      emailId: emailResult?.id || null,
+      emailId: sendResult?.id || null,
       emailFailureReason,
+      deliveryId: delivery.id,
+      deliveryStage: updatedDelivery.stage,
     });
 
     return json({
@@ -3390,6 +3497,13 @@ export async function GET(request) {
       email: emailResult,
       emailSkipped: !emailAccepted,
       reason: emailFailureReason,
+      delivery: {
+        id: delivery.id,
+        stage: updatedDelivery.stage,
+        retryable: willRetry,
+        nextRetryAt: updatedDelivery.nextRetryAt || null,
+        attempts: updatedDelivery.attempts || 0,
+      },
       xPost: xPostResult ? {
         ok: Boolean(xPostResult.ok),
         skipped: xPostResult.skipped || null,

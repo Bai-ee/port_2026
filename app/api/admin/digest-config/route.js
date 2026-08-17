@@ -6,6 +6,110 @@ const { buildAuthRequestShim, verifyAdminRequest } = require('../../../../api/_l
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
 const digestConfig = require('../../../../features/intelligence/_digest-config.js');
 const { getMarketInsightPlatformState } = require('../../../../features/intelligence/_market-insight-platform-state.js');
+const digestDelivery = require('../../../../api/_lib/digest-delivery.cjs');
+const digestBreaker = require('../../../../api/_lib/digest-circuit-breaker.cjs');
+const { hasResendKey } = require('../../../../api/_lib/digest-refresh-preflight.cjs');
+const { sendViaResend } = require('../../../../api/_lib/resend-transport.cjs');
+
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const DIGEST_FROM = process.env.DIGEST_FROM || 'HITLOOP Daily <digest@hitloop.agency>';
+
+function digestSendFn({ subject, html, to, idempotencyKey }) {
+  return sendViaResend({ apiKey: RESEND_API_KEY, from: DIGEST_FROM, to, subject, html, idempotencyKey });
+}
+
+/** The client's own configured digest timezone (default America/Chicago) —
+ *  delivery identity is keyed by LOCAL day, not UTC, so admin surfaces must
+ *  resolve dateKey the same way the send route does or they'll look up the
+ *  wrong record. */
+async function clientDigestTimeZone(clientId) {
+  try {
+    const cfg = await digestConfig.getDigestConfig(clientId);
+    return cfg?.schedule?.timezone || 'America/Chicago';
+  } catch {
+    return 'America/Chicago';
+  }
+}
+
+/** Best-effort, bounded, non-blocking-ish sweep piggybacked onto an
+ *  authenticated admin GET — when someone is actively looking at the Email
+ *  Digest card during an incident, a due retry resolves within seconds
+ *  instead of waiting for the next scheduled wake-up. Never the ONLY
+ *  wake-up mechanism (see docs/source-of-truth/EMAIL-DIGEST-CARD.md §12b) —
+ *  purely additive, and never allowed to fail the request it rides on. */
+async function opportunisticSweep() {
+  try {
+    await digestDelivery.sweepDueRetries({
+      sendFn: digestSendFn,
+      limit: 5,
+    });
+  } catch { /* best-effort only */ }
+}
+
+/** GET ?action=delivery-status&clientId=…&dateKey=… — surfaces the durable
+ *  delivery record + circuit-breaker state for the dashboard. Read-only.
+ *  `dateKey` defaults to the CLIENT's own local digest day (not UTC) when
+ *  omitted, matching how the send route resolves delivery identity. */
+async function getDeliveryStatus(request, url) {
+  try {
+    await verifyAdminRequest(buildAuthRequestShim(request));
+  } catch (err) {
+    return json({ error: err instanceof Error ? err.message : 'Forbidden.' }, 403);
+  }
+  const clientId = (url.searchParams.get('clientId') || '').trim();
+  if (!clientId) return json({ error: 'clientId is required.' }, 400);
+  const dateKey = (url.searchParams.get('dateKey') || '').trim()
+    || digestDelivery.localDateKey(Date.now(), await clientDigestTimeZone(clientId));
+  const deliveryId = digestDelivery.buildDeliveryId(clientId, dateKey);
+  const [delivery, breaker] = await Promise.all([
+    digestDelivery.getDelivery(deliveryId),
+    digestBreaker.getBreakerState(clientId),
+  ]);
+  return json({
+    ok: true,
+    clientId,
+    dateKey,
+    delivery: delivery
+      ? {
+          id: delivery.id, stage: delivery.stage, attempts: delivery.attempts,
+          nextRetryAt: delivery.nextRetryAt, lastError: delivery.lastError,
+          attemptLog: delivery.attemptLog || [],
+          providerEmailId: delivery.providerEmailId, source: delivery.source,
+          updatedAt: delivery.updatedAt,
+        }
+      : null,
+    breaker,
+  });
+}
+
+/** POST action:'retry-delivery' — reuses the stored render for a delivery,
+ *  calling Resend again under the same idempotency key. Never calls
+ *  Anthropic: it has no dependency capable of generating content, only
+ *  digest-delivery.cjs's transport replay. Accepts an explicit
+ *  `deliveryId` (preferred — from a delivery-status lookup) or falls back
+ *  to resolving (clientId, dateKey) against the client's own local day. */
+async function retryDelivery(patch) {
+  const clientId = String(patch.clientId || '').trim();
+  if (!clientId) return json({ error: 'clientId is required.' }, 400);
+  const explicitId = String(patch.deliveryId || '').trim();
+  const dateKey = String(patch.dateKey || '').trim()
+    || digestDelivery.localDateKey(Date.now(), await clientDigestTimeZone(clientId));
+  const deliveryId = explicitId || digestDelivery.buildDeliveryId(clientId, dateKey);
+  const outcome = await digestDelivery.retryDeliveryNow(deliveryId, { sendFn: digestSendFn });
+  return json({ ok: Boolean(outcome.ok || outcome.alreadySent), deliveryId, outcome });
+}
+
+/** POST action:'reset-breaker' — explicit admin reset, only when transport
+ *  is actually healthy (never re-open the gate onto a still-broken sender). */
+async function resetBreaker(patch, actorUid) {
+  const clientId = String(patch.clientId || '').trim();
+  if (!clientId) return json({ error: 'clientId is required.' }, 400);
+  if (!hasResendKey()) {
+    return json({ error: 'Cannot reset: RESEND_API_KEY is not configured, so the transport is still unhealthy.' }, 409);
+  }
+  const state = await digestBreaker.resetBreaker(clientId, { actorUid });
+  return json({ ok: true, clientId, breaker: state });
+}
 
 function json(body, status = 200) {
   return NextResponse.json(body, { status, headers: { 'cache-control': 'no-store' } });
@@ -57,11 +161,20 @@ async function enrichClientsWithMarketInsights(clients = []) {
 }
 
 export async function GET(request) {
+  const url0 = new URL(request.url);
+  if (url0.searchParams.get('action') === 'delivery-status') {
+    return getDeliveryStatus(request, url0);
+  }
   try {
     await verifyAdminRequest(buildAuthRequestShim(request));
   } catch (err) {
     return json({ error: err instanceof Error ? err.message : 'Forbidden.' }, 403);
   }
+
+  // Opportunistic wake-up: an admin opening this card is exactly the moment
+  // an incident is most likely being actively investigated. See
+  // docs/source-of-truth/EMAIL-DIGEST-CARD.md §12b.
+  await opportunisticSweep();
 
   try {
     // Scope to the client loaded in the dashboard (?clientId=) — the Email Digest
@@ -104,14 +217,17 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
+  let decoded;
   try {
-    await verifyAdminRequest(buildAuthRequestShim(request));
+    decoded = await verifyAdminRequest(buildAuthRequestShim(request));
   } catch (err) {
     return json({ error: err instanceof Error ? err.message : 'Forbidden.' }, 403);
   }
 
   try {
     const patch = await request.json().catch(() => ({}));
+    if (patch.action === 'retry-delivery') return retryDelivery(patch);
+    if (patch.action === 'reset-breaker') return resetBreaker(patch, decoded?.uid || null);
     // Scope to the client loaded in the dashboard (body.clientId or ?clientId=);
     // falls back to the email-resolved admin client. `clientId` is not a config
     // field, so saveDigestConfig ignores it in the patch.

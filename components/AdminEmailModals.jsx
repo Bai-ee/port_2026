@@ -171,6 +171,19 @@ function guardIncludeForAvailability(include = {}, availability = {}) {
   return next;
 }
 
+function formatDigestSendHour(hour) {
+  const normalizedHour = Number.isFinite(Number(hour))
+    ? ((Number(hour) % 24) + 24) % 24
+    : 7;
+  const period = normalizedHour >= 12 ? 'PM' : 'AM';
+  const displayHour = normalizedHour % 12 || 12;
+  return `${displayHour}:00 ${period}`;
+}
+
+function digestTimezoneLabel(timezone) {
+  return !timezone || timezone === 'America/Chicago' ? 'CST' : timezone;
+}
+
 // ── Email Digest: SETTINGS (params) + PREVIEW (rendered email + send) ─────────
 export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, activeClientId }) {
   // The card is scoped to the client loaded in the dashboard: every digest-config
@@ -286,6 +299,7 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
   // Master daily-email state for the loaded client — mirrors the server's
   // isCronEnrolled gate (enabled AND a real cadence). Drives the ON/OFF toggle.
   const dailyOn = form?.schedule?.enabled === true && (form?.schedule?.frequency || 'off') !== 'off';
+  const scheduleTimezoneLabel = digestTimezoneLabel(form?.schedule?.timezone);
 
   // ── Preview state (the rendered email) ──
   // Default to LIVE so the preview = exactly what sends (same route code path,
@@ -343,6 +357,16 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
   const runAndSend = useCallback(async () => {
     if (!user || typeof runWithTerminal !== 'function') return;
     const freshnessToken = `digest-ui-${Date.now().toString(36)}`;
+    // Stable per-click request id (P1-2 fix, 2026-08-17 review pass):
+    // generated ONCE for this click and held across the whole task closure
+    // below, including the final send call. If this exact click's request
+    // is ever resubmitted (e.g. the browser/proxy retries after a perceived
+    // timeout), the server derives the SAME manual delivery id from this
+    // same id — one email, not two. A genuinely new click always gets a
+    // fresh id here, so it never collapses with a different click's send.
+    const requestId = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+      ? crypto.randomUUID()
+      : `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
     setSendStatus({ kind: 'pending', msg: 'Saving settings…' });
     // Stream through the shared global run terminal — same modal + minimize/reopen
     // RUNNING badge every other card run uses. advance() = phase transition (settles
@@ -425,7 +449,7 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
           advance('[SEND]', 'Generating and sending the email with the latest completed video…');
           note('Manual send refreshes intelligence but never starts a video render.');
           setSendStatus({ kind: 'pending', msg: 'Generating and sending email…' });
-          const res = await authFetch(user, `/api/admin/daily-digest?send=1&skipRefresh=1&freshnessToken=${encodeURIComponent(freshnessToken)}${sendClientId ? `&clientId=${encodeURIComponent(sendClientId)}` : ''}`);
+          const res = await authFetch(user, `/api/admin/daily-digest?send=1&skipRefresh=1&freshnessToken=${encodeURIComponent(freshnessToken)}&requestId=${encodeURIComponent(requestId)}${sendClientId ? `&clientId=${encodeURIComponent(sendClientId)}` : ''}`);
           (Array.isArray(res?.log) ? res.log : []).forEach((l) => note(l.text));
           if (res?.subject) note(`Subject · ${res.subject}`);
           setSendStatus({ kind: 'ok', msg: 'Email sent with the latest completed video.' });
@@ -906,8 +930,12 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
                 </label>
                 <div className="field-grid">
                   <label className="field" style={{ display: 'grid', gap: 6 }}>
-                    <span className="label">Send hour (0–23)</span>
-                    <input type="number" min="0" max="23" value={form.schedule?.sendHour ?? 7} onChange={(e) => setForm((p) => ({ ...p, schedule: { ...(p.schedule || {}), sendHour: Number(e.target.value) } }))} />
+                    <span className="label">Send time</span>
+                    <select value={form.schedule?.sendHour ?? 7} onChange={(e) => setForm((p) => ({ ...p, schedule: { ...(p.schedule || {}), sendHour: Number(e.target.value) } }))}>
+                      {Array.from({ length: 24 }, (_, hour) => (
+                        <option key={hour} value={hour}>{formatDigestSendHour(hour)} {scheduleTimezoneLabel}</option>
+                      ))}
+                    </select>
                   </label>
                   {form.schedule?.frequency === 'weekly' ? (
                     <label className="field" style={{ display: 'grid', gap: 6 }}>
@@ -918,8 +946,8 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
                     </label>
                   ) : null}
                   <label className="field" style={{ display: 'grid', gap: 6 }}>
-                    <span className="label">Timezone</span>
-                    <input value={form.schedule?.timezone || ''} onChange={(e) => setForm((p) => ({ ...p, schedule: { ...(p.schedule || {}), timezone: e.target.value } }))} />
+                    <span className="label">Timezone (IANA)</span>
+                    <input value={form.schedule?.timezone || ''} placeholder="America/Chicago" onChange={(e) => setForm((p) => ({ ...p, schedule: { ...(p.schedule || {}), timezone: e.target.value } }))} />
                   </label>
                 </div>
               </section>

@@ -1,0 +1,44 @@
+name: Digest Delivery Sweep
+
+# NOT YET ACTIVE — this file is uncommitted (added by an incident-response
+# session, see docs/source-of-truth/EMAIL-DIGEST-CARD.md §12b). It only
+# takes effect once committed, pushed to the default branch, and GitHub
+# Actions picks up the schedule — none of which this session is authorized
+# to do. It exactly mirrors the already-live brief-worker-sweep.yml in this
+# same directory (same secret, same cadence, same auth header shape),
+# targeting the new /api/worker/digest-delivery-sweep route instead.
+#
+# What it does once active: pings the sweep route every 5 minutes. That
+# route ONLY retries digest deliveries already sitting in `retry-wait` whose
+# backoff has elapsed, reusing their already-stored HTML under their
+# already-assigned Resend idempotency key — it never calls Anthropic, Scout,
+# X search, or any renderer. This is the sub-daily wake-up Vercel Hobby
+# cannot provide directly (Hobby cron schedules cap at once-per-day).
+#
+# Required before enabling: the HITLOOP_CRON_SECRET repository secret must
+# already be set (brief-worker-sweep.yml already depends on it, so it
+# should already exist) and must match the deployed CRON_SECRET env var.
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Retry due digest deliveries (transport-only, never Anthropic)
+        env:
+          HITLOOP_CRON_SECRET: ${{ secrets.HITLOOP_CRON_SECRET }}
+        run: |
+          if [ -z "$HITLOOP_CRON_SECRET" ]; then
+            echo "Missing HITLOOP_CRON_SECRET repository secret." >&2
+            exit 1
+          fi
+
+          curl --fail --show-error --silent \
+            --request GET \
+            --header "Authorization: Bearer ${HITLOOP_CRON_SECRET}" \
+            "https://hitloop.agency/api/worker/digest-delivery-sweep?limit=10"
