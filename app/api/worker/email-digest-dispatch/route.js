@@ -4,24 +4,42 @@ import { createRequire } from 'module';
 // email-digest-dispatch — Phase 3 per-client scheduling (EMAIL-REBUILD-PLAN.md
 // owner decision: real per-client sendHour/weekday/timezone, GitHub-Actions
 // dispatcher, hour precision). Every tick: find enrolled clients whose
-// nextRunAt is due, atomically claim each ONE AT A TIME (never claim-then-
-// queue), and for each claimed client fire the SAME two proven worker calls
-// the old fan-out used — /api/worker/pre-digest-refresh then
-// /api/admin/daily-digest, both with an explicit ?clientId= so neither one
-// re-enters ITS OWN internal fan-out branch. Reuses the existing hardened
-// entrypoints deliberately: this route only adds WHEN a client's turn comes
-// up, not HOW the refresh/send themselves work (Phase 0+1's zero-LLM-
-// scheduled-send guarantees, delivery leases, and stamps are untouched).
+// nextRunAt is due, atomically claim them, and for each claimed client fire
+// the SAME two proven worker calls the old fan-out used —
+// /api/worker/pre-digest-refresh then /api/admin/daily-digest, both with an
+// explicit ?clientId= so neither one re-enters ITS OWN internal fan-out
+// branch. Reuses the existing hardened entrypoints deliberately: this route
+// only adds WHEN a client's turn comes up, not HOW the refresh/send
+// themselves work (Phase 0+1's zero-LLM-scheduled-send guarantees, delivery
+// leases, and stamps are untouched).
 //
-// Why claim-one-then-process-one, never claim-many-then-process: claiming
-// immediately advances that client's nextRunAt to its NEXT future occurrence
-// (see scheduler.cjs). If this route claimed every due client up front and
-// then ran out of its own time budget partway through processing them, the
-// unprocessed-but-claimed clients would silently miss today entirely — not
-// retry next tick, because they're no longer "due" until their next real
-// slot. Claiming right before processing, and stopping BEFORE claiming a new
-// one when budget is low, means an unclaimed due client is picked up on the
-// very next 30-minute tick instead.
+// Claim sequentially, dispatch concurrently, in bounded waves — never claim
+// what this invocation can't immediately start dispatching. Claiming
+// advances a client's nextRunAt to its NEXT future occurrence (see
+// scheduler.cjs), so claiming without dispatching would silently drop that
+// client's whole day rather than retry next tick. But strictly serial
+// claim-then-fully-await-refresh-then-send-then-next-claim is its OWN
+// hazard: a refresh alone can take ~4 minutes against this route's 300s
+// ceiling, so one-at-a-time processing serves roughly one client per
+// 30-minute tick — client N sharing a sendHour with N-1 others waits
+// N*30min. A wave claims up to WAVE_SIZE clients, fires all of their
+// refresh+send sub-requests concurrently (each is its own independent
+// invocation with its own 300s budget), waits for the wave, then claims the
+// next wave if budget remains — mirrors pre-digest-refresh's own existing
+// multi-client DISPATCH_CONCURRENCY=3 wave pattern.
+//
+// Within a claimed client, the send sub-request is ALWAYS attempted, even
+// when refresh failed or threw — never one try/catch spanning both. This
+// isn't just "don't lose data on a crash": daily-digest's send path creates
+// the durable delivery record immediately and sends last-good saved data
+// with a visible stale label when nothing fresher exists (the owner-decided
+// stale policy) — attempting it unconditionally converts "refresh failed"
+// into "delivered stale-labeled" instead of "nothing sent today". The only
+// remaining exposure is a dispatcher dying in the literal gap between a
+// claim committing and its first sub-request firing — a millisecond window,
+// and even then the existing digest-delivery-sweep 5-minute reclaim (a
+// separate, already-live mechanism) recovers a stuck-mid-generation delivery
+// within the same day.
 //
 // NOT wired into any live trigger yet: no vercel.json cron entry (Hobby caps
 // crons at once-per-day; this needs 30-min resolution, which only a GitHub
@@ -39,7 +57,8 @@ const { logInfo, logWarn, logError } = require('../../../../api/_lib/observabili
 const digestConfig = require('../../../../features/intelligence/_digest-config.js');
 const { digestSelfOrigin, fetchWorkerJson, buildRefreshStampEntry, buildSendStampEntry } = require('../../../../api/_lib/digest-self-origin.cjs');
 
-const DISPATCH_BUDGET_MS = 270_000; // leaves headroom under the 300s ceiling for the in-flight client's own two sub-requests to finish
+const DISPATCH_BUDGET_MS = 270_000; // leaves headroom under the 300s ceiling for the last-claimed wave to finish
+const WAVE_SIZE = 3; // mirrors pre-digest-refresh's own DISPATCH_CONCURRENCY
 
 function json(body, status = 200) {
   return NextResponse.json(body, { status, headers: { 'cache-control': 'no-store' } });
@@ -57,24 +76,38 @@ function hasValidCronSecret(request) {
   return safeSecretEquals(provided, `Bearer ${cronSecret}`);
 }
 
-/** One claimed client's refresh, then send — both attempted regardless of
- *  whether the other succeeded (a failed refresh still sends last-good data
- *  with a visible stale label, per the owner-decided stale policy; a failed
- *  send doesn't skip the refresh that already ran and already saved data for
- *  next time). Returns the two stamp entries so the caller can persist and
- *  report them without this function reaching into Firestore itself beyond
- *  the stamps digestConfig.stampCronRun already writes. */
+/** One claimed client's refresh, then send. Each sub-request is its own
+ *  try/catch — the send attempt below must run even if the refresh call
+ *  above threw, not just when it merely reported ok:false (fetchWorkerJson
+ *  itself never throws, but this stays fault-isolated defensively rather
+ *  than trusting that contract to hold forever). Never throws — a crash in
+ *  either half becomes an honest {ok:false} entry, not a rejected promise,
+ *  so a Promise.all across a wave can never have one client's failure take
+ *  down its wave-mates. */
 async function processClaimedClient(clientId, selfOrigin) {
-  const refreshTarget = new URL('/api/worker/pre-digest-refresh', selfOrigin);
-  refreshTarget.searchParams.set('clientId', clientId);
-  const refreshEntry = buildRefreshStampEntry(clientId, await fetchWorkerJson(refreshTarget));
-  await digestConfig.stampCronRun(clientId, 'refresh', refreshEntry);
+  let refreshEntry;
+  try {
+    const refreshTarget = new URL('/api/worker/pre-digest-refresh', selfOrigin);
+    refreshTarget.searchParams.set('clientId', clientId);
+    refreshEntry = buildRefreshStampEntry(clientId, await fetchWorkerJson(refreshTarget));
+  } catch (err) {
+    refreshEntry = { clientId, ok: false, status: null, reason: `refresh dispatch threw: ${err.message}` };
+  }
+  await digestConfig.stampCronRun(clientId, 'refresh', refreshEntry).catch(() => {});
 
-  const sendTarget = new URL('/api/admin/daily-digest', selfOrigin);
-  sendTarget.searchParams.set('clientId', clientId);
-  const sendEntry = buildSendStampEntry(clientId, await fetchWorkerJson(sendTarget));
-  await digestConfig.stampCronRun(clientId, 'send', sendEntry);
+  let sendEntry;
+  try {
+    const sendTarget = new URL('/api/admin/daily-digest', selfOrigin);
+    sendTarget.searchParams.set('clientId', clientId);
+    sendEntry = buildSendStampEntry(clientId, await fetchWorkerJson(sendTarget));
+  } catch (err) {
+    sendEntry = { clientId, ok: false, status: null, reason: `send dispatch threw: ${err.message}`, error: err.message, emailId: null };
+  }
+  await digestConfig.stampCronRun(clientId, 'send', sendEntry).catch(() => {});
 
+  logInfo('email_digest_dispatch_client_done', {
+    clientId, refreshOk: refreshEntry.ok, sendOk: sendEntry.ok, emailId: sendEntry.emailId || null,
+  });
   return { clientId, refresh: refreshEntry, send: sendEntry };
 }
 
@@ -83,11 +116,10 @@ async function handle(request) {
   if (!authed) return json({ error: 'Unauthorized' }, 401);
 
   const startedAtMs = Date.now();
-  const now = Date.now();
 
   let dueIds = [];
   try {
-    dueIds = await digestConfig.listDueClientIds(now);
+    dueIds = await digestConfig.listDueClientIds(Date.now());
   } catch (err) {
     logError('email_digest_dispatch_scan_error', { error: err.message });
     return json({ error: `Could not scan due clients: ${err.message}` }, 500);
@@ -100,40 +132,39 @@ async function handle(request) {
   const selfOrigin = digestSelfOrigin();
   const processed = [];
   const skipped = [];
+  let i = 0;
 
-  for (const clientId of dueIds) {
+  while (i < dueIds.length) {
     if (Date.now() - startedAtMs > DISPATCH_BUDGET_MS) {
-      // Not claimed — still due, picked up on the next tick. Never claim
-      // a client this invocation doesn't have budget left to process.
-      skipped.push({ clientId, reason: 'dispatch budget exhausted before this client\'s turn' });
-      // eslint-disable-next-line no-continue
-      continue;
+      // Nothing left in this wave gets claimed — still due, picked up on
+      // the next tick. Never claim a client this invocation doesn't have
+      // budget left to immediately start dispatching.
+      for (; i < dueIds.length; i += 1) skipped.push({ clientId: dueIds[i], reason: 'dispatch budget exhausted before this client\'s turn' });
+      break;
     }
-    // eslint-disable-next-line no-await-in-loop
-    const claim = await digestConfig.claimDueOccurrence(clientId, Date.now());
-    if (!claim.claimed) {
-      skipped.push({ clientId, reason: claim.reason || 'not claimed' });
-      // eslint-disable-next-line no-continue
-      continue;
-    }
-    logInfo('email_digest_dispatch_claimed', { clientId, claimedNextRunAt: claim.claimedNextRunAt, advancedNextRunAt: claim.advancedNextRunAt });
-    try {
+    // Claim sequentially (fast Firestore transactions) up to WAVE_SIZE.
+    const wave = [];
+    while (wave.length < WAVE_SIZE && i < dueIds.length) {
+      const clientId = dueIds[i];
+      i += 1;
       // eslint-disable-next-line no-await-in-loop
-      const result = await processClaimedClient(clientId, selfOrigin);
-      processed.push(result);
-      logInfo('email_digest_dispatch_client_done', {
-        clientId, refreshOk: result.refresh.ok, sendOk: result.send.ok, emailId: result.send.emailId || null,
-      });
-    } catch (err) {
-      // A claim already advanced nextRunAt — this client is NOT retried
-      // sooner by this route; it gets its next occurrence at its normal
-      // scheduled time, same as the digest-delivery-sweep/generation-reclaim
-      // path (a different mechanism) already covers stuck-mid-generation
-      // recovery within a day. Log loudly since a claimed-but-crashed
-      // client is otherwise invisible until tomorrow.
-      logError('email_digest_dispatch_client_crashed', { clientId, error: err.message });
-      processed.push({ clientId, refresh: null, send: null, error: err.message });
+      const claim = await digestConfig.claimDueOccurrence(clientId, Date.now());
+      if (!claim.claimed) {
+        skipped.push({ clientId, reason: claim.reason || 'not claimed' });
+        // eslint-disable-next-line no-continue
+        continue;
+      }
+      logInfo('email_digest_dispatch_claimed', { clientId, claimedNextRunAt: claim.claimedNextRunAt, advancedNextRunAt: claim.advancedNextRunAt });
+      wave.push(clientId);
     }
+    if (!wave.length) continue; // this pass claimed nothing (all lost the race or became ineligible) — advance to the next slice, loop condition re-checks budget
+
+    // Dispatch the whole wave's refresh+send concurrently — each client's
+    // two sub-requests are independent invocations with their own 300s
+    // budget; this route just waits for the wave, it doesn't do their work.
+    // eslint-disable-next-line no-await-in-loop
+    const waveResults = await Promise.all(wave.map((clientId) => processClaimedClient(clientId, selfOrigin)));
+    processed.push(...waveResults);
   }
 
   const ok = processed.every((r) => r.refresh?.ok && r.send?.ok);
