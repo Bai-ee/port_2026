@@ -11,8 +11,9 @@
 // the same kit the Video Remix modal uses. See
 // public/docs/dashboard-modal-component-style-guide.html.
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { SECTIONS, UI_GROUP_ORDER } from '../features/email-digest/sections.registry.cjs';
+import { computeNextRunAt } from '../features/email-digest/scheduler.cjs';
 
 async function authFetch(user, path, options = {}) {
   const token = await user.getIdToken();
@@ -171,6 +172,23 @@ function digestTimezoneLabel(timezone) {
   }
 }
 
+// "Wed, Aug 20 · 7:00 AM CDT" — human display for a computeNextRunAt() ms
+// epoch, in the schedule's own timezone (never the browser's local zone —
+// an admin reviewing a client's schedule from a different timezone must see
+// the client's time, not their own).
+function formatNextRunAt(ms, timezone) {
+  if (!Number.isFinite(ms)) return null;
+  const tz = timezone || 'America/Chicago';
+  try {
+    const dateStr = new Date(ms).toLocaleString('en-US', {
+      timeZone: tz, weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+    });
+    return `${dateStr} ${digestTimezoneLabel(tz)}`;
+  } catch {
+    return new Date(ms).toISOString();
+  }
+}
+
 // ── Email Digest: SETTINGS (params) + PREVIEW (rendered email + send) ─────────
 export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, activeClientId }) {
   const [tab, setTab] = useState('settings'); // 'settings' | 'preview'
@@ -284,6 +302,17 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
   // isCronEnrolled gate (enabled AND a real cadence). Drives the ON/OFF toggle.
   const dailyOn = form?.schedule?.enabled === true && (form?.schedule?.frequency || 'off') !== 'off';
   const scheduleTimezoneLabel = digestTimezoneLabel(form?.schedule?.timezone);
+  // Live preview of the NEXT occurrence for the CURRENT (even unsaved) form
+  // state — computeNextRunAt is the same pure, zero-dependency function the
+  // dispatch route uses server-side (scheduler.cjs), so this always matches
+  // what saving right now would actually schedule. Recomputes only when the
+  // schedule fields actually change, not on every keystroke elsewhere in the
+  // form.
+  const previewNextRunAt = useMemo(() => {
+    if (!dailyOn || !form?.schedule) return null;
+    try { return computeNextRunAt(form.schedule, Date.now()); } catch { return null; }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dailyOn, form?.schedule?.enabled, form?.schedule?.frequency, form?.schedule?.sendHour, form?.schedule?.weekday, form?.schedule?.timezone]);
 
   // ── Preview state (the rendered email) ──
   // Default to LIVE so the preview = exactly what sends (same route code path,
@@ -920,6 +949,13 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
                     <input value={form.schedule?.timezone || ''} placeholder="America/Chicago" onChange={(e) => setForm((p) => ({ ...p, schedule: { ...(p.schedule || {}), timezone: e.target.value } }))} />
                   </label>
                 </div>
+                {dailyOn ? (
+                  <div id="digest-next-send-preview" className="oc-note" style={{ font: '500 12px/1.5 var(--vrk-mono, monospace)', opacity: 0.85 }}>
+                    {previewNextRunAt
+                      ? <>Next send (if saved now): {formatNextRunAt(previewNextRunAt, form.schedule?.timezone)} — arrives within ~30 min after the dispatcher's next check.</>
+                      : 'Next send time unavailable — check the timezone value above.'}
+                  </div>
+                ) : null}
               </section>
 
               <section className="section">
