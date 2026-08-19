@@ -189,6 +189,23 @@ function formatNextRunAt(ms, timezone) {
   }
 }
 
+// "3h ago" / "just now" for an ISO string or ms epoch. Operator-panel-only —
+// coarse buckets are the right precision for "is this stale", not a live
+// ticking clock.
+function formatAge(value) {
+  if (!value) return null;
+  const ms = typeof value === 'number' ? value : Date.parse(value);
+  if (!Number.isFinite(ms)) return null;
+  const deltaMs = Date.now() - ms;
+  if (deltaMs < 0) return 'in the future';
+  const mins = Math.floor(deltaMs / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
 // ── Email Digest: SETTINGS (params) + PREVIEW (rendered email + send) ─────────
 export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, activeClientId }) {
   const [tab, setTab] = useState('settings'); // 'settings' | 'preview'
@@ -207,6 +224,14 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
   const [runState, setRunState] = useState({}); // { [clientId]: 'running' | 'done' | 'error: msg' }
   const [socialAccountStatus, setSocialAccountStatus] = useState({}); // connected accounts owned by the selected video client
   const [videoOwnerDigestConfig, setVideoOwnerDigestConfig] = useState(null);
+  // ── Operator panel (Phase 3E): durable delivery/breaker/cron-stamp state,
+  // already-written data — this is a read (+ two narrow admin actions), never
+  // a new source of truth. ──
+  const [operatorStatus, setOperatorStatus] = useState(null); // { delivery, breaker, lastRefresh, lastSend, dateKey }
+  const [operatorLoading, setOperatorLoading] = useState(false);
+  const [operatorError, setOperatorError] = useState('');
+  const [retryStatus, setRetryStatus] = useState(null); // { kind: 'pending'|'ok'|'error', msg }
+  const [resetStatus, setResetStatus] = useState(null);
   const videoOwnerClientId = form?.dailyVideo?.sourceClientId || clientId;
   const videoOwnerIsThisDigest = Boolean(videoOwnerClientId && videoOwnerClientId === clientId);
   const effectiveVideoOwnerConfig = videoOwnerIsThisDigest ? form : videoOwnerDigestConfig;
@@ -253,6 +278,52 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
       setSettingsLoading(false);
     }
   }, [user, activeClientId]);
+
+  const loadOperatorStatus = useCallback(async () => {
+    if (!user || !clientId) return;
+    setOperatorLoading(true);
+    setOperatorError('');
+    try {
+      const data = await callEmailDigest(user, 'status', { clientId });
+      setOperatorStatus(data);
+    } catch (e) {
+      setOperatorError(e.message);
+    } finally {
+      setOperatorLoading(false);
+    }
+  }, [user, clientId]);
+
+  // Loads once clientId becomes available (loadSettings resolves it from the
+  // server — it isn't known up front for the env/admin-resolved default
+  // client case where activeClientId is empty).
+  useEffect(() => { loadOperatorStatus(); }, [loadOperatorStatus]);
+
+  const retryStoredDelivery = useCallback(async () => {
+    if (!user || !clientId) return;
+    setRetryStatus({ kind: 'pending', msg: 'Retrying…' });
+    try {
+      const data = await callEmailDigest(user, 'retry', { clientId, deliveryId: operatorStatus?.delivery?.id, dateKey: operatorStatus?.dateKey });
+      setRetryStatus({
+        kind: data.ok ? 'ok' : 'error',
+        msg: data.ok ? 'Retry sent — check the delivery stage below.' : (data.outcome?.reason || 'Retry did not complete.'),
+      });
+      loadOperatorStatus();
+    } catch (e) {
+      setRetryStatus({ kind: 'error', msg: e.message });
+    }
+  }, [user, clientId, operatorStatus?.delivery?.id, operatorStatus?.dateKey, loadOperatorStatus]);
+
+  const resetTransportBreaker = useCallback(async () => {
+    if (!user || !clientId) return;
+    setResetStatus({ kind: 'pending', msg: 'Resetting…' });
+    try {
+      const data = await callEmailDigest(user, 'reset-breaker', { clientId });
+      setResetStatus({ kind: 'ok', msg: 'Breaker reset.' });
+      setOperatorStatus((s) => (s ? { ...s, breaker: data.breaker } : s));
+    } catch (e) {
+      setResetStatus({ kind: 'error', msg: e.message });
+    }
+  }, [user, clientId]);
 
   const toggleInclude = useCallback((cid) => {
     setForm((f) => {
@@ -978,6 +1049,86 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
                   </div>
                 ) : (
                   <p className="empty">No knowledge-base docs found for this client.</p>
+                )}
+              </section>
+
+              <section className="section" id="digest-operator-panel-section">
+                <div className="section-head">
+                  <span className="index">06</span>
+                  <div>
+                    <h3>Delivery status</h3>
+                    <p>Durable, already-recorded state — never triggers a refresh or a send. Retry replays transport only, from the already-rendered email.</p>
+                  </div>
+                  {operatorStatus?.breaker?.pausedAt ? (
+                    <span className="label" style={{ color: 'var(--vrk-danger, #a0392b)' }}>PAUSED</span>
+                  ) : null}
+                </div>
+                {operatorLoading && !operatorStatus ? (
+                  <p className="empty">Loading…</p>
+                ) : operatorError ? (
+                  <p className="hint-danger">{operatorError}</p>
+                ) : operatorStatus ? (
+                  <div style={{ display: 'grid', gap: 14 }}>
+                    <div className="field-grid">
+                      <div className="field" style={{ display: 'grid', gap: 4 }}>
+                        <span className="label">Last refresh (cron)</span>
+                        <span style={{ fontSize: 13 }}>
+                          {operatorStatus.lastRefresh?.at
+                            ? <>{operatorStatus.lastRefresh.status === 'ok' ? '✓' : operatorStatus.lastRefresh.status === 'skipped' ? '· skipped' : '✗'} {formatAge(operatorStatus.lastRefresh.at)}</>
+                            : 'Never'}
+                        </span>
+                        {operatorStatus.lastRefresh?.reason ? <span className="oc-note">{operatorStatus.lastRefresh.reason}</span> : null}
+                      </div>
+                      <div className="field" style={{ display: 'grid', gap: 4 }}>
+                        <span className="label">Last send (cron)</span>
+                        <span style={{ fontSize: 13 }}>
+                          {operatorStatus.lastSend?.at
+                            ? <>{operatorStatus.lastSend.status === 'ok' ? '✓' : operatorStatus.lastSend.status === 'skipped' ? '· skipped' : '✗'} {formatAge(operatorStatus.lastSend.at)}</>
+                            : 'Never'}
+                        </span>
+                        {operatorStatus.lastSend?.reason ? <span className="oc-note">{operatorStatus.lastSend.reason}</span> : null}
+                      </div>
+                    </div>
+                    <div className="field-grid">
+                      <div className="field" style={{ display: 'grid', gap: 4 }}>
+                        <span className="label">Today&apos;s delivery ({operatorStatus.dateKey})</span>
+                        {operatorStatus.delivery ? (
+                          <>
+                            <span style={{ fontSize: 13 }}>Stage: <strong>{operatorStatus.delivery.stage}</strong> · {operatorStatus.delivery.attempts} attempt{operatorStatus.delivery.attempts === 1 ? '' : 's'}</span>
+                            {operatorStatus.delivery.providerEmailId ? <span className="oc-note">Provider id: {operatorStatus.delivery.providerEmailId}</span> : null}
+                            {operatorStatus.delivery.nextRetryAt ? <span className="oc-note">Next retry: {formatAge(operatorStatus.delivery.nextRetryAt)}</span> : null}
+                            {operatorStatus.delivery.lastError ? <span className="hint-danger">{operatorStatus.delivery.lastError}</span> : null}
+                          </>
+                        ) : (
+                          <span className="oc-note">No delivery recorded for today yet.</span>
+                        )}
+                      </div>
+                      <div className="field" style={{ display: 'grid', gap: 4 }}>
+                        <span className="label">Transport breaker</span>
+                        {operatorStatus.breaker?.pausedAt ? (
+                          <>
+                            <span style={{ fontSize: 13, color: 'var(--vrk-danger, #a0392b)' }}>Paused since {formatAge(operatorStatus.breaker.pausedAt)}</span>
+                            <span className="oc-note">{operatorStatus.breaker.pausedReason}</span>
+                          </>
+                        ) : (
+                          <span style={{ fontSize: 13 }}>Healthy ({operatorStatus.breaker?.consecutiveFailures || 0} consecutive failures)</span>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <button type="button" className="btn btn-outline" onClick={retryStoredDelivery} disabled={retryStatus?.kind === 'pending' || !operatorStatus.delivery}>
+                        {retryStatus?.kind === 'pending' ? 'Retrying…' : 'Retry stored email'}
+                      </button>
+                      <button type="button" className="btn btn-outline" onClick={resetTransportBreaker} disabled={resetStatus?.kind === 'pending' || !operatorStatus.breaker?.pausedAt}>
+                        {resetStatus?.kind === 'pending' ? 'Resetting…' : 'Reset breaker'}
+                      </button>
+                      <button type="button" className="btn btn-outline" onClick={loadOperatorStatus} disabled={operatorLoading}>Refresh status</button>
+                      {retryStatus && retryStatus.kind !== 'pending' ? <span className={retryStatus.kind === 'error' ? 'hint-danger' : 'oc-note'}>{retryStatus.msg}</span> : null}
+                      {resetStatus && resetStatus.kind !== 'pending' ? <span className={resetStatus.kind === 'error' ? 'hint-danger' : 'oc-note'}>{resetStatus.msg}</span> : null}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="empty">No status loaded yet.</p>
                 )}
               </section>
 

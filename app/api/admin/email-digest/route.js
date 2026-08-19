@@ -150,16 +150,22 @@ async function handleConfig(body) {
   return json({ ok: true, clientId, homeClientId, config, docs, clients, marketInsights, ownerEmail });
 }
 
-// ── action: status — delivery record + circuit-breaker state ──────────────
+// ── action: status — delivery record + circuit-breaker state + last cron stamps ──
 async function handleStatus(body) {
   const clientId = String(body.clientId || '').trim();
   if (!clientId) return json({ error: 'clientId is required.' }, 400);
   const dateKey = String(body.dateKey || '').trim() || digestDelivery.localDateKey(Date.now(), await clientDigestTimeZone(clientId));
   const deliveryId = digestDelivery.buildDeliveryId(clientId, dateKey);
-  const [delivery, breaker] = await Promise.all([
+  const [delivery, breaker, configSnap] = await Promise.all([
     digestDelivery.getDelivery(deliveryId),
     digestBreaker.getBreakerState(clientId),
+    // Cron stamps (lastCronRefresh*/lastCronSend*, written by stampCronRun)
+    // aren't part of getDigestConfig's curated shape — read the raw doc
+    // directly rather than widen that shared contract for an operator-panel-
+    // only need.
+    fb.adminDb.collection('digest_config').doc(clientId).get(),
   ]);
+  const raw = configSnap.exists ? (configSnap.data() || {}) : {};
   return json({
     ok: true,
     clientId,
@@ -174,6 +180,8 @@ async function handleStatus(body) {
         }
       : null,
     breaker,
+    lastRefresh: { at: raw.lastCronRefreshAt || null, status: raw.lastCronRefreshStatus || null, reason: raw.lastCronRefreshReason || null },
+    lastSend: { at: raw.lastCronSendAt || null, status: raw.lastCronSendStatus || null, reason: raw.lastCronSendReason || null },
   });
 }
 
