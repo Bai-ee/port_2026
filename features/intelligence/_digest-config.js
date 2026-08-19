@@ -11,6 +11,7 @@ const {
   getMarketInsightPlatformState,
 } = require('./_market-insight-platform-state.js');
 const { SECTIONS } = require('../email-digest/sections.registry.cjs');
+const { computeNextRunAt } = require('../email-digest/scheduler.cjs');
 
 // Aggregation toggles — EVERY rendered section of the email is individually
 // on/off here. Each key maps to exactly one section in the digest route's
@@ -224,6 +225,7 @@ const DEFAULTS = {
   autoPublish: { ...DEFAULT_AUTO_PUBLISH },
   dailyVideo: { ...DEFAULT_DAILY_VIDEO },
   schedule: { ...DEFAULT_SCHEDULE },
+  nextRunAt: null,         // ms epoch of this client's next scheduled occurrence, or null when not enrolled. Set here on every schedule save (computeNextRunAt); advanced by the dispatch route's atomic claim, never by the config-save path.
   briefLinkMode: DEFAULT_BRIEF_LINK_MODE, // how the Executive Brief link resolves
   contactUrl: '',          // "Contact Your Human" CTA target (Calendly etc.); env DIGEST_CONTACT_URL is the fallback
   autoPostX: true,         // on a REAL send, queue the suggested x_post to the social-posting system. Default ON (as-built); off = skip.
@@ -349,6 +351,62 @@ async function listCronEnrolledClientIds() {
   }
 }
 
+// Enrolled clients whose next scheduled occurrence is due (nextRunAt <= now),
+// most-overdue first. A null nextRunAt on an otherwise-enrolled client counts
+// as due too — covers a client enrolled before this field existed, or any
+// other gap, without a separate backfill migration: the claim step computes
+// a real value for it the same way it would for a normal due client.
+async function listDueClientIds(now = Date.now()) {
+  try {
+    const snap = await fb.adminDb.collection('digest_config').limit(500).get();
+    const rows = [];
+    snap.forEach((doc) => {
+      const data = doc.data() || {};
+      const schedule = normalizeSchedule(data.schedule);
+      if (!isCronEnrolled(schedule)) return;
+      const nextRunAt = typeof data.nextRunAt === 'number' && Number.isFinite(data.nextRunAt) ? data.nextRunAt : null;
+      if (nextRunAt !== null && nextRunAt > now) return; // not due yet
+      rows.push({ id: doc.id, nextRunAt: nextRunAt ?? -Infinity });
+    });
+    rows.sort((a, b) => a.nextRunAt - b.nextRunAt || a.id.localeCompare(b.id));
+    return rows.map((r) => r.id);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Atomically claim `clientId`'s due occurrence: iff its schedule is still
+ * enrolled and its stored nextRunAt is still due (<= now) at transaction
+ * time, advance nextRunAt to computeNextRunAt(schedule, now) and report the
+ * claim as won. Two dispatchers racing on the same client can never both
+ * win — Firestore transactions serialize the read-check-write. Advancing
+ * relative to `now` (not the old nextRunAt) is what makes a severely
+ * overdue occurrence fire exactly once rather than burst a backlog — see
+ * scheduler.cjs's computeNextRunAt doc comment.
+ */
+async function claimDueOccurrence(clientId, now = Date.now()) {
+  if (!clientId) return { claimed: false, reason: 'missing clientId' };
+  try {
+    const ref = configDocRef(clientId);
+    return await fb.adminDb.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const data = snap.exists ? (snap.data() || {}) : {};
+      const schedule = normalizeSchedule(data.schedule);
+      if (!isCronEnrolled(schedule)) return { claimed: false, reason: 'not enrolled' };
+      const storedNextRunAt = typeof data.nextRunAt === 'number' && Number.isFinite(data.nextRunAt) ? data.nextRunAt : null;
+      if (storedNextRunAt !== null && storedNextRunAt > now) return { claimed: false, reason: 'not due' };
+      const claimedNextRunAt = storedNextRunAt; // the occurrence this claim is FOR
+      const advancedNextRunAt = computeNextRunAt(schedule, now);
+      tx.set(ref, { nextRunAt: advancedNextRunAt }, { merge: true });
+      return { claimed: true, schedule, claimedNextRunAt, advancedNextRunAt };
+    });
+  } catch (err) {
+    // Fail closed — an unverifiable claim must never be treated as won.
+    return { claimed: false, reason: err.message };
+  }
+}
+
 // One-time, idempotent: with the opt-in default flip, every existing config that
 // was saved daily-on would otherwise auto-enroll. Turn them all OFF except the
 // home client, so daily runs become explicit opt-in. Guarded by a flag doc so it
@@ -399,6 +457,7 @@ async function getDigestConfig(clientId) {
     autoPublish: normalizeAutoPublish(data.autoPublish),
     dailyVideo: normalizeDailyVideo(data.dailyVideo),
     schedule: normalizeSchedule(data.schedule),
+    nextRunAt: typeof data.nextRunAt === 'number' && Number.isFinite(data.nextRunAt) ? data.nextRunAt : null,
     briefLinkMode: normalizeBriefLinkMode(data.briefLinkMode),
     contactUrl: typeof data.contactUrl === 'string' ? data.contactUrl : '',
     autoPostX: data.autoPostX !== false,
@@ -424,7 +483,15 @@ async function saveDigestConfig(clientId, patch = {}) {
   if ('postPlatforms' in patch) next.postPlatforms = normalizePostPlatforms(patch.postPlatforms);
   if ('autoPublish' in patch) next.autoPublish = normalizeAutoPublish(patch.autoPublish);
   if ('dailyVideo' in patch) next.dailyVideo = normalizeDailyVideo(patch.dailyVideo);
-  if ('schedule' in patch) next.schedule = normalizeSchedule(patch.schedule);
+  if ('schedule' in patch) {
+    next.schedule = normalizeSchedule(patch.schedule);
+    // Recomputed on every schedule save so nextRunAt can never go stale
+    // against the schedule an admin just set — null when the new schedule
+    // is disabled/off, matching isCronEnrolled's own gate exactly (both read
+    // the same normalized schedule). The dispatch route is the only other
+    // writer, advancing this same field atomically on claim.
+    next.nextRunAt = computeNextRunAt(next.schedule, Date.now());
+  }
   if ('briefLinkMode' in patch) next.briefLinkMode = normalizeBriefLinkMode(patch.briefLinkMode);
   if (typeof patch.contactUrl === 'string') next.contactUrl = patch.contactUrl.trim().slice(0, 500);
   if (typeof patch.autoPostX === 'boolean') next.autoPostX = patch.autoPostX;
@@ -570,6 +637,8 @@ module.exports = {
   isCronEnrolled,
   listCronEnrolledClientIds,
   listCronEnrolledClientIdsByStaleness,
+  listDueClientIds,
+  claimDueOccurrence,
   stampCronRun,
   ensureDailyOptInMigration,
   getMarketInsightPlatformState,

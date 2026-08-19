@@ -121,9 +121,11 @@ class Query {
     return rows.slice(0, this._limit);
   }
   async get() {
-    return {
-      docs: this._rows().map(({ id, data }) => snapshot(new DocRef(this._store, this._collection, id), data)),
-    };
+    const docs = this._rows().map(({ id, data }) => snapshot(new DocRef(this._store, this._collection, id), data));
+    // Real Firestore's QuerySnapshot exposes both .docs and .forEach() —
+    // added here for _digest-config.js's collection-scan helpers
+    // (listCronEnrolledClientIds-style), which call snap.forEach directly.
+    return { docs, forEach: (fn) => docs.forEach(fn) };
   }
 }
 
