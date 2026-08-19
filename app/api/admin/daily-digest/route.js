@@ -24,6 +24,7 @@ import {
   buildEmailHtml,
   buildPlaceholderData,
 } from '../../../../features/email-digest/render.js';
+import { SECTIONS } from '../../../../features/email-digest/sections.registry.cjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -1780,12 +1781,13 @@ export async function GET(request) {
       // Reuse the up-front list (recompute only if homeClientId was just resolved).
       const briefIds = briefClientIds.length ? briefClientIds : [...new Set([homeClientId, ...(cfg.includeClientIds || [])].filter(Boolean))];
 
-      // The brief fetch powers every Market Signals item + weather + follower
-      // posts — fetch if ANY brief-derived section is enabled.
-      const needBrief = [
-        'humanBrief', 'opportunities', 'suggestedReplies', 'signals', 'watchlistAccounts', 'suggestedPosts',
-        'planPreview', 'watchlist', 'redditAnalysis', 'instagramAnalysis', 'xMarketTalk', 'followerPosts', 'weather',
-      ].some((k) => include[k] !== false);
+      // The brief fetch powers every Market Signals item + weather (both read
+      // `briefs` in render.js's RENDER map) — fetch if ANY brief-derived
+      // section is enabled. Derived from the registry's renderGroup field
+      // rather than a hand-maintained list: a hardcoded list here previously
+      // went stale (missing pressCoverage/opportunitySignals, added after
+      // this gate was written — found during the Phase 2 audit, 2026-08-19).
+      const needBrief = SECTIONS.some((s) => (s.key === 'weather' || s.renderGroup === 'marketSignals') && include[s.key] !== false);
       if (needBrief) {
         briefs = (await Promise.all(briefIds.map((cid) => briefIntel.getBriefForClient(cid)))).filter(Boolean);
       }
