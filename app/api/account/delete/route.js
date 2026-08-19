@@ -64,12 +64,11 @@ export async function POST(request) {
     errors.push({ step: 'audit_log', message: err?.message || String(err) });
   }
 
-  // 0b. Re-signup blocklist: bar this email from signing up again (the
-  // reusable test account is cleared instead — see deleted-accounts.cjs).
+  // 0b. Deleted-account audit history. This never blocks future signup.
   try {
     await recordDeletedAccount({ email, uid, clientId });
   } catch (err) {
-    errors.push({ step: 'resignup_blocklist', message: err?.message || String(err) });
+    errors.push({ step: 'deleted_account_history', message: err?.message || String(err) });
   }
 
   // 1. Storage: delete everything under clients/{clientId}/

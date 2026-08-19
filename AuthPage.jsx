@@ -4,7 +4,7 @@ import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Globe, Lock } from 'lucide-react';
-import { useAuth, NEW_USER_SIGNIN_ERROR, DELETED_ACCOUNT_ERROR, DELETED_ACCOUNT_MESSAGE } from './AuthContext';
+import { useAuth, NEW_USER_SIGNIN_ERROR } from './AuthContext';
 import InternalPageBackground from './InternalPageBackground';
 import { internalPageGlassCardStyle } from './pageSurfaceSystem';
 import { trackSignIn, trackSignUp } from '@/lib/analytics';
@@ -40,18 +40,6 @@ const AuthPageInner = () => {
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  // Blocklisted-email signup attempt — top-center toast, auto-dismisses.
-  const [deletedAccountToast, setDeletedAccountToast] = useState(false);
-
-  useEffect(() => {
-    if (!deletedAccountToast) return undefined;
-    const t = setTimeout(() => setDeletedAccountToast(false), 8000);
-    return () => clearTimeout(t);
-  }, [deletedAccountToast]);
-
-  const isDeletedAccountError = (err) => (
-    err?.code === DELETED_ACCOUNT_ERROR || err?.message === DELETED_ACCOUNT_MESSAGE
-  );
   const [isHomepageCreate, setIsHomepageCreate] = useState(false);
   // True when the homepage entry was an email (not a website/idea) — lets signup
   // proceed straight to email+password+Google; the website is collected later by
@@ -183,10 +171,6 @@ const AuthPageInner = () => {
       router.replace(redirectPath);
     } catch (nextError) {
       if (mode === 'create') clearPendingDashboardSignup();
-      if (isDeletedAccountError(nextError)) {
-        setDeletedAccountToast(true);
-        return;
-      }
       setError(nextError?.message || 'Authentication failed.');
     } finally {
       setSubmitting(false);
@@ -227,10 +211,6 @@ const AuthPageInner = () => {
         return;
       }
       if (mode === 'create') clearPendingDashboardSignup();
-      if (isDeletedAccountError(nextError)) {
-        setDeletedAccountToast(true);
-        return;
-      }
       setError(nextError?.message || 'Authentication failed.');
     } finally {
       setSubmitting(false);
@@ -329,48 +309,6 @@ const AuthPageInner = () => {
         }
       `}</style>
       <div id="auth-gradient-overlay" style={gradientStyle} />
-
-      {deletedAccountToast ? (
-        <div
-          id="deleted-account-toast"
-          role="alert"
-          aria-live="assertive"
-          style={{
-            position: 'fixed',
-            top: '1rem',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 10000,
-            maxWidth: 'min(24rem, calc(100vw - 2rem))',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.6rem',
-            padding: '0.75rem 1rem',
-            borderRadius: '10px',
-            background: 'rgba(255, 250, 248, 0.94)',
-            backdropFilter: 'blur(10px)',
-            WebkitBackdropFilter: 'blur(10px)',
-            border: '1px solid rgba(215, 25, 33, 0.32)',
-            boxShadow: '0px 5px 10px rgba(0, 0, 0, 0.1), 0px 15px 30px rgba(0, 0, 0, 0.12)',
-            fontFamily: '"Space Mono", monospace',
-            fontSize: '0.72rem',
-            lineHeight: 1.4,
-            letterSpacing: '0.02em',
-            color: 'rgba(150, 22, 28, 0.92)',
-          }}
-        >
-          <span
-            style={{
-              flexShrink: 0,
-              width: '0.5rem',
-              height: '0.5rem',
-              borderRadius: '999px',
-              background: '#d71921',
-            }}
-          />
-          <span>{DELETED_ACCOUNT_MESSAGE}</span>
-        </div>
-      ) : null}
 
       <div id="auth-card" style={{ ...cardStyle, maxWidth: '30rem' }}>
         <div id="auth-brand-row" style={brandStyle}>
