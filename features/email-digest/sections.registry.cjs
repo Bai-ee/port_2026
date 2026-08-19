@@ -19,9 +19,9 @@
 //
 // Field meaning:
 //   key          INCLUDE_KEYS entry / render dispatch key / order key.
-//   uiLabel      AdminEmailModals SETTINGS-tab row label. null = no UI row
-//                exists for this key today (see opportunitySignals below —
-//                a pre-existing gap, not introduced by this registry).
+//   uiLabel      AdminEmailModals SETTINGS-tab row label. Every key has one
+//                as of 2026-08-19 (opportunitySignals previously had none —
+//                a pre-existing gap, fixed alongside Phase 3).
 //   uiHint       AdminEmailModals row description. null when uiLabel is null.
 //   uiGroup      AdminEmailModals SECTION_GROUPS group label. null when
 //                uiLabel is null.
@@ -61,18 +61,13 @@ const SECTIONS = [
   { key: 'videoPromo', uiLabel: 'Video Promo Post', uiHint: 'Latest Video Promo (mockup) + X post', uiGroup: 'Post Content', relatedCardId: null, platformIcon: null, renderGroup: 'postContent', defaultOn: true, orderable: true, uiOrder: 4 },
   { key: 'agenda', uiLabel: 'Calendar Agenda', uiHint: 'Up to 5 days of events', uiGroup: 'Top of email', relatedCardId: 'calendar-connect', platformIcon: null, renderGroup: 'topOfEmail', defaultOn: true, orderable: true, uiOrder: 0 },
   { key: 'weather', uiLabel: 'Weather', uiHint: 'Local forecast (today + 3-day)', uiGroup: 'Top of email', relatedCardId: null, platformIcon: null, renderGroup: 'topOfEmail', defaultOn: true, orderable: true, uiOrder: 1 },
-  { key: 'followerPosts', uiLabel: 'Follower Posts', uiHint: '1 post from each followed handle', uiGroup: 'Market Signals brief', relatedCardId: 'signals', platformIcon: null, renderGroup: 'marketSignals', defaultOn: true, orderable: true, uiOrder: 19 },
+  { key: 'followerPosts', uiLabel: 'Follower Posts', uiHint: '1 post from each followed handle', uiGroup: 'Market Signals brief', relatedCardId: 'signals', platformIcon: null, renderGroup: 'marketSignals', defaultOn: true, orderable: true, uiOrder: 20 },
   { key: 'watchlist', uiLabel: 'Happening on X', uiHint: 'Watchlist analysis', uiGroup: 'Market Signals brief', relatedCardId: 'signals', platformIcon: 'x', renderGroup: 'marketSignals', defaultOn: false, orderable: true, uiOrder: 15 },
   { key: 'redditAnalysis', uiLabel: 'Happening on Reddit', uiHint: 'Reddit platform analysis', uiGroup: 'Market Signals brief', relatedCardId: 'signals', platformIcon: 'reddit', renderGroup: 'marketSignals', defaultOn: false, orderable: true, uiOrder: 16 },
   { key: 'instagramAnalysis', uiLabel: 'Happening on Instagram', uiHint: 'Instagram platform analysis', uiGroup: 'Market Signals brief', relatedCardId: 'signals', platformIcon: 'instagram', renderGroup: 'marketSignals', defaultOn: false, orderable: true, uiOrder: 17 },
   { key: 'xMarketTalk', uiLabel: 'Market Talk on X', uiHint: 'What the market is saying about you on X — a brand-handle search. Paid X API; runs on Generate & Send only.', uiGroup: 'Market Signals brief', relatedCardId: 'signals', platformIcon: 'x', renderGroup: 'marketSignals', defaultOn: false, orderable: true, uiOrder: 18 },
-  // Pre-existing gap, NOT introduced here: opportunitySignals has always been
-  // a real INCLUDE_KEY / render-dispatch member with no AdminEmailModals UI
-  // row — an admin cannot toggle this specific section from the SETTINGS tab
-  // today. Preserved exactly as-is; fixing it is a separate, out-of-scope
-  // product decision.
-  { key: 'opportunitySignals', uiLabel: null, uiHint: null, uiGroup: null, relatedCardId: null, platformIcon: null, renderGroup: 'marketSignals', defaultOn: false, orderable: true, uiOrder: null },
-  { key: 'creativeBrief', uiLabel: 'Creative cover', uiHint: 'Creative assets of the day', uiGroup: 'Creative brief', relatedCardId: 'onboarding-brief', platformIcon: null, renderGroup: 'creative', defaultOn: false, orderable: true, uiOrder: 20 },
+  { key: 'opportunitySignals', uiLabel: 'Opportunity Signals', uiHint: 'Public buying-signal opportunities scan — trigger, problem, and response angle per match', uiGroup: 'Market Signals brief', relatedCardId: 'signals', platformIcon: null, renderGroup: 'marketSignals', defaultOn: false, orderable: true, uiOrder: 19 },
+  { key: 'creativeBrief', uiLabel: 'Creative cover', uiHint: 'Creative assets of the day', uiGroup: 'Creative brief', relatedCardId: 'onboarding-brief', platformIcon: null, renderGroup: 'creative', defaultOn: false, orderable: true, uiOrder: 21 },
   { key: 'humanBrief', uiLabel: 'Human Brief', uiHint: 'The strategist’s opening blurb', uiGroup: 'Market Signals brief', relatedCardId: 'signals', platformIcon: null, renderGroup: 'marketSignals', defaultOn: false, orderable: true, uiOrder: 7 },
   { key: 'opportunities', uiLabel: 'Post Opportunities', uiHint: 'Conversation / angle to enter', uiGroup: 'Market Signals brief', relatedCardId: 'signals', platformIcon: null, renderGroup: 'marketSignals', defaultOn: false, orderable: true, uiOrder: 8 },
   { key: 'suggestedReplies', uiLabel: 'Suggested Replies', uiHint: 'Drafted reply per opportunity', uiGroup: 'Market Signals brief', relatedCardId: 'signals', platformIcon: null, renderGroup: 'marketSignals', defaultOn: true, orderable: true, uiOrder: 9 },
@@ -81,17 +76,17 @@ const SECTIONS = [
   { key: 'watchlistAccounts', uiLabel: 'Watchlist Accounts', uiHint: 'Tracked accounts, name-for-name', uiGroup: 'Market Signals brief', relatedCardId: 'signals', platformIcon: null, renderGroup: 'marketSignals', defaultOn: false, orderable: true, uiOrder: 12 },
   { key: 'suggestedPosts', uiLabel: 'Suggested Posts', uiHint: 'Drafted posts for today', uiGroup: 'Market Signals brief', relatedCardId: 'signals', platformIcon: null, renderGroup: 'marketSignals', defaultOn: false, orderable: true, uiOrder: 13 },
   { key: 'planPreview', uiLabel: '30-Day Plan', uiHint: 'Upcoming scheduled posts', uiGroup: 'Market Signals brief', relatedCardId: 'signals', platformIcon: null, renderGroup: 'marketSignals', defaultOn: false, orderable: true, uiOrder: 14 },
-  { key: 'platformOverview', uiLabel: 'Platform Overview', uiHint: 'Sign-ups, users, dashboards', uiGroup: 'Platform', relatedCardId: null, platformIcon: null, renderGroup: 'platform', defaultOn: false, orderable: true, uiOrder: 26 },
-  { key: 'ga4Traffic', uiLabel: 'GA4 Traffic', uiHint: 'Sessions, views, bounce', uiGroup: 'Web Performance', relatedCardId: null, platformIcon: null, renderGroup: 'webPerf', defaultOn: false, orderable: true, uiOrder: 21 },
-  { key: 'topPages', uiLabel: 'Top Pages', uiHint: 'Most-viewed pages', uiGroup: 'Web Performance', relatedCardId: null, platformIcon: null, renderGroup: 'webPerf', defaultOn: false, orderable: true, uiOrder: 22 },
-  { key: 'trafficSources', uiLabel: 'Traffic Sources', uiHint: 'Source / medium', uiGroup: 'Web Performance', relatedCardId: null, platformIcon: null, renderGroup: 'webPerf', defaultOn: false, orderable: true, uiOrder: 23 },
-  { key: 'keyEvents', uiLabel: 'Key Events', uiHint: 'Tracked GA4 events', uiGroup: 'Web Performance', relatedCardId: null, platformIcon: null, renderGroup: 'webPerf', defaultOn: false, orderable: true, uiOrder: 24 },
-  { key: 'homepage', uiLabel: 'Homepage Activity', uiHint: 'Clicks, scroll, web vitals', uiGroup: 'Web Performance', relatedCardId: null, platformIcon: null, renderGroup: 'webPerf', defaultOn: false, orderable: true, uiOrder: 25 },
-  { key: 'signups', uiLabel: 'New Sign-ups', uiHint: 'Recent user table', uiGroup: 'Platform', relatedCardId: null, platformIcon: null, renderGroup: 'platform', defaultOn: true, orderable: true, uiOrder: 27 },
-  { key: 'dashboards', uiLabel: 'Dashboards', uiHint: 'Recent brief runs', uiGroup: 'Platform', relatedCardId: null, platformIcon: null, renderGroup: 'platform', defaultOn: false, orderable: true, uiOrder: 28 },
-  { key: 'pipeline', uiLabel: 'Pipeline Status', uiHint: 'Run status breakdown', uiGroup: 'Platform', relatedCardId: null, platformIcon: null, renderGroup: 'platform', defaultOn: false, orderable: true, uiOrder: 29 },
-  { key: 'deployments', uiLabel: 'Deployments', uiHint: 'Vercel deploys', uiGroup: 'Deployments', relatedCardId: null, platformIcon: null, renderGroup: 'ops', defaultOn: false, orderable: true, uiOrder: 30 },
-  { key: 'runtimeErrors', uiLabel: 'Runtime Errors', uiHint: 'Vercel error logs', uiGroup: 'Deployments', relatedCardId: null, platformIcon: null, renderGroup: 'ops', defaultOn: false, orderable: true, uiOrder: 31 },
+  { key: 'platformOverview', uiLabel: 'Platform Overview', uiHint: 'Sign-ups, users, dashboards', uiGroup: 'Platform', relatedCardId: null, platformIcon: null, renderGroup: 'platform', defaultOn: false, orderable: true, uiOrder: 27 },
+  { key: 'ga4Traffic', uiLabel: 'GA4 Traffic', uiHint: 'Sessions, views, bounce', uiGroup: 'Web Performance', relatedCardId: null, platformIcon: null, renderGroup: 'webPerf', defaultOn: false, orderable: true, uiOrder: 22 },
+  { key: 'topPages', uiLabel: 'Top Pages', uiHint: 'Most-viewed pages', uiGroup: 'Web Performance', relatedCardId: null, platformIcon: null, renderGroup: 'webPerf', defaultOn: false, orderable: true, uiOrder: 23 },
+  { key: 'trafficSources', uiLabel: 'Traffic Sources', uiHint: 'Source / medium', uiGroup: 'Web Performance', relatedCardId: null, platformIcon: null, renderGroup: 'webPerf', defaultOn: false, orderable: true, uiOrder: 24 },
+  { key: 'keyEvents', uiLabel: 'Key Events', uiHint: 'Tracked GA4 events', uiGroup: 'Web Performance', relatedCardId: null, platformIcon: null, renderGroup: 'webPerf', defaultOn: false, orderable: true, uiOrder: 25 },
+  { key: 'homepage', uiLabel: 'Homepage Activity', uiHint: 'Clicks, scroll, web vitals', uiGroup: 'Web Performance', relatedCardId: null, platformIcon: null, renderGroup: 'webPerf', defaultOn: false, orderable: true, uiOrder: 26 },
+  { key: 'signups', uiLabel: 'New Sign-ups', uiHint: 'Recent user table', uiGroup: 'Platform', relatedCardId: null, platformIcon: null, renderGroup: 'platform', defaultOn: true, orderable: true, uiOrder: 28 },
+  { key: 'dashboards', uiLabel: 'Dashboards', uiHint: 'Recent brief runs', uiGroup: 'Platform', relatedCardId: null, platformIcon: null, renderGroup: 'platform', defaultOn: false, orderable: true, uiOrder: 29 },
+  { key: 'pipeline', uiLabel: 'Pipeline Status', uiHint: 'Run status breakdown', uiGroup: 'Platform', relatedCardId: null, platformIcon: null, renderGroup: 'platform', defaultOn: false, orderable: true, uiOrder: 30 },
+  { key: 'deployments', uiLabel: 'Deployments', uiHint: 'Vercel deploys', uiGroup: 'Deployments', relatedCardId: null, platformIcon: null, renderGroup: 'ops', defaultOn: false, orderable: true, uiOrder: 31 },
+  { key: 'runtimeErrors', uiLabel: 'Runtime Errors', uiHint: 'Vercel error logs', uiGroup: 'Deployments', relatedCardId: null, platformIcon: null, renderGroup: 'ops', defaultOn: false, orderable: true, uiOrder: 32 },
 ];
 
 // UI group presentation sequence (Top of email, Executive Summary, Post
