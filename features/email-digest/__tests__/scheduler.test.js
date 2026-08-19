@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { computeNextRunAt, getZonedParts, getTzOffsetMinutes } from '../scheduler.js';
+import { computeNextRunAt, getZonedParts, getTzOffsetMinutes } from '../scheduler.cjs';
 
 const TZ = 'America/Chicago';
 const DAY_MS = 24 * 60 * 60 * 1000;

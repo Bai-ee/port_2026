@@ -1,8 +1,14 @@
-// scheduler.js — pure per-client send-time computation for the email digest
+'use strict';
+
+// scheduler.cjs — pure per-client send-time computation for the email digest
 // (EMAIL-REBUILD-PLAN.md Phase 3, owner decision: real per-client hours,
 // GitHub-Actions dispatcher, hour precision). No I/O, no Firestore, no
-// Next-specific imports — safe to unit-test directly and safe to import from
-// the worker dispatch route.
+// Next-specific imports. Plain CJS (like sections.registry.cjs) rather than
+// ESM specifically so _digest-config.js (CJS) can require() it directly —
+// require() cannot load an ESM module, but ESM can import a CJS one (Next/
+// Node both interop that direction transparently), so CJS is the format that
+// works from every consumer: _digest-config.js, the ESM dispatch route, and
+// this module's own ESM test file.
 //
 // `schedule` is the existing normalizeSchedule() shape from
 // features/intelligence/_digest-config.js: { enabled, frequency, sendHour,
@@ -105,4 +111,4 @@ function computeNextRunAt(schedule, now = Date.now()) {
   return candidateUtc;
 }
 
-export { computeNextRunAt, getZonedParts, getTzOffsetMinutes, zonedTimeToUtc, addCalendarDays };
+module.exports = { computeNextRunAt, getZonedParts, getTzOffsetMinutes, zonedTimeToUtc, addCalendarDays };
