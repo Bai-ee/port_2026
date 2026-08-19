@@ -12,6 +12,7 @@
 // public/docs/dashboard-modal-component-style-guide.html.
 
 import React, { useCallback, useEffect, useState } from 'react';
+import { SECTIONS, UI_GROUP_ORDER } from '../features/email-digest/sections.registry.cjs';
 
 async function authFetch(user, path, options = {}) {
   const token = await user.getIdToken();
@@ -29,65 +30,29 @@ async function authFetch(user, path, options = {}) {
 }
 
 // Granular email section toggles, grouped. Each entry is
-// [include key, card title, card description, customize cardId]. One key = one
-// rendered section in the digest's buildEmailHtml, so the EMAIL PREVIEW and the
-// sent email match. The 4th element opens the dashboard card that owns that
-// section's own settings (null = no card). Creative Brief is opt-in (off).
-// Grouped by the brief each section belongs to — mirrors the email's top-down
-// order (STAND UP: agenda/weather context → executive summary → one section per
-// brief). Each entry: [include key, card title, description, customize cardId].
-const SECTION_GROUPS = [
-  ['Top of email', [
-    ['agenda', 'Calendar Agenda', 'Up to 5 days of events', 'calendar-connect'],
-    ['weather', 'Weather', 'Local forecast (today + 3-day)', null],
-  ]],
-  ['Executive Summary', [
-    ['execSummary', 'Executive summary', 'The “Today” callout summary', null],
-  ]],
-  ['Post Content', [
-    ['videoPosts', 'Video Remix Post', 'Latest remix video + X promo post', 'video-remix'],
-    ['videoPromo', 'Video Promo Post', 'Latest Video Promo (mockup) + X post', null],
-  ]],
-  ['Call to action', [
-    ['execBriefLink', 'Executive Brief link', 'The “Open Executive Brief” button', null],
-    ['contactHuman', 'Contact Your Human', 'CTA → your booking link (Calendly)', null],
-  ]],
-  ['Market Signals brief', [
-    ['humanBrief', 'Human Brief', 'The strategist’s opening blurb', 'signals'],
-    ['opportunities', 'Post Opportunities', 'Conversation / angle to enter', 'signals'],
-    ['suggestedReplies', 'Suggested Replies', 'Drafted reply per opportunity', 'signals'],
-    ['signals', 'Signals', 'KOLs, competitors, narratives', 'signals'],
-    ['pressCoverage', 'Press Coverage', 'Articles about you, competitors, or the category — each with a working link', 'signals'],
-    ['watchlistAccounts', 'Watchlist Accounts', 'Tracked accounts, name-for-name', 'signals'],
-    ['suggestedPosts', 'Suggested Posts', 'Drafted posts for today', 'signals'],
-    ['planPreview', '30-Day Plan', 'Upcoming scheduled posts', 'signals'],
-    ['watchlist', 'Happening on X', 'Watchlist analysis', 'signals', 'x'],
-    ['redditAnalysis', 'Happening on Reddit', 'Reddit platform analysis', 'signals', 'reddit'],
-    ['instagramAnalysis', 'Happening on Instagram', 'Instagram platform analysis', 'signals', 'instagram'],
-    ['xMarketTalk', 'Market Talk on X', 'What the market is saying about you on X — a brand-handle search. Paid X API; runs on Generate & Send only.', 'signals', 'x'],
-    ['followerPosts', 'Follower Posts', '1 post from each followed handle', 'signals'],
-  ]],
-  ['Creative brief', [
-    ['creativeBrief', 'Creative cover', 'Creative assets of the day', 'onboarding-brief'],
-  ]],
-  ['Web Performance', [
-    ['ga4Traffic', 'GA4 Traffic', 'Sessions, views, bounce', null],
-    ['topPages', 'Top Pages', 'Most-viewed pages', null],
-    ['trafficSources', 'Traffic Sources', 'Source / medium', null],
-    ['keyEvents', 'Key Events', 'Tracked GA4 events', null],
-    ['homepage', 'Homepage Activity', 'Clicks, scroll, web vitals', null],
-  ]],
-  ['Platform', [
-    ['platformOverview', 'Platform Overview', 'Sign-ups, users, dashboards', null],
-    ['signups', 'New Sign-ups', 'Recent user table', null],
-    ['dashboards', 'Dashboards', 'Recent brief runs', null],
-    ['pipeline', 'Pipeline Status', 'Run status breakdown', null],
-  ]],
-  ['Deployments', [
-    ['deployments', 'Deployments', 'Vercel deploys', null],
-    ['runtimeErrors', 'Runtime Errors', 'Vercel error logs', null],
-  ]],
-];
+// [include key, card title, card description, customize cardId, platformIcon?].
+// One key = one rendered section in the digest's render.js buildEmailHtml, so
+// the EMAIL PREVIEW and the sent email match. The 4th element opens the
+// dashboard card that owns that section's own settings (null = no card).
+// Creative Brief is opt-in (off). Grouped by the brief each section belongs
+// to — mirrors the email's top-down order.
+//
+// Derived from the single section registry (features/email-digest/
+// sections.registry.cjs) — a plain-data CJS module with zero requires, safe
+// to import into this client component (unlike _digest-config.js, which
+// requires firebase-admin.cjs and can never be imported client-side). Add,
+// remove, relabel, or reorder a row there, not here. Group/row order comes
+// from the registry's UI_GROUP_ORDER + each row's uiOrder — genuinely
+// different from the registry's own array order (which is INCLUDE_KEYS
+// order, load-bearing for the email's default render order) — see the
+// uiOrder field doc comment in sections.registry.cjs.
+const SECTION_GROUPS = UI_GROUP_ORDER.map((groupLabel) => [
+  groupLabel,
+  SECTIONS
+    .filter((s) => s.uiGroup === groupLabel)
+    .sort((a, b) => a.uiOrder - b.uiOrder)
+    .map((s) => [s.key, s.uiLabel, s.uiHint, s.relatedCardId, s.platformIcon]),
+]);
 const ALL_SECTION_KEYS = SECTION_GROUPS.flatMap(([, items]) => items.map(([k]) => k));
 
 // Sections whose data comes from OUR accounts (our GA4 property, our Firestore

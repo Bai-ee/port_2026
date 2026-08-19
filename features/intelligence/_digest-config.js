@@ -10,93 +10,22 @@ const {
   DEFAULT_MARKET_INSIGHT_SOURCE_PLATFORMS,
   getMarketInsightPlatformState,
 } = require('./_market-insight-platform-state.js');
+const { SECTIONS } = require('../email-digest/sections.registry.cjs');
 
 // Aggregation toggles — EVERY rendered section of the email is individually
 // on/off here. Each key maps to exactly one section in the digest route's
-// buildEmailHtml, so the EMAIL PREVIEW and the actual sent email hide/show
-// identically (no data-presence gating). Default ON (except creativeBrief).
-const INCLUDE_KEYS = [
-  'execBriefLink',    // "Open Executive Brief" CTA button (top + footer)
-  'contactHuman',     // "Contact Your Human" CTA button (opens contactUrl / Calendly)
-  'execSummary',      // LLM executive-summary paragraph
-  'videoPosts',       // Video Remix "Post content" row (video + X promo post)
-  'videoPromo',       // Video Promo (Mockup Studio) "Post content" row
-  'agenda',           // Today's Agenda (calendar)
-  'weather',          // Local weather forecast
-  'followerPosts',    // 1 post from each followed handle
-  'watchlist',        // "Happening on X" watchlist analysis
-  'redditAnalysis',   // "Happening on Reddit" platform analysis
-  'instagramAnalysis',// "Happening on Instagram" platform analysis
-  'xMarketTalk',      // "Market Talk on X" — brand-search analysis (paid X API)
-  'opportunitySignals', // Opportunity Signals — public buying-signal scan
-  'creativeBrief',    // Attached Creative Brief deliverable
-  // Market Signals · Strategic-brief items (each individually toggled)
-  'humanBrief',       // Human brief blurb
-  'opportunities',    // Post opportunities (Conversation / angle)
-  'suggestedReplies', // Suggested replies (drafted reply per opportunity)
-  'signals',          // KOLs / competitors / narratives
-  'pressCoverage',    // Press Coverage — articles about the brand/competitors/category
-  'watchlistAccounts',// Watchlist accounts (name-for-name)
-  'suggestedPosts',   // Suggested posts
-  'planPreview',      // 30-day plan preview
-  'platformOverview', // Platform Overview stat cells
-  'ga4Traffic',       // GA4 Traffic overview
-  'topPages',         // GA4 Top Pages
-  'trafficSources',   // GA4 Traffic Sources
-  'keyEvents',        // GA4 Key Events
-  'homepage',         // Homepage interaction analytics
-  'signups',          // Firebase New Sign-ups table
-  'dashboards',       // Firebase Dashboards table
-  'pipeline',         // Firebase Pipeline Status
-  'deployments',      // Vercel Deployments
-  'runtimeErrors',    // Vercel Runtime Errors
-];
+// render.js buildEmailHtml, so the EMAIL PREVIEW and the actual sent email
+// hide/show identically (no data-presence gating). Derived from the single
+// section registry (features/email-digest/sections.registry.cjs) — add,
+// remove, or reorder a row there, not here.
+const INCLUDE_KEYS = SECTIONS.map((s) => s.key);
 // Tease-by-default: a NEW config shows the short "tease" core (summary, agenda,
 // new sign-ups, both CTAs) plus post-content video rows. Everything heavier is
 // OFF — the full detail lives in the linked Executive Brief; the admin opts each
 // extra section in.
 // NOTE: only applies to brand-new / missing keys — existing saved configs keep
 // whatever they saved (normalizeInclude overlays saved keys on top of this).
-const DEFAULT_INCLUDE = {
-  execBriefLink: true,
-  contactHuman: true,
-  execSummary: true,
-  agenda: true,
-  weather: true,
-  followerPosts: true,
-  videoPosts: true,
-  videoPromo: true,
-  signups: true,
-  // ── opt-in extras (off by default) ──
-  humanBrief: false,
-  opportunities: false,
-  suggestedReplies: true,
-  signals: false,
-  // ON by default: press coverage is the one strategic-brief item that is
-  // always a real external event (a publication wrote about you), and it is
-  // deliberately absent from LEGACY_INCLUDE_EXPANSION so a legacy coarse
-  // `marketingBrief: false` can never silently switch it off.
-  pressCoverage: true,
-  watchlistAccounts: false,
-  suggestedPosts: false,
-  planPreview: false,
-  watchlist: false,
-  redditAnalysis: false,
-  instagramAnalysis: false,
-  xMarketTalk: false,
-  opportunitySignals: false,
-  creativeBrief: false,
-  platformOverview: false,
-  ga4Traffic: false,
-  topPages: false,
-  trafficSources: false,
-  keyEvents: false,
-  homepage: false,
-  dashboards: false,
-  pipeline: false,
-  deployments: false,
-  runtimeErrors: false,
-};
+const DEFAULT_INCLUDE = Object.fromEntries(SECTIONS.map((s) => [s.key, s.defaultOn]));
 
 // Legacy coarse keys (the pre-granular schema). A saved doc using these expands
 // to the matching granular set so existing configs keep working unchanged.
@@ -126,7 +55,7 @@ const DEFAULT_BRIEF_LINK_MODE = 'fresh';
 // Section order. The admin can shuffle sections up/down WITHIN their group; the
 // email renders each group's items in this saved order. CTAs (execBriefLink /
 // contactHuman) are not part of the section flow, so they're excluded.
-const ORDERABLE_KEYS = INCLUDE_KEYS.filter((k) => !['execBriefLink', 'contactHuman'].includes(k));
+const ORDERABLE_KEYS = SECTIONS.filter((s) => s.orderable).map((s) => s.key);
 const DEFAULT_ORDER = [...ORDERABLE_KEYS];
 
 function normalizeOrder(value) {

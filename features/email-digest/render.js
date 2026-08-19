@@ -3,6 +3,15 @@
 // under plain node --test as well as the Next bundler.
 
 import digestConfig from '../intelligence/_digest-config.js';
+import { SECTIONS } from './sections.registry.cjs';
+
+// Keys belonging to one of render.js's 8 render-dispatch groups, in the
+// registry's own row order. See sections.registry.cjs's `renderGroup` field
+// doc comment — CTAs (execBriefLink/contactHuman) have renderGroup:null and
+// render via the separate ctaRow path, never through this.
+function keysInRenderGroup(id) {
+  return SECTIONS.filter((s) => s.renderGroup === id).map((s) => s.key);
+}
 
 export function appOrigin() {
   // ⚠️ Deliberately NO `VERCEL_URL` fallback: this project runs SSO Deployment
@@ -1102,18 +1111,18 @@ export function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestam
     .map((k) => RENDER[k]())
     .join('');
 
-  const topSections = renderGroup(['agenda', 'weather']);
-  const todaySection = renderGroup(['execSummary']);
-  const postContentSection = renderGroup(['videoPosts', 'videoPromo']);
-  // ⚠️ Hardcoded group membership — a key in INCLUDE_KEYS + RENDER still renders
-  // NOTHING until it is listed here. This is the third hardcoded list a new
-  // digest section has to be added to (INCLUDE_KEYS, the AdminEmailModals
-  // toggle rows, and this group).
-  const marketSignalsSection = renderGroup(['humanBrief', 'opportunities', 'suggestedReplies', 'signals', 'pressCoverage', 'watchlistAccounts', 'suggestedPosts', 'planPreview', 'watchlist', 'redditAnalysis', 'instagramAnalysis', 'xMarketTalk', 'opportunitySignals', 'followerPosts']);
-  const creativeSection = renderGroup(['creativeBrief']);
-  const webPerfSection = renderGroup(['ga4Traffic', 'topPages', 'trafficSources', 'keyEvents', 'homepage']);
-  const platformSection = renderGroup(['platformOverview', 'signups', 'dashboards', 'pipeline']);
-  const opsSection = renderGroup(['deployments', 'runtimeErrors']);
+  // Group membership now comes from the single section registry
+  // (sections.registry.cjs) instead of a hand-maintained literal per group —
+  // a key in the registry with a renderGroup id renders automatically; no
+  // separate list to remember to update.
+  const topSections = renderGroup(keysInRenderGroup('topOfEmail'));
+  const todaySection = renderGroup(keysInRenderGroup('today'));
+  const postContentSection = renderGroup(keysInRenderGroup('postContent'));
+  const marketSignalsSection = renderGroup(keysInRenderGroup('marketSignals'));
+  const creativeSection = renderGroup(keysInRenderGroup('creative'));
+  const webPerfSection = renderGroup(keysInRenderGroup('webPerf'));
+  const platformSection = renderGroup(keysInRenderGroup('platform'));
+  const opsSection = renderGroup(keysInRenderGroup('ops'));
   const freshnessTokenText = String(freshnessToken || '').trim();
   const freshnessSection = freshnessTokenText
     ? dSection('Verification', 'Freshness Token', `<div style="background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:16px 18px;font-family:${DT.fMono};font-size:12px;line-height:1.5;color:${DT.ink};word-break:break-word;">${escapeHtml(freshnessTokenText)}</div>`)
