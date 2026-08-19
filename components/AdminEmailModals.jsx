@@ -145,8 +145,18 @@ function formatDigestSendHour(hour) {
   return `${displayHour}:00 ${period}`;
 }
 
+// Real abbreviation for the CURRENT date, not a hardcoded 'CST' that lies
+// half the year (America/Chicago is CDT roughly March-November). Falls back
+// to the raw IANA string only if Intl can't resolve it (e.g. malformed
+// saved value) — never a wrong-but-plausible-looking abbreviation.
 function digestTimezoneLabel(timezone) {
-  return !timezone || timezone === 'America/Chicago' ? 'CST' : timezone;
+  const tz = timezone || 'America/Chicago';
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'short' }).formatToParts(new Date());
+    return parts.find((p) => p.type === 'timeZoneName')?.value || tz;
+  } catch {
+    return tz;
+  }
 }
 
 // ── Email Digest: SETTINGS (params) + PREVIEW (rendered email + send) ─────────
