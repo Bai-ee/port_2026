@@ -53,10 +53,10 @@ const websiteSchema = {
 // Testimonials surfaced on the homepage. Mirrors StackedSlidesSection's
 // `testimonials` array — if that changes, update here too.
 const REVIEWS = [
-  { quote: 'Transforms ideas into polished, high-impact experiences. Strong across devices, highly responsive, and consistently delivers under pressure.', name: 'Melissa Hsiao', title: 'Industry Lead', company: 'TikTok' },
-  { quote: 'Rare ability to operate across both design and development. Pixel-perfect execution with deep technical ownership across platforms.', name: 'Jeanne Cheung', title: 'Director, Design Management', company: 'HBO Max' },
-  { quote: 'Brings expert-level creative and technical thinking across platforms. Pushes concepts further and executes with precision.', name: 'Eric Farias', title: 'Senior Art Director', company: 'Epsilon' },
-  { quote: "A go-to for complex creative builds across desktop, mobile, and video. Combines technical depth with strong design instincts.", name: "Vanessa D'Amore", title: 'Sr. Product Manager (AI, SaaS, Integrations)', company: 'TST' },
+  { quote: 'Transforms ideas into polished, high-impact experiences. Strong across devices, highly responsive, and consistently delivers under pressure.', name: 'Melissa Hsiao', title: 'Industry Lead', company: 'TikTok', linkedinUrl: 'https://www.linkedin.com/in/melissahsiao/' },
+  { quote: 'Rare ability to operate across both design and development. Pixel-perfect execution with deep technical ownership across platforms.', name: 'Jeanne Cheung', title: 'Director, Design Management', company: 'HBO Max', linkedinUrl: 'https://www.linkedin.com/in/jeannecheung/' },
+  { quote: 'Brings expert-level creative and technical thinking across platforms. Pushes concepts further and executes with precision.', name: 'Eric Farias', title: 'Senior Art Director', company: 'Epsilon', linkedinUrl: 'https://www.linkedin.com/in/ericfarias/' },
+  { quote: "A go-to for complex creative builds across desktop, mobile, and video. Combines technical depth with strong design instincts.", name: "Vanessa D'Amore", title: 'Sr. Product Manager (AI, SaaS, Integrations)', company: 'TST', linkedinUrl: 'https://www.linkedin.com/in/vdamore/' },
 ];
 
 const reviewSchemas = REVIEWS.map((r, i) => ({
@@ -69,6 +69,7 @@ const reviewSchemas = REVIEWS.map((r, i) => ({
     name: r.name,
     jobTitle: r.title,
     worksFor: { '@type': 'Organization', name: r.company },
+    sameAs: [r.linkedinUrl],
   },
   itemReviewed: { '@id': `${SITE_URL}#bryan-balli` },
   reviewRating: {

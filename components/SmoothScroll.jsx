@@ -17,6 +17,10 @@ export default function SmoothScroll() {
     if (excluded) return;
 
     const lenis = new Lenis({ duration: 1 });
+    // Exposed so modals/overlays can lenis.stop()/start() — body.style.overflow
+    // alone doesn't stop Lenis, since it drives scroll itself via wheel/touch,
+    // not the native scrollbar.
+    window.__lenis = lenis;
 
     let rafId;
     function raf(time) {
@@ -28,6 +32,7 @@ export default function SmoothScroll() {
     return () => {
       cancelAnimationFrame(rafId);
       lenis.destroy();
+      window.__lenis = null;
     };
   }, [excluded]);
 
