@@ -58,8 +58,8 @@ const Header = ({ logoRef, onOpenPage, logoSrc = '/img/sig.png' }) => {
               className="founders-chat-cta--light"
               onClick={handleDashboardCta}
             >
-              <span className="founders-chat-label-full">Dashboard</span>
-              <span className="founders-chat-label-short">Dash</span>
+              <span className="founders-chat-label-full">Clients</span>
+              <span className="founders-chat-label-short">Clients</span>
               <UpRightArrow id="founders-chat-cta-icon" />
             </button>
           </div>

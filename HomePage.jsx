@@ -202,6 +202,11 @@ const HomePage = () => {
     const urlInputRow   = document.querySelector('#hero-url-input-row');
     const panelCta      = document.querySelector('#panel-hero-cta');
     const panelGrid     = document.querySelector('#stacked-grid-row');
+    // Desktop (≥900px) hides #panel-hero-cta until the hero pin reveals it.
+    const isDesktopCtaExperiment =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(min-width: 900px)').matches;
     gsap.set([gradient, headline, canvasWrapper, nav].filter(Boolean), { autoAlpha: 0 });
     gsap.set([panelHeadline, urlInputRow, panelCta, panelGrid].filter(Boolean), { autoAlpha: 0 });
 
@@ -215,8 +220,12 @@ const HomePage = () => {
       .to(nav,           { autoAlpha: 1, duration: 1.2, ease: 'power2.out' }, '<0.2')
       .to(headline,      { autoAlpha: 1, duration: 1.05, ease: 'power2.out' }, '0.32')
       .to(panelHeadline, { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '0.58')
-      // URL input row + Meet CTA fade in together
-      .to([urlInputRow, panelCta].filter(Boolean), { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '<0.15')
+      // URL input row fades in; panelCta ("Book a Call with Bryan") is
+      // excluded — it's hidden by default at every width (see
+      // #panel-hero-cta's CSS rule) and only appears via the scroll-triggered
+      // pin in this file's other useLayoutEffect. Forcing it visible here
+      // would pop it on load, overlapping the now-100%-width url input row.
+      .to([urlInputRow].filter(Boolean), { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '<0.15')
       .to(panelGrid,     { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '<0.15');
 
     // Replays the hero's entrance when the user returns to the top after scrolling

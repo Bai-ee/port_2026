@@ -1,6 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import gsap from 'gsap';
+import { scrambleTextTo } from './components/home/scrambleText';
 // Hidden for now — hero card deck.
 // import HeroDeliverableDeck from './components/home/HeroDeliverableDeck';
 
@@ -22,7 +23,6 @@ const SUBHEADLINE_PHRASES = [
   'Browser Based Gaming',
 ];
 
-const SCRAMBLE_CHARS = '!<>-_\\/[]{}—=+*^?#________';
 const HOLD_MS = 1600;     // time a fully-revealed phrase stays on screen
 const SCRAMBLE_MS = 600;  // time spent scrambling into the next phrase
 
@@ -61,39 +61,16 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
     }
 
     let index = 0;
-    let rafId = 0;
+    let cancelScramble = null;
     let holdTimer = 0;
 
     const scrambleTo = (next) => {
-      const prev = node.textContent || '';
-      const length = Math.max(prev.length, next.length);
-      const start = performance.now();
-
-      const frame = (now) => {
-        const progress = Math.min((now - start) / SCRAMBLE_MS, 1);
-        let out = '';
-        for (let i = 0; i < length; i += 1) {
-          // Each char locks into place at a staggered point in the timeline.
-          const lockPoint = (i / length) * 0.7;
-          if (progress >= lockPoint + 0.3 || progress >= 1) {
-            out += next[i] ?? '';
-          } else if (progress >= lockPoint) {
-            out += SCRAMBLE_CHARS[(Math.random() * SCRAMBLE_CHARS.length) | 0];
-          } else {
-            out += prev[i] ?? SCRAMBLE_CHARS[(Math.random() * SCRAMBLE_CHARS.length) | 0];
-          }
-        }
-        node.textContent = out;
-
-        if (progress < 1) {
-          rafId = requestAnimationFrame(frame);
-        } else {
-          node.textContent = next;
+      cancelScramble = scrambleTextTo(node, next, {
+        durationMs: SCRAMBLE_MS,
+        onComplete: () => {
           holdTimer = window.setTimeout(advance, HOLD_MS);
-        }
-      };
-
-      rafId = requestAnimationFrame(frame);
+        },
+      });
     };
 
     const advance = () => {
@@ -105,7 +82,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
     holdTimer = window.setTimeout(advance, HOLD_MS);
 
     return () => {
-      cancelAnimationFrame(rafId);
+      if (cancelScramble) cancelScramble();
       clearTimeout(holdTimer);
     };
   }, []);
@@ -287,7 +264,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
             fontSize: 'clamp(1.25rem, min(13vw, calc(var(--hero-gap-height) / 5)), 7.83rem)',
             textTransform: 'none',
           }}>
-            YOUR<br />HUMAN<br />IN THE<br />LOOP
+            HUMAN<br />IN THE<br />LOOP
           </h1>
           <p id="hero-subheadline" style={{
             margin: '1rem 0 0',
