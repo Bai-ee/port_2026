@@ -29,6 +29,18 @@ async function authFetch(user, path, options = {}) {
   return data;
 }
 
+// The new consolidated POST-only admin route (Phase 3) — one action per
+// call, replacing the old digest-config POST/GET split and daily-digest's
+// GET ?preview=/?send=1 query-param contract. See app/api/admin/email-digest
+// /route.js for the five actions (config/status/retry/reset-breaker/preview/
+// send-now); this is the one call site every UI action below goes through.
+function callEmailDigest(user, action, payload = {}) {
+  return authFetch(user, '/api/admin/email-digest', {
+    method: 'POST',
+    body: JSON.stringify({ action, ...payload }),
+  });
+}
+
 // Granular email section toggles, grouped. Each entry is
 // [include key, card title, card description, customize cardId, platformIcon?].
 // One key = one rendered section in the digest's render.js buildEmailHtml, so
@@ -161,12 +173,6 @@ function digestTimezoneLabel(timezone) {
 
 // ── Email Digest: SETTINGS (params) + PREVIEW (rendered email + send) ─────────
 export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, activeClientId }) {
-  // The card is scoped to the client loaded in the dashboard: every digest-config
-  // read/write carries this id so the Daily-email toggle + settings belong to the
-  // client you're viewing (falls back to the email-resolved admin client server-side).
-  const digestConfigGetPath = activeClientId
-    ? `/api/admin/digest-config?clientId=${encodeURIComponent(activeClientId)}`
-    : '/api/admin/digest-config';
   const [tab, setTab] = useState('settings'); // 'settings' | 'preview'
   const [clientsExpanded, setClientsExpanded] = useState(false); // "Include client briefs" collapsible — default collapsed
 
@@ -202,7 +208,7 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
     }
     let cancelled = false;
     setVideoOwnerDigestConfig(null);
-    authFetch(user, `/api/admin/digest-config?clientId=${encodeURIComponent(videoOwnerClientId)}`)
+    callEmailDigest(user, 'config', { clientId: videoOwnerClientId })
       .then((data) => { if (!cancelled) setVideoOwnerDigestConfig(data.config || null); })
       .catch(() => { if (!cancelled) setVideoOwnerDigestConfig(null); });
     return () => { cancelled = true; };
@@ -213,7 +219,10 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
     setSettingsLoading(true);
     setSettingsError('');
     try {
-      const data = await authFetch(user, digestConfigGetPath);
+      // No `patch` field = load, per the config action's contract. Scoped to
+      // the client loaded in the dashboard (falls back to the email-resolved
+      // admin client server-side when activeClientId is empty).
+      const data = await callEmailDigest(user, 'config', activeClientId ? { clientId: activeClientId } : {});
       setForm(data.config || null);
       setDocs(data.docs || []);
       setClientId(data.clientId || '');
@@ -225,7 +234,7 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
     } finally {
       setSettingsLoading(false);
     }
-  }, [user, digestConfigGetPath]);
+  }, [user, activeClientId]);
 
   const toggleInclude = useCallback((cid) => {
     setForm((f) => {
@@ -261,8 +270,8 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
     if (!user || !form) return;
     setSaveStatus({ kind: 'pending', msg: 'Saving…' });
     try {
-      const guardedForm = { ...form, clientId: activeClientId, include: guardIncludeForAvailability(form.include, currentPlatformAvailability(form)) };
-      const data = await authFetch(user, '/api/admin/digest-config', { method: 'POST', body: JSON.stringify(guardedForm) });
+      const guardedPatch = { ...form, include: guardIncludeForAvailability(form.include, currentPlatformAvailability(form)) };
+      const data = await callEmailDigest(user, 'config', { clientId: activeClientId, patch: guardedPatch });
       setForm(data.config);
       if (data.marketInsights) setMarketInsights(data.marketInsights);
       setSaveStatus({ kind: 'ok', msg: 'Saved.' });
@@ -296,31 +305,17 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
     setPreviewError('');
     setPreviewMode(nextMode);
     try {
-      const param = nextMode === 'live' ? '1' : 'template';
       // Scope the preview to this card's client so preview == sent per client.
       const previewClientId = form?.homeClientId || clientId || activeClientId || '';
-      let path = `/api/admin/daily-digest?preview=${param}${previewClientId ? `&clientId=${encodeURIComponent(previewClientId)}` : ''}`;
-      if (includeFlags) {
-        const on = Object.entries(includeFlags).filter(([, v]) => v !== false).map(([k]) => k).join(',');
-        path += `&include=${encodeURIComponent(on)}`;
-      }
-      // Live preview honors the typed (even unsaved) Calendly URL so the
-      // "Contact Your Human" button shows before saving (preview-only override).
-      if (nextMode === 'live' && contactUrl) path += `&contactUrl=${encodeURIComponent(contactUrl)}`;
-      // Live preview honors the current (even unsaved) section order.
-      if (nextMode === 'live' && Array.isArray(order) && order.length) path += `&order=${encodeURIComponent(order.join(','))}`;
-      // Live preview honors the current (even unsaved) suggested-post platforms.
-      if (nextMode === 'live' && postPlatforms) {
-        const on = Object.entries(postPlatforms).filter(([, v]) => v).map(([k]) => k).join(',');
-        path += `&posts=${encodeURIComponent(on)}`;
-      }
-      // Live preview honors the current (even unsaved) demo-metric groups, so
-      // flipping a group to demo shows it drop to zeros without saving first.
-      if (nextMode === 'live' && demoMetrics) {
-        const on = Object.entries(demoMetrics).filter(([, v]) => v).map(([k]) => k).join(',');
-        path += `&demo=${encodeURIComponent(on)}`;
-      }
-      const data = await authFetch(user, path);
+      const payload = { clientId: previewClientId, mode: nextMode };
+      if (includeFlags) payload.includeKeys = Object.entries(includeFlags).filter(([, v]) => v !== false).map(([k]) => k);
+      // Live preview honors the current (even unsaved) form state so the
+      // preview matches what Send Now would actually use before saving.
+      if (nextMode === 'live' && contactUrl) payload.contactUrl = contactUrl;
+      if (nextMode === 'live' && Array.isArray(order) && order.length) payload.order = order;
+      if (nextMode === 'live' && postPlatforms) payload.postPlatforms = Object.entries(postPlatforms).filter(([, v]) => v).map(([k]) => k);
+      if (nextMode === 'live' && demoMetrics) payload.demoGroups = Object.entries(demoMetrics).filter(([, v]) => v).map(([k]) => k);
+      const data = await callEmailDigest(user, 'preview', payload);
       setPreview({ html: data.html || '', paragraph: data.paragraph || data.summary?.paragraph || '', placeholder: Boolean(data.placeholder) });
     } catch (e) {
       setPreviewError(e.message);
@@ -357,8 +352,8 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
           // (the send reads saved config, not unsaved form state).
           let savedConfig = form;
           if (form) {
-            const guardedForm = { ...form, clientId: activeClientId, include: guardIncludeForAvailability(form.include, currentPlatformAvailability(form)) };
-            const saved = await authFetch(user, '/api/admin/digest-config', { method: 'POST', body: JSON.stringify(guardedForm) });
+            const guardedPatch = { ...form, include: guardIncludeForAvailability(form.include, currentPlatformAvailability(form)) };
+            const saved = await callEmailDigest(user, 'config', { clientId: activeClientId, patch: guardedPatch });
             if (saved?.config) {
               savedConfig = saved.config;
               setForm(saved.config);
@@ -424,7 +419,7 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
           advance('[SEND]', 'Generating and sending the email with the latest completed video…');
           note('Manual send refreshes intelligence but never starts a video render.');
           setSendStatus({ kind: 'pending', msg: 'Generating and sending email…' });
-          const res = await authFetch(user, `/api/admin/daily-digest?send=1&skipRefresh=1&freshnessToken=${encodeURIComponent(freshnessToken)}&requestId=${encodeURIComponent(requestId)}${sendClientId ? `&clientId=${encodeURIComponent(sendClientId)}` : ''}`);
+          const res = await callEmailDigest(user, 'send-now', { clientId: sendClientId || undefined, freshnessToken, requestId });
           (Array.isArray(res?.log) ? res.log : []).forEach((l) => note(l.text));
           if (res?.subject) note(`Subject · ${res.subject}`);
           setSendStatus({ kind: 'ok', msg: 'Email sent with the latest completed video.' });
