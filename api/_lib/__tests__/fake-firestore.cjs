@@ -57,6 +57,10 @@ function snapshot(ref, data) {
 function matchesFilter(data, f) {
   const fv = data?.[f.field];
   if (f.op === '==') return fv === f.value; // unchanged original behavior
+  // 'in' — single-field membership (added for the stale-generation reclaim's
+  // stage-in query). Real Firestore serves this off the automatic single-field
+  // index; missing fields never match, same as equality.
+  if (f.op === 'in') return Array.isArray(f.value) && f.value.includes(fv);
   // Range operators: Firestore excludes documents where the field is
   // missing/null from an inequality query on that field — matters here
   // because dueSortKey is deliberately null for every stage that isn't
@@ -79,7 +83,7 @@ class Query {
   // orderBy on that SAME field, which real Firestore serves off the
   // automatic single-field index with no composite index required).
   where(field, op, value) {
-    const SUPPORTED = ['==', '<', '<=', '>', '>='];
+    const SUPPORTED = ['==', '<', '<=', '>', '>=', 'in'];
     if (!SUPPORTED.includes(op)) throw new Error(`fake-firestore only supports ${SUPPORTED.join(', ')} (got ${op})`);
     this._filters.push({ field, op, value }); return this;
   }
@@ -153,6 +157,7 @@ class FakeDb {
   // test helpers
   _raw(collection, id) { return this._store.get(collection)?.get(id); }
   _patch(collection, id, partial) {
+    if (!this._store.has(collection)) this._store.set(collection, new Map());
     const map = this._store.get(collection);
     map.set(id, { ...map.get(id), ...partial });
   }

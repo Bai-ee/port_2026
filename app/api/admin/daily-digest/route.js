@@ -29,8 +29,9 @@ const briefIntel = require('../../../../features/intelligence/_brief-intel.js');
 const { signApprovalToken, APPROVAL_TTL_MS } = require('../../../../api/_lib/social-approval.cjs');
 const { hasValidWorkerSecret } = require('../../../../api/_lib/auth.cjs');
 const digestDelivery = require('../../../../api/_lib/digest-delivery.cjs');
-const { checkDigestRefreshPreflight } = require('../../../../api/_lib/digest-refresh-preflight.cjs');
 const { sendViaResend } = require('../../../../api/_lib/resend-transport.cjs');
+const { digestSelfOrigin, fetchWorkerJson, buildSendStampEntry } = require('../../../../api/_lib/digest-self-origin.cjs');
+const { resolveSendPolicy } = require('../../../../api/_lib/digest-send-policy.cjs');
 
 // ── Config ──────────────────────────────────────────────────────────────────
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
@@ -76,12 +77,15 @@ const DIGEST_INCLUDE_KEYS = Array.from(new Set([...(digestConfig.INCLUDE_KEYS ||
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 export function appOrigin() {
+  // ⚠️ Deliberately NO `VERCEL_URL` fallback: this project runs SSO Deployment
+  // Protection ("all_except_custom_domains"), so VERCEL_URL is a PROTECTED host
+  // — a link or self-request built on it lands on the vercel.com login page,
+  // not the app (2026-08-18 email root cause). Env override → custom domain.
   const raw =
     process.env.NEXT_PUBLIC_APP_URL ||
     process.env.NEXT_PUBLIC_SITE_URL ||
     process.env.PUBLIC_APP_URL ||
     process.env.APP_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '') ||
     'https://hitloop.agency';
   return String(raw).replace(/\/+$/, '');
 }
@@ -1063,6 +1067,12 @@ export function buildVideoPostRow(item, kind = 'Video', ctx = null) {
  *  structured callouts; falls back to the flat paragraph; empty state otherwise. */
 function buildSummaryBody(summary) {
   const callouts = Array.isArray(summary?.callouts) ? summary.callouts : [];
+  // Honest staleness: a scheduled send whose refresh failed still sends the
+  // last-good summary, visibly labeled (owner decision, 2026-08-18) — never
+  // silently passed off as today's.
+  const staleLine = summary?.staleNote
+    ? `<div style="font-family:${DT.fMono};font-size:10px;letter-spacing:.08em;color:${DT.light};margin:12px 0 0;">⚠ ${escapeHtml(summary.staleNote)}</div>`
+    : '';
 
   // Structured callouts → marketing-director grammar: a warm report card with a
   // mono eyebrow, a Doto headline, the lead as a pull-quote, then one labeled
@@ -1083,7 +1093,7 @@ function buildSummaryBody(summary) {
         ${c.line ? `<div style="font-family:${DT.fBody};font-size:14px;line-height:1.55;color:${DT.soft};">${escapeHtml(c.line)}</div>` : ''}
       </div>`;
     }).join('');
-    return `<div style="background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:20px;margin-bottom:18px;">${lead}${blocks}</div>`;
+    return `<div style="background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:20px;margin-bottom:18px;">${lead}${blocks}${staleLine}</div>`;
   }
 
   // Fallback: flat paragraph (or empty state). Toggle-gated by the caller
@@ -1092,7 +1102,7 @@ function buildSummaryBody(summary) {
     ? escapeHtml(summary.paragraph).replace(/\n+/g, ' ')
     : '';
   const body = text || `<span style="color:${DT.light};">No executive summary generated for this run.</span>`;
-  return `<div style="background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:20px 22px;margin-bottom:18px;font-family:${DT.fBody};font-size:15px;line-height:1.62;color:${DT.ink};">${body}</div>`;
+  return `<div style="background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:20px 22px;margin-bottom:18px;font-family:${DT.fBody};font-size:15px;line-height:1.62;color:${DT.ink};">${body}${staleLine}</div>`;
 }
 
 // ── Email size caps ───────────────────────────────────────────────────────────
@@ -2427,15 +2437,14 @@ async function fanOutScheduledSends(url) {
     return json({ ok: true, skipped: true, reason: 'No clients enrolled in the daily digest.' });
   }
 
-  // Sub-requests re-enter this route, so they must carry cron/worker auth.
-  const headers = { 'cache-control': 'no-store' };
-  if (process.env.CRON_SECRET) headers.authorization = `Bearer ${process.env.CRON_SECRET}`;
-  else if (WORKER_SECRET) headers['x-worker-secret'] = WORKER_SECRET;
-
-  // Re-enter the SAME deployment the cron hit. appOrigin() falls back to the
-  // production alias, so using it here would make a local-dev or preview-deploy
-  // fan-out fire its sub-sends at a different build than the one running.
-  const selfOrigin = url.origin || appOrigin();
+  // ⚠️ Self-requests must target the custom production domain, NEVER
+  // url.origin: the cron invocation arrives on an SSO-protected *.vercel.app
+  // host, and a sub-request to that origin lands on the vercel.com login page
+  // instead of this route — which this dispatcher then stamped as "Email
+  // provider did not return an id." (the 2026-08-18 root cause; Resend was
+  // never called). fetchWorkerJson refuses redirects and non-JSON bodies so
+  // that failure mode is loud now. See api/_lib/digest-self-origin.cjs.
+  const selfOrigin = digestSelfOrigin();
 
   logInfo('daily_digest_fanout_start', { clients: clientIds.length, clientIds, origin: selfOrigin });
 
@@ -2448,24 +2457,11 @@ async function fanOutScheduledSends(url) {
     });
     target.searchParams.set('clientId', clientId);
 
-    let entry;
-    try {
-      const res = await fetch(target.toString(), { headers, cache: 'no-store' });
-      const body = await res.json().catch(() => ({}));
-      const emailSkipped = body?.email?.skipped === true || body?.emailSkipped === true;
-      const emailId = body?.email?.id || null;
-      entry = {
-        clientId,
-        status: res.status,
-        ok: res.ok && body?.ok !== false && !emailSkipped && Boolean(emailId),
-        skipped: body?.skipped === true || emailSkipped,
-        reason: body?.reason || body?.email?.reason || body?.error || (!emailId ? 'Email provider did not return an id.' : null),
-        error: body?.error || null,
-        emailId,
-      };
-    } catch (err) {
-      entry = { clientId, ok: false, error: err.message };
-    }
+    // Honest stamps via the tested contract builder: a sub-request that never
+    // executed (SSO page, redirect, non-JSON) fails with its real HTTP
+    // status/content-type, and the child's body can never overwrite the
+    // dispatcher's trusted clientId/status/ok fields.
+    const entry = buildSendStampEntry(clientId, await fetchWorkerJson(target));
     await digestConfig.stampCronRun(clientId, 'send', entry);
     logInfo('daily_digest_fanout_client_done', entry);
     return entry;
@@ -2782,6 +2778,12 @@ export async function GET(request) {
     }
   }
 
+  // Hoisted so the catch block can stamp a generation failure onto the durable
+  // record — a thrown send used to leave the delivery doc untouched, making
+  // Vercel's short-lived logs the only trace of WHY a day failed.
+  let delivery = null;
+  let genLeaseOwner = null;
+  const routeStartedMs = Date.now();
   try {
     const timestamp = Date.now();
     logInfo('daily_digest_start', { timestamp: new Date(timestamp).toISOString() });
@@ -2838,7 +2840,11 @@ export async function GET(request) {
     // Send routes never run Scout inline. Inline refresh was the source of
     // time-boxed sends and orphaned "running" brief_runs; fresh data must be
     // produced by /api/worker/pre-digest-refresh before this route sends.
-    const isRealSend = isSendNow || (!isPreview && !isTemplate);
+    // What this request mode may do — see api/_lib/digest-send-policy.cjs.
+    // Scheduled sends are zero-LLM and zero-social; manual sends keep both;
+    // no send path publishes a fresh brief (the refresh phase owns that).
+    const { isRealSend, isScheduledSend, allowInlineLlm, allowSocialSideEffects } =
+      resolveSendPolicy({ isPreview, isTemplate, isSendNow });
 
     // Delivery identity (P1-C + P1-2 fixes), resolved once, early. Uses the
     // CLIENT'S configured digest timezone — not UTC — so "today" matches
@@ -2855,11 +2861,80 @@ export async function GET(request) {
     const deliveryClientId = homeClientId || 'unscoped';
     const deliverySource = isSendNow ? 'manual-admin' : 'cron-scheduled';
     const deliveryTimeZone = digestCfg?.schedule?.timezone || 'America/Chicago';
-    const deliveryIdentity = isRealSend
-      ? await digestDelivery.resolveDeliveryIdentity({
+    // Sweep reclaim (worker-auth scheduled path only): the sweep names the
+    // EXACT stuck record it wants advanced. Identity then comes from that
+    // record — never recomputed from the current clock — so reclaiming a
+    // prior-day occurrence finishes THAT record under its original
+    // idempotency key instead of minting a new current-day delivery at the
+    // wrong hour. Invalid targets are refused outright (409), never silently
+    // downgraded to a fresh send.
+    const reclaimDeliveryId = isScheduledSend
+      ? String(url.searchParams.get('reclaimDeliveryId') || '').trim().slice(0, 200)
+      : '';
+    let deliveryIdentity = null;
+    if (isRealSend) {
+      if (reclaimDeliveryId) {
+        const reclaimTarget = await digestDelivery.getDelivery(reclaimDeliveryId);
+        const check = digestDelivery.validateReclaimTarget(reclaimTarget, { clientId: deliveryClientId });
+        if (!check.ok) {
+          logWarn('daily_digest_reclaim_rejected', { reclaimDeliveryId, clientId: deliveryClientId, reason: check.reason });
+          return json({ ok: false, skipped: true, reason: `reclaim rejected: ${check.reason}` }, 409);
+        }
+        deliveryIdentity = { dateKey: check.identity.dateKey, deliveryId: check.identity.deliveryId };
+      } else {
+        deliveryIdentity = await digestDelivery.resolveDeliveryIdentity({
           clientId: deliveryClientId, timestampMs: timestamp, timeZone: deliveryTimeZone, source: deliverySource, requestId,
-        })
-      : null;
+        });
+      }
+    }
+    // Durability starts FIRST (EMAIL-REBUILD-PLAN.md Phase 1 rule 3): the
+    // delivery record used to be created only after every collector and the
+    // full render succeeded, so a request killed mid-generation left NOTHING —
+    // no record, no stored HTML, nothing for any sweep to recover, and the day
+    // was silently lost. Creating it here makes any death visible in a durable
+    // doc and gives the sweep's stale-generation reclaim something to re-enter.
+    // Idempotent create-only: a re-entry for the same occurrence returns the
+    // same record.
+    if (isRealSend) {
+      delivery = await digestDelivery.getOrCreateDelivery({
+        clientId: deliveryClientId,
+        dateKey: deliveryIdentity.dateKey,
+        source: deliverySource,
+        deliveryId: deliveryIdentity.deliveryId,
+      });
+      // Generation lease: exactly one worker may regenerate this occurrence at
+      // a time (fenced through storeRenderedHtml), so a sweep reclaim racing
+      // the daily fan-out can never produce two competing renders — and a
+      // duplicate request resolves honestly instead of doing redundant work.
+      const genClaim = await digestDelivery.claimGeneration(delivery.id);
+      if (!genClaim.ok) {
+        if (genClaim.reason === 'already-sent') {
+          // Idempotent success: this occurrence already delivered.
+          return json({
+            ok: true, alreadySent: true,
+            email: { ok: true, id: genClaim.providerEmailId || null },
+            delivery: { id: delivery.id, stage: 'sent' },
+          });
+        }
+        if (genClaim.reason === 'already-rendered') {
+          // Render exists — skip regeneration entirely and go straight to
+          // transport under the send lease (safe no-op if another worker is
+          // mid-send or it already delivered).
+          const sendResult = await digestDelivery.sendFirstAttempt(delivery.id, digestSendFn);
+          const updated = await digestDelivery.getDelivery(delivery.id);
+          return json({
+            ok: Boolean(sendResult.ok),
+            resumedStoredRender: true,
+            email: sendResult,
+            reason: sendResult.ok ? null : (sendResult.reason || null),
+            delivery: { id: delivery.id, stage: updated?.stage || null, attempts: updated?.attempts || 0, nextRetryAt: updated?.nextRetryAt || null },
+          }, sendResult.ok ? 200 : 502);
+        }
+        // 'generation-in-progress' / 'terminal-failure' / 'not-found'
+        return json({ ok: false, skipped: true, reason: `generation not claimed: ${genClaim.reason}` }, 409);
+      }
+      genLeaseOwner = genClaim.ownerId;
+    }
 
     const skipInlineRefresh = url.searchParams.get('skipRefresh') === '1' || url.searchParams.get('refresh') === '0';
     const forceInlineRefresh = url.searchParams.get('refresh') === 'inline';
@@ -3030,7 +3105,49 @@ export async function GET(request) {
         creative = await briefIntel.getCreativeBriefForClient(homeClientId);
       }
 
-      if (cfg.summaryEnabled && !skipLlm) {
+      // Scheduled sends are ZERO-LLM (EMAIL-REBUILD-PLAN.md Phase 1 rule 1):
+      // they read the summary the pre-digest refresh already generated and
+      // saved (dashboard_state.digestSummary, written by
+      // refreshDigestEmailSummary), falling back to the executive-daily cover
+      // paragraph, falling back to the section's honest empty state. Missing
+      // or old saved content NEVER triggers an inline Anthropic call here —
+      // an LLM hang mid-send is how scheduled days used to be lost. Manual
+      // sends and live preview keep the inline path (now bounded by
+      // callAnthropic's timeout).
+      const SUMMARY_STALE_AFTER_MS = 20 * 60 * 60 * 1000;
+      if (cfg.summaryEnabled && isScheduledSend) {
+        try {
+          const dashSnap = homeClientId
+            ? await fb.adminDb.collection('dashboard_state').doc(homeClientId).get()
+            : null;
+          const dash = dashSnap?.exists ? dashSnap.data() || {} : {};
+          // Ownership: only accept a summary stamped for THIS client (or a
+          // legacy write without the stamp, which lives in this client's doc).
+          const savedDigest = dash.digestSummary
+            && (!dash.digestSummary.clientId || dash.digestSummary.clientId === homeClientId)
+            ? dash.digestSummary : null;
+          const legacyCover = dash.briefSummaries?.['executive-daily'] || null;
+          const chosen = (savedDigest && (savedDigest.paragraph || savedDigest.callouts?.length))
+            ? savedDigest
+            : (legacyCover?.summary
+              ? { paragraph: String(legacyCover.summary), lead: '', callouts: [], generatedAtIso: legacyCover.generatedAtIso || null }
+              : null);
+          if (chosen) {
+            const ageMs = chosen.generatedAtIso ? Date.now() - Date.parse(chosen.generatedAtIso) : Infinity;
+            const fresh = Number.isFinite(ageMs) && ageMs >= 0 && ageMs <= SUMMARY_STALE_AFTER_MS;
+            summary = {
+              paragraph: chosen.paragraph || '',
+              lead: chosen.lead || '',
+              callouts: Array.isArray(chosen.callouts) ? chosen.callouts : [],
+              // Visible honesty (owner decision, 2026-08-18): stale content
+              // still sends, labeled — never silently passed off as today's.
+              staleNote: fresh ? null : `Summary generated ${chosen.generatedAtIso ? new Date(chosen.generatedAtIso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'earlier'} — today's refresh did not complete.`,
+            };
+          }
+        } catch (e) {
+          logWarn('daily_digest_saved_summary_read_failed', { clientId: homeClientId, error: e.message });
+        }
+      } else if (cfg.summaryEnabled && allowInlineLlm && !skipLlm) {
         const { text: docsText } = await digestConfig.getRecentDocsText({
           clientId: homeClientId, count: cfg.recentDocsCount, maxChars: cfg.maxDocChars,
         });
@@ -3165,7 +3282,12 @@ export async function GET(request) {
           remix: canonicalRemixCopy(remixCap?.createdWith || {}),
           promo: '',
         };
-        if (!isTemplate && !skipLlm) {
+        // Scheduled sends are ZERO-LLM (policy.allowInlineLlm): no Haiku
+        // caption call — the remix caption is metadata-derived
+        // (canonicalRemixCopy) and the promo row renders without generated
+        // copy rather than risking an LLM hang inside the cron send. Manual
+        // sends + live preview keep captions.
+        if (allowInlineLlm && !isTemplate && !skipLlm) {
           const captionGroups = [];
           const addCaptionTarget = (kind, capture, ownerClientId, ownerConfig) => {
             if (!capture || !ownerClientId) return;
@@ -3245,7 +3367,14 @@ export async function GET(request) {
     }
 
     let xPostResult = null;
-    if (isRealSend && digestCfg?.autoPostX !== false) {
+    // Social writes are MANUAL-send-only (policy): a scheduled send must never
+    // queue a post, mint an approval token, or publish — social publishing
+    // gets its own schedule/job in Phase 4. Until then, scheduled sends note
+    // the skip honestly in the terminal log.
+    if (isScheduledSend && digestCfg?.autoPostX !== false) {
+      step('info', 'X post queue skipped on scheduled send (social side effects are manual-send-only until Phase 4).');
+    }
+    if (allowSocialSideEffects && digestCfg?.autoPostX !== false) {
       try {
         xPostResult = await enqueueDigestSuggestedPost({ homeClientId, briefs, timestamp, step });
         if (xPostResult?.skipped && !['duplicate'].includes(xPostResult.skipped)) {
@@ -3265,14 +3394,23 @@ export async function GET(request) {
     // describes the configured mode (read-only, no Firestore writes).
     const videoPublishCtx = { x: null };
     if (wantRemix && homeClientId) {
-      if (isRealSend && videoOwnerConfigLoadFailed) {
+      // Manual sends still refuse to proceed on a broken publish config (an
+      // operator is acting on it); a SCHEDULED send skips social entirely, so
+      // a social-config problem must never block the email itself.
+      if (allowSocialSideEffects && videoOwnerConfigLoadFailed) {
         throw new Error(`Publishing settings could not be loaded for video owner ${videoSourceClientId}; email was not sent.`);
+      }
+      if (isScheduledSend && videoOwnerConfigLoadFailed) {
+        step('warn', `Publishing settings could not be loaded for video owner ${videoSourceClientId} — auto-publish skipped; email continues.`);
       }
       const publishPlatform = 'x';
       const publishMode = videoOwnerDigestCfg?.autoPublish?.platforms?.[publishPlatform]?.mode || 'off';
       const publishClientId = videoSourceClientId;
+      if (isScheduledSend && publishMode !== 'off') {
+        step('info', `Auto-publish (@${publishPlatform}, mode ${publishMode}) skipped on scheduled send — social side effects are manual-send-only until Phase 4.`);
+      }
       if (publishMode !== 'off') {
-        if (isRealSend) {
+        if (allowSocialSideEffects) {
           try {
             const result = await enqueueAutoPublishVideoPost({
               clientId: publishClientId,
@@ -3354,32 +3492,19 @@ export async function GET(request) {
     // (LLM cost) only happens on a real send — never on a preview reload.
     let briefUrl = null;
     const briefLinkMode = digestCfg?.briefLinkMode || 'fresh';
-    // Spend gate for the fresh-brief-link render specifically: a fresh brief
-    // is its own paid LLM render (see docs/source-of-truth/EMAIL-DIGEST-CARD.md
-    // §10). Never run it when the global kill switch is set or this client's
-    // delivery breaker is paused — falls back to the resolver's own 'latest'
-    // behavior (same as a preview) rather than spending on content tied to a
-    // send that keeps failing to deliver.
-    let briefLinkPreflight = { ok: true, reason: null };
-    if (isRealSend && homeClientId && briefLinkMode === 'fresh') {
-      // Fails closed on its own (digest-refresh-preflight.cjs) — no .catch()
-      // override needed. The current render is not unresolved yet, so no
-      // exclusion is necessary; an existing same-day failure must block
-      // another paid brief just like an older failure does.
-      briefLinkPreflight = await checkDigestRefreshPreflight(homeClientId);
-    }
     if (include.execBriefLink !== false && briefLinkMode !== 'off' && homeClientId) {
       try {
         const { resolveExecutiveBriefUrl } = require('../../../../features/intelligence/_digest-brief-link.js');
-        const allowFreshRun = !isPreview && briefLinkPreflight.ok; // preview tab never triggers a paid run
-        if (isRealSend && briefLinkMode === 'fresh' && !briefLinkPreflight.ok) {
-          step('warn', `Fresh Executive Brief skipped (${briefLinkPreflight.reason}) — using latest published brief instead.`);
-        }
+        // Send paths are READ-ONLY here (owner decision, 2026-08-18): the
+        // 'fresh' publish now happens in the pre-digest refresh's analysis
+        // phase (publishFreshDigestBrief), so resolving with
+        // allowFreshRun:false simply picks up this morning's already-published
+        // page — and a send request can no longer stall on a render/publish.
         briefUrl = await resolveExecutiveBriefUrl({
           clientId: homeClientId,
           mode: briefLinkMode,
           origin: appOrigin(),
-          allowFreshRun,
+          allowFreshRun: false,
           freshnessToken,
         });
       } catch (err) {
@@ -3454,15 +3579,17 @@ export async function GET(request) {
     // never a re-render, never a second Anthropic call. `sendFirstAttempt`
     // claims the delivery atomically before touching the transport, so a
     // racing duplicate request can never send the same delivery twice.
-    const delivery = await digestDelivery.getOrCreateDelivery({
-      clientId: deliveryClientId,
-      dateKey: deliveryIdentity.dateKey,
-      source: deliverySource,
-      deliveryId: deliveryIdentity.deliveryId,
-    });
-    await digestDelivery.markStage(delivery.id, 'generated', { note: 'email rendered' }).catch(() => {});
-    await digestDelivery.storeRenderedHtml(delivery.id, { html, subject, recipient: digestRecipient });
+    // (Delivery record already exists — created up front, before generation,
+    // and this worker holds the generation lease.)
+    await digestDelivery.markStage(delivery.id, 'generated', { note: `email rendered in ${Date.now() - routeStartedMs}ms` }).catch(() => {});
+    const stored = await digestDelivery.storeRenderedHtml(delivery.id, { html, subject, recipient: digestRecipient, leaseOwner: genLeaseOwner });
+    if (stored?.__generationFenced) {
+      // Another worker holds the lease (ours expired mid-run) — its render is
+      // the one that counts; never send ours on top of it.
+      return json({ ok: false, skipped: true, reason: 'generation fenced: another worker owns this occurrence' }, 409);
+    }
     const sendResult = await digestDelivery.sendFirstAttempt(delivery.id, digestSendFn);
+    await digestDelivery.releaseGeneration(delivery.id, genLeaseOwner);
     const updatedDelivery = await digestDelivery.getDelivery(delivery.id);
 
     const emailResult = sendResult;
@@ -3535,6 +3662,22 @@ export async function GET(request) {
     }, emailAccepted ? 200 : 502);
   } catch (err) {
     logError('daily_digest_route_error', { error: err });
+    // Durable trace: a generation failure lands on the delivery record (plain
+    // merge — no stage transition, so a later re-entry/reclaim proceeds
+    // normally). Without this, the only evidence was a log line that expires
+    // within the hour on the Hobby plan.
+    if (delivery?.id) {
+      await fb.adminDb.collection('digest_deliveries').doc(delivery.id).set({
+        lastGenerationError: String(err.message || err).slice(0, 500),
+        lastGenerationErrorAt: new Date().toISOString(),
+        lastGenerationElapsedMs: Date.now() - routeStartedMs,
+        // Bump updatedAt so the sweep's stale-generation reclaim backs off a
+        // full staleness window after each failed attempt instead of
+        // re-entering a deterministic failure every sweep tick.
+        updatedAt: new Date().toISOString(),
+      }, { merge: true }).catch(() => {});
+      await digestDelivery.releaseGeneration(delivery.id, genLeaseOwner);
+    }
     return json({ error: err.message || 'Internal error' }, 500);
   }
 }

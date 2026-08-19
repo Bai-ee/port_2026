@@ -43,6 +43,7 @@ const { getHeaderValue, safeSecretEquals, hasValidWorkerSecret, buildAuthRequest
 const { logInfo, logWarn } = require('../../../../api/_lib/observability.cjs');
 const digestDelivery = require('../../../../api/_lib/digest-delivery.cjs');
 const { sendViaResend } = require('../../../../api/_lib/resend-transport.cjs');
+const { digestSelfOrigin, fetchWorkerJson } = require('../../../../api/_lib/digest-self-origin.cjs');
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const DIGEST_FROM = process.env.DIGEST_FROM || 'HITLOOP Daily <digest@hitloop.agency>';
@@ -86,8 +87,42 @@ async function handle(request) {
     const stillRetrying = results.filter((r) => r.stage === 'retry-wait').length;
     const terminal = results.filter((r) => r.stage === 'terminal-failure').length;
     const claimedElsewhere = results.filter((r) => r.reason && String(r.reason).startsWith('claim-failed')).length;
-    logInfo('digest_delivery_sweep', { swept, sent, stillRetrying, terminal, claimedElsewhere });
-    return json({ ok: true, swept, sent, stillRetrying, terminal, claimedElsewhere, limit });
+
+    // Stale-generation reclaim (Phase 1, EMAIL-REBUILD-PLAN.md): a
+    // cron-scheduled occurrence killed BEFORE its render was stored has no
+    // HTML for the transport sweep above — it used to be a silently lost day.
+    // Re-enter the per-client send for at most 2 such records per sweep tick:
+    // regeneration reads saved data only (the send path is zero-LLM for
+    // scheduled sends), the deterministic identity maps back to the SAME
+    // record, and the transactional send claim makes duplicates impossible.
+    const reclaimed = [];
+    try {
+      const stuck = await digestDelivery.listStuckScheduledGeneration({ limit: 2 });
+      for (const doc of stuck) {
+        const target = new URL('/api/admin/daily-digest', digestSelfOrigin());
+        target.searchParams.set('clientId', doc.clientId);
+        // Name the EXACT record to advance: the send route validates it and
+        // proceeds with the record's own identity (dateKey + idempotency key),
+        // never a recomputed current-day one — a prior-day stuck occurrence
+        // finishes as itself instead of minting a new delivery.
+        target.searchParams.set('reclaimDeliveryId', doc.id);
+        // eslint-disable-next-line no-await-in-loop
+        const sub = await fetchWorkerJson(target);
+        reclaimed.push({
+          deliveryId: doc.id,
+          clientId: doc.clientId,
+          stage: doc.stage,
+          ok: Boolean(sub.executed && sub.body?.email?.id),
+          reason: sub.executed ? (sub.body?.reason || null) : sub.reason,
+        });
+      }
+    } catch (err) {
+      logWarn('digest_generation_reclaim_failed', { error: err.message });
+    }
+    if (reclaimed.length) logInfo('digest_generation_reclaim', { reclaimed });
+
+    logInfo('digest_delivery_sweep', { swept, sent, stillRetrying, terminal, claimedElsewhere, reclaimed: reclaimed.length });
+    return json({ ok: true, swept, sent, stillRetrying, terminal, claimedElsewhere, reclaimed, limit });
   } catch (err) {
     logWarn('digest_delivery_sweep_failed', { error: err.message });
     return json({ error: err.message || 'sweep failed' }, 500);

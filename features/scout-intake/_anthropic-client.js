@@ -24,8 +24,18 @@ function getAnthropicApiKey({ required = true } = {}) {
   return key || null;
 }
 
-async function callAnthropic(params, { apiKey } = {}) {
+// Hard ceiling on any single Anthropic call. This is a raw fetch() — there is
+// no SDK timeout/retry underneath — and an unbounded hang here has ridden a
+// Vercel function to its maxDuration kill mid-run (2026-08-18 email diagnosis).
+// Default stays high enough for the long Scout/Scribe calls; latency-sensitive
+// callers (e.g. the digest summary) pass a tighter per-call `timeoutMs`.
+const DEFAULT_ANTHROPIC_TIMEOUT_MS = Number(process.env.ANTHROPIC_TIMEOUT_MS) || 240_000;
+
+async function callAnthropic(params, { apiKey, timeoutMs } = {}) {
   const resolvedApiKey = apiKey || getAnthropicApiKey();
+  const boundedMs = Number.isFinite(Number(timeoutMs)) && Number(timeoutMs) > 0
+    ? Number(timeoutMs)
+    : DEFAULT_ANTHROPIC_TIMEOUT_MS;
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -34,6 +44,7 @@ async function callAnthropic(params, { apiKey } = {}) {
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify(params),
+    signal: AbortSignal.timeout(boundedMs),
   });
 
   const text = await response.text();

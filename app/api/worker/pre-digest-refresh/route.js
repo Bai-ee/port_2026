@@ -41,6 +41,9 @@ const { FALLBACK_BRIEF_SITE } = require('../../../../api/_lib/brief-fallback.cjs
 const { collectRedditSignals, collectInstagramSignals, collectXMarketTalkSignals, filterRelevantSignals } = require('../../../../features/intelligence/_platform-signals.js');
 const { searchReddit: scSearchReddit, searchInstagram: scSearchInstagram, redditQueriesFromCustomRows: scRedditQueries, hasApiKey: scHasApiKey } = require('../../../../features/scout-intake/external-scouts/scrapecreators-client.js');
 const { refreshOpportunitySignals } = require('../../../../features/scout-intake/opportunity-signals-search.js');
+const { digestSelfOrigin, fetchWorkerJson, buildRefreshStampEntry } = require('../../../../api/_lib/digest-self-origin.cjs');
+const briefIntel = require('../../../../features/intelligence/_brief-intel.js');
+const briefSummary = require('../../../../features/intelligence/_brief-summary.js');
 
 import { generateStrategyPlan } from '../../../../features/strategy-builder/generate-plan.js';
 import { generateBriefSummaries } from '../../../../features/scout-intake/brief-summary-runner.mjs';
@@ -449,6 +452,81 @@ async function refreshBriefSummaries(clientId, runId = null) {
       : { ok: false, error: (result.failed || []).length ? `summary failed: ${result.failed.join(', ')}` : 'summary generation failed' };
   } catch (err) {
     return { ok: false, error: err.message || 'summary generation threw' };
+  }
+}
+
+/** Generate the DIGEST EMAIL's executive summary here, at refresh time, and
+ *  save it to dashboard_state.digestSummary — so the scheduled send path can be
+ *  zero-LLM (docs/plans/EMAIL-REBUILD-PLAN.md Phase 1 rule 1). Same generator
+ *  the send route used to call inline (`generateBriefSummary`, {lead, callouts,
+ *  paragraph}), fed from saved brief/docs/brain data. Send-time collector data
+ *  (agenda/GA4/platform/homepage) is not available here, so those callout
+ *  categories are simply omitted — the sections themselves still render from
+ *  their own collectors. Best-effort: a failure leaves any previous saved
+ *  summary in place and the email renders its honest empty/stale state. */
+async function refreshDigestEmailSummary(clientId, cfg) {
+  try {
+    if (cfg && cfg.summaryEnabled === false) return { ok: true, skipped: true, reason: 'summary-disabled' };
+    const briefIds = [...new Set([clientId, ...(cfg?.includeClientIds || [])].filter(Boolean))];
+    const briefs = (await Promise.all(
+      briefIds.map((cid) => briefIntel.getBriefForClient(cid).catch(() => null))
+    )).filter(Boolean);
+    const briefText = briefs
+      .map((b) => `[${b.clientName}]\n${briefIntel.briefIntelToText(b.intel)}`)
+      .join('\n\n')
+      .slice(0, 12000);
+    let docsText = '';
+    try {
+      docsText = (await digestConfig.getRecentDocsText({
+        clientId, count: cfg?.recentDocsCount, maxChars: cfg?.maxDocChars,
+      })).text;
+    } catch { /* summary works without docs */ }
+    let clientBrainContext = '';
+    try {
+      clientBrainContext = await loadClientBrainContext(clientId, { useFor: 'emailDigest', maxChars: 1800 });
+    } catch { /* absent brain => '' => unchanged behavior */ }
+    const fullDateStr = new Date().toLocaleDateString('en-US', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    });
+    const summary = await briefSummary.generateBriefSummary({
+      dateStr: fullDateStr, agenda: null, ga4: null, firebase: null, homepage: null,
+      docsText, briefText, clientBrainContext, config: cfg || {},
+    });
+    const generatedAtIso = new Date().toISOString();
+    await fb.adminDb.collection('dashboard_state').doc(clientId).set({
+      digestSummary: {
+        clientId,
+        generatedAtIso,
+        lead: summary.lead || '',
+        callouts: Array.isArray(summary.callouts) ? summary.callouts : [],
+        paragraph: summary.paragraph || '',
+        model: summary.model || null,
+      },
+    }, { merge: true });
+    logInfo('pre_digest_email_summary', { clientId, callouts: summary.callouts?.length || 0 });
+    return { ok: true, generatedAtIso };
+  } catch (err) {
+    logError('pre_digest_email_summary_failed', { clientId, error: err.message });
+    return { ok: false, error: err.message || 'digest summary failed' };
+  }
+}
+
+/** Publish the fresh hosted Executive Brief here, at refresh time, when the
+ *  client's briefLinkMode is 'fresh'. The render is LLM-free (it lays out the
+ *  just-refreshed dashboard_state); moving the publish out of the send request
+ *  is what lets every real send resolve the link read-only ('latest' picks up
+ *  this morning's page). Best-effort: failure degrades the email's button to
+ *  the newest previously-published brief. */
+async function publishFreshDigestBrief(clientId, freshnessToken) {
+  try {
+    const { resolveExecutiveBriefUrl } = require('../../../../features/intelligence/_digest-brief-link.js');
+    const path = await resolveExecutiveBriefUrl({ clientId, mode: 'fresh', origin: '', allowFreshRun: true, freshnessToken });
+    if (!path) return { ok: false, error: 'no brief published' };
+    logInfo('pre_digest_fresh_brief_published', { clientId, path });
+    return { ok: true, path };
+  } catch (err) {
+    logError('pre_digest_fresh_brief_failed', { clientId, error: err.message });
+    return { ok: false, error: err.message || 'fresh brief publish failed' };
   }
 }
 
@@ -883,9 +961,10 @@ export async function refreshDigestClient(clientId, { freshnessToken = '', force
   // expects their email on. Falls back to the module default (America/
   // Chicago, matching DIGEST_TIMEZONE) if the config read fails.
   let refreshTimeZone = 'America/Chicago';
+  let digestCfg = null;
   try {
-    const cfg = await digestConfig.getDigestConfig(clientId);
-    refreshTimeZone = cfg?.schedule?.timezone || refreshTimeZone;
+    digestCfg = await digestConfig.getDigestConfig(clientId);
+    refreshTimeZone = digestCfg?.schedule?.timezone || refreshTimeZone;
   } catch { /* keep default */ }
   const dateKey = digestDelivery.localDateKey(Date.now(), refreshTimeZone);
 
@@ -987,6 +1066,21 @@ export async function refreshDigestClient(clientId, { freshnessToken = '', force
     : (execSummaryWanted
       ? await refreshBriefSummaries(clientId, scout?.runId || modules?.runId || null)
       : { ok: true, skipped: true, reason: 'exec-summary-off' });
+  // Phase-1 moves (EMAIL-REBUILD-PLAN.md): the digest email's own summary and
+  // the fresh hosted-brief publish now run HERE, after the analysis data they
+  // render is saved, so the scheduled send path is zero-LLM and read-only.
+  // Order matters: the fresh brief page embeds the executive-daily cover
+  // summary, so both run after refreshBriefSummaries.
+  const digestEmailSummary = !wantAnalysis
+    ? { ok: true, skipped: true, reason: 'other-phase' }
+    : (execSummaryWanted
+      ? await refreshDigestEmailSummary(clientId, digestCfg)
+      : { ok: true, skipped: true, reason: 'exec-summary-off' });
+  const freshBrief = !wantAnalysis
+    ? { ok: true, skipped: true, reason: 'other-phase' }
+    : (freshBriefWanted
+      ? await publishFreshDigestBrief(clientId, freshnessToken)
+      : { ok: true, skipped: true, reason: 'not-fresh-mode' });
   // digestFreshness records the completed refresh — written by the final phase
   // (analysis) or the unphased run, so partial phases don't stamp a full refresh.
   const digestFreshness = {
@@ -1001,6 +1095,8 @@ export async function refreshDigestClient(clientId, { freshnessToken = '', force
     instagramAnalysisOk: Boolean(instagramAnalysis?.ok),
     xMarketTalkAnalysisOk: Boolean(xMarketTalkAnalysis?.ok),
     opportunitySignalsAnalysisOk: Boolean(opportunitySignalsAnalysis?.ok),
+    digestSummaryOk: Boolean(digestEmailSummary?.ok && !digestEmailSummary?.skipped),
+    freshBriefPath: freshBrief?.path || null,
   };
   if (wantAnalysis) {
     await fb.adminDb.collection('dashboard_state').doc(clientId).set(
@@ -1034,6 +1130,8 @@ export async function refreshDigestClient(clientId, { freshnessToken = '', force
     opportunitySignalsRefresh,
     opportunitySignalsAnalysis,
     executiveSummary: briefSummaries,
+    digestEmailSummary,
+    freshBrief,
     digestFreshness,
     warnings: watchlistWarning ? [{ source: 'watchlist', message: watchlistWarning }] : [],
   };
@@ -1121,11 +1219,14 @@ async function handle(request) {
   // invocation and the parent only waits. The explicit-clientId path below is
   // the single-client worker and is unchanged.
   if (!requestedClientId && clientIds.length > 0) {
-    const headers = { 'cache-control': 'no-store' };
-    if (process.env.CRON_SECRET) headers.authorization = `Bearer ${process.env.CRON_SECRET}`;
-    else if (process.env.WORKER_SECRET) headers['x-worker-secret'] = process.env.WORKER_SECRET;
-    // Re-enter the SAME deployment this run is executing on, never a fixed alias.
-    const selfOrigin = url.origin;
+    // ⚠️ Self-requests must target the custom production domain, NEVER
+    // url.origin: the cron invocation arrives on an SSO-protected *.vercel.app
+    // host, and a sub-request to that origin lands on the vercel.com login
+    // page instead of this route (the 2026-08-18 root cause — every scheduled
+    // refresh was silently stamped "ok" off a login page). fetchWorkerJson
+    // also refuses redirects and non-JSON bodies so this class of failure can
+    // never read as success again. See api/_lib/digest-self-origin.cjs.
+    const selfOrigin = digestSelfOrigin();
 
     const refreshOne = async (clientId) => {
       const target = new URL('/api/worker/pre-digest-refresh', selfOrigin);
@@ -1133,14 +1234,11 @@ async function handle(request) {
         if (key !== 'clientId') target.searchParams.set(key, value);
       });
       target.searchParams.set('clientId', clientId);
-      let entry;
-      try {
-        const res = await fetch(target.toString(), { headers, cache: 'no-store' });
-        const body = await res.json().catch(() => ({}));
-        entry = { clientId, status: res.status, ok: res.ok && body?.ok !== false, reason: body?.error || null, ...body };
-      } catch (err) {
-        entry = { clientId, ok: false, reason: err.message };
-      }
+      // Honest stamps via the tested contract builder: success requires the
+      // child's explicit `ok: true` (an empty/foreign JSON body is a failure),
+      // per-phase outcomes land in the reason, and the child's body can never
+      // overwrite the dispatcher's trusted clientId/status/ok fields.
+      const entry = buildRefreshStampEntry(clientId, await fetchWorkerJson(target));
       await digestConfig.stampCronRun(clientId, 'refresh', entry);
       logInfo('pre_digest_refresh_client_done', { clientId, ok: entry.ok, status: entry.status || null, reason: entry.reason || null });
       return entry;

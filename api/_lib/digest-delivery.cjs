@@ -562,19 +562,25 @@ async function hasUnresolvedPriorDelivery(clientId, { excludeDeliveryId = null, 
  * untouched by a second call. Transactional — closes the race between two
  * near-simultaneous callers for the SAME delivery id.
  */
-async function storeRenderedHtml(deliveryId, { html, subject, recipient }) {
+async function storeRenderedHtml(deliveryId, { html, subject, recipient, leaseOwner = null }) {
   const existing = await getDelivery(deliveryId);
   if (existing?.htmlStoragePath) return existing; // fast path: already rendered, immutable, no Storage write attempted at all
+  // Fence BEFORE the Storage upload: the upload happens outside the
+  // transaction below, and two DIFFERENT renders racing the same path would
+  // otherwise leave the object's bytes inconsistent with the winning
+  // Firestore hash (a generation re-entry regenerates from fresher saved
+  // data, so "identical bytes" can no longer be assumed). A caller holding
+  // the generation lease passes its owner id; a stale owner is turned away
+  // here, then again inside the transaction.
+  if (leaseOwner && existing?.genLeaseOwner && existing.genLeaseOwner !== leaseOwner) {
+    return { ...existing, __generationFenced: true };
+  }
 
   const fb = ctx();
   const path = `${STORAGE_PREFIX}/${deliveryId}.html`;
   const buffer = Buffer.from(String(html || ''), 'utf8');
   const hash = sha256(html);
 
-  // Upload first — an overwrite with identical bytes (the narrow race where
-  // two near-simultaneous callers both reach this point for the SAME
-  // delivery id) is harmless. The transaction below decides which write
-  // wins the FIRESTORE record — the source of truth for what gets sent.
   await fb.adminStorage.bucket().file(path).save(buffer, { contentType: 'text/html; charset=utf-8' });
 
   const ref = fb.adminDb.collection(COLLECTION).doc(deliveryId);
@@ -582,6 +588,11 @@ async function storeRenderedHtml(deliveryId, { html, subject, recipient }) {
     const snap = await tx.get(ref);
     const data = snap.exists ? snap.data() : null;
     if (data?.htmlStoragePath) return { id: deliveryId, ...data }; // another caller's write already won — immutable
+    // In-transaction fence (authoritative): only the current generation-lease
+    // owner may record a render while a lease is active.
+    if (leaseOwner && data?.genLeaseOwner && data.genLeaseOwner !== leaseOwner) {
+      return { id: deliveryId, ...data, __generationFenced: true };
+    }
     if (data && !canTransition(data.stage, 'delivery-pending')) return { id: deliveryId, ...data };
     const history = Array.isArray(data?.history) ? data.history.slice(-24) : [];
     history.push({ stage: 'delivery-pending', at: new Date().toISOString(), note: 'render stored' });
@@ -598,6 +609,54 @@ async function storeRenderedHtml(deliveryId, { html, subject, recipient }) {
     tx.set(ref, patch, { merge: true });
     return { id: deliveryId, ...(data || {}), ...patch };
   });
+}
+
+// ── Generation lease (Phase 1 hardening) ─────────────────────────────────────
+// Fences the GENERATION segment (collect → render → store) the same way the
+// send lease fences transport: at most one worker regenerates a delivery at a
+// time, so a sweep reclaim racing the daily fan-out (or two overlapping sweep
+// ticks) can never produce two competing renders. TTL exceeds the platform's
+// 300s function ceiling, so an expired lease always means a dead worker.
+const GENERATION_LEASE_TTL_MS = 6 * 60_000;
+
+async function claimGeneration(deliveryId, { now = Date.now(), ttlMs = GENERATION_LEASE_TTL_MS } = {}) {
+  const fb = ctx();
+  const ref = fb.adminDb.collection(COLLECTION).doc(deliveryId);
+  const ownerId = `gen-${crypto.randomBytes(8).toString('hex')}`;
+  return fb.adminDb.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return { ok: false, reason: 'not-found' };
+    const data = snap.data() || {};
+    if (data.stage === 'sent') {
+      return { ok: false, reason: 'already-sent', stage: data.stage, providerEmailId: data.providerEmailId || null };
+    }
+    if (data.stage === 'terminal-failure') return { ok: false, reason: 'terminal-failure', stage: data.stage };
+    // Render already stored → nothing to generate; the caller should go
+    // straight to transport (sendFirstAttempt has its own send lease).
+    if (data.htmlStoragePath) return { ok: false, reason: 'already-rendered', stage: data.stage };
+    const activeUntil = Date.parse(data.genLeaseExpiresAt || '') || 0;
+    if (data.genLeaseOwner && activeUntil > now) {
+      return { ok: false, reason: 'generation-in-progress', stage: data.stage };
+    }
+    tx.set(ref, {
+      genLeaseOwner: ownerId,
+      genLeaseExpiresAt: new Date(now + ttlMs).toISOString(),
+      updatedAt: new Date(now).toISOString(),
+    }, { merge: true });
+    return { ok: true, ownerId };
+  });
+}
+
+async function releaseGeneration(deliveryId, ownerId) {
+  if (!deliveryId || !ownerId) return;
+  const fb = ctx();
+  const ref = fb.adminDb.collection(COLLECTION).doc(deliveryId);
+  await fb.adminDb.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return;
+    if ((snap.data() || {}).genLeaseOwner !== ownerId) return; // fenced: never clear another owner's lease
+    tx.set(ref, { genLeaseOwner: null, genLeaseExpiresAt: null }, { merge: true });
+  }).catch(() => { /* best-effort — TTL expiry recovers a missed release */ });
 }
 
 async function loadRenderedHtml(deliveryId) {
@@ -789,6 +848,67 @@ async function sweepDueRetries({ sendFn, onOutcome, now = Date.now(), limit = 25
   return { swept: due.length, results };
 }
 
+// ── Stale-generation reclaim (Phase 1, EMAIL-REBUILD-PLAN.md) ────────────────
+// A cron-scheduled occurrence killed BEFORE its render was stored (stage still
+// `scheduled`/`refreshing`/`generated`) used to be unrecoverable: no stored
+// HTML for the transport sweep, no lease, no dueSortKey — the day was silently
+// lost. These helpers let the delivery sweep find such records and re-enter
+// the per-client send (regeneration from saved data is free; the deterministic
+// scheduled identity + transactional send claim make a re-entry duplicate-safe).
+const RECLAIMABLE_GENERATION_STAGES = new Set(['scheduled', 'refreshing', 'generated']);
+// Older than this since the last write ⇒ no function can still be running it
+// (well past any maxDuration) AND past the normal refresh(12:35)→send(13:00+)
+// cron gap, so the reclaim never fires during an ordinary healthy morning.
+const GENERATION_STALE_AFTER_MS = 45 * 60_000;
+// Younger than this since creation ⇒ still inside the Resend idempotency
+// safety window, so a reclaimed send behaves exactly like the original would.
+const GENERATION_RECLAIM_MAX_AGE_MS = IDEMPOTENCY_SAFETY_MARGIN_MS;
+
+/** Pure predicate — exported for tests. `doc` is a delivery record. */
+function isReclaimableGeneration(doc, now = Date.now(), {
+  staleMs = GENERATION_STALE_AFTER_MS,
+  maxAgeMs = GENERATION_RECLAIM_MAX_AGE_MS,
+} = {}) {
+  if (!doc || !RECLAIMABLE_GENERATION_STAGES.has(doc.stage)) return false;
+  // Only unattended occurrences: a manual flow's bookkeeping (source
+  // 'manual-admin') has an operator watching it — never auto-resend for them.
+  if (doc.source !== 'cron-scheduled') return false;
+  const updatedMs = Date.parse(doc.updatedAt || doc.createdAt || '') || 0;
+  const createdMs = Date.parse(doc.createdAt || '') || 0;
+  if (!updatedMs || !createdMs) return false;
+  return (now - updatedMs) >= staleMs && (now - createdMs) <= maxAgeMs;
+}
+
+/**
+ * Validate a reclaim target the sweep handed to the send route. The identity
+ * a reclaim proceeds with comes from THE STUCK RECORD — never recomputed from
+ * the current clock — so reclaiming yesterday-evening's stuck occurrence
+ * advances that exact record (same id, same dateKey, same idempotency key)
+ * instead of minting a brand-new current-day delivery at the wrong hour.
+ */
+function validateReclaimTarget(doc, { clientId = null, now = Date.now() } = {}) {
+  if (!doc) return { ok: false, reason: 'not-found' };
+  if (clientId && doc.clientId !== clientId) return { ok: false, reason: 'client-mismatch' };
+  if (!isReclaimableGeneration(doc, now)) {
+    return { ok: false, reason: `not-reclaimable (stage=${doc.stage || 'unknown'}, source=${doc.source || 'unknown'})` };
+  }
+  return { ok: true, identity: { clientId: doc.clientId, dateKey: doc.dateKey, deliveryId: doc.id, source: 'cron-scheduled' } };
+}
+
+/** Cron-scheduled deliveries stuck mid-generation, oldest first. */
+async function listStuckScheduledGeneration({ now = Date.now(), limit = 2, staleMs, maxAgeMs } = {}) {
+  const fb = ctx();
+  const snap = await fb.adminDb.collection(COLLECTION)
+    .where('stage', 'in', [...RECLAIMABLE_GENERATION_STAGES])
+    .limit(50)
+    .get();
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((d) => isReclaimableGeneration(d, now, { staleMs, maxAgeMs }))
+    .sort((a, b) => String(a.updatedAt || '').localeCompare(String(b.updatedAt || '')))
+    .slice(0, limit);
+}
+
 // ── Retention / cleanup ──────────────────────────────────────────────────────
 // No cron invokes these automatically in this pass.
 //
@@ -876,6 +996,13 @@ module.exports = {
   retryDeliveryNow,
   listDueWork,
   sweepDueRetries,
+  isReclaimableGeneration,
+  validateReclaimTarget,
+  listStuckScheduledGeneration,
+  GENERATION_STALE_AFTER_MS,
+  claimGeneration,
+  releaseGeneration,
+  GENERATION_LEASE_TTL_MS,
   listDeliveriesOlderThan,
   purgeDelivery,
   purgeDeliveriesOlderThan,

@@ -93,12 +93,14 @@ async function generateBriefSummary({ dateStr, agenda, ga4, firebase, homepage, 
 
   const userContent = `Here is today's data:\n\n${dataBlock}${briefBlock}${brainBlock}${docBlock}`;
 
+  // Tight per-call bound: this Haiku summary sits on latency-sensitive paths
+  // (manual send, refresh phase) — a hang must never ride out a function budget.
   const response = await callAnthropic({
     model: SUMMARY_MODEL,
     max_tokens: MAX_OUTPUT_TOKENS,
     system,
     messages: [{ role: 'user', content: userContent }],
-  });
+  }, { timeoutMs: 60_000 });
   // Instrument — daily-digest Haiku summary; runs on every real send, was untracked.
   try { await logAnthropicCall({ module: 'digest', action: 'brief-summary', model: SUMMARY_MODEL, response }); } catch { /* best-effort */ }
 
@@ -174,7 +176,7 @@ async function generateVideoPromoPosts({ videos = [], clientBrainContext = '', c
     max_tokens: 500,
     system,
     messages: [{ role: 'user', content: user }],
-  });
+  }, { timeoutMs: 60_000 });
   // Instrument — daily-digest video-promo copy Haiku call; was untracked.
   try { await logAnthropicCall({ module: 'digest', action: 'video-promo-posts', model: SUMMARY_MODEL, response }); } catch { /* best-effort */ }
   const raw = (response?.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
