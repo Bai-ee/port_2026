@@ -1,8 +1,8 @@
 # Onboarding UX + Account Guardrails — SSOT
 
-As-built 2026-07-18 (commits `e84491ad`, `4d7062f1`, `47e92324`, `1a2d3501`). Launch-hardening for
-the new-signup experience: error-surface routing during the build terminal, the deleted-account
-re-signup blocklist, and the mobile brief-viewer fixes. For the Creative Brief content system and
+As-built 2026-07-18 (commits `e84491ad`, `4d7062f1`, `47e92324`, `1a2d3501`), updated 2026-08-19
+to allow deleted users to sign up again. Launch-hardening for the new-signup experience:
+error-surface routing during the build terminal, deleted-account audit history, and the mobile brief-viewer fixes. For the Creative Brief content system and
 the post-signup auto-open, see [`CREATIVE-BRIEF-COMPOSER.md`](CREATIVE-BRIEF-COMPOSER.md).
 
 ## 1. Toast routing during onboarding (DashboardPage.jsx)
@@ -23,28 +23,39 @@ toasts only after it closes.
   render in the terminal (`Error` status + `errorState.message` line), never as a toast.
 - CSS lives in the `dashboardCss` const (mirror `dashboard.css` synced for the toast block).
 
-## 2. Deleted-account re-signup blocklist
+## 2. Deleted-account audit history
 
-Any account deletion bars that email from signing up again — **sole exception
-`sangamondivide@gmail.com`** (the test account), which is fully cleansed so it can cycle
-signup → delete → signup.
+Any account deletion records the email for operational history, but **never bars that email from
+signing up again**. The expected UX is delete → sign up again → new workspace provisioning.
 
 - **Module:** `api/_lib/deleted-accounts.cjs` — collection `deleted_account_emails/{emailLower}`,
-  `isEmailBlocked`, `recordDeletedAccount` (records, or deletes the entry for the exception),
-  `DELETED_ACCOUNT_MESSAGE` = exact copy "Deleted Account, Contact Bryan.".
-- **Write:** `app/api/account/delete/route.js` step 0b calls `recordDeletedAccount` (before
-  storage/Firestore/auth teardown; errors collect, don't short-circuit).
-- **Enforce (authority):** `app/api/clients/provision/route.js` → 403 + `code: 'DELETED_ACCOUNT'`
-  for blocked emails, before rate limiting. Fail-open on blocklist read errors so an outage never
-  blocks normal signups.
-- **Instant UX:** public pre-check `app/api/public/deleted-account-check?email=` (IP rate-limited
-  30/h) → `AuthContext.signUp` checks BEFORE `createUserWithEmailAndPassword` (no orphan identity);
-  the Google path checks after the popup, signs back out, throws. `AuthPage` catches the typed
-  `DELETED_ACCOUNT` error → top-center red toast (`#deleted-account-toast`, 8s), no inline dupe.
-- Known edge: if the pre-check fetch fails, email/password signup creates the auth user, provision
-  then 403s and signs them out — a workspaceless orphan auth identity remains (harmless).
-- Emails deleted BEFORE this shipped are not in the blocklist (populates on delete going forward);
-  backfill from `account_deletions` audit collection is possible if ever wanted.
+  `recordDeletedAccount` writes history and `isEmailBlocked` is a compatibility shim that returns
+  `false`.
+- **Write:** `app/api/account/delete/route.js` step 0b calls `recordDeletedAccount` before
+  storage/Firestore/auth teardown; errors collect, don't short-circuit.
+- **Provisioning authority:** `app/api/clients/provision/route.js` does not check deleted-account
+  history. Normal auth, rate limits, and `provisionClientForUser` determine whether signup can
+  proceed.
+- **Compatibility endpoint:** `app/api/public/deleted-account-check?email=` remains IP rate-limited
+  but always returns `{ blocked:false }` for stale clients.
+- **Client UX:** `AuthContext.signUp` and the Google create path no longer run a deleted-account
+  pre-check. `AuthPage` no longer renders `#deleted-account-toast`.
+
+### 2b. Re-signup after an ADMIN "Delete Client"
+
+`app/api/admin/delete-client/route.js` deletes Firestore data only — the Firebase Auth identity
+survives on purpose (self-serve `account/delete` is the path that removes the identity). Two
+guardrails keep that survivor from walling the user out of a fresh signup:
+
+- **`AuthContext.signUp`** treats `auth/email-already-in-use` as "returning user": it signs in with
+  the submitted password and provisions a new workspace on the existing uid. A wrong password
+  yields an actionable message ("sign in with your existing password, or reset it"), never the raw
+  Firebase code.
+- **`provisionClientForUser`** (`api/_lib/client-provisioning.cjs`) only honors a `users/{uid}`
+  → `clientId` link when that client doc still exists. A stale link falls through to fresh
+  provisioning instead of returning `alreadyProvisioned` with `client: null` (a dead dashboard).
+- Not changed: the provision rate limits (8/h per IP, **3 per uid per 24h**). Repeated
+  delete → re-signup cycles on one uid inside a day hit "Too many provisioning attempts".
 
 ## 3. Brief/asset viewer on mobile
 

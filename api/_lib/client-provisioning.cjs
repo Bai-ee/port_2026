@@ -282,11 +282,16 @@ async function provisionClientForUser({ uid, email, displayName, companyName, we
   if (existingClientId) {
     const existingClientRef = fb.adminDb.collection('clients').doc(existingClientId);
     const existingClient = await existingClientRef.get();
-    return {
-      clientId: existingClientId,
-      client: existingClient.exists ? existingClient.data() : null,
-      alreadyProvisioned: true,
-    };
+    // A stale link (admin deleted the client, user doc survived) must not pin the
+    // user to a workspace that no longer exists — fall through and provision a
+    // fresh one instead of returning a dashboard with no client.
+    if (existingClient.exists) {
+      return {
+        clientId: existingClientId,
+        client: existingClient.data(),
+        alreadyProvisioned: true,
+      };
+    }
   }
 
   // Signup can land on the dashboard before the user->client link is visible
