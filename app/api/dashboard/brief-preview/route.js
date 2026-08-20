@@ -2235,10 +2235,17 @@ async function handleGet(request) {
   // Brief format, even for existing clients re-running it — otherwise the
   // run-sequence check below falls back to the Executive layout.
   let renderedRunTrigger = null;
+  // When the run produced no marketingBrief (signup / creative-brief runs), this
+  // is the only timestamp available for the cover date — see the
+  // effectiveGeneratedAt fallback below.
+  let renderedRunAtIso = null;
   try {
     if (renderedRunId) {
       const rrSnap = await fb.adminDb.collection('clients').doc(clientId).collection('brief_runs').doc(renderedRunId).get();
-      renderedRunTrigger = rrSnap.exists ? (rrSnap.data()?.trigger || null) : null;
+      const rrData = rrSnap.exists ? rrSnap.data() : null;
+      renderedRunTrigger = rrData?.trigger || null;
+      const rrStamp = rrData?.completedAt || rrData?.createdAt || null;
+      renderedRunAtIso = typeof rrStamp?.toDate === 'function' ? rrStamp.toDate().toISOString() : null;
     }
   } catch { /* non-fatal — fall back to run-sequence detection */ }
   // A creative-brief OR signup run renders the Creative Brief format: signup now
@@ -2288,6 +2295,15 @@ async function handleGet(request) {
       }
       // else: no archived snapshot (older run) — falls back to the latest brief.
     } catch { /* fall back to latest */ }
+  }
+  // A signup / creative-brief run ships ONLY the Creative Brief (deliverables +
+  // cover summary) — there is no marketingBrief, so generatedAtIso was null and
+  // every date on the cover rendered "Not yet run" for brand-new clients. The
+  // Creative Brief's real run time is when its cover summary was written; the
+  // run doc's completion stamp covers the case where that LLM call failed
+  // (non-fatal — the brief still renders).
+  if (!effectiveGeneratedAt && isMainBrief && isOnboardingRun) {
+    effectiveGeneratedAt = dash.briefSummaries?.onboarding?.generatedAtIso || renderedRunAtIso || null;
   }
   // Tier gate — named briefs follow BRIEF_TIER_ACCESS; admins bypass. The
   // admins lookup only runs when the tier alone would deny, so the common
