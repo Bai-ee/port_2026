@@ -48,15 +48,30 @@ const isNarrowTouchViewport = () =>
   typeof window.matchMedia === 'function' &&
   window.matchMedia(NARROW_SCROLL_MEDIA_QUERY).matches;
 
+// Marquee logos are sized by optical AREA, not by height: matching heights makes
+// a 6.6:1 wordmark (Greystripe) tower over a 1:1 crest (Publicis) in ink, and
+// matching areas alone shrinks the long wordmarks to nothing. So each `scale`
+// solves height = sqrt(TARGET_AREA / aspect) off the 22px base, clamped to
+// 18-32px so no mark gets unreadable or oversized. Target area ≈ 2000px².
+// Recompute `scale` with that formula when adding a logo; `w`/`h` stay the
+// PNG's intrinsic size (Next/Image needs the real ratio).
+// Rendered height is AGENCY_LOGO_BASE_HEIGHT * scale. `bearing` is each PNG's
+// own transparent margin in SOURCE px [left, right], measured off the alpha
+// channel; the render pulls it back out with a negative margin so the visible
+// gap between marks is the flex gap for every pair, not "gap + whatever padding
+// that particular file happened to ship with".
+const AGENCY_LOGO_BASE_HEIGHT = 14.7;
 const agencyLogos = [
-  { src: '/img/agencies/publicis.png', alt: 'Publicis', scale: 1.5, w: 105, h: 100 },
-  { src: '/img/agencies/epsilon.png', alt: 'Epsilon', w: 175, h: 48 },
-  { src: '/img/agencies/conversant.png', alt: 'Conversant', w: 228, h: 42 },
-  { src: '/img/agencies/alliance.png', alt: 'Alliance Data', w: 201, h: 50 },
-  { src: '/img/agencies/greystripe.png', alt: 'Greystripe Media', w: 265, h: 40 },
-  // Stacked mark + wordmark, so it needs extra height to carry the same
-  // visual weight as the wide wordmarks above (same reason Publicis is scaled).
-  { src: '/img/agencies/valueclick.png', alt: 'ValueClick', scale: 1.6, w: 161, h: 76 },
+  // 1.05:1 crest + two lines of type — the tallest mark on the strip.
+  { src: '/img/agencies/publicis.png', alt: 'Publicis', scale: 1.45, w: 105, h: 100, bearing: [2, 5] },
+  { src: '/img/agencies/epsilon.png', alt: 'Epsilon', scale: 1.06, w: 175, h: 48, bearing: [0, 1] },
+  { src: '/img/agencies/conversant.png', alt: 'Conversant', scale: 0.87, w: 228, h: 42 },
+  { src: '/img/agencies/alliance.png', alt: 'Alliance Data', scale: 1.01, w: 201, h: 50, bearing: [3, 3] },
+  // Widest mark (6.6:1), ink flush to both edges — so the shortest of the set.
+  { src: '/img/agencies/greystripe.png', alt: 'Greystripe Media', scale: 0.82, w: 265, h: 40 },
+  // Stacked mark + wordmark on an opaque plate: reads heavier than a transparent
+  // wordmark at the same area, so it sits a step below the formula.
+  { src: '/img/agencies/valueclick.png', alt: 'ValueClick', scale: 1.22, w: 161, h: 76 },
 ];
 
 // Public source for every quote below. LinkedIn exposes no permalink to an
@@ -168,9 +183,13 @@ const XLogo = (props) => (
   </svg>
 );
 
+// The previous path ran to x=24.78 — past the 24-wide viewBox — so the right
+// edge of the "in" mark was sliced flat. This one closes at exactly x=24, and
+// the box drops 13 -> 12 because the new path fills all 24 units where the old
+// one only covered ~22, keeping the mark's rendered size the same.
 const LinkedInLogo = (props) => (
-  <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true" {...props}>
-    <path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5M2.4 21.5h5.16V9.5H2.4zm7.74 0h5.16v-6.6c0-3.53 4.32-3.82 4.32 0v6.6h5.16v-8.38c0-6.6-7.32-6.36-9.48-3.11V9.5h-5.16z" />
+  <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true" {...props}>
+    <path d="M4.98 3.5C4.98 4.881 3.87 6 2.5 6S0 4.881 0 3.5 1.12 1 2.5 1s2.48 1.119 2.48 2.5zM5 8H0v16h5V8zm7.982 0H8.014v16h4.968v-8.399c0-4.67 6.029-5.052 6.029 0V24H24V13.869c0-7.88-8.922-7.593-11.018-3.714V8z" />
   </svg>
 );
 
@@ -309,6 +328,7 @@ function CmoTableRows({ dailyBriefOpen, onToggleDaily, dashboardOpen, onToggleDa
         key={row.task}
         {...variantProps}
         data-daily={isDaily || undefined}
+        data-dashboard={isDashboard || undefined}
         onClick={isToggle ? (isDaily ? onToggleDaily : onToggleDashboard) : undefined}
         role={isToggle ? 'button' : undefined}
         aria-expanded={isToggle ? isOpen : undefined}
@@ -413,18 +433,24 @@ function HitloopAboutBlock() {
     <div id="cmo-about-split">
       <div id="cmo-about-identity-col">
         <div id="cmo-about-identity-header" style={aboutIdentityHeaderStyle}>
-          <Image
-            id="cmo-about-avatar"
-            src="/img/profile2_400x400.png"
-            width={72}
-            height={72}
-            alt="Bryan Balli"
-            style={aboutIdentityAvatarStyle}
-          />
+          {/* Shell owns the sizing: a replaced <img> ignores align-items:stretch
+              and falls back to its intrinsic box, so below 900px the shell is the
+              flex item that stretches to the name + role stack and the image just
+              fills it. */}
+          <span id="cmo-about-avatar-shell" style={aboutIdentityAvatarShellStyle}>
+            <Image
+              id="cmo-about-avatar"
+              src="/img/profile2_400x400.png"
+              width={72}
+              height={72}
+              alt="Bryan Balli"
+              style={aboutIdentityAvatarStyle}
+            />
+          </span>
           <div id="cmo-about-identity-textstack" style={aboutIdentityTextStackStyle}>
             <h2 id="cmo-about-heading" ref={aboutHeadingRef} style={aboutHeadingStyle}>{ABOUT_HEADING_COPY}</h2>
             <div id="cmo-about-signature-row" style={aboutSignatureRowStyle}>
-              <span id="cmo-about-signature-dot" aria-hidden="true" style={aboutSignatureDotStyle} />
+              {/* <span id="cmo-about-signature-dot" aria-hidden="true" style={aboutSignatureDotStyle} /> */}
               <span id="cmo-about-signature" style={aboutSignatureStyle}>{INTRO_SIGNATURE}</span>
               <span id="cmo-about-signature-divider" aria-hidden="true" style={aboutSignatureDividerStyle} />
               <div id="cmo-about-signature-socials" style={aboutSignatureSocialsRowStyle}>
@@ -465,7 +491,7 @@ function HitloopAboutBlock() {
                       alt={copy > 0 ? '' : logo.alt}
                       width={logo.w}
                       height={logo.h}
-                      style={logo.scale ? { ...agencyLogoStyle, width: 'auto', height: `${22 * logo.scale}px` } : { ...agencyLogoStyle, width: 'auto' }}
+                      style={agencyLogoImgStyle(logo)}
                     />
                   ))}
                 </div>
@@ -1546,6 +1572,11 @@ const StackedSlidesSection = () => {
 
     const doPin = () => {
       if (pinned) return;
+      // Guard against ScrollTrigger evaluating "already past the trigger
+      // point" at mount/refresh time on short viewports (mobile) — that pins
+      // the CTA immediately on load, before the user has scrolled at all.
+      // A real scroll-triggered pin always happens after scrollY moves.
+      if (window.scrollY < 8) return;
       origParent = cta.parentNode;
       origNext   = cta.nextSibling;
       const arrowEl    = document.getElementById('nav-scroll-top-arrow');
@@ -1553,19 +1584,18 @@ const StackedSlidesSection = () => {
       if (arrowEl)    arrowEl.style.display    = '';
       if (settingsEl) settingsEl.style.display = 'none';
 
-      // Spacer holds the layout so the trigger row's position stays stable on
-      // refresh. EXPERIMENT: on desktop the CTA is position:absolute (out of
-      // flow) by default now — see the #panel-hero-cta media rule above — so
-      // removing it never shifts the row; a real-width spacer there would
-      // wrongly shrink #hero-url-input-row back down from its 100%-width state.
-      const wasInFlow = getComputedStyle(cta).position !== 'absolute';
+      // Spacer is only an insertion anchor for unpin — never a layout element.
+      // The CTA is position:absolute at every width (see the #panel-hero-cta rule),
+      // so removing it can't shift the row, and a display:none spacer can't be
+      // counted as a flex item eating a gutter's worth of the input row's width.
       spacer = document.createElement('div');
-      const r = cta.getBoundingClientRect();
-      pinnedWidth = r.width;
-      spacer.style.cssText = wasInFlow
-        ? `width:${r.width}px;height:${r.height}px;flex-shrink:0;pointer-events:none;`
-        : `width:0;height:0;flex-shrink:0;pointer-events:none;`;
+      pinnedWidth = cta.getBoundingClientRect().width;
+      spacer.style.cssText = 'display:none;';
       origParent.insertBefore(spacer, cta);
+      // Pinned markers drive the CSS that closes the row's now-pointless flex
+      // gap and sizes the centered mobile pill (see the #panel-hero-cta rules).
+      cta.dataset.ctaPinned = 'true';
+      origParent.dataset.ctaPinned = 'true';
 
       Object.assign(cta.style, {
         position: 'fixed',
@@ -1596,6 +1626,8 @@ const StackedSlidesSection = () => {
       cta.style.removeProperty('width');
       ['position','top','zIndex','margin','left','right','transform','justifyContent','opacity','visibility','pointerEvents']
         .forEach(p => { cta.style[p] = ''; });
+      delete cta.dataset.ctaPinned;
+      delete origParent.dataset.ctaPinned;
       origParent.insertBefore(cta, spacer);
       spacer?.parentNode?.removeChild(spacer);
       spacer    = null;
@@ -1627,7 +1659,13 @@ const StackedSlidesSection = () => {
     const handleResize = () => positionPinnedCta();
     window.addEventListener('resize', handleResize);
 
+    // Force a re-measure once the layout has actually settled (fonts, the
+    // hero's 100dvh sizing, etc.) — creating these triggers before that can
+    // make GSAP evaluate the wrong initial state on short/mobile viewports.
+    const refreshId = requestAnimationFrame(() => ScrollTrigger.refresh());
+
     return () => {
+      cancelAnimationFrame(refreshId);
       st?.kill();
       stFooter?.kill();
       window.removeEventListener('resize', handleResize);
@@ -1823,7 +1861,6 @@ const StackedSlidesSection = () => {
             justify-content: center !important;
             box-sizing: border-box !important;
           }
-          #cmo-dashboard-table { border-top: none !important; padding-top: 0 !important; }
           /* ── Onboarding card / table overflow fix ── */
           #dashboard-stack-shell {
             overflow: visible;
@@ -1896,16 +1933,19 @@ const StackedSlidesSection = () => {
           #cmo-dashboard-table tbody tr[data-sub] td:nth-child(3) {
             padding-left: 1.1rem !important;
           }
-          /* Daily Brief row has no description line anymore (chevron only) — keep the
-             chevron on the same grid row as the "Daily Brief" label instead of the
-             empty description row below it. */
-          #cmo-dashboard-table tbody tr[data-daily] {
+          /* The two toggle rows (Dashboard / Daily Brief) carry a value + chevron,
+             not a description — keep both on the same grid row as their label,
+             right-aligned, instead of dropping to the row below it. */
+          #cmo-dashboard-table tbody tr[data-daily],
+          #cmo-dashboard-table tbody tr[data-dashboard] {
             grid-template-columns: 2rem 1fr auto !important;
           }
-          #cmo-dashboard-table tbody tr[data-daily] td:nth-child(2) {
+          #cmo-dashboard-table tbody tr[data-daily] td:nth-child(2),
+          #cmo-dashboard-table tbody tr[data-dashboard] td:nth-child(2) {
             grid-row: 1 !important;
           }
-          #cmo-dashboard-table tbody tr[data-daily] td:nth-child(3) {
+          #cmo-dashboard-table tbody tr[data-daily] td:nth-child(3),
+          #cmo-dashboard-table tbody tr[data-dashboard] td:nth-child(3) {
             grid-column: 3 !important;
             grid-row: 1 !important;
             display: flex !important;
@@ -2019,22 +2059,74 @@ const StackedSlidesSection = () => {
         #cmo-about-divider {
           display: none;
         }
-        /* Below the 900px split, center the identity block (avatar, name,
-           role row) — the desktop 2-column layout stays left-justified
-           against the copy column via the plain #cmo-about-identity-col
-           rule above; !important needed since alignment is inline-styled. */
+        /* Below the 900px split there is no left/right column pair, so the
+           identity block is a compact intro only: the background line, the
+           "previously at" label and the agency marquee are two-column-only
+           content and stay hidden at EVERY width under 900px (tablet band and
+           phone band alike). !important since both are inline-styled. */
         @media (max-width: 899px) {
+          #cmo-about-lead,
+          #cmo-about-previously-block {
+            display: none !important;
+          }
+        }
+        /* Below the 900px two-column split (tablet band + phone alike) the
+           identity block reads as one left-justified unit: avatar hard left,
+           "I'm Bryan Balli" and "CREATIVE LEAD" stacked directly beside it.
+           !important since the alignment is inline-styled. The ≥900 two-column
+           orientation is untouched — it aligns against the copy column. */
+        @media (max-width: 899px) {
+          /* Below the split the table block leads with the URL input, so its
+             divider would draw a hairline directly above that pill. */
+          #cmo-dashboard-table { border-top: none !important; padding-top: 0 !important; }
           #cmo-about-identity-header {
-            justify-content: center !important;
+            justify-content: flex-start !important;
+            align-items: flex-start !important;
+            gap: clamp(0.5rem, 2.5vw, 1rem) !important;
+            /* Mirrors aboutHeadingStyle's font-size; the avatar sizes off it. */
+            --about-heading-size: clamp(1.2rem, 5.8vw, 2.1rem);
+          }
+          /* Avatar matches the height of the name + role stack. Computed from the
+             type scale rather than align-items:stretch: the shell's width would
+             then depend on its stretched height while the stack's width depends
+             on the shell's width, and the circular resolution blew it up to 128px.
+             --about-heading-size is re-declared for the phone band below. */
+          #cmo-about-avatar-shell {
+            --about-stack-gap: clamp(0.3rem, 0.6vw, 0.4rem);
+            --about-role-line: calc(1.25 * clamp(0.8rem, 1vw, 0.88rem));
+            width: calc(var(--about-heading-size) + var(--about-stack-gap) + var(--about-role-line)) !important;
+            height: calc(var(--about-heading-size) + var(--about-stack-gap) + var(--about-role-line)) !important;
+            align-self: flex-start !important;
           }
           #cmo-about-identity-textstack {
-            align-items: center !important;
+            align-items: flex-start !important;
+            flex: 0 0 auto;
           }
           #cmo-about-heading {
-            text-align: center !important;
+            text-align: left !important;
           }
           #cmo-about-signature-row {
-            justify-content: center !important;
+            justify-content: flex-start !important;
+          }
+        }
+        /* Phone (≤767px): scale the name up to absorb the width freed by the
+           hidden two-column content; the avatar tracks it through the shared var. */
+        @media (max-width: 767px) {
+          #cmo-about-heading {
+            font-size: clamp(1.35rem, 8vw, 2.3rem) !important;
+          }
+          #cmo-about-identity-header {
+            --about-heading-size: clamp(1.35rem, 8vw, 2.3rem);
+          }
+        }
+        /* Sub-360px: tighten the role row so the dot + CREATIVE LEAD + socials
+           stay on one line beside the avatar instead of wrapping. */
+        @media (max-width: 360px) {
+          #cmo-about-signature-row {
+            gap: 0.35rem !important;
+          }
+          #cmo-about-signature-socials {
+            gap: 0.45rem !important;
           }
         }
         @media (min-width: 900px) {
@@ -2061,29 +2153,25 @@ const StackedSlidesSection = () => {
            #hero-url-input-row's flex:1 fill the freed width automatically,
            and keeps it measurable so the pin code's getBoundingClientRect()
            sizing still works. */
-        @media (min-width: 900px) {
-          #panel-hero-text-row {
-            position: relative;
-            /* The row's flex gap still counts the 0-width spacer (inserted
-               here once pinned, in place of the CTA) as a real flex item,
-               eating a gutter's worth of space even though nothing visible
-               sits there — that shortened #hero-url-input-row's full width.
-               Zeroed here since on desktop there's only ever one visible
-               item in this row now; mobile still needs the real gap
-               between the input row and the
-               inline CTA. */
-            gap: 0 !important;
-          }
-          #panel-hero-cta {
-            position: absolute;
-            top: 50%;
-            right: 0;
-            transform: translateY(-50%);
-            opacity: 0;
-            visibility: hidden;
-            pointer-events: none;
-            transition: opacity 0.25s ease;
-          }
+        /* #panel-hero-cta is hidden at EVERY width until the scroll pin reveals it
+           (HomePage.jsx sets the same opacity/visibility to prevent FOUC), so it is
+           taken out of flow at every width too. Left in flow below 900px it was an
+           invisible ~240px hole that stopped #hero-url-input-row from stretching. */
+        #panel-hero-text-row {
+          position: relative;
+          /* Only one in-flow item lives here now (plus the display:none spacer the
+             pin inserts), so a flex gap would just be a dead gutter. */
+          gap: 0 !important;
+        }
+        #panel-hero-cta {
+          position: absolute;
+          top: 50%;
+          right: 0;
+          transform: translateY(-50%);
+          opacity: 0;
+          visibility: hidden;
+          pointer-events: none;
+          transition: opacity 0.25s ease;
         }
         .cmo-url-input-desktop { display: none !important; }
         .cmo-url-input-mobile { display: flex; }
@@ -2302,14 +2390,10 @@ const StackedSlidesSection = () => {
         @media (max-width: 767px), (prefers-reduced-motion: reduce) {
           #cmo-modal-overlay, #cmo-auth-card { animation: none; }
         }
-        @media (max-width: 480px) {
-          #hero-url-input-row { display: none !important; }
-          #panel-hero-text-row { justify-content: center; }
-        }
-        /* xsmall (pre-mobile) + tablet: the hero input pill and "Meet with A
-           Human" collide. Collapse the onboard button to an arrow circle (keeping
-           its state styling) and let both pills share the row at full width. */
-        @media (min-width: 481px) and (max-width: 1024px) {
+        /* xsmall + mobile only: the labelled button leaves too little room for the
+           input, so it collapses to an arrow circle (keeping its state styling).
+           Tablet and up keep the "Onboard Now" label. */
+        @media (max-width: 767px) {
           #hero-url-input-row button .hero-onboard-label { display: none; }
           #hero-url-input-row button {
             width: 2.6rem;
@@ -2321,8 +2405,12 @@ const StackedSlidesSection = () => {
             flex-shrink: 0;
           }
           #hero-url-input-row button > span { margin-left: 0 !important; }
+        }
+        /* Tablet: both pills stay on one row, but "Book a Call" only takes its
+           natural width so the input pill absorbs every remaining pixel. */
+        @media (min-width: 768px) and (max-width: 1024px) {
           #panel-hero-cta {
-            flex: 1 1 auto !important;
+            flex: 0 1 auto !important;
             min-width: 0 !important;
             width: auto !important;
             max-width: 100% !important;
@@ -2330,6 +2418,26 @@ const StackedSlidesSection = () => {
             padding-right: clamp(0.75rem, 2vw, 1.5rem) !important;
             justify-content: center !important;
             overflow: hidden;
+          }
+        }
+        /* Mobile: the input pill owns the row outright. */
+        @media (max-width: 767px) {
+          #panel-hero-text-row { flex-wrap: wrap !important; }
+          #hero-url-input-row {
+            flex: 1 1 100% !important;
+            width: 100% !important;
+          }
+          #panel-hero-cta {
+            width: 100% !important;
+            min-width: 0 !important;
+            max-width: 100% !important;
+            justify-content: center !important;
+          }
+          /* Once pinned it's a floating bar centered by JS (left:50% + translateX),
+             so it shouldn't run edge to edge the way the row-width version does. */
+          #panel-hero-cta[data-cta-pinned] {
+            width: 88% !important;
+            max-width: 88% !important;
           }
         }
       `}</style>
@@ -2403,7 +2511,7 @@ const StackedSlidesSection = () => {
                               >
                                 {[
                                   { ref: peekCard3Ref, id: 'dash-peek-card-3', left: '0%',  rotate: '-1.4deg', objPos: 'top center', label: '', img: '/img/ss3.png', height: '190px', topOffset: '0', bg: '#fcfaf4' },
-                                  { ref: peekCard2Ref, id: 'dash-peek-card-2', left: '33%', rotate: '1.2deg',  objPos: 'top center', label: '', img: '/img/ss2.png', height: '168px', topOffset: '0', bg: '#fcfaf4' },
+                                  { ref: peekCard2Ref, id: 'dash-peek-card-2', left: '33%', rotate: '1.2deg',  objPos: 'top center', label: '', img: '/img/clairecalls_ss.png', height: '168px', topOffset: '0', bg: '#fcfaf4' },
                                   { ref: peekCard1Ref, id: 'dash-peek-card-1', left: '66%', rotate: '-3.2deg', objPos: 'top center', label: '', img: '/img/ss1.png', height: '200px', topOffset: '0', bg: '#fcfaf4' },
                                 ].map(({ ref: cardRef, id, left, rotate, objPos, label, img, height, topOffset, bg }, i) => (
                                   <div
@@ -2473,7 +2581,7 @@ const StackedSlidesSection = () => {
                                     </div>
                                   </div>
                                   <div id="cmo-dashboard-table" className="cmo-table-outer" style={{ gridColumn: '1 / -1', marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
-                                    <div className="cmo-url-input-mobile" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
+                                    <div className="cmo-url-input-mobile" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                                       <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
                                       <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter your website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
                                       <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="cmo-table-submit-label">Onboard Now</span><UpRightArrow className="cmo-table-submit-arrow" style={ctaIconStyle} /></button>
@@ -2690,12 +2798,12 @@ const StackedSlidesSection = () => {
                         <div ref={marqueeTrackRef} style={agencyMarqueeTrackStyle}>
                           <div ref={marqueeSetRef} style={agencyMarqueeSetStyle}>
                             {agencyLogos.map((logo) => (
-                              <Image key={`agency-a-${logo.alt}`} src={logo.src} alt={logo.alt} width={logo.w} height={logo.h} style={logo.scale ? { ...agencyLogoStyle, width: 'auto', height: `${22 * logo.scale}px` } : { ...agencyLogoStyle, width: 'auto' }} />
+                              <Image key={`agency-a-${logo.alt}`} src={logo.src} alt={logo.alt} width={logo.w} height={logo.h} style={agencyLogoImgStyle(logo)} />
                             ))}
                           </div>
                           <div aria-hidden="true" style={agencyMarqueeSetStyle}>
                             {agencyLogos.map((logo) => (
-                              <Image key={`agency-b-${logo.alt}`} src={logo.src} alt="" width={logo.w} height={logo.h} style={logo.scale ? { ...agencyLogoStyle, width: 'auto', height: `${22 * logo.scale}px` } : { ...agencyLogoStyle, width: 'auto' }} />
+                              <Image key={`agency-b-${logo.alt}`} src={logo.src} alt="" width={logo.w} height={logo.h} style={agencyLogoImgStyle(logo)} />
                             ))}
                           </div>
                         </div>
@@ -3606,12 +3714,19 @@ const aboutIdentityHeaderStyle = {
   width: '100%',
 };
 
-const aboutIdentityAvatarStyle = {
+const aboutIdentityAvatarShellStyle = {
+  display: 'block',
   width: 'clamp(2.25rem, 4vw, 3.25rem)',
   height: 'clamp(2.25rem, 4vw, 3.25rem)',
+  flexShrink: 0,
+};
+
+const aboutIdentityAvatarStyle = {
+  width: '100%',
+  height: '100%',
   borderRadius: '50%',
   objectFit: 'cover',
-  flexShrink: 0,
+  display: 'block',
   boxShadow: '0 4px 14px rgba(42, 36, 32, 0.16)',
 };
 
@@ -3642,8 +3757,11 @@ const aboutSignatureRowStyle = {
 };
 
 const aboutSignatureDotStyle = {
-  width: '0.4rem',
-  height: '0.4rem',
+  // Sized in em off the same clamp as the label + #cmo-about-lead paragraph, so
+  // the dot tracks the role text instead of drifting at other viewport widths.
+  fontSize: 'clamp(0.8rem, 1vw, 0.88rem)',
+  width: '0.5em',
+  height: '0.5em',
   borderRadius: '50%',
   background: '#2a2420',
   flexShrink: 0,
@@ -3651,11 +3769,13 @@ const aboutSignatureDotStyle = {
 
 const aboutSignatureStyle = {
   fontFamily: "'Space Grotesk', system-ui, sans-serif",
-  fontSize: '0.78rem',
+  // Reads as body copy, not a label: same size, weight, case and tracking as
+  // aboutLeadStyle ("My background spans…"), only a touch darker.
+  fontSize: 'clamp(0.8rem, 1vw, 0.88rem)',
   fontStyle: 'normal',
-  fontWeight: 600,
-  letterSpacing: '0.07em',
-  textTransform: 'uppercase',
+  fontWeight: 400,
+  letterSpacing: 'normal',
+  textTransform: 'none',
   color: 'rgba(42, 36, 32, 0.52)',
 };
 
@@ -4432,12 +4552,26 @@ const agencyMarqueeSetStyle = {
 };
 
 const agencyLogoStyle = {
-  height: '22px',
+  height: `${AGENCY_LOGO_BASE_HEIGHT}px`,
   width: 'auto',
   display: 'block',
   opacity: 0.45,
   filter: 'grayscale(1)',
   flexShrink: 0,
+};
+
+// Single source for every marquee copy (about block, panel, inline footer).
+const agencyLogoImgStyle = (logo) => {
+  const height = AGENCY_LOGO_BASE_HEIGHT * (logo.scale ?? 1);
+  const sourceToRendered = height / logo.h;
+  const [bearingLeft = 0, bearingRight = 0] = logo.bearing ?? [];
+  return {
+    ...agencyLogoStyle,
+    width: 'auto',
+    height: `${height.toFixed(2)}px`,
+    marginLeft: `${(-bearingLeft * sourceToRendered).toFixed(2)}px`,
+    marginRight: `${(-bearingRight * sourceToRendered).toFixed(2)}px`,
+  };
 };
 
 const inlineFooterCreditRowStyle = {
@@ -4835,12 +4969,12 @@ export function ContactCapabilitiesPanel() {
                       <div ref={marqueeTrackRef} style={agencyMarqueeTrackStyle}>
                         <div ref={marqueeSetRef} style={agencyMarqueeSetStyle}>
                           {agencyLogos.map((logo) => (
-                            <Image key={`agency-a-${logo.alt}`} src={logo.src} alt={logo.alt} width={logo.w} height={logo.h} style={logo.scale ? { ...agencyLogoStyle, width: 'auto', height: `${22 * logo.scale}px` } : { ...agencyLogoStyle, width: 'auto' }} />
+                            <Image key={`agency-a-${logo.alt}`} src={logo.src} alt={logo.alt} width={logo.w} height={logo.h} style={agencyLogoImgStyle(logo)} />
                           ))}
                         </div>
                         <div aria-hidden="true" style={agencyMarqueeSetStyle}>
                           {agencyLogos.map((logo) => (
-                            <Image key={`agency-b-${logo.alt}`} src={logo.src} alt="" width={logo.w} height={logo.h} style={logo.scale ? { ...agencyLogoStyle, width: 'auto', height: `${22 * logo.scale}px` } : { ...agencyLogoStyle, width: 'auto' }} />
+                            <Image key={`agency-b-${logo.alt}`} src={logo.src} alt="" width={logo.w} height={logo.h} style={agencyLogoImgStyle(logo)} />
                           ))}
                         </div>
                       </div>
