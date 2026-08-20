@@ -2036,6 +2036,11 @@ const StackedSlidesSection = () => {
           padding: clamp(0.75rem, 2vw, 1.5rem) 0 clamp(1rem, 2.5vw, 1.5rem);
           box-sizing: border-box;
         }
+        @media (max-width: 899px) {
+          #cmo-about-split {
+            padding-bottom: 0;
+          }
+        }
         #cmo-about-identity-col {
           display: flex;
           flex-direction: column;
@@ -2490,7 +2495,7 @@ const StackedSlidesSection = () => {
                           {[0, 1].map((i) => (
                             <div key={i} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
                               {['HELLO', '•', 'HELLO', '•'].map((w, j) => (
-                                <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
+                                <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 28.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
                               ))}
                             </div>
                           ))}
@@ -2638,7 +2643,7 @@ const StackedSlidesSection = () => {
                           {[0, 1].map((i) => (
                             <div key={i} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
                               {['RECENTLY SHIPPED', '•', 'RECENTLY SHIPPED', '•'].map((w, j) => (
-                                <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
+                                <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 28.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
                               ))}
                             </div>
                           ))}
@@ -2766,7 +2771,7 @@ const StackedSlidesSection = () => {
                           {[0, 1].map((i) => (
                             <div key={i} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
                               {['CONTACT', '•', 'CONTACT', '•'].map((w, j) => (
-                                <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
+                                <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 28.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
                               ))}
                             </div>
                           ))}
@@ -4939,7 +4944,7 @@ export function ContactCapabilitiesPanel() {
                         {[0, 1].map((i) => (
                           <div key={i} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
                             {['CONTACT', '•', 'CONTACT', '•'].map((w, j) => (
-                              <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
+                              <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 28.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
                             ))}
                           </div>
                         ))}
