@@ -1,5 +1,7 @@
 # Email Digest Card — Source of Truth
 
+> **Active simplification/redesign handoff:** [`../plans/EMAIL-SYSTEM-SIMPLIFICATION-FABLE-HANDOFF.md`](../plans/EMAIL-SYSTEM-SIMPLIFICATION-FABLE-HANDOFF.md). It is verified against production commit `fbb6bc60` and explicitly reconciles current-code contradictions that this historical SSOT still contains, including the unhonored send-hour/weekday controls, weekly cadence behaving daily, paid live-preview calls, durable-delivery boundaries, and the now-active retry workflow. Read it before restructuring this subsystem.
+
 **Status:** P1 shipped · P2(b) shipped (calendar toggle migrated) · P2(a) stage 1 shipped
 (config backbone + digest wiring) · P2(a) stage 2 pending (the dashboard card UI) ·
 **Granular per-section toggles shipped** (§9) · **Fresh-run-on-send + hosted Executive
