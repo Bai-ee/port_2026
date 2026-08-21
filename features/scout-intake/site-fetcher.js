@@ -1,6 +1,7 @@
 'use strict';
 
 const { readResponseText, safeFetch, validateUrl: _ssrfValidate } = require('../../api/_lib/safe-fetch.cjs');
+const { fetchBrowserlessContent } = require('../../api/_lib/browserless.cjs');
 
 // site-fetcher.js — Lightweight website evidence extractor
 //
@@ -9,12 +10,18 @@ const { readResponseText, safeFetch, validateUrl: _ssrfValidate } = require('../
 //   2. Discover up to MAX_ADDITIONAL_PAGES linked pages (about, pricing, services, contact)
 //   3. Fetch those pages in parallel
 //   4. Extract structured evidence from each page using regex (no external HTML parser)
+//   5. Rendered fallback (Phase 1, see docs/plans/BRIEF-RENDERED-SCRAPE-SONNET-HANDOFF.md):
+//      any page whose static read is thin, or that looks like an un-hydrated SPA
+//      shell, gets one Browserless `/content` render attempt (hard-capped per run).
+//      A successful, content-improving render REPLACES that page's primary fields;
+//      the static read is preserved under `staticView` (Phase 2 needs both).
 //
 // Returns a compact SiteEvidence object ready for LLM synthesis.
 //
 // All fetches are timeout-guarded (FETCH_TIMEOUT_MS).
 // Failures are non-fatal — pages that fail are logged in warnings[].
-// thin=true is set when extracted content is very sparse (JS SPA or parked domain).
+// thin=true is set when extracted content is very sparse (JS SPA or parked domain),
+// recomputed AFTER any rendered fallback so a successful render clears it.
 
 const FETCH_TIMEOUT_MS = 8000;
 const MAX_HTML_BYTES = 2 * 1024 * 1024;
@@ -25,6 +32,18 @@ const MAX_BODY_PARAGRAPHS = 8;
 const MIN_PARAGRAPH_LENGTH = 40;
 const MAX_PARAGRAPH_LENGTH = 600;
 const THIN_CONTENT_THRESHOLD = 200; // total chars of headings+paragraphs below which we flag as thin
+
+// Rendered fallback — hard cap independent of MAX_ADDITIONAL_PAGES so a future
+// bump to page discovery can never silently uncap Browserless spend.
+const MAX_RENDERED_FETCHES_PER_RUN = 4;
+// A sub-10KB document whose hydration root is empty is the master prompt's
+// SPA-shell signature (docs/plans/BRIEF-RENDERED-SCRAPE-SONNET-HANDOFF.md §3
+// Phase 1) — thin-content alone can also be a genuinely sparse but real static
+// page, so this catches the case where static extraction found *something* but
+// the document itself is a client-hydration shell.
+const SPA_SHELL_MAX_BYTES = 10 * 1024;
+const SPA_SHELL_ROOT_RE = /<div[^>]*\bid\s*=\s*["'](?:root|app|__next|___gatsby)["'][^>]*>\s*<\/div>/i;
+const RENDER_VARIANT = { id: 'scout-intake-site-fetch', label: 'Scout intake rendered fallback' };
 
 // Pages we want to fetch beyond the homepage, in priority order
 const ADDITIONAL_PAGE_PATTERNS = [
@@ -452,6 +471,103 @@ function buildPageEvidence(url, type, html) {
   return evidence;
 }
 
+// ── Rendered fallback (Phase 1) ─────────────────────────────────────────────────
+
+/** Chars of extracted heading/body content for ONE page's static evidence. */
+function pageContentChars(pageEvidence) {
+  return [...pageEvidence.h1, ...pageEvidence.h2, ...pageEvidence.bodyParagraphs].join(' ').length;
+}
+
+/** A page's own static read is sparse — same measure as the run-level `thin` flag. */
+function isPageThin(pageEvidence) {
+  return pageContentChars(pageEvidence) < THIN_CONTENT_THRESHOLD;
+}
+
+/**
+ * SPA-shell signature: a small HTML document with an empty client-hydration
+ * root (React/Vue/Next/Gatsby). Static extraction on a page like this can
+ * still clear THIN_CONTENT_THRESHOLD by accident (e.g. a stray footer string),
+ * so this check fires independently of page thinness.
+ */
+function looksLikeSpaShell(html) {
+  if (!html) return false;
+  if (Buffer.byteLength(html, 'utf8') >= SPA_SHELL_MAX_BYTES) return false;
+  return SPA_SHELL_ROOT_RE.test(html);
+}
+
+/** Trimmed static-read snapshot preserved on a page once a render replaces it. */
+function buildStaticView(pageEvidence) {
+  const view = {
+    title: pageEvidence.title,
+    metaDescription: pageEvidence.metaDescription,
+    h1: pageEvidence.h1,
+    h2: pageEvidence.h2,
+    navLabels: pageEvidence.navLabels,
+    ctaTexts: pageEvidence.ctaTexts,
+    bodyParagraphs: pageEvidence.bodyParagraphs,
+    socialLinks: pageEvidence.socialLinks,
+    contactClues: pageEvidence.contactClues,
+  };
+  if (pageEvidence.siteMeta) view.siteMeta = pageEvidence.siteMeta;
+  return view;
+}
+
+/**
+ * Decide whether a page needs a rendered (Browserless) fallback and apply it.
+ * Exported for direct unit testing of the per-run render cap — the public
+ * `fetchSiteEvidence` flow never has more than MAX_RENDERED_FETCHES_PER_RUN
+ * candidate pages today (homepage + MAX_ADDITIONAL_PAGES), so the cap itself
+ * needs a test that drives this function directly against a shared budget.
+ *
+ * Never throws — a `fetchRendered` rejection degrades to `renderFailed`.
+ *
+ * @param {object} params
+ * @param {object} params.pageEvidence - static evidence already built for this page
+ * @param {string} params.rawHtml - the static HTML that produced it
+ * @param {string} params.url
+ * @param {string} params.type - 'homepage' | 'about' | 'pricing' | ...
+ * @param {{ remaining: number }} params.renderBudget - shared, mutated in place
+ * @param {function} params.fetchRendered - fetchBrowserlessContent-shaped fn
+ * @param {string[]} params.warnings - pushed to in place
+ * @returns {Promise<object>} the page evidence to use (static, or rebuilt from the render)
+ */
+async function attemptRenderedFallback({ pageEvidence, rawHtml, url, type, renderBudget, fetchRendered, warnings }) {
+  const needsRender = isPageThin(pageEvidence) || looksLikeSpaShell(rawHtml);
+  if (!needsRender) {
+    return { ...pageEvidence, renderMode: 'static' };
+  }
+
+  if (!renderBudget || renderBudget.remaining <= 0) {
+    warnings.push(`${type} page (${url}) looked thin/JS-rendered but the per-run rendered-fetch cap (${MAX_RENDERED_FETCHES_PER_RUN}) was already reached.`);
+    return { ...pageEvidence, renderMode: 'static', renderFailed: 'render_cap_reached' };
+  }
+  renderBudget.remaining -= 1;
+
+  let rendered;
+  try {
+    rendered = await fetchRendered({ url, variant: RENDER_VARIANT });
+  } catch (err) {
+    rendered = { ok: false, reason: err?.message || 'fetch_error' };
+  }
+
+  if (!rendered?.ok || !rendered.html) {
+    warnings.push(`${type} page (${url}) looked thin/JS-rendered but the Browserless render did not succeed (${rendered?.reason || 'unavailable'}) — reading static HTML only.`);
+    return { ...pageEvidence, renderMode: 'static', renderFailed: rendered?.reason || 'browserless_unavailable' };
+  }
+
+  if (rendered.html.length <= rawHtml.length) {
+    warnings.push(`${type} page (${url}) rendered via Browserless but returned no more content than the static HTML — keeping the static read.`);
+    return { ...pageEvidence, renderMode: 'static', renderFailed: 'no_improvement' };
+  }
+
+  const rebuilt = buildPageEvidence(url, type, rendered.html);
+  rebuilt.renderMode = 'rendered-fallback';
+  rebuilt.renderedVia = 'browserless';
+  rebuilt.staticView = buildStaticView(pageEvidence);
+  warnings.push(`${type} page (${url}) was JS-rendered — static HTML was too thin; Browserless rendered fallback succeeded.`);
+  return rebuilt;
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
@@ -459,15 +575,21 @@ function buildPageEvidence(url, type, html) {
  *
  * @param {string} websiteUrl - The site to fetch (must include protocol)
  * @param {object} [options]
- * @param {function} [options.onPageFetched] - Called after each page is fetched.
+ * @param {function} [options.onPageFetched] - Called after each page is fetched
+ *   (after any rendered-fallback attempt, so callers see the final evidence).
  *   Signature: (type: string, url: string, pageEvidence: object) => void
  *   Fire-and-forget — the fetcher does not await this.
+ * @param {function} [options.fetchRendered] - fetchBrowserlessContent-shaped
+ *   override for tests. Defaults to the real Browserless `/content` client
+ *   (`api/_lib/browserless.cjs`), which logs every attempt to
+ *   `browserless_requests` and degrades to `{ ok:false }` when unconfigured.
  * @returns {Promise<SiteEvidence>}
  */
-async function fetchSiteEvidence(websiteUrl, { onPageFetched } = {}) {
+async function fetchSiteEvidence(websiteUrl, { onPageFetched, fetchRendered = fetchBrowserlessContent } = {}) {
   const fetchedAt = new Date().toISOString();
   const pages = [];
   const warnings = [];
+  const renderBudget = { remaining: MAX_RENDERED_FETCHES_PER_RUN };
 
   // SSRF guard: reject private/internal URLs before fetching
   try {
@@ -495,24 +617,46 @@ async function fetchSiteEvidence(websiteUrl, { onPageFetched } = {}) {
     };
   }
 
-  const homepageEvidence = buildPageEvidence(websiteUrl, 'homepage', homepageFetch.html);
+  let homepageEvidence = buildPageEvidence(websiteUrl, 'homepage', homepageFetch.html);
+  homepageEvidence = await attemptRenderedFallback({
+    pageEvidence: homepageEvidence,
+    rawHtml: homepageFetch.html,
+    url: websiteUrl,
+    type: 'homepage',
+    renderBudget,
+    fetchRendered,
+    warnings,
+  });
   pages.push(homepageEvidence);
   // Emit homepage progress — fire-and-forget, never throws to fetcher
   if (onPageFetched) { try { onPageFetched('homepage', websiteUrl, homepageEvidence); } catch { /* ignore */ } }
 
-  // Step 2 — Discover and fetch additional pages in parallel
+  // Step 2 — Discover and fetch additional pages in parallel. Discovery reads
+  // the STATIC homepage HTML (unchanged) — a true client-only SPA shell has no
+  // static hrefs to discover either, so only the homepage gets a rendered
+  // fallback in that case; a site with static nav but thin individual pages
+  // gets each thin page rendered too.
   const additionalLinks = discoverAdditionalPages(homepageFetch.html, websiteUrl)
     .slice(0, MAX_ADDITIONAL_PAGES);
 
   if (additionalLinks.length > 0) {
     const additionalResults = await Promise.allSettled(
       additionalLinks.map(({ type, url }) =>
-        fetchPage(url).then((result) => {
+        fetchPage(url).then(async (result) => {
           if (!result.ok || !result.html) {
             warnings.push(`${type} page (${url}) failed: ${result.reason}`);
             return { type, url, result, pageEvidence: null };
           }
-          const pageEvidence = buildPageEvidence(url, type, result.html);
+          let pageEvidence = buildPageEvidence(url, type, result.html);
+          pageEvidence = await attemptRenderedFallback({
+            pageEvidence,
+            rawHtml: result.html,
+            url,
+            type,
+            renderBudget,
+            fetchRendered,
+            warnings,
+          });
           // Emit per-page progress — fire-and-forget
           if (onPageFetched) { try { onPageFetched(type, url, pageEvidence); } catch { /* ignore */ } }
           return { type, url, result, pageEvidence };
@@ -527,7 +671,9 @@ async function fetchSiteEvidence(websiteUrl, { onPageFetched } = {}) {
     }
   }
 
-  // Step 3 — Flag thin content
+  // Step 3 — Flag thin content. Computed from the FINAL pages array, so a page
+  // whose primary fields were replaced by a successful rendered fallback
+  // contributes its rendered content here, not its static content.
   const totalContentChars = pages
     .flatMap((p) => [...p.h1, ...p.h2, ...p.bodyParagraphs])
     .join(' ')
@@ -549,4 +695,14 @@ async function fetchSiteEvidence(websiteUrl, { onPageFetched } = {}) {
   };
 }
 
-module.exports = { fetchSiteEvidence, extractSiteMeta, extractCtaTexts };
+module.exports = {
+  fetchSiteEvidence,
+  extractSiteMeta,
+  extractCtaTexts,
+  // Exported for direct unit testing (Phase 1 rendered-fallback matrix) —
+  // see features/scout-intake/__tests__/site-fetcher-rendered-fallback.test.js
+  looksLikeSpaShell,
+  isPageThin,
+  attemptRenderedFallback,
+  MAX_RENDERED_FETCHES_PER_RUN,
+};

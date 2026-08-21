@@ -62,6 +62,33 @@ test('a JS-rendered site that returned no static text is marked UNPROVEN', () =>
   assert.match(evidenceText, /UNPROVEN/);
 });
 
+// ── Phase 1 rendered fallback (docs/plans/BRIEF-RENDERED-SCRAPE-SONNET-HANDOFF.md) ──
+
+test('a page captured via a successful rendered (Browserless) fallback is reported as READ, never as "could not be read"', () => {
+  const data = crawled();
+  data.evidence.thin = false;
+  data.evidence.pages = [{ ...PAGE, renderMode: 'rendered-fallback', renderedVia: 'browserless' }];
+  const { evidenceText } = buildBriefSummaryEvidence('onboarding', data);
+  assert.match(evidenceText, /## CAPTURE STATUS/);
+  assert.match(evidenceText, /JS-rendered/);
+  assert.match(evidenceText, /rendered \(Browserless\) fetch/);
+  assert.doesNotMatch(evidenceText, /COULD NOT BE READ/);
+  assert.doesNotMatch(evidenceText, /UNPROVEN/);
+  // The real page content (captured from the rendered read) still reaches the brief.
+  assert.match(evidenceText, /## site-content/);
+  assert.match(evidenceText, /H1 \(homepage\) — MINE · PLAY GAME/);
+});
+
+test('a rendered fallback that was ATTEMPTED but FAILED still reads as the genuine "could not read" degrade', () => {
+  const data = crawled();
+  data.evidence.thin = true;
+  data.evidence.pages = [{ ...PAGE, ctaTexts: [], bodyParagraphs: [], h1: [], h2: [], renderMode: 'static', renderFailed: 'browserless_disabled' }];
+  const { evidenceText } = buildBriefSummaryEvidence('onboarding', data);
+  assert.match(evidenceText, /COULD NOT BE READ/);
+  assert.match(evidenceText, /UNPROVEN/);
+  assert.doesNotMatch(evidenceText, /rendered \(Browserless\) fetch/);
+});
+
 test('failed and never-run modules are reported separately', () => {
   const { evidenceText } = buildBriefSummaryEvidence('onboarding', crawled({
     modules: {

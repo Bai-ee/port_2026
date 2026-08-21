@@ -37,6 +37,24 @@ function summarizeEvidencePages(evidence) {
   if (!evidence || !Array.isArray(evidence.pages) || evidence.pages.length === 0) return null;
   const cap = (list, max, charCap = 240) =>
     arr(list).slice(0, max).map((s) => str(s).slice(0, charCap)).filter(Boolean);
+  // Phase 1 rendered fallback (docs/plans/BRIEF-RENDERED-SCRAPE-SONNET-HANDOFF.md):
+  // when a page's primary fields were replaced by a Browserless render, the
+  // static read that a non-rendering crawler actually receives is preserved
+  // here — trimmed the same way as the primary fields, never the raw HTML.
+  const staticView = (sv) => {
+    if (!sv || typeof sv !== 'object') return null;
+    return {
+      title: str(sv.title) || null,
+      h1: cap(sv.h1, 3),
+      h2: cap(sv.h2, 10),
+      navLabels: cap(sv.navLabels, 15, 60),
+      ctaTexts: cap(sv.ctaTexts, 10, 80),
+      bodyParagraphs: cap(sv.bodyParagraphs, 5),
+      socialLinks: cap(sv.socialLinks, 12),
+      contactClues: cap(sv.contactClues, 8),
+      ...(sv.siteMeta ? { siteMeta: sv.siteMeta } : {}),
+    };
+  };
   return {
     url: str(evidence.url) || null,
     fetchedAt: str(evidence.fetchedAt) || null,
@@ -52,6 +70,12 @@ function summarizeEvidencePages(evidence) {
       bodyParagraphs: cap(p?.bodyParagraphs, 5),
       socialLinks: cap(p?.socialLinks, 12),
       contactClues: cap(p?.contactClues, 8),
+      // 'static' | 'rendered-fallback' — defaults to 'static' so pages captured
+      // before this field existed still read as a valid, honest value.
+      renderMode: str(p?.renderMode) || 'static',
+      renderedVia: str(p?.renderedVia) || null,
+      renderFailed: str(p?.renderFailed) || null,
+      staticView: staticView(p?.staticView),
     })),
   };
 }

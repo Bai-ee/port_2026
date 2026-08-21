@@ -102,9 +102,17 @@ function captureStatusLines(data) {
   const lines = [];
   const evidence = data.evidence;
   const pageCount = arr(evidence?.pages).length;
+  // Phase 1 rendered fallback (docs/plans/BRIEF-RENDERED-SCRAPE-SONNET-HANDOFF.md):
+  // a page whose static read was thin/JS-shell can have been rebuilt from a
+  // Browserless render. That is a genuine Tier-A-equivalent read, not a gap —
+  // keep it out of the "COULD NOT BE READ" register below.
+  const renderedPages = arr(evidence?.pages).filter((p) => p?.renderMode === 'rendered-fallback');
 
   if (!evidence || !pageCount) {
     lines.push('Page crawl — DID NOT RUN this run. No on-page copy, headings, CTAs or links were read. Their absence below is UNPROVEN.');
+  } else if (renderedPages.length) {
+    const where = renderedPages.map((p) => p.type || 'page').join(', ');
+    lines.push(`Page crawl — ran (${pageCount} page(s)). The site is JS-rendered: static HTML for ${where} was too thin to read, so it was captured via a rendered (Browserless) fetch instead. On-page copy, headings, CTAs and links for those pages below reflect the RENDERED page, not the raw HTML a non-rendering crawler would see.`);
   } else if (evidence.thin) {
     lines.push(`Page crawl — ran (${pageCount} page(s)) but returned almost no static text; the site is JS-rendered, so on-page copy and CTAs COULD NOT BE READ. Their absence is UNPROVEN.`);
   } else {
