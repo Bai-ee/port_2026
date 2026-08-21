@@ -1203,6 +1203,12 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     // never a bare ✗ from a blind static read — it is either ABSENT (proven,
     // with the tier that proved it) or NOT TESTED (with the reason), per
     // buildSocialChecklistRows (features/scout-intake/brief-honesty-sections.js).
+    // Shared copy for the two Phase 3 honesty sub-sections — one string each,
+    // read by both the classic subsection blocks below and the Simple layout's
+    // sb-crawler-parity/sb-coverage builders (Phase 3c), so the wording never
+    // drifts between layouts.
+    const CRAWLER_PARITY_NOTE = `Your homepage builds its content with JavaScript. When the link is shared on Facebook, X, LinkedIn, or iMessage, those apps read the page's raw HTML before any script runs — not what a visitor sees. Here is the difference this run found:`;
+    const COVERAGE_MANIFEST_NOTE = 'What this run’s website-read stage could and couldn’t check this time. Screenshots and device mockups are captured separately and appear in your Deliverables above.';
     const socialInner = (() => {
       const sm = siteMeta || {};
       if (!siteMeta && !socialPreviewImageUrl) return '';
@@ -1232,7 +1238,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     const crawlerParityInner = (() => {
       const pages = buildCrawlerParityPages(evidence);
       if (!pages.length) return '';
-      const note = `Your homepage builds its content with JavaScript. When the link is shared on Facebook, X, LinkedIn, or iMessage, those apps read the page's raw HTML before any script runs — not what a visitor sees. Here is the difference this run found:`;
+      const note = CRAWLER_PARITY_NOTE;
       const pagesHtml = pages.map((p) => {
         const rowsHtml = p.fields.map((f) => `<div class="cb-parity-row"><span class="cb-parity-field">${esc(f.label)}</span><span class="cb-parity-val"><span class="cb-parity-col-label">Crawlers receive</span>${esc(f.static)}</span><span class="cb-parity-val"><span class="cb-parity-col-label">Visitors see</span>${esc(f.rendered)}</span><span class="cb-parity-match${f.match ? '' : ' is-differs'}">${f.match ? 'Matches' : 'Differs'}</span></div>`).join('');
         return `<div class="cb-parity-page"><div class="cb-parity-page-url">${esc(p.type)} · ${esc(p.url || '')}</div>${rowsHtml}</div>`;
@@ -1247,7 +1253,7 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     const coverageManifestInner = (() => {
       const { hasData, allRan, rows } = buildCoverageManifestRows(evidence?.coverage);
       if (!hasData) return '';
-      const note = 'What this run’s website-read stage could and couldn’t check this time. Screenshots and device mockups are captured separately and appear in your Deliverables above.';
+      const note = COVERAGE_MANIFEST_NOTE;
       const body = allRan
         ? `<p class="cb-coverage-clean">Every planned check for this run’s website read completed.</p>`
         : gapList(rows.map((r) => `${r.label} — ${r.status}${r.reason ? `: ${r.reason}` : ''}`));
@@ -1534,8 +1540,12 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
           return sbPage('sb-featured-post', 'Featured<br/>Post.', `<p class="sb-lead">${esc(caption)}</p>${mediaRow}${actions}`);
         },
         'sb-social-share': () => {
-          // Simple-native: share thumbnail row + numbered captured/missing
-          // checklist. No faux share-card (classic-only).
+          // Simple-native: share thumbnail row + numbered three-state
+          // checklist — same buildSocialChecklistRows truth source as the
+          // classic layout's Social Share sub-section (Phase 3c), so a
+          // missing tag is never a bare miss here either: PRESENT / ABSENT
+          // (proven, tier named) / NOT TESTED (reason named). No faux
+          // share-card mock (classic-only).
           const sm = siteMeta || {};
           if (!siteMeta && !socialPreviewImageUrl) return '';
           const shareImg = socialPreviewImageUrl || sm.ogImage || null;
@@ -1545,17 +1555,39 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
             <span class="sb-dl-thumb${ok(shareImg) ? '' : ' sb-dl-thumb--empty'}">${ok(shareImg) ? `<img src="${esc(shareImg)}" alt="Share image"/>` : ''}</span>
             <span class="sb-dl-text"><span class="sb-dl-title">${esc(sm.title || host || 'How your site shares')}</span><span class="sb-dl-desc">${esc(sm.description || (ok(shareImg) ? 'The card platforms show when your link is shared.' : 'No share image set.'))}</span></span>
           </div></div>`;
-          const checks = [
-            { label: 'Share image (og:image)', val: sm.ogImage },
-            { label: 'Image alt text', val: sm.ogImageAlt },
-            { label: 'Title', val: sm.title },
-            { label: 'Description', val: sm.description },
-            { label: 'Site name', val: sm.siteName },
-            { label: 'Favicon', val: sm.favicon },
-            { label: 'Brand color', val: sm.themeColor },
-          ];
-          const list = `<ol class="sb-numlist">${checks.map((c, i) => `<li><span class="n">${String(i + 1).padStart(2, '0')}</span><span class="d">—</span><span class="t"><span class="sb-dl-title">${esc(c.label)}</span><span class="sb-dl-desc${c.val ? '' : ' sb-status-miss'}">${c.val ? 'Captured' : 'Missing'}</span></span></li>`).join('')}</ol>`;
+          const SB_STATUS_TEXT = { present: 'Captured', 'absent-proven': 'Missing', 'not-tested': 'Not tested' };
+          const rows = buildSocialChecklistRows(sm, evidence);
+          const list = `<ol class="sb-numlist">${rows.map((r, i) => `<li><span class="n">${String(i + 1).padStart(2, '0')}</span><span class="d">—</span><span class="t"><span class="sb-dl-title">${esc(r.label)}</span><span class="sb-dl-desc">${esc(SB_STATUS_TEXT[r.state])}${r.detail ? ` — ${esc(r.detail)}` : ''}</span></span></li>`).join('')}</ol>`;
           return sbPage('sb-social-share', 'Social<br/>Share.', `${shareRow}${list}`);
+        },
+        'sb-crawler-parity': () => {
+          // Simple-native: same buildCrawlerParityPages truth source as the
+          // classic Crawler vs. Human sub-section (Phase 3c) — a full field
+          // comparison (matches included, not just diffs) rendered as flat
+          // numbered rows. Renders only when a rendered fallback fired this
+          // run and left a real diff to show; empty otherwise.
+          const pages = buildCrawlerParityPages(evidence);
+          if (!pages.length) return '';
+          const items = [];
+          for (const p of pages) {
+            const prefix = pages.length > 1 ? `${p.type} — ` : '';
+            for (const f of p.fields) {
+              items.push(`${prefix}${f.label}: ${f.match ? 'matches' : 'differs'} — crawlers see "${f.static}", visitors see "${f.rendered}"`);
+            }
+          }
+          if (!items.length) return '';
+          return sbPage('sb-crawler-parity', 'Crawler vs.<br/>Human.', `<p class="sb-dl-desc">${esc(CRAWLER_PARITY_NOTE)}</p>${sbNumList(items)}`);
+        },
+        'sb-coverage': () => {
+          // Simple-native: same buildCoverageManifestRows truth source as the
+          // classic Coverage Notes sub-section (Phase 3c). Quiet register —
+          // a note about our tooling, not an alarm about the site.
+          const { hasData, allRan, rows } = buildCoverageManifestRows(evidence?.coverage);
+          if (!hasData) return '';
+          const body = allRan
+            ? `<p class="sb-dl-desc">Every planned check for this run’s website read completed.</p>`
+            : sbNumList(rows.map((r) => `${r.label} — ${r.status}${r.reason ? `: ${r.reason}` : ''}`));
+          return sbPage('sb-coverage', 'Coverage<br/>Notes.', `<p class="sb-dl-desc">${esc(COVERAGE_MANIFEST_NOTE)}</p>${body}`);
         },
         'sb-risk': () => {
           // Simple-native: plain lead copy + numbered points (no alert box,
@@ -2048,10 +2080,9 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     .sb-dl-row{grid-template-columns:auto minmax(0,1fr) auto;gap:12px}
     .sb-dl-row .n{display:none}
   }
-  /* Featured Post flat actions + share checklist status. */
+  /* Featured Post flat actions. */
   .sb-fp-actions{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
   .sb-copy-btn{cursor:pointer;border:1px solid rgba(0,0,0,.2);background:transparent;color:var(--ink)}
-  .sb-status-miss{color:#9f1f17}
   /* Contact identity as plain text lines. */
   .sb-contact-ident{display:grid;gap:3px;margin:18px 0 4px}
   .sb-contact-label{font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-soft)}

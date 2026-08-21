@@ -45,6 +45,23 @@ test('Phase 3b: legacy website-status config (predating crawler-parity/coverage-
   ]);
 });
 
+test('Phase 3c: legacy simple sb-pages config (predating sb-crawler-parity/sb-coverage) defaults them on and appends them', () => {
+  // Simulates a saved simple-layout doc from before these two ids existed in
+  // the registry — mirrors the Phase 3b classic test above.
+  const cfg = normalizeCreativeBriefConfig({
+    layout: 'simple',
+    order: { 'sb-pages': ['sb-deliverables', 'sb-key-insight', 'sb-positioning', 'sb-decision', 'sb-clarify', 'sb-missing', 'sb-opportunity', 'sb-onboarded', 'sb-featured-post', 'sb-social-share', 'sb-risk', 'sb-services', 'sb-contact'] },
+  });
+  assert.strictEqual(cfg.include['sb-crawler-parity'], true);
+  assert.strictEqual(cfg.include['sb-coverage'], true);
+  assert.strictEqual(cfg.include['sb-crawler-parity:heading'], true);
+  assert.strictEqual(cfg.include['sb-coverage:heading'], true);
+  assert.deepStrictEqual(cfg.order['sb-pages'], [
+    'sb-deliverables', 'sb-key-insight', 'sb-positioning', 'sb-decision', 'sb-clarify', 'sb-missing', 'sb-opportunity', 'sb-onboarded', 'sb-featured-post', 'sb-social-share', 'sb-risk', 'sb-services', 'sb-contact',
+    'sb-crawler-parity', 'sb-coverage',
+  ]);
+});
+
 test('normalize ignores non-boolean include values', () => {
   const cfg = normalizeCreativeBriefConfig({ include: { 'key-insight': 'nope' } });
   assert.strictEqual(cfg.include['key-insight'], true);

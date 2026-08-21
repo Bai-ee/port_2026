@@ -112,6 +112,8 @@ const SIMPLE_BRIEF_GROUPS = [
       { id: 'sb-featured-post', label: 'Featured Post', desc: 'Suggested Post as a real X card with the brand video.', hasHeading: true },
       { id: 'sb-social-share', label: 'Social Share check', desc: 'Share-card preview + captured/missing tag checklist.', hasHeading: true },
       { id: 'sb-risk', label: 'Biggest Risk', desc: 'The risk callout from the analysis.', hasHeading: true },
+      { id: 'sb-crawler-parity', label: 'Crawler vs. Human', desc: 'Static-HTML-vs-rendered-DOM diff for JS-rendered sites. Renders only when this run found a real gap; empty otherwise.', hasHeading: true },
+      { id: 'sb-coverage', label: 'Coverage Notes', desc: 'What this run’s website-read stage could and couldn’t check. Renders only when there’s something to report.', hasHeading: true },
       { id: 'sb-services', label: 'What We Offer', desc: 'The S01…S10 services grid.', hasHeading: true },
       { id: 'sb-contact', label: 'Contact Your Human', desc: 'Closing contact section with Meet with Bryan CTA.', hasHeading: true },
     ],
