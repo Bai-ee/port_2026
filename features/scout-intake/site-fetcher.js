@@ -1,7 +1,8 @@
 'use strict';
 
-const { readResponseText, safeFetch, validateUrl: _ssrfValidate } = require('../../api/_lib/safe-fetch.cjs');
+const { readResponseText, readResponseBuffer, safeFetch, validateUrl: _ssrfValidate } = require('../../api/_lib/safe-fetch.cjs');
 const { fetchBrowserlessContent } = require('../../api/_lib/browserless.cjs');
+const sharp = require('sharp');
 
 // site-fetcher.js — Lightweight website evidence extractor
 //
@@ -44,6 +45,18 @@ const MAX_RENDERED_FETCHES_PER_RUN = 4;
 const SPA_SHELL_MAX_BYTES = 10 * 1024;
 const SPA_SHELL_ROOT_RE = /<div[^>]*\bid\s*=\s*["'](?:root|app|__next|___gatsby)["'][^>]*>\s*<\/div>/i;
 const RENDER_VARIANT = { id: 'scout-intake-site-fetch', label: 'Scout intake rendered fallback' };
+
+// Phase 2 (docs/plans/BRIEF-RENDERED-SCRAPE-SONNET-HANDOFF.md §3): the master
+// prompt's L3 "inspect the artifact" rule applied to og:image — resolving is
+// not a pass, fetch it and record what it is.
+const MAX_OG_IMAGE_BYTES = 5 * 1024 * 1024;
+
+// robotsSitemapProbe/screenshots never run inside site-fetcher.js itself —
+// they are separate modules (agent-readiness / the parallel screenshot task
+// in runner.js). Honest default: 'skipped' unless a caller that DOES have
+// that data this run passes it in via coverageOverrides.
+const ROBOTS_SITEMAP_SKIP_REASON = 'robots/sitemap probe runs as a separate agent-readiness module, not part of this fetch stage';
+const SCREENSHOTS_SKIP_REASON = 'screenshot capture runs as a separate parallel task (api/_lib/browserless.cjs), not part of this fetch stage';
 
 // Pages we want to fetch beyond the homepage, in priority order
 const ADDITIONAL_PAGE_PATTERNS = [
@@ -199,6 +212,60 @@ function extractSocialLinks(html) {
     }
   }
   return [...new Set(results)].slice(0, 8);
+}
+
+// JSON-LD @type extraction — regex script-block extraction (no HTML parser
+// needed: script contents are JSON, not markup), JSON.parse per block. A
+// malformed block is skipped, never thrown — one bad script tag must not lose
+// types found in other, valid script tags on the same page.
+function collectJsonLdTypes(node, out) {
+  if (!node || typeof node !== 'object') return;
+  if (Array.isArray(node)) {
+    for (const item of node) collectJsonLdTypes(item, out);
+    return;
+  }
+  if (Array.isArray(node['@graph'])) {
+    for (const item of node['@graph']) collectJsonLdTypes(item, out);
+  }
+  const t = node['@type'];
+  if (typeof t === 'string' && t.trim()) {
+    out.add(t.trim());
+  } else if (Array.isArray(t)) {
+    for (const v of t) if (typeof v === 'string' && v.trim()) out.add(v.trim());
+  }
+}
+
+/** Distinct schema.org @type values declared anywhere in the page's JSON-LD. */
+function extractJsonLdTypes(html) {
+  if (!html) return [];
+  const re = /<script[^>]*type\s*=\s*['"]application\/ld\+json['"][^>]*>([\s\S]*?)<\/script>/gi;
+  const types = new Set();
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    const raw = (m[1] || '').trim();
+    if (!raw) continue;
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      continue; // malformed JSON-LD — skip this block, keep scanning
+    }
+    collectJsonLdTypes(parsed, types);
+  }
+  return [...types].slice(0, 20);
+}
+
+// og:*/twitter:* tag PRESENCE (names only, never values) — feeds the crawler-
+// parity "social meta set" comparison. Distinct from extractSiteMeta, which
+// resolves specific field VALUES for the homepage only; this scans any page's
+// raw HTML for which tags exist at all.
+function extractSocialMetaKeys(html) {
+  if (!html) return [];
+  const re = /<meta[^>]*(?:property|name)\s*=\s*['"](og:[a-z0-9:_-]+|twitter:[a-z0-9:_-]+)['"]/gi;
+  const keys = new Set();
+  let m;
+  while ((m = re.exec(html)) !== null) keys.add(m[1].toLowerCase());
+  return [...keys].sort();
 }
 
 function extractContactClues(html) {
@@ -445,6 +512,7 @@ async function fetchPage(url, timeoutMs = FETCH_TIMEOUT_MS) {
 // ── Page evidence builder ─────────────────────────────────────────────────────
 
 function buildPageEvidence(url, type, html) {
+  const jsonLdTypes = extractJsonLdTypes(html);
   const evidence = {
     url,
     type,
@@ -457,6 +525,8 @@ function buildPageEvidence(url, type, html) {
     bodyParagraphs: extractBodyParagraphs(html),
     socialLinks: extractSocialLinks(html),
     contactClues: extractContactClues(html),
+    // Phase 2: schema.org @type values declared in this page's JSON-LD.
+    jsonLdTypes,
     // Raw HTML preserved for downstream CSS extraction (design-system-extractor.js).
     // Stripped before Firestore write by normalize.js — never persisted.
     _rawHtml: html,
@@ -465,7 +535,7 @@ function buildPageEvidence(url, type, html) {
   // siteMeta is homepage-only: OG image, favicon, theme-color, etc.
   // Stored as a top-level field so it survives after _rawHtml is stripped.
   if (type === 'homepage') {
-    evidence.siteMeta = extractSiteMeta(html, url);
+    evidence.siteMeta = { ...extractSiteMeta(html, url), jsonLdTypes };
   }
 
   return evidence;
@@ -507,9 +577,181 @@ function buildStaticView(pageEvidence) {
     bodyParagraphs: pageEvidence.bodyParagraphs,
     socialLinks: pageEvidence.socialLinks,
     contactClues: pageEvidence.contactClues,
+    jsonLdTypes: pageEvidence.jsonLdTypes || [],
   };
   if (pageEvidence.siteMeta) view.siteMeta = pageEvidence.siteMeta;
   return view;
+}
+
+// ── Crawler-parity diff (Phase 2) ───────────────────────────────────────────
+//
+// The master prompt's highest-value comparison: what a non-rendering crawler
+// (static HTML) receives vs. what a human sees (rendered DOM). Both raw HTMLs
+// exist only here, at capture time — this computes the derived, persistable
+// diff and nothing raw ever leaves this function.
+
+function wordCount(paragraphs) {
+  return (Array.isArray(paragraphs) ? paragraphs : [])
+    .join(' ')
+    .split(/\s+/)
+    .filter(Boolean).length;
+}
+
+function sameStringSet(a, b) {
+  const x = [...new Set(a)].sort();
+  const y = [...new Set(b)].sort();
+  return x.length === y.length && x.every((v, i) => v === y[i]);
+}
+
+/**
+ * Diff a page's static read against its rendered read. Only meaningful (and
+ * only ever called) when BOTH views were actually captured this run — a page
+ * that was never rendered has nothing to diff against, so callers must not
+ * invoke this outside a successful rendered-fallback.
+ */
+function computeCrawlerParity(staticEvidence, staticHtml, renderedEvidence, renderedHtml) {
+  const staticTitle = staticEvidence.title || '';
+  const renderedTitle = renderedEvidence.title || '';
+  const staticDesc = staticEvidence.metaDescription || '';
+  const renderedDesc = renderedEvidence.metaDescription || '';
+  const staticTags = extractSocialMetaKeys(staticHtml);
+  const renderedTags = extractSocialMetaKeys(renderedHtml);
+  const staticH1 = staticEvidence.h1 || [];
+  const renderedH1 = renderedEvidence.h1 || [];
+  const staticCta = staticEvidence.ctaTexts || [];
+  const renderedCta = renderedEvidence.ctaTexts || [];
+  const staticWords = wordCount(staticEvidence.bodyParagraphs);
+  const renderedWords = wordCount(renderedEvidence.bodyParagraphs);
+
+  return {
+    title: { static: staticTitle, rendered: renderedTitle, match: staticTitle === renderedTitle },
+    metaDescription: { static: staticDesc, rendered: renderedDesc, match: staticDesc === renderedDesc },
+    socialMetaTags: { static: staticTags, rendered: renderedTags, match: sameStringSet(staticTags, renderedTags) },
+    h1: { static: staticH1, rendered: renderedH1, match: sameStringSet(staticH1, renderedH1) },
+    ctaTexts: { static: staticCta, rendered: renderedCta, match: sameStringSet(staticCta, renderedCta) },
+    bodyWordCount: { static: staticWords, rendered: renderedWords, match: staticWords === renderedWords },
+  };
+}
+
+// ── og:image artifact inspection (Phase 2, L3) ──────────────────────────────
+//
+// "Present" is not a finding — fetch the resolved og:image and record what it
+// actually is. Never throws; an undecodable image records what it could
+// confirm (bytes/contentType/host) and leaves dimensions null.
+
+async function defaultFetchImage(imageUrl) {
+  try {
+    const res = await safeFetch(imageUrl, { timeoutMs: FETCH_TIMEOUT_MS, maxBytes: MAX_OG_IMAGE_BYTES });
+    if (!res.ok) return { ok: false, reason: `HTTP ${res.status}` };
+    const contentType = res.headers.get('content-type') || null;
+    const buffer = await readResponseBuffer(res, MAX_OG_IMAGE_BYTES);
+    return { ok: true, buffer, contentType };
+  } catch (err) {
+    const reason = err?.name === 'AbortError' ? 'timeout' : (err?.message || 'fetch_error');
+    return { ok: false, reason };
+  }
+}
+
+/**
+ * @param {string|null} imageUrl - resolved og:image URL (or null — nothing to inspect)
+ * @param {object} [opts]
+ * @param {function} [opts.fetchImage] - DI seam for tests. Defaults to a real,
+ *   SSRF-validated, size-capped fetch.
+ * @returns {Promise<{ artifact: object|null, status: 'ran'|'skipped'|'failed', reason: string|null }>}
+ */
+async function inspectOgImageArtifact(imageUrl, { fetchImage = defaultFetchImage } = {}) {
+  if (!imageUrl) return { artifact: null, status: 'skipped', reason: 'no_og_image' };
+
+  try {
+    await _ssrfValidate(imageUrl);
+  } catch {
+    return { artifact: null, status: 'failed', reason: 'ssrf_blocked' };
+  }
+
+  let result;
+  try {
+    result = await fetchImage(imageUrl);
+  } catch (err) {
+    result = { ok: false, reason: err?.message || 'fetch_error' };
+  }
+
+  if (!result?.ok || !result.buffer) {
+    return { artifact: null, status: 'failed', reason: result?.reason || 'fetch_failed' };
+  }
+
+  const host = (() => { try { return new URL(imageUrl).hostname; } catch { return null; } })();
+  let width = null;
+  let height = null;
+  try {
+    const metadata = await sharp(result.buffer).metadata();
+    width = typeof metadata.width === 'number' ? metadata.width : null;
+    height = typeof metadata.height === 'number' ? metadata.height : null;
+  } catch {
+    // Undecodable image (corrupt bytes, unsupported format) — bytes/contentType/
+    // host below are still real, confirmed facts; dimensions stay unknown.
+  }
+
+  return {
+    artifact: { bytes: result.buffer.length, contentType: result.contentType || null, width, height, host },
+    status: 'ran',
+    reason: null,
+  };
+}
+
+// ── Coverage manifest (Phase 2) ─────────────────────────────────────────────
+//
+// L4/L5 made durable: every planned check, recorded as ran/skipped/failed
+// (+reason), so nothing this run could not see is silently absent from the
+// output. One object for the whole run (not per-page) — Phase 3's coverage
+// manifest section reads this directly.
+
+function resolveExternalCoverage(entry, defaultReason) {
+  if (entry && typeof entry === 'object' && typeof entry.status === 'string') {
+    return { status: entry.status, reason: entry.reason ?? null };
+  }
+  return { status: 'skipped', reason: defaultReason };
+}
+
+/** Coverage for the early-exit paths (SSRF blocked / homepage fetch failed) — nothing after page crawl ever ran. */
+function buildEmptyCoverage({ pageCrawlReason, coverageOverrides = {} }) {
+  const skip = (reason) => ({ status: 'skipped', reason });
+  return {
+    pageCrawl: { status: 'failed', reason: pageCrawlReason },
+    renderedFallback: skip('homepage fetch failed — no page to evaluate for a rendered fallback'),
+    metaExtraction: skip('homepage fetch failed — no HTML to extract meta from'),
+    jsonLd: skip('homepage fetch failed — no HTML to scan for JSON-LD'),
+    ogImageInspection: skip('homepage fetch failed — no siteMeta to resolve an og:image from'),
+    robotsSitemapProbe: resolveExternalCoverage(coverageOverrides.robotsSitemapProbe, ROBOTS_SITEMAP_SKIP_REASON),
+    screenshots: resolveExternalCoverage(coverageOverrides.screenshots, SCREENSHOTS_SKIP_REASON),
+  };
+}
+
+/** Coverage for a run that got at least the homepage. */
+function buildCoverage({ pages, ogImageStatus, coverageOverrides = {} }) {
+  // A page's renderFailed is only a real render ATTEMPT when it isn't the cap
+  // being reached before this page's turn — the cap case never called fetchRendered.
+  const attempted = pages.filter((p) => p.renderMode === 'rendered-fallback' || (p.renderFailed && p.renderFailed !== 'render_cap_reached'));
+  const succeeded = pages.filter((p) => p.renderMode === 'rendered-fallback');
+
+  let renderedFallback;
+  if (attempted.length === 0) {
+    renderedFallback = { status: 'skipped', reason: 'no page required a rendered fallback — static reads were sufficient' };
+  } else if (succeeded.length > 0) {
+    renderedFallback = { status: 'ran', reason: null };
+  } else {
+    const reasons = [...new Set(attempted.map((p) => p.renderFailed).filter(Boolean))];
+    renderedFallback = { status: 'failed', reason: reasons.join('; ') || 'rendered fetch attempted but did not succeed' };
+  }
+
+  return {
+    pageCrawl: { status: 'ran', reason: null },
+    renderedFallback,
+    metaExtraction: { status: 'ran', reason: null },
+    jsonLd: { status: 'ran', reason: null },
+    ogImageInspection: ogImageStatus,
+    robotsSitemapProbe: resolveExternalCoverage(coverageOverrides.robotsSitemapProbe, ROBOTS_SITEMAP_SKIP_REASON),
+    screenshots: resolveExternalCoverage(coverageOverrides.screenshots, SCREENSHOTS_SKIP_REASON),
+  };
 }
 
 /**
@@ -534,12 +776,12 @@ function buildStaticView(pageEvidence) {
 async function attemptRenderedFallback({ pageEvidence, rawHtml, url, type, renderBudget, fetchRendered, warnings }) {
   const needsRender = isPageThin(pageEvidence) || looksLikeSpaShell(rawHtml);
   if (!needsRender) {
-    return { ...pageEvidence, renderMode: 'static' };
+    return { ...pageEvidence, renderMode: 'static', crawlerParity: null };
   }
 
   if (!renderBudget || renderBudget.remaining <= 0) {
     warnings.push(`${type} page (${url}) looked thin/JS-rendered but the per-run rendered-fetch cap (${MAX_RENDERED_FETCHES_PER_RUN}) was already reached.`);
-    return { ...pageEvidence, renderMode: 'static', renderFailed: 'render_cap_reached' };
+    return { ...pageEvidence, renderMode: 'static', renderFailed: 'render_cap_reached', crawlerParity: null };
   }
   renderBudget.remaining -= 1;
 
@@ -552,18 +794,20 @@ async function attemptRenderedFallback({ pageEvidence, rawHtml, url, type, rende
 
   if (!rendered?.ok || !rendered.html) {
     warnings.push(`${type} page (${url}) looked thin/JS-rendered but the Browserless render did not succeed (${rendered?.reason || 'unavailable'}) — reading static HTML only.`);
-    return { ...pageEvidence, renderMode: 'static', renderFailed: rendered?.reason || 'browserless_unavailable' };
+    return { ...pageEvidence, renderMode: 'static', renderFailed: rendered?.reason || 'browserless_unavailable', crawlerParity: null };
   }
 
   if (rendered.html.length <= rawHtml.length) {
     warnings.push(`${type} page (${url}) rendered via Browserless but returned no more content than the static HTML — keeping the static read.`);
-    return { ...pageEvidence, renderMode: 'static', renderFailed: 'no_improvement' };
+    return { ...pageEvidence, renderMode: 'static', renderFailed: 'no_improvement', crawlerParity: null };
   }
 
   const rebuilt = buildPageEvidence(url, type, rendered.html);
   rebuilt.renderMode = 'rendered-fallback';
   rebuilt.renderedVia = 'browserless';
   rebuilt.staticView = buildStaticView(pageEvidence);
+  // Both raw HTMLs are only ever in hand here — persist the derived diff, never the markup.
+  rebuilt.crawlerParity = computeCrawlerParity(pageEvidence, rawHtml, rebuilt, rendered.html);
   warnings.push(`${type} page (${url}) was JS-rendered — static HTML was too thin; Browserless rendered fallback succeeded.`);
   return rebuilt;
 }
@@ -583,9 +827,16 @@ async function attemptRenderedFallback({ pageEvidence, rawHtml, url, type, rende
  *   override for tests. Defaults to the real Browserless `/content` client
  *   (`api/_lib/browserless.cjs`), which logs every attempt to
  *   `browserless_requests` and degrades to `{ ok:false }` when unconfigured.
+ * @param {function} [options.fetchImage] - DI seam for the og:image artifact
+ *   inspection (Phase 2, L3). Defaults to a real, SSRF-validated, size-capped
+ *   ({@link MAX_OG_IMAGE_BYTES}) fetch. Tests must always override this.
+ * @param {object} [options.coverageOverrides] - `{ robotsSitemapProbe, screenshots }`,
+ *   each `{ status, reason }`. Neither check ever runs inside site-fetcher.js
+ *   itself (they are separate modules/tasks) — pass real status here only when
+ *   the caller already ran them this same run; omitted, both read 'skipped'.
  * @returns {Promise<SiteEvidence>}
  */
-async function fetchSiteEvidence(websiteUrl, { onPageFetched, fetchRendered = fetchBrowserlessContent } = {}) {
+async function fetchSiteEvidence(websiteUrl, { onPageFetched, fetchRendered = fetchBrowserlessContent, fetchImage = defaultFetchImage, coverageOverrides = {} } = {}) {
   const fetchedAt = new Date().toISOString();
   const pages = [];
   const warnings = [];
@@ -601,6 +852,7 @@ async function fetchSiteEvidence(websiteUrl, { onPageFetched, fetchRendered = fe
       pages: [],
       warnings: ['URL not allowed.'],
       thin: true,
+      coverage: buildEmptyCoverage({ pageCrawlReason: 'URL not allowed (SSRF guard)', coverageOverrides }),
     };
   }
 
@@ -614,6 +866,7 @@ async function fetchSiteEvidence(websiteUrl, { onPageFetched, fetchRendered = fe
       pages: [],
       warnings: [`Homepage fetch failed: ${homepageFetch.reason || 'unknown error'}`],
       thin: true,
+      coverage: buildEmptyCoverage({ pageCrawlReason: homepageFetch.reason || 'unknown error', coverageOverrides }),
     };
   }
 
@@ -627,6 +880,19 @@ async function fetchSiteEvidence(websiteUrl, { onPageFetched, fetchRendered = fe
     fetchRendered,
     warnings,
   });
+
+  // og:image artifact inspection (Phase 2, L3) — inspect whichever siteMeta
+  // won (rendered or static), once per run. Never blocks/throws the pipeline.
+  let ogImageStatus = { status: 'skipped', reason: 'no_og_image' };
+  const ogImageUrl = homepageEvidence.siteMeta?.ogImage || null;
+  if (ogImageUrl) {
+    const inspected = await inspectOgImageArtifact(ogImageUrl, { fetchImage });
+    ogImageStatus = { status: inspected.status, reason: inspected.reason };
+    if (inspected.artifact) {
+      homepageEvidence = { ...homepageEvidence, siteMeta: { ...homepageEvidence.siteMeta, ogImageArtifact: inspected.artifact } };
+    }
+  }
+
   pages.push(homepageEvidence);
   // Emit homepage progress — fire-and-forget, never throws to fetcher
   if (onPageFetched) { try { onPageFetched('homepage', websiteUrl, homepageEvidence); } catch { /* ignore */ } }
@@ -692,6 +958,7 @@ async function fetchSiteEvidence(websiteUrl, { onPageFetched, fetchRendered = fe
     pages,
     warnings,
     thin,
+    coverage: buildCoverage({ pages, ogImageStatus, coverageOverrides }),
   };
 }
 
@@ -705,4 +972,14 @@ module.exports = {
   isPageThin,
   attemptRenderedFallback,
   MAX_RENDERED_FETCHES_PER_RUN,
+  // Exported for direct unit testing (Phase 2 — see
+  // features/scout-intake/__tests__/{crawler-parity,json-ld-extraction,
+  // og-image-artifact,coverage-manifest}.test.js)
+  extractJsonLdTypes,
+  extractSocialMetaKeys,
+  computeCrawlerParity,
+  inspectOgImageArtifact,
+  buildCoverage,
+  buildEmptyCoverage,
+  MAX_OG_IMAGE_BYTES,
 };

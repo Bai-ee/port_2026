@@ -85,6 +85,8 @@ Launched as `screenshotTask` at the start of Stage 3 and awaited later. Non-fata
 
 **File:** `features/scout-intake/site-fetcher.js::fetchSiteEvidence`
 
+> **Rendered fallback + evidence-tier schema (Phases 1–2, [`docs/plans/BRIEF-RENDERED-SCRAPE-SONNET-HANDOFF.md`](/Users/bballi/Documents/Repos/Bballi_Portfolio/docs/plans/BRIEF-RENDERED-SCRAPE-SONNET-HANDOFF.md:1)):** a JS-rendered (SPA) page used to be read as static HTML only and reported as an empty site. Phase 1 added a Browserless rendered-fallback for thin/SPA-shell pages (§3.2b). Phase 2 added the crawler-parity diff, JSON-LD extraction, an og:image artifact inspection, a run-level coverage manifest, and a pure evidence-tier function (§3.6–3.9) — this is the full as-built `SiteEvidence`/`PageEvidence` schema through both phases.
+
 ### 3.1 Page discovery
 
 Homepage is fetched first. Then up to **3 additional pages** matching URL patterns (first match per type wins, same-origin only):
@@ -115,13 +117,23 @@ Each page (`PageEvidence`) carries:
 | `bodyParagraphs` | `<p>` inner text | each 40–600 chars, sliced to 300, 8 max |
 | `socialLinks` | `href` matching twitter/x/instagram/facebook/linkedin/tiktok/youtube/pinterest | 8 unique max |
 | `contactClues` | email + US/CA phone regex | 4 unique max |
-| `_rawHtml` | full HTML source | **ephemeral** — stripped by `normalize.js` before Firestore write, AND stripped by runner.js before being passed to analyzer skills (to avoid 200K token overflow) |
+| `jsonLdTypes` (Phase 2) | `script[type="application/ld+json"]` `@type` values (handles arrays and `@graph`) — regex script-block extraction + `JSON.parse` per block; a malformed block is skipped, never thrown | 20 unique max, deduplicated |
+| `renderMode` (Phase 1) | `'static'` \| `'rendered-fallback'` — see §3.2b | — |
+| `renderedVia` (Phase 1) | `'browserless'` when rendered, else `null`/absent | — |
+| `renderFailed` (Phase 1) | reason a needed render didn't replace the static read (`browserless_unavailable`, `no_improvement`, `render_cap_reached`, or the Browserless error) — absent on a page that never needed rendering | — |
+| `staticView` (Phase 1) | the pre-render static read, preserved once a render replaces the page's primary fields — same field shape as the page itself (title/h1/h2/navLabels/ctaTexts/bodyParagraphs/socialLinks/contactClues/jsonLdTypes, + `siteMeta` on the homepage) | present only on a successful rendered-fallback page |
+| `crawlerParity` (Phase 2) | static-vs-rendered diff — see §3.6 | `null` unless this page had a successful rendered fallback (both raw HTML views existed to compare) |
+| `_rawHtml` | full HTML source | **ephemeral** — stripped by `normalize.js` before Firestore write, AND stripped by runner.js before being passed to analyzer skills (to avoid 200K token overflow). Never inside `staticView` or `crawlerParity` either — both are derived summaries computed while the raw HTML is still in hand in `site-fetcher.js`, and neither ever carries markup. |
 
 All strings pass through `decodeEntities()` and `stripTags()`.
 
+### 3.2b Rendered fallback (Phase 1)
+
+Any page whose static read is thin (`isPageThin` — heading+body chars < `THIN_CONTENT_THRESHOLD`, 200) OR looks like an un-hydrated SPA shell (`looksLikeSpaShell` — a sub-10KB document with an empty `#root`/`#app`/`#__next`/`#___gatsby` hydration root) gets one Browserless `/content` render attempt, hard-capped at `MAX_RENDERED_FETCHES_PER_RUN` (4) per whole run — a shared budget across the homepage and every discovered page. A successful, content-improving render (`rendered.html.length > staticHtml.length`) **replaces** that page's primary fields (title/h1/h2/navLabels/ctaTexts/bodyParagraphs/socialLinks/contactClues/jsonLdTypes, and — homepage only — `siteMeta`) and tags `renderMode: 'rendered-fallback'` + `renderedVia: 'browserless'`; the pre-render static read survives on `staticView`. Any other outcome (Browserless unavailable, no improvement over static, or the cap already spent) leaves the page `renderMode: 'static'` with a `renderFailed` reason — an honest degrade, not a silent one. `SiteEvidence.thin` is recomputed from the FINAL (post-fallback) pages, so a successful render clears it.
+
 ### 3.3 Homepage-only — `siteMeta` extraction
 
-Attached only to the homepage PageEvidence as `page.siteMeta`. Fields: `title`, `description`, `siteName`, `ogImage`, `ogImageAlt`, `favicon`, `appleTouchIcon`, `themeColor`, `canonical`, `locale`, `type`.
+Attached only to the homepage PageEvidence as `page.siteMeta`. Fields: `title`, `description`, `siteName`, `ogImage`, `ogImageAlt`, `favicon`, `appleTouchIcon`, `themeColor`, `canonical`, `locale`, `type`, plus (Phase 2) `jsonLdTypes` (mirrors the page-level field) and `ogImageArtifact` (see §3.7). Extracted from whichever HTML won (static, or the rendered HTML on a successful fallback) — `runner.js` reads this straight off `evidence.pages.find(p => p.type === 'homepage').siteMeta` and passes it as its own top-level `siteMeta` on `IntakePipelineResult`, untrimmed by `normalize.js::summarizeEvidencePages` (that function only trims the `evidence.pages[]` array).
 
 ### 3.4 Thin-content detection
 
@@ -134,6 +146,68 @@ If `fetchSiteEvidence` throws (site unreachable, all pages timeout):
 - Warning `fetch_failed` pushed
 - Terminal emits `[FETCH] Fetch failed — continuing with limited data`
 - Pipeline continues — no early return
+
+Independently, `fetchSiteEvidence` itself never throws for an SSRF-blocked URL or a failed homepage fetch — both return a well-formed (but empty) `SiteEvidence` with `pages: []`, `thin: true`, and a fully-populated `coverage` object (§3.9) marking `pageCrawl` as `failed` and every downstream check `skipped`.
+
+### 3.6 Crawler-parity diff (Phase 2)
+
+The master prompt's highest-value comparison — what a non-rendering crawler (Facebook/X/Slack/iMessage link unfurl) receives vs. what a human sees after JS execution. Computed by `site-fetcher.js::computeCrawlerParity` at the exact moment BOTH raw HTML views exist (inside `attemptRenderedFallback`, right after a successful render) — this is the only place either raw HTML is ever in hand, and only the derived diff below is persisted:
+
+```
+crawlerParity: {
+  title:           { static, rendered, match },   // <title> text
+  metaDescription: { static, rendered, match },   // meta[name=description]
+  socialMetaTags:  { static, rendered, match },    // og:*/twitter:* TAG NAMES present (not values), as sorted arrays
+  h1:              { static, rendered, match },    // string arrays
+  ctaTexts:        { static, rendered, match },    // string arrays
+  bodyWordCount:   { static, rendered, match },    // numbers
+} | null
+```
+
+`null` on every page that never had a successful rendered fallback — a page read only once (static-rich, or a render that was attempted and failed/didn't improve) has nothing to diff against; that is the honest representation, not a trivially-equal placeholder.
+
+### 3.7 og:image artifact inspection (Phase 2, L3)
+
+"Present" is not a finding — resolving an `og:image` URL is inspected, not just recorded. `site-fetcher.js::inspectOgImageArtifact` fetches the image (SSRF-validated the same way page URLs are, size-capped at 5MB via `safeFetch`/`readResponseBuffer`) and decodes it with `sharp` to record what it actually is:
+
+```
+siteMeta.ogImageArtifact: {
+  bytes: number,
+  contentType: string | null,
+  width: number | null,     // null when sharp cannot decode the bytes
+  height: number | null,
+  host: string | null,
+} | undefined   // absent when there was no og:image, or the fetch itself failed
+```
+
+Runs once per run, against whichever `siteMeta.ogImage` won (rendered or static). An undecodable image still records `bytes`/`contentType`/`host` — it never throws and never silently omits what could be confirmed. The `fetchImage` fetch itself is an injectable DI seam on `fetchSiteEvidence` (same pattern as Phase 1's `fetchRendered`), defaulting to a real, SSRF-validated fetch.
+
+### 3.8 Evidence tiers (Phase 2 — `features/scout-intake/evidence-tiers.js`)
+
+A pure function, no I/O, mirroring the master prompt's evidence tiers (A rendered / B transport / C inferred / D external / X not tested — see `/Users/bballi/Documents/Repos/Virtual_Time_capsule/brief-agent.system.md`) collapsed to the four this pipeline can actually produce. Tiers are derived MECHANICALLY from a page's own `renderMode`/`renderFailed` at read time — never hand-stored per field:
+
+- **A (rendered)** — `renderMode === 'rendered-fallback'`: content fields reflect a live-DOM read.
+- **B (static/transport)** — `renderMode === 'static'` with no `renderFailed`: a normal, successful raw-HTTP read.
+- **X (not tested)** — no page, an unrecognized `renderMode`, or `renderMode === 'static'` WITH a `renderFailed` reason (a render was needed but never confirmed or denied what a human would see — the static content here is unproven, not a pass).
+- **C (heuristic/inferred)** — `ctaTexts` and `contactClues` specifically, on any successfully-captured page (A or B) — both are pattern-guesses about intent (is this a CTA? does this look like a phone number?), never a definitive tag read, matching the master prompt's Tier C definition.
+
+`evidenceTiers(evidence)` tiers every page in a `SiteEvidence` object; `pageTiers(page)` / `fieldTier(field, page)` operate on one page. Not yet consumed by any UI — feeds Phase 3's per-field checklist tiering.
+
+### 3.9 Coverage manifest (Phase 2 — L4/L5 made durable)
+
+One object per run (not per page) on `SiteEvidence.coverage`, recording every planned check as `{ status: 'ran' | 'skipped' | 'failed', reason: string | null }` — so a run's own blind spots are never confused with a genuine site gap, and Phase 3's coverage-manifest section always has an honest, structured input instead of re-deriving it from prose:
+
+| Check | Meaning |
+|---|---|
+| `pageCrawl` | Did the homepage fetch succeed at all (SSRF-blocked and homepage-fetch-failure both mark this `failed`) |
+| `renderedFallback` | `skipped` — no page needed one; `ran` — at least one attempted render succeeded; `failed` — a render was needed and attempted but none succeeded |
+| `metaExtraction` | `siteMeta` extraction — `ran` whenever the homepage was fetched, else `skipped` |
+| `jsonLd` | JSON-LD scan — `ran` whenever at least one page was fetched, else `skipped` (an empty `jsonLdTypes` array is a legitimate "ran, found none" result, not a failure) |
+| `ogImageInspection` | `skipped` (no og:image resolved), `ran`, or `failed` — see §3.7 |
+| `robotsSitemapProbe` | **Never runs inside `site-fetcher.js`** — that probe is the separate `agent-readiness` module (`features/scout-intake/modules/agent-readiness.js` → `agent-ready/_fetch.js::fetchProbe`), which only runs in the full/paid pipeline, never on a signup-narrow run. Always `skipped` with a named reason unless the caller passes real status via `fetchSiteEvidence(url, { coverageOverrides: { robotsSitemapProbe: { status, reason } } })` |
+| `screenshots` | **Never runs inside `site-fetcher.js`** either — homepage screenshot capture is Stage 2's separate parallel task (`api/_lib/browserless.cjs`). Same override mechanism as `robotsSitemapProbe` |
+
+`coverageOverrides` is the DI seam for the two checks site-fetcher.js has no visibility into; omitted (the signup-narrow path today), both read `skipped` with a reason naming which module owns that check.
 
 ---
 
@@ -309,7 +383,7 @@ Maps the raw LLM `intake` (or empty shell) into the canonical `IntakePipelineRes
   strategy:            { postStrategy, contentAngles, opportunityMap } | null,
   outputsPreview:      { samplePost, sampleCaption } | null,
   systemPreview:       { modulesUnlocked, nextStep } | null,
-  siteMeta:            { ...10 OG/meta fields } | null,
+  siteMeta:            { ...10 OG/meta fields, + jsonLdTypes, + ogImageArtifact (Phase 2) } | null,
 
   scoutPriorityAction: string | null,
   content:             { x_post, content_angle, caption? } | null,
@@ -557,7 +631,8 @@ Footer link "Skip remaining questions" visible whenever `!introMode`. Calls same
 | Concern | File |
 |---|---|
 | Pipeline orchestration | `features/scout-intake/runner.js` |
-| HTML fetch + extraction | `features/scout-intake/site-fetcher.js` |
+| HTML fetch + extraction (+ rendered fallback, crawler parity, JSON-LD, og:image inspection, coverage manifest) | `features/scout-intake/site-fetcher.js` |
+| Evidence tiers (pure, Phase 2) | `features/scout-intake/evidence-tiers.js` |
 | LLM synthesis | `features/scout-intake/intake-synthesizer.js` |
 | Result shaping | `features/scout-intake/normalize.js` |
 | CSS → design tokens | `features/scout-intake/design-system-extractor.js` |

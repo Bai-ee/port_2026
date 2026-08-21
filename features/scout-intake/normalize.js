@@ -52,13 +52,46 @@ function summarizeEvidencePages(evidence) {
       bodyParagraphs: cap(sv.bodyParagraphs, 5),
       socialLinks: cap(sv.socialLinks, 12),
       contactClues: cap(sv.contactClues, 8),
+      jsonLdTypes: cap(sv.jsonLdTypes, 20, 80),
       ...(sv.siteMeta ? { siteMeta: sv.siteMeta } : {}),
     };
+  };
+  // Phase 2 (docs/plans/BRIEF-RENDERED-SCRAPE-SONNET-HANDOFF.md §3): the
+  // static-vs-rendered diff, already derived (no raw HTML) by site-fetcher.js
+  // — pass through as-is, whitelisted to the known shape.
+  const crawlerParity = (cp) => {
+    if (!cp || typeof cp !== 'object') return null;
+    const field = (f) => (f && typeof f === 'object' ? f : null);
+    return {
+      title: field(cp.title),
+      metaDescription: field(cp.metaDescription),
+      socialMetaTags: field(cp.socialMetaTags),
+      h1: field(cp.h1),
+      ctaTexts: field(cp.ctaTexts),
+      bodyWordCount: field(cp.bodyWordCount),
+    };
+  };
+  // Phase 2: the run-level coverage manifest (L4/L5) — every planned check as
+  // { status, reason }. Small, flat, already-derived data; whitelist the keys.
+  const coverage = (cov) => {
+    if (!cov || typeof cov !== 'object') return null;
+    const entry = (e) => (e && typeof e === 'object' && typeof e.status === 'string')
+      ? { status: e.status, reason: e.reason != null ? str(e.reason).slice(0, 300) : null }
+      : null;
+    const out = {};
+    for (const key of ['pageCrawl', 'renderedFallback', 'metaExtraction', 'jsonLd', 'ogImageInspection', 'robotsSitemapProbe', 'screenshots']) {
+      const e = entry(cov[key]);
+      if (e) out[key] = e;
+    }
+    return Object.keys(out).length > 0 ? out : null;
   };
   return {
     url: str(evidence.url) || null,
     fetchedAt: str(evidence.fetchedAt) || null,
     thin: Boolean(evidence.thin),
+    // Phase 2: run-level coverage manifest — see buildCoverage/buildEmptyCoverage
+    // in site-fetcher.js. Absent on evidence captured before this field existed.
+    coverage: coverage(evidence.coverage),
     pages: evidence.pages.slice(0, 4).map((p) => ({
       url: str(p?.url) || null,
       type: str(p?.type) || null,
@@ -70,12 +103,18 @@ function summarizeEvidencePages(evidence) {
       bodyParagraphs: cap(p?.bodyParagraphs, 5),
       socialLinks: cap(p?.socialLinks, 12),
       contactClues: cap(p?.contactClues, 8),
+      // Phase 2: schema.org @type values declared in this page's JSON-LD.
+      jsonLdTypes: cap(p?.jsonLdTypes, 20, 80),
       // 'static' | 'rendered-fallback' — defaults to 'static' so pages captured
       // before this field existed still read as a valid, honest value.
       renderMode: str(p?.renderMode) || 'static',
       renderedVia: str(p?.renderedVia) || null,
       renderFailed: str(p?.renderFailed) || null,
       staticView: staticView(p?.staticView),
+      // Phase 2: static-vs-rendered diff — null unless a successful rendered
+      // fallback replaced this page's primary fields (only case both raw HTML
+      // views existed to compare).
+      crawlerParity: crawlerParity(p?.crawlerParity),
     })),
   };
 }

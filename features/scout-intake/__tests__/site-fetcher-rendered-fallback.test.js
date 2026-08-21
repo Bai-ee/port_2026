@@ -48,6 +48,14 @@ const {
 
 const HOME_URL = 'https://example.com/';
 
+// Phase 2 added an og:image artifact inspection (site-fetcher.js `fetchImage`
+// DI seam) that runs whenever siteMeta.ogImage resolves — every fixture below
+// sets an og:image, so every fetchSiteEvidence() call here must mock it. This
+// file's own tests are about the Phase 1 rendered-fallback behavior, not
+// og-image inspection, so the mock always reports "skipped" and never touches
+// the network.
+const noOgImageFetch = async () => ({ ok: false, reason: 'not_mocked_in_this_test' });
+
 const SPA_SHELL_HTML = `<!doctype html>
 <html lang="en">
 <head><meta charset="utf-8"><title>MyApp</title></head>
@@ -107,7 +115,7 @@ test('SPA shell homepage: rendered fallback fires, evidence populated, top-level
     return { ok: true, html: RENDERED_HOME_HTML, bytes: RENDERED_HOME_HTML.length, durationMs: 42 };
   };
 
-  const evidence = await fetchSiteEvidence(HOME_URL, { fetchRendered });
+  const evidence = await fetchSiteEvidence(HOME_URL, { fetchRendered, fetchImage: noOgImageFetch });
 
   assert.equal(calls, 1, 'Browserless render must be attempted exactly once for the homepage');
   assert.equal(evidence.thin, false, 'rendered content clears the thin flag');
@@ -142,7 +150,7 @@ test('Browserless unavailable: honest degrade — thin stays true, renderFailed 
   responses = { [HOME_URL]: { html: SPA_SHELL_HTML } };
   const fetchRendered = async () => ({ ok: false, reason: 'browserless_disabled', durationMs: 0 });
 
-  const evidence = await fetchSiteEvidence(HOME_URL, { fetchRendered });
+  const evidence = await fetchSiteEvidence(HOME_URL, { fetchRendered, fetchImage: noOgImageFetch });
 
   assert.equal(evidence.thin, true, 'a failed render must not fake non-thin content');
   const home = evidence.pages[0];
@@ -165,7 +173,7 @@ test('static-rich site: no Browserless call, evidence matches the static extract
   let calls = 0;
   const fetchRendered = async () => { calls += 1; throw new Error('must never be called for a rich static site'); };
 
-  const evidence = await fetchSiteEvidence(HOME_URL, { fetchRendered });
+  const evidence = await fetchSiteEvidence(HOME_URL, { fetchRendered, fetchImage: noOgImageFetch });
 
   assert.equal(calls, 0, 'a rich static homepage must never trigger a rendered fallback');
   assert.equal(evidence.thin, false);
@@ -250,7 +258,7 @@ test('additional pages: only the thin discovered page renders, the rich homepage
     return { ok: true, html: RENDERED_HOME_HTML, bytes: RENDERED_HOME_HTML.length, durationMs: 1 };
   };
 
-  const evidence = await fetchSiteEvidence(HOME_URL, { fetchRendered });
+  const evidence = await fetchSiteEvidence(HOME_URL, { fetchRendered, fetchImage: noOgImageFetch });
 
   assert.deepEqual(calledUrls, [pricingUrl], 'only the thin pricing page should trigger a render — the rich homepage must not');
   const home = evidence.pages.find((p) => p.type === 'homepage');

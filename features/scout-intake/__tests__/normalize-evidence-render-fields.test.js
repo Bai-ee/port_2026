@@ -86,3 +86,101 @@ test('a page with no evidence.pages still returns null (unchanged behavior)', ()
   assert.equal(summarizeEvidencePages(null), null);
   assert.equal(summarizeEvidencePages({ pages: [] }), null);
 });
+
+// ── Phase 2 (docs/plans/BRIEF-RENDERED-SCRAPE-SONNET-HANDOFF.md §3) ──────────
+
+test('jsonLdTypes and crawlerParity pass through summarization on a rendered-fallback page', () => {
+  const page = {
+    ...BASE_PAGE,
+    jsonLdTypes: ['Organization', 'WebSite'],
+    renderMode: 'rendered-fallback',
+    renderedVia: 'browserless',
+    crawlerParity: {
+      title: { static: 'Example', rendered: 'Example — Rendered', match: false },
+      metaDescription: { static: '', rendered: 'A rendered description', match: false },
+      socialMetaTags: { static: [], rendered: ['og:title'], match: false },
+      h1: { static: [], rendered: ['Hello'], match: false },
+      ctaTexts: { static: [], rendered: ['Sign up'], match: false },
+      bodyWordCount: { static: 0, rendered: 12, match: false },
+    },
+  };
+  const out = summarizeEvidencePages({ url: 'https://example.com/', fetchedAt: 't', thin: false, pages: [page] });
+  const summarized = out.pages[0];
+
+  assert.deepEqual(summarized.jsonLdTypes, ['Organization', 'WebSite']);
+  assert.ok(summarized.crawlerParity, 'crawlerParity must survive summarization');
+  assert.equal(summarized.crawlerParity.title.static, 'Example');
+  assert.equal(summarized.crawlerParity.title.rendered, 'Example — Rendered');
+  assert.equal(summarized.crawlerParity.bodyWordCount.rendered, 12);
+});
+
+test('a page with no jsonLdTypes/crawlerParity defaults to [] and null (unchanged-behavior page)', () => {
+  const out = summarizeEvidencePages({ url: 'https://example.com/', fetchedAt: 't', thin: false, pages: [BASE_PAGE] });
+  const page = out.pages[0];
+  assert.deepEqual(page.jsonLdTypes, []);
+  assert.equal(page.crawlerParity, null);
+});
+
+test('a page never rendered (renderMode static, no renderFailed) carries crawlerParity: null through summarization', () => {
+  const page = { ...BASE_PAGE, renderMode: 'static', crawlerParity: null };
+  const out = summarizeEvidencePages({ url: 'https://example.com/', fetchedAt: 't', thin: false, pages: [page] });
+  assert.equal(out.pages[0].crawlerParity, null);
+});
+
+test('the run-level coverage manifest passes through summarization, whitelisted to known keys', () => {
+  const evidence = {
+    url: 'https://example.com/',
+    fetchedAt: 't',
+    thin: false,
+    pages: [BASE_PAGE],
+    coverage: {
+      pageCrawl: { status: 'ran', reason: null },
+      renderedFallback: { status: 'skipped', reason: 'no page required a rendered fallback' },
+      metaExtraction: { status: 'ran', reason: null },
+      jsonLd: { status: 'ran', reason: null },
+      ogImageInspection: { status: 'skipped', reason: 'no_og_image' },
+      robotsSitemapProbe: { status: 'skipped', reason: 'runs as a separate agent-readiness module' },
+      screenshots: { status: 'skipped', reason: 'screenshot capture runs as a separate parallel task' },
+      unexpectedExtraKey: { status: 'ran', reason: null }, // must be dropped, not a known coverage key
+    },
+  };
+  const out = summarizeEvidencePages(evidence);
+  assert.ok(out.coverage);
+  assert.equal(out.coverage.pageCrawl.status, 'ran');
+  assert.equal(out.coverage.renderedFallback.status, 'skipped');
+  assert.equal(out.coverage.ogImageInspection.reason, 'no_og_image');
+  assert.equal(out.coverage.unexpectedExtraKey, undefined, 'unknown coverage keys must not be persisted');
+});
+
+test('evidence with no coverage object (pre-Phase-2 shape) summarizes with coverage: null', () => {
+  const out = summarizeEvidencePages({ url: 'https://example.com/', fetchedAt: 't', thin: false, pages: [BASE_PAGE] });
+  assert.equal(out.coverage, null);
+});
+
+test('raw HTML is still never persisted anywhere, including alongside the new Phase 2 fields', () => {
+  const page = {
+    ...BASE_PAGE,
+    jsonLdTypes: ['Organization'],
+    _rawHtml: '<html>top-level raw html must never survive</html>',
+    renderMode: 'rendered-fallback',
+    renderedVia: 'browserless',
+    crawlerParity: {
+      title: { static: 'a', rendered: 'b', match: false },
+      metaDescription: { static: '', rendered: '', match: true },
+      socialMetaTags: { static: [], rendered: [], match: true },
+      h1: { static: [], rendered: [], match: true },
+      ctaTexts: { static: [], rendered: [], match: true },
+      bodyWordCount: { static: 0, rendered: 0, match: true },
+    },
+    staticView: {
+      title: 'Example',
+      h1: [], h2: [], navLabels: [], ctaTexts: [], bodyParagraphs: [], socialLinks: [], contactClues: [],
+      jsonLdTypes: ['Organization'],
+      _rawHtml: '<html>static view raw html must never survive either</html>',
+    },
+  };
+  const out = summarizeEvidencePages({ url: 'https://example.com/', fetchedAt: 't', thin: false, pages: [page] });
+  const summarized = JSON.stringify(out);
+  assert.ok(!summarized.includes('_rawHtml'), 'the literal key _rawHtml must never appear in summarized output');
+  assert.ok(!summarized.includes('must never survive'), 'no raw HTML content must leak through, at any nesting level');
+});
