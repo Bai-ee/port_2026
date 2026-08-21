@@ -27,6 +27,11 @@ const MAX_DELTA_CHARS = 2500; // day-over-day "what changed" fed to the exec bri
 const { callAnthropic, extractAnthropicUsage } = require('./_anthropic-client');
 const { logAnthropicCall } = require('../../api/_lib/usage-logger.cjs');
 const { getComposition, resolveBriefType } = require('./brief-sections.cjs');
+// Phase 3 (docs/plans/BRIEF-RENDERED-SCRAPE-SONNET-HANDOFF.md §3): same pure
+// dual-view/coverage row derivation the rendered brief uses
+// (app/api/dashboard/brief-preview/route.js) — reused here so the model gets
+// the identical facts the client will see, not a re-derived summary of them.
+const { buildCrawlerParityPages, buildCoverageManifestRows } = require('./brief-honesty-sections.js');
 
 // ── Evidence helpers ──────────────────────────────────────────────────────────
 
@@ -138,6 +143,31 @@ function captureStatusLines(data) {
   }
   if (failed.length) lines.push(line('Modules that FAILED this run — their findings are missing, not negative', failed.join(' · '), 240));
   if (notRun.length) lines.push(line('Modules that NEVER RAN this run — say nothing about what they measure', notRun.join(' · '), 240));
+
+  // Phase 3: crawler-vs-rendered parity, when a rendered fallback fired this
+  // run. This is the master prompt's highest-value comparison — feed it in so
+  // "what's missing" can be framed correctly: a field absent from the STATIC
+  // HTML but present in the rendered DOM is a share-metadata gap for
+  // non-rendering platforms, not a gap in the site itself.
+  for (const page of buildCrawlerParityPages(evidence)) {
+    const mismatches = page.fields.filter((f) => !f.match).map((f) => f.label);
+    if (!mismatches.length) continue;
+    lines.push(line(
+      `Crawler-vs-visitor diff (${page.type})`,
+      `non-rendering platforms (Facebook/X/LinkedIn/iMessage) build their preview from the static HTML, a visitor gets the rendered page — these differ: ${mismatches.join(', ')}`,
+      280,
+    ));
+  }
+
+  // Phase 3 coverage manifest: name what this run's website-read stage did
+  // NOT complete, with its own reason — the model must cite this instead of
+  // inventing an explanation, and must present it as a tooling limit (L4),
+  // never as something the client's site lacks.
+  const coverageResult = buildCoverageManifestRows(evidence?.coverage);
+  if (coverageResult.hasData && !coverageResult.allRan) {
+    const skipped = coverageResult.rows.map((r) => `${r.label} (${r.status}${r.reason ? `: ${r.reason}` : ''})`).join(' · ');
+    lines.push(line("This run's website-read stage did NOT fully complete — cite these as OUR tooling limits, never the client's gaps", skipped, 400));
+  }
 
   return lines.filter(Boolean);
 }
@@ -539,6 +569,11 @@ The CAPTURE STATUS block states what this run was able to read. Two different th
 - ON THE SITE: anything present in the site-content block IS on the site. Never list it under What's Missing. If a CTA, heading, body line, or social link appears there, it exists — cite it by name.
 - NOT CAPTURED: when CAPTURE STATUS says the page crawl did not run, or returned almost no static text, or a module FAILED / NEVER RAN, you have no evidence either way. Do NOT claim the site lacks what those inputs would have shown. Say it plainly instead — "not captured this run" — and keep it out of Headline and Biggest Risk. Build those on what WAS read.
 - Only call something missing when the input that would have found it ran successfully and came back empty (e.g. crawl read real content and the CTA line says "none found").
+
+EVIDENCE HONESTY (the brief must survive the client saying "that's wrong")
+- Absence requires proof. Never write "missing," "not present," or "unconfirmed" without naming what proved it — say whether it was checked in the rendered page, the static HTML, or was not tested this run. If you cannot name that, the honest word is "not tested this run," never "missing."
+- Separate your limits from their gaps. When CAPTURE STATUS or the crawler-vs-visitor diff names a tooling limit (a rendered capture that failed, a check that was skipped, a module that never ran), say so as OUR run's limit — never rephrase it as something the client's site lacks.
+- Be visibly fair. Find at least one specific, real thing this site does well — a working CTA, a clean og:image, a real testimonial, clear nav, present structured data, fast/clear copy — and credit it by name somewhere in the brief. A brief that only finds fault reads as a sales pitch, and the client discounts everything in it, including the findings that matter.
 
 USE ONLY THESE INPUTS
 Page titles, meta descriptions; H1/H2 and body copy; navigation labels and structure; CTA text and conversion paths; page types and layout; contact/trust signals; social links and metadata; OG tags and share previews; screenshots and device captures; visual system, color, typography; motion/video cues; performance or technical signals if provided.

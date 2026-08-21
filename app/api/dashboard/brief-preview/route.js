@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url);
    Stateful singletons (firebase-admin, auth, client-provisioning) stay
    cached on purpose. */
 if (process.env.NODE_ENV !== 'production') {
-  const STALE_CJS = /(scout-intake[\\/](brief-sections\.cjs|brief-css\.cjs|brief-renderer\.js|creative-brief-config\.cjs)|not-the-rug-brief[\\/]post-url-validator\.cjs|intelligence[\\/](_brief-intel|_weather)\.js)$/;
+  const STALE_CJS = /(scout-intake[\\/](brief-sections\.cjs|brief-css\.cjs|brief-renderer\.js|creative-brief-config\.cjs|brief-honesty-sections\.js)|not-the-rug-brief[\\/]post-url-validator\.cjs|intelligence[\\/](_brief-intel|_weather)\.js)$/;
   for (const key of Object.keys(require.cache)) {
     if (STALE_CJS.test(key)) delete require.cache[key];
   }
@@ -27,6 +27,10 @@ const { getClientWeather } = require('../../../../features/intelligence/_weather
 const { getComposition, resolveBriefType, DEFAULT_BRIEF_TYPE, isBriefAllowed } = require('../../../../features/scout-intake/brief-sections.cjs');
 const { loadCreativeBriefConfig, defaultCreativeBriefConfig } = require('../../../../features/scout-intake/creative-brief-config.cjs');
 const { renderPdfBuffer } = require('../../../../api/_lib/browserless.cjs');
+// Phase 3 (docs/plans/BRIEF-RENDERED-SCRAPE-SONNET-HANDOFF.md §3): pure row
+// derivation for the Creative Brief's honesty layer (Social Share three-state
+// checklist, Crawler-vs-Human parity, coverage manifest).
+const { buildSocialChecklistRows, buildCrawlerParityPages, buildCoverageManifestRows } = require('../../../../features/scout-intake/brief-honesty-sections.js');
 
 function makeReqShim(request) {
   return {
@@ -143,7 +147,7 @@ function hostnameOf(url) {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return String(url); }
 }
 
-function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, generatedAt, clientId, userEmail, tier, watchlistKols = [], weather = null, moduleBriefs = [], auditMockupUrl = null, studioVideoUrl = null, socialPreviewImageUrl = null, siteMeta = null, fullPageScreenshots = null, company = null, researchConfig = null, strategyData = null, signalsCore = [], socialQueue = [], briefType = DEFAULT_BRIEF_TYPE, coverSummary = null, previousRunAt = null, displayLabel = null, dashboardState = null, freshnessToken = '', creativeBriefConfig = null }) {
+function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, generatedAt, clientId, userEmail, tier, watchlistKols = [], weather = null, moduleBriefs = [], auditMockupUrl = null, studioVideoUrl = null, socialPreviewImageUrl = null, siteMeta = null, evidence = null, fullPageScreenshots = null, company = null, researchConfig = null, strategyData = null, signalsCore = [], socialQueue = [], briefType = DEFAULT_BRIEF_TYPE, coverSummary = null, previousRunAt = null, displayLabel = null, dashboardState = null, freshnessToken = '', creativeBriefConfig = null }) {
   const content = marketingBrief?.content || {};
   const agentData = marketingBrief?.scoutBrief?.agentData || {};
   // Single source of truth: every signal array is derived from the shared
@@ -1193,8 +1197,12 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     }
     // Social Share — surfaces exactly what the site exposes when shared: a
     // faux share-card preview (og:image, falling back to the largest icon /
-    // favicon) plus a captured/missing checklist of the social tags we read.
-    // Renders whenever a homepage was captured; "all missing" IS the finding.
+    // favicon) plus a three-state checklist of the social tags we read.
+    // Renders whenever a homepage was captured. Phase 3
+    // (docs/plans/BRIEF-RENDERED-SCRAPE-SONNET-HANDOFF.md §3): a missing row is
+    // never a bare ✗ from a blind static read — it is either ABSENT (proven,
+    // with the tier that proved it) or NOT TESTED (with the reason), per
+    // buildSocialChecklistRows (features/scout-intake/brief-honesty-sections.js).
     const socialInner = (() => {
       const sm = siteMeta || {};
       if (!siteMeta && !socialPreviewImageUrl) return '';
@@ -1207,17 +1215,41 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
         ? `<div class="cb-social-card-img cb-social-card-img--icon"><img src="${esc(fallbackIcon)}" alt="Site icon"/></div>`
         : `<div class="cb-social-card-img cb-social-card-img--empty">No share image set</div>`;
       const card = `<div class="cb-social-card">${cardImg}<div class="cb-social-card-meta">${host ? `<span class="cb-social-card-host">${esc(host)}</span>` : ''}<span class="cb-social-card-title">${esc(sm.title || sm.siteName || host || 'Untitled')}</span>${sm.description ? `<span class="cb-social-card-desc">${esc(sm.description)}</span>` : ''}</div></div>`;
-      const checks = [
-        { label: 'Share image (og:image)', val: sm.ogImage },
-        { label: 'Image alt text', val: sm.ogImageAlt },
-        { label: 'Title', val: sm.title },
-        { label: 'Description', val: sm.description },
-        { label: 'Site name', val: sm.siteName },
-        { label: 'Favicon', val: sm.favicon },
-        { label: 'Brand color', val: sm.themeColor },
-      ];
-      const list = `<ul class="cb-social-checks">${checks.map((c) => `<li class="cb-social-check ${c.val ? 'is-ok' : 'is-miss'}"><span class="cb-social-mark" aria-hidden="true">${c.val ? '✓' : '✗'}</span><span class="cb-social-label">${esc(c.label)}</span><span class="cb-social-status">${c.val ? 'Captured' : 'Missing'}</span></li>`).join('')}</ul>`;
+      const STATUS_TEXT = { present: 'Captured', 'absent-proven': 'Not on the page', 'not-tested': 'Not tested' };
+      const STATUS_MARK = { present: '✓', 'absent-proven': '✗', 'not-tested': '–' };
+      const rows = buildSocialChecklistRows(sm, evidence);
+      const list = `<ul class="cb-social-checks">${rows.map((r) => `<li class="cb-social-check is-${r.state}"><span class="cb-social-mark" aria-hidden="true">${STATUS_MARK[r.state]}</span><span class="cb-social-label">${esc(r.label)}</span><span class="cb-social-status">${STATUS_TEXT[r.state]}</span>${r.detail ? `<span class="cb-social-detail">${esc(r.detail)}</span>` : ''}</li>`).join('')}</ul>`;
       return `<div class="cb-social"><div class="cb-social-preview">${card}</div>${list}</div>`;
+    })();
+    // Crawler vs Human — Phase 3's headline finding for JS-rendered sites: what
+    // a non-rendering crawler (Facebook/X/LinkedIn/iMessage) reads from the raw
+    // HTML vs what a visitor actually sees, framed in client terms. Renders
+    // ONLY when a rendered fallback fired this run (buildCrawlerParityPages
+    // returns rows only for pages that carry a real static-vs-rendered diff) —
+    // a static-rich site has nothing to diff against and this section stays
+    // silent for it.
+    const crawlerParityInner = (() => {
+      const pages = buildCrawlerParityPages(evidence);
+      if (!pages.length) return '';
+      const note = `Your homepage builds its content with JavaScript. When the link is shared on Facebook, X, LinkedIn, or iMessage, those apps read the page's raw HTML before any script runs — not what a visitor sees. Here is the difference this run found:`;
+      const pagesHtml = pages.map((p) => {
+        const rowsHtml = p.fields.map((f) => `<div class="cb-parity-row"><span class="cb-parity-field">${esc(f.label)}</span><span class="cb-parity-val"><span class="cb-parity-col-label">Crawlers receive</span>${esc(f.static)}</span><span class="cb-parity-val"><span class="cb-parity-col-label">Visitors see</span>${esc(f.rendered)}</span><span class="cb-parity-match${f.match ? '' : ' is-differs'}">${f.match ? 'Matches' : 'Differs'}</span></div>`).join('');
+        return `<div class="cb-parity-page"><div class="cb-parity-page-url">${esc(p.type)} · ${esc(p.url || '')}</div>${rowsHtml}</div>`;
+      }).join('');
+      return `<div class="cb-parity"><p class="cb-parity-note">${esc(note)}</p>${pagesHtml}</div>`;
+    })();
+    // Coverage manifest — L4/L5 made visible: what this run's website-read
+    // stage could and could not check, named honestly. Quiet, footer-register
+    // (plain numbered list, no alert styling) — this is a note about our
+    // tooling, not an alarm about the site.
+    const coverageManifestInner = (() => {
+      const { hasData, allRan, rows } = buildCoverageManifestRows(evidence?.coverage);
+      if (!hasData) return '';
+      const note = 'What this run’s website-read stage could and couldn’t check this time. Screenshots and device mockups are captured separately and appear in your Deliverables above.';
+      const body = allRan
+        ? `<p class="cb-coverage-clean">Every planned check for this run’s website read completed.</p>`
+        : gapList(rows.map((r) => `${r.label} — ${r.status}${r.reason ? `: ${r.reason}` : ''}`));
+      return `<div class="cb-coverage"><p class="cb-coverage-note">${esc(note)}</p>${body}</div>`;
     })();
     pageBuilders['website-status'] = () => {
       // WTIS lead reads full-width across the page (not a narrow pull-quote).
@@ -1245,6 +1277,11 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
           parts.push(subs[id]);
         }
       }
+      // Phase 3 honesty sub-sections: data-gated, not composer-toggleable (the
+      // coverage/parity layer should not be an off-switchable marketing
+      // element) — always last, in this fixed order.
+      if (crawlerParityInner) parts.push(subSection('Crawler vs. Human', crawlerParityInner, 'brief-crawler-parity-section'));
+      if (coverageManifestInner) parts.push(subSection('Coverage Notes', coverageManifestInner, 'brief-coverage-manifest-section'));
       if (!parts.length) return '';
       return page('Your Website<br/>Status.', parts.join('\n      '), 'cb-what-this-site-is');
     };
@@ -1776,14 +1813,43 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
   .cb-social-card-title{font-family:"Space Grotesk",sans-serif;font-weight:500;font-size:16px;line-height:1.3;color:var(--ink)}
   .cb-social-card-desc{font-family:"Space Grotesk",sans-serif;font-weight:300;font-size:14px;line-height:1.5;color:var(--ink-soft);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .cb-social-checks{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
-  .cb-social-check{display:flex;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid var(--line)}
+  .cb-social-check{display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid var(--line)}
   .cb-social-mark{flex-shrink:0;width:16px;text-align:center;font-family:"Space Mono",monospace;font-size:13px;font-weight:400;line-height:1}
-  .cb-social-check.is-ok .cb-social-mark{color:var(--ink)}
-  .cb-social-check.is-miss .cb-social-mark{color:var(--ink-soft)}
+  .cb-social-check.is-present .cb-social-mark{color:var(--ink)}
+  .cb-social-check.is-absent-proven .cb-social-mark,.cb-social-check.is-not-tested .cb-social-mark{color:var(--ink-soft)}
   .cb-social-label{flex:1;min-width:0;font-family:"Space Grotesk",sans-serif;font-weight:400;font-size:16px;line-height:1.3;color:var(--ink)}
-  .cb-social-check.is-miss .cb-social-label{color:var(--ink-soft)}
+  .cb-social-check.is-absent-proven .cb-social-label,.cb-social-check.is-not-tested .cb-social-label{color:var(--ink-soft)}
   .cb-social-status{font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft);flex-shrink:0}
+  /* Phase 3: the third row line — tier proof for a confirmed gap, or the
+     honest reason a field was never tested this run. Always its own line so
+     it never crowds the label/status columns. */
+  .cb-social-detail{flex-basis:100%;font-family:"Space Grotesk",sans-serif;font-weight:300;font-size:13px;line-height:1.5;color:var(--ink-soft);padding-left:30px}
   @media(max-width:760px){.cb-social{grid-template-columns:1fr;gap:24px}}
+  /* Crawler vs Human — what a non-rendering crawler (static HTML) receives vs
+     what a visitor sees (rendered DOM). Renders only when a rendered fallback
+     fired this run; the header carries normal weight (via .cb-sub-head) since
+     this is the headline finding for JS-rendered sites. */
+  .cb-parity{display:flex;flex-direction:column;gap:26px;width:100%}
+  .cb-parity-note{font-family:"Space Grotesk",sans-serif;font-weight:300;font-size:15px;line-height:1.6;color:var(--ink-soft);max-width:74ch;margin:0}
+  .cb-parity-page{border:1px solid var(--line)}
+  .cb-parity-page-url{font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft);padding:12px 16px;border-bottom:1px solid var(--line);word-break:break-word}
+  .cb-parity-row{display:grid;grid-template-columns:minmax(120px,.8fr) minmax(0,1.3fr) minmax(0,1.3fr) auto;gap:16px;align-items:start;padding:14px 16px;border-bottom:1px solid var(--line)}
+  .cb-parity-row:last-child{border-bottom:0}
+  .cb-parity-field{font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);padding-top:2px}
+  .cb-parity-col-label{font-family:"Space Mono",monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-soft);display:block;margin-bottom:4px}
+  .cb-parity-val{font-family:"Space Grotesk",sans-serif;font-weight:400;font-size:14px;line-height:1.4;color:var(--ink);word-break:break-word}
+  .cb-parity-match{font-family:"Space Mono",monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:6px 10px;border:1px solid var(--line);white-space:nowrap;color:var(--ink-soft);height:fit-content}
+  .cb-parity-match.is-differs{color:var(--ink);border-color:var(--ink)}
+  @media(max-width:600px){.cb-parity-row{grid-template-columns:1fr;gap:6px}.cb-parity-match{justify-self:start}}
+  /* Coverage manifest — quiet, footer-register honesty note (L4/L5): what this
+     run's website-read stage could and couldn't check. Plain text, the same
+     numbered-list primitive as What's Missing, no alert styling — this is a
+     note about our tooling, never an alarm about the site. */
+  .cb-coverage{max-width:660px}
+  .cb-coverage-note{font-family:"Space Grotesk",sans-serif;font-weight:300;font-size:13px;line-height:1.6;color:var(--ink-soft);margin:0 0 14px}
+  .cb-coverage-clean{font-family:"Space Mono",monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);margin:0}
+  .cb-coverage .cb-gap-t{font-size:14px;line-height:1.5;color:var(--ink-soft);font-weight:400}
+  .cb-coverage .cb-gap{padding:9px 0}
   /* Cover handoff — Nothing container: one bordered box, sig on the left,
      "what you get" on the right, split by a single hairline divider. */
   .cb-handoff{display:grid;grid-template-columns:1fr auto;align-items:center;gap:0;border:0;padding:0;margin:30px 0 0;width:100%;max-width:100%}
@@ -2199,6 +2265,10 @@ async function handleGet(request) {
     // Full homepage meta — drives the Social Share capture checklist (what
     // social tags were/weren't found) + favicon fallback in Your Website Status.
     siteMeta: dash.siteMeta || null,
+    // Phase 3: trimmed crawl evidence (renderMode/coverage/crawlerParity) —
+    // feeds the honest three-state Social Share checklist, the Crawler vs
+    // Human sub-section, and the coverage manifest.
+    evidence: dash.evidence || null,
     // Full-page captures (same source as the Cross-Device Layouts card) so the
     // deliverables show full-page shots, not just the viewport homepage.
     fullPageScreenshots: dash.artifacts?.fullPageScreenshots || null,
