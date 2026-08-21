@@ -15168,6 +15168,17 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                         {copiedBriefId === (brief.id || brief.briefSlug) ? 'Copied ✓' : 'Copy link'}
                                       </button>
                                     )}
+                                    {brief.pdfDownloadUrl && (
+                                      <a
+                                        className="mu-btn-outline brief-pdf-download-btn"
+                                        href={brief.pdfDownloadUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        title="Download this brief as a PDF (first download renders it)"
+                                      >
+                                        Download PDF
+                                      </a>
+                                    )}
                                     {brief.ogImageUrl && (
                                       <a className="mu-btn-outline" href={brief.ogImageUrl} target="_blank" rel="noopener noreferrer">
                                         OG Image
@@ -15652,6 +15663,17 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                       >
                                         {copiedBriefId === (brief.id || brief.briefSlug) ? 'Copied ✓' : 'Copy link'}
                                       </button>
+                                    )}
+                                    {brief.pdfDownloadUrl && (
+                                      <a
+                                        className="mu-btn-outline brief-pdf-download-btn"
+                                        href={brief.pdfDownloadUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        title="Download this brief as a PDF (first download renders it)"
+                                      >
+                                        Download PDF
+                                      </a>
                                     )}
                                     {brief.ogImageUrl && (
                                       <a className="mu-btn-outline" href={brief.ogImageUrl} target="_blank" rel="noopener noreferrer">
