@@ -62,6 +62,8 @@ const CREATIVE_BRIEF_GROUPS = [
       { id: 'biggest-risk', label: 'Biggest Risk', desc: 'Risk callout.' },
       { id: 'opportunity', label: 'The Opportunity', desc: 'Opportunity tiles + copy.' },
       { id: 'decision', label: 'The Decision', desc: 'Decision pull-quote + tags.' },
+      { id: 'crawler-parity', label: 'Crawler vs. Human', desc: 'Static-HTML-vs-rendered-DOM diff for JS-rendered sites. Renders only when this run found a real gap; empty otherwise.' },
+      { id: 'coverage-manifest', label: 'Coverage Notes', desc: 'What this run’s website-read stage could and couldn’t check. Renders only when there’s something to report.' },
     ],
   },
   {

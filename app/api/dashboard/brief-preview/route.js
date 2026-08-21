@@ -1227,7 +1227,8 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     // ONLY when a rendered fallback fired this run (buildCrawlerParityPages
     // returns rows only for pages that carry a real static-vs-rendered diff) —
     // a static-rich site has nothing to diff against and this section stays
-    // silent for it.
+    // silent for it. Composer id 'crawler-parity' (Phase 3b) gates on top of
+    // this data check — toggle off hides it even when there IS a diff.
     const crawlerParityInner = (() => {
       const pages = buildCrawlerParityPages(evidence);
       if (!pages.length) return '';
@@ -1241,7 +1242,8 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
     // Coverage manifest — L4/L5 made visible: what this run's website-read
     // stage could and could not check, named honestly. Quiet, footer-register
     // (plain numbered list, no alert styling) — this is a note about our
-    // tooling, not an alarm about the site.
+    // tooling, not an alarm about the site. Composer id 'coverage-manifest'
+    // (Phase 3b) gates on top of this data check.
     const coverageManifestInner = (() => {
       const { hasData, allRan, rows } = buildCoverageManifestRows(evidence?.coverage);
       if (!hasData) return '';
@@ -1261,6 +1263,13 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
         'biggest-risk': subSection('Biggest Risk', riskInner, 'cb-biggest-risk'),
         'opportunity': subSection('The Opportunity', oppInner, 'cb-opportunity'),
         'decision': subSection('The Decision', decInner, 'cb-decision'),
+        // Phase 3 honesty sub-sections (Phase 3b: composer-registered like
+        // every other website-status element). Still gated by data on top of
+        // the composer toggle — an empty inner ('' when this run found
+        // nothing to report) drops out via the subs[id] truthiness check
+        // below regardless of the toggle state.
+        'crawler-parity': subSection('Crawler vs. Human', crawlerParityInner, 'brief-crawler-parity-section'),
+        'coverage-manifest': subSection('Coverage Notes', coverageManifestInner, 'brief-coverage-manifest-section'),
       };
       const ord = cbOrderOf('website-status').filter((id) => cbOn(id) && subs[id]);
       // What's Missing + Biggest Risk pair side-by-side (as-built look) when
@@ -1277,11 +1286,6 @@ function renderMarketingBriefHtml({ marketingBrief, clientName, websiteUrl, gene
           parts.push(subs[id]);
         }
       }
-      // Phase 3 honesty sub-sections: data-gated, not composer-toggleable (the
-      // coverage/parity layer should not be an off-switchable marketing
-      // element) — always last, in this fixed order.
-      if (crawlerParityInner) parts.push(subSection('Crawler vs. Human', crawlerParityInner, 'brief-crawler-parity-section'));
-      if (coverageManifestInner) parts.push(subSection('Coverage Notes', coverageManifestInner, 'brief-coverage-manifest-section'));
       if (!parts.length) return '';
       return page('Your Website<br/>Status.', parts.join('\n      '), 'cb-what-this-site-is');
     };

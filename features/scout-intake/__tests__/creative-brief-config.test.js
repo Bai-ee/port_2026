@@ -32,6 +32,19 @@ test('normalize keeps saved toggles/order, drops unknown ids, appends missing', 
   assert.deepStrictEqual(cfg.order.cover, defaultCreativeBriefConfig().order.cover);
 });
 
+test('Phase 3b: legacy website-status config (predating crawler-parity/coverage-manifest) defaults them on and appends them', () => {
+  // Simulates a saved doc from before these two ids existed in the registry.
+  const cfg = normalizeCreativeBriefConfig({
+    order: { 'website-status': ['wtis-lead', 'social-share', 'whats-missing', 'biggest-risk', 'opportunity', 'decision'] },
+  });
+  assert.strictEqual(cfg.include['crawler-parity'], true);
+  assert.strictEqual(cfg.include['coverage-manifest'], true);
+  assert.deepStrictEqual(cfg.order['website-status'], [
+    'wtis-lead', 'social-share', 'whats-missing', 'biggest-risk', 'opportunity', 'decision',
+    'crawler-parity', 'coverage-manifest',
+  ]);
+});
+
 test('normalize ignores non-boolean include values', () => {
   const cfg = normalizeCreativeBriefConfig({ include: { 'key-insight': 'nope' } });
   assert.strictEqual(cfg.include['key-insight'], true);
