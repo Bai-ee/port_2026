@@ -37,7 +37,10 @@ function sourceTypeLabel(chunk) {
   return type || 'SOURCE';
 }
 
-export default function KnowledgeBaseCard({ getIdToken }) {
+export default function KnowledgeBaseCard({ getIdToken, apiPath }) {
+  // apiPath appends ?as=<clientId> during admin impersonation so every KB
+  // operation targets the viewed client's KB, never the admin's own.
+  const toApiPath = typeof apiPath === 'function' ? apiPath : (path) => path;
   const [activeTab, setActiveTab] = useState('text');
   const [items, setItems] = useState([]);
   const [limits, setLimits] = useState({ maxItems: 100, remaining: 100 });
@@ -58,7 +61,7 @@ export default function KnowledgeBaseCard({ getIdToken }) {
     setError('');
     try {
       const token = await getIdToken();
-      const res = await fetch('/api/dashboard/knowledge-base/items', {
+      const res = await fetch(toApiPath('/api/dashboard/knowledge-base/items'), {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json().catch(() => ({}));
@@ -70,7 +73,7 @@ export default function KnowledgeBaseCard({ getIdToken }) {
     } finally {
       setLoading(false);
     }
-  }, [getIdToken]);
+  }, [getIdToken, apiPath]);
 
   useEffect(() => {
     loadItems();
@@ -83,14 +86,29 @@ export default function KnowledgeBaseCard({ getIdToken }) {
       const token = await getIdToken();
       let res;
       if (activeTab === 'upload') {
-        const formData = new FormData();
-        formData.append('file', payload.file);
-        if (payload.title) formData.append('title', payload.title);
-        res = await fetch('/api/dashboard/knowledge-base/upload', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-          body: formData,
-        });
+        const files = Array.isArray(payload.files) ? payload.files : [];
+        const failures = [];
+        for (const file of files) {
+          const formData = new FormData();
+          formData.append('file', file);
+          if (payload.title && files.length === 1) formData.append('title', payload.title);
+          try {
+            const uploadRes = await fetch(toApiPath('/api/dashboard/knowledge-base/upload'), {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}` },
+              body: formData,
+            });
+            const uploadData = await uploadRes.json().catch(() => ({}));
+            if (!uploadRes.ok) throw new Error(uploadData?.error || `HTTP ${uploadRes.status}`);
+          } catch (err) {
+            failures.push(`${file.name}: ${err.message || 'upload failed'}`);
+          }
+        }
+        await loadItems();
+        if (failures.length) {
+          setError(`${failures.length} of ${files.length} uploads failed — ${failures.join(' · ')}`);
+        }
+        return;
       } else {
         const endpoint = activeTab === 'url'
           ? '/api/dashboard/knowledge-base/ingest-url'
@@ -98,7 +116,7 @@ export default function KnowledgeBaseCard({ getIdToken }) {
         const body = activeTab === 'url'
           ? { title: payload.title, url: payload.url }
           : { title: payload.title, text: payload.text };
-        res = await fetch(endpoint, {
+        res = await fetch(toApiPath(endpoint), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify(body),
@@ -121,7 +139,7 @@ export default function KnowledgeBaseCard({ getIdToken }) {
     setError('');
     try {
       const token = await getIdToken();
-      const res = await fetch(`/api/dashboard/knowledge-base/items/${encodeURIComponent(itemId)}`, {
+      const res = await fetch(toApiPath(`/api/dashboard/knowledge-base/items/${encodeURIComponent(itemId)}`), {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -143,7 +161,7 @@ export default function KnowledgeBaseCard({ getIdToken }) {
     setError('');
     try {
       const token = await getIdToken();
-      const res = await fetch('/api/dashboard/knowledge-base/search', {
+      const res = await fetch(toApiPath('/api/dashboard/knowledge-base/search'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ query, topK: 8 }),
@@ -167,7 +185,7 @@ export default function KnowledgeBaseCard({ getIdToken }) {
     setError('');
     try {
       const token = await getIdToken();
-      const res = await fetch('/api/dashboard/knowledge-base/chat', {
+      const res = await fetch(toApiPath('/api/dashboard/knowledge-base/chat'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ question }),

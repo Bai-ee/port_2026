@@ -7,6 +7,7 @@ const { verifyRequestUser } = require('../../../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../../../api/_lib/client-provisioning.cjs');
 const { geocodeZip } = require('../../../../../features/intelligence/_weather.js');
 const { loadClientBrainCardDefaults, saveClientBrainCardSettingsSnapshot } = require('../../../../../features/client-brain/store.cjs');
+const { normalizeSearchTerms } = require('../../../../../features/scout-intake/search-term-normalizer.js');
 
 // Normalize + (re)geocode the weather config. Geocodes the zip on save so the
 // brief/email can fetch a forecast by lat/lon without geocoding every run.
@@ -292,11 +293,14 @@ export async function POST(request) {
   const weather = await normalizeWeather(body?.weather, priorWeather);
   const incomingAck = (body?.acknowledgedCards && typeof body.acknowledgedCards === 'object') ? body.acknowledgedCards : {};
 
-  const splitTerms = (input, max) => String(input || '')
-    .split(/[\n,]+/)
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .slice(0, max);
+  // normalizeSearchTerms, not a bare String().split: the old version
+  // stringified ARRAY input (comma-joining it) before re-splitting, which
+  // shredded any prose the array carried into junk fragments while keeping
+  // long blobs as single "terms" — searches built from that vocabulary
+  // return nothing (2026-08-20 clairecalls incident; see
+  // features/scout-intake/search-term-normalizer.js). Handles arrays and
+  // newline/comma-joined strings alike, drops prose-length entries.
+  const splitTerms = (input, max) => normalizeSearchTerms(input, { max });
 
   const marketingBriefConfig = {
     enabled: true,

@@ -6,24 +6,24 @@ export default function AddItemPanel({ mode, busy, onSubmit }) {
   const [title, setTitle] = useState('');
   const [text, setText] = useState('');
   const [url, setUrl] = useState('');
-  const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]);
 
   useEffect(() => {
     setTitle('');
     setText('');
     setUrl('');
-    setFile(null);
+    setFiles([]);
   }, [mode]);
 
   const isTextMode = mode === 'text';
   const isUploadMode = mode === 'upload';
   const canSubmit = isUploadMode
-    ? Boolean(file)
+    ? files.length > 0
     : isTextMode
     ? text.trim().length >= 20
     : url.trim().length > 0;
   const submitHint = isUploadMode
-    ? 'Choose a file to enable upload.'
+    ? 'Choose one or more files to enable upload.'
     : isTextMode
     ? `${Math.min(text.trim().length, 20)}/20 characters required.`
     : 'Enter a URL to enable import.';
@@ -36,12 +36,12 @@ export default function AddItemPanel({ mode, busy, onSubmit }) {
       title: title.trim(),
       text: text.trim(),
       url: url.trim(),
-      file,
+      files,
     });
     setTitle('');
     setText('');
     setUrl('');
-    setFile(null);
+    setFiles([]);
     form.reset();
   }
 
@@ -55,7 +55,7 @@ export default function AddItemPanel({ mode, busy, onSubmit }) {
           value={title}
           onChange={(event) => setTitle(event.target.value)}
           maxLength={160}
-          placeholder={isTextMode ? 'Positioning notes, FAQ, offer details' : isUploadMode ? 'Document title (optional)' : 'Source title (optional)'}
+          placeholder={isTextMode ? 'Positioning notes, FAQ, offer details' : isUploadMode ? 'Document title (optional, single file only)' : 'Source title (optional)'}
           className="mu-input"
         />
       </div>
@@ -79,13 +79,19 @@ export default function AddItemPanel({ mode, busy, onSubmit }) {
           <input
             id="kb-file-input"
             type="file"
+            multiple
             accept=".pdf,.docx,.txt,.md,.csv,.json,.html,.xml,.yaml,.yml,.rtf,.log"
-            onChange={(event) => setFile(event.target.files?.[0] || null)}
+            onChange={(event) => setFiles(Array.from(event.target.files || []))}
             className="mu-input"
           />
           <span style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5, marginTop: 4 }}>
-            Upload PDFs, DOCX, TXT, Markdown, CSV, JSON, HTML, XML, YAML, RTF, logs, and other text-based files. Max 10 MB. Legacy .doc is not supported.
+            Upload PDFs, DOCX, TXT, Markdown, CSV, JSON, HTML, XML, YAML, RTF, logs, and other text-based files. Select multiple files to add them in one batch. Max 10 MB each. Legacy .doc is not supported.
           </span>
+          {files.length > 1 && (
+            <span id="kb-file-count-hint" style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
+              {files.length} files selected.
+            </span>
+          )}
         </div>
       ) : (
         <div className="mu-field">
@@ -109,7 +115,11 @@ export default function AddItemPanel({ mode, busy, onSubmit }) {
           className="mu-cta-primary"
           style={{ minHeight: 42, padding: '0 20px', fontSize: 13 }}
         >
-          {busy ? 'Adding...' : isUploadMode ? 'Upload File' : isTextMode ? 'Add Text' : 'Add URL'}
+          {busy
+            ? 'Adding...'
+            : isUploadMode
+            ? files.length > 1 ? `Upload ${files.length} Files` : 'Upload File'
+            : isTextMode ? 'Add Text' : 'Add URL'}
         </button>
         {!canSubmit && !busy && (
           <span id="kb-submit-hint" style={{ fontSize: 11, color: 'var(--text-secondary)' }}>

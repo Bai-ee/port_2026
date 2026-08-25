@@ -27,6 +27,7 @@
 const { getScoutConfig, saveScoutConfig } = require('./scout-config-store');
 const { callAnthropic, extractAnthropicUsage } = require('./_anthropic-client');
 const { logAnthropicCall } = require('../../api/_lib/usage-logger.cjs');
+const { normalizeSearchTerms } = require('./search-term-normalizer');
 
 const MODEL = 'claude-haiku-4-5-20251001';
 const MAX_TOKENS = 1400;
@@ -91,19 +92,23 @@ const CAPABILITIES = [
     id: 'brandKeywords',
     summary: 'Exact brand and product name match strings to feed into web searches. Include the exact brand name quoted, the canonical hostname, and the top 1-2 product/service names.',
     detect: () => ({ enabled: true, reason: 'always' }),
-    defaults: (_ctx, section) => (Array.isArray(section) ? section : []).slice(0, 8),
+    // normalizeSearchTerms, not a bare slice: the LLM sometimes emits prose
+    // paragraphs or comma-joined blobs inside the array, and downstream
+    // searches built from those return nothing (2026-08-20 clairecalls
+    // incident — see search-term-normalizer.js).
+    defaults: (_ctx, section) => normalizeSearchTerms(section, { max: 8 }),
   },
   {
     id: 'competitors',
     summary: 'Likely named competitors in the same space. Infer from industry + positioning. Flag as INFERRED — admin review expected.',
     detect: () => ({ enabled: true, reason: 'always' }),
-    defaults: (_ctx, section) => (Array.isArray(section) ? section : []).slice(0, 8),
+    defaults: (_ctx, section) => normalizeSearchTerms(section, { max: 8 }),
   },
   {
     id: 'categoryTerms',
-    summary: 'Category-level search terms capturing the broader conversation the brand sits inside (not the brand name). Mix of trends, tooling, region.',
+    summary: 'Category-level search terms capturing the broader conversation the brand sits inside (not the brand name). Each term MUST be a short standalone search phrase of 1-4 words (e.g. "voice journaling", "journaling app") — never a sentence or description.',
     detect: () => ({ enabled: true, reason: 'always' }),
-    defaults: (_ctx, section) => (Array.isArray(section) ? section : []).slice(0, 10),
+    defaults: (_ctx, section) => normalizeSearchTerms(section, { max: 10 }),
   },
   {
     id: 'kols',

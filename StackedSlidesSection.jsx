@@ -779,6 +779,29 @@ const StackedSlidesSection = () => {
   const peekCard4Ref = useRef(null);
 
   const [pokerHovered, setPokerHovered] = useState(false);
+  // EXPERIMENT (homepage full-width fill): uniformly scale the 810px design
+  // column up to the dashboard UI's 1700px cap. zoom keeps every element's
+  // width/height ratio; <906px viewports render exactly as before (zoom 1).
+  // Revert by deleting this state + effect, the zoom on
+  // #homepage-fill-scale-root, and the fillGutterOverride spreads.
+  const [fillZoom, setFillZoom] = useState(1);
+  useLayoutEffect(() => {
+    const computeFillZoom = () => {
+      // 906 = 810px column + 2 × 48px gutters; 1700/810 caps the column at
+      // the dashboard's #founders-shell max-width.
+      const z = Math.min(Math.max(window.innerWidth / 906, 1), 1700 / 810);
+      setFillZoom(z > 1.02 ? Number(z.toFixed(4)) : 1);
+    };
+    computeFillZoom();
+    window.addEventListener('resize', computeFillZoom);
+    return () => window.removeEventListener('resize', computeFillZoom);
+  }, []);
+  // While zoomed, the 10vw gutter would swallow the gained width (vw ignores
+  // zoom) — swap it for the dashboard's fixed 48px gutter.
+  const fillGutterOverride = fillZoom > 1 ? {
+    paddingLeft: 'max(48px, calc((100% - 810px) / 2))',
+    paddingRight: 'max(48px, calc((100% - 810px) / 2))',
+  } : null;
   const [activeFilter, setActiveFilter] = useState(null);
   const [filterCopy, setFilterCopy] = useState(FILTER_COPY.default);
   const [particleParams, setParticleParams] = useState(PARTICLE_DEFAULTS);
@@ -1676,7 +1699,7 @@ const StackedSlidesSection = () => {
 
 
   return (
-    <section style={sectionStyle}>
+    <section id="homepage-fill-scale-root" style={{ ...sectionStyle, zoom: fillZoom }}>
       {hoverCards.length > 0 && typeof document !== 'undefined'
         ? createPortal(
             <>
@@ -2463,7 +2486,7 @@ const StackedSlidesSection = () => {
             <div style={contentStyle}>
               <div data-stack-inner style={innerStyle}>
                 {slide.layout === 'grid' ? (
-                  <div id="panel-grid-layout" style={{ ...gridLayoutStyle, paddingBottom: 'clamp(5.75rem, 1.5vw, 1.4rem)' }}>
+                  <div id="panel-grid-layout" style={{ ...gridLayoutStyle, ...fillGutterOverride, paddingBottom: 'clamp(5.75rem, 1.5vw, 1.4rem)' }}>
                     <div id="panel-hero-intro-centering" style={{ ...textCenteringStyle, marginTop: 'clamp(1.5rem, 3vw, 3rem)', marginBottom: 'clamp(1.5rem, 3vw, 3rem)' }}>
                       <div id="panel-hero-text-row" style={{ ...textRowStyle, display: 'flex', alignItems: 'center', gap: 'clamp(0.5rem, 1.5vw, 1rem)', width: '100%' }}>
                         <div id="hero-url-input-row" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flex: 1, minWidth: 0, height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
@@ -2516,8 +2539,8 @@ const StackedSlidesSection = () => {
                               >
                                 {[
                                   { ref: peekCard3Ref, id: 'dash-peek-card-3', left: '0%',  rotate: '-1.4deg', objPos: 'top center', label: '', img: '/img/ss3.png', height: '190px', topOffset: '0', bg: '#fcfaf4' },
-                                  { ref: peekCard2Ref, id: 'dash-peek-card-2', left: '33%', rotate: '1.2deg',  objPos: 'top center', label: '', img: '/img/clairecalls_ss.png', height: '168px', topOffset: '0', bg: '#fcfaf4' },
-                                  { ref: peekCard1Ref, id: 'dash-peek-card-1', left: '66%', rotate: '-3.2deg', objPos: 'top center', label: '', img: '/img/ss1.png', height: '200px', topOffset: '0', bg: '#fcfaf4' },
+                                  { ref: peekCard2Ref, id: 'dash-peek-card-2', left: '33%', rotate: '1.2deg',  objPos: 'top center', label: '', img: '/img/claire_ss.png', height: '168px', topOffset: '0', bg: '#fcfaf4' },
+                                  { ref: peekCard1Ref, id: 'dash-peek-card-1', left: '66%', rotate: '-3.2deg', objPos: 'top center', label: '', img: '/img/undergroundex_ss.png', height: '200px', topOffset: '0', bg: '#fcfaf4' },
                                 ].map(({ ref: cardRef, id, left, rotate, objPos, label, img, height, topOffset, bg }, i) => (
                                   <div
                                     key={id}
@@ -2722,31 +2745,20 @@ const StackedSlidesSection = () => {
       <section id="capabilities-panel" data-stack-panel style={{ ...panelStyle, minHeight: 'auto', background: 'rgba(245, 241, 223, 0.38)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.45), inset 0 1px 0 rgba(255,255,255,0.6)', color: '#2a2420' }}>
         <div style={contentStyle}>
           <div data-stack-inner style={innerStyle}>
-            <div id="panel-capabilities-layout" style={gridLayoutStyle}>
+            <div id="panel-capabilities-layout" style={{ ...gridLayoutStyle, ...fillGutterOverride }}>
               <section id="capability-cards-section" data-capability-grid style={capabilitySectionStyle}>
                 <div id="capability-cards-grid" style={{ ...capabilityGridStyle, marginTop: '5.75rem' }}>
+                  {/* Service cards are presentational only — no tap-to-preview, no
+                      hover state, nothing clickable. `data-capability-card` stays
+                      because the scroll-reveal in this file selects on it. */}
                   {AUTOMATION_CAPABILITIES.filter((item) => !item.tablePreview).map((item) => {
                     const Icon = AUTOMATION_ICON_COMPONENTS[item.icon];
-                    const isMobileCapabilityOpen = isTouchScrollDevice() && activeMobileCapability === item.title;
                     return (
                       <article
                         key={item.title}
                         data-capability-card
-                        style={{ ...capabilityCardStyle, zIndex: isMobileCapabilityOpen ? 6 : 1 }}
-                        onClick={() => {
-                          if (!isTouchScrollDevice()) return;
-                          setActiveMobileCapability((current) => (current === item.title ? null : item.title));
-                        }}
+                        style={{ ...capabilityCardStyle, zIndex: 1 }}
                       >
-                        {isMobileCapabilityOpen ? (
-                          <div style={mobileCapabilityPreviewStyle} aria-hidden="true">
-                            {item.previewVideo ? (
-                              <video src={item.previewVideo} autoPlay muted loop playsInline style={mobileCapabilityPreviewImageStyle} />
-                            ) : (
-                              <Image src={item.previewImage} alt="" fill sizes="90vw" style={{ objectFit: 'cover', display: 'block' }} />
-                            )}
-                          </div>
-                        ) : null}
                         <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 'clamp(0.8rem, 1.5vw, 1rem)' }}>
                           <div style={capabilityContentStyle}>
                             <h4 style={capabilityCardTitleStyle}>{item.title}</h4>

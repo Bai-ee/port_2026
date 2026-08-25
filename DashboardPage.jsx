@@ -279,22 +279,59 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // sources. `cardId` scopes the overlay so the two cards never bleed state.
   const brainDropInputs = useRef({});
   const [companyBrainUpload, setCompanyBrainUpload] = useState({ busy: false, dragOver: false, msg: '', tone: '', cardId: null });
-  const uploadToCompanyBrain = useCallback(async (file, cardId = 'knowledge-base') => {
-    if (!file) return;
-    setCompanyBrainUpload({ busy: true, dragOver: false, msg: `Uploading ${file.name}…`, tone: '', cardId });
+  const uploadToCompanyBrain = useCallback(async (fileOrFiles, cardId = 'knowledge-base') => {
+    const files = (Array.isArray(fileOrFiles) ? fileOrFiles : [fileOrFiles]).filter(Boolean);
+    if (!files.length) return;
+    const failures = [];
+    let done = 0;
     try {
       const token = await brandSystemGetIdToken();
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('title', file.name);
-      const res = await fetch(apiPath('/api/dashboard/knowledge-base/upload'), {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-      setCompanyBrainUpload({ busy: false, dragOver: false, msg: `Added “${file.name}” to the Source Library.`, tone: 'ok', cardId });
+      for (const file of files) {
+        setCompanyBrainUpload({
+          busy: true,
+          dragOver: false,
+          msg: files.length > 1 ? `Uploading ${done + 1}/${files.length}: ${file.name}…` : `Uploading ${file.name}…`,
+          tone: '',
+          cardId,
+        });
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('title', file.name);
+          const res = await fetch(apiPath('/api/dashboard/knowledge-base/upload'), {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+            body: formData,
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+        } catch (err) {
+          failures.push(`${file.name}: ${err?.message || 'upload failed'}`);
+        }
+        done += 1;
+      }
+      const okCount = files.length - failures.length;
+      if (failures.length) {
+        setCompanyBrainUpload({
+          busy: false,
+          dragOver: false,
+          msg: okCount
+            ? `Added ${okCount} of ${files.length} — failed: ${failures.join(' · ')}`
+            : failures.join(' · '),
+          tone: 'err',
+          cardId,
+        });
+      } else {
+        setCompanyBrainUpload({
+          busy: false,
+          dragOver: false,
+          msg: files.length > 1
+            ? `Added ${files.length} documents to the Source Library.`
+            : `Added “${files[0].name}” to the Source Library.`,
+          tone: 'ok',
+          cardId,
+        });
+      }
     } catch (err) {
       setCompanyBrainUpload({ busy: false, dragOver: false, msg: err?.message || 'Upload failed.', tone: 'err', cardId });
     } finally {
@@ -6197,6 +6234,13 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 
   const handleReseed = useCallback(async () => {
     if (!user || !reseedUrl.trim() || reseedLoading) return;
+    // Update & Rerun replaces the current dashboard content with a fresh
+    // intake run — gate it behind an explicit confirm so a stray click on the
+    // header button can't overwrite work. First-run (Create Dashboard) has
+    // nothing to overwrite, so it stays one click.
+    if (client && typeof window !== 'undefined' && !window.confirm(
+      `Update & Rerun will re-run the full intake for ${reseedUrl.trim()} and overwrite the current dashboard content. Continue?`
+    )) return;
     setReseedLoading(true);
     setReseedError('');
     setReseedSuccess(false);
@@ -11144,7 +11188,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 key={card.id}
                 onDragOver={isBrainDrop ? (e) => { e.preventDefault(); e.stopPropagation(); if (!(isBrainDropActive && companyBrainUpload.dragOver)) setCompanyBrainUpload((p) => ({ ...p, dragOver: true, cardId: card.id })); } : undefined}
                 onDragLeave={isBrainDrop ? (e) => { if (e.currentTarget.contains(e.relatedTarget)) return; setCompanyBrainUpload((p) => (p.cardId === card.id ? { ...p, dragOver: false } : p)); } : undefined}
-                onDrop={isBrainDrop ? (e) => { e.preventDefault(); e.stopPropagation(); const f = e.dataTransfer?.files?.[0]; if (f) uploadToCompanyBrain(f, card.id); } : undefined}
+                onDrop={isBrainDrop ? (e) => { e.preventDefault(); e.stopPropagation(); const fs = Array.from(e.dataTransfer?.files || []); if (fs.length) uploadToCompanyBrain(fs, card.id); } : undefined}
                 onClick={(e) => {
                   const clickedControl = e.target.closest('button, a, input, textarea, select, summary, details, [role="button"]');
                   if (clickedControl) return;
@@ -11185,8 +11229,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     <button
                       type="button"
                       className="tile-brain-clip-btn"
-                      title={`Attach a document to the ${card.title}`}
-                      aria-label={`Attach a document to the ${card.title}`}
+                      title={`Attach documents to the ${card.title}`}
+                      aria-label={`Attach documents to the ${card.title}`}
                       disabled={isBrainDropActive && companyBrainUpload.busy}
                       onClick={(e) => { e.stopPropagation(); brainDropInputs.current[card.id]?.click(); }}
                     >
@@ -11204,15 +11248,16 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   <input
                     ref={(el) => { brainDropInputs.current[card.id] = el; }}
                     type="file"
+                    multiple
                     accept=".pdf,.doc,.docx,.txt,.md,.markdown,.csv,.html,.htm,.rtf"
                     style={{ display: 'none' }}
-                    onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadToCompanyBrain(f, card.id); e.target.value = ''; }}
+                    onChange={(e) => { const fs = Array.from(e.target.files || []); if (fs.length) uploadToCompanyBrain(fs, card.id); e.target.value = ''; }}
                   />
                 )}
                 {isBrainDropActive && (companyBrainUpload.dragOver || companyBrainUpload.busy || companyBrainUpload.msg) && (
                   <div className={`tile-brain-dropzone${companyBrainUpload.tone === 'ok' ? ' tile-brain-dropzone--ok' : ''}${companyBrainUpload.tone === 'err' ? ' tile-brain-dropzone--err' : ''}`} aria-live="polite">
                     <Paperclip size={16} strokeWidth={1.8} aria-hidden="true" />
-                    <span>{companyBrainUpload.busy ? companyBrainUpload.msg : companyBrainUpload.msg || 'Drop a document to add it to the Source Library'}</span>
+                    <span>{companyBrainUpload.busy ? companyBrainUpload.msg : companyBrainUpload.msg || 'Drop documents to add them to the Source Library'}</span>
                   </div>
                 )}
                 {isLocked ? (
@@ -15889,7 +15934,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     className="tile-detail-bento-cell tile-detail-tabbed-container"
                     style={{ overflowY: 'auto', minHeight: 0 }}
                   >
-                    <KnowledgeBaseCard getIdToken={brandSystemGetIdToken} />
+                    <KnowledgeBaseCard getIdToken={brandSystemGetIdToken} apiPath={apiPath} />
                   </div>
                 )}
 
