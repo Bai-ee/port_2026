@@ -199,7 +199,7 @@ const INTRO_SOCIALS = [
 ];
 
 const INTRO_COPY_PRIMARY = 'At HITLOOP, Bryan Balli provides hands-on design, development, and marketing solutions. Guiding projects from early direction through launch, growth, and support.';
-const INTRO_COPY_SECONDARY = 'Share your website or email below to get onboarded with a project dashboard or onboarding call.';
+const INTRO_COPY_SECONDARY = "Bryan's background spans design, front-end development, creative technology, and digital marketing.";
 
 const SHARED_SUPPORT = 'Turn your website or idea into a working dashboard so we can get up to speed fast, automate where it makes sense, and focus on high-quality, personalized work.';
 
@@ -431,76 +431,6 @@ function HitloopAboutBlock() {
 
   return (
     <div id="cmo-about-split">
-      <div id="cmo-about-identity-col">
-        <div id="cmo-about-identity-header" style={aboutIdentityHeaderStyle}>
-          {/* Shell owns the sizing: a replaced <img> ignores align-items:stretch
-              and falls back to its intrinsic box, so below 900px the shell is the
-              flex item that stretches to the name + role stack and the image just
-              fills it. */}
-          <span id="cmo-about-avatar-shell" style={aboutIdentityAvatarShellStyle}>
-            <Image
-              id="cmo-about-avatar"
-              src="/img/profile2_400x400.png"
-              width={72}
-              height={72}
-              alt="Bryan Balli"
-              style={aboutIdentityAvatarStyle}
-            />
-          </span>
-          <div id="cmo-about-identity-textstack" style={aboutIdentityTextStackStyle}>
-            <h2 id="cmo-about-heading" ref={aboutHeadingRef} style={aboutHeadingStyle}>{ABOUT_HEADING_COPY}</h2>
-            <div id="cmo-about-signature-row" style={aboutSignatureRowStyle}>
-              {/* <span id="cmo-about-signature-dot" aria-hidden="true" style={aboutSignatureDotStyle} /> */}
-              <span id="cmo-about-signature" style={aboutSignatureStyle}>{INTRO_SIGNATURE}</span>
-              <span id="cmo-about-signature-divider" aria-hidden="true" style={aboutSignatureDividerStyle} />
-              <div id="cmo-about-signature-socials" style={aboutSignatureSocialsRowStyle}>
-                {INTRO_SOCIALS.map(({ label, href, icon: Icon }) => (
-                  <a
-                    key={label}
-                    href={href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label={label}
-                    title={label}
-                    className="about-signature-social-link"
-                    style={aboutSignatureSocialStyle}
-                    onMouseEnter={(e) => e.stopPropagation()}
-                    onMouseLeave={(e) => e.stopPropagation()}
-                  >
-                    <Icon />
-                  </a>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-        <p id="cmo-about-lead" style={aboutLeadStyle}>{INTRO_LEAD}</p>
-        <div id="cmo-about-previously-block" style={{ width: '100%' }}>
-          <div id="cmo-about-previously-row" style={aboutPreviouslyRowStyle}>
-            <span id="cmo-about-previously-label" style={aboutPreviouslyLabelStyle}>previously at</span>
-            <span id="cmo-about-previously-rule" aria-hidden="true" style={aboutPreviouslyRuleStyle} />
-          </div>
-          <div id="cmo-about-agency-marquee" style={aboutAgencyMarqueeShellStyle}>
-            <div style={aboutAgencyMarqueeTrackStyle}>
-              {[0, 1].map((copy) => (
-                <div key={copy} aria-hidden={copy > 0 ? 'true' : undefined} style={agencyMarqueeSetStyle}>
-                  {agencyLogos.map((logo) => (
-                    <Image
-                      key={`about-agency-${copy}-${logo.alt}`}
-                      src={logo.src}
-                      alt={copy > 0 ? '' : logo.alt}
-                      width={logo.w}
-                      height={logo.h}
-                      style={agencyLogoImgStyle(logo)}
-                    />
-                  ))}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-      <div id="cmo-about-divider" aria-hidden="true" />
       <div id="cmo-about-copy-col">
         <p id="cmo-about-mission-statement" style={aboutMissionStatementStyle}>{INTRO_COPY_PRIMARY}</p>
         <p style={aboutCopyCtaLineStyle}>{INTRO_COPY_SECONDARY}</p>
@@ -2225,18 +2155,11 @@ const StackedSlidesSection = () => {
         #cmo-card-onboard-body { display: none !important; }
         #cmo-dashboard-card .cmo-url-input-desktop { display: flex !important; }
         #cmo-about-split {
-          grid-template-columns: minmax(5rem, 0.2fr) 1px minmax(0, 0.8fr) !important;
-          gap: clamp(1.5rem, 3.5vw, 2.75rem) !important;
+          grid-template-columns: minmax(0, 1fr) !important;
+          gap: 0 !important;
           align-items: stretch !important;
-          padding: 0 clamp(0rem, 1vw, 0.5rem) clamp(1.5rem, 3vw, 2.5rem) !important;
+          padding: 0 0 clamp(1.5rem, 3vw, 2.5rem) !important;
         }
-        #cmo-about-divider { display: block !important; }
-        #cmo-about-identity-col { justify-content: center; align-self: stretch; }
-        #cmo-about-identity-textstack,
-        #cmo-about-lead,
-        #cmo-about-previously-block { display: none !important; }
-        #cmo-about-identity-header { height: 100%; justify-content: center !important; }
-        #cmo-about-avatar-shell { width: clamp(4.75rem, 8vw, 7rem) !important; height: clamp(4.75rem, 8vw, 7rem) !important; }
         #cmo-about-copy-col { justify-content: center; gap: clamp(0.85rem, 1.6vw, 1.35rem); }
         #cmo-about-mission-statement {
           font-size: clamp(1.35rem, 2.25vw, 2.05rem) !important;
@@ -2250,8 +2173,6 @@ const StackedSlidesSection = () => {
         @media (max-width: 899px) {
           #cmo-dashboard-card { padding: clamp(1.25rem, 6vw, 2rem) !important; }
           #cmo-about-split { grid-template-columns: 1fr !important; gap: 1.25rem !important; }
-          #cmo-about-divider { display: none !important; }
-          #cmo-about-identity-col, #cmo-about-identity-header { justify-content: flex-start !important; height: auto; }
           #cmo-about-copy-col { gap: 0.75rem; }
           #cmo-about-mission-statement { max-width: none; }
         }
