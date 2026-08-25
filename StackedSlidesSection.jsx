@@ -198,8 +198,8 @@ const INTRO_SOCIALS = [
   { label: 'LinkedIn', href: 'https://www.linkedin.com/in/bryanballi', icon: LinkedInLogo },
 ];
 
-const INTRO_COPY_PRIMARY = 'At HITLOOP, Bryan Balli provides hands-on design, development, and marketing solutions. Guiding projects from early direction through launch, growth, and support.';
-const INTRO_COPY_SECONDARY = "Bryan's background spans design, front-end development, creative technology, and digital marketing.";
+const INTRO_COPY_PRIMARY = 'At HITLOOP, Bryan Balli provides hands-on design, development, and marketing solutions. Guiding projects from early direction through launch, growth, and support. Providing hands-on design, development, and marketing solutions.';
+const INTRO_COPY_SECONDARY = 'Share your website or email below to get onboarded with a project dashboard or onboarding call.';
 
 const SHARED_SUPPORT = 'Turn your website or idea into a working dashboard so we can get up to speed fast, automate where it makes sense, and focus on high-quality, personalized work.';
 
@@ -431,6 +431,19 @@ function HitloopAboutBlock() {
 
   return (
     <div id="cmo-about-split">
+      <div id="cmo-about-identity-col">
+        <span id="cmo-about-avatar-shell" style={aboutIdentityAvatarShellStyle}>
+          <Image
+            id="cmo-about-avatar"
+            src="/img/profile2_400x400.png"
+            width={112}
+            height={112}
+            alt="Bryan Balli"
+            style={aboutIdentityAvatarStyle}
+          />
+        </span>
+      </div>
+      <div id="cmo-about-divider" aria-hidden="true" />
       <div id="cmo-about-copy-col">
         <p id="cmo-about-mission-statement" style={aboutMissionStatementStyle}>{INTRO_COPY_PRIMARY}</p>
         <p style={aboutCopyCtaLineStyle}>{INTRO_COPY_SECONDARY}</p>
@@ -2155,10 +2168,25 @@ const StackedSlidesSection = () => {
         #cmo-card-onboard-body { display: none !important; }
         #cmo-dashboard-card .cmo-url-input-desktop { display: flex !important; }
         #cmo-about-split {
-          grid-template-columns: minmax(0, 1fr) !important;
-          gap: 0 !important;
+          grid-template-columns: minmax(5rem, 0.2fr) 1px minmax(0, 0.8fr) !important;
+          gap: clamp(1.5rem, 3.5vw, 2.75rem) !important;
           align-items: stretch !important;
           padding: 0 0 clamp(1.5rem, 3vw, 2.5rem) !important;
+        }
+        #cmo-about-identity-col {
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          align-self: stretch !important;
+        }
+        #cmo-about-avatar-shell {
+          width: clamp(4.75rem, 8vw, 7rem) !important;
+          height: clamp(4.75rem, 8vw, 7rem) !important;
+        }
+        #cmo-about-divider {
+          display: block !important;
+          align-self: stretch !important;
+          background: rgba(42, 36, 32, 0.18) !important;
         }
         #cmo-about-copy-col { justify-content: center; gap: clamp(0.85rem, 1.6vw, 1.35rem); }
         #cmo-about-mission-statement {
@@ -2168,11 +2196,13 @@ const StackedSlidesSection = () => {
           text-align: left !important;
           max-width: 32ch;
         }
-        #cmo-about-copy-col > p:last-child { text-align: left !important; max-width: 58ch; }
+        #cmo-about-copy-col > p:last-child { width: 100%; text-align: center !important; max-width: none; }
         #cmo-url-input-row { margin-top: 0 !important; }
         @media (max-width: 899px) {
           #cmo-dashboard-card { padding: clamp(1.25rem, 6vw, 2rem) !important; }
           #cmo-about-split { grid-template-columns: 1fr !important; gap: 1.25rem !important; }
+          #cmo-about-identity-col { justify-content: flex-start !important; }
+          #cmo-about-divider { display: none !important; }
           #cmo-about-copy-col { gap: 0.75rem; }
           #cmo-about-mission-statement { max-width: none; }
         }
@@ -2542,7 +2572,7 @@ const StackedSlidesSection = () => {
                                     <div id="cmo-url-input-row" className="cmo-url-input-desktop" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.85rem', height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                                       <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
                                       <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter your website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
-                                      <span id="cmo-dashboard-cta-hover-shell" style={{ display: 'inline-flex', flexShrink: 0, cursor: 'pointer' }}><button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'pointer', padding: '0.75rem 0.75rem' }}>Connect with Us<UpRightArrow style={ctaIconStyle} /></button></span>
+                                      <span id="cmo-dashboard-cta-hover-shell" style={{ display: 'inline-flex', flexShrink: 0, cursor: 'pointer' }}><button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'pointer', padding: '0.75rem 0.75rem' }}>Onboard Now<UpRightArrow style={ctaIconStyle} /></button></span>
                                     </div>
                                     <div className="cmo-table-inner" style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '0px solid rgba(42,36,32,0.1)' }}>
                                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
