@@ -198,8 +198,8 @@ const INTRO_SOCIALS = [
   { label: 'LinkedIn', href: 'https://www.linkedin.com/in/bryanballi', icon: LinkedInLogo },
 ];
 
-const INTRO_COPY_PRIMARY = 'At HITLOOP, Bryan Balli provides hands-on design, development, and marketing solutions. Guiding projects from early direction through launch, growth, and support. Providing hands-on design, development, and marketing solutions.';
-const INTRO_COPY_SECONDARY = 'Share your website or email below to get onboarded with a project dashboard or onboarding call.';
+const INTRO_COPY_PRIMARY = 'We guide projects from early direction through launch, growth, and support. Providing hands-on design, development, and marketing solutions.';
+const INTRO_COPY_SECONDARY = 'Share your website or email below to get started.';
 
 const SHARED_SUPPORT = 'Turn your website or idea into a working dashboard so we can get up to speed fast, automate where it makes sense, and focus on high-quality, personalized work.';
 
@@ -2198,13 +2198,20 @@ const StackedSlidesSection = () => {
         }
         #cmo-about-copy-col > p:last-child { width: 100%; text-align: center !important; max-width: none; }
         #cmo-url-input-row { margin-top: 0 !important; }
+        /* The support line tracks the composition: wide canvases give it a
+           centered, editorial pause; the large two-column layout lets it
+           align directly beneath the message. */
+        @media (min-width: 900px) and (max-width: 1199px) {
+          #cmo-about-copy-col > p:last-child { text-align: left !important; }
+        }
         @media (max-width: 899px) {
           #cmo-dashboard-card { padding: clamp(1.25rem, 6vw, 2rem) !important; }
           #cmo-about-split { grid-template-columns: 1fr !important; gap: 1.25rem !important; }
-          #cmo-about-identity-col { justify-content: flex-start !important; }
+          #cmo-about-identity-col { display: none !important; }
           #cmo-about-divider { display: none !important; }
           #cmo-about-copy-col { gap: 0.75rem; }
           #cmo-about-mission-statement { max-width: none; }
+          #cmo-about-copy-col > p:last-child { text-align: center !important; }
         }
         /* ── Automations Modal ─────────────────────────────────────────────── */
         @property --cta-angle { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
