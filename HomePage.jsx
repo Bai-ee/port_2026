@@ -5,6 +5,8 @@ import dynamic from 'next/dynamic';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import HeroHeadline from './HeroHeadline';
+import HeroSchematicOverlay from './components/home/HeroSchematicOverlay';
+import { createHeroCursorStage } from './components/home/heroCursorStage';
 import Header from './Header';
 import HorizontalTextSection from './HorizontalTextSection';
 import HorizontalGallery from './HorizontalGallery';
@@ -137,6 +139,12 @@ const HomePage = () => {
   const paramsRef = useRef(HERO_PARAMS_START);
   const userParamsRef = useRef(HERO_PARAMS_START); // user's intentional settings (panel changes)
   const heroProgressRef = useRef(0); // current scroll progress, kept in sync with ScrollTrigger
+  // Cursor-driven hero readout: ox.jsx writes the loop's screen-space outline
+  // anchors into silhouetteRef, HeroHeadline writes the churn/reveal clock into
+  // cursorStageRef, and HeroSchematicOverlay draws the lines between them. Refs,
+  // not state — all three run per-frame and must never re-render this page.
+  const silhouetteRef = useRef(null);
+  const cursorStageRef = useRef(createHeroCursorStage());
 
   // Pre-paint so the copy never flashes into the recorded video.
   useLayoutEffect(() => {
@@ -373,9 +381,15 @@ const HomePage = () => {
       >
         <div id="hero-gradient-overlay" style={heroGradientStyle} />
         <div id="hero-canvas-wrapper" ref={canvasWrapperRef} style={{ position: 'absolute', inset: 0, opacity: 0 }}>
-          <AppCanvas params={params} liveParamsRef={paramsRef} backgroundColor={canvasBackground} />
+          <AppCanvas params={params} liveParamsRef={paramsRef} backgroundColor={canvasBackground} silhouetteRef={silhouetteRef} />
         </div>
-        <HeroHeadline headerLogoRef={headerLogoRef} textColor={textColor} />
+        <HeroSchematicOverlay
+          silhouetteRef={silhouetteRef}
+          cursorStageRef={cursorStageRef}
+          heroProgressRef={heroProgressRef}
+          color={textColor}
+        />
+        <HeroHeadline headerLogoRef={headerLogoRef} textColor={textColor} cursorStageRef={cursorStageRef} />
         {/* Section heading for screen readers and crawlers. Kept concise and
             honest (no keyword stuffing). Full credentials live in JSON-LD
             Person/Organization schema on this route. */}

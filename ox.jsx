@@ -55,7 +55,36 @@ const SceneBackground = ({ color }) => {
   return null;
 };
 
-const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {}, snapRef = null, scatterRef = null }) => {
+// Screen-space silhouette sampling (opt-in via silhouetteRef; every other
+// consumer of this component passes nothing and pays no cost).
+//
+// The swarm has no mesh edges to trace, but it does have a real silhouette. We
+// project a sparse, evenly-spaced subset of particles to screen pixels, bin
+// them by angle around their own projected centroid, and keep the farthest one
+// per bin. That gives outline anchors that spin, pulse, and breathe with the
+// actual object instead of a faked ellipse — for a few dozen projections a
+// frame, against a 25k-particle loop that is already running.
+const SILHOUETTE_BINS = 24;
+const SILHOUETTE_SAMPLES = 96;
+const TAU = Math.PI * 2;
+
+export function createSilhouetteBuffer() {
+  return {
+    bins: SILHOUETTE_BINS,
+    // [x0, y0, x1, y1, …] in CSS pixels, one entry per angular bin.
+    points: new Float32Array(SILHOUETTE_BINS * 2),
+    // Squared radius of the winning sample per bin; < 0 means the bin got no
+    // sample this frame and its point is stale — readers must skip it.
+    radii: new Float32Array(SILHOUETTE_BINS),
+    sampleX: new Float32Array(SILHOUETTE_SAMPLES),
+    sampleY: new Float32Array(SILHOUETTE_SAMPLES),
+    cx: 0,
+    cy: 0,
+    valid: false,
+  };
+}
+
+const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {}, snapRef = null, scatterRef = null, silhouetteRef = null }) => {
   const meshRef = useRef();
   const groupRef = useRef();
   const simTimeRef = useRef(0);
@@ -99,6 +128,8 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {},
   const color = pColor; // Alias for user code compatibility
   const lastScaleRef = useRef(-1);
   const targetKeysRef = useRef({ src: null, keys: null });
+  const { camera, size } = useThree();
+  const projVec = useMemo(() => new THREE.Vector3(), []);
 
   const positions = useMemo(() => {
     const arr = new Float32Array(count * 3);
@@ -331,6 +362,57 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {},
     }
     mesh.instanceMatrix.needsUpdate = true;
     mesh.instanceColor.needsUpdate = true;
+
+    if (silhouetteRef) {
+      const out = silhouetteRef.current || (silhouetteRef.current = createSilhouetteBuffer());
+      const group = groupRef.current;
+      // Rotation was written above this frame; matrixWorld is only refreshed
+      // during render, so force it here or the anchors trail by a frame.
+      group.updateMatrixWorld();
+      const { points, radii, sampleX, sampleY } = out;
+      const step = Math.max(1, Math.floor(count / SILHOUETTE_SAMPLES));
+
+      let sumX = 0;
+      let sumY = 0;
+      let taken = 0;
+      for (let i = 0; i < count && taken < SILHOUETTE_SAMPLES; i += step) {
+        const i3 = i * 3;
+        projVec.set(positions[i3], positions[i3 + 1], positions[i3 + 2])
+          .applyMatrix4(group.matrixWorld)
+          .project(camera);
+        const px = (projVec.x * 0.5 + 0.5) * size.width;
+        const py = (-projVec.y * 0.5 + 0.5) * size.height;
+        sampleX[taken] = px;
+        sampleY[taken] = py;
+        sumX += px;
+        sumY += py;
+        taken += 1;
+      }
+
+      if (taken > 0) {
+        const cx = sumX / taken;
+        const cy = sumY / taken;
+        radii.fill(-1);
+        for (let s = 0; s < taken; s++) {
+          const dx = sampleX[s] - cx;
+          const dy = sampleY[s] - cy;
+          const d2 = dx * dx + dy * dy;
+          let angle = Math.atan2(dy, dx);
+          if (angle < 0) angle += TAU;
+          const bin = Math.min(SILHOUETTE_BINS - 1, ((angle / TAU) * SILHOUETTE_BINS) | 0);
+          if (d2 > radii[bin]) {
+            radii[bin] = d2;
+            points[bin * 2] = sampleX[s];
+            points[bin * 2 + 1] = sampleY[s];
+          }
+        }
+        out.cx = cx;
+        out.cy = cy;
+        out.valid = true;
+      } else {
+        out.valid = false;
+      }
+    }
   });
 
   return (
@@ -340,7 +422,7 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {},
   );
 };
 
-export default function App({ params = {}, liveParamsRef = null, backgroundColor = '#1a1a1a', onReady = null, snapRef = null, scatterRef = null }) {
+export default function App({ params = {}, liveParamsRef = null, backgroundColor = '#1a1a1a', onReady = null, snapRef = null, scatterRef = null, silhouetteRef = null }) {
   const useSimpleScrollViewport = useMediaMatch(SIMPLE_SCROLL_MEDIA_QUERY);
   const isMobile = useMediaMatch(MOBILE_MEDIA_QUERY);
   const prefersReducedMotion = useMediaMatch(REDUCED_MOTION_QUERY);
@@ -435,7 +517,7 @@ export default function App({ params = {}, liveParamsRef = null, backgroundColor
         }}
       >
         <SceneBackground color={backgroundColor} />
-        <ParticleSwarm params={optimizedParams} liveParamsRef={liveParamsRef} runtimeProfile={qualityProfile} snapRef={snapRef} scatterRef={scatterRef} />
+        <ParticleSwarm params={optimizedParams} liveParamsRef={liveParamsRef} runtimeProfile={qualityProfile} snapRef={snapRef} scatterRef={scatterRef} silhouetteRef={silhouetteRef} />
         {qualityProfile.enableControls ? (
           <OrbitControls autoRotate={qualityProfile.autoRotate} enableZoom enablePan={false} enableRotate enableDamping dampingFactor={0.08} rotateSpeed={0.45} zoomSpeed={0.75} minDistance={45} maxDistance={180} />
         ) : null}

@@ -11,7 +11,7 @@ import { BrainIcon } from './components/ui/brain';
 import SubscribeModal from './components/payments/SubscribeModal';
 import DeliverableHoverCard from './components/home/DeliverableHoverCards';
 import AnchorLavaShader from './components/home/AnchorLavaShader';
-import { scrambleMask, scrambleTextTo } from './components/home/scrambleText';
+import { easeInOutCubic, poolFromWords, scrambleMask, scrambleTextTo } from './components/home/scrambleText';
 import UpRightArrow from './components/UpRightArrow';
 import CreateCaseStudyModal from './CreateCaseStudyModal';
 import {
@@ -31,6 +31,7 @@ import {
   Check,
   Blocks,
   Gamepad2,
+  ExternalLink,
 } from 'lucide-react';
 
 gsap.registerPlugin(ScrollTrigger);
@@ -49,7 +50,7 @@ const isNarrowTouchViewport = () =>
   window.matchMedia(NARROW_SCROLL_MEDIA_QUERY).matches;
 
 // Marquee logos are sized by optical AREA, not by height: matching heights makes
-// a 6.6:1 wordmark (Greystripe) tower over a 1:1 crest (Publicis) in ink, and
+// a 5.4:1 wordmark (Conversant) tower over a 1:1 crest (Publicis) in ink, and
 // matching areas alone shrinks the long wordmarks to nothing. So each `scale`
 // solves height = sqrt(TARGET_AREA / aspect) off the 22px base, clamped to
 // 18-32px so no mark gets unreadable or oversized. Target area ≈ 2000px².
@@ -60,6 +61,11 @@ const isNarrowTouchViewport = () =>
 // channel; the render pulls it back out with a negative margin so the visible
 // gap between marks is the flex gap for every pair, not "gap + whatever padding
 // that particular file happened to ship with".
+// The DASHBOARD row's check in the CMO access table. The site's ink, matching the
+// Lock glyph and row labels beside it — the row's meaning carries on its own, so
+// the mark does not need a colour of its own.
+const CMO_CHECK_COLOR = '#2a2420';
+
 const AGENCY_LOGO_BASE_HEIGHT = 14.7;
 const agencyLogos = [
   // 1.05:1 crest + two lines of type — the tallest mark on the strip.
@@ -67,11 +73,6 @@ const agencyLogos = [
   { src: '/img/agencies/epsilon.png', alt: 'Epsilon', scale: 1.06, w: 175, h: 48, bearing: [0, 1] },
   { src: '/img/agencies/conversant.png', alt: 'Conversant', scale: 0.87, w: 228, h: 42 },
   { src: '/img/agencies/alliance.png', alt: 'Alliance Data', scale: 1.01, w: 201, h: 50, bearing: [3, 3] },
-  // Widest mark (6.6:1), ink flush to both edges — so the shortest of the set.
-  { src: '/img/agencies/greystripe.png', alt: 'Greystripe Media', scale: 0.82, w: 265, h: 40 },
-  // Stacked mark + wordmark on an opaque plate: reads heavier than a transparent
-  // wordmark at the same area, so it sits a step below the formula.
-  { src: '/img/agencies/valueclick.png', alt: 'ValueClick', scale: 1.22, w: 161, h: 76 },
 ];
 
 // Public source for every quote below. LinkedIn exposes no permalink to an
@@ -198,8 +199,15 @@ const INTRO_SOCIALS = [
   { label: 'LinkedIn', href: 'https://www.linkedin.com/in/bryanballi', icon: LinkedInLogo },
 ];
 
-const INTRO_COPY_PRIMARY = 'Bryan guides projects from early direction through launch, growth, and support, providing hands-on design, development, and marketing solutions.';
-const INTRO_COPY_SECONDARY = 'Share your website or email below to get started.';
+// House marquee pace, in CSS px per second. Not a new number: the agency and
+// agent JS drives already ran at exactly this, and the footer CSS marquee
+// happened to land within 2px/s of it, so it is the established speed that the
+// outliers were drifting from.
+const MARQUEE_PX_PER_SEC = 42;
+const MARQUEE_PX_PER_SEC_TOUCH = 28;
+
+const INTRO_COPY_PRIMARY = 'I guide projects from early direction through launch, growth, and support, providing hands-on design, development, and marketing solutions.';
+const INTRO_COPY_SECONDARY = 'Share your website or email for rapid onboarding.';
 
 const SHARED_SUPPORT = 'Turn your website or idea into a working dashboard so we can get up to speed fast, automate where it makes sense, and focus on high-quality, personalized work.';
 
@@ -334,7 +342,7 @@ function CmoTableRows({ dailyBriefOpen, onToggleDaily, dashboardOpen, onToggleDa
         aria-expanded={isToggle ? isOpen : undefined}
         style={{ borderBottom: (row.task === 'Daily Brief' || row.task === 'DASHBOARD' || (row.sub && !isSubLast(arr, ri))) ? 'none' : '1px solid rgba(42,36,32,0.07)', cursor: isToggle ? 'pointer' : undefined }}
       >
-        <td style={{ padding: '0.7rem 0.2rem', textAlign: 'center', verticalAlign: 'middle', position: 'relative' }}>{row.task === 'DASHBOARD' ? <Check size={18} strokeWidth={3} color="#2f6fed" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? <BriefConnector first={isSubFirst(arr, ri)} last={isSubLast(arr, ri)} /> : <span className="cmo-arrow" aria-hidden="true"><Lock size={12} /></span>}</td>
+        <td style={{ padding: '0.7rem 0.2rem', textAlign: 'center', verticalAlign: 'middle', position: 'relative' }}>{row.task === 'DASHBOARD' ? <Check size={18} strokeWidth={3} color={CMO_CHECK_COLOR} style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? <BriefConnector first={isSubFirst(arr, ri)} last={isSubLast(arr, ri)} /> : <span className="cmo-arrow" aria-hidden="true"><Lock size={12} /></span>}</td>
         <td style={{ padding: row.sub ? '0.7rem 0.4rem 0.7rem 1.1rem' : '0.7rem 0.4rem', color: row.sub ? 'rgba(42,36,32,0.55)' : 'rgba(42,36,32,0.75)', fontWeight: row.bold ? 700 : (row.sub ? 400 : 500) }}>{row.task === 'DASHBOARD' ? 'Dashboard' : row.task}</td>
         <td style={{ padding: '0.7rem 0.4rem 0.7rem 0.6rem', textAlign: 'left', color: row.sub ? 'rgba(42,36,32,0.48)' : 'rgba(42,36,32,0.65)', fontWeight: row.bold ? 700 : 400 }}>{isToggle ? (
           <span style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
@@ -451,6 +459,28 @@ function HitloopAboutBlock() {
     </div>
   );
 }
+
+// Fanned deck of work thumbnails peeking above #cmo-dashboard-card. Position and
+// rotation ride on CSS custom properties (--peek-left / --peek-rotate) so the
+// responsive rules stay count-agnostic — adding a card here needs no CSS edit.
+// NOTE: the hover word in the HELLO marquee is derived from the FILENAME by
+// peekCardImageWord, so renaming a file changes what the marquee says.
+// `left` runs 0% -> 67% in even steps: a card is 33% wide, so the last one at
+// 67% sits flush against the shell's right edge. Re-space these when the count
+// changes (step = 67 / (count - 1)).
+//
+// `ratio` is each PNG's own intrinsic aspect, applied to the card as
+// aspect-ratio with height:auto — so the container is exactly as tall as its
+// image, with no letterboxing and no arbitrary height to keep in sync. That
+// also makes peekLiftFor's measurement land on the image's real bottom edge.
+const PEEK_CARDS = [
+  // Outermost two sit straight: they overhang the edges of #cmo-dashboard-card,
+  // where a tilt makes them poke into the "I guide projects" copy area.
+  { id: 'dash-peek-card-1', img: '/img/Claire Calls.png',   left: '0%',    rotate: '0deg',    ratio: '305 / 155' },
+  { id: 'dash-peek-card-2', img: '/img/Critters Quest.png', left: '22.3%', rotate: '1.8deg',  ratio: '304 / 155' },
+  { id: 'dash-peek-card-3', img: '/img/Viva Acid.png',      left: '44.7%', rotate: '-2.1deg', ratio: '304 / 155' },
+  { id: 'dash-peek-card-4', img: '/img/Passion House.png',  left: '67%',   rotate: '0deg',    ratio: '305 / 157' },
+];
 
 const AUTOMATION_CAPABILITIES = [
   {
@@ -706,7 +736,49 @@ function classifyHomepageInput(raw) {
   return { kind: 'empty', value: '' };
 }
 
+// CSS marquees animate to a fixed DURATION, which makes their speed a function
+// of how wide their content happens to be. Every one of them ran `agentMarquee
+// 28s` over a -50% translate, so the pace was setWidth / 28: "WORK &
+// TESTIMONIALS" crossed at ~100px/s while "HELLO" crawled at ~35px/s. This
+// retimes each track from its own measured set width so they all cross at the
+// same speed, and re-runs whenever a width can change — resize, font load (Doto
+// swapping in moves these a lot), and DOM changes for the tracks that mount
+// later inside modals.
+function useConstantSpeedMarquees() {
+  useEffect(() => {
+    let frame = 0;
+    const sync = () => {
+      frame = 0;
+      const speed = isTouchScrollDevice() ? MARQUEE_PX_PER_SEC_TOUCH : MARQUEE_PX_PER_SEC;
+      document.querySelectorAll('[data-marquee-track]').forEach((track) => {
+        // The keyframes translate by -50% of the track, i.e. exactly one set.
+        const set = track.firstElementChild;
+        const setWidth = set ? set.getBoundingClientRect().width : 0;
+        if (!setWidth) return;
+        track.style.animationDuration = `${setWidth / speed}s`;
+      });
+    };
+    const schedule = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(sync);
+    };
+
+    schedule();
+    window.addEventListener('resize', schedule);
+    document.fonts?.ready.then(schedule).catch(() => {});
+    const observer = new MutationObserver(schedule);
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', schedule);
+      observer.disconnect();
+    };
+  }, []);
+}
+
 const StackedSlidesSection = () => {
+  useConstantSpeedMarquees();
   const wrapperRef = useRef(null);
   const servicesViewportRef = useRef(null);
   const servicesCanvasRef = useRef(null);
@@ -716,12 +788,13 @@ const StackedSlidesSection = () => {
   const agentMarqueeShellRef = useRef(null);
   const agentMarqueeTrackRef = useRef(null);
   const agentMarqueeSetRef = useRef(null);
-  const peekCard1Ref = useRef(null);
-  const peekCard2Ref = useRef(null);
-  const peekCard3Ref = useRef(null);
   const peekCard4Ref = useRef(null);
   const helloMarqueeTrackRef = useRef(null);
   const helloMarqueeSetRef = useRef(null);
+  // Published by the marquee drive effect below: { park(node), release() }.
+  // The swap handler lives outside that effect's closure but has to be able to
+  // stop the track and hold one word in the middle of the shell.
+  const helloMarqueeDriveRef = useRef(null);
 
   // HELLO marquee ⇄ peek-card hover: the scrolling marquee words scramble in
   // place into the hovered card's image name (SS3 / CLAIRE / UNDERGROUNDEX)
@@ -733,6 +806,10 @@ const StackedSlidesSection = () => {
   // both scramble the same marquee spans — routing every scramble through
   // scrambleNode guarantees at most one rAF loop per span (the newest wins).
   const nodeScrambleCancels = useRef(new Map());
+  // What the marquee currently reads. Needed on hover-OUT, where the call site
+  // only knows it is going back to HELLO and not which word it is leaving —
+  // both ends are required to build the letter pool below.
+  const helloMarqueeWordRef = useRef('HELLO');
   const scrambleNode = (node, text, opts = {}) => {
     nodeScrambleCancels.current.get(node)?.();
     nodeScrambleCancels.current.set(node, scrambleTextTo(node, text, {
@@ -749,10 +826,50 @@ const StackedSlidesSection = () => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const marqueeWords = document.querySelectorAll('#testimonials-marquee-shell [data-hello-marquee-word]');
     const marqueeDots = document.querySelectorAll('#testimonials-marquee-shell [data-hello-marquee-dot]');
-    marqueeWords.forEach((node) => scrambleNode(node, word || 'HELLO', { durationMs: word ? 700 : 450 }));
+    // Longer than a plain reveal on purpose: this swap has to communicate one
+    // word turning into another, so it churns the whole way (churnBeforeLock)
+    // at a readable ~15Hz (churnIntervalMs) and eases in and out rather than
+    // sweeping at a constant rate. The track is parked below while it runs, so
+    // the word resolves standing still in the middle of the shell.
+    const nextWord = word || 'HELLO';
+    const prevWord = helloMarqueeWordRef.current;
+    helloMarqueeWordRef.current = nextWord;
+
+    // Park the track on the word already closest to the middle of the shell —
+    // that one has the shortest distance to travel, so the marquee eases to a
+    // stop rather than yanking a far-off word into frame. Releasing on hover-out
+    // hands the scroll back mid-unscramble, which is where it was before.
+    const drive = helloMarqueeDriveRef.current;
+    if (drive) {
+      if (word) {
+        const shellRect = document.getElementById('testimonials-marquee-shell')?.getBoundingClientRect();
+        let nearest = null;
+        let nearestGap = Infinity;
+        marqueeWords.forEach((node) => {
+          if (!shellRect) return;
+          const rect = node.getBoundingClientRect();
+          const gap = Math.abs((rect.left + rect.width / 2) - (shellRect.left + shellRect.width / 2));
+          if (gap < nearestGap) { nearestGap = gap; nearest = node; }
+        });
+        if (nearest) drive.park(nearest);
+      } else {
+        drive.release();
+      }
+    }
+    // Churn only through the letters the two words are made of, so the swap
+    // reads as HELLO physically rearranging into the card's name instead of the
+    // line dissolving into symbol static.
+    const charPool = poolFromWords(prevWord, nextWord);
+    marqueeWords.forEach((node) => scrambleNode(node, nextWord, {
+      durationMs: word ? 1000 : 760,
+      churnBeforeLock: true,
+      churnIntervalMs: 66,
+      ease: easeInOutCubic,
+      charPool,
+    }));
     // Dots fade rather than unmount so the track's word spacing never jumps.
     gsap.killTweensOf(marqueeDots);
-    gsap.to(marqueeDots, { opacity: word ? 0 : 1, duration: word ? 0.45 : 0.7, ease: 'power1.out' });
+    gsap.to(marqueeDots, { opacity: word ? 0 : 1, duration: word ? 0.6 : 0.8, ease: 'power2.inOut' });
   };
 
   useEffect(() => () => cancelHelloScrambles(), []);
@@ -776,6 +893,10 @@ const StackedSlidesSection = () => {
     let measureFrameId = 0;
     let lastTime = 0;
     let isVisible = false;
+    let parked = false;
+    let parkNode = null;
+    let parkFrameId = 0;
+    let parkLastTime = 0;
 
     const applyTransform = () => {
       track.style.transform = `translate3d(${offset}px, 0, 0)`;
@@ -784,8 +905,15 @@ const StackedSlidesSection = () => {
     const measure = () => {
       itemWidth = set.getBoundingClientRect().width;
       if (!itemWidth) return;
-      if (!speed) speed = itemWidth / 28; // preserve the old 28s loop pace
-      offset = -(Math.abs(offset) % itemWidth);
+      // Constant px/sec, not a fixed loop time — see MARQUEE_PX_PER_SEC. This
+      // used to be itemWidth / 28, which tied the pace to the word on screen.
+      speed = isTouchScrollDevice() ? MARQUEE_PX_PER_SEC_TOUCH : MARQUEE_PX_PER_SEC;
+      // Only re-snap when the offset actually fell out of range. The set's
+      // width changes continuously during a helloMarqueeSwap (the words are
+      // literally getting longer or shorter), which fires the ResizeObserver
+      // many times a second — re-snapping on each of those jerked the whole
+      // track sideways mid-scramble. tick() already handles the normal wrap.
+      if (offset <= -itemWidth) offset = -(Math.abs(offset) % itemWidth);
       applyTransform();
     };
 
@@ -816,9 +944,59 @@ const StackedSlidesSection = () => {
     };
 
     const start = () => {
-      if (frameId || document.hidden || !isVisible || !itemWidth) return;
+      if (parked || frameId || document.hidden || !isVisible || !itemWidth) return;
       lastTime = 0;
       frameId = requestAnimationFrame(tick);
+    };
+
+    // Parking: hovering a peek card stops the scroll and glides one word to the
+    // centre of the shell, where it stays put while it scrambles into the card's
+    // name. Re-aiming at the target every frame rather than tweening to a fixed
+    // offset is what keeps it centred THROUGH the scramble — the word is
+    // physically getting longer or shorter as characters lock (HELLO ->
+    // UNDERGROUNDEX is more than double the width), so any offset computed up
+    // front would be wrong by the time it arrived.
+    const PARK_APPROACH = 9; // higher converges harder
+    const parkFrame = (time) => {
+      if (!parkNode || !itemWidth) { parkFrameId = 0; return; }
+      if (!parkLastTime) parkLastTime = time;
+      const dt = Math.min((time - parkLastTime) / 1000, 0.05);
+      parkLastTime = time;
+      const shellRect = shell.getBoundingClientRect();
+      const nodeRect = parkNode.getBoundingClientRect();
+      const delta = (shellRect.left + shellRect.width / 2) - (nodeRect.left + nodeRect.width / 2);
+      offset += delta * (1 - Math.exp(-dt * PARK_APPROACH));
+      applyTransform();
+      parkFrameId = requestAnimationFrame(parkFrame);
+    };
+
+    // Shifting by exactly one set width is visually identical — the track holds
+    // two identical sets — so the offset can always be pulled back into range
+    // without anything moving on screen.
+    const normalize = () => {
+      if (!itemWidth) return;
+      while (offset <= -itemWidth) offset += itemWidth;
+      while (offset > 0) offset -= itemWidth;
+    };
+
+    helloMarqueeDriveRef.current = {
+      park: (node) => {
+        if (!node) return;
+        parked = true;
+        parkNode = node;
+        parkLastTime = 0;
+        stop();
+        if (!parkFrameId) parkFrameId = requestAnimationFrame(parkFrame);
+      },
+      release: () => {
+        parked = false;
+        parkNode = null;
+        cancelAnimationFrame(parkFrameId);
+        parkFrameId = 0;
+        normalize();
+        applyTransform();
+        start();
+      },
     };
 
     const handleVisibility = () => {
@@ -841,6 +1019,8 @@ const StackedSlidesSection = () => {
     return () => {
       stop();
       cancelAnimationFrame(measureFrameId);
+      cancelAnimationFrame(parkFrameId);
+      helloMarqueeDriveRef.current = null;
       resizeObserver?.disconnect();
       intersectionObserver.disconnect();
       document.removeEventListener('visibilitychange', handleVisibility);
@@ -848,6 +1028,105 @@ const StackedSlidesSection = () => {
   }, []);
   const peekCardImageWord = (img) =>
     img.split('/').pop().replace(/\.[a-z0-9]+$/i, '').replace(/_ss$/i, '').toUpperCase();
+
+  // ⚠️ PARKED, not orphaned: the peek deck's hover state (this block, peekApply
+  // below, helloMarqueeSwap above, and the drive's park/release) is intact but
+  // no longer wired — the cards' onMouseEnter/onMouseLeave were deliberately
+  // removed, so the deck is static and the marquee just scrolls HELLO. Re-add
+  // those two handlers on the card in the render to switch it all back on.
+  //
+  // Hovering one card lifts it and settles the rest of the deck a few pixels
+  // down, so the hovered thumbnail reads as pulled out of the stack rather than
+  // just moved. overwrite:'auto' matters here — sliding straight from one card
+  // to the next fires mouseleave then mouseenter, and without it the leave
+  // tween would fight the enter tween for the same y.
+  const PEEK_SETTLE_PX = 20;
+
+  // A card sits at the top of #dashboard-stack-shell and is covered from the
+  // shell's padding-top downward by #cmo-dashboard-card, so only that strip
+  // shows at rest. Lifting by (cardHeight - thatStrip) lands the card's bottom
+  // edge exactly on the covering card's top edge: the whole image clears, and
+  // not a pixel further. Measured per card because heights differ, and read at
+  // hover time so the smaller mobile padding is picked up for free.
+  // Held 10% short of the full reveal, then hard-capped so the card can never
+  // reach the HELLO marquee overhead.
+  //
+  // The cap is not belt-and-braces. A card's height scales with its width (33%
+  // of the shell), so the lift shrinks on narrow viewports — while the marquee's
+  // gap is a vw-based clamp that shrinks on a different curve. Tuning the two
+  // against each other only ever holds at one width; measuring the real distance
+  // holds at all of them. The marquee's own margin stays untouched: it is set to
+  // give equal ink-to-ink gaps above and below the glyphs.
+  const PEEK_LIFT_SCALE = 0.9;
+  const PEEK_HEADROOM_PX = 20;
+  const peekLiftFor = (el) => {
+    const shell = el.parentElement;
+    if (!shell) return 0;
+    const covered = parseFloat(window.getComputedStyle(shell).paddingTop) || 0;
+    const wanted = Math.max(0, el.offsetHeight - covered) * PEEK_LIFT_SCALE;
+
+    const marquee = document.querySelector('#testimonials-marquee-shell');
+    if (!marquee) return -wanted;
+    // Normalise against any in-flight y so re-entering mid-tween still measures
+    // from the card's resting position, not its animated one.
+    const currentY = Number(gsap.getProperty(el, 'y')) || 0;
+    const restingTop = el.getBoundingClientRect().top - currentY;
+    const room = restingTop - marquee.getBoundingClientRect().bottom - PEEK_HEADROOM_PX;
+    return -Math.max(0, Math.min(wanted, room));
+  };
+
+  // Strictly non-overshooting easings. peekLiftFor stops the card exactly at the
+  // image's bottom edge, so any ease that overshoots its target (back / elastic)
+  // pushes past that mark and flashes the card's underside clear of the covering
+  // card. power*.out decelerates into the target and never passes it.
+  //
+  // power2, not the steeper power3/power4 these started on: a high-order ease
+  // spends almost all its distance in the first fraction of the tween, which
+  // reads as a snap followed by a long crawl no matter how much duration it is
+  // given. power2 spreads the travel out, so the card feels lifted rather than
+  // flicked.
+  const PEEK_EASE_IN = 'power2.out';
+  const PEEK_EASE_OUT = 'power2.inOut';
+  const PEEK_DURATION_IN = 0.45;
+  const PEEK_DURATION_OUT = 0.55;
+
+  // ⚠️ No stagger here, and no differential sibling sets. Both strand cards.
+  //
+  // A staggered tween's later targets sit at a delay before they move; sliding
+  // from one card to the next fires mouseleave then mouseenter, and the new
+  // tween's overwrite:'auto' kills those targets while they are still waiting —
+  // they never move at all and are left at whatever y the previous hover gave
+  // them. Splitting the work into "the hovered card" plus "its siblings" has the
+  // same failure from the other direction: between the leave and the enter, a
+  // card can belong to neither set and receive no tween.
+  //
+  // So the deck's state is total, not differential: every card in the shell is
+  // re-targeted on every hover change, including the ones already where they
+  // belong. An interrupted sweep can then never leave a card partway, because
+  // the very next call hands that card a target too.
+  const peekApply = (shell, activeEl) => {
+    if (!shell) return;
+    const cards = Array.from(shell.querySelectorAll('[data-peek-card]'));
+    cards.forEach((card) => {
+      const isActive = card === activeEl;
+      // Rest rotation is already on the element as the --peek-rotate custom
+      // property the render sets, so it never has to be threaded through the
+      // event handler.
+      const restRotation = parseFloat(card.style.getPropertyValue('--peek-rotate')) || 0;
+      gsap.to(card, {
+        // rotation: 0 squares the raised card up — it reads as pulled out of
+        // the deck and laid flat for a proper look.
+        y: isActive ? peekLiftFor(card) : (activeEl ? PEEK_SETTLE_PX : 0),
+        rotation: isActive ? 0 : restRotation,
+        duration: activeEl ? PEEK_DURATION_IN : PEEK_DURATION_OUT,
+        ease: activeEl ? PEEK_EASE_IN : PEEK_EASE_OUT,
+        overwrite: 'auto',
+      });
+    });
+  };
+
+  const peekHoverIn = (el) => peekApply(el.parentElement, el);
+  const peekHoverOut = (el) => peekApply(el.parentElement, null);
 
   const [pokerHovered, setPokerHovered] = useState(false);
   const [activeFilter, setActiveFilter] = useState(null);
@@ -1121,7 +1400,7 @@ const StackedSlidesSection = () => {
 
       const delta = Math.min((time - lastTime) / 1000, 0.05);
       lastTime = time;
-      offset -= delta * (isTouchScrollDevice() ? 28 : 42);
+      offset -= delta * (isTouchScrollDevice() ? MARQUEE_PX_PER_SEC_TOUCH : MARQUEE_PX_PER_SEC);
 
       if (offset <= -itemWidth) {
         offset += itemWidth;
@@ -1230,7 +1509,7 @@ const StackedSlidesSection = () => {
       if (!lastTime) lastTime = time;
       const delta = Math.min((time - lastTime) / 1000, 0.05);
       lastTime = time;
-      offset -= delta * (isTouchScrollDevice() ? 28 : 42);
+      offset -= delta * (isTouchScrollDevice() ? MARQUEE_PX_PER_SEC_TOUCH : MARQUEE_PX_PER_SEC);
       if (offset <= -itemWidth) offset += itemWidth;
       applyTransform();
       frameId = requestAnimationFrame(tick);
@@ -1322,7 +1601,7 @@ const StackedSlidesSection = () => {
                 <th style="width:1.2rem;"></th>
               </tr></thead>
               <tbody>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Onboarding Brief</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2f6fed" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;"><polyline points="20 6 9 17 4 12"></polyline></svg></td></tr>
+                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Onboarding Brief</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2a2420" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;"><polyline points="20 6 9 17 4 12"></polyline></svg></td></tr>
                 <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Executive Brief</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;color:rgba(42,36,32,0.45);"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></td></tr>
                 <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Market Brief</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;color:rgba(42,36,32,0.45);"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></td></tr>
                 <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Creative Brief</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;color:rgba(42,36,32,0.45);"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></td></tr>
@@ -1551,35 +1830,25 @@ const StackedSlidesSection = () => {
     return () => ctx.revert();
   }, []);
 
-  // Capability section — header + cards fade up on scroll, runs on all devices
+  // Capability section — header + cards sit static (no scroll entrance).
   useLayoutEffect(() => {
     if (!wrapperRef.current) return;
     if (typeof window === 'undefined') return;
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
     const wrapper = wrapperRef.current;
-    const isTouch = isTouchScrollDevice();
-    const offset = isTouch ? 18 : 26;
 
     const ctx = gsap.context(() => {
       const header = wrapper.querySelector('[data-capability-header]');
       const cards = gsap.utils.toArray('[data-capability-card]', wrapper);
 
+      // TRIAL: the HELLO marquee header no longer travels up into place on
+      // scroll — it renders at its final position, statically. The old
+      // fromTo (autoAlpha 0 -> 1, y offset -> 0, ScrollTrigger at 'top 90%')
+      // is in git if the entrance is wanted back. Kept as an explicit set so
+      // nothing else can leave the header at a stale autoAlpha/y.
       if (header) {
-        gsap.set(header, { autoAlpha: 0, y: offset });
-        gsap.to(header, {
-          autoAlpha: 1,
-          y: 0,
-          duration: isTouch ? 0.45 : 0.65,
-          ease: 'power2.out',
-          overwrite: true,
-          scrollTrigger: {
-            trigger: header,
-            start: 'top 90%',
-            toggleActions: 'play none none reverse',
-            invalidateOnRefresh: true,
-          },
-        });
+        gsap.set(header, { autoAlpha: 1, y: 0, clearProps: 'willChange' });
       }
 
       if (!cards.length) return;
@@ -1788,20 +2057,27 @@ const StackedSlidesSection = () => {
         .font-doto {
           font-family: 'Doto', monospace;
         }
-        /* Testimonial attribution + source links point at the LinkedIn originals. */
-        .testimonial-author-link,
-        #testimonials-linkedin-source-link {
+        /* Testimonial attribution links point at each recommender's own profile.
+           Underlined at rest, not just on hover: it's the only signal that the
+           name is clickable, and hover-only discovery fails on touch. */
+        .testimonial-author-link {
           text-decoration: none;
-          border-bottom: 1px solid transparent;
+          border-bottom: 1px solid rgba(42, 36, 32, 0.3);
           transition: border-color 0.2s ease, color 0.2s ease;
         }
         .testimonial-author-link:hover {
-          border-bottom-color: rgba(42, 36, 32, 0.35);
+          border-bottom-color: rgba(42, 36, 32, 0.75);
         }
-        #testimonials-linkedin-source-link:hover {
-          color: #2a2420;
-          border-bottom-color: rgba(42, 36, 32, 0.35);
+        /* Per-quote link out to the full LinkedIn recommendations page. */
+        .testimonial-source-link {
+          display: inline-flex;
+          align-items: center;
+          margin-left: auto;
+          flex-shrink: 0;
+          color: rgba(42, 36, 32, 0.38);
+          transition: color 0.2s ease;
         }
+        .testimonial-source-link:hover { color: #2a2420; }
         .about-signature-social-link {
           color: rgba(42, 36, 32, 0.4);
           transition: color 0.15s ease;
@@ -1938,9 +2214,7 @@ const StackedSlidesSection = () => {
             padding-top: 35px !important;
           }
           /* Cards static-lifted on mobile — no interaction needed */
-          #dash-peek-card-1 { transform: translateY(-46px) rotate(-3.2deg) !important; }
-          #dash-peek-card-2 { transform: translateY(-46px) rotate(1.2deg) !important; }
-          #dash-peek-card-3 { transform: translateY(-46px) rotate(-1.4deg) !important; }
+          [data-peek-card] { transform: translateY(-46px) rotate(var(--peek-rotate)) !important; }
           #cmo-dashboard-card { margin-top: -40px !important; }
           #onboarding-table-section { margin-top: 2.5rem !important; }
           [data-peek-card] {
@@ -2287,14 +2561,25 @@ const StackedSlidesSection = () => {
         #cmo-dashboard-card {
           display: block !important;
           padding: clamp(1.5rem, 4vw, 3rem) !important;
-          background: rgba(255, 255, 255, 0.97) !important;
+          /* Fully opaque: the peek-card deck sits directly behind this card, and
+             even 0.97 let the thumbnails read through the white. */
+          background: #ffffff !important;
           border-radius: clamp(1rem, 2vw, 1.4rem) !important;
         }
-        #cmo-dashboard-card .cmo-table-inner,
-        #cmo-dashboard-table,
-        #cmo-dashboard-card-anchor-footer,
+        /* The "focused onboarding panel" trial (d2d1e2ec) hid the deliverables
+           table, its mobile twin, and the lava-shader footer on desktop so the
+           panel was nothing but avatar + message + Connect. The collapsible
+           Daily Brief / Dashboard rows and the shader footer are back; only the
+           per-item body paragraph stays hidden, since the mission statement
+           above it already says the same thing at a larger size. */
         #cmo-card-onboard-body { display: none !important; }
-        #cmo-dashboard-card .cmo-url-input-desktop { display: flex !important; }
+        /* Desktop-only, and it must stay inside this media query: the selector
+           outspecifies the base .cmo-url-input-desktop display:none rule, so
+           unscoped it renders a SECOND Connect pill on phones, right above the
+           deliverables table's own .cmo-url-input-mobile one. */
+        @media (min-width: 900px) {
+          #cmo-dashboard-card .cmo-url-input-desktop { display: flex !important; }
+        }
         #cmo-about-split {
           grid-template-columns: minmax(5rem, 0.2fr) 1px minmax(0, 0.8fr) !important;
           gap: clamp(1.5rem, 3.5vw, 2.75rem) !important;
@@ -2330,14 +2615,50 @@ const StackedSlidesSection = () => {
            down. */
         #cmo-about-copy-col > p:last-child { width: 100%; text-align: left !important; max-width: none; }
         #cmo-url-input-row { margin-top: 0 !important; }
+        /* TRIAL (revert by restoring the single-column rules in git): below the
+           900px split the onboarding panel KEEPS the avatar + divider + copy
+           two-column layout instead of collapsing to one stacked column. The
+           avatar track shrinks with the viewport so the message column keeps
+           the dominant width; copy stays left-aligned because it now has a
+           column edge to align against at every width. */
         @media (max-width: 899px) {
           #cmo-dashboard-card { padding: clamp(1.25rem, 6vw, 2rem) !important; }
-          #cmo-about-split { grid-template-columns: 1fr !important; gap: 1.25rem !important; }
-          #cmo-about-identity-col { display: none !important; }
-          #cmo-about-divider { display: none !important; }
+          #cmo-about-split {
+            grid-template-columns: minmax(3rem, auto) 1px minmax(0, 1fr) !important;
+            gap: clamp(0.9rem, 3.2vw, 1.5rem) !important;
+            align-items: center !important;
+          }
+          #cmo-about-identity-col {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            align-self: stretch !important;
+          }
+          #cmo-about-avatar-shell {
+            width: clamp(3.25rem, 12vw, 4.75rem) !important;
+            height: clamp(3.25rem, 12vw, 4.75rem) !important;
+            align-self: center !important;
+          }
+          #cmo-about-divider {
+            display: block !important;
+            align-self: stretch !important;
+            background: rgba(42, 36, 32, 0.18) !important;
+          }
           #cmo-about-copy-col { gap: 0.75rem; }
           #cmo-about-mission-statement { max-width: none; }
-          #cmo-about-copy-col > p:last-child { text-align: center !important; }
+          #cmo-about-copy-col > p:last-child { text-align: left !important; }
+        }
+        /* Phone band: the avatar track gets smaller still so the message keeps
+           its line length on a 320-430px viewport. */
+        @media (max-width: 480px) {
+          #cmo-about-split {
+            grid-template-columns: minmax(2.5rem, auto) 1px minmax(0, 1fr) !important;
+            gap: 0.85rem !important;
+          }
+          #cmo-about-avatar-shell {
+            width: clamp(2.75rem, 14vw, 3.5rem) !important;
+            height: clamp(2.75rem, 14vw, 3.5rem) !important;
+          }
         }
         /* ── Automations Modal ─────────────────────────────────────────────── */
         @property --cta-angle { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
@@ -2358,11 +2679,9 @@ const StackedSlidesSection = () => {
           #cmo-modal-overlay { align-items: center; justify-content: center; padding: 16px; min-height: 100dvh; }
           .testimonials-port-img { aspect-ratio: 16 / 10 !important; }
           #dashboard-stack-shell { padding-top: 44px !important; }
-          .dash-peek-card { width: calc(100% / 3) !important; max-height: 120px !important; }
-          .dash-peek-card img { height: calc(100% - 24px) !important; }
-          #dash-peek-card-1 { left: 66.667% !important; }
-          #dash-peek-card-2 { left: 33.333% !important; }
-          #dash-peek-card-3 { left: 0% !important; }
+          /* Height comes from each card's aspect-ratio — no max-height/img-height
+             override here, or the container stops matching its image. */
+          .dash-peek-card { width: calc(100% / 3) !important; }
         }
         #cmo-auth-card {
           position: relative; width: 100%; max-width: 44rem;
@@ -2625,7 +2944,27 @@ const StackedSlidesSection = () => {
                       </div>
                     </div>
                     <div data-capability-header style={{ ...capabilitySectionHeaderStyle, maxWidth: 'none', marginBottom: 0 }}>
-                      <div id="testimonials-marquee-shell" style={{ width: '100%', overflow: 'hidden', margin: 'calc(clamp(24px, 5vw, 75px) - clamp(1.5rem, 3vw, 3rem)) 0 clamp(24px, 5vw, 75px)', maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)' }}>
+                      <div id="testimonials-marquee-shell" style={{ width: '100%', overflow: 'hidden',
+                        /* Equal gap above and below the HELLO glyphs — measured to the
+                           ink and to what is actually PAINTED, which is why the CSS is
+                           asymmetric. Top is 0 because [data-capability-header] is a FLEX
+                           column, so margins do not collapse, and the panel above it
+                           already contributes its own gap; a top margin here stacks on
+                           that and doubles it.
+                           The two reference edges are not the ones you would reach for:
+                           above is #hero-url-input-row's bottom (its wrapper
+                           #panel-hero-intro-centering's box runs 12px past the visible
+                           pill), and below is the peek cards' own tops, which sit ~4px
+                           above #dashboard-stack-shell because the rotated cards have
+                           taller bounding boxes.
+                           The bottom value tracks vw because the gap ABOVE does: that
+                           one is built from the panel's own vw-based spacing, so a fixed
+                           px correction only holds at one width. This is fitted to two
+                           measured points — 39.5px at a 828px viewport and 58.3px at
+                           1417px, both landing within 1px of matching. Re-measure against
+                           the two edges named above if you retune, and check BOTH ends of
+                           the range, not just desktop. */
+                        margin: '0 0 clamp(26px, calc(3.2vw + 13px), 76px)', maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)' }}>
                         <div id="hello-marquee-track" ref={helloMarqueeTrackRef} style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform' }}>
                           {[0, 1].map((i) => (
                             <div key={i} ref={i === 0 ? helloMarqueeSetRef : undefined} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
@@ -2649,38 +2988,33 @@ const StackedSlidesSection = () => {
                                 id="dashboard-stack-shell"
                                 style={{ position: 'relative', gridColumn: '1 / -1', paddingTop: '70px', zIndex: isMobileCapabilityOpen ? 6 : 1 }}
                               >
-                                {[
-                                  { ref: peekCard3Ref, id: 'dash-peek-card-3', left: '0%',  rotate: '-1.4deg', objPos: 'top center', label: '', img: '/img/UE.INFO.png', height: '190px', topOffset: '0', bg: '#fcfaf4' },
-                                  { ref: peekCard2Ref, id: 'dash-peek-card-2', left: '33%', rotate: '1.2deg',  objPos: 'top center', label: '', img: '/img/Viva.Acid.png', height: '168px', topOffset: '0', bg: '#fcfaf4' },
-                                  { ref: peekCard1Ref, id: 'dash-peek-card-1', left: '66%', rotate: '-3.2deg', objPos: 'top center', label: '', img: '/img/Critters.Quest.png', height: '200px', topOffset: '0', bg: '#fcfaf4' },
-                                ].map(({ ref: cardRef, id, left, rotate, objPos, label, img, height, topOffset, bg }, i) => (
+                                {PEEK_CARDS.map(({ id, left, rotate, img, ratio }, i) => (
                                   <div
                                     key={id}
-                                    ref={cardRef}
                                     data-peek-card
                                     className="dash-peek-card"
                                     id={id}
-                                    onMouseEnter={() => { if (isTouchScrollDevice()) return; gsap.to(cardRef.current, { y: -46, duration: 0.38, ease: 'power2.out' }); helloMarqueeSwap(peekCardImageWord(img)); }}
-                                    onMouseLeave={() => { if (isTouchScrollDevice()) return; gsap.to(cardRef.current, { y: 0,   duration: 0.48, ease: 'power2.inOut' }); helloMarqueeSwap(null); }}
                                     style={{
+                                      '--peek-left': left,
+                                      '--peek-rotate': rotate,
                                       position: 'absolute',
-                                      top: topOffset,
-                                      left,
-                                      width: 'clamp(180px, 33%, 400px)',
-                                      height,
+                                      top: 0,
+                                      left: 'var(--peek-left)',
+                                      width: 'clamp(140px, 33%, 400px)',
+                                      height: 'auto',
+                                      aspectRatio: ratio,
                                       zIndex: i + 1,
                                       borderRadius: '10px',
                                       border: '1px solid rgba(200,200,200,0.85)',
-                                      background: bg || '#fcfaf4',
+                                      background: '#fcfaf4',
                                       overflow: 'hidden',
-                                      cursor: 'pointer',
                                       willChange: 'transform',
                                       boxSizing: 'border-box',
-                                      transform: `rotate(${rotate})`,
+                                      transform: 'rotate(var(--peek-rotate))',
                                       boxShadow: '0 6px 20px rgba(0,0,0,0.09), 0 1px 0 rgba(255,255,255,0.85)',
                                     }}
                                   >
-                                    <Image src={img} alt="" fill sizes="(max-width: 768px) 33vw, 400px" style={{ objectFit: 'contain', objectPosition: objPos, pointerEvents: 'none', userSelect: 'none' }} />
+                                    <Image src={img} alt="" fill sizes="(max-width: 768px) 33vw, 400px" style={{ objectFit: 'cover', objectPosition: 'top center', pointerEvents: 'none', userSelect: 'none' }} />
                                   </div>
                                 ))}
                                 <article
@@ -2699,7 +3033,7 @@ const StackedSlidesSection = () => {
                                         <p style={{ margin: '0 0 0.6rem', fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.4)', fontFamily: "'Space Mono', monospace" }}>Your Business, Mapped</p>
                                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem', fontFamily: "'Space Grotesk', system-ui, sans-serif", flex: 1 }}>
                                           <thead><tr style={{ borderBottom: '1px solid rgba(42,36,32,0.15)' }}><th style={{ width: '1.2rem' }} /><th style={{ textAlign: 'left', padding: '0.28rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.45)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: "'Doto', 'Space Mono', monospace" }}>Access</th></tr></thead>
-                                          <tbody>{CMO_TABLE_ROWS.map((row, ri, arr) => (<tr key={row.task} style={{ borderBottom: (row.task === 'Daily Brief' || row.task === 'DASHBOARD' || (row.sub && !isSubLast(arr, ri))) ? 'none' : '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.38rem 0.2rem', textAlign: 'center', position: 'relative' }}>{row.task === 'DASHBOARD' ? <Check size={18} strokeWidth={3} color="#2f6fed" style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? <BriefConnector first={isSubFirst(arr, ri)} last={isSubLast(arr, ri)} /> : <span className="cmo-arrow" aria-hidden="true"><Lock size={12} /></span>}</td><td style={{ padding: row.sub ? '0.38rem 0.4rem 0.38rem 0.9rem' : '0.38rem 0.4rem', color: row.sub ? 'rgba(42,36,32,0.55)' : '#2a2420', fontWeight: row.bold ? 700 : (row.sub ? 400 : 500) }}>{row.task === 'DASHBOARD' ? 'Dashboard' : row.task}</td></tr>))}</tbody>
+                                          <tbody>{CMO_TABLE_ROWS.map((row, ri, arr) => (<tr key={row.task} style={{ borderBottom: (row.task === 'Daily Brief' || row.task === 'DASHBOARD' || (row.sub && !isSubLast(arr, ri))) ? 'none' : '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.38rem 0.2rem', textAlign: 'center', position: 'relative' }}>{row.task === 'DASHBOARD' ? <Check size={18} strokeWidth={3} color={CMO_CHECK_COLOR} style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? <BriefConnector first={isSubFirst(arr, ri)} last={isSubLast(arr, ri)} /> : <span className="cmo-arrow" aria-hidden="true"><Lock size={12} /></span>}</td><td style={{ padding: row.sub ? '0.38rem 0.4rem 0.38rem 0.9rem' : '0.38rem 0.4rem', color: row.sub ? 'rgba(42,36,32,0.55)' : '#2a2420', fontWeight: row.bold ? 700 : (row.sub ? 400 : 500) }}>{row.task === 'DASHBOARD' ? 'Dashboard' : row.task}</td></tr>))}</tbody>
                                         </table>
                                       </div>
                                     </div>
@@ -2774,7 +3108,7 @@ const StackedSlidesSection = () => {
                     </section>
                     <section data-capability-grid style={capabilitySectionStyle}>
                       <div id="iship-marquee-shell" style={{ width: '100%', overflow: 'hidden', margin: 'clamp(24px, 5vw, 75px) 0', maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', animation: 'agentMarquee 28s linear infinite' }}>
+                        <div data-marquee-track style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', animation: 'agentMarquee 28s linear infinite' }}>
                           {[0, 1].map((i) => (
                             <div key={i} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
                               {['WORK & TESTIMONIALS', '•', 'WORK & TESTIMONIALS', '•'].map((w, j) => (
@@ -2824,19 +3158,18 @@ const StackedSlidesSection = () => {
                                   >{item.data.name}</a>
                                   <span style={{ color: 'rgba(42,36,32,0.3)', fontSize: '0.75rem' }}>·</span>
                                   <span style={quoteAttributionRoleStyle}>{item.data.title}, {item.data.company}</span>
+                                  <a
+                                    className="testimonial-source-link"
+                                    href={LINKEDIN_RECOMMENDATIONS_URL}
+                                    target="_blank"
+                                    rel="noopener noreferrer nofollow"
+                                    aria-label="See all recommendations on LinkedIn"
+                                    title="See all recommendations on LinkedIn"
+                                  ><ExternalLink size={14} strokeWidth={2} aria-hidden="true" /></a>
                                 </div>
                               </div>
                             </article>
                           ))}
-                        </div>
-                        <div id="testimonials-linkedin-source-row" style={{ display: 'flex', justifyContent: 'flex-end', width: '100%', marginTop: 'clamp(0.75rem, 1.5vw, 1rem)' }}>
-                          <a
-                            id="testimonials-linkedin-source-link"
-                            href={LINKEDIN_RECOMMENDATIONS_URL}
-                            target="_blank"
-                            rel="noopener noreferrer nofollow"
-                            style={testimonialsSourceLinkStyle}
-                          >See all recommendations on LinkedIn →</a>
                         </div>
                       </div>
                     </section>
@@ -2891,7 +3224,7 @@ const StackedSlidesSection = () => {
                   <div id="stacked-inline-footer" style={inlineFooterStyle}>
                     <div id="inline-footer-value-block" style={inlineFooterNewsletterStyle}>
                       <div id="footer-marquee-shell" style={{ width: '100%', overflow: 'hidden', marginBottom: 'clamp(24px, 5vw, 75px)', maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', animation: 'agentMarquee 28s linear infinite' }}>
+                        <div data-marquee-track style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', animation: 'agentMarquee 28s linear infinite' }}>
                           {[0, 1].map((i) => (
                             <div key={i} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
                               {['CONTACT', '•', 'CONTACT', '•'].map((w, j) => (
@@ -3067,7 +3400,7 @@ const StackedSlidesSection = () => {
             </div>
 
             <div id="cmo-modal-marquee" aria-label="CREATE DASHBOARD">
-              <div className="cmo-marquee-track">
+              <div className="cmo-marquee-track" data-marquee-track>
                 {Array.from({ length: 8 }).map((_, i) => (
                   <span key={i} className="cmo-marquee-item" aria-hidden={i > 0 ? 'true' : undefined}>
                     CREATE DASHBOARD
@@ -3320,10 +3653,12 @@ const ctaIconStyle = {
   marginLeft: '0.1rem',
 };
 
+// No padding-bottom here: [data-grid-inner]'s last child is #stacked-inline-footer,
+// which already carries the identical clamp(3rem, 6vw, 5rem). Having both stacked
+// two full pads of dead space under the footer.
 const gridInnerContainerStyle = {
   width: '100%',
   overflowX: 'visible',
-  paddingBottom: 'clamp(3rem, 6vw, 5rem)',
   boxSizing: 'border-box',
 };
 
@@ -4000,6 +4335,9 @@ const aboutAgencyMarqueeShellStyle = {
   WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 12%, black 88%, transparent 100%)',
 };
 
+// NOTE: currently unused — nothing spreads this. If it is ever mounted, the
+// element needs data-marquee-track or it will keep the hardcoded 28s and run at
+// a different speed from every other marquee (see useConstantSpeedMarquees).
 const aboutAgencyMarqueeTrackStyle = {
   display: 'flex',
   alignItems: 'center',
@@ -4043,13 +4381,6 @@ const quoteAttributionSepStyle = {
 const quoteAttributionRoleStyle = {
   fontSize: 'clamp(0.75rem, 1vw, 0.85rem)',
   color: 'rgba(42, 36, 32, 0.45)',
-};
-
-const testimonialsSourceLinkStyle = {
-  fontSize: 'clamp(0.75rem, 1vw, 0.85rem)',
-  color: 'rgba(42, 36, 32, 0.55)',
-  textDecoration: 'none',
-  letterSpacing: '-0.01em',
 };
 
 const secondaryQuotesGridStyle = {
@@ -4961,6 +5292,7 @@ export default StackedSlidesSection;
 // URL-input pill (#footer-url-input-row) is omitted — dashboard users are
 // already signed in. Used by DashboardPage in place of <SiteFooter />.
 export function ContactCapabilitiesPanel() {
+  useConstantSpeedMarquees();
   const marqueeShellRef = useRef(null);
   const marqueeTrackRef = useRef(null);
   const marqueeSetRef = useRef(null);
@@ -5002,7 +5334,7 @@ export function ContactCapabilitiesPanel() {
       if (!lastTime) lastTime = time;
       const delta = Math.min((time - lastTime) / 1000, 0.05);
       lastTime = time;
-      offset -= delta * (isTouchScrollDevice() ? 28 : 42);
+      offset -= delta * (isTouchScrollDevice() ? MARQUEE_PX_PER_SEC_TOUCH : MARQUEE_PX_PER_SEC);
       if (offset <= -itemWidth) offset += itemWidth;
       applyTransform();
       frameId = requestAnimationFrame(tick);
@@ -5064,7 +5396,7 @@ export function ContactCapabilitiesPanel() {
                 <div id="stacked-inline-footer" style={inlineFooterStyle}>
                   <div id="inline-footer-value-block" style={inlineFooterNewsletterStyle}>
                     <div id="footer-marquee-shell" style={{ width: '100%', overflow: 'hidden', marginBottom: 'clamp(24px, 5vw, 75px)', maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', animation: 'agentMarquee 28s linear infinite' }}>
+                      <div data-marquee-track style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', animation: 'agentMarquee 28s linear infinite' }}>
                         {[0, 1].map((i) => (
                           <div key={i} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
                             {['CONTACT', '•', 'CONTACT', '•'].map((w, j) => (

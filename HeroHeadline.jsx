@@ -1,7 +1,7 @@
 import React, { useLayoutEffect, useRef } from 'react';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import gsap from 'gsap';
-import { scrambleChurn, scrambleMask, scrambleTextTo } from './components/home/scrambleText';
+import { easeOutQuart, scrambleChurn, scrambleMask, scrambleTextTo } from './components/home/scrambleText';
 // Hidden for now — hero card deck.
 // import HeroDeliverableDeck from './components/home/HeroDeliverableDeck';
 
@@ -29,8 +29,10 @@ const SUBHEADLINE_PHRASES = [
 // for IDLE_REVEAL_MS. It never advances on its own. Touch/coarse-pointer devices
 // get no pointermove events, so they fall back to the original timed cycle
 // (HOLD_MS between reveals) instead of freezing on the first phrase.
+// A click resets the rotation to the first phrase, so the name is always one
+// deliberate action away no matter how far the cursor has walked the list.
 const HOLD_MS = 1600;        // coarse-pointer fallback: hold between phrases
-const SCRAMBLE_MS = 600;     // time spent scrambling into the next phrase
+const SCRAMBLE_MS = 340;     // time spent scrambling into the next phrase
 const IDLE_REVEAL_MS = 220;  // cursor stillness that triggers the reveal
 
 const HEADLINE_LINES = ['HUMAN', 'IN THE', 'LOOP'];
@@ -80,7 +82,7 @@ const glass = {
   visibility: 'hidden',
 };
 
-const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
+const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420', cursorStageRef = null }) => {
   const topLeftRef = useRef(null);
   const headlineContentRef = useRef(null);
   const scrambleTextRef = useRef(null);
@@ -136,15 +138,28 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
       if (cycleCancel) { cycleCancel(); cycleCancel = null; }
     };
 
+    const setStage = (phase) => {
+      const stage = cursorStageRef?.current;
+      if (!stage) return;
+      stage.phase = phase;
+      if (phase === 'reveal') {
+        stage.revealAt = performance.now();
+        stage.revealMs = SCRAMBLE_MS;
+      }
+    };
+
     const revealTarget = (onDone) => {
       stopChurn();
+      setStage('reveal');
       cycleCancel = scrambleTextTo(subScrambleEl, SUBHEADLINE_PHRASES[targetIndex], {
         durationMs: SCRAMBLE_MS,
         preserveWhitespace: true,
         churnBeforeLock: true,
+        ease: easeOutQuart,
         onComplete: () => {
           cycleCancel = null;
           index = targetIndex;
+          setStage('idle');
           if (onDone) onDone();
         },
       });
@@ -152,8 +167,15 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
 
     // Cursor moved: hold the line in a churn keyed to the next phrase's shape
     // (so resolving causes no reflow) and restart the stillness countdown.
-    const handlePointerMove = () => {
+    const handlePointerMove = (event) => {
       stopReveal();
+      const stage = cursorStageRef?.current;
+      if (stage) {
+        stage.x = event.clientX;
+        stage.y = event.clientY;
+        stage.seen = true;
+        stage.phase = 'churn';
+      }
       if (!churnCancel) {
         if (targetIndex === index) {
           targetIndex = (index + 1) % SUBHEADLINE_PHRASES.length;
@@ -166,6 +188,18 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
       idleTimer = window.setTimeout(() => revealTarget(), IDLE_REVEAL_MS);
     };
 
+    // Click anywhere: snap the rotation back to the top of the list. Runs the
+    // same reveal as a normal lock (never a hard text swap) so the reset reads
+    // as the readout being re-taken, and re-fires even when phrase 0 is already
+    // on screen — the click should always produce that motion.
+    const handlePointerDown = () => {
+      stopChurn();
+      stopReveal();
+      clearTimeout(idleTimer);
+      targetIndex = 0;
+      revealTarget();
+    };
+
     const advanceTimed = () => {
       targetIndex = (index + 1) % SUBHEADLINE_PHRASES.length;
       revealTarget(() => { holdTimer = window.setTimeout(advanceTimed, HOLD_MS); });
@@ -175,6 +209,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
     const armCycle = () => {
       if (cursorDriven) {
         window.addEventListener('pointermove', handlePointerMove, { passive: true });
+        window.addEventListener('pointerdown', handlePointerDown, { passive: true });
         pointerBound = true;
       } else {
         holdTimer = window.setTimeout(advanceTimed, HOLD_MS);
@@ -240,7 +275,11 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
       introCancels.forEach((cancel) => cancel && cancel());
       stopReveal();
       stopChurn();
-      if (pointerBound) window.removeEventListener('pointermove', handlePointerMove);
+      if (pointerBound) {
+        window.removeEventListener('pointermove', handlePointerMove);
+        window.removeEventListener('pointerdown', handlePointerDown);
+      }
+      if (cursorStageRef?.current) cursorStageRef.current.phase = 'idle';
       clearTimeout(holdTimer);
       clearTimeout(idleTimer);
       lines.forEach((node, i) => { node.textContent = lineCopy[i]; });
@@ -390,6 +429,12 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
     <>
       <style>{`
         @media (max-width: 620px) {
+          #hero-panel-top-left h1 {
+            /* Preserve the Doto face's original proportions; reclaim room
+               between lines rather than distorting the letterforms. */
+            font-size: clamp(3.5rem, 22vw, 7.83rem) !important;
+            line-height: 0.75 !important;
+          }
           #hero-subheadline { font-size: clamp(1rem, 4vw, 1.25rem) !important; }
           #hero-subheadline-scramble { white-space: normal; word-break: break-word; }
         }
