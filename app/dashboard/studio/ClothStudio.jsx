@@ -9162,7 +9162,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336, isAdmin = f
         style={{
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
           ...(isNarrow
-            ? { position: 'relative', width: '100%', height: '46vh', flex: 'none' }
+            ? { position: 'relative', width: '100%', height: '64vh', flex: 'none' }
             : { position: 'absolute', left: 0, top: 0, bottom: 0, right: railW }),
         }}
       >

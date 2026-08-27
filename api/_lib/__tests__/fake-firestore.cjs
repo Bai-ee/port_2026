@@ -4,6 +4,7 @@
 // runTransaction (sequential, no isolation), and FieldValue sentinels.
 
 let _clock = 1_700_000_000_000; // fixed base so createdAtTs ordering is stable
+let _autoId = 0;
 function nextClockMs() { _clock += 1; return _clock; }
 
 function timestamp(ms) {
@@ -43,6 +44,11 @@ class DocRef {
   }
   async get() { return snapshot(this, this._map.get(this.id)); }
   async delete() { this._map.delete(this.id); }
+  // Subcollection support (e.g. clients/{clientId}/brief_runs/{runId}) —
+  // added for run-lifecycle.cjs tests. Composes a path-keyed collection in
+  // the same flat `_store` Map, mirroring how real Firestore addresses a
+  // subcollection by its full path.
+  collection(name) { return new Collection(this._store, `${this._collection}/${this.id}/${name}`); }
 }
 
 function snapshot(ref, data) {
@@ -54,8 +60,17 @@ function snapshot(ref, data) {
   };
 }
 
+// Real Firestore addresses a nested map field in a query by a dot-path
+// string (e.g. 'errorState.status') — added for
+// dashboard-failure-incidents.cjs's open-incident query. A field name with
+// no dot behaves exactly as before (flat property lookup).
+function getFieldValue(data, field) {
+  if (!field.includes('.')) return data?.[field];
+  return field.split('.').reduce((acc, key) => (acc == null ? undefined : acc[key]), data);
+}
+
 function matchesFilter(data, f) {
-  const fv = data?.[f.field];
+  const fv = getFieldValue(data, f.field);
   if (f.op === '==') return fv === f.value; // unchanged original behavior
   // 'in' — single-field membership (added for the stale-generation reclaim's
   // stage-in query). Real Firestore serves this off the automatic single-field
@@ -131,6 +146,12 @@ class Query {
 
 class Collection extends Query {
   doc(id) { return new DocRef(this._store, this._collection, id); }
+  async add(data) {
+    _autoId += 1;
+    const ref = this.doc(`auto-${_autoId}`);
+    await ref.set(data);
+    return ref;
+  }
 }
 
 class FakeDb {

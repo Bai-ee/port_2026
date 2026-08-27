@@ -62,7 +62,7 @@ export const metadata = {
       'A creative partnership led by Bryan Balli, helping founders launch products, execute marketing campaigns, and build scalable systems through strategy, design, development, and automation.',
     images: [
       {
-        url: '/img/og_meta.optimized.jpg',
+        url: '/img/og_meta_82626.optimized.jpg',
         width: 1200,
         height: 630,
         alt: 'HITLOOP — Human in the Loop creative partnership led by Bryan Balli',
@@ -79,7 +79,7 @@ export const metadata = {
       'Led by Bryan Balli. Built for founders who need momentum.',
     images: [
       {
-        url: '/img/og_meta.optimized.jpg',
+        url: '/img/og_meta_82626.optimized.jpg',
         alt: 'HITLOOP — Human in the Loop creative partnership led by Bryan Balli',
       },
     ],

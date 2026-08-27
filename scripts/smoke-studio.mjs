@@ -1,4 +1,4 @@
-import { access, mkdir, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
 
@@ -243,6 +243,72 @@ async function main() {
   await page.screenshot({ path: path.join(outDir, '04-mobile.png'), fullPage: true });
   const mobileOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 8);
   if (mobileOverflow) issues.push('mobile viewport has horizontal overflow');
+
+  // ── PAINT mode (?tool=paint) ─────────────────────────────────────────────
+  // Back to desktop viewport, then switch modes via the tool-switch row
+  // (rather than a fresh navigation) so this also exercises mockup→paint
+  // switching with no cross-mode bleed.
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.waitForTimeout(300);
+  await clickText(page, 'PAINT');
+  await page.waitForSelector('#paint-studio-board', { timeout: 20000 });
+  await page.waitForSelector('#paint-preview-canvas-shell canvas', { timeout: 20000 });
+  for (const cardTitle of ['Template', 'Palette', 'Composition', 'Material / Texture', 'Variation', 'Export', 'Saved recipes']) {
+    if (!(await page.getByText(cardTitle, { exact: true }).count())) {
+      issues.push(`Paint rail card "${cardTitle}" did not render`);
+    }
+  }
+  await page.screenshot({ path: path.join(outDir, '05-paint-desktop.png'), fullPage: true });
+
+  const paintCanvasSize = await page.evaluate(() => {
+    const canvas = document.querySelector('#paint-preview-canvas-shell canvas');
+    return canvas ? { width: canvas.width, height: canvas.height } : null;
+  });
+  if (!paintCanvasSize || paintCanvasSize.width !== 2560 || paintCanvasSize.height !== 1440) {
+    issues.push(`Paint default (desktop format) canvas size mismatch: ${JSON.stringify(paintCanvasSize)}`);
+  }
+
+  // Export PNG — assert the download fires and matches the selected format's
+  // exact pixel dimensions (read straight from the downloaded PNG header via
+  // an <img> decode, no extra deps needed).
+  const [download] = await Promise.all([
+    page.waitForEvent('download', { timeout: 20000 }),
+    clickText(page, 'Export PNG'),
+  ]);
+  const downloadPath = path.join(outDir, 'paint-export.png');
+  await download.saveAs(downloadPath);
+  const pngBase64 = await readFile(downloadPath, { encoding: 'base64' });
+  const pngDims = await page.evaluate(async (fileBase64) => {
+    const img = new Image();
+    const loaded = new Promise((resolve, reject) => {
+      img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+      img.onerror = reject;
+    });
+    img.src = `data:image/png;base64,${fileBase64}`;
+    return loaded;
+  }, pngBase64);
+  if (!pngDims || pngDims.width !== 2560 || pngDims.height !== 1440) {
+    issues.push(`Paint PNG export dimensions mismatch: ${JSON.stringify(pngDims)}`);
+  }
+
+  // Switch to a narrow viewport within Paint mode — board/rail must stack
+  // without horizontal overflow, same check as mockup mode above.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: path.join(outDir, '06-paint-mobile.png'), fullPage: true });
+  const paintMobileOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 8);
+  if (paintMobileOverflow) issues.push('Paint mobile viewport has horizontal overflow');
+
+  // Switch back to HOLO PAPER then MOCKUP VIDEO — confirm no cross-mode
+  // bleed/errors when leaving Paint and returning to the other two modes.
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.waitForTimeout(300);
+  await clickText(page, 'HOLO PAPER');
+  await page.waitForSelector('#cloth-studio-board', { timeout: 20000 });
+  await clickText(page, 'MOCKUP VIDEO');
+  await page.waitForSelector('#studio-artboard', { timeout: 20000 });
+  await clickText(page, 'PAINT');
+  await page.waitForSelector('#paint-studio-board', { timeout: 20000 });
 
   await browser.close();
 

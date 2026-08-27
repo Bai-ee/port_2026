@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from './AuthContext';
 import AdminOperatingCostView from './components/AdminCostView';
+import AdminDashboardFailuresView from './components/AdminDashboardFailuresView';
 
 // ── API helpers ────────────────────────────────────────────────────────────────
 
@@ -24,7 +25,7 @@ async function adminFetch(user, path, options = {}) {
 
 // ── AdminPage ──────────────────────────────────────────────────────────────────
 
-const TABS = ['CLIENTS', 'QUEUE', 'FAILED', 'INTELLIGENCE', 'COSTS', 'DIGEST'];
+const TABS = ['CLIENTS', 'QUEUE', 'FAILED', 'INCIDENTS', 'INTELLIGENCE', 'COSTS', 'DIGEST'];
 
 const AdminPage = () => {
   const { user, signOutUser } = useAuth();
@@ -970,6 +971,17 @@ const AdminPage = () => {
               <span className="section-title">OPERATING COSTS</span>
             </div>
             <AdminOperatingCostView user={user} />
+          </section>
+        ) : null}
+
+        {/* Phase 6 (docs/plans/DASHBOARD_CREATION_FAILURE_UX_CLAUDE_PLAN.md):
+            open dashboard-creation-failure incidents — requeue or resolve. */}
+        {tab === 'INCIDENTS' ? (
+          <section id="admin-dashboard-failures-section">
+            <div className="section-head">
+              <span className="section-title">DASHBOARD CREATION FAILURES</span>
+            </div>
+            <AdminDashboardFailuresView user={user} />
           </section>
         ) : null}
 

@@ -18,10 +18,60 @@
 //   (needed for findNextQueuedRun)
 
 const fb = require('./firebase-admin.cjs');
-const { logInfo } = require('./observability.cjs');
+const { logInfo, logWarn } = require('./observability.cjs');
+const { notifyDashboardFailure } = require('./dashboard-failure-notification.cjs');
 
 const MAX_ATTEMPTS = 3;
 const LEASE_TIMEOUT_MS = 10 * 60 * 1000; // 10 min — stale lease window for admin reclaim
+
+// --- test seam (failRun and its client-visible event write) ------------------
+// The lifecycle's production behavior remains on `fb`; failRun and the
+// appendRunEvent helper it calls use `ctx()` so their incident/security
+// contract is testable against the shared fake Firestore.
+let _testCtx = null;
+function __setTestContext(ctx) { _testCtx = ctx; }
+function ctx() { return _testCtx || fb; }
+
+// ── Dashboard-creation-failure classification ───────────────────────────────
+// See docs/plans/DASHBOARD_CREATION_FAILURE_UX_CLAUDE_PLAN.md — client-safe
+// category + copy for a hard-gated incident. Conservative fallback:
+// anything unrecognized lands in 'processing' rather than guessing wrong.
+const PUBLIC_FAILURE_COPY = {
+  website_address: 'We could not validate the website address.',
+  website_access: 'We could not reach the website to build your dashboard.',
+  website_rendering: 'We could not read the website well enough to create the dashboard.',
+  processing: 'We hit a problem while creating your dashboard.',
+};
+
+function classifyPublicFailure(error) {
+  const message = String(error?.message || error || '').toLowerCase();
+  const stage = String(error?.stage || '').toLowerCase();
+  const haystack = `${stage} ${message}`;
+
+  let publicStage = 'processing';
+  if (/invalid url|invalid website|malformed url|bad hostname|invalid hostname/.test(haystack)) {
+    publicStage = 'website_address';
+  } else if (/screenshot|browserless|playwright|puppeteer|render/.test(haystack)) {
+    publicStage = 'website_rendering';
+  } else if (/enotfound|econnrefused|econnreset|etimedout|timed out|timeout|\bdns\b|refused|unreachable|fetch failed|\b4\d\d\b|\b5\d\d\b|connection/.test(haystack)) {
+    publicStage = 'website_access';
+  }
+
+  return { publicStage, publicMessage: PUBLIC_FAILURE_COPY[publicStage] };
+}
+
+// Deterministic support reference — same runId always yields the same code,
+// so a retry/requeue of the primary run (same doc id) keeps one stable code
+// the client can reference across sessions.
+function buildIncidentPublicCode(runId) {
+  let hash = 0;
+  const str = String(runId || '');
+  for (let i = 0; i < str.length; i += 1) {
+    hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+  }
+  const code = hash.toString(36).toUpperCase().padStart(6, '0').slice(-6);
+  return `HIT-${code}`;
+}
 
 // ── Claim ─────────────────────────────────────────────────────────────────────
 
@@ -387,16 +437,24 @@ async function completeRun(runId, clientId, pipelineResult) {
 /**
  * Mark a run as failed.
  *
- * Internal error detail is written to brief_runs (admin-visible via Admin SDK).
- * dashboard_state receives only a sanitized error message — never internal detail.
+ * Internal error detail is always written to brief_runs (admin-visible via
+ * Admin SDK). dashboard_state only ever receives sanitized copy — never
+ * internal detail — and only in three of four cases:
  *
- * If attempts < MAX_ATTEMPTS, dashboard_state.errorState.retryPending = true so
- * Phase 5 admin UI can surface "retry available" without exposing the actual error.
- *
- * Soft mode (details.soft = true): full error detail still lands in brief_runs,
- * but dashboard_state keeps no errorState and the client doc is not downgraded.
- * Used for chained follow-up runs (e.g. onboarding-chain scout-brief) whose
- * failure must not error-screen a client whose primary run succeeded.
+ * - Soft mode (details.soft = true): no errorState, no client downgrade.
+ *   Used for chained follow-up runs (e.g. onboarding-chain scout-brief)
+ *   whose failure must not error-screen a client whose primary run succeeded.
+ * - The client's PRIMARY dashboard-creation run (pipelineType:
+ *   'free-tier-intake', trigger: 'signup') with retries remaining:
+ *   dashboard_state.errorState.retryPending = true, client stays 'provisioning'.
+ * - That same primary run once attempts are exhausted: a hard-gated
+ *   support incident — errorState.kind = 'dashboard_creation_failed',
+ *   status: 'open', client downgraded to 'error'. See
+ *   docs/plans/DASHBOARD_CREATION_FAILURE_UX_CLAUDE_PLAN.md.
+ * - Anything else (module runs, a reseed on an already-provisioned client):
+ *   the run/latestRunStatus is recorded as failed, but no errorState is
+ *   written and client.status is left untouched — an established client
+ *   never loses dashboard access because a later run failed.
  *
  * @param {string} runId
  * @param {string} clientId
@@ -405,12 +463,27 @@ async function completeRun(runId, clientId, pipelineResult) {
  */
 async function failRun(runId, clientId, error, attempts, details = {}) {
   const soft = details.soft === true;
-  const runRef = fb.adminDb.collection('brief_runs').doc(runId);
-  const clientRunRef = fb.adminDb.collection('clients').doc(clientId).collection('brief_runs').doc(runId);
-  const dashboardStateRef = fb.adminDb.collection('dashboard_state').doc(clientId);
-  const clientRef = fb.adminDb.collection('clients').doc(clientId);
-  const now = fb.FieldValue.serverTimestamp();
+  const store = ctx();
+  const runRef = store.adminDb.collection('brief_runs').doc(runId);
+  const clientRunRef = store.adminDb.collection('clients').doc(clientId).collection('brief_runs').doc(runId);
+  const dashboardStateRef = store.adminDb.collection('dashboard_state').doc(clientId);
+  const clientRef = store.adminDb.collection('clients').doc(clientId);
+  const now = store.FieldValue.serverTimestamp();
   const failedAt = new Date().toISOString();
+
+  // Stale-write guard: an admin requeue or a duplicate/late worker may have
+  // already moved this run past 'running' (queued again, cancelled, or —
+  // in a race — already succeeded). Only a run this caller still sees as
+  // 'running' is theirs to fail; anything else is a stale finish that must
+  // not clobber a newer state (mirrors completeRun's cancelled-only guard,
+  // but broader — a requeue never routes through 'cancelled').
+  const runSnap = await runRef.get();
+  const runData = runSnap.exists ? (runSnap.data() || {}) : {};
+  const priorStatus = runSnap.exists ? runData.status : null;
+  if (priorStatus && priorStatus !== 'running') {
+    logWarn('run_fail_skipped_stale', { clientId, runId, priorStatus });
+    return;
+  }
 
   const isExhausted = attempts >= MAX_ATTEMPTS;
   const artifactRefs = Array.isArray(details.artifactRefs) ? details.artifactRefs : [];
@@ -440,22 +513,61 @@ async function failRun(runId, clientId, error, attempts, details = {}) {
     warnings: Array.isArray(details.warnings) ? details.warnings : [],
   };
 
+  // Hard-gate only the client's PRIMARY dashboard-creation run — the
+  // signup-triggered free-tier-intake run created by queueInitialBriefRun
+  // (deterministic id `${clientId}-signup`, trigger: 'signup'). A reseed/
+  // refresh of an already-provisioned client's intake (trigger: 'reseed')
+  // and every module run (pipelineType: 'module-run') must never lock an
+  // established client out of their existing dashboard.
+  const isPrimaryCreationRun = runData.pipelineType === 'free-tier-intake' && runData.trigger === 'signup';
+  // Gate on the run identity alone, not on `isExhausted`: nothing in this
+  // codebase auto-retries a 'failed' run (attempts only advances when an
+  // admin calls requeueRun, api/_lib/run-lifecycle.cjs requeueRun — the
+  // sole call site is app/api/admin/requeue/route.js). Requiring exhaustion
+  // here would mean the incident/alert — the thing meant to prompt that
+  // admin's first look — could only ever fire after the admin had already
+  // manually retried the same run twice on their own.
+  const hard = !soft && isPrimaryCreationRun;
+
   // Sanitized error for dashboard — no internal detail exposed to end users.
-  // Soft fails leave latestRunId/latestRunStatus pointing at the succeeded
-  // primary run and never set errorState.
-  const dashboardUpdate = soft
-    ? { clientId, updatedAt: now }
-    : {
-        clientId,
-        latestRunId: runId,
-        latestRunStatus: 'failed',
-        updatedAt: now,
-        errorState: {
-          message: 'Initial setup encountered an issue. Our team has been notified.',
-          failedAt,
-          retryPending: !isExhausted,
-        },
-      };
+  let dashboardUpdate;
+  if (hard) {
+    const { publicStage, publicMessage } = classifyPublicFailure(error);
+    const publicCode = buildIncidentPublicCode(runId);
+    logWarn('dashboard_creation_failed', { clientId, runId, publicCode, publicStage });
+    dashboardUpdate = {
+      clientId,
+      latestRunId: runId,
+      latestRunStatus: 'failed',
+      updatedAt: now,
+      errorState: {
+        kind: 'dashboard_creation_failed',
+        status: 'open',
+        incidentId: runId,
+        runId,
+        failedAt,
+        publicCode,
+        publicStage,
+        publicMessage,
+        // Backwards-compatible alias during rollout — migrate UI reads to
+        // publicMessage, then drop this (see the plan's Data contract note).
+        message: publicMessage,
+        notification: { attemptedAt: null, status: 'not_configured' },
+        resolvedAt: null,
+        resolvedBy: null,
+      },
+    };
+  } else if (soft) {
+    // Chained follow-up runs (e.g. onboarding-chain scout-brief) fail soft:
+    // full error in brief_runs, but no dashboard errorState / client
+    // downgrade — the primary intake already succeeded.
+    dashboardUpdate = { clientId, updatedAt: now };
+  } else {
+    // Module run or reseed of an established client: record the failed run
+    // for run-tracking UI, but never manufacture a client-facing errorState
+    // — that field is reserved for the primary dashboard-creation incident.
+    dashboardUpdate = { clientId, latestRunId: runId, latestRunStatus: 'failed', updatedAt: now };
+  }
 
   if (homepageScreenshot) {
     dashboardUpdate.artifacts = {
@@ -474,15 +586,13 @@ async function failRun(runId, clientId, error, attempts, details = {}) {
     };
   }
 
-  const clientUpdate = soft
-    ? { updatedAt: now }
-    : {
-        latestRunId: runId,
-        latestRunStatus: 'failed',
-        // Keep provisioning status unless fully exhausted — admin may retry
-        status: isExhausted ? 'error' : 'provisioning',
-        updatedAt: now,
-      };
+  const clientUpdate = hard
+    ? { latestRunId: runId, latestRunStatus: 'failed', status: 'error', updatedAt: now }
+    : soft
+      ? { updatedAt: now }
+      // Module run or reseed on an established client: never touch
+      // client.status — the client's existing dashboard stays active.
+      : { latestRunId: runId, latestRunStatus: 'failed', updatedAt: now };
 
   await Promise.all([
     runRef.set(runUpdate, { merge: true }),
@@ -491,13 +601,55 @@ async function failRun(runId, clientId, error, attempts, details = {}) {
     clientRef.set(clientUpdate, { merge: true }),
     appendRunEvent(runId, clientId, {
       stage: 'error',
-      // Run events are client-readable — soft fails get a sanitized line,
-      // the raw error stays in brief_runs (admin only).
-      progressLabel: soft
-        ? 'Brief generation hit an issue — retry from the Executive Daily Brief card.'
-        : `Pipeline failed: ${error?.message || String(error)}`.slice(0, 500),
+      // Run events are client-readable. Keep raw diagnostics exclusively in
+      // brief_runs (Admin SDK only), including after an admin manually clears
+      // a dashboard-creation gate and the historical terminal becomes visible.
+      progressLabel: hard
+        ? `Dashboard setup could not be completed: ${dashboardUpdate.errorState.publicMessage} (${dashboardUpdate.errorState.publicCode})`
+        : soft
+          ? 'Brief generation hit an issue — retry from the Executive Daily Brief card.'
+          : 'Pipeline failed. Please try again or contact support if the problem continues.',
     }).catch(() => {}),
   ]);
+
+  // Phase 2: best-effort, idempotent alert to Bryan — strictly AFTER the
+  // incident above is durably written, and never allowed to affect it. Any
+  // outcome here only updates errorState.notification in a follow-up write;
+  // it can never re-open, block, or fail the write that already committed.
+  if (hard) {
+    await notifyHardFailure({ clientId, errorState: dashboardUpdate.errorState, internalError: runUpdate.error, dashboardStateRef, store });
+  }
+}
+
+// Reads the client doc for notification context (company/owner/site), sends
+// the alert, then writes the real delivery status back onto the SAME
+// incident. Writes the FULL errorState object with `notification` overridden
+// — a bare `{errorState: {notification}}` merge would replace the whole
+// errorState map (Firestore's merge:true is shallow at the top level; a
+// nested object VALUE is replaced wholesale, not deep-merged), wiping out
+// kind/status/incidentId/publicCode/etc. Wrapped so a throw here can never
+// propagate out of failRun — see the contract note atop
+// dashboard-failure-notification.cjs.
+async function notifyHardFailure({ clientId, errorState, internalError, dashboardStateRef, store }) {
+  const { runId, publicCode, publicStage, failedAt } = errorState;
+  try {
+    const clientSnap = await store.adminDb.collection('clients').doc(clientId).get();
+    const clientData = clientSnap.exists ? (clientSnap.data() || {}) : {};
+    const notification = await notifyDashboardFailure({
+      clientId,
+      runId,
+      publicCode,
+      publicStage,
+      failedAt,
+      companyName: clientData.companyName || null,
+      ownerEmail: clientData.ownerEmail || null,
+      websiteUrl: clientData.websiteUrl || null,
+      internalError,
+    });
+    await dashboardStateRef.set({ errorState: { ...errorState, notification } }, { merge: true });
+  } catch (err) {
+    logWarn('dashboard_failure_notify_wiring_threw', { clientId, runId, error: err?.message || String(err) });
+  }
 }
 
 // ── Requeue stale ─────────────────────────────────────────────────────────────
@@ -796,7 +948,8 @@ async function updateRunProgress(runId, clientId, progress) {
  * real-time terminal lines during a pipeline run.
  */
 async function appendRunEvent(runId, clientId, progress = {}) {
-  const now = fb.FieldValue.serverTimestamp();
+  const store = ctx();
+  const now = store.FieldValue.serverTimestamp();
   const { stage, progressLabel, ...extra } = progress;
   const event = {
     stage:     stage         || 'progress',
@@ -804,7 +957,7 @@ async function appendRunEvent(runId, clientId, progress = {}) {
     extra:     extra && Object.keys(extra).length > 0 ? extra : null,
     createdAt: now,
   };
-  await fb.adminDb
+  await store.adminDb
     .collection('clients').doc(clientId)
     .collection('brief_runs').doc(runId)
     .collection('events')
@@ -1043,4 +1196,7 @@ module.exports = {
   updateRunProgress,
   appendRunEvent,
   updateModuleState,
+  __setTestContext,
+  classifyPublicFailure,
+  buildIncidentPublicCode,
 };

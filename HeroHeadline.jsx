@@ -1,7 +1,7 @@
-import React, { useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useLayoutEffect, useRef } from 'react';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import gsap from 'gsap';
-import { scrambleTextTo } from './components/home/scrambleText';
+import { scrambleChurn, scrambleMask, scrambleTextTo } from './components/home/scrambleText';
 // Hidden for now — hero card deck.
 // import HeroDeliverableDeck from './components/home/HeroDeliverableDeck';
 
@@ -11,6 +11,7 @@ const SIMPLE_SCROLL_MEDIA_QUERY = '(max-width: 680px) and (pointer: coarse)';
 
 // Lines the subheadline cycles through. Add/remove freely — any length works.
 const SUBHEADLINE_PHRASES = [
+  'BRYAN BALLI',
   'Brand Identity & Design',
   'Websites & Landing Pages',
   'Social Media & Content',
@@ -23,8 +24,47 @@ const SUBHEADLINE_PHRASES = [
   'Browser Based Gaming',
 ];
 
-const HOLD_MS = 1600;     // time a fully-revealed phrase stays on screen
-const SCRAMBLE_MS = 600;  // time spent scrambling into the next phrase
+// The subheadline is cursor-driven on fine-pointer devices: it churns while the
+// pointer moves and resolves into the next phrase once the pointer holds still
+// for IDLE_REVEAL_MS. It never advances on its own. Touch/coarse-pointer devices
+// get no pointermove events, so they fall back to the original timed cycle
+// (HOLD_MS between reveals) instead of freezing on the first phrase.
+const HOLD_MS = 1600;        // coarse-pointer fallback: hold between phrases
+const SCRAMBLE_MS = 600;     // time spent scrambling into the next phrase
+const IDLE_REVEAL_MS = 220;  // cursor stillness that triggers the reveal
+
+const HEADLINE_LINES = ['HUMAN', 'IN THE', 'LOOP'];
+
+// Hero text load sequence. This component owns the whole thing on ONE gsap
+// timeline — panel reveal, headline scramble, then the subheadline — so the
+// order can be retuned here without drifting against another clock. The
+// HomePage intro timeline deliberately does not touch #hero-panel-top-left.
+//
+// Order: the scrambling headline is the first thing on screen (its panel fades
+// up at t=0, ahead of HomePage's own 0.2s-delayed timeline) and it churns for
+// the entire reveal, locking line by line. The subheadline overlaps the tail of
+// that churn — it starts fading up from 0 and scrambling in shortly BEFORE the
+// last headline line locks, so the two reads hand off instead of queueing.
+const HERO_INTRO = {
+  panelFadeS: 0.45,
+  // Mirrors the scroll-out blur in applyLayout (10px at full progress, and none
+  // on the simple-scroll viewport), played in reverse so the headline resolves
+  // out of a blur as it scrambles.
+  blurPx: 10,
+  blurInS: 0.8,
+  // Budget: HomePage's own timeline (delay 0.2) brings the ox.jsx canvas up at
+  // t=0.1 over 1.2s, so the loop element is fully formed at ~1.5s absolute.
+  // This component's timeline starts at t=0, and these values land the last
+  // subheadline character at ~1.25s — headline and subheadline are both done
+  // before the loop finishes forming. Retiming the canvas means retiming here.
+  headlineScrambleS: 0.9,
+  headlineLineStaggerS: 0.1,
+  // Signed offset against the moment the last headline line locks.
+  // Negative = the subheadline leads, starting that many seconds early.
+  subheadLeadS: -0.35,
+  subheadFadeS: 0.4,
+  subheadScrambleS: 0.5,
+};
 
 const glass = {
   backdropFilter: 'blur(18px)',
@@ -45,10 +85,21 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
   const headlineContentRef = useRef(null);
   const scrambleTextRef = useRef(null);
 
-  // Scramble-cycle the subheadline through SUBHEADLINE_PHRASES.
-  useEffect(() => {
-    const node = scrambleTextRef.current;
-    if (!node) return;
+  // Hero text load sequence + the subheadline's ongoing phrase cycle. Both live
+  // in one effect because they share the same node and must not overlap: the
+  // cycle only starts once the intro scramble has handed the subheadline over.
+  // useLayoutEffect so the scramble masks are in place before first paint —
+  // the real copy must never flash.
+  useLayoutEffect(() => {
+    const panelEl = topLeftRef.current;
+    const contentEl = headlineContentRef.current;
+    const subScrambleEl = scrambleTextRef.current;
+    if (!panelEl || !contentEl || !subScrambleEl) return;
+    const subEl = panelEl.querySelector('#hero-subheadline');
+    if (!subEl) return;
+
+    const lines = Array.from(contentEl.querySelectorAll('[data-hero-headline-line]'));
+    const lineCopy = lines.map((node, i) => HEADLINE_LINES[i] ?? node.textContent);
 
     const prefersReducedMotion =
       typeof window !== 'undefined' &&
@@ -56,34 +107,143 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
       window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     if (prefersReducedMotion) {
-      node.textContent = SUBHEADLINE_PHRASES[0];
+      lines.forEach((node, i) => { node.textContent = lineCopy[i]; });
+      subScrambleEl.textContent = SUBHEADLINE_PHRASES[0];
+      gsap.set([panelEl, subEl], { autoAlpha: 1 });
       return;
     }
 
+    // index = phrase currently resolved on screen. targetIndex = the phrase the
+    // active churn/reveal is heading to; it only folds back into index when a
+    // reveal actually completes, so a reveal interrupted by more cursor movement
+    // resumes toward the same phrase instead of skipping one.
     let index = 0;
-    let cancelScramble = null;
-    let holdTimer = 0;
+    let targetIndex = 0;
+    let cycleCancel = null;   // in-flight reveal
+    let churnCancel = null;   // pointer-driven churn
+    let holdTimer = 0;        // coarse-pointer fallback cycle
+    let idleTimer = 0;
+    let pointerBound = false;
 
-    const scrambleTo = (next) => {
-      cancelScramble = scrambleTextTo(node, next, {
+    const cursorDriven =
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
+    const stopChurn = () => {
+      if (churnCancel) { churnCancel(); churnCancel = null; }
+    };
+    const stopReveal = () => {
+      if (cycleCancel) { cycleCancel(); cycleCancel = null; }
+    };
+
+    const revealTarget = (onDone) => {
+      stopChurn();
+      cycleCancel = scrambleTextTo(subScrambleEl, SUBHEADLINE_PHRASES[targetIndex], {
         durationMs: SCRAMBLE_MS,
+        preserveWhitespace: true,
+        churnBeforeLock: true,
         onComplete: () => {
-          holdTimer = window.setTimeout(advance, HOLD_MS);
+          cycleCancel = null;
+          index = targetIndex;
+          if (onDone) onDone();
         },
       });
     };
 
-    const advance = () => {
-      index = (index + 1) % SUBHEADLINE_PHRASES.length;
-      scrambleTo(SUBHEADLINE_PHRASES[index]);
+    // Cursor moved: hold the line in a churn keyed to the next phrase's shape
+    // (so resolving causes no reflow) and restart the stillness countdown.
+    const handlePointerMove = () => {
+      stopReveal();
+      if (!churnCancel) {
+        if (targetIndex === index) {
+          targetIndex = (index + 1) % SUBHEADLINE_PHRASES.length;
+        }
+        churnCancel = scrambleChurn(subScrambleEl, SUBHEADLINE_PHRASES[targetIndex], {
+          preserveWhitespace: true,
+        });
+      }
+      clearTimeout(idleTimer);
+      idleTimer = window.setTimeout(() => revealTarget(), IDLE_REVEAL_MS);
     };
 
-    node.textContent = SUBHEADLINE_PHRASES[0];
-    holdTimer = window.setTimeout(advance, HOLD_MS);
+    const advanceTimed = () => {
+      targetIndex = (index + 1) % SUBHEADLINE_PHRASES.length;
+      revealTarget(() => { holdTimer = window.setTimeout(advanceTimed, HOLD_MS); });
+    };
+
+    // Handed the subheadline once the intro scramble lands.
+    const armCycle = () => {
+      if (cursorDriven) {
+        window.addEventListener('pointermove', handlePointerMove, { passive: true });
+        pointerBound = true;
+      } else {
+        holdTimer = window.setTimeout(advanceTimed, HOLD_MS);
+      }
+    };
+
+    // Headline lines start empty and type themselves in (growIn below); the
+    // spans carry a min-height so emptying them doesn't collapse the panel.
+    lines.forEach((node) => { node.textContent = ''; });
+    subScrambleEl.textContent = scrambleMask(SUBHEADLINE_PHRASES[0], { preserveWhitespace: true });
+    gsap.set(subEl, { autoAlpha: 0 });
+
+    const introCancels = [];
+    // The last headline line locks at (stagger * lastIndex) + scrambleS.
+    // subheadLeadS is negative, so the subheadline cue lands just ahead of it.
+    // Clamped at 0 so a large lead can never schedule before the timeline start.
+    const subheadCue = Math.max(
+      0,
+      (lines.length - 1) * HERO_INTRO.headlineLineStaggerS +
+      HERO_INTRO.headlineScrambleS +
+      HERO_INTRO.subheadLeadS,
+    );
+
+    const tl = gsap.timeline();
+    // The intro tweens the panel; applyLayout below owns the inner content's
+    // transform/opacity/filter on scroll, so the two never write the same node.
+    tl.fromTo(
+      panelEl,
+      { autoAlpha: 0 },
+      { autoAlpha: 1, duration: HERO_INTRO.panelFadeS, ease: 'power2.out' },
+      0,
+    );
+    if (!window.matchMedia(SIMPLE_SCROLL_MEDIA_QUERY).matches) {
+      tl.fromTo(
+        panelEl,
+        { filter: `blur(${HERO_INTRO.blurPx}px)` },
+        { filter: 'blur(0px)', duration: HERO_INTRO.blurInS, ease: 'power2.out' },
+        0,
+      );
+    }
+    lines.forEach((node, i) => {
+      tl.call(() => {
+        introCancels.push(scrambleTextTo(node, lineCopy[i], {
+          durationMs: HERO_INTRO.headlineScrambleS * 1000,
+          preserveWhitespace: true,
+          growIn: true,
+        }));
+      }, null, i * HERO_INTRO.headlineLineStaggerS);
+    });
+    tl.to(subEl, { autoAlpha: 1, duration: HERO_INTRO.subheadFadeS, ease: 'power2.out' }, subheadCue);
+    tl.call(() => {
+      introCancels.push(scrambleTextTo(subScrambleEl, SUBHEADLINE_PHRASES[0], {
+        durationMs: HERO_INTRO.subheadScrambleS * 1000,
+        preserveWhitespace: true,
+        churnBeforeLock: true,
+        // Hand off to the cursor-driven cycle (or its timed fallback).
+        onComplete: armCycle,
+      }));
+    }, null, subheadCue);
 
     return () => {
-      if (cancelScramble) cancelScramble();
+      tl.kill();
+      introCancels.forEach((cancel) => cancel && cancel());
+      stopReveal();
+      stopChurn();
+      if (pointerBound) window.removeEventListener('pointermove', handlePointerMove);
       clearTimeout(holdTimer);
+      clearTimeout(idleTimer);
+      lines.forEach((node, i) => { node.textContent = lineCopy[i]; });
     };
   }, []);
 
@@ -264,7 +424,11 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420' }) => {
             fontSize: 'clamp(1.25rem, min(13vw, calc(var(--hero-gap-height) / 5)), 7.83rem)',
             textTransform: 'none',
           }}>
-            HUMAN<br />IN THE<br />LOOP
+            {HEADLINE_LINES.map((line) => (
+              // minHeight holds the line box while the intro types the text in
+              // from empty, so the panel's centred position never recomputes.
+              <span key={line} data-hero-headline-line style={{ display: 'block', minHeight: '1.05em' }}>{line}</span>
+            ))}
           </h1>
           <p id="hero-subheadline" style={{
             margin: '1rem 0 0',

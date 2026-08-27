@@ -669,6 +669,35 @@ function inferModuleStateFromDashboard(dashboardState) {
   return base;
 }
 
+// Client-safe projection of an open dashboard-creation incident (see
+// docs/plans/DASHBOARD_CREATION_FAILURE_UX_CLAUDE_PLAN.md §3). An explicit
+// allow-list, not a passthrough of dashboardState.errorState — even though
+// failRun (api/_lib/run-lifecycle.cjs) never writes anything but sanitized
+// fields there today, this is the read-side boundary that keeps a raw
+// internal error from ever reaching a client even if that ever changes.
+// Returns null whenever there is nothing to gate on, so callers can check
+// `bootstrap.creationFailure?.status === 'open'` with no other guard.
+function buildCreationFailureProjection(dashboardState, impersonating) {
+  // An admin viewing another client's dashboard (impersonation) must see
+  // their normal admin tooling, never get walled off by THAT client's
+  // incident — the hard gate only ever applies to a client's own session.
+  if (impersonating) return null;
+  const errorState = dashboardState?.errorState;
+  if (!errorState || errorState.kind !== 'dashboard_creation_failed' || errorState.status !== 'open') {
+    return null;
+  }
+  return {
+    status: errorState.status,
+    incidentId: errorState.incidentId || null,
+    runId: errorState.runId || null,
+    failedAt: errorState.failedAt || null,
+    publicCode: errorState.publicCode || null,
+    publicStage: errorState.publicStage || null,
+    publicMessage: errorState.publicMessage || null,
+    notification: { status: errorState.notification?.status || 'not_configured' },
+  };
+}
+
 async function getDashboardBootstrap(input) {
   const opts = typeof input === 'string' ? { uid: input } : (input || {});
   const context = await getEffectiveClientContext(opts);
@@ -684,6 +713,7 @@ async function getDashboardBootstrap(input) {
       ownClientId: null,
       impersonating: false,
       adminDashboards: [],
+      creationFailure: null,
     };
   }
 
@@ -697,6 +727,7 @@ async function getDashboardBootstrap(input) {
       ownClientId,
       impersonating: false,
       adminDashboards: await listAdminDashboards(opts.email),
+      creationFailure: null,
     };
   }
 
@@ -806,6 +837,7 @@ async function getDashboardBootstrap(input) {
     effectiveClientId: clientId,
     ownClientId,
     impersonating,
+    creationFailure: buildCreationFailureProjection(dashboardState, impersonating),
     ignoredRequestedClientId: context.ignoredRequestedClientId || null,
     adminDashboards: context.adminDashboards.length
       ? context.adminDashboards
@@ -1116,4 +1148,5 @@ module.exports = {
   createWebsitelessClient,
   reseedIntakeForClient,
   loadAdminAccess,
+  buildCreationFailureProjection,
 };

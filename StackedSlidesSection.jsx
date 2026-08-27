@@ -198,7 +198,7 @@ const INTRO_SOCIALS = [
   { label: 'LinkedIn', href: 'https://www.linkedin.com/in/bryanballi', icon: LinkedInLogo },
 ];
 
-const INTRO_COPY_PRIMARY = 'We guide projects from early direction through launch, growth, and support. Providing hands-on design, development, and marketing solutions.';
+const INTRO_COPY_PRIMARY = 'Bryan guides projects from early direction through launch, growth, and support, providing hands-on design, development, and marketing solutions.';
 const INTRO_COPY_SECONDARY = 'Share your website or email below to get started.';
 
 const SHARED_SUPPORT = 'Turn your website or idea into a working dashboard so we can get up to speed fast, automate where it makes sense, and focus on high-quality, personalized work.';
@@ -446,7 +446,7 @@ function HitloopAboutBlock() {
       <div id="cmo-about-divider" aria-hidden="true" />
       <div id="cmo-about-copy-col">
         <p id="cmo-about-mission-statement" style={aboutMissionStatementStyle}>{INTRO_COPY_PRIMARY}</p>
-        <p style={aboutCopyCtaLineStyle}>{INTRO_COPY_SECONDARY}</p>
+        <p id="cmo-about-cta-line" style={aboutCopyCtaLineStyle}>{INTRO_COPY_SECONDARY}</p>
       </div>
     </div>
   );
@@ -720,6 +720,134 @@ const StackedSlidesSection = () => {
   const peekCard2Ref = useRef(null);
   const peekCard3Ref = useRef(null);
   const peekCard4Ref = useRef(null);
+  const helloMarqueeTrackRef = useRef(null);
+  const helloMarqueeSetRef = useRef(null);
+
+  // HELLO marquee ⇄ peek-card hover: the scrolling marquee words scramble in
+  // place into the hovered card's image name (SS3 / CLAIRE / UNDERGROUNDEX)
+  // and back to HELLO on leave — the marquee keeps scrolling throughout.
+  // Same scrambleTextTo effect as the about heading; direct DOM text
+  // mutation is the established pattern (React's vdom text is unchanged so
+  // re-renders don't clobber it).
+  // Per-node scramble registry: the hover swap and the scroll-in/out reveal
+  // both scramble the same marquee spans — routing every scramble through
+  // scrambleNode guarantees at most one rAF loop per span (the newest wins).
+  const nodeScrambleCancels = useRef(new Map());
+  const scrambleNode = (node, text, opts = {}) => {
+    nodeScrambleCancels.current.get(node)?.();
+    nodeScrambleCancels.current.set(node, scrambleTextTo(node, text, {
+      ...opts,
+      onComplete: () => nodeScrambleCancels.current.delete(node),
+    }));
+  };
+  const cancelHelloScrambles = () => {
+    nodeScrambleCancels.current.forEach((cancel) => cancel && cancel());
+    nodeScrambleCancels.current.clear();
+  };
+  const helloMarqueeSwap = (word) => {
+    if (isTouchScrollDevice()) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const marqueeWords = document.querySelectorAll('#testimonials-marquee-shell [data-hello-marquee-word]');
+    const marqueeDots = document.querySelectorAll('#testimonials-marquee-shell [data-hello-marquee-dot]');
+    marqueeWords.forEach((node) => scrambleNode(node, word || 'HELLO', { durationMs: word ? 700 : 450 }));
+    // Dots fade rather than unmount so the track's word spacing never jumps.
+    gsap.killTweensOf(marqueeDots);
+    gsap.to(marqueeDots, { opacity: word ? 0 : 1, duration: word ? 0.45 : 0.7, ease: 'power1.out' });
+  };
+
+  useEffect(() => () => cancelHelloScrambles(), []);
+
+  // Constant-speed JS drive for the HELLO marquee (same mechanism as the
+  // agency marquee below): px offset wrapped at the measured set width, so
+  // scrambling to longer/shorter words changes the text width WITHOUT
+  // changing scroll speed or snapping position — unlike the old CSS
+  // translate3d(-50%) keyframes, whose % distance remapped on every width
+  // change. Speed is locked once from the original 28s-per-set pace.
+  useEffect(() => {
+    const shell = document.getElementById('testimonials-marquee-shell');
+    const track = helloMarqueeTrackRef.current;
+    const set = helloMarqueeSetRef.current;
+    if (!shell || !track || !set) return undefined;
+
+    let itemWidth = 0;
+    let speed = 0; // px/sec, locked at first measure
+    let offset = 0;
+    let frameId = 0;
+    let measureFrameId = 0;
+    let lastTime = 0;
+    let isVisible = false;
+
+    const applyTransform = () => {
+      track.style.transform = `translate3d(${offset}px, 0, 0)`;
+    };
+
+    const measure = () => {
+      itemWidth = set.getBoundingClientRect().width;
+      if (!itemWidth) return;
+      if (!speed) speed = itemWidth / 28; // preserve the old 28s loop pace
+      offset = -(Math.abs(offset) % itemWidth);
+      applyTransform();
+    };
+
+    const scheduleMeasure = () => {
+      cancelAnimationFrame(measureFrameId);
+      measureFrameId = requestAnimationFrame(measure);
+    };
+
+    const stop = () => {
+      if (!frameId) return;
+      cancelAnimationFrame(frameId);
+      frameId = 0;
+      lastTime = 0;
+    };
+
+    const tick = (time) => {
+      if (!isVisible || document.hidden || !itemWidth) {
+        stop();
+        return;
+      }
+      if (!lastTime) lastTime = time;
+      const delta = Math.min((time - lastTime) / 1000, 0.05);
+      lastTime = time;
+      offset -= delta * speed;
+      if (offset <= -itemWidth) offset += itemWidth;
+      applyTransform();
+      frameId = requestAnimationFrame(tick);
+    };
+
+    const start = () => {
+      if (frameId || document.hidden || !isVisible || !itemWidth) return;
+      lastTime = 0;
+      frameId = requestAnimationFrame(tick);
+    };
+
+    const handleVisibility = () => {
+      if (document.hidden) { stop(); return; }
+      start();
+    };
+
+    const intersectionObserver = new IntersectionObserver(([entry]) => {
+      isVisible = entry?.isIntersecting ?? false;
+      if (isVisible) start(); else stop();
+    });
+    const resizeObserver = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(scheduleMeasure) : null;
+
+    resizeObserver?.observe(shell);
+    resizeObserver?.observe(set);
+    intersectionObserver.observe(shell);
+    document.addEventListener('visibilitychange', handleVisibility);
+    scheduleMeasure();
+
+    return () => {
+      stop();
+      cancelAnimationFrame(measureFrameId);
+      resizeObserver?.disconnect();
+      intersectionObserver.disconnect();
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, []);
+  const peekCardImageWord = (img) =>
+    img.split('/').pop().replace(/\.[a-z0-9]+$/i, '').replace(/_ss$/i, '').toUpperCase();
 
   const [pokerHovered, setPokerHovered] = useState(false);
   const [activeFilter, setActiveFilter] = useState(null);
@@ -2196,14 +2324,12 @@ const StackedSlidesSection = () => {
           text-align: left !important;
           max-width: 32ch;
         }
-        #cmo-about-copy-col > p:last-child { width: 100%; text-align: center !important; max-width: none; }
+        /* The support line aligns directly beneath the message wherever the
+           two-column layout is in play (>=900px). Only the stacked single-column
+           layout below 899px re-centres it — see the max-width block further
+           down. */
+        #cmo-about-copy-col > p:last-child { width: 100%; text-align: left !important; max-width: none; }
         #cmo-url-input-row { margin-top: 0 !important; }
-        /* The support line tracks the composition: wide canvases give it a
-           centered, editorial pause; the large two-column layout lets it
-           align directly beneath the message. */
-        @media (min-width: 900px) and (max-width: 1199px) {
-          #cmo-about-copy-col > p:last-child { text-align: left !important; }
-        }
         @media (max-width: 899px) {
           #cmo-dashboard-card { padding: clamp(1.25rem, 6vw, 2rem) !important; }
           #cmo-about-split { grid-template-columns: 1fr !important; gap: 1.25rem !important; }
@@ -2454,6 +2580,11 @@ const StackedSlidesSection = () => {
         {slides.map((slide, index) => (
           <section
             key={slide.title}
+            // The first panel is the bottom peek visible on load. It carries the
+            // backdrop blur, so the intro fade has to target it directly — fading
+            // an ancestor instead isolates the backdrop root and the blur snaps
+            // on at the end instead of ramping.
+            id={index === 0 ? 'stack-peek-panel' : undefined}
             data-stack-panel
             style={{
               ...panelStyle,
@@ -2475,7 +2606,7 @@ const StackedSlidesSection = () => {
                           <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter your website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
                           {/* Primary on-load CTA: loud gradient + comet border while empty,
                               calm white "ready" state once a valid site/email is entered. */}
-                          <button id="hero-onboard-cta" className="cta-pill-btn" data-cta-state={urlIsValid ? 'ready' : 'idle'} onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaSecondaryStyle, flexShrink: 0, opacity: 1, padding: '0.75rem 0.75rem' } : { ...ctaStyle, flexShrink: 0, opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="hero-onboard-label">Connect with Us</span><UpRightArrow style={ctaIconStyle} /></button>
+                          <button id="hero-onboard-cta" className="cta-pill-btn" data-cta-state={urlIsValid ? 'ready' : 'idle'} onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaSecondaryStyle, flexShrink: 0, opacity: 1, padding: '0.75rem 0.75rem' } : { ...ctaStyle, flexShrink: 0, opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="hero-onboard-label">Connect</span><UpRightArrow style={ctaIconStyle} /></button>
                         </div>
                         <a
                           id="panel-hero-cta"
@@ -2495,11 +2626,11 @@ const StackedSlidesSection = () => {
                     </div>
                     <div data-capability-header style={{ ...capabilitySectionHeaderStyle, maxWidth: 'none', marginBottom: 0 }}>
                       <div id="testimonials-marquee-shell" style={{ width: '100%', overflow: 'hidden', margin: 'calc(clamp(24px, 5vw, 75px) - clamp(1.5rem, 3vw, 3rem)) 0 clamp(24px, 5vw, 75px)', maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', animation: 'agentMarquee 28s linear infinite' }}>
+                        <div id="hello-marquee-track" ref={helloMarqueeTrackRef} style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform' }}>
                           {[0, 1].map((i) => (
-                            <div key={i} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
+                            <div key={i} ref={i === 0 ? helloMarqueeSetRef : undefined} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
                               {['HELLO', '•', 'HELLO', '•'].map((w, j) => (
-                                <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 28.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
+                                <span key={j} data-hello-marquee-word={w === 'HELLO' ? '' : undefined} data-hello-marquee-dot={w === '•' ? '' : undefined} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 28.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
                               ))}
                             </div>
                           ))}
@@ -2529,8 +2660,8 @@ const StackedSlidesSection = () => {
                                     data-peek-card
                                     className="dash-peek-card"
                                     id={id}
-                                    onMouseEnter={() => { if (isTouchScrollDevice()) return; gsap.to(cardRef.current, { y: -46, duration: 0.38, ease: 'power2.out' }); }}
-                                    onMouseLeave={() => { if (isTouchScrollDevice()) return; gsap.to(cardRef.current, { y: 0,   duration: 0.48, ease: 'power2.inOut' }); }}
+                                    onMouseEnter={() => { if (isTouchScrollDevice()) return; gsap.to(cardRef.current, { y: -46, duration: 0.38, ease: 'power2.out' }); helloMarqueeSwap(peekCardImageWord(img)); }}
+                                    onMouseLeave={() => { if (isTouchScrollDevice()) return; gsap.to(cardRef.current, { y: 0,   duration: 0.48, ease: 'power2.inOut' }); helloMarqueeSwap(null); }}
                                     style={{
                                       position: 'absolute',
                                       top: topOffset,
@@ -2579,7 +2710,7 @@ const StackedSlidesSection = () => {
                                     <div id="cmo-url-input-row" className="cmo-url-input-desktop" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.85rem', height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                                       <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
                                       <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter your website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
-                                      <span id="cmo-dashboard-cta-hover-shell" style={{ display: 'inline-flex', flexShrink: 0, cursor: 'pointer' }}><button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'pointer', padding: '0.75rem 0.75rem' }}>Onboard Now<UpRightArrow style={ctaIconStyle} /></button></span>
+                                      <span id="cmo-dashboard-cta-hover-shell" style={{ display: 'inline-flex', flexShrink: 0, cursor: 'pointer' }}><button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'pointer', padding: '0.75rem 0.75rem' }}>Connect<UpRightArrow style={ctaIconStyle} /></button></span>
                                     </div>
                                     <div className="cmo-table-inner" style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '0px solid rgba(42,36,32,0.1)' }}>
                                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
@@ -2593,7 +2724,7 @@ const StackedSlidesSection = () => {
                                     <div className="cmo-url-input-mobile" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                                       <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
                                       <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter your website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
-                                      <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="cmo-table-submit-label"></span><UpRightArrow className="cmo-table-submit-arrow" style={ctaIconStyle} /></button>
+                                      <button aria-label="Connect" className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="cmo-table-submit-label">Connect</span><UpRightArrow className="cmo-table-submit-arrow" style={ctaIconStyle} /></button>
                                     </div>
                                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
                                     <colgroup><col style={{ width: '2rem' }} /><col style={{ width: '26%' }} /><col /></colgroup>
@@ -2646,7 +2777,7 @@ const StackedSlidesSection = () => {
                         <div style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform', animation: 'agentMarquee 28s linear infinite' }}>
                           {[0, 1].map((i) => (
                             <div key={i} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
-                              {['RECENTLY SHIPPED', '•', 'RECENTLY SHIPPED', '•'].map((w, j) => (
+                              {['WORK & TESTIMONIALS', '•', 'WORK & TESTIMONIALS', '•'].map((w, j) => (
                                 <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 28.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
                               ))}
                             </div>
@@ -2776,7 +2907,7 @@ const StackedSlidesSection = () => {
                         <div id="footer-url-input-row" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flex: 1, minWidth: 'min(100%, 18rem)', height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                           <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
                           <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter your website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
-                          <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="footer-submit-label">Connect with Us</span><UpRightArrow style={ctaIconStyle} /></button>
+                          <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="footer-submit-label">Connect</span><UpRightArrow style={ctaIconStyle} /></button>
                         </div>
                         <a
                           id="footer-contact-cta"
@@ -2926,7 +3057,7 @@ const StackedSlidesSection = () => {
           onClick={() => setShowCmoModal(false)}
           role="dialog"
           aria-modal="true"
-          aria-label="Connect with Us"
+          aria-label="Connect"
         >
           <div id="cmo-auth-card" onClick={(e) => e.stopPropagation()}>
             <div id="cmo-auth-brand-row">
@@ -2967,7 +3098,7 @@ const StackedSlidesSection = () => {
                   disabled={!urlIsValid}
                   className={urlIsValid ? 'cta-pill-btn cmo-url-pill-submit-active' : 'cta-pill-btn cmo-url-pill-submit-idle'}
                 >
-                  <span className="cmo-submit-label">Get Dashboard</span>
+                  <span className="cmo-submit-label">Connect</span>
                   <UpRightArrow className="cmo-submit-arrow" />
                 </button>
               </form>
@@ -3894,7 +4025,7 @@ const aboutCopyCtaLineStyle = {
   fontSize: 'clamp(0.8rem, 1vw, 0.88rem)',
   lineHeight: 1.6,
   color: 'rgba(42, 36, 32, 0.46)',
-  textAlign: 'justify',
+  textAlign: 'left',
 };
 
 const quoteAttributionNameStyle = {

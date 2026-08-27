@@ -20,6 +20,9 @@ import GlassTooltipLayer from '../../../components/GlassTooltipLayer';
 // HOLO PAPER mode (?tool=cloth) — the cloth/foil simulator. Client-only and
 // lazy so the mockup-video path pays nothing for it.
 const ClothStudio = dynamic(() => import('./ClothStudio'), { ssr: false });
+// PAINT mode (?tool=paint) — the p5.js procedural wallpaper studio. Client-only
+// and lazy so neither the mockup nor cloth paths pay anything for it.
+const PaintStudio = dynamic(() => import('./paint/PaintStudio'), { ssr: false });
 
 const VIEWPORTS = {
   desktop: { width: 1440, height: 900,  bezel: 30, depth: 40, corner: 26, screenCorner: 14, camZ: 2700, label: 'DESKTOP' },
@@ -481,8 +484,10 @@ export default function StudioPage() {
     setTool(next);
     try {
       const url = new URL(window.location.href);
-      if (next === 'cloth') url.searchParams.set('tool', 'cloth');
-      else url.searchParams.delete('tool');
+      // 'mockup' stays the clean, param-less default URL; every other tool
+      // (cloth, paint, …) gets an explicit ?tool= value.
+      if (next === 'mockup') url.searchParams.delete('tool');
+      else url.searchParams.set('tool', next);
       window.history.replaceState(null, '', url.toString());
     } catch { /* URL update is cosmetic */ }
   }, []);
@@ -626,7 +631,8 @@ export default function StudioPage() {
 	    if (qTemplate && CAMERA_TEMPLATES.some((tpl) => tpl.id === qTemplate)) setTemplateId(qTemplate);
 	    autoVideoRequestedRef.current = params.get('autovideo') === '1';
 	    if (params.get('director') === '1') setDirectorOpen(true);
-	    setTool(params.get('tool') === 'cloth' ? 'cloth' : 'mockup');
+	    const qTool = params.get('tool');
+	    setTool(qTool === 'cloth' ? 'cloth' : qTool === 'paint' ? 'paint' : 'mockup');
 	  }, []);
 
   // Source the site from the account's established website (no manual input).
@@ -2303,16 +2309,21 @@ export default function StudioPage() {
           data-tooltip-disabled="true"
           style={{
             position: 'absolute', top: 14, zIndex: 30,
-            ...(isNarrow ? { left: '50%', transform: 'translateX(-50%)' } : { right: RAIL_W + 24 }),
-            display: 'flex', gap: 4, padding: 4, borderRadius: 999,
+            ...(isNarrow
+              ? { left: 12, right: 12, width: 'calc(100% - 24px)', boxSizing: 'border-box', justifyContent: 'center', overflowX: 'hidden', overscrollBehaviorX: 'contain', scrollbarWidth: 'none' }
+              : { right: RAIL_W + 24 }),
+            display: 'flex', gap: 4, padding: isNarrow ? 4 : 4, borderRadius: 999,
             ...GLASS.surface,
           }}
         >
-          {[['mockup', 'MOCKUP VIDEO'], ['cloth', 'HOLO PAPER']].map(([id, label]) => (
+          {[['mockup', 'MOCKUP VIDEO'], ['cloth', 'HOLO PAPER'], ['paint', 'PAINT']].map(([id, label]) => (
             <button
               key={id}
               onClick={() => switchTool(id)}
-              style={{ ...ui.btn(tool === id), height: 30, padding: '0 14px', fontSize: 10 }}
+              style={{
+                ...ui.btn(tool === id), height: 30, padding: '0 14px', fontSize: 10, flexShrink: 0, whiteSpace: 'nowrap',
+                ...(isNarrow ? { flex: '1 1 0', minWidth: 0, padding: '0 6px', letterSpacing: 0 } : {}),
+              }}
             >
               {label}
             </button>
@@ -2323,7 +2334,9 @@ export default function StudioPage() {
       {/* Body — the canvas/board (with the exportable artboard on it) + the right rail.
           Stacks vertically on narrow screens; the board sits above, the UI below. */}
       <div id="studio-main-row" style={{ flex: 1, position: 'relative', minHeight: 0, display: isNarrow ? 'flex' : 'block', flexDirection: isNarrow ? 'column' : undefined }}>
-        {tool === 'cloth' ? (
+        {tool === 'paint' ? (
+          <PaintStudio isNarrow={isNarrow} railW={RAIL_W} authedFetch={authedFetch} />
+        ) : tool === 'cloth' ? (
           <ClothStudio isNarrow={isNarrow} railW={RAIL_W} isAdmin={isAdmin} authedFetch={authedFetch} />
         ) : tool === 'mockup' ? (
         <>

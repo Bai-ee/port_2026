@@ -17,8 +17,6 @@ import HomepageAnalytics from './components/HomepageAnalytics';
 
 const AppCanvas = dynamic(() => import('./ox.jsx'), { ssr: false });
 
-const SIMPLE_SCROLL_MEDIA_QUERY = '(max-width: 680px) and (pointer: coarse)';
-
 const HERO_PARAMS_START = {
   scale: 200,
   chaos: 0,
@@ -60,7 +58,12 @@ const HERO_PARAMS_END = {
   saturation: 1,
   lightness: 0.55,
   torusMajorRadius: 0.7,
-  torusTubeRadius: 2,
+  // ⚠️ Must stay well below 2: the particle projection in ox.jsx divides by
+  // (2 - torusTubeRadius·sin(v)). At 2 the denominator crosses 0 — particle
+  // positions blow up toward infinity and scroll-linked scale becomes wildly
+  // unstable (the "tube jumps from small to huge on fast scroll-up" bug).
+  // 1.6 keeps the expanded chaotic-cloud look with bounded (~2.5×) amplification.
+  torusTubeRadius: 1.6,
   animationSpeed: 3.4,
   opacity: 0.18,
 };
@@ -133,11 +136,7 @@ const HomePage = () => {
   const contentSectionRef = useRef(null);
   const paramsRef = useRef(HERO_PARAMS_START);
   const userParamsRef = useRef(HERO_PARAMS_START); // user's intentional settings (panel changes)
-  const isScrollMorphActiveRef = useRef(false);
   const heroProgressRef = useRef(0); // current scroll progress, kept in sync with ScrollTrigger
-  const snapCanvasRef = useRef(false); // signals canvas to reset smoothedParamsRef on next frame
-  const scatterCanvasRef = useRef(false); // signals canvas to re-scatter particles (replay load-in formation)
-  const heroMaxProgressRef = useRef(0); // deepest scroll reached this cycle — gates the return-to-top replay
 
   // Pre-paint so the copy never flashes into the recorded video.
   useLayoutEffect(() => {
@@ -176,17 +175,6 @@ const HomePage = () => {
   }, []);
 
   useLayoutEffect(() => {
-    // Teaser capture (?teaser=1): the loop's scatter/converge replay is
-    // load-in-only — returning to top must NOT break the loop apart again.
-    // Checked from the URL directly: this effect runs once on mount, before
-    // the teaserCleanMode state (set in the effect above) has re-rendered.
-    const isTeaserCapture = new URLSearchParams(window.location.search).has('teaser');
-
-    const useSimpleScrollViewport =
-      typeof window !== 'undefined' &&
-      typeof window.matchMedia === 'function' &&
-      window.matchMedia(SIMPLE_SCROLL_MEDIA_QUERY).matches;
-
     window.history.scrollRestoration = 'manual';
     window.scrollTo(0, 0);
 
@@ -194,7 +182,9 @@ const HomePage = () => {
     // canvasWrapperRef targets a stable div that is always in the DOM at mount time.
     // Querying 'canvas' directly fails when the dynamic @react-three/fiber component
     // hasn't mounted yet — the wrapper approach avoids that race.
-    const headline     = document.querySelector('#hero-panel-top-left');
+    // #hero-panel-top-left is intentionally absent here — HeroHeadline owns its
+    // reveal so the panel fade and the headline scramble share one clock, and
+    // so the scrambling headline leads this timeline's 0.2s delay on screen.
     const gradient     = document.querySelector('#hero-gradient-overlay');
     const canvasWrapper = canvasWrapperRef.current;
     const nav          = document.querySelector('#founders-top-strip');
@@ -207,7 +197,13 @@ const HomePage = () => {
       typeof window !== 'undefined' &&
       typeof window.matchMedia === 'function' &&
       window.matchMedia('(min-width: 900px)').matches;
-    gsap.set([gradient, headline, canvasWrapper, nav].filter(Boolean), { autoAlpha: 0 });
+    // The bottom peek's background band is this panel, not its children — gating
+    // only the children left the band on screen from first paint, ahead of the
+    // nav. Fade the panel itself rather than #content-section: the blur is a
+    // backdrop-filter, and an ancestor at opacity < 1 isolates the backdrop root,
+    // which kills the blur until opacity hits exactly 1 and then snaps it on.
+    const peekPanel = document.querySelector('#stack-peek-panel');
+    gsap.set([gradient, canvasWrapper, nav, peekPanel].filter(Boolean), { autoAlpha: 0 });
     gsap.set([panelHeadline, urlInputRow, panelCta, panelGrid].filter(Boolean), { autoAlpha: 0 });
 
     const tl = gsap.timeline({ delay: 0.2 });
@@ -217,29 +213,21 @@ const HomePage = () => {
         { autoAlpha: 1, scale: 1, duration: 1.1, ease: 'power2.out' }
       )
       .to(canvasWrapper, { autoAlpha: 1, duration: 1.2, ease: 'power2.out' }, '<0.1')
-      .to(nav,           { autoAlpha: 1, duration: 1.2, ease: 'power2.out' }, '<0.2')
-      .to(headline,      { autoAlpha: 1, duration: 1.05, ease: 'power2.out' }, '0.32')
+      // The nav and the bottom peek's website-url pill come in together, so both
+      // are anchored to this label rather than to each other's positions.
+      .addLabel('navReveal', '<0.2')
+      .to(nav,           { autoAlpha: 1, duration: 1.2, ease: 'power2.out' }, 'navReveal')
+      .to([peekPanel].filter(Boolean), { autoAlpha: 1, duration: 1.2, ease: 'power2.out' }, 'navReveal')
       .to(panelHeadline, { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '0.58')
       // URL input row fades in; panelCta ("Book a Call with Bryan") is
       // excluded — it's hidden by default at every width (see
       // #panel-hero-cta's CSS rule) and only appears via the scroll-triggered
       // pin in this file's other useLayoutEffect. Forcing it visible here
       // would pop it on load, overlapping the now-100%-width url input row.
-      .to([urlInputRow].filter(Boolean), { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '<0.15')
-      .to(panelGrid,     { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '<0.15');
-
-    // Replays the hero's entrance when the user returns to the top after scrolling
-    // through it — fades the 3D element back onto the page. Opacity-only on the
-    // canvas wrapper (transforms would shift ScrollTrigger pin positions); the
-    // gradient may scale since it is a separate overlay.
-    let entranceTween = null;
-    const replayHeroEntrance = () => {
-      if (entranceTween && entranceTween.isActive()) return;
-      scatterCanvasRef.current = true; // re-scatter particles so they converge back into the loop
-      entranceTween = gsap.timeline()
-        .fromTo(gradient,      { autoAlpha: 0, scale: 1.06 }, { autoAlpha: 1, scale: 1, duration: 0.9, ease: 'power2.out' })
-        .fromTo(canvasWrapper, { autoAlpha: 0 },              { autoAlpha: 1, duration: 1.0, ease: 'power2.out' }, '<0.1');
-    };
+      .to([urlInputRow].filter(Boolean), { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, 'navReveal')
+      // Absolute, not '<0.15' — that relative position tracked the url row, which
+      // no longer sits just before it.
+      .to(panelGrid,     { autoAlpha: 1, duration: 0.6, ease: 'power2.out' }, '0.88');
 
     // Scrub hero params directly from scroll progress to keep the transition
     // tied to the gesture instead of firing a one-shot time tween.
@@ -252,39 +240,30 @@ const HomePage = () => {
       scrub: true,
       invalidateOnRefresh: true,
       onUpdate: (self) => {
-        isScrollMorphActiveRef.current = true;
         heroProxy.progress = self.progress;
         heroProgressRef.current = self.progress;
-        if (self.progress > heroMaxProgressRef.current) heroMaxProgressRef.current = self.progress;
         paramsRef.current = interpolateHeroParams(getScrollBase(userParamsRef.current), HERO_PARAMS_END, heroProxy.progress);
       },
+      // Back above the hero start: point the live target at the user's params and
+      // let the canvas's per-frame exponential smoothing carry the morph home.
+      // Deliberately NO snap/setParams/replay here — a React params change resets
+      // smoothedParamsRef inside ox.jsx (instant pop), and the old scatter+fade
+      // "re-entrance replay" masked the pop with worse UX instead of fixing it.
       onLeaveBack: () => {
         heroProgressRef.current = 0;
         paramsRef.current = userParamsRef.current;
-        snapCanvasRef.current = true; // flush smoothedParamsRef drift accumulated from repeated scroll cycles
-        setParams(userParamsRef.current);
-        // Only replay if the user actually scrolled through the hero (not a
-        // micro-scroll) — and never during teaser capture (load-in only).
-        if (!isTeaserCapture && heroMaxProgressRef.current > 0.5) replayHeroEntrance();
-        heroMaxProgressRef.current = 0;
-      },
-      onToggle: (self) => {
-        if (!self.isActive) {
-          isScrollMorphActiveRef.current = false;
-          setParams(paramsRef.current);
-        }
       },
     });
 
+    // Re-sync the live param target after tab/window returns. Target-only on
+    // purpose: no setParams here — a React params change resets smoothedParamsRef
+    // in ox.jsx, flashing the tube whenever the window regains focus mid-page.
     const syncHeroFromScroll = () => {
       requestAnimationFrame(() => {
         heroST.refresh();
         heroProxy.progress = heroST.progress;
         heroProgressRef.current = heroST.progress;
         paramsRef.current = interpolateHeroParams(getScrollBase(userParamsRef.current), HERO_PARAMS_END, heroProxy.progress);
-        if (!isScrollMorphActiveRef.current) {
-          setParams(userParamsRef.current);
-        }
       });
     };
 
@@ -322,9 +301,7 @@ const HomePage = () => {
 
     return () => {
       tl.kill();
-      entranceTween?.kill();
       heroST.kill();
-      isScrollMorphActiveRef.current = false;
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('pageshow', handlePageShow);
       window.removeEventListener('focus', handleFocus);
@@ -396,7 +373,7 @@ const HomePage = () => {
       >
         <div id="hero-gradient-overlay" style={heroGradientStyle} />
         <div id="hero-canvas-wrapper" ref={canvasWrapperRef} style={{ position: 'absolute', inset: 0, opacity: 0 }}>
-          <AppCanvas params={params} liveParamsRef={paramsRef} backgroundColor={canvasBackground} snapRef={snapCanvasRef} scatterRef={scatterCanvasRef} />
+          <AppCanvas params={params} liveParamsRef={paramsRef} backgroundColor={canvasBackground} />
         </div>
         <HeroHeadline headerLogoRef={headerLogoRef} textColor={textColor} />
         {/* Section heading for screen readers and crawlers. Kept concise and

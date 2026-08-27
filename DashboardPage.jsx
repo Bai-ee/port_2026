@@ -50,6 +50,7 @@ import { BRIEF_TIER_ACCESS, BRIEF_PRODUCERS } from './features/scout-intake/brie
 import { deriveFindings } from './features/scout-intake/derived-findings.mjs';
 import ModuleCardControls from './components/dashboard/ModuleCardControls';
 import SubscribeModal from './components/payments/SubscribeModal';
+import DashboardCreationFailedModal from './components/dashboard/DashboardCreationFailedModal';
 import { AdminEmailDigestView, AdminCreateClientView } from './components/AdminEmailModals';
 import { CreativeBriefComposerView } from './components/dashboard/CreativeBriefComposerCard';
 import { AdminOperatingCostView } from './components/AdminCostView';
@@ -215,6 +216,13 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // Free-tier cooldown modal — opened by the countdown time in the source bar.
   // Shows time left + reschedule picker, with subscribe / run-once options.
   const [showCooldownModal, setShowCooldownModal] = useState(false);
+
+  // "Create dashboard anyway" — the client chose to view their (unpopulated)
+  // dashboard instead of taking one of the failure modal's help/delete exits.
+  // Session-only on purpose: it is NOT persisted, so a reload restores the
+  // failure gate and the client can still reach Bryan or delete the account.
+  // The underlying incident is untouched and stays open for admin review.
+  const [creationFailureBypassed, setCreationFailureBypassed] = useState(false);
 
   const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
@@ -5499,7 +5507,20 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // round-trip updates latestRunStatus — otherwise there's a visible 2s gap
   // between click and the terminal appearing.
   const moduleRunInFlight = Object.values(moduleRunLoading || {}).some(Boolean);
-  const showIntakeModal = !intakeModalDismissed && !bootstrapLoading && (
+  // Highest-priority client state (docs/plans/DASHBOARD_CREATION_FAILURE_UX_
+  // CLAUDE_PLAN.md §5): a hard-gated dashboard-creation incident supersedes
+  // every terminal/reveal decision below. Derived from bootstrap.creationFailure
+  // (Phase 3's allow-listed, impersonation-aware projection) — never from a
+  // locally-PERSISTED acknowledgment, so it cannot be permanently dismissed
+  // away. `bootstrap.creationFailure` is undefined until the first bootstrap
+  // response lands, so this is safely false while loading.
+  //
+  // The one exception is `creationFailureBypassed`: an explicit, in-memory
+  // "Create dashboard anyway" choice that survives only the current session.
+  // Nothing is written to localStorage or Firestore, so a reload puts the gate
+  // back and the incident stays open for admin review either way.
+  const creationFailureOpen = bootstrap.creationFailure?.status === 'open' && !creationFailureBypassed;
+  const showIntakeModal = !creationFailureOpen && !intakeModalDismissed && !bootstrapLoading && (
     (awaitingSignupProvision || !noWorkspaceState) && (
     awaitingSignupProvision
     || moduleRunInFlight
@@ -5544,6 +5565,16 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 
   useEffect(() => {
     if (typeof window === 'undefined' || !intakeDismissKey) return;
+    // Migration safety: a pre-Phase-5 client may have dismissed+acked this
+    // exact run's terminal before it was reclassified as a hard-gated
+    // incident. showIntakeModal's creationFailureOpen check above already
+    // ignores that old ack, but clear it outright so no future code path can
+    // reintroduce the "acknowledge it away" loophole by trusting this key.
+    if (creationFailureOpen) {
+      window.sessionStorage.removeItem(`intake-dismissed:${intakeDismissKey}`);
+      window.localStorage.removeItem(`intake-failed-acked:${intakeDismissKey}`);
+      return;
+    }
     if (window.sessionStorage.getItem(`intake-dismissed:${intakeDismissKey}`) === '1') {
       setIntakeModalDismissed(true);
     }
@@ -5554,7 +5585,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       && window.localStorage.getItem(`intake-failed-acked:${intakeDismissKey}`) === '1') {
       setIntakeModalDismissed(true);
     }
-  }, [intakeDismissKey, latestRunStatus]);
+  }, [intakeDismissKey, latestRunStatus, creationFailureOpen]);
 
   useEffect(() => {
     if (!bgRunToast) return undefined;
@@ -5622,7 +5653,13 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       window.sessionStorage.setItem(`intake-dismissed:${intakeDismissKey}`, '1');
       // Closing a FAILED run's terminal acknowledges it permanently —
       // localStorage so it survives new sessions/tabs (never-zombie rule).
-      if (latestRunStatus === 'failed') {
+      // NEVER for a hard-gated dashboard-creation incident: that state is
+      // superseded entirely by DashboardCreationFailedModal and must not be
+      // acknowledgeable away. In practice this branch can't even be reached
+      // for that case (the terminal itself is suppressed — showIntakeModal's
+      // creationFailureOpen check above), but the guard is explicit here too
+      // so the invariant holds even if a future call site changes that.
+      if (latestRunStatus === 'failed' && !creationFailureOpen) {
         window.localStorage.setItem(`intake-failed-acked:${intakeDismissKey}`, '1');
       }
     }
@@ -5642,14 +5679,14 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   };
 
   useEffect(() => {
-    const anyModalOpen = showIntakeModal || showTierModal || showClientEditModal || showDeleteAccountModal || briefFullScreen || auditFullScreen || Boolean(deliverableView) || Boolean(adhocTerminal?.open);
+    const anyModalOpen = showIntakeModal || showTierModal || showClientEditModal || showDeleteAccountModal || briefFullScreen || auditFullScreen || Boolean(deliverableView) || Boolean(adhocTerminal?.open) || creationFailureOpen;
     if (!anyModalOpen) {
       document.body.style.overflow = '';
       return undefined;
     }
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = ''; };
-  }, [showIntakeModal, showTierModal, showClientEditModal, showDeleteAccountModal, briefFullScreen, auditFullScreen, deliverableView, adhocTerminal?.open]);
+  }, [showIntakeModal, showTierModal, showClientEditModal, showDeleteAccountModal, briefFullScreen, auditFullScreen, deliverableView, adhocTerminal?.open, creationFailureOpen]);
 
   // First bootstrap resolved — latches true and never resets so later
   // refetches don't replay the entrance.
@@ -5684,11 +5721,16 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     // card-stagger effect reveals them.
     const sections = [strip, heroNum, heroMeta, capNav, ctaRow, capGrid].filter(Boolean);
 
-    if (showIntakeModal) {
+    if (showIntakeModal || creationFailureOpen) {
       setGridShellRevealed(false);
       setCardsRevealed(false);
       if (dashboardVisibleRef.current) {
-        // Was visible — fade out so the modal can take over
+        // Was visible — fade out so the modal can take over. Also the
+        // self-correction path for the hard-gate race: entranceReady can
+        // resolve before the bootstrap fetch that would reveal an open
+        // incident, so the reveal timeline below may already be running by
+        // the time creationFailureOpen flips true — this re-run (it's a
+        // dependency) hides everything again before the next paint.
         dashboardVisibleRef.current = false;
         const outTl = gsap.timeline();
         outTl.to([...sections, ...cards], { autoAlpha: 0, duration: 0.3, ease: 'power2.in' });
@@ -5728,12 +5770,12 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       .call(() => setGridShellRevealed(true), null, '1.2');
 
     return () => tl.kill();
-  }, [showIntakeModal, entranceReady]);
+  }, [showIntakeModal, entranceReady, creationFailureOpen]);
 
   // Card reveal — runs once the grid shell is on screen AND the first
   // bootstrap has resolved. No stagger: all cards display at once when ready.
   useLayoutEffect(() => {
-    if (!gridShellRevealed || !initialBootstrapDone || showIntakeModal) return undefined;
+    if (!gridShellRevealed || !initialBootstrapDone || showIntakeModal || creationFailureOpen) return undefined;
     const capGrid = capabilityGridRef.current;
     if (!capGrid) return undefined;
     const cards = gsap.utils.toArray('[data-capability-card]', capGrid);
@@ -5742,7 +5784,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     if (cards.length) gsap.set(cards, { autoAlpha: 1 });
     setCardsRevealed(true);
     return undefined;
-  }, [gridShellRevealed, initialBootstrapDone, showIntakeModal]);
+  }, [gridShellRevealed, initialBootstrapDone, showIntakeModal, creationFailureOpen]);
 
   // Polling while a run is in-flight
   useEffect(() => {
@@ -10493,7 +10535,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   disabled={reseedLoading || !reseedUrl.trim()}
                   style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minHeight: '3rem', border: 'none', borderRadius: '999px', background: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)', color: '#fff', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer', marginTop: '0.4rem', fontFamily: '"Space Mono", monospace', letterSpacing: '0.05em', textTransform: 'uppercase' }}
                 >
-                  {reseedLoading ? 'Working…' : 'Create Dashboard'}
+                  {reseedLoading ? 'Connecting…' : 'Connect'}
                 </button>
 
                 <div id="dashboard-associate-secondary-actions" style={{ display: 'flex', gap: '0.6rem', marginTop: '0.2rem' }}>
@@ -10867,13 +10909,13 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         disabled={reseedLoading || isRunActive || !reseedUrl.trim()}
                       >
                         <span className="reseed-run-btn-label-desktop">
-                          {reseedLoading ? 'Queueing...' :
+                          {reseedLoading ? 'Connecting…' :
                            latestRunStatus === 'queued' ? 'Intake Queued' :
                            latestRunStatus === 'running' ? 'Intake Running' :
-                           client ? 'Update & Rerun' : 'Create Dashboard'}
+                          'Connect'}
                         </span>
                         <span className="reseed-run-btn-label-mobile">
-                          {reseedLoading ? 'Queueing...' : 'Rerun'}
+                          {reseedLoading ? 'Connecting…' : 'Connect'}
                         </span>
                         <UpRightArrow id="reseed-run-btn-icon" />
                       </button>
@@ -12836,6 +12878,24 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           </div>
         </div>
       )}
+
+      {/* Phase 4 (docs/plans/DASHBOARD_CREATION_FAILURE_UX_CLAUDE_PLAN.md): the
+          modal itself is wired here — Phase 5 still owns suppressing the
+          Intake Terminal and preventing a dashboard-flash when both this
+          gate and showIntakeModal are true at once. */}
+      <DashboardCreationFailedModal
+        creationFailure={creationFailureOpen ? bootstrap.creationFailure : null}
+        websiteUrl={client?.websiteUrl || client?.website || ''}
+        onRequestDeleteAccount={() => setShowDeleteAccountModal(true)}
+        onContinueAnyway={() => {
+          // Also mark the intake terminal dismissed: with the gate lifted,
+          // showIntakeModal's `latestRunStatus === 'failed'` branch would
+          // otherwise replace this modal with the terminal's failure screen
+          // instead of revealing the dashboard the client just asked for.
+          setIntakeModalDismissed(true);
+          setCreationFailureBypassed(true);
+        }}
+      />
 
       {pendingDeleteClient && (
         <div
