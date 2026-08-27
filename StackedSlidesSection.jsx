@@ -2650,9 +2650,9 @@ const StackedSlidesSection = () => {
                                 style={{ position: 'relative', gridColumn: '1 / -1', paddingTop: '70px', zIndex: isMobileCapabilityOpen ? 6 : 1 }}
                               >
                                 {[
-                                  { ref: peekCard3Ref, id: 'dash-peek-card-3', left: '0%',  rotate: '-1.4deg', objPos: 'top center', label: '', img: '/img/ss3.png', height: '190px', topOffset: '0', bg: '#fcfaf4' },
-                                  { ref: peekCard2Ref, id: 'dash-peek-card-2', left: '33%', rotate: '1.2deg',  objPos: 'top center', label: '', img: '/img/claire_ss.png', height: '168px', topOffset: '0', bg: '#fcfaf4' },
-                                  { ref: peekCard1Ref, id: 'dash-peek-card-1', left: '66%', rotate: '-3.2deg', objPos: 'top center', label: '', img: '/img/undergroundex_ss.png', height: '200px', topOffset: '0', bg: '#fcfaf4' },
+                                  { ref: peekCard3Ref, id: 'dash-peek-card-3', left: '0%',  rotate: '-1.4deg', objPos: 'top center', label: '', img: '/img/UE.INFO.png', height: '190px', topOffset: '0', bg: '#fcfaf4' },
+                                  { ref: peekCard2Ref, id: 'dash-peek-card-2', left: '33%', rotate: '1.2deg',  objPos: 'top center', label: '', img: '/img/Viva.Acid.png', height: '168px', topOffset: '0', bg: '#fcfaf4' },
+                                  { ref: peekCard1Ref, id: 'dash-peek-card-1', left: '66%', rotate: '-3.2deg', objPos: 'top center', label: '', img: '/img/Critters.Quest.png', height: '200px', topOffset: '0', bg: '#fcfaf4' },
                                 ].map(({ ref: cardRef, id, left, rotate, objPos, label, img, height, topOffset, bg }, i) => (
                                   <div
                                     key={id}
