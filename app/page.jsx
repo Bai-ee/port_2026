@@ -14,7 +14,7 @@ const personSchema = {
   name: 'Bryan Balli',
   alternateName: ['Bai-ee', 'bballi'],
   url: SITE_URL,
-  image: `${SITE_URL}/img/og_meta_82628.optimized.jpg`,
+  image: `${SITE_URL}/img/og_meta_82628b.optimized.jpg`,
   jobTitle: 'AI Design Engineer & Creative Technologist',
   email: 'mailto:bryanballi@gmail.com',
   description:
