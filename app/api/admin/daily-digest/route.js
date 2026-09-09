@@ -31,7 +31,7 @@ const { hasValidWorkerSecret } = require('../../../../api/_lib/auth.cjs');
 const digestDelivery = require('../../../../api/_lib/digest-delivery.cjs');
 const { sendViaResend } = require('../../../../api/_lib/resend-transport.cjs');
 const { digestSelfOrigin, fetchWorkerJson, buildSendStampEntry } = require('../../../../api/_lib/digest-self-origin.cjs');
-const { resolveSendPolicy } = require('../../../../api/_lib/digest-send-policy.cjs');
+const { resolveSendPolicy, validateVideoPublishEmailGate } = require('../../../../api/_lib/digest-send-policy.cjs');
 
 // ── Config ──────────────────────────────────────────────────────────────────
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
@@ -3453,25 +3453,23 @@ export async function GET(request) {
 
     // Approval/auto mode promises an actionable daily-video row. Never send a
     // misleading email without the video, without a connected client account,
-    // or (in approval mode) without the approval button. The admin can retry
-    // after the already-queued render finishes or connect the account first.
+    // or, on a manual send where social writes are allowed, without the
+    // approval button. Scheduled sends must not mint approval links, so a
+    // missing approval URL there cannot block the email.
     if (isRealSend && wantRemix && homeClientId) {
       const publishMode = videoOwnerDigestCfg?.autoPublish?.platforms?.x?.mode || 'off';
       const publishResult = videoPublishCtx.x;
-      if (publishMode !== 'off') {
-        if (!videoItems.remix || videoItems.remix.stale) {
-          throw new Error(`No completed Video Remix is available for the selected video source; email was not sent.`);
-        }
-        if (publishResult?.skipped === 'not-connected') {
-          throw new Error(`X is not connected for video owner ${videoSourceClientId}; email was not sent because no working approval/publish action could be created.`);
-        }
-        if (publishMode === 'approval' && !publishResult?.approvalUrl) {
-          throw new Error(`Approval link could not be created for video owner ${videoSourceClientId}; email was not sent.`);
-        }
-        if (publishResult?.skipped === 'enqueue-failed' || publishResult?.skipped === 'publish-failed') {
-          throw new Error(`Daily video ${publishMode} setup failed for video owner ${videoSourceClientId}; email was not sent.`);
-        }
-      }
+      const gateError = validateVideoPublishEmailGate({
+        isRealSend,
+        allowSocialSideEffects,
+        wantRemix,
+        homeClientId,
+        publishMode,
+        publishResult,
+        remixVideo: videoItems.remix,
+        videoSourceClientId,
+      });
+      if (gateError) throw gateError;
     }
 
     const sessionStr = ga4.overview ? `, ${ga4.overview.sessions} session${ga4.overview.sessions !== 1 ? 's' : ''}` : '';

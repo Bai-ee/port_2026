@@ -3,7 +3,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { resolveSendPolicy } = require('../digest-send-policy.cjs');
+const { resolveSendPolicy, validateVideoPublishEmailGate } = require('../digest-send-policy.cjs');
 const { buildRefreshStampEntry, buildSendStampEntry } = require('../digest-self-origin.cjs');
 
 // ── Send policy: the scheduled-send invariants (EMAIL-REBUILD-PLAN.md §3) ────
@@ -34,6 +34,48 @@ test('previews and templates never touch social state and are never real sends',
     assert.equal(p.allowSocialSideEffects, false);
     assert.equal(p.allowFreshBriefRun, false);
   }
+});
+
+test('scheduled approval-mode video email does not require an approval link', () => {
+  const err = validateVideoPublishEmailGate({
+    isRealSend: true,
+    allowSocialSideEffects: false,
+    wantRemix: true,
+    homeClientId: 'client-a',
+    publishMode: 'approval',
+    publishResult: { preview: true, approvalUrl: null },
+    remixVideo: { url: 'https://example.com/remix.mp4', stale: false },
+    videoSourceClientId: 'video-owner',
+  });
+  assert.equal(err, null);
+});
+
+test('manual approval-mode video email still requires an approval link', () => {
+  const err = validateVideoPublishEmailGate({
+    isRealSend: true,
+    allowSocialSideEffects: true,
+    wantRemix: true,
+    homeClientId: 'client-a',
+    publishMode: 'approval',
+    publishResult: { approvalUrl: null },
+    remixVideo: { url: 'https://example.com/remix.mp4', stale: false },
+    videoSourceClientId: 'video-owner',
+  });
+  assert.match(err?.message, /Approval link could not be created/);
+});
+
+test('real video email still refuses to send without a completed remix', () => {
+  const err = validateVideoPublishEmailGate({
+    isRealSend: true,
+    allowSocialSideEffects: false,
+    wantRemix: true,
+    homeClientId: 'client-a',
+    publishMode: 'approval',
+    publishResult: { preview: true },
+    remixVideo: null,
+    videoSourceClientId: 'video-owner',
+  });
+  assert.match(err?.message, /No completed Video Remix/);
 });
 
 // ── Refresh stamp contract ───────────────────────────────────────────────────
