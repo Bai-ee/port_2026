@@ -8,12 +8,13 @@ const { buildRefreshStampEntry, buildSendStampEntry } = require('../digest-self-
 
 // ── Send policy: the scheduled-send invariants (EMAIL-REBUILD-PLAN.md §3) ────
 
-test('a SCHEDULED send is zero-LLM, zero-social, zero-fresh-brief', () => {
+test('a SCHEDULED send allows video approval preparation but no LLM or automatic publishing', () => {
   const p = resolveSendPolicy({ isPreview: false, isTemplate: false, isSendNow: false });
   assert.equal(p.isRealSend, true);
   assert.equal(p.isScheduledSend, true);
   assert.equal(p.allowInlineLlm, false);
   assert.equal(p.allowSocialSideEffects, false);
+  assert.equal(p.allowVideoApproval, true);
   assert.equal(p.allowFreshBriefRun, false);
 });
 
@@ -32,11 +33,12 @@ test('previews and templates never touch social state and are never real sends',
     assert.equal(p.isRealSend, false, JSON.stringify(mode));
     assert.equal(p.isScheduledSend, false);
     assert.equal(p.allowSocialSideEffects, false);
+    assert.equal(p.allowVideoApproval, false);
     assert.equal(p.allowFreshBriefRun, false);
   }
 });
 
-test('scheduled approval-mode video email does not require an approval link', () => {
+test('scheduled approval-mode video email requires an approval link', () => {
   const err = validateVideoPublishEmailGate({
     isRealSend: true,
     allowSocialSideEffects: false,
@@ -47,7 +49,17 @@ test('scheduled approval-mode video email does not require an approval link', ()
     remixVideo: { url: 'https://example.com/remix.mp4', stale: false },
     videoSourceClientId: 'video-owner',
   });
-  assert.equal(err, null);
+  assert.match(err?.message, /Approval link could not be created/);
+});
+
+test('scheduled approval email accepts a working link or an already published video', () => {
+  for (const publishResult of [{ approvalUrl: 'https://hitloop.agency/post-approval?token=test' }, { publishedAt: '2026-09-11T13:00:00Z' }]) {
+    assert.equal(validateVideoPublishEmailGate({
+      isRealSend: true, allowSocialSideEffects: false, wantRemix: true,
+      homeClientId: 'client-a', publishMode: 'approval', publishResult,
+      remixVideo: { url: 'https://example.com/video.mp4', stale: false },
+    }), null);
+  }
 });
 
 test('manual approval-mode video email still requires an approval link', () => {

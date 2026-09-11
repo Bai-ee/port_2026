@@ -115,6 +115,14 @@ Dashboard counterpart (`app/api/social-posting/route.js` actions `approve-post`/
 
 ## 5. Email wiring + the roll-up
 
+Scheduled-send correction (2026-09-11): real scheduled emails may create
+`awaiting_approval` video drafts and mint approval links. They still cannot
+generate copy, queue automatically scheduled posts, or call X to publish.
+Preview/template requests never create drafts or tokens. Approval-mode emails
+require a working approval URL, or an already-published result; they must not
+render the preview-only placeholder. The recipient's explicit publish action
+remains responsible for posting to the selected video's owner account.
+
 `app/api/admin/daily-digest/route.js`:
 - The selected Video Remix publishing owner and file library are resolved
   independently before captioning or publishing.

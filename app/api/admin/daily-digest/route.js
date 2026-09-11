@@ -994,7 +994,9 @@ function buildAutoPublishRow(ctx) {
     : '';
 
   let action = '';
-  if (ctx.mode === 'approval' && ctx.approvalUrl) {
+  if (ctx.mode === 'approval' && ctx.publishedAt) {
+    action = `<div style="font-family:${DT.fMono};font-size:10px;color:#2f9e6b;">ALREADY POSTED TO ${platformLabel}</div>`;
+  } else if (ctx.mode === 'approval' && ctx.approvalUrl) {
     // Bulletproof-table CTA — no flex, no JS, Outlook-safe.
     const href = escapeHtml(ctx.approvalUrl);
     action = `<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border-radius:8px;background:${DT.ink};">
@@ -2080,11 +2082,12 @@ async function enqueueDigestSuggestedPost({ homeClientId, briefs, timestamp, ste
 // email-vs-preview itself). Never throws: every exit is a return, and the
 // caller still wraps the call for defense in depth. Returns a ctx object
 // ready for buildVideoPostRow, or null when nothing applies (mode 'off').
-async function enqueueAutoPublishVideoPost({ clientId, platform, videoItems, timestamp, digestCfg, step }) {
+async function enqueueAutoPublishVideoPost({ clientId, platform, videoItems, timestamp, digestCfg, step, approvalOnly = false, allowInlineLlm = true }) {
   const platformLabel = platform === 'x' ? 'X' : platform;
   const platformCfg = digestCfg?.autoPublish?.platforms?.[platform];
   const mode = platformCfg?.mode || 'off';
   if (!clientId || mode === 'off') return null;
+  if (approvalOnly && mode !== 'approval') return { mode, skipped: 'scheduled-publish-disabled' };
 
   let clientName = clientId;
   try {
@@ -2193,7 +2196,7 @@ async function enqueueAutoPublishVideoPost({ clientId, platform, videoItems, tim
   // The caption is already generated upstream for the email card — reuse it
   // (zero extra LLM cost). Only fall back to a fresh generation if it's empty.
   let caption = String(item.caption || '').trim();
-  if (!caption) {
+  if (!caption && allowInlineLlm) {
     try {
       caption = await generatePromoCopy({ name: clientName }, {});
     } catch { /* leave empty — handled below */ }
@@ -2841,9 +2844,9 @@ export async function GET(request) {
     // time-boxed sends and orphaned "running" brief_runs; fresh data must be
     // produced by /api/worker/pre-digest-refresh before this route sends.
     // What this request mode may do — see api/_lib/digest-send-policy.cjs.
-    // Scheduled sends are zero-LLM and zero-social; manual sends keep both;
+    // Scheduled sends prepare video approvals but never generate or publish;
     // no send path publishes a fresh brief (the refresh phase owns that).
-    const { isRealSend, isScheduledSend, allowInlineLlm, allowSocialSideEffects } =
+    const { isRealSend, isScheduledSend, allowInlineLlm, allowSocialSideEffects, allowVideoApproval } =
       resolveSendPolicy({ isPreview, isTemplate, isSendNow });
 
     // Delivery identity (P1-C + P1-2 fixes), resolved once, early. Uses the
@@ -3367,10 +3370,8 @@ export async function GET(request) {
     }
 
     let xPostResult = null;
-    // Social writes are MANUAL-send-only (policy): a scheduled send must never
-    // queue a post, mint an approval token, or publish — social publishing
-    // gets its own schedule/job in Phase 4. Until then, scheduled sends note
-    // the skip honestly in the terminal log.
+    // Suggested-post scheduling and automatic publishing remain manual-only.
+    // Video approval drafts below require an explicit recipient action.
     if (isScheduledSend && digestCfg?.autoPostX !== false) {
       step('info', 'X post queue skipped on scheduled send (social side effects are manual-send-only until Phase 4).');
     }
@@ -3394,23 +3395,18 @@ export async function GET(request) {
     // describes the configured mode (read-only, no Firestore writes).
     const videoPublishCtx = { x: null };
     if (wantRemix && homeClientId) {
-      // Manual sends still refuse to proceed on a broken publish config (an
-      // operator is acting on it); a SCHEDULED send skips social entirely, so
-      // a social-config problem must never block the email itself.
-      if (allowSocialSideEffects && videoOwnerConfigLoadFailed) {
+      // A real send needs the owner's policy to prepare the correct action.
+      if ((allowSocialSideEffects || allowVideoApproval) && videoOwnerConfigLoadFailed) {
         throw new Error(`Publishing settings could not be loaded for video owner ${videoSourceClientId}; email was not sent.`);
-      }
-      if (isScheduledSend && videoOwnerConfigLoadFailed) {
-        step('warn', `Publishing settings could not be loaded for video owner ${videoSourceClientId} — auto-publish skipped; email continues.`);
       }
       const publishPlatform = 'x';
       const publishMode = videoOwnerDigestCfg?.autoPublish?.platforms?.[publishPlatform]?.mode || 'off';
       const publishClientId = videoSourceClientId;
-      if (isScheduledSend && publishMode !== 'off') {
+      if (isScheduledSend && publishMode === 'auto') {
         step('info', `Auto-publish (@${publishPlatform}, mode ${publishMode}) skipped on scheduled send — social side effects are manual-send-only until Phase 4.`);
       }
       if (publishMode !== 'off') {
-        if (allowSocialSideEffects) {
+        if (allowSocialSideEffects || (allowVideoApproval && publishMode === 'approval')) {
           try {
             const result = await enqueueAutoPublishVideoPost({
               clientId: publishClientId,
@@ -3419,6 +3415,8 @@ export async function GET(request) {
               timestamp,
               digestCfg: videoOwnerDigestCfg,
               step,
+              approvalOnly: !allowSocialSideEffects,
+              allowInlineLlm,
             });
             // Every per-client digest keeps its own actionable button. The
             // independent master roll-up also lists this pending post, so the
@@ -3445,7 +3443,8 @@ export async function GET(request) {
           } catch { /* fall back to the raw id */ }
           videoPublishCtx[publishPlatform] = {
             clientName: publishClientName, handle, mode: publishMode, platformLabel: 'X',
-            approvalUrl: null, publishedAt: null, preview: true,
+            approvalUrl: null, publishedAt: null, preview: !isRealSend,
+            skipped: isScheduledSend ? 'scheduled-publish-disabled' : undefined,
           };
         }
       }
@@ -3453,9 +3452,7 @@ export async function GET(request) {
 
     // Approval/auto mode promises an actionable daily-video row. Never send a
     // misleading email without the video, without a connected client account,
-    // or, on a manual send where social writes are allowed, without the
-    // approval button. Scheduled sends must not mint approval links, so a
-    // missing approval URL there cannot block the email.
+    // or without the approval button on either manual or scheduled sends.
     if (isRealSend && wantRemix && homeClientId) {
       const publishMode = videoOwnerDigestCfg?.autoPublish?.platforms?.x?.mode || 'off';
       const publishResult = videoPublishCtx.x;

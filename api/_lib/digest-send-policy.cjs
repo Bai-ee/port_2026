@@ -6,8 +6,9 @@
 // invariants are testable and greppable instead of scattered conditions:
 //
 //  - A SCHEDULED send (cron fan-out / sweep reclaim) is zero-generation and
-//    zero-side-effect: no LLM call of any kind, no social queue write, no
-//    approval-token mint, no X publish, no fresh-brief publish. It reads saved
+//    no automatic publishing: no LLM call, no scheduled social queue write,
+//    no X publish, no fresh-brief publish. Approval-only drafts and tokens
+//    are allowed for explicit recipient action. It reads saved
 //    data, renders, snapshots, sends. Anything missing renders an honest
 //    empty/stale state.
 //  - A MANUAL send (admin Send Now) may run inline LLM (bounded by
@@ -29,6 +30,7 @@ function resolveSendPolicy({ isPreview = false, isTemplate = false, isSendNow = 
     // Social writes (suggested-post queue, auto-publish, approval tokens):
     // manual real sends only.
     allowSocialSideEffects: isRealSend && !isScheduledSend,
+    allowVideoApproval: isRealSend,
     // Fresh hosted-brief publish: no send path, ever (refresh phase owns it).
     allowFreshBriefRun: false,
   };
@@ -50,12 +52,12 @@ function validateVideoPublishEmailGate({
     return new Error(`No completed Video Remix is available for the selected video source; email was not sent.`);
   }
 
-  if (!allowSocialSideEffects) return null;
+  if (!allowSocialSideEffects && publishMode !== 'approval') return null;
 
   if (publishResult?.skipped === 'not-connected') {
     return new Error(`X is not connected for video owner ${videoSourceClientId}; email was not sent because no working approval/publish action could be created.`);
   }
-  if (publishMode === 'approval' && !publishResult?.approvalUrl) {
+  if (publishMode === 'approval' && !publishResult?.approvalUrl && !publishResult?.publishedAt) {
     return new Error(`Approval link could not be created for video owner ${videoSourceClientId}; email was not sent.`);
   }
   if (publishResult?.skipped === 'enqueue-failed' || publishResult?.skipped === 'publish-failed') {
