@@ -196,6 +196,18 @@ if (!args.client) {
   process.exit(1);
 }
 
+// ⚠️ A sweep where EVERY account failed is an environment problem, not a quiet
+// window, and writing it replaces a good scan with an empty one — which is
+// exactly what a broken launchd PATH did here for weeks while reporting a
+// clean run. A genuinely empty window still writes: it has successes, just no
+// candidates worth quoting.
+if (targets.length > 0 && payload.succeeded === 0) {
+  console.error(`\nERROR: all ${targets.length} accounts failed — refusing to overwrite the stored scan with an empty one.`);
+  if (failures.length) console.error(`  first error: ${failures[0].error}`);
+  console.error('  Fix the cause and re-run. Use --force-empty only if you genuinely want to clear it.');
+  if (!args.forceEmpty) process.exit(1);
+}
+
 // Env before firebase-admin, or the SDK falls back to application-default creds.
 const require = createRequire(import.meta.url);
 require(path.join(REPO, 'features/not-the-rug-brief/load-env'));

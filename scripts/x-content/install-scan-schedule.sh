@@ -62,6 +62,14 @@ case "$cmd" in
   <dict>
     <key>BIRD</key><string>${BIRD_PATH}</string>
     <key>HOME</key><string>${HOME}</string>
+    <!-- ⚠️ Required, and the reason this job silently produced empty scans for
+         weeks. launchd runs with PATH=/usr/bin:/bin:/usr/sbin:/sbin, and
+         \`bird\` is a \`#!/usr/bin/env node\` script — so it died with
+         "env: node: No such file or directory" on every account while the
+         scan itself reported a clean run and wrote 0 candidates. Naming the
+         node binary in ProgramArguments is not enough; the child process
+         needs to find node too. -->
+    <key>PATH</key><string>$(dirname "${NODE_BIN}"):/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
   <key>WorkingDirectory</key><string>${REPO}</string>
   <key>StartCalendarInterval</key>

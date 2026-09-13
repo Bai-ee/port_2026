@@ -219,6 +219,12 @@ async function main() {
   }
 
   for (const { clientId, payload } of results) {
+    // Same guard as the single-client scan: a client whose every account
+    // failed must not have its stored scan replaced by an empty one.
+    if (payload.scanned > 0 && payload.succeeded === 0) {
+      process.stderr.write(`  ${clientId}: every account failed — keeping the previous scan\n`);
+      continue;
+    }
     await fb.adminDb.collection('dashboard_state').doc(clientId)
       .set({ marketingBrief: { quoteTargets: payload } }, { merge: true });
     process.stdout.write(`wrote dashboard_state/${clientId}.marketingBrief.quoteTargets\n`);
