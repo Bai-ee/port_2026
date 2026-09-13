@@ -226,6 +226,56 @@ One-off, backward-looking. Free except view backfill. Full runbook: [`scripts/x-
 
 ---
 
+## 8b. The per-client layer — `features/x-benchmark/`
+
+Everything above describes one account measured against one benchmark by hand.
+`features/x-benchmark/` is the same analysis as functions, so a second client gets it without a
+second act of authorship. Built 2026-09-12; plan and phase rationale in
+[`docs/plans/X-GROWTH-PRODUCTIZATION-PLAN.md`](../plans/X-GROWTH-PRODUCTIZATION-PLAN.md).
+
+| Module | Does |
+|---|---|
+| `taxonomy.js` | One account-agnostic topic vocabulary (21 labels) + per-client `lanes`, tagged separately |
+| `normalize-corpus.js` | Raw timeline → the corpus row shape everything else assumes |
+| `summarize.js` | Corpus → scale-free stat block (`lift` = performance relative to the same account's own average) |
+| `compare.js` | Two stat blocks → ranked gap report + projection |
+| `profile.js` | The per-client contract: handle, benchmarks, lanes, mode, tier |
+| `derive-watchlist.js` | Benchmark corpus → quote targets (the rule behind the 39 hand-picked handles) |
+| `build-calendar.js` | Gap report + tier → the slot plan `day-plan.js` already consumes |
+| `store.js` | `x_corpora/{handle}` (stat blocks, shared) + `dashboard_state/{clientId}.marketingBrief.xGrowth` (per-client report + calendar) |
+
+**The flow:** `ingest-corpus.mjs --handle X --write` (local, per account, benchmark and client alike)
+→ `refresh-analysis` action on `/api/dashboard/quote-targets` (free, offline, pure)
+→ `scan-all-clients.mjs` (one shared, rate-budgeted sweep for every enrolled client)
+→ the X Calendar card's gap panel and day-plan slot view.
+
+Config lives at `client_configs/{clientId}.marketingBriefConfig.xGrowth` and is normalized in
+`app/api/dashboard/marketing-brief/config/route.js` — ⚠️ a block that route does not explicitly
+name is dropped on every save.
+
+### ⚠️ Things that will bite
+
+- **A share delta is not a recommendation.** Copying the benchmark's raw type mix scored **0.84×** on
+  the real pair — it would have cut `@bai_ee`'s best type and added one it executes badly. Gaps carry
+  `direction` (increase / decrease / **hold** / **investigate**) and only the actionable two carry impact.
+- **Impacts are per-unit.** `perDay` and `perPost` are different claims and are never ranked against
+  each other; `shape` findings carry no impact at all.
+- **Topic labels are per-tagger.** Cross-account topic comparison is suppressed below 30% vocabulary
+  overlap. The old per-account taggers shared 1 label out of 28.
+- **Clock hours never cross accounts.** Generated calendars take their hours from the client's *own*
+  history. Different timezones, different audiences.
+- **ScrapeCreators cannot serve X timelines at this account size.** Probed 2026-09-12:
+  `/v1/twitter/user-tweets` returns `{success:true, tweets:[]}` for `@seb__design` (1,549 followers,
+  782 posts in the window). Ingest and scan are local-only via `bird`; the X API stays spend-gated.
+- **A bird timeline carries no view counts.** Ingested corpora report 0% view coverage and null
+  engagement rates; every `lift` is likes-based for exactly this reason.
+- **Engagement rate must be pooled, not averaged.** The "3.36% ER" once cited for `@bai_ee`'s
+  `original-showcase` is `avgER`, a mean of per-post ratios that low-view posts inflate. Pooled ER for
+  that set is **1.68%**, below the account's 1.84% average. The conclusion (showcase is its best type)
+  holds on likes-lift at **1.61×**; the statistic did not.
+
+---
+
 ## 9. Current state (2026-09-10)
 
 - Research complete; dashboard published; strategy documented.
