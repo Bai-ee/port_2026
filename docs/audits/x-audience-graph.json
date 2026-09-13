@@ -1,0 +1,205 @@
+{
+  "generatedAt": "2026-09-11T03:18:56.712Z",
+  "window": {
+    "start": "2026-07-07",
+    "end": "2026-09-10"
+  },
+  "method": "Outbound amplification graph derived from post captions and quotedAuthor. Follower roster and following list are NOT available — see the caveat in the dashboard section.",
+  "accounts": {
+    "seb": {
+      "handle": "seb__design",
+      "followers": 1549,
+      "amplification": {
+        "viaQuote": 231,
+        "viaRetweet": 88,
+        "quoteSharePct": 72.41,
+        "distinctAccounts": 267,
+        "postsSpent": 320,
+        "onceOnly": 237,
+        "onceOnlyShare": 88.76,
+        "repeat3Plus": 8,
+        "top5Share": 9.38,
+        "selfQuotes": 106,
+        "topTargets": [
+          {
+            "handle": "rare_jpg",
+            "n": 8,
+            "types": {
+              "retweet": 2,
+              "quote-react": 6
+            }
+          },
+          {
+            "handle": "interiorsuckerr",
+            "n": 7,
+            "types": {
+              "quote-react": 6,
+              "quote-commentary": 1
+            }
+          },
+          {
+            "handle": "figma",
+            "n": 6,
+            "types": {
+              "quote-react": 6
+            }
+          },
+          {
+            "handle": "RaminNasibov",
+            "n": 5,
+            "types": {
+              "quote-react": 5
+            }
+          },
+          {
+            "handle": "thatguybg",
+            "n": 4,
+            "types": {
+              "quote-commentary": 3,
+              "quote-react": 1
+            }
+          },
+          {
+            "handle": "CharlesPattson",
+            "n": 3,
+            "types": {
+              "quote-react": 1,
+              "retweet": 2
+            }
+          },
+          {
+            "handle": "vanschneider",
+            "n": 3,
+            "types": {
+              "quote-commentary": 2,
+              "quote-react": 1
+            }
+          },
+          {
+            "handle": "SciFiArchives",
+            "n": 3,
+            "types": {
+              "retweet": 2,
+              "quote-react": 1
+            }
+          }
+        ]
+      },
+      "activity": {
+        "total": 782,
+        "authored": 603,
+        "retweets": 179,
+        "retweetShare": 22.89,
+        "retweetsWithOwnViews": 0
+      },
+      "reach": {
+        "authoredPosts": 603,
+        "avgLikesAuthored": 36.35,
+        "likesPerFollowerPct": 2.35,
+        "medianViewsAuthored": 2205,
+        "viewsResolved": 150,
+        "viewsCoveragePct": 24.88,
+        "viewsPerFollowerPct": 142.35
+      }
+    },
+    "baiee": {
+      "handle": "bai_ee",
+      "followers": 1725,
+      "amplification": {
+        "viaQuote": 40,
+        "viaRetweet": 162,
+        "quoteSharePct": 19.8,
+        "distinctAccounts": 149,
+        "postsSpent": 202,
+        "onceOnly": 127,
+        "onceOnlyShare": 85.23,
+        "repeat3Plus": 10,
+        "top5Share": 16.34,
+        "selfQuotes": 1,
+        "topTargets": [
+          {
+            "handle": "seb__design",
+            "n": 8,
+            "types": {
+              "retweet": 7,
+              "quote-react": 1
+            }
+          },
+          {
+            "handle": "crittersquest",
+            "n": 8,
+            "types": {
+              "quote-commentary": 2,
+              "retweet": 6
+            }
+          },
+          {
+            "handle": "iDankyMcgee",
+            "n": 7,
+            "types": {
+              "retweet": 7
+            }
+          },
+          {
+            "handle": "jh3yy",
+            "n": 5,
+            "types": {
+              "retweet": 5
+            }
+          },
+          {
+            "handle": "0xCharlota",
+            "n": 5,
+            "types": {
+              "retweet": 4,
+              "quote-react": 1
+            }
+          },
+          {
+            "handle": "djmarkfarina",
+            "n": 4,
+            "types": {
+              "retweet": 4
+            }
+          },
+          {
+            "handle": "measure_plan",
+            "n": 4,
+            "types": {
+              "retweet": 3,
+              "quote-commentary": 1
+            }
+          },
+          {
+            "handle": "DmitryKurash",
+            "n": 4,
+            "types": {
+              "retweet": 4
+            }
+          }
+        ]
+      },
+      "activity": {
+        "total": 246,
+        "authored": 84,
+        "retweets": 162,
+        "retweetShare": 65.85,
+        "retweetsWithOwnViews": 0
+      },
+      "reach": {
+        "authoredPosts": 84,
+        "avgLikesAuthored": 2.46,
+        "likesPerFollowerPct": 0.14,
+        "medianViewsAuthored": 66.5,
+        "viewsResolved": 84,
+        "viewsCoveragePct": 100,
+        "viewsPerFollowerPct": 3.86
+      }
+    }
+  },
+  "ratios": {
+    "likesPerFollower": 16.79,
+    "followerCount": 1.11,
+    "selfQuoteGap": 106
+  }
+}

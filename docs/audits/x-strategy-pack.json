@@ -1,0 +1,172 @@
+{
+  "quoteTargets": [
+    {
+      "vein": "japanese-asian-design",
+      "why": "The model's smallest-volume vein (23/782 posts) but its highest-reach: median 14,584 views / median 15 likes, well above his 2,205 overall median. Low supply, high payoff — exactly the gap @bai_ee's quote-tweets are missing (his own quote-tweets average ~100 views because he quotes low-reach accounts, not this vein).",
+      "accounts": ["@rare_jpg", "@sirini_cha", "@quietcomp_", "@tndhjm", "@if6ukg", "@neybell_", "@yusuke_nm", "@hiro000509", "@darylginn", "@dezainaz_ceo"],
+      "captionPattern": "this is beyond creative, [one specific craft detail]"
+    },
+    {
+      "vein": "retro-analog-preinternet",
+      "why": "27/782 posts, median 11,014 views / 16 likes — the model's second-highest-reach vein. Repeated quote of @interiorsuckerr (3x) and @SciFiArchives (2x) shows a working pattern: nostalgia-coded visual artifacts read as craft signal, not just aesthetics.",
+      "accounts": ["@interiorsuckerr", "@SciFiArchives", "@ohhdanqi", "@cameronmoll", "@applefiles_", "@eduardosousa320", "@derax456", "@thefinnmckenty", "@eliza___v", "@blak3shao"],
+      "captionPattern": "nobody is making [object/interface] like this anymore"
+    },
+    {
+      "vein": "motion-animation-web",
+      "why": "The model's single largest tagged vein (88/782 posts, 11.3% of the corpus) — his highest-volume repeatable format. Median views are lower per-post (4,183) than the two veins above, but volume + consistency is what feeds topicConsistency in the retrieval tower rather than any single post's reach.",
+      "accounts": ["@markovurnek_", "@joki_hirooka", "@NeuralAA", "@lucasquan", "@MengTo", "@vanschneider", "@eduardosousa320", "@nitishkmrk", "@motion_so", "@AnatoleOis", "@figma"],
+      "captionPattern": "the timing on this is doing all the work"
+    },
+    {
+      "vein": "editorial-typography",
+      "why": "56/782 posts, median 3,972 views / 18.5 likes — the model's third-most-tagged vein, and the one @figma and @vanschneider both surface in, giving it credible reach beyond niche design accounts.",
+      "accounts": ["@figma", "@vanschneider", "@eduardosousa320", "@dsgnevrywhr", "@xiaoxiaodong01", "@iDID_team", "@jmdsgn", "@KolesnikSt79432", "@applefiles_", "@mikesmith187"],
+      "captionPattern": "the grid decision nobody notices but works"
+    },
+    {
+      "vein": "music-hardware-rave-design (Bryan-unique, not present in the model's corpus)",
+      "why": "Not measurable from either corpus — neither account posts in this vein, so there is no view/engagement number to cite here. This is a differentiation bet, not a data-backed one: it is the one design-adjacent vein where Bryan's actual build history (Underground Existence archive, LoopStudio, SP-16/EditTrax export) gives him standing the model account has no equivalent in. Handles below are well-known in music-hardware/rave-visual culture but are UNVERIFIED against either corpus or a live handle check — confirm before using.",
+      "accounts": ["@teenageengineering?", "@resident_advisor?", "@attackmagazine?", "@native_instruments?", "@moogmusic?", "@boilerroomtv?", "@elektron_official?", "@xlr8r?"],
+      "captionPattern": "this hardware/venue deserved better documentation"
+    }
+  ],
+  "campaigns": [
+    {
+      "name": "Archive Transmissions",
+      "runsFor": "6 weeks (12 posts), then evaluate against baseline",
+      "premise": "Turn the dormant Underground Existence Arweave rave/DJ mix archive into a recurring native-video series: a rescued mix paired with a generated visual treatment (WebGPU/TSL shader render or HOLO PAPER cloth sim reacting to the track). No other design-adjacent account on X can produce this specific combination.",
+      "cadence": "2 posts/week (Tue/Fri), 6 weeks, 12 posts total",
+      "assets": ["Underground Existence Arweave archive", "WebGPU/Three.js/TSL shaders", "HOLO PAPER cloth simulation", "GPU video render pipeline", "LoopStudio audio slicing"],
+      "postShapes": [
+        "Native 30-45s video: 15s of a rescued mix clip synced to a generative shader visual, captioned 'Archived on Arweave forever: [DJ], [year]. Nobody's playing this. I am.'",
+        "Before/after: LoopStudio waveform slice next to the shader render it drove, captioned 'Turned a 20-year-old rave tape into a live shader. Audio in, geometry out.'",
+        "Thread: '5 mixes that shaped a genre nobody archives properly' — one 20s clip + one line of history per tweet, archive link placed in the FIRST REPLY, not the primary post.",
+        "Follow-up quote of his own week-1 post with a concrete archive stat (mixes preserved, total plays), building the project as ongoing rather than a one-off flex."
+      ],
+      "successMetric": "Median views on Archive Transmissions posts vs. the current 66-view account-wide baseline; stretch target is closing meaningfully toward the model's 2,205 median within the run.",
+      "whyItWorks": "postTypeScoringHints 'asset' rewards native photo_expand/video_view media exactly like this, and mediaBoost (high confidence) predicts native video raises P(video_view); putting the Arweave link in the first reply follows the linkRisk workaround instead of the primary post; a single repeating on-brand vein (vs. scattered retweets) directly serves topicConsistency."
+    },
+    {
+      "name": "Shader a Day",
+      "runsFor": "21 consecutive days",
+      "premise": "One native-video build-log post per day of a WebGPU/TSL shader or HOLO PAPER cloth experiment, same slot every day, ending in a compiled recap reel.",
+      "cadence": "1 post/day, 21 consecutive days",
+      "assets": ["WebGPU/Three.js/TSL shaders", "HOLO PAPER cloth simulation", "GSAP", "PaintStudio"],
+      "postShapes": [
+        "'Day 4/21 — gave the cloth sim actual wind. Still fighting the seams.' + 8s screen capture.",
+        "'Day 11/21 — one number away from ruining this render. Guess which one.' + side-by-side of two parameter values.",
+        "'Day 18/21 — which pass should I open-source first, the cloth or the glass?' (direct question, no media required).",
+        "Day 21 recap thread: all 21 clips compiled into one video, one lesson-line per day."
+      ],
+      "successMetric": "Follower delta over the 21 days, and replies-per-post (target: at least 1 real reply per post, up from near-zero on his current original-text posts).",
+      "whyItWorks": "authorDiversityAttenuation (high confidence: cadence matters more than volume) favors one consistent daily slot over bursty posting; 21 same-vein posts compound topicConsistency; the Day-18 direct-question format is the exact pattern replyBoost (high confidence) describes as raising P(reply)."
+    },
+    {
+      "name": "Clone It Live",
+      "runsFor": "4 weeks (8 posts)",
+      "premise": "Publicly demonstrate Site Recreate and Invoice Studio as working tools — clone a real site or generate a themed invoice on camera, post the before/after as proof, keep the primary post link-free.",
+      "cadence": "2 posts/week, 4 weeks, 8 posts total",
+      "assets": ["Site Recreate", "Invoice Studio", "GPU video render pipeline"],
+      "postShapes": [
+        "'[site]'s homepage. 40 seconds. Downloadable zip.' + native video of Site Recreate cloning a public demo site.",
+        "Quote a designer complaining about invoice tooling: 'made you a themed one in 90 seconds' + Invoice Studio screen capture.",
+        "'Every tool on this account is one I built and use.' + a 4-clip carousel: Invoice Studio, LoopStudio, HOLO PAPER, PaintStudio.",
+        "Weekly quote of his own best clone from that week, adding one new data point (e.g. time-to-clone)."
+      ],
+      "successMetric": "Replies asking 'can you do mine' as a profile-interest proxy; target at least one per 2 posts, since raw follow/click counts aren't in either corpus.",
+      "whyItWorks": "postTypeScoringHints 'proof-loop' (repost primary, quote secondary) and 'case-study' (repost primary, profile_click secondary) directly match a live tool demo; keeping hasLink false on the primary post follows the linkRisk hypothesis."
+    },
+    {
+      "name": "Same-Day Remix",
+      "runsFor": "Ongoing; review after 30 days",
+      "premise": "Quote-tweet only inside the four proven design veins above, and only when there's a real artifact to add (a quick PaintStudio/HOLO PAPER remix or a one-line craft opinion) — never a bare reaction, and never a low-reach account.",
+      "cadence": "3-4 quote-tweets/week, targeting posts still in active circulation",
+      "assets": ["PaintStudio", "HOLO PAPER cloth simulation", "WebGPU/TSL shaders"],
+      "postShapes": [
+        "Quote a japanese-asian-design post: 'the way this manages negative space' + a 10s clip of the same layout logic re-rendered in HOLO PAPER cloth.",
+        "Quote a motion-animation-web post: 'stealing this timing curve for TSL' + an inline comparison clip.",
+        "Quote an editorial-typography post with a one-line craft opinion and no attached media, to keep the format fast.",
+        "Restrict all targets to the quoteTargets accounts list — never the low-reach accounts his current corpus shows him quoting (crittersquest, ghostradioshow, etc., all under 100 views)."
+      ],
+      "successMetric": "Average views per quote-tweet, moving off the current ~76-100 view floor by only quoting accounts inside the proven veins.",
+      "whyItWorks": "postTypeScoringHints 'kol-adjacent' (reply primary, repost secondary) rewards engaging established accounts; restricting to 4 fixed veins reinforces topicConsistency instead of the scattered low-reach quoting the corpus shows today."
+    }
+  ],
+  "causeEffect": [
+    {
+      "cause": "66% of posts are retweets of scattered, unrelated authors and topics (crypto-finance, us-politics, web3-gaming, music-archive-dj, ai-tooling, design-engineering all mixed together)",
+      "measured": "162/246 posts are type=retweet (65.9%); topics span 9+ unrelated categories including 18 crypto-finance and 4 us-politics posts",
+      "mechanism": "topicConsistency (medium confidence): 'Consistent topical posting helps the candidate retrieval tower (Two-Tower Model) surface posts to relevant audiences.' A feed this scattered gives the retrieval tower no consistent signal for who to show it to.",
+      "solution": "Cut retweet volume sharply; when resharing, stay inside 1-2 fixed veins (design/motion + music-hardware) instead of whatever crosses the timeline that day.",
+      "expectedEffect": "Plausibly improves audience-matching over weeks, not immediately; the profile does not give a numeric size for this effect, so treat this as directional, not guaranteed."
+    },
+    {
+      "cause": "Near-zero replying to other accounts (4 replies in 65 days)",
+      "measured": "4/246 posts are type=reply",
+      "mechanism": "The profile has no assumption specifically about replying TO other accounts (there is no 'replyEarlyWindow' id in x-2026-05-15.json — that name does not exist in the profile and should not be cited as fact). The closest grounded mechanisms are replyBoost (high confidence, about a post's OWN replies) and the postTypeScoringHints 'kol-adjacent' category (primaryAction: reply, secondaryAction: repost), which frames replying to established accounts as a discovery path.",
+      "solution": "Reply to 8-10 posts/day inside the proven design veins (see replyPlaybook) instead of treating replying as optional.",
+      "expectedEffect": "Reasoned, not measured — the profile doesn't quantify a reply-volume effect; this is inference from the kol-adjacent scoring hint, not a cited number."
+    },
+    {
+      "cause": "Quote-tweets aimed at accounts with almost no audience",
+      "measured": "40 quote-type posts average ~96 views (median 76.5), vs. the model's quote-tweets on the same format averaging 11,451 views on comparable posts",
+      "mechanism": "Not directly named in the profile — there is no assumption modeling 'the reach of the account you quote.' The closest adjacent mechanism is topicConsistency, since consistently quoting recognized, on-topic accounts (vs. one-off low-reach ones) is what keeps the retrieval tower's audience signal coherent.",
+      "solution": "Restrict quote-tweets to the accounts listed in quoteTargets — established, on-vein accounts only.",
+      "expectedEffect": "Should raise the per-quote view floor closer to the model's numbers, but the profile gives no formula for how much of the gap is attributable to this vs. other factors."
+    },
+    {
+      "cause": "No blue verification (Premium/Blue badge)",
+      "measured": "Given as external context, not present as a field in either corpus",
+      "mechanism": "Not modeled anywhere in x-2026-05-15.json — the profile has no verification-related assumption at all. This should not be asserted as an algorithmic cause; it may matter through mechanisms X hasn't published (e.g. reply visibility ordering), but that is outside this profile's scope.",
+      "solution": "Not addressable from this profile's evidence; treat as a possible but unconfirmed lever, separate from the ranking mechanisms below.",
+      "expectedEffect": "Unknown — cannot be estimated from the algorithm profile."
+    },
+    {
+      "cause": "Politics and crypto content mixed into an otherwise design/motion/music feed",
+      "measured": "18 crypto-finance + 4 us-politics posts out of 246 (9% of the corpus) sitting alongside design-engineering, ai-tooling, and music-archive-dj",
+      "mechanism": "topicConsistency (medium confidence): mixed, off-vein topics work against the retrieval tower's ability to match the account to a consistent relevant audience.",
+      "solution": "Stop posting politics/crypto entirely on this account; keep every post inside design/motion/music-hardware veins.",
+      "expectedEffect": "Directionally supports better audience matching; the profile gives no quantified topic-purity threshold, so this is a hedge, not a guarantee."
+    },
+    {
+      "cause": "Engagement rate is level with the model (1.84% vs 1.91% pooled) despite a ~33x gap in median views (66 vs 2,205)",
+      "measured": "1.84% vs 1.91% engagement rate; 66 vs 2,205 median views",
+      "mechanism": "This parity is diagnostic rather than a named mechanism: since the rate on the views he does get is competitive, the profile's content-quality-adjacent assumptions (mediaBoost, dwellLengthCorrelation) are not the likely bottleneck. The gap points at the reach/session-level mechanisms instead — authorDiversityAttenuation and topicConsistency.",
+      "solution": "Don't rework the creative voice; fix the mix (less retweeting, more replies, consistent topic, better quote targets) rather than the content itself.",
+      "expectedEffect": "This is a diagnostic conclusion, not a prediction — it explains where to look, not how much it will move the numbers."
+    },
+    {
+      "cause": "Original showcase posts (his actual craft work) still under-reach the model's baseline even when posted",
+      "measured": "29 original-showcase posts, median 52 views, below even the account's own 66.5 overall median",
+      "mechanism": "authorDiversityAttenuation (high confidence): 'Phoenix Scorer penalizes repeated same-author exposure in a single feed session. Cadence matters more than volume.' A feed dominated by 66% retweets likely means his few original posts get scored inside sessions where the account has already been shown once via a retweet, suppressing the original post's own reach.",
+      "solution": "Reduce retweet volume so original showcase posts aren't competing against his own retweets for the same feed sessions.",
+      "expectedEffect": "Plausible based on the stated hypothesis, but the profile marks this attenuation's exact magnitude unspecified — treat as a reasonable bet, not a measured lift."
+    }
+  ],
+  "replyPlaybook": {
+    "targetsPerDay": 10,
+    "windowHours": 6,
+    "rule": "There is no assumption named 'replyEarlyWindow' in x-2026-05-15.json — it does not exist in the profile and must not be cited as a real mechanism. The closest grounded guidance is: replyBoost (high confidence) — questions and direct conversation invitations meaningfully raise P(reply), a high-weight positive signal — and authorDiversityAttenuation (high confidence) — cadence matters more than volume within a session. The safe, grounded version of a 'reply window' rule is to spread the 10 daily replies across the day rather than bursting them, and to prioritize posts that are already inviting conversation, not to chase an unverified early-minutes velocity multiplier.",
+    "howToPick": [
+      "Stay inside the proven veins (japanese-asian-design, retro-analog-preinternet, motion-animation-web, editorial-typography, music-hardware) rather than general tech/crypto/politics.",
+      "Prioritize accounts with a real audience — the quoteTargets list, or comparable reach — mirroring the measured gap between quoting low-reach accounts (~96 views) and higher-reach ones (11,451 views on the model's account).",
+      "Prioritize posts that are already asking a question or inviting discussion, per replyBoost.",
+      "Prioritize posts with visible native media (video/image) already attached, since a craft-specific reply needs something concrete to react to.",
+      "Skip posts showing hard-sell or engagement-bait language ('like if', 'buy now', 'limited time') per hardSellPenalty and engagementBaitPenalty — replying there risks association with content those assumptions predict gets suppressed.",
+      "Rotate targets so no single account gets replied to twice in the same day, keeping the reply activity itself topically and author-wise diverse."
+    ],
+    "replyShapes": [
+      "Craft-specific technical reply: 'the easing on that hover state — spring or cubic-bezier? it doesn't overshoot the way most spring configs do.'",
+      "Build-along proof reply: 'rebuilt this exact grain effect in TSL last week, this is way cleaner than mine.'",
+      "One-line agreement + addition, no media: 'this is the actual argument against flat design and nobody says it this directly.'",
+      "Question-forward reply to invite a thread back: 'how's this holding up on lower-end GPUs? curious if the shader degrades gracefully.'"
+    ],
+    "antipatterns": [
+      "Replying with just an emoji or 'this is fire' — no craft content, doesn't function as an authority or reply-loop signal.",
+      "Replying to accounts with near-zero followings or engagement — the same low-reach problem measured in his quote-tweets.",
+      "Dropping a link in the reply — triggers the same linkRisk hypothesis as a primary post.",
+      "Replying across unrelated topics (politics, crypto, design) in the same day — works against topicConsistency instead of reinforcing a vein."
+    ]
+  }
+}

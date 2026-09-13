@@ -1,0 +1,355 @@
+{
+  "handle": "seb__design",
+  "pulledAt": "2026-09-10T20:46:16.205Z",
+  "posts": 782,
+  "firstPost": "2026-07-07T20:00:33.000Z",
+  "lastPost": "2026-09-10T20:26:01.000Z",
+  "daysCovered": 66,
+  "spanDays": 65,
+  "postsPerActiveDay": 11.85,
+  "byType": {
+    "quote-react": 183,
+    "retweet": 179,
+    "self-quote": 15,
+    "original-text": 169,
+    "original-showcase": 155,
+    "reply": 33,
+    "quote-commentary": 48
+  },
+  "hourHist": [
+    {
+      "hour": 0,
+      "n": 11,
+      "avgLikes": 10.4
+    },
+    {
+      "hour": 1,
+      "n": 1,
+      "avgLikes": 0
+    },
+    {
+      "hour": 2,
+      "n": 0,
+      "avgLikes": 0
+    },
+    {
+      "hour": 3,
+      "n": 0,
+      "avgLikes": 0
+    },
+    {
+      "hour": 4,
+      "n": 0,
+      "avgLikes": 0
+    },
+    {
+      "hour": 5,
+      "n": 2,
+      "avgLikes": 11.5
+    },
+    {
+      "hour": 6,
+      "n": 10,
+      "avgLikes": 29.9
+    },
+    {
+      "hour": 7,
+      "n": 26,
+      "avgLikes": 9.8
+    },
+    {
+      "hour": 8,
+      "n": 22,
+      "avgLikes": 10.8
+    },
+    {
+      "hour": 9,
+      "n": 33,
+      "avgLikes": 25.3
+    },
+    {
+      "hour": 10,
+      "n": 57,
+      "avgLikes": 44.2
+    },
+    {
+      "hour": 11,
+      "n": 42,
+      "avgLikes": 32.5
+    },
+    {
+      "hour": 12,
+      "n": 47,
+      "avgLikes": 14.1
+    },
+    {
+      "hour": 13,
+      "n": 61,
+      "avgLikes": 51.8
+    },
+    {
+      "hour": 14,
+      "n": 54,
+      "avgLikes": 34.6
+    },
+    {
+      "hour": 15,
+      "n": 52,
+      "avgLikes": 15.6
+    },
+    {
+      "hour": 16,
+      "n": 36,
+      "avgLikes": 50.9
+    },
+    {
+      "hour": 17,
+      "n": 66,
+      "avgLikes": 42.3
+    },
+    {
+      "hour": 18,
+      "n": 55,
+      "avgLikes": 18
+    },
+    {
+      "hour": 19,
+      "n": 46,
+      "avgLikes": 15.3
+    },
+    {
+      "hour": 20,
+      "n": 46,
+      "avgLikes": 26.4
+    },
+    {
+      "hour": 21,
+      "n": 50,
+      "avgLikes": 14.7
+    },
+    {
+      "hour": 22,
+      "n": 29,
+      "avgLikes": 41.1
+    },
+    {
+      "hour": 23,
+      "n": 36,
+      "avgLikes": 8.7
+    }
+  ],
+  "dayHist": {
+    "Thu": {
+      "n": 131,
+      "likes": 3835
+    },
+    "Wed": {
+      "n": 130,
+      "likes": 4001
+    },
+    "Tue": {
+      "n": 113,
+      "likes": 2084
+    },
+    "Mon": {
+      "n": 110,
+      "likes": 2094
+    },
+    "Sun": {
+      "n": 109,
+      "likes": 5067
+    },
+    "Sat": {
+      "n": 80,
+      "likes": 3277
+    },
+    "Fri": {
+      "n": 109,
+      "likes": 1564
+    }
+  },
+  "perDay": {
+    "2026-09-10": 11,
+    "2026-09-09": 15,
+    "2026-09-08": 11,
+    "2026-09-07": 6,
+    "2026-09-06": 7,
+    "2026-09-05": 7,
+    "2026-09-04": 16,
+    "2026-09-03": 15,
+    "2026-09-02": 19,
+    "2026-09-01": 12,
+    "2026-08-31": 13,
+    "2026-08-30": 11,
+    "2026-08-29": 8,
+    "2026-08-28": 18,
+    "2026-08-27": 19,
+    "2026-08-26": 20,
+    "2026-08-25": 7,
+    "2026-08-24": 13,
+    "2026-08-23": 18,
+    "2026-08-22": 6,
+    "2026-08-21": 8,
+    "2026-08-20": 11,
+    "2026-08-19": 6,
+    "2026-08-18": 8,
+    "2026-08-17": 6,
+    "2026-08-16": 8,
+    "2026-08-15": 12,
+    "2026-08-14": 18,
+    "2026-08-13": 8,
+    "2026-08-12": 14,
+    "2026-08-11": 9,
+    "2026-08-10": 5,
+    "2026-08-09": 8,
+    "2026-08-08": 3,
+    "2026-08-07": 2,
+    "2026-08-06": 9,
+    "2026-08-05": 7,
+    "2026-08-04": 7,
+    "2026-08-03": 12,
+    "2026-08-02": 9,
+    "2026-08-01": 7,
+    "2026-07-31": 5,
+    "2026-07-30": 6,
+    "2026-07-29": 5,
+    "2026-07-28": 7,
+    "2026-07-27": 4,
+    "2026-07-26": 14,
+    "2026-07-25": 15,
+    "2026-07-24": 9,
+    "2026-07-23": 5,
+    "2026-07-22": 10,
+    "2026-07-21": 20,
+    "2026-07-20": 23,
+    "2026-07-19": 21,
+    "2026-07-18": 10,
+    "2026-07-17": 18,
+    "2026-07-16": 12,
+    "2026-07-15": 13,
+    "2026-07-14": 26,
+    "2026-07-13": 28,
+    "2026-07-12": 13,
+    "2026-07-11": 12,
+    "2026-07-10": 15,
+    "2026-07-09": 35,
+    "2026-07-08": 21,
+    "2026-07-07": 6
+  },
+  "topicStats": {
+    "japanese-asian-design": {
+      "n": 23,
+      "avgLikes": 187.4,
+      "avgReplies": 1.6,
+      "avgReposts": 53.7
+    },
+    "client-work-credit": {
+      "n": 53,
+      "avgLikes": 41.2,
+      "avgReplies": 3.5,
+      "avgReposts": 2.9
+    },
+    "untagged-riff": {
+      "n": 441,
+      "avgLikes": 13.8,
+      "avgReplies": 1.7,
+      "avgReposts": 450.6
+    },
+    "editorial-typography": {
+      "n": 56,
+      "avgLikes": 39.7,
+      "avgReplies": 3.8,
+      "avgReposts": 9.3
+    },
+    "motion-animation-web": {
+      "n": 88,
+      "avgLikes": 59.6,
+      "avgReplies": 3.8,
+      "avgReposts": 22.7
+    },
+    "platform-meta": {
+      "n": 41,
+      "avgLikes": 26.1,
+      "avgReplies": 3.1,
+      "avgReposts": 3.3
+    },
+    "anti-ai-slop": {
+      "n": 19,
+      "avgLikes": 35.2,
+      "avgReplies": 3.6,
+      "avgReposts": 4.3
+    },
+    "industry-hot-take": {
+      "n": 15,
+      "avgLikes": 25.7,
+      "avgReplies": 3.5,
+      "avgReposts": 1.1
+    },
+    "freelance-business": {
+      "n": 80,
+      "avgLikes": 31.9,
+      "avgReplies": 3,
+      "avgReposts": 37.5
+    },
+    "own-work-process": {
+      "n": 45,
+      "avgLikes": 47.7,
+      "avgReplies": 5.1,
+      "avgReposts": 2.6
+    },
+    "tools": {
+      "n": 44,
+      "avgLikes": 38.8,
+      "avgReplies": 4,
+      "avgReposts": 2.2
+    },
+    "craft-advice": {
+      "n": 10,
+      "avgLikes": 36.2,
+      "avgReplies": 4.9,
+      "avgReposts": 3.4
+    },
+    "audience-question": {
+      "n": 14,
+      "avgLikes": 12.6,
+      "avgReplies": 3.6,
+      "avgReposts": 0.1
+    },
+    "retro-analog-preinternet": {
+      "n": 27,
+      "avgLikes": 65.7,
+      "avgReplies": 2.3,
+      "avgReposts": 27.9
+    },
+    "personal-vulnerability": {
+      "n": 8,
+      "avgLikes": 43.1,
+      "avgReplies": 10.4,
+      "avgReposts": 15.8
+    },
+    "growth-milestone": {
+      "n": 10,
+      "avgLikes": 29.3,
+      "avgReplies": 7.7,
+      "avgReposts": 0.2
+    }
+  },
+  "mediaStats": {
+    "none": {
+      "n": 428,
+      "avgLikes": 31.4
+    },
+    "video": {
+      "n": 61,
+      "avgLikes": 89.3
+    },
+    "image": {
+      "n": 108,
+      "avgLikes": 27.5
+    },
+    "gif": {
+      "n": 6,
+      "avgLikes": 7.5
+    }
+  }
+}

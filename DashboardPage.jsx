@@ -69,7 +69,7 @@ import { parseBriefSuggestedPost, sanitizeBriefHtmlForStandalone, parseEstimateL
 import { safeDownloadName, downloadBrowserAsset, termArrCount, termItemLines, cloneJson, appendCacheBust, fsTimestampToDate } from './lib/dashboard/format-utils';
 import { MARKETING_BRIEF_SOURCE_PLATFORMS, UNLOCKED_SOURCE_PLATFORMS, DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS, WATCHLIST_RECIPE_IDS, SEARCH_PLAN_CUSTOM_MAX, BRAND_KEYWORD_RECOMMENDED_MAX, CATEGORY_TERM_RECOMMENDED_MAX, WEB_SEARCH_SOURCES, SOCIAL_SIGNAL_SOURCES, deriveMarketingBriefPerPlatformResults, splitMarketingBriefTerms, getClientHostname, buildRecommendedCustomSearchRows, getMarketingBriefSearchStats, buildDefaultMarketingBriefConfig, joinConfigList } from './lib/dashboard/marketing-brief-config';
 import { buildBrandSnapshotDraft, draftToStyleGuide, colorInputValue } from './lib/dashboard/brand-snapshot';
-import { sanitizeStylePreviewLabel, tiles, memoryNodes, WORK_NEEDED_LABEL, MOCKUP_STUDIO_VIEWPORTS, MOCKUP_STUDIO_BACKDROPS, MOCKUP_STUDIO_TEMPLATES, MOCKUP_STUDIO_ENVIRONMENTS, MOCKUP_STUDIO_CAMERA_PRESET_MAP, MOCKUP_STUDIO_OUTPUT_BY_DEVICE, CUSTOM_DETAIL_CARD_IDS, CARD_ACTION_EDIT, BRIEF_TYPE_BY_CARD, BRIEF_CARD_PREVIEW_TYPES, BRIEF_CARD_PREVIEW_BUCKETS, DELIVERABLES_CARD_COPY, buildUnavailableDescription, buildWorkNeededRows } from './lib/dashboard/tile-config';
+import { sanitizeStylePreviewLabel, tiles, memoryNodes, WORK_NEEDED_LABEL, MOCKUP_STUDIO_VIEWPORTS, MOCKUP_STUDIO_BACKDROPS, MOCKUP_STUDIO_TEMPLATES, MOCKUP_STUDIO_ENVIRONMENTS, MOCKUP_STUDIO_CAMERA_PRESET_MAP, MOCKUP_STUDIO_OUTPUT_BY_DEVICE, CUSTOM_DETAIL_CARD_IDS, FULL_WIDTH_MODAL_CARD_IDS, CARD_ACTION_EDIT, BRIEF_TYPE_BY_CARD, BRIEF_CARD_PREVIEW_TYPES, BRIEF_CARD_PREVIEW_BUCKETS, DELIVERABLES_CARD_COPY, buildUnavailableDescription, buildWorkNeededRows } from './lib/dashboard/tile-config';
 import { readImpersonateClientId, writeImpersonateClientId, withImpersonation, fetchDashboardBootstrap, readPendingDashboardSignup, clearPendingDashboardSignup } from './lib/dashboard/bootstrap-session';
 import { _isModularOnlyRun, buildTerminalLog, buildTerminalLines } from './lib/dashboard/terminal-log';
 import { ONBOARDING_ENTRY_STEPS, ONBOARDING_CARD_IDS, UI_TEASER_VARIATIONS, NON_ADMIN_UNLOCKED_CARD_IDS, OVERLAY_FOR_ALL_CARD_IDS, NON_ADMIN_LOCKED_NAV_KEYS, isCapStepLocked, HIDE_INTAKE_CHAT, CAP_STEPS, CAP_BUCKET_COLOR, TIER_BRIEF_COOLDOWN_SECONDS, FREE_TIER_BRIEF_COOLDOWN_SECONDS } from './lib/dashboard/tier-access-config';
@@ -115,6 +115,16 @@ const SiteRecreateCard = dynamic(() => import('./components/dashboard/SiteRecrea
 });
 
 const XProfileCard = dynamic(() => import('./components/dashboard/XProfileCard'), {
+  loading: () => null,
+  ssr: false,
+});
+
+const XMonitorCard = dynamic(() => import('./components/dashboard/XMonitorCard'), {
+  loading: () => null,
+  ssr: false,
+});
+
+const XCalendarCard = dynamic(() => import('./components/dashboard/XCalendarCard'), {
   loading: () => null,
   ssr: false,
 });
@@ -9398,8 +9408,45 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       footerLeft: 'Live',
       footerRight: 'ADMIN',
     }] : []),
+    ...(isAdmin ? [{
+      id: 'x-monitor',
+      category: 'social',
+      number: 'XM',
+      label: 'MONITOR',
+      title: 'X Monitor',
+      description: 'Tracks how the X account is actually performing — follower growth over time, exactly who followed and who left, and per-post impressions and engagement.',
+      placeholderLabel: 'X\nMONITOR',
+      rows: [
+        { key: 'xm-account', label: 'Account', value: 'X / Twitter — connected account' },
+        { key: 'xm-growth', label: 'Growth', value: 'Daily follower snapshots + net change' },
+        { key: 'xm-audience', label: 'Audience', value: 'Gained / lost followers, with identities' },
+        { key: 'xm-posts', label: 'Posts', value: 'Impressions, profile clicks, engagement rate' },
+        { key: 'xm-gate', label: 'Spend gate', value: 'Read-only — every sync confirms its call count first' },
+      ],
+      footerLeft: 'Live',
+      footerRight: 'ADMIN',
+    }] : []),
 
-    // ── DAILY BRIEFS ────────────────────────────────────────────────────────
+    ...(isAdmin ? [{
+      id: 'x-calendar',
+      category: 'social',
+      number: 'XC',
+      label: 'CALENDAR',
+      title: 'X Calendar',
+      description: 'The day\u2019s posting plan. Quote-react slots are filled from a local scan of accounts whose posts are climbing right now; the rest comes from the standing 15-day strategy.',
+      placeholderLabel: 'X\nCALENDAR',
+      rows: [
+        { key: 'xc-scan', label: 'Scan', value: 'Watchlist timelines, ranked by velocity' },
+        { key: 'xc-window', label: 'Window', value: '36h \u2014 measured, not the 6h reply window' },
+        { key: 'xc-slots', label: 'Slots', value: 'Live quote targets + the standing calendar' },
+        { key: 'xc-guard', label: 'Guard', value: 'Every draft passes the work/casino filter' },
+        { key: 'xc-cost', label: 'Cost', value: 'Free \u2014 local scan, no X API, no credits' },
+      ],
+      footerLeft: 'Local scan',
+      footerRight: 'ADMIN',
+    }] : []),
+
+    // \u2500\u2500 DAILY BRIEFS \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     ...(isAdmin ? [{
       id: 'submit-custom-brief',
       category: 'brief',
@@ -13249,12 +13296,12 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             </div>
 
             {/* ── Bento grid ── */}
-            {/* media-library is a full-width management workspace: it drops the
-                left visual/about cell and collapses the grid to one column. */}
-            <div id="tile-detail-bento-grid" className={activeTileModal.cardId === 'media-library' ? 'tile-detail-bento-grid--full-content' : undefined}>
+            {/* Full-width workspaces (media-library, x-monitor) drop the left
+                visual/about cell and collapse the grid to one column. */}
+            <div id="tile-detail-bento-grid" className={FULL_WIDTH_MODAL_CARD_IDS.has(activeTileModal.cardId) ? 'tile-detail-bento-grid--full-content' : undefined}>
 
               {/* Left — visual + about */}
-              {activeTileModal.cardId !== 'media-library' ? (
+              {!FULL_WIDTH_MODAL_CARD_IDS.has(activeTileModal.cardId) ? (
               <div id="tile-detail-bento-image-cell" className="tile-detail-bento-cell">
                 <div className={`tile-intake-placeholder tile-intake-placeholder-${activeTileModal.cardId || 'draft-post'} tile-detail-bento-placeholder`}>
                 {activeTileModal.cardId === 'style-guide' ? (
@@ -15912,6 +15959,38 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   </div>
                 )}
 
+                {/* X Monitor card — read-only account performance dashboard */}
+                {activeTileModal.cardId === 'x-monitor' && (
+                  <div id="x-monitor-modal-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
+                    <div className="tile-detail-tabs">
+                      <button type="button" className="tile-detail-tab tile-detail-tab--active">X MONITOR</button>
+                    </div>
+                    <div className="tile-detail-tab-content">
+                      <div className="tile-detail-tab-pane">
+                        <XMonitorCard getIdToken={brandSystemGetIdToken} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* X Calendar card — live quote-react candidates + the standing plan */}
+                {activeTileModal.cardId === 'x-calendar' && (
+                  <div id="x-calendar-modal-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
+                    <div className="tile-detail-tabs">
+                      <button type="button" className="tile-detail-tab tile-detail-tab--active">X CALENDAR</button>
+                    </div>
+                    <div className="tile-detail-tab-content">
+                      <div className="tile-detail-tab-pane">
+                        <XCalendarCard
+                          getIdToken={brandSystemGetIdToken}
+                          activeClientId={client?.clientId || client?.id || bootstrap?.effectiveClientId}
+                          clientName={client?.companyName || client?.name || client?.dashboardTitle || null}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Social Media Posting card — X composer + queue */}
                 {activeTileModal.cardId === 'social-media-posting' && (
                   <div id="social-posting-modal-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
@@ -16351,7 +16430,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                              </div>
 	                              <a
 	                                className="btn btn-outline"
-	                                href="/dashboard/video-remix-studio"
+	                                href="/dashboard/studio?tool=remix"
 	                                target="_blank"
 	                                rel="noopener noreferrer"
 	                                style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}

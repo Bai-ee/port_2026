@@ -1,0 +1,1260 @@
+{
+  "meta": {
+    "tier": "2",
+    "postsPerDay": 8,
+    "generatedFor": "@bai_ee",
+    "note": "tier-2 mix per day: 3 quote-react, 2 original-showcase (video), 2 original-text, 1 retweet, plus a repliesTarget of >=10 substantive replies. no hashtags anywhere. no links in main-post copy — links live only in the selfReply of showcase posts. every 7th day (day 7, day 14) carries a personal-vulnerability or craft-advice slot, tagged via \"subtype\" on an original-text slot. all original-showcase/original-text copy scored with features/x-growth scoreXPost; scores stored per-slot."
+  },
+  "days": [
+    {
+      "day": 1,
+      "weekday": "Mon",
+      "theme": "HOLO PAPER cloth physics",
+      "repliesTarget": 10,
+      "repliesNote": "reply into threads about creative-coding demos, three.js, and physics sims",
+      "slots": [
+        {
+          "slot": "A",
+          "timeCT": "07:00",
+          "type": "quote-react",
+          "brief": "a cloth-sim or physics demo getting hyped for looking real",
+          "copy": "the moment a cloth sim looks real is the moment physics stops being cute",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "B",
+          "timeCT": "09:00",
+          "type": "original-showcase",
+          "brief": null,
+          "copy": "grabbed a corner and let go. no keyframes, no easing curve, verlet physics does the settling.",
+          "asset": "screen capture of a HOLO PAPER grab-and-fling clip, close on fabric rebound settling",
+          "selfReply": "browser-based, runs on canvas, no video shot of real cloth: [link]",
+          "score": 0.238,
+          "warnings": []
+        },
+        {
+          "slot": "C",
+          "timeCT": "11:00",
+          "type": "quote-react",
+          "brief": "a three.js or WebGL portfolio demo people are praising",
+          "copy": "this is the good kind of overengineered",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "D",
+          "timeCT": "13:00",
+          "type": "original-text",
+          "brief": null,
+          "copy": "spent two days on rebound damping. one number is the difference between fabric and a bedsheet made of rubber.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.208,
+          "warnings": []
+        },
+        {
+          "slot": "E",
+          "timeCT": "15:00",
+          "type": "retweet",
+          "brief": "a creative-coding or Three.js account's demo reel, no comment added",
+          "copy": null,
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "F",
+          "timeCT": "17:00",
+          "type": "quote-react",
+          "brief": "a dev complaining that physics libraries are too heavy for a simple effect",
+          "copy": "wrote my own verlet solver for this exact reason",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "G",
+          "timeCT": "19:00",
+          "type": "original-showcase",
+          "brief": null,
+          "copy": "pinned one point and pushed. this is what fabric does when it has nowhere to go.",
+          "asset": "clip of the rumple effect in ClothStudio, fabric bunching under a static pin point",
+          "selfReply": "full scene runs in the browser, mp4 export when you're done: [link]",
+          "score": 0.238,
+          "warnings": []
+        },
+        {
+          "slot": "H",
+          "timeCT": "21:00",
+          "type": "original-text",
+          "brief": null,
+          "copy": "physics sims are 90 percent tuning damping until it stops looking like jello.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.218,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "day": 2,
+      "weekday": "Tue",
+      "theme": "LoopStudio + SP-16 hardware export",
+      "repliesTarget": 10,
+      "repliesNote": "reply into threads about hardware samplers, groove boxes, and loop workflow",
+      "slots": [
+        {
+          "slot": "A",
+          "timeCT": "07:00",
+          "type": "quote-react",
+          "brief": "a producer complaining about hardware sampler workflow (SP-404, MPC, etc.)",
+          "copy": "hardware groove boxes deserve better file formats than they get",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "B",
+          "timeCT": "09:00",
+          "type": "original-showcase",
+          "brief": null,
+          "copy": "sliced this loop on zero crossings, not a grid. every chunk loops clean, no clicks.",
+          "asset": "clip of LoopStudio slicing a WAV loop into transient-aligned chunks",
+          "selfReply": "built the slicer myself, runs local in the browser: [link]",
+          "score": 0.238,
+          "warnings": []
+        },
+        {
+          "slot": "C",
+          "timeCT": "11:00",
+          "type": "quote-react",
+          "brief": "someone hitting scene-file compatibility issues on a hardware sampler",
+          "copy": "exporting straight to .scn so the hardware doesn't have to care",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "D",
+          "timeCT": "13:00",
+          "type": "original-text",
+          "brief": null,
+          "copy": "wrote a .scn writer by reverse-engineering scene files byte by byte. no docs existed for the format.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.208,
+          "warnings": []
+        },
+        {
+          "slot": "E",
+          "timeCT": "15:00",
+          "type": "retweet",
+          "brief": "a hardware sampler manufacturer's firmware update or new device post",
+          "copy": null,
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "F",
+          "timeCT": "17:00",
+          "type": "quote-react",
+          "brief": "a post about interactive audio players or embeds for sharing music",
+          "copy": "built one of these into loopstudio, exports as a standalone zip",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "G",
+          "timeCT": "19:00",
+          "type": "original-showcase",
+          "brief": null,
+          "copy": "this player is a zip file. drop it anywhere, no server, stems mute live in the browser.",
+          "asset": "clip of the EditTrax interactive player export, muting and soloing stems live",
+          "selfReply": "export target is called edittrax, try a demo build: [link]",
+          "score": 0.238,
+          "warnings": []
+        },
+        {
+          "slot": "H",
+          "timeCT": "21:00",
+          "type": "original-text",
+          "brief": null,
+          "copy": "the sp-16 export took longer than the slicer itself. hardware file formats leave zero margin for guessing.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.223,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "day": 3,
+      "weekday": "Wed",
+      "theme": "Invoice Studio + HoloPaper layer",
+      "repliesTarget": 10,
+      "repliesNote": "reply into threads about invoicing tools, freelancer ops, and print CSS pain",
+      "slots": [
+        {
+          "slot": "A",
+          "timeCT": "07:00",
+          "type": "quote-react",
+          "brief": "a freelancer complaining about invoicing tool pricing (Wave, Bonsai, etc.)",
+          "copy": "charging monthly for a pdf generator is a scam",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "B",
+          "timeCT": "09:00",
+          "type": "original-showcase",
+          "brief": null,
+          "copy": "type in the rail, watch the invoice update live. three themes, one canvas.",
+          "asset": "clip scrolling through the 3 Invoice Studio themes with the edit rail syncing to canvas",
+          "selfReply": "free, no login, print-correct pagination: [link]",
+          "score": 0.243,
+          "warnings": []
+        },
+        {
+          "slot": "C",
+          "timeCT": "11:00",
+          "type": "quote-react",
+          "brief": "a developer venting about print CSS being broken or unpredictable",
+          "copy": "print css is where good developers go to cry",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "D",
+          "timeCT": "13:00",
+          "type": "original-text",
+          "brief": null,
+          "copy": "pagination for print is worse than it sounds. a line item can't split across pages and nobody warns you.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.208,
+          "warnings": []
+        },
+        {
+          "slot": "E",
+          "timeCT": "15:00",
+          "type": "retweet",
+          "brief": "a dev-tools account's release note about a design or PDF-generation tool",
+          "copy": null,
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "F",
+          "timeCT": "17:00",
+          "type": "quote-react",
+          "brief": "a holographic or foil-card UI effect getting attention",
+          "copy": "did a version of this for invoices, just to see if it'd look good on paper",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "G",
+          "timeCT": "19:00",
+          "type": "original-showcase",
+          "brief": null,
+          "copy": "this is an invoice. it tilts like a holographic trading card because why not.",
+          "asset": "clip of the HoloPaper presentation layer, invoice tilting under cursor with foil shimmer",
+          "selfReply": "editor-only, never touches the real pdf or print output: [link]",
+          "score": 0.25,
+          "warnings": []
+        },
+        {
+          "slot": "H",
+          "timeCT": "21:00",
+          "type": "original-text",
+          "brief": null,
+          "copy": "the holo layer was a two hour detour that turned into a shipped feature. those are the best kind.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.218,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "day": 4,
+      "weekday": "Thu",
+      "theme": "WebGPU/TSL shaders + PaintStudio",
+      "repliesTarget": 10,
+      "repliesNote": "reply into threads about WebGPU, TSL, shaders, and GSAP motion timing",
+      "slots": [
+        {
+          "slot": "A",
+          "timeCT": "07:00",
+          "type": "quote-react",
+          "brief": "a post about WebGPU landing in stable browsers",
+          "copy": "webgpu in stable chrome changed what a browser tab can render",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "B",
+          "timeCT": "09:00",
+          "type": "original-showcase",
+          "brief": null,
+          "copy": "this brush stroke is a shader, not a texture. runs at 60fps on a phone.",
+          "asset": "clip of a PaintStudio brush stroke rendered live with a custom TSL shader",
+          "selfReply": "TSL node graph is public, happy to walk through it: [link]",
+          "score": 0.248,
+          "warnings": []
+        },
+        {
+          "slot": "C",
+          "timeCT": "11:00",
+          "type": "quote-react",
+          "brief": "someone venting about migrating GLSL shaders to WGSL",
+          "copy": "TSL made this migration less painful than it should have been",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "D",
+          "timeCT": "13:00",
+          "type": "original-text",
+          "brief": null,
+          "copy": "wrote the same effect in glsl and tsl. the node graph version reads easier six months later.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.208,
+          "warnings": []
+        },
+        {
+          "slot": "E",
+          "timeCT": "15:00",
+          "type": "retweet",
+          "brief": "a Three.js or WebGPU core team announcement or demo",
+          "copy": null,
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "F",
+          "timeCT": "17:00",
+          "type": "quote-react",
+          "brief": "a designer saying a UI transition feels \"cheap\" or stiff",
+          "copy": "9 times out of 10 it's the easing curve, not the effect",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "G",
+          "timeCT": "19:00",
+          "type": "original-showcase",
+          "brief": null,
+          "copy": "same transition, different curve. one feels like a toy, the other one does not.",
+          "asset": "clip comparing default ease vs a custom GSAP curve on the same UI transition",
+          "selfReply": "curve is a hand-tuned bezier, not a gsap preset: [link]",
+          "score": 0.233,
+          "warnings": []
+        },
+        {
+          "slot": "H",
+          "timeCT": "21:00",
+          "type": "original-text",
+          "brief": null,
+          "copy": "motion design is mostly timing. everyone jumps to the easing function and wonders why it still feels off.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.215,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "day": 5,
+      "weekday": "Fri",
+      "theme": "Video Promo / Mockup Studio (Cloud Run GPU)",
+      "repliesTarget": 10,
+      "repliesNote": "reply into threads about product demo videos, site mockups, and GPU rendering",
+      "slots": [
+        {
+          "slot": "A",
+          "timeCT": "07:00",
+          "type": "quote-react",
+          "brief": "someone complaining that their screen-recorded site demo looks worse than the real site",
+          "copy": "screen recordings for site demos always look worse than the site does",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "B",
+          "timeCT": "09:00",
+          "type": "original-showcase",
+          "brief": null,
+          "copy": "this camera move isn't a screen recording. it's a gpu render of the real site.",
+          "asset": "clip of a Mockup Studio GPU render, camera diving into a corner of a client site",
+          "selfReply": "renders on cloud run, no local gpu needed: [link]",
+          "score": 0.233,
+          "warnings": []
+        },
+        {
+          "slot": "C",
+          "timeCT": "11:00",
+          "type": "quote-react",
+          "brief": "a founder complaining about the cost of hiring a videographer for a product demo",
+          "copy": "this is exactly the gap i built the render pipeline to close",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "D",
+          "timeCT": "13:00",
+          "type": "original-text",
+          "brief": null,
+          "copy": "every render is unique on purpose. same site, different camera path, different client, no repeats.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.208,
+          "warnings": []
+        },
+        {
+          "slot": "E",
+          "timeCT": "15:00",
+          "type": "retweet",
+          "brief": "a Cloud Run / GCP release note or a GPU-rendering demo account",
+          "copy": null,
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "F",
+          "timeCT": "17:00",
+          "type": "quote-react",
+          "brief": "someone posting about scroll-jacking or a scroll-to-bottom bug on a marketing site",
+          "copy": "banned a whole render setting after hitting this exact bug",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "G",
+          "timeCT": "19:00",
+          "type": "original-showcase",
+          "brief": null,
+          "copy": "same url, two runs, two different videos. it's seeded, not random, but you would never guess.",
+          "asset": "clip of the variation engine producing two different renders from the same URL back to back",
+          "selfReply": "each client gets their own seed counter: [link]",
+          "score": 0.238,
+          "warnings": []
+        },
+        {
+          "slot": "H",
+          "timeCT": "21:00",
+          "type": "original-text",
+          "brief": null,
+          "copy": "the hardest part of automated video wasn't the render, it was making every render feel intentional.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.208,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "day": 6,
+      "weekday": "Sat",
+      "theme": "Underground Existence / Arweave archive",
+      "repliesTarget": 10,
+      "repliesNote": "reply into threads about permanent storage, rave nostalgia, and Arweave use cases",
+      "slots": [
+        {
+          "slot": "A",
+          "timeCT": "07:00",
+          "type": "quote-react",
+          "brief": "someone mourning a dead hard drive or lost old files",
+          "copy": "this is why i put my old sets on arweave instead of a dead hard drive",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "B",
+          "timeCT": "09:00",
+          "type": "original-showcase",
+          "brief": null,
+          "copy": "these mixes are older than some of my clients. now they are permanent.",
+          "asset": "clip scrolling the Underground Existence archive UI with an old rave mix playing",
+          "selfReply": "stored on arweave, pay once, hosted forever: [link]",
+          "score": 0.233,
+          "warnings": []
+        },
+        {
+          "slot": "C",
+          "timeCT": "11:00",
+          "type": "quote-react",
+          "brief": "someone discussing Arweave or permanent storage outside token speculation",
+          "copy": "this is the actual use case, not the speculative one",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "D",
+          "timeCT": "13:00",
+          "type": "original-text",
+          "brief": null,
+          "copy": "archiving my own dj mixes taught me more about permanence than any client project has.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.208,
+          "warnings": []
+        },
+        {
+          "slot": "E",
+          "timeCT": "15:00",
+          "type": "retweet",
+          "brief": "the Arweave protocol account's technical update, not a price post",
+          "copy": null,
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "F",
+          "timeCT": "17:00",
+          "type": "quote-react",
+          "brief": "a mixtape or cassette nostalgia post",
+          "copy": "i still buy physical mixtapes, this is just the digital version of that instinct",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "G",
+          "timeCT": "19:00",
+          "type": "original-showcase",
+          "brief": null,
+          "copy": "uploading a set here shows the exact cost before it goes permanent. no surprise bill.",
+          "asset": "clip of uploading a mix through the archive pipeline with a cost estimate shown",
+          "selfReply": "same pipeline that archives client video assets: [link]",
+          "score": 0.238,
+          "warnings": []
+        },
+        {
+          "slot": "H",
+          "timeCT": "21:00",
+          "type": "original-text",
+          "brief": null,
+          "copy": "started this archive to save my own mixes. now it does the same job for client media.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.208,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "day": 7,
+      "weekday": "Sun",
+      "theme": "Craft + personal — Blender warehouse, DJing, building slow",
+      "repliesTarget": 10,
+      "repliesNote": "reply into threads about solo building, parenting-while-building, and craft over hustle",
+      "slots": [
+        {
+          "slot": "A",
+          "timeCT": "07:00",
+          "type": "quote-react",
+          "brief": "a solo-dev-and-parent tweet about balancing kids and building",
+          "copy": "my son thinks blender is a toy. he's not wrong, that's why it works",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "B",
+          "timeCT": "09:00",
+          "type": "original-showcase",
+          "brief": null,
+          "copy": "built this warehouse in blender with my 6 year old over three weekends. he did the windows.",
+          "asset": "orbit-camera clip of the Blender warehouse model built with his son",
+          "selfReply": "no brief for this one, just a saturday",
+          "score": 0.253,
+          "warnings": []
+        },
+        {
+          "slot": "C",
+          "timeCT": "11:00",
+          "type": "quote-react",
+          "brief": "a tweet about craft over hustle, slow deliberate work",
+          "copy": "slow is the only speed that's produced anything i'm proud of",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "D",
+          "timeCT": "13:00",
+          "type": "original-text",
+          "subtype": "craft-advice",
+          "brief": null,
+          "copy": "advice nobody asked for: stop optimizing the tool before you've used it enough to know what's slow.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.208,
+          "warnings": []
+        },
+        {
+          "slot": "E",
+          "timeCT": "15:00",
+          "type": "retweet",
+          "brief": "a maker or craftsperson's finished-project post, non-tech",
+          "copy": null,
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "F",
+          "timeCT": "17:00",
+          "type": "quote-react",
+          "brief": "a tweet claiming real DJ skill is dying, replaced by all-digital sets",
+          "copy": "i still beatmatch by ear first, quantize second. keeps the ear honest",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "G",
+          "timeCT": "19:00",
+          "type": "original-showcase",
+          "brief": null,
+          "copy": "not a set, just a warmup. twenty minutes before dinner.",
+          "asset": "clip of a short, casual DJ practice session on CDJs, unpolished",
+          "selfReply": "full mixes live in the archive if you want more: [link]",
+          "score": 0.233,
+          "warnings": []
+        },
+        {
+          "slot": "H",
+          "timeCT": "21:00",
+          "type": "original-text",
+          "subtype": "personal-vulnerability",
+          "brief": null,
+          "copy": "most weeks i ship less than i plan and more than i think. the plan is the part i've stopped trusting.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.208,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "day": 8,
+      "weekday": "Mon",
+      "theme": "Site Recreate",
+      "repliesTarget": 10,
+      "repliesNote": "reply into threads about web dev pricing, static sites, and site cloning",
+      "slots": [
+        {
+          "slot": "A",
+          "timeCT": "07:00",
+          "type": "quote-react",
+          "brief": "a small business complaining their web dev quote is too high or too slow",
+          "copy": "this is the exact problem i built site recreate to shortcut",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "B",
+          "timeCT": "09:00",
+          "type": "original-showcase",
+          "brief": null,
+          "copy": "pasted a live url. got back an exact static clone, hosted, in minutes.",
+          "asset": "clip pasting a live URL into Site Recreate and watching the static mirror build",
+          "selfReply": "html, css, js only, no cms weight: [link]",
+          "score": 0.233,
+          "warnings": []
+        },
+        {
+          "slot": "C",
+          "timeCT": "11:00",
+          "type": "quote-react",
+          "brief": "someone posting a \"rebuilt this site\" before/after thread",
+          "copy": "recreating first, redesigning second, is a better order than people think",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "D",
+          "timeCT": "13:00",
+          "type": "original-text",
+          "brief": null,
+          "copy": "wrote a killlist for shopify's checkout scripts, they change every few months and silently break clones.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.208,
+          "warnings": []
+        },
+        {
+          "slot": "E",
+          "timeCT": "15:00",
+          "type": "retweet",
+          "brief": "a static-site or hosting tooling account's release note",
+          "copy": null,
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "F",
+          "timeCT": "17:00",
+          "type": "quote-react",
+          "brief": "a dev joking that most modern sites are bloated JS for static content",
+          "copy": "half these sites are static content wearing a framework costume",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "G",
+          "timeCT": "19:00",
+          "type": "original-showcase",
+          "brief": null,
+          "copy": "this zip is the whole site. no build step, no dependencies, just files.",
+          "asset": "clip zooming through the downloadable zip output of a cloned site in a code editor",
+          "selfReply": "cloud run worker does the heavy lifting: [link]",
+          "score": 0.233,
+          "warnings": []
+        },
+        {
+          "slot": "H",
+          "timeCT": "21:00",
+          "type": "original-text",
+          "brief": null,
+          "copy": "the hardest part of cloning a site isn't the html, it's the analytics scripts pretending to be content.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.208,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "day": 9,
+      "weekday": "Tue",
+      "theme": "HITLOOP dashboard — Market Signals, Client Brain, digest",
+      "repliesTarget": 10,
+      "repliesNote": "reply into threads about agency ops, manual reporting, and email automation",
+      "slots": [
+        {
+          "slot": "A",
+          "timeCT": "07:00",
+          "type": "quote-react",
+          "brief": "an agency owner complaining about manually pulling market or social data weekly",
+          "copy": "this is a solved problem now, i just haven't told everyone yet",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "B",
+          "timeCT": "09:00",
+          "type": "original-showcase",
+          "brief": null,
+          "copy": "one button, one terminal, three platforms searched live. no tab switching.",
+          "asset": "clip of Market Signals running a live search across X, Reddit, and Instagram in the terminal UI",
+          "selfReply": "reads are free, x search only runs when i click refresh: [link]",
+          "score": 0.233,
+          "warnings": []
+        },
+        {
+          "slot": "C",
+          "timeCT": "11:00",
+          "type": "quote-react",
+          "brief": "a post about AI-generated brand content drifting off voice",
+          "copy": "built a whole system just to keep the voice from drifting",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "D",
+          "timeCT": "13:00",
+          "type": "original-text",
+          "brief": null,
+          "copy": "client brain is one document. everything downstream reads from it or it does not ship.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.208,
+          "warnings": []
+        },
+        {
+          "slot": "E",
+          "timeCT": "15:00",
+          "type": "retweet",
+          "brief": "a small-business marketing-automation tool's product update",
+          "copy": null,
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "F",
+          "timeCT": "17:00",
+          "type": "quote-react",
+          "brief": "a founder saying email is the only channel that still converts",
+          "copy": "the daily digest gets read more than the dashboard it summarizes",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "G",
+          "timeCT": "19:00",
+          "type": "original-showcase",
+          "brief": null,
+          "copy": "this email writes itself every morning. exec summary, calendar, strategy, done.",
+          "asset": "clip scrolling a generated daily digest email from exec summary to calendar to brief",
+          "selfReply": "opt-in per client, off by default: [link]",
+          "score": 0.233,
+          "warnings": []
+        },
+        {
+          "slot": "H",
+          "timeCT": "21:00",
+          "type": "original-text",
+          "brief": null,
+          "copy": "spent a week fixing a leak where the cron ran for clients who never opted in. that is the actual job.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.208,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "day": 10,
+      "weekday": "Wed",
+      "theme": "PaintStudio + GSAP motion craft",
+      "repliesTarget": 10,
+      "repliesNote": "reply into threads about micro-interactions, drag physics, and motion feel",
+      "slots": [
+        {
+          "slot": "A",
+          "timeCT": "07:00",
+          "type": "quote-react",
+          "brief": "a designer sharing a portfolio piece with nice hover states or micro-interactions",
+          "copy": "this is the kind of detail that takes an hour and gets noticed for years",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "B",
+          "timeCT": "09:00",
+          "type": "original-showcase",
+          "brief": null,
+          "copy": "pressure changes stroke width in real time. feels closer to a real brush than i expected.",
+          "asset": "clip of PaintStudio's pressure-sensitive brush, stroke width changing live",
+          "selfReply": "browser only, no plugin required: [link]",
+          "score": 0.238,
+          "warnings": []
+        },
+        {
+          "slot": "C",
+          "timeCT": "11:00",
+          "type": "quote-react",
+          "brief": "someone complaining a site feels \"stiff\" or lifeless despite good visuals",
+          "copy": "usually means every element moves at the exact same speed",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "D",
+          "timeCT": "13:00",
+          "type": "original-text",
+          "brief": null,
+          "copy": "if two elements animate on the same duration, the eye reads them as one object. stagger everything.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.208,
+          "warnings": []
+        },
+        {
+          "slot": "E",
+          "timeCT": "15:00",
+          "type": "retweet",
+          "brief": "a GSAP or creative-coding account's demo reel",
+          "copy": null,
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "F",
+          "timeCT": "17:00",
+          "type": "quote-react",
+          "brief": "someone complaining a drag interaction feels laggy or unnatural",
+          "copy": "usually it is missing momentum, not the drag itself",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "G",
+          "timeCT": "19:00",
+          "type": "original-showcase",
+          "brief": null,
+          "copy": "let go and it keeps moving. that half second of momentum is most of the feel.",
+          "asset": "clip of a GSAP-driven drag interaction with inertia on release",
+          "selfReply": "custom inertia curve, not a plugin default: [link]",
+          "score": 0.233,
+          "warnings": []
+        },
+        {
+          "slot": "H",
+          "timeCT": "21:00",
+          "type": "original-text",
+          "brief": null,
+          "copy": "spend the extra hour on the release state. that is the frame people remember, not the drag.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.208,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "day": 11,
+      "weekday": "Thu",
+      "theme": "HOLO PAPER — grab/fling/rebound deep dive",
+      "repliesTarget": 10,
+      "repliesNote": "reply into threads about satisfying physics demos and canvas performance",
+      "slots": [
+        {
+          "slot": "A",
+          "timeCT": "07:00",
+          "type": "quote-react",
+          "brief": "a satisfying-physics video going around (ragdoll, jelly, cloth)",
+          "copy": "this genre of video lives rent free, mine included",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "B",
+          "timeCT": "09:00",
+          "type": "original-showcase",
+          "brief": null,
+          "copy": "flung it at the wall just to see what rebound looked like. kept the bug, it is a feature now.",
+          "asset": "clip flinging the cloth object across the canvas and watching it rebound off the edge",
+          "selfReply": "grab, fling, rebound, all one interaction model: [link]",
+          "score": 0.248,
+          "warnings": []
+        },
+        {
+          "slot": "C",
+          "timeCT": "11:00",
+          "type": "quote-react",
+          "brief": "a tweet about accidental bugs becoming intentional features",
+          "copy": "the best feature in this tool started as a bug i forgot to fix",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "D",
+          "timeCT": "13:00",
+          "type": "original-text",
+          "brief": null,
+          "copy": "half of tuning physics is deciding which unrealistic behavior actually feels better than the real one.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.208,
+          "warnings": []
+        },
+        {
+          "slot": "E",
+          "timeCT": "15:00",
+          "type": "retweet",
+          "brief": "a physics or fluid-sim demo from another creative-coding account",
+          "copy": null,
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "F",
+          "timeCT": "17:00",
+          "type": "quote-react",
+          "brief": "someone asking how browser demos get this responsive",
+          "copy": "canvas plus a tight update loop, nothing fancier than that",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "G",
+          "timeCT": "19:00",
+          "type": "original-showcase",
+          "brief": null,
+          "copy": "export turns the live canvas into an mp4. what you see is what you get, no re-render.",
+          "asset": "clip of the mp4 export process, canvas capture to downloadable video",
+          "selfReply": "no server round trip, all client side: [link]",
+          "score": 0.253,
+          "warnings": []
+        },
+        {
+          "slot": "H",
+          "timeCT": "21:00",
+          "type": "original-text",
+          "brief": null,
+          "copy": "most of this tool is one update loop. the interesting part is what happens between frames.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.218,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "day": 12,
+      "weekday": "Fri",
+      "theme": "LoopStudio EditTrax export — musician workflow",
+      "repliesTarget": 10,
+      "repliesNote": "reply into threads about sharing stems, loop packs, and audio-in-browser pain",
+      "slots": [
+        {
+          "slot": "A",
+          "timeCT": "07:00",
+          "type": "quote-react",
+          "brief": "a musician complaining about sharing stems awkwardly (zip files, wetransfer)",
+          "copy": "this is the exact workflow edittrax was built to skip",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "B",
+          "timeCT": "09:00",
+          "type": "original-showcase",
+          "brief": null,
+          "copy": "sent this to a friend. he muted the drums on his phone without opening any software.",
+          "asset": "clip sharing an EditTrax export link and someone muting/soloing stems on their device",
+          "selfReply": "self-contained zip, works offline: [link]",
+          "score": 0.238,
+          "warnings": []
+        },
+        {
+          "slot": "C",
+          "timeCT": "11:00",
+          "type": "quote-react",
+          "brief": "someone dealing with hardware sampler firmware or scene compatibility issues",
+          "copy": "reverse-engineered this exact file format for the sp-16 export",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "D",
+          "timeCT": "13:00",
+          "type": "original-text",
+          "brief": null,
+          "copy": "preset zero has to boot the whole build or the player looks broken on first load. learned that the hard way.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.208,
+          "warnings": []
+        },
+        {
+          "slot": "E",
+          "timeCT": "15:00",
+          "type": "retweet",
+          "brief": "a music production tool or plugin release announcement",
+          "copy": null,
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "F",
+          "timeCT": "17:00",
+          "type": "quote-react",
+          "brief": "a tweet about audio-in-browser being harder than people expect",
+          "copy": "web audio api has opinions about timing that will ruin your week",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "G",
+          "timeCT": "19:00",
+          "type": "original-showcase",
+          "brief": null,
+          "copy": "that click was not the sample, it was decoding at the wrong sample rate. fixed, gone.",
+          "asset": "clip of LoopStudio's clean-loop fix, before/after waveform with a click removed",
+          "selfReply": "decode at source rate, never resample blind: [link]",
+          "score": 0.238,
+          "warnings": []
+        },
+        {
+          "slot": "H",
+          "timeCT": "21:00",
+          "type": "original-text",
+          "brief": null,
+          "copy": "spent a day chasing a click that turned out to be one decode setting. documenting it so future me skips the day.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.208,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "day": 13,
+      "weekday": "Sat",
+      "theme": "Underground Existence — mixtape collecting",
+      "repliesTarget": 10,
+      "repliesNote": "reply into threads about rave nostalgia, vinyl digging, and archiving old media",
+      "slots": [
+        {
+          "slot": "A",
+          "timeCT": "07:00",
+          "type": "quote-react",
+          "brief": "someone posting a rare mixtape find or an old rave flyer",
+          "copy": "i have a shelf of these, half unlabeled, exactly like this",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "B",
+          "timeCT": "09:00",
+          "type": "original-showcase",
+          "brief": null,
+          "copy": "these tapes started the archive. digitized the ones i could still play.",
+          "asset": "clip flipping through a physical mixtape collection, cutting to the digital archive",
+          "selfReply": "the rest live on arweave now: [link]",
+          "score": 0.233,
+          "warnings": []
+        },
+        {
+          "slot": "C",
+          "timeCT": "11:00",
+          "type": "quote-react",
+          "brief": "a debate about physical media outliving digital formats",
+          "copy": "physical outlives digital until the tape itself does not",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "D",
+          "timeCT": "13:00",
+          "type": "original-text",
+          "brief": null,
+          "copy": "collecting mixtapes taught me to care about provenance before i ever heard the word at work.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.208,
+          "warnings": []
+        },
+        {
+          "slot": "E",
+          "timeCT": "15:00",
+          "type": "retweet",
+          "brief": "a DJ archive or vinyl/tape collector account's find",
+          "copy": null,
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "F",
+          "timeCT": "17:00",
+          "type": "quote-react",
+          "brief": "someone asking how to back up an old music collection safely",
+          "copy": "arweave if you want it to outlive the hard drive it is on now",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "G",
+          "timeCT": "19:00",
+          "type": "original-showcase",
+          "brief": null,
+          "copy": "fifteen seconds of a longer set. the transition took four tries to get clean.",
+          "asset": "clip of a short DJ transition recorded at home, unpolished",
+          "selfReply": "full set goes in the archive when it's done: [link]",
+          "score": 0.233,
+          "warnings": []
+        },
+        {
+          "slot": "H",
+          "timeCT": "21:00",
+          "type": "original-text",
+          "brief": null,
+          "copy": "most of my music taste is inherited from mixtapes i can't return to the person who made them.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.208,
+          "warnings": []
+        }
+      ]
+    },
+    {
+      "day": 14,
+      "weekday": "Sun",
+      "theme": "Craft + personal — two-week wrap, shipping habits",
+      "repliesTarget": 10,
+      "repliesNote": "reply into threads about consistency, burnout, and solo-builder shipping habits",
+      "slots": [
+        {
+          "slot": "A",
+          "timeCT": "07:00",
+          "type": "quote-react",
+          "brief": "a solo builder tweet about burnout or shipping fatigue",
+          "copy": "two weeks of daily posting made me a better editor of my work, not a worse one",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "B",
+          "timeCT": "09:00",
+          "type": "original-showcase",
+          "brief": null,
+          "copy": "he asked for a garage door that opens. spent saturday morning making that happen.",
+          "asset": "clip of the Blender warehouse project with a new addition his son suggested",
+          "selfReply": "still not a client project, still the best part of the week",
+          "score": 0.238,
+          "warnings": []
+        },
+        {
+          "slot": "C",
+          "timeCT": "11:00",
+          "type": "quote-react",
+          "brief": "a tweet arguing consistency beats intensity in creative work",
+          "copy": "this week proved it more than any advice ever did",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "D",
+          "timeCT": "13:00",
+          "type": "original-text",
+          "subtype": "craft-advice",
+          "brief": null,
+          "copy": "ship the ugly version first. the polish pass tells you what actually needed polishing.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.208,
+          "warnings": []
+        },
+        {
+          "slot": "E",
+          "timeCT": "15:00",
+          "type": "retweet",
+          "brief": "a fellow indie or solo dev's shipped-this-today post",
+          "copy": null,
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "F",
+          "timeCT": "17:00",
+          "type": "quote-react",
+          "brief": "a tweet about the gap between what gets posted and what actually got built",
+          "copy": "most of what i build never becomes a post. this is the visible fraction",
+          "asset": null,
+          "selfReply": null
+        },
+        {
+          "slot": "G",
+          "timeCT": "19:00",
+          "type": "original-showcase",
+          "brief": null,
+          "copy": "two weeks, four tools, one thread if you want the whole build log.",
+          "asset": "clip of a quick highlight reel cut from the two weeks: cloth sim, invoice, loop slicer, site clone",
+          "selfReply": "full breakdown of everything shipped: [link]",
+          "score": 0.257,
+          "warnings": []
+        },
+        {
+          "slot": "H",
+          "timeCT": "21:00",
+          "type": "original-text",
+          "subtype": "personal-vulnerability",
+          "brief": null,
+          "copy": "the hardest part of this wasn't building the tools, it was posting about them before i felt ready.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.223,
+          "warnings": []
+        }
+      ]
+    }
+  ]
+}

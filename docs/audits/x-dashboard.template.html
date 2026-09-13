@@ -1,0 +1,1093 @@
+<title>Reach Telemetry</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700&family=Space+Grotesk:wght@300;400;500&family=Space+Mono:wght@400;700&display=swap">
+<style>
+:root{
+  --ground:#F5F5F5; --surface:#FFFFFF; --raised:#F0F0F0;
+  --border:#E8E8E8; --border-hi:#CCCCCC;
+  --ink-3:#9A9694; --ink-2:#67625F; --ink-1:#1A1A1A; --ink-0:#000000;
+  --accent:#C4141C; --accent-soft:rgba(196,20,28,.12);
+  --seb:#000000; --baiee:#C4141C;
+  --grid:rgba(0,0,0,.07);
+  --font-ui:"Space Grotesk","DM Sans",system-ui,sans-serif;
+  --font-mono:"Space Mono","JetBrains Mono","SF Mono",ui-monospace,monospace;
+  --font-display:"Doto","Space Mono",monospace;
+  --ease:cubic-bezier(.25,.1,.25,1);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#000000; --surface:#0D0D0D; --raised:#161616;
+    --border:#222222; --border-hi:#333333;
+    --ink-3:#5E5A58; --ink-2:#8F8A87; --ink-1:#E8E8E8; --ink-0:#FFFFFF;
+    --accent:#F0353D; --accent-soft:rgba(240,53,61,.16);
+    --seb:#FFFFFF; --baiee:#F0353D;
+    --grid:rgba(255,255,255,.07);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#000000; --surface:#0D0D0D; --raised:#161616;
+  --border:#222222; --border-hi:#333333;
+  --ink-3:#5E5A58; --ink-2:#8F8A87; --ink-1:#E8E8E8; --ink-0:#FFFFFF;
+  --accent:#F0353D; --accent-soft:rgba(240,53,61,.16);
+  --seb:#FFFFFF; --baiee:#F0353D;
+  --grid:rgba(255,255,255,.07);
+}
+
+*{box-sizing:border-box}
+body{
+  background:var(--ground); color:var(--ink-1);
+  font-family:var(--font-ui); font-weight:300;
+  -webkit-font-smoothing:antialiased;
+  padding-inline:clamp(16px,4vw,56px); padding-block:clamp(28px,5vw,64px);
+  max-width:1440px; margin-inline:auto;
+  font-variant-numeric:tabular-nums;
+}
+.lbl{
+  font-family:var(--font-mono); font-size:11px; letter-spacing:.09em;
+  text-transform:uppercase; color:var(--ink-2); font-weight:400;
+}
+.num{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+
+/* ---------- masthead ---------- */
+.masthead{display:flex;flex-wrap:wrap;gap:24px 40px;align-items:flex-end;justify-content:space-between;
+  border-bottom:1px solid var(--border-hi);padding-bottom:20px}
+.masthead h1{
+  font-family:var(--font-ui); font-weight:500; font-size:clamp(26px,4.2vw,40px);
+  line-height:1.05; letter-spacing:-.02em; margin:6px 0 0; color:var(--ink-0);
+  text-wrap:balance; max-width:16ch;
+}
+.mast-meta{display:flex;flex-direction:column;gap:5px;text-align:right;margin-left:auto}
+@media(max-width:560px){.mast-meta{text-align:left;margin-left:0}}
+
+/* ---------- hero ---------- */
+.hero{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:clamp(24px,5vw,72px);
+  align-items:center;padding-block:clamp(36px,6vw,72px)}
+@media(max-width:800px){.hero{grid-template-columns:1fr;gap:36px}}
+.hero-fig{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.hero-num{
+  font-family:var(--font-display); font-weight:400;
+  font-size:clamp(72px,15vw,158px); line-height:.85; letter-spacing:.01em;
+  color:var(--ink-0);
+}
+.hero-unit{font-family:var(--font-mono);font-size:clamp(16px,2.6vw,26px);color:var(--ink-2);letter-spacing:.02em}
+.hero-say{font-size:clamp(15px,1.5vw,17px);line-height:1.55;color:var(--ink-1);max-width:44ch;margin:18px 0 0}
+.hero-say b{font-weight:500;color:var(--ink-0)}
+
+/* account plates */
+.plates{display:grid;gap:1px;background:var(--border);border:1px solid var(--border)}
+.plate{background:var(--surface);padding:18px 20px;display:grid;grid-template-columns:1fr auto;gap:6px 16px;align-items:center}
+.plate-id{display:flex;align-items:center;gap:9px}
+.chip{width:9px;height:9px;flex:none;border-radius:50%}
+.plate-h{font-family:var(--font-mono);font-size:14px;color:var(--ink-0);font-weight:700}
+.plate-row{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:8px;
+  border-top:1px solid var(--border);padding-top:12px}
+.pstat{display:flex;flex-direction:column;gap:3px}
+.pstat .v{font-family:var(--font-mono);font-size:17px;color:var(--ink-0)}
+.pstat .v.acc{color:var(--accent)}
+
+/* ---------- section frame ---------- */
+section{padding-block:clamp(32px,5vw,60px);border-top:1px solid var(--border)}
+.sec-head{display:flex;flex-wrap:wrap;gap:10px 24px;align-items:baseline;justify-content:space-between;margin-bottom:8px}
+.sec-head h2{font-family:var(--font-ui);font-weight:500;font-size:20px;letter-spacing:-.01em;color:var(--ink-0);margin:0}
+.sec-note{font-size:13.5px;line-height:1.6;color:var(--ink-2);max-width:70ch;margin:10px 0 26px}
+.sec-note b{color:var(--ink-1);font-weight:500}
+
+/* ---------- chart ---------- */
+.legend{display:flex;flex-wrap:wrap;gap:8px 22px;align-items:center;margin-bottom:14px}
+.lg{display:flex;align-items:center;gap:8px}
+.lg .swatch{width:14px;height:3px;flex:none}
+.lg .dot{width:8px;height:8px;border-radius:50%;flex:none;opacity:.55}
+.chart-wrap{overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch}
+.chart-inner{min-width:660px}
+svg{display:block;width:100%;height:auto;overflow:visible}
+.panel-tag{font-family:var(--font-mono);font-size:11px;letter-spacing:.09em;text-transform:uppercase}
+.axis-t{font-family:var(--font-mono);font-size:10px;fill:var(--ink-3);letter-spacing:.04em}
+.gridline{stroke:var(--grid);stroke-width:1}
+.baseline{stroke:var(--border-hi);stroke-width:1}
+.ann-rule{stroke:var(--ink-3);stroke-width:1;stroke-dasharray:2 3}
+.ann-t{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.05em;fill:var(--ink-2)}
+.post-dot{cursor:pointer}
+.hit{fill:transparent;cursor:crosshair}
+.cursor-rule{stroke:var(--ink-0);stroke-width:1;opacity:.32;pointer-events:none}
+
+/* tooltip */
+.tip{
+  position:fixed;z-index:60;pointer-events:none;max-width:330px;
+  background:var(--surface);border:1px solid var(--border-hi);
+  padding:11px 13px;opacity:0;transition:opacity 140ms var(--ease);
+}
+.tip[data-on="1"]{opacity:1}
+.tip .t-date{font-family:var(--font-mono);font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-2)}
+.tip .t-txt{font-size:12.5px;line-height:1.45;color:var(--ink-1);margin:7px 0 9px}
+.tip .t-row{display:flex;gap:14px;flex-wrap:wrap}
+.tip .t-row span{font-family:var(--font-mono);font-size:11px;color:var(--ink-2)}
+.tip .t-row b{color:var(--ink-0);font-weight:700}
+
+/* ---------- instruments ---------- */
+.instruments{display:grid;grid-template-columns:repeat(auto-fit,minmax(268px,1fr));gap:1px;background:var(--border);
+  border:1px solid var(--border)}
+.inst{background:var(--surface);padding:20px}
+.inst h3{font-family:var(--font-mono);font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--ink-2);font-weight:400;margin:0 0 4px}
+.inst .sub{font-size:12.5px;line-height:1.5;color:var(--ink-3);margin:0 0 18px}
+.bars{display:flex;flex-direction:column;gap:13px}
+.bar-row{display:grid;grid-template-columns:82px 1fr auto;gap:11px;align-items:center}
+.bar-row .k{font-family:var(--font-mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.track{height:7px;background:var(--raised);position:relative;overflow:hidden}
+.fill{position:absolute;inset:0 auto 0 0;transform-origin:left}
+.bar-row .v{font-family:var(--font-mono);font-size:11px;color:var(--ink-0);min-width:52px;text-align:right}
+
+/* ER inversion */
+.inv{display:flex;flex-direction:column;gap:14px}
+.inv-row{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;
+  padding-bottom:12px;border-bottom:1px solid var(--border)}
+.inv-row:last-child{border-bottom:0;padding-bottom:0}
+.inv-row .k{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.04em;color:var(--ink-2)}
+.inv-row .a,.inv-row .b{font-family:var(--font-mono);font-size:13px;min-width:56px;text-align:right}
+.inv-row .a{color:var(--accent);font-weight:700}
+.inv-row .b{color:var(--ink-1)}
+.win{display:inline-block;margin-left:5px;font-size:9px;letter-spacing:.06em;color:var(--accent)}
+
+/* fix list */
+.fixes{display:grid;gap:1px;background:var(--border);border:1px solid var(--border)}
+.fix{background:var(--surface);padding:18px 20px;display:grid;grid-template-columns:34px 1fr auto;gap:16px;align-items:start}
+@media(max-width:620px){.fix{grid-template-columns:28px 1fr;gap:12px}.fix .delta{grid-column:2;text-align:left}}
+.fix .n{font-family:var(--font-mono);font-size:11px;color:var(--ink-3);padding-top:3px;letter-spacing:.06em}
+.fix .body strong{display:block;font-family:var(--font-ui);font-weight:500;font-size:15px;color:var(--ink-0);margin-bottom:5px}
+.fix .body p{margin:0;font-size:13px;line-height:1.55;color:var(--ink-2)}
+.fix .delta{font-family:var(--font-mono);font-size:11px;color:var(--accent);white-space:nowrap;letter-spacing:.04em;padding-top:4px}
+
+footer{border-top:1px solid var(--border);padding-top:24px;margin-top:8px}
+footer p{font-size:12.5px;line-height:1.65;color:var(--ink-3);max-width:78ch;margin:0 0 9px}
+footer b{color:var(--ink-2);font-weight:400}
+.caveat{border-left:2px solid var(--accent);padding-left:14px;margin:22px 0 0}
+.caveat p{color:var(--ink-2)}
+
+
+/* ---------- sticky nav ---------- */
+.navbar{position:sticky;top:0;z-index:40;background:var(--ground);border-bottom:1px solid var(--border);
+  display:flex;gap:2px;overflow-x:auto;margin-inline:calc(-1*clamp(16px,4vw,56px));
+  padding-inline:clamp(16px,4vw,56px);padding-block:9px;scrollbar-width:none}
+.navbar::-webkit-scrollbar{display:none}
+.navbar a{font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--ink-2);text-decoration:none;padding:6px 11px;white-space:nowrap;border:1px solid transparent;
+  transition:color 150ms var(--ease),border-color 150ms var(--ease)}
+.navbar a:hover,.navbar a:focus-visible{color:var(--ink-0);border-color:var(--border-hi);outline:none}
+
+/* ---------- mechanism blocks ---------- */
+.mech{display:grid;gap:1px;background:var(--border);border:1px solid var(--border)}
+.mech-row{background:var(--surface);padding:20px;display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1.15fr) minmax(0,1.25fr);gap:22px}
+@media(max-width:860px){.mech-row{grid-template-columns:1fr;gap:14px}}
+.mech-col h4{font-family:var(--font-mono);font-size:10px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--ink-3);font-weight:400;margin:0 0 7px}
+.mech-col p{margin:0;font-size:13.5px;line-height:1.55;color:var(--ink-1)}
+.mech-col p.dim{color:var(--ink-2);font-size:13px}
+.mech-fig{font-family:var(--font-mono);font-size:15px;color:var(--accent);display:block;margin-bottom:6px}
+.mech-src{display:inline-block;font-family:var(--font-mono);font-size:9.5px;letter-spacing:.05em;
+  color:var(--ink-3);border:1px solid var(--border-hi);padding:2px 6px;margin-top:9px}
+
+/* ---------- decay viz ---------- */
+.decay{display:flex;align-items:flex-end;gap:5px;height:92px;margin:6px 0 12px}
+.decay-bar{flex:1;background:var(--ink-0);position:relative;min-width:0}
+.decay-bar span{position:absolute;top:-15px;left:0;right:0;text-align:center;
+  font-family:var(--font-mono);font-size:9px;color:var(--ink-3)}
+.decay-bar.floor{background:var(--ink-3)}
+
+/* ---------- cadence table ---------- */
+.tbl-wrap{overflow-x:auto}
+table.grid{width:100%;border-collapse:collapse;min-width:520px}
+table.grid th,table.grid td{text-align:right;padding:10px 12px;border-bottom:1px solid var(--border);
+  font-family:var(--font-mono);font-size:12.5px;color:var(--ink-1)}
+table.grid th{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);font-weight:400;
+  border-bottom:1px solid var(--border-hi)}
+table.grid td:first-child,table.grid th:first-child{text-align:left;color:var(--ink-2)}
+table.grid td.hi{color:var(--ink-0)}
+table.grid td.acc{color:var(--accent)}
+table.grid tr.total td{border-top:1px solid var(--border-hi);border-bottom:0;color:var(--ink-0)}
+
+/* ---------- campaigns ---------- */
+.camps{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1px;background:var(--border);
+  border:1px solid var(--border)}
+.camp{background:var(--surface);padding:22px;display:flex;flex-direction:column;gap:12px}
+.camp-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.camp h3{font-family:var(--font-ui);font-weight:500;font-size:17px;color:var(--ink-0);margin:0;letter-spacing:-.01em}
+.camp .run{font-family:var(--font-mono);font-size:10px;letter-spacing:.07em;color:var(--accent);white-space:nowrap}
+.camp p{margin:0;font-size:13px;line-height:1.55;color:var(--ink-2)}
+.camp ul{margin:0;padding-left:16px;display:flex;flex-direction:column;gap:7px}
+.camp li{font-size:12.5px;line-height:1.5;color:var(--ink-1)}
+.camp .foot{margin-top:auto;padding-top:12px;border-top:1px solid var(--border);
+  font-family:var(--font-mono);font-size:10px;letter-spacing:.05em;color:var(--ink-3);line-height:1.6}
+
+/* ---------- calendar ---------- */
+.cal{display:grid;gap:1px;background:var(--border);border:1px solid var(--border)}
+.cal details{background:var(--surface)}
+.cal summary{padding:15px 20px;cursor:pointer;display:grid;grid-template-columns:56px 1fr auto;gap:16px;
+  align-items:center;list-style:none}
+.cal summary::-webkit-details-marker{display:none}
+.cal summary:hover{background:var(--raised)}
+.cal summary .d{font-family:var(--font-mono);font-size:11px;letter-spacing:.06em;color:var(--ink-3)}
+.cal summary .th{font-size:14px;color:var(--ink-0);font-weight:400}
+.cal summary .ct{font-family:var(--font-mono);font-size:10px;letter-spacing:.06em;color:var(--ink-2)}
+.cal .slots{padding:0 20px 18px;display:flex;flex-direction:column;gap:1px;background:var(--border)}
+.slot{background:var(--surface);padding:13px 0 13px 0;display:grid;grid-template-columns:58px 116px 1fr;gap:14px;align-items:start}
+@media(max-width:700px){.slot{grid-template-columns:1fr;gap:6px}}
+.slot .tm{font-family:var(--font-mono);font-size:11px;color:var(--accent)}
+.slot .ty{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3)}
+.slot .cp{font-size:13.5px;line-height:1.5;color:var(--ink-1)}
+.slot .meta{display:block;margin-top:6px;font-size:11.5px;line-height:1.5;color:var(--ink-3)}
+.slot .meta b{color:var(--ink-2);font-weight:400}
+.slot .sc{font-family:var(--font-mono);font-size:10px;color:var(--ink-3);margin-left:8px}
+
+/* ---------- composition matrix ---------- */
+.matrix{width:100%;border-collapse:collapse;min-width:560px}
+.matrix th,.matrix td{padding:9px 10px;border-bottom:1px solid var(--border);font-family:var(--font-mono);font-size:12px;text-align:right}
+.matrix th{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);font-weight:400;border-bottom:1px solid var(--border-hi)}
+.matrix td:first-child,.matrix th:first-child{text-align:left;color:var(--ink-2)}
+.matrix .cell-n{color:var(--ink-3)}
+.matrix .cell-l{color:var(--ink-0)}
+.matrix td.best{background:var(--accent-soft)}
+.matrix td.empty{color:var(--ink-3)}
+.mx-head{display:flex;align-items:baseline;gap:10px;margin:26px 0 10px}
+.mx-head .chip{width:9px;height:9px;border-radius:50%;flex:none}
+.mx-head h3{font-family:var(--font-mono);font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-1);margin:0;font-weight:400}
+
+/* ---------- prescription ---------- */
+.rx{border:1px solid var(--border-hi);padding:24px;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:22px}
+.rx-item{display:flex;flex-direction:column;gap:5px}
+.rx-item .k{font-family:var(--font-mono);font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3)}
+.rx-item .v{font-family:var(--font-mono);font-size:22px;color:var(--ink-0)}
+.rx-item .v.acc{color:var(--accent)}
+.rx-item .n{font-size:12px;line-height:1.5;color:var(--ink-2)}
+
+/* ---------- ledger ---------- */
+.ledger{display:grid;gap:1px;background:var(--border);border:1px solid var(--border)}
+.led{background:var(--surface);padding:16px 20px;display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start}
+.led .badge{font-family:var(--font-mono);font-size:9px;letter-spacing:.07em;padding:3px 7px;white-space:nowrap;
+  border:1px solid currentColor}
+.led .badge.conf{color:var(--ink-0)}
+.led .badge.hyp{color:var(--ink-3)}
+.led .badge.no{color:var(--accent)}
+.led .txt strong{display:block;font-family:var(--font-ui);font-weight:500;font-size:14px;color:var(--ink-0);margin-bottom:4px}
+.led .txt p{margin:0;font-size:12.5px;line-height:1.55;color:var(--ink-2)}
+.led .txt code{font-family:var(--font-mono);font-size:11.5px;color:var(--ink-1)}
+
+@media (prefers-reduced-motion:reduce){*{transition-duration:0ms!important;animation:none!important}}
+</style>
+
+<header class="masthead">
+  <div>
+    <div class="lbl">X Telemetry &middot; 65-day window &middot; 2026-07-07 &rarr; 2026-09-10</div>
+    <h1>Where the posts land</h1>
+  </div>
+  <div class="mast-meta">
+    <div class="lbl">@bai_ee vs @seb__design</div>
+    <div class="lbl" style="color:var(--ink-3)">1,028 posts &middot; 234 with resolved views</div>
+    <div class="lbl" style="color:var(--ink-3)">* seb&rsquo;s views are a top-weighted sample</div>
+  </div>
+</header>
+
+
+<nav class="navbar" aria-label="Sections">
+  <a href="#visibility">Visibility mechanics</a>
+  <a href="#audience">Audience graph</a>
+  <a href="#causes">Cause &rarr; solution</a>
+  <a href="#mirror">The mirror</a>
+  <a href="#composition">Composition</a>
+  <a href="#prescription">Recommendation</a>
+  <a href="#replies">Reply playbook</a>
+  <a href="#campaigns">Campaigns</a>
+  <a href="#calendar">14-day calendar</a>
+  <a href="#ledger">Algorithm ledger</a>
+</nav>
+
+<div class="hero">
+  <div>
+    <div class="lbl">Engagement per post &mdash; the gap</div>
+    <div class="hero-fig">
+      <div class="hero-num" id="hero-num">33&times;</div>
+      <div class="hero-unit">fewer</div>
+    </div>
+    <p class="hero-say">You have <b>more followers than he does</b> &mdash; <b id="hero-fb">1,725</b> against <b id="hero-fa">1,549</b> &mdash; and average <b id="hero-la">0.84</b> likes a post against his <b id="hero-lb">28.03</b>. Yet your engagement rate is <b>level with his</b>: 1.84% against 1.91%. Identical conversion, a fraction of the reach. That is a distribution problem, not a content problem.</p>
+  </div>
+  <div class="plates" id="plates"></div>
+</div>
+
+<section>
+  <div class="sec-head">
+    <h2>Daily reach, post by post</h2>
+    <div class="lbl" id="tl-range"></div>
+  </div>
+  <p class="sec-note">Each dot is one post, placed on the day it went out; its height is the likes it earned. The line is a <b>7-day trailing average</b> &mdash; the trajectory. <b>Likes, not views, drive this chart on purpose:</b> views exist for only 150 of seb's 782 posts and that sample was drawn from his top performers, so a view-based time series would invent daily swings that never happened. Likes are recorded for all 1,028 posts on both accounts. <b>The panels do not share a y-axis</b> &mdash; the accounts differ by roughly 50&times; and a shared scale would press the lower one flat. Each panel prints its own ceiling, on a square-root scale so small posts stay visible.</p>
+  <div class="legend" id="legend"></div>
+  <div class="chart-wrap"><div class="chart-inner"><svg id="timeline" role="img" aria-label="Daily post reach for both accounts across the 65-day window"></svg></div></div>
+</section>
+
+<section>
+  <div class="sec-head"><h2>What the shapes mean</h2></div>
+  <div class="instruments">
+    <div class="inst">
+      <h3>Output mix</h3>
+      <p class="sub">Share of all posts, by kind. A retweet earns no impression of your own &mdash; X credits the view to the original author.</p>
+      <div class="bars" id="mix"></div>
+    </div>
+    <div class="inst">
+      <h3>Pull per post kind</h3>
+      <p class="sub">Average likes, same format, both accounts &mdash; complete data, every post counted. Identical mechanics, different outcome.</p>
+      <div class="bars" id="reach"></div>
+    </div>
+    <div class="inst">
+      <h3>Conversion, head to head</h3>
+      <p class="sub">Engagement rate pooled by impressions &mdash; total engagement over total views, not an average of per-post ratios. You lead on both quote formats; he leads on showcase and text.</p>
+      <div class="inv" id="inv"></div>
+    </div>
+  </div>
+</section>
+
+<section id="visibility">
+  <div class="sec-head"><h2>Why you only see three of his eighteen</h2></div>
+  <p class="sec-note">You asked the right question. He posts a median of <b>11 a day</b>, hits <b>14+ on 21 days</b> and <b>18+ on 14 days</b>, with a peak of <b>35</b>. You see a handful. That is not your imagination and it is not a bug &mdash; it is an explicit, named rule in X's ranking code. It also does <em>not</em> mean he spaces his posts out: he does the opposite, and the second panel below corrects an earlier version of this page that said otherwise.</p>
+
+  <div class="mech">
+    <div class="mech-row">
+      <div class="mech-col">
+        <h4>The rule</h4>
+        <p><b>Author Diversity.</b> In the ranking phase, &ldquo;each post after an author&rsquo;s first is multiplied by a decaying factor, down to a floor.&rdquo;</p>
+        <span class="mech-src">home-mixer/scorers/ranking_scorer.rs</span>
+      </div>
+      <div class="mech-col">
+        <h4>What it looks like in one session</h4>
+        <div class="decay" aria-hidden="true">
+          <div class="decay-bar" style="height:100%"><span>1st</span></div>
+          <div class="decay-bar" style="height:58%"><span>2nd</span></div>
+          <div class="decay-bar" style="height:34%"><span>3rd</span></div>
+          <div class="decay-bar" style="height:20%"><span>4th</span></div>
+          <div class="decay-bar floor" style="height:12%"><span>5th</span></div>
+          <div class="decay-bar floor" style="height:12%"><span>&hellip;</span></div>
+        </div>
+        <p class="dim">Illustrative shape &mdash; the code confirms decay and a floor, it does not publish the coefficient.</p>
+      </div>
+      <div class="mech-col">
+        <h4>So what volume actually buys</h4>
+        <p>Eighteen posts are not eighteen shots at <em>your</em> feed. They are eighteen entries into <b>different people&rsquo;s sessions</b>, each of whom sees one or two at full weight. Volume works by widening the number of independent auctions you enter &mdash; never by dominating any single feed.</p>
+      </div>
+    </div>
+
+    <div class="mech-row">
+      <div class="mech-col">
+        <h4>What clustering actually looks like</h4>
+        <p><span class="mech-fig">1.96 vs 1.31</span>Posts per <em>occupied</em> hour, his against yours. <b>73% of his posts land in an hour that already contains another of his posts</b>, and his busiest hour held eleven. He is denser than you, not sparser.</p>
+      </div>
+      <div class="mech-col">
+        <h4>So spacing is not the lever</h4>
+        <p class="dim">Author Diversity decays same-author posts inside <em>one ranked session</em> &mdash; not inside a clock hour. Two posts sixty minutes apart mostly compete for different sessions anyway, and when they do share one, the second is discounted rather than discarded. It still reaches every viewer whose session missed the first.</p>
+        <span class="mech-src">CONFIRMED mechanism &middot; scheduling inference was not</span>
+      </div>
+      <div class="mech-col">
+        <h4>What to do instead</h4>
+        <p>Copy his <b>shape</b>, not a spacing rule: roughly <b>two posts per active hour</b>, and <b>add hours as volume grows</b> rather than deepening the ones you already use. At Tier 2 that is 8 posts across 4&ndash;5 hours. Volume is the lever; the hour count follows it.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="audience">
+  <div class="sec-head"><h2>The audience graph &mdash; who is standing there before you post</h2></div>
+  <p class="sec-note">Everything above measures <em>what you post</em>. This measures <em>who is there when you do</em>, and it is the larger of the two problems. You carry <b id="aud-fol-b">1,725</b> followers against his <b id="aud-fol-a">1,549</b> &mdash; an <b>11% longer list</b> &mdash; and earn <b id="aud-gap">16.8&times;</b> fewer likes per follower on an authored post. A follower count is not distribution. It is a list of people who <em>may</em> be shown a post, if the handful served first react fast enough to clear the next gate.</p>
+
+  <div class="instruments">
+    <div class="inst">
+      <h3>Reach per follower</h3>
+      <p class="sub">Average likes on an authored post as a share of the follower list. Complete data &mdash; every one of the 1,028 posts on both accounts carries a like count, so this comparison carries no sampling caveat.</p>
+      <div class="bars" id="audience-per-follower-bars"></div>
+      <p class="sub" style="margin:18px 0 0" id="audience-per-follower-note"></p>
+    </div>
+    <div class="inst">
+      <h3>How each account amplifies</h3>
+      <p class="sub">The same social act &mdash; handing someone else&rsquo;s post to your audience &mdash; ships in two vehicles with opposite distribution. A quote is a new post of your own, eligible for strangers. A retweet is stripped for every non-follower.</p>
+      <div class="bars" id="audience-vehicle-bars"></div>
+    </div>
+    <div class="inst">
+      <h3>Concentration of amplification</h3>
+      <p class="sub">Every retweet and quote counted by target, self-quotes separated out. Scatter across other people&rsquo;s accounts is normal &mdash; both of you do it. The line that differs is the last one.</p>
+      <div class="inv" id="audience-concentration"></div>
+    </div>
+  </div>
+
+  <div class="mech" id="audience-mechanism-list"></div>
+
+  <div class="sec-head" style="margin-top:44px"><h2>Pruning &mdash; what each lever actually changes</h2></div>
+  <p class="sec-note">The instinct is to clean the follow graph: cut the sports accounts, cut the politics, tighten the topic. <b>Check the direction of the arrow first.</b> Who you follow builds your <em>consumer</em> embedding &mdash; the feed you are served. Who follows and engages with you builds your <em>producer</em> embedding &mdash; the one that decides which strangers you are retrievable for. Unfollowing someone does not change how X classifies you as an author. The two towers are separate, and only one of them is your reach.</p>
+  <div class="tbl-wrap">
+    <table class="grid" id="audience-lever-table">
+      <thead><tr><th>Lever</th><th>Your feed</th><th>Your reach as an author</th><th>Reversible</th></tr></thead>
+      <tbody>
+        <tr><td>Mute</td><td>removed</td><td class="hi">no change &mdash; they still follow you</td><td>yes, silently</td></tr>
+        <tr><td>Private List</td><td>unchanged</td><td class="hi">no change &mdash; changes what you <em>react</em> to</td><td>yes, silently</td></tr>
+        <tr><td>Unfollow</td><td>removed</td><td>no direct change</td><td>yes, visible</td></tr>
+        <tr><td>Remove follower</td><td>unchanged</td><td style="color:var(--accent)">shrinks your in-network pool</td><td>they must re-follow</td></tr>
+        <tr><td>Block</td><td>removed</td><td style="color:var(--accent)">shrinks your in-network pool</td><td>visible, and remembered</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="sec-note" style="margin-top:18px"><b>The one real link runs the other way.</b> Your feed is your reaction pool &mdash; you quote and retweet what is in front of you, and a feed spanning five clusters produced <b>80 accounts amplified exactly once</b>. The follow graph hurt you through what it <em>fed</em> you, never through what it <em>labelled</em> you. So the fix is not subtraction: build a private List of the design-engineering, web3-design and ai-tooling accounts you already amplify, open that list and nothing else when you sit down to post, and let the home feed stay personal. <b>Keep the politics. Keep anyone you enjoy.</b> Mute what you want out of working hours without spending a follow. Removing followers is the only lever here that touches distribution directly, it only moves one account at a time, and on an audience this inert it buys less than a single week of replying would.</p>
+
+  <div class="caveat" id="audience-unknowns-note">
+    <p><b>What this section cannot see.</b> Neither your follower roster nor your following list is available &mdash; ScrapeCreators publishes no followers endpoint, and this repo&rsquo;s own <span class="num">x_monitor</span> roster has never been synced. Everything above is derived from the <b>outbound</b> graph: who each account hands its distribution to, and what each earns back per follower. <b>Follower quality is therefore inferred, not measured.</b></p>
+    <p>The specific unknowns that would change the advice: how many of the 1,725 are dormant or abandoned, how many arrived from a former music-and-DJ audience with no interest in design or dev work, and how many are mutuals who would reliably supply the early engagement that gates fanout. Resolving them needs a roster pull &mdash; <span class="num">sync-audience</span> on the X Monitor card at roughly two API calls, or the <span class="num">bird</span> CLI for free &mdash; and it is a deliberate decision, not a refactor.</p>
+  </div>
+</section>
+
+<section id="causes">
+  <div class="sec-head"><h2>Cause &rarr; mechanism &rarr; solution</h2></div>
+  <p class="sec-note">Every mechanism here is named in X's published ranking code or in this repo&rsquo;s algorithm profile. Where something is a hypothesis rather than a confirmed component, it says so.</p>
+
+  <div class="mech" id="cause-list"></div>
+</section>
+
+<section id="mirror">
+  <div class="sec-head"><h2>The mirror &mdash; his mix against yours</h2></div>
+  <p class="sec-note">Posts per calendar day across the same 66 days. The column that matters is the last one: <b>posts able to reach someone who does not follow you</b>. He has 570 of them, you have 80 &mdash; a <b>7.1&times; gap</b>, far wider than the 3.2&times; gap in raw post count.</p>
+  <div class="tbl-wrap">
+    <table class="grid">
+      <thead><tr><th>Post type</th><th>@seb /day</th><th>You now</th><th>Tier 1</th><th>Tier 2</th><th>Tier 3</th><th>Reaches non-followers</th></tr></thead>
+      <tbody>
+        <tr><td>quote-react</td><td class="hi">2.77</td><td class="acc">0.39</td><td>2</td><td>3</td><td>4</td><td class="hi">yes</td></tr>
+        <tr><td>original-showcase</td><td class="hi">2.35</td><td class="acc">0.44</td><td>1</td><td>2</td><td>2</td><td class="hi">yes</td></tr>
+        <tr><td>original-text</td><td class="hi">2.56</td><td class="acc">0.15</td><td>1</td><td>2</td><td>3</td><td class="hi">yes</td></tr>
+        <tr><td>quote-commentary</td><td class="hi">0.73</td><td class="acc">0.21</td><td>0</td><td>0</td><td>1</td><td class="hi">yes</td></tr>
+        <tr><td>retweet</td><td>2.71</td><td class="acc">2.45</td><td>1</td><td>1</td><td>2</td><td style="color:var(--accent)">no &mdash; OON-filtered</td></tr>
+        <tr><td>reply</td><td>0.50<sup>*</sup></td><td class="acc">0.06</td><td>5</td><td>10</td><td>15</td><td style="color:var(--accent)">no &mdash; OON-filtered</td></tr>
+        <tr class="total"><td>Total per day</td><td>11.85</td><td class="acc">3.73</td><td>10</td><td>18</td><td>27</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="sec-note" style="margin-top:18px"><sup>*</sup> His reply count is a floor, not a measurement &mdash; X&rsquo;s profile timeline hides most replies. With 10,575 likes given and 648 accounts followed, his true reply volume is certainly far higher than 0.50 a day.<br>
+  <b>Start at Tier 1 and hold it for two weeks before moving up.</b> His one bad stretch &mdash; the week of 3 August, 43 posts at 15.5 average likes &mdash; recovered only when volume came back. Consistency beats peak volume, and a tier you abandon in nine days is worse than one you keep.</p>
+</section>
+
+<section id="composition">
+  <div class="sec-head"><h2>Composition &mdash; what the posts actually are</h2></div>
+  <p class="sec-note">Post count alone hides the thing that matters. Below: every post type crossed against the media it carried, with average likes in each cell. Read it for two things &mdash; <b>which format wins inside a given type</b>, and <b>where you are already doing it right</b>.</p>
+  <div id="matrices"></div>
+
+  <div class="sec-head" style="margin-top:44px"><h2>What an occupied hour holds</h2></div>
+  <p class="sec-note">An &ldquo;occupied hour&rdquo; is any clock hour in which the account posted at all. This is the table that corrected the earlier spacing advice on this page.</p>
+  <div class="tbl-wrap">
+    <table class="grid" id="hours-tbl"></table>
+  </div>
+  <div id="seq-note"></div>
+</section>
+
+<section id="prescription">
+  <div class="sec-head"><h2>The actual recommendation</h2></div>
+  <p class="sec-note">Superseding the &ldquo;never post twice in an hour&rdquo; rule this page previously carried. Volume is the lever. Hour count is a consequence of volume, not a discipline to manage.</p>
+  <div class="rx" id="rx"></div>
+  <p class="sec-note" style="margin-top:22px"><b>Do not ration posts per hour.</b> He puts <b>73%</b> of his posts into an hour that already contains one of his, and his busiest hour held <b>eleven</b>. Author Diversity discounts a second post inside one ranked session &mdash; it does not delete it, and it does nothing at all to the viewers whose session missed the first. Stacking costs you very little. Not posting costs you everything.</p>
+  <p class="sec-note"><b>Mix the stack, do not repeat it.</b> 80% of his multi-post hours contain more than one type. 63% of yours are retweets, and <span class="num">retweet &rarr; retweet</span> is your single most common in-hour sequence &mdash; you are clustering the one format that cannot reach a stranger. If you stack, stack a quote-react next to a showcase, not two retweets.</p>
+</section>
+
+<section id="replies">
+  <div class="sec-head"><h2>Reply playbook</h2></div>
+  <p class="sec-note"><b>Read this before you start replying, because the obvious mental model is wrong.</b> Replies from accounts a viewer does not follow are stripped by <span class="num">OONRetweetReplyFilter</span> during pre-scoring &mdash; so your reply is <em>not</em> going to travel through the For You feed. It works through two other surfaces entirely: the <b>conversation view</b> under a post people are already reading, and the <b>profile click</b> that follows a reply worth reading. Optimise for those, not for reach.</p>
+  <div class="mech" id="reply-list"></div>
+</section>
+
+<section id="campaigns">
+  <div class="sec-head"><h2>Campaigns</h2></div>
+  <p class="sec-note">Four runs built on your own assets. Each names the mechanism it exploits, and each is sized to be finished rather than admired.</p>
+  <div class="camps" id="camp-list"></div>
+</section>
+
+<section id="calendar">
+  <div class="sec-head">
+    <h2>14-day calendar</h2>
+    <div class="lbl" id="cal-meta"></div>
+  </div>
+  <p class="sec-note">Tier 2 cadence, real copy, ready to paste. Every authored post was scored through this repo&rsquo;s <span class="num">scoreXPost</span> and rewritten until it cleared 0.20. Open a day to see the slots. Quote-react slots carry a brief instead of a fixed target, because the post you are quoting has to be found fresh each morning &mdash; that is the job, and it takes five minutes.</p>
+  <div class="cal" id="cal-list"></div>
+</section>
+
+<section id="ledger">
+  <div class="sec-head"><h2>Algorithm ledger</h2></div>
+  <p class="sec-note">What is confirmed in X&rsquo;s published ranking code, what is a community hypothesis carried in this repo&rsquo;s profile, and what is not supported at all. Kept separate on purpose, so a guess never gets treated as a fact.</p>
+  <div class="ledger">
+    <div class="led"><span class="badge conf">CONFIRMED</span><div class="txt"><strong>Author Diversity decay</strong><p>&ldquo;Each post after an author&rsquo;s first is multiplied by a decaying factor, down to a floor.&rdquo; Named in <code>home-mixer/scorers/ranking_scorer.rs</code>. This is why high volume works across sessions and fails within one.</p></div></div>
+    <div class="led"><span class="badge conf">CONFIRMED</span><div class="txt"><strong>OONRetweetReplyFilter</strong><p>Removes reposts and replies from non-followed accounts during pre-scoring filtering. Retweets and replies cannot reach strangers through For You. Quote-tweets are not in this filter &mdash; a quote is a new post carrying its own text, which is precisely why quote-react is the reach engine.</p></div></div>
+    <div class="led"><span class="badge conf">CONFIRMED</span><div class="txt"><strong>Out-of-Network Discount</strong><p>Posts from accounts a viewer does not follow are multiplied by a factor below 1. Reaching new people starts from a penalty &mdash; which is why the quality bar for a stranger-facing post is higher than for one your followers see.</p></div></div>
+    <div class="led"><span class="badge conf">CONFIRMED</span><div class="txt"><strong>Negative signals carry real negative weight</strong><p><code>not_interested</code>, <code>mute_author</code>, <code>block_author</code>, <code>report</code> &mdash; and <code>not_dwelled</code>. Scrolling past without stopping is itself a cost. Off-topic posts do not merely underperform; they actively subtract.</p></div></div>
+    <div class="led"><span class="badge conf">CONFIRMED</span><div class="txt"><strong>Two-tower retrieval on hashed author identity</strong><p>Out-of-network candidates come from Phoenix embedding retrieval and SimClusters. Your author identity has to sit consistently inside one topic cluster to be retrievable by the right strangers. Spreading it across five &mdash; music, design-engineering, ai-tooling, web3 gaming, web3 design &mdash; blurs that embedding. <b>That the mechanism exists is confirmed; that topical spread measurably dilutes it is this repo&rsquo;s own <code>topicConsistency</code> hypothesis at medium confidence.</b> The handful of political and crypto posts, at 5.3% of output, are not the cause.</p></div></div>
+    <div class="led"><span class="badge hyp">HYPOTHESIS</span><div class="txt"><strong>Link suppression</strong><p>This repo&rsquo;s profile rates <code>linkRisk</code> at medium confidence and recommends putting links in the first reply. The published code does not name a link demotion. Your own data agrees with the hypothesis regardless &mdash; posts with an inline link averaged 20.5 likes against 36.5 without.</p></div></div>
+    <div class="led"><span class="badge hyp">HYPOTHESIS</span><div class="txt"><strong>Early reply window</strong><p><code>replyEarlyWindow</code>, medium confidence: replying to a young, accelerating post rides its rising distribution, with velocity mattering more than total engagement. Already implemented in this repo&rsquo;s <code>reply-targets</code> recipe at a 6-hour window.</p></div></div>
+    <div class="led"><span class="badge no">NOT SUPPORTED</span><div class="txt"><strong>Blue checkmark as a ranking boost</strong><p>Phoenix&rsquo;s published feature list contains <em>no</em> verification or subscriber signal. The only subscription component in the pipeline is <code>IneligibleSubscriptionFilter</code>, which gates access to subscriber-only content and does nothing to ranking. <b>Verification is not a demonstrated distribution lever.</b> It buys longer posts, editing, and analytics &mdash; useful, but it will not fix reach, and nothing in your numbers should be blamed on its absence. Buy it as a tool, not as a remedy.</p></div></div>
+  </div>
+</section>
+
+<footer>
+  <p><b>Method.</b> Timelines pulled via the <span class="num">bird</span> CLI over X's web GraphQL using browser cookie auth &mdash; free, no API spend. View counts backfilled through ScrapeCreators at 1 credit per post. Total cost across both audits: <span class="num">238 credits ≈ $0.45</span>. No paid X API call was made.</p>
+  <p><b>Algorithm source of truth.</b> Mechanism claims on this page come from X&rsquo;s published ranking code at <span class="num">github.com/xai-org/x-algorithm</span>, cross-checked against this repo&rsquo;s own profile at <span class="num">features/x-growth/algorithm-profiles/x-2026-05-15.json</span> and the draft scorer in <span class="num">features/x-growth/score-draft.js</span>. That profile is dated <span class="num">2026-05-15</span> and reviewed <span class="num">2026-06-18</span>. <b>When the upstream repo changes, the profile and this strategy both need re-checking</b> &mdash; the ledger above is the place to start, since it separates what is confirmed in code from what is a community hypothesis. Anything that moves from HYPOTHESIS to CONFIRMED, or drops off entirely, changes the advice built on it.</p>
+  <p><b>Where this lands eventually.</b> The Social Media bucket already carries an <span class="num">x-profile</span> &ldquo;Social Accounts&rdquo; card (<span class="num">DashboardPage.jsx:9408</span>), and the <span class="num">copywriter</span> card already scores drafts through the same <span class="num">scoreXPost</span> used here. This page is deliberately standalone for now; the cadence targets, quote-target list and reply playbook are the parts that would move into that card first.</p>
+  <div class="caveat">
+    <p><b>Corrected after review.</b> An earlier version of this page advised never posting twice inside an hour. The model account does the opposite &mdash; 73% of his posts land in an hour that already contains one of his, and his busiest hour held eleven. That advice was a scheduling rule inferred from a real mechanism rather than measured against his behaviour, and it has been replaced. The related &ldquo;3.1 vs 6.0 hours&rdquo; figure was also largely an artifact of his 3.2&times; higher volume, and is no longer presented as a cost you are paying.</p>
+  <p><b>One claim corrected.</b> An earlier draft of this analysis stated that X down-ranks unverified accounts in reply ranking. The published algorithm does not support that, and it has been removed &mdash; see the NOT SUPPORTED entry in the ledger. Engagement-rate figures were also recomputed as pooled rates rather than averages of per-post ratios, which changed the finding from &ldquo;your conversion beats his&rdquo; to the more defensible &ldquo;your conversion is level with his.&rdquo;</p>
+    <p><b>What this chart cannot show.</b> X publishes no follower history, so there is no growth curve here and none was invented. Trajectory is drawn from measured reach, which is a proxy, not a follower count. The three real follower datapoints we have are marked on the timeline as annotations.</p>
+    <p><b>Sampling is asymmetric.</b> Every one of @bai_ee's 84 authored posts has a resolved view count. @seb__design has views for 150 of 782 &mdash; the top 100 by likes plus random controls &mdash; so his view figures are biased upward and are only safe for comparison within that sampled set. His daily view totals are therefore partial, and his trailing-average line is drawn only across days that contain sampled posts.</p>
+  </div>
+</footer>
+
+<div class="tip" id="tip" role="status" aria-live="polite"></div>
+
+<script id="payload" type="application/json">/*__DATA__*/</script>
+<script id="pack" type="application/json">/*__PACK__*/</script>
+<script id="cal" type="application/json">/*__CAL__*/</script>
+<script>
+(function(){
+  var DATA;
+  try { DATA = JSON.parse(document.getElementById('payload').textContent); }
+  catch(e){ document.getElementById('timeline').outerHTML='<p class="sec-note">Data payload failed to parse.</p>'; return; }
+
+  var A = { key:'seb',   handle:'@seb__design', color:'var(--seb)',   label:'seb__design' };
+  var B = { key:'baiee', handle:'@bai_ee',      color:'var(--baiee)', label:'bai_ee' };
+  var fmt = function(n){ return n==null ? '\u2014' : Number(n).toLocaleString('en-US'); };
+  var css = function(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); };
+
+  /* ---------- plates ---------- */
+  var plates = document.getElementById('plates');
+  [B,A].forEach(function(acct){
+    var m = DATA[acct.key].meta;
+    var el = document.createElement('div');
+    el.className = 'plate';
+    el.innerHTML =
+      '<div class="plate-id"><span class="chip" style="background:'+acct.color+'"></span>'+
+        '<span class="plate-h">'+acct.handle+'</span></div>'+
+      '<div class="lbl">'+fmt(m.followers)+' followers</div>'+
+      '<div class="plate-row">'+
+        '<div class="pstat"><span class="lbl">Avg likes</span><span class="v'+(acct.key==='baiee'?' acc':'')+'">'+(m.avgLikes==null?'\u2014':m.avgLikes.toFixed(2))+'</span></div>'+
+        '<div class="pstat"><span class="lbl">Authored</span><span class="v">'+fmt(m.authoredPosts)+'</span></div>'+
+        '<div class="pstat"><span class="lbl">Median views'+(acct.key==='seb'?' *':'')+'</span><span class="v">'+fmt(m.medianViews)+'</span></div>'+
+      '</div>';
+    plates.appendChild(el);
+  });
+
+  /* ---------- hero ---------- */
+  document.getElementById('hero-fb').textContent = fmt(DATA.baiee.meta.followers);
+  document.getElementById('hero-fa').textContent = fmt(DATA.seb.meta.followers);
+  document.getElementById('hero-la').textContent = DATA.baiee.meta.avgLikes.toFixed(2);
+  document.getElementById('hero-lb').textContent = DATA.seb.meta.avgLikes.toFixed(2);
+  document.getElementById('hero-num').textContent =
+    Math.round(DATA.seb.meta.avgLikes / DATA.baiee.meta.avgLikes) + '\u00d7';
+
+  /* ---------- legend ---------- */
+  var legend = document.getElementById('legend');
+  legend.innerHTML =
+    '<span class="lg"><span class="swatch" style="background:var(--seb)"></span><span class="lbl">@seb__design \u00b7 7-day avg likes</span></span>'+
+    '<span class="lg"><span class="swatch" style="background:var(--baiee)"></span><span class="lbl">@bai_ee \u00b7 7-day avg likes</span></span>'+
+    '<span class="lg"><span class="dot" style="background:var(--ink-2)"></span><span class="lbl">one post</span></span>'+
+    '<span class="lg"><span class="swatch" style="background:var(--ink-3);height:1px"></span><span class="lbl">marked event</span></span>';
+
+  /* ---------- timeline ---------- */
+  var days = DATA.seb.daily.map(function(d){ return d.date; });
+  document.getElementById('tl-range').textContent = days.length + ' days';
+
+  var W = 1180, PL = 52, PR = 20, PT = 38, PB = 30, PH = 176, GAP = 58;
+  var innerW = W - PL - PR;
+  var H = PT + PH + GAP + PH + PB;
+  var svg = document.getElementById('timeline');
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+
+  var xOf = function(i){ return PL + (innerW * (i + 0.5)) / days.length; };
+  var sq = function(v){ return Math.sqrt(Math.max(0, v)); };
+  var NS = 'http://www.w3.org/2000/svg';
+  function mk(tag, attrs, txt){
+    var e = document.createElementNS(NS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (txt != null) e.textContent = txt;
+    return e;
+  }
+
+  var panels = [
+    { acct:A, top:PT,               data:DATA.seb   },
+    { acct:B, top:PT + PH + GAP,    data:DATA.baiee }
+  ];
+
+  panels.forEach(function(p){
+    // Likes, not views: complete for every post on both accounts.
+    var posts = p.data.posts;
+    var maxV  = posts.reduce(function(m,q){ return Math.max(m, q.likes); }, 0) || 1;
+    var yBase = p.top + PH;
+    var yOf   = function(v){ return yBase - (sq(v) / sq(maxV)) * PH; };
+
+    // horizontal grid at 4 steps of the sqrt scale
+    [0.25, 0.5, 0.75, 1].forEach(function(f){
+      var val = maxV * f * f;
+      var y = yBase - f * PH;
+      svg.appendChild(mk('line', { x1:PL, x2:W-PR, y1:y, y2:y, class:'gridline' }));
+      svg.appendChild(mk('text', { x:PL-9, y:y+3.5, class:'axis-t', 'text-anchor':'end' }, fmt(Math.round(val))));
+    });
+    svg.appendChild(mk('line', { x1:PL, x2:W-PR, y1:yBase, y2:yBase, class:'baseline' }));
+
+    // panel tag
+    var tag = mk('text', { x:PL, y:p.top-38, class:'panel-tag', fill:'currentColor' }, p.acct.handle + '  \u00b7  PEAK ' + fmt(maxV) + ' LIKES');
+    tag.style.fill = p.acct.key === 'seb' ? css('--ink-0') : css('--baiee');
+    svg.appendChild(tag);
+
+    // 7-day trailing average line
+    var pts = [];
+    p.data.rolling.forEach(function(r, i){
+      if (r.avgLikes7 == null) return;
+      pts.push([xOf(i), yOf(r.avgLikes7)]);
+    });
+    if (pts.length > 1){
+      var d = pts.map(function(pt,i){ return (i?'L':'M') + pt[0].toFixed(1) + ' ' + pt[1].toFixed(1); }).join(' ');
+      svg.appendChild(mk('path', {
+        d:d, fill:'none', 'stroke-width':2, 'stroke-linejoin':'round', 'stroke-linecap':'round',
+        stroke: p.acct.key === 'seb' ? css('--ink-0') : css('--baiee')
+      }));
+    }
+
+    // One dot per post. Batched into a fragment and rendered listener-free:
+    // 1,028 individually-appended circles forced layout on every insert, and the
+    // shared hover rect sits above them anyway, so per-dot listeners never fired.
+    var byDay = {};
+    posts.forEach(function(q){ (byDay[q.date] = byDay[q.date] || []).push(q); });
+    var frag = document.createDocumentFragment();
+    var dotFill = p.acct.key === 'seb' ? css('--ink-0') : css('--baiee');
+    var ground = css('--ground');
+    days.forEach(function(day, i){
+      var arr = byDay[day] || [];
+      arr.forEach(function(q, k){
+        var jitter = arr.length > 1 ? ((k / (arr.length - 1)) - 0.5) * Math.min(6, innerW / days.length * 0.7) : 0;
+        frag.appendChild(mk('circle', {
+          cx:(xOf(i) + jitter).toFixed(1), cy:yOf(q.likes).toFixed(1), r:2.6,
+          fill:dotFill, 'fill-opacity':0.42, stroke:ground, 'stroke-width':0.75
+        }));
+      });
+    });
+    svg.appendChild(frag);
+
+    // annotations belonging to this account
+    var anns = (DATA.annotations || []).filter(function(a){ return a.account === p.acct.key; })
+      .sort(function(a,b){ return a.date < b.date ? -1 : 1; });
+    anns.forEach(function(a, ai){
+      var i = days.indexOf(a.date);
+      if (i < 0) return;
+      var x = xOf(i);
+      // Adjacent milestones would overprint; lift every other label onto a second row.
+      var labelY = p.top - (ai % 2 ? 26 : 13);
+      svg.appendChild(mk('line', { x1:x, x2:x, y1:labelY + 4, y2:yBase, class:'ann-rule' }));
+      var anchor = i > days.length * 0.84 ? 'end' : (i < days.length * 0.1 ? 'start' : 'middle');
+      svg.appendChild(mk('text', { x:x, y:labelY, class:'ann-t', 'text-anchor':anchor }, a.label));
+    });
+  });
+
+  // x axis ticks \u2014 first of each month plus the two endpoints
+  days.forEach(function(day, i){
+    var isEdge = (i === 0 || i === days.length - 1);
+    var isFirst = day.slice(8) === '01';
+    if (!isEdge && !isFirst) return;
+    svg.appendChild(mk('text', {
+      x:xOf(i), y:H - PB + 18, class:'axis-t',
+      'text-anchor': i === 0 ? 'start' : (i === days.length-1 ? 'end' : 'middle')
+    }, day.slice(5)));
+  });
+
+  // shared hover column
+  var hit = mk('rect', { x:PL, y:PT-18, width:innerW, height:H-PT-PB+18, class:'hit' });
+  svg.appendChild(hit);
+  var rule = mk('line', { x1:0, x2:0, y1:PT-18, y2:H-PB, class:'cursor-rule', opacity:0 });
+  svg.appendChild(rule);
+
+  hit.addEventListener('pointermove', function(ev){
+    var box = svg.getBoundingClientRect();
+    var rel = (ev.clientX - box.left) / box.width * W;
+    var i = Math.max(0, Math.min(days.length - 1, Math.floor((rel - PL) / innerW * days.length)));
+    rule.setAttribute('x1', xOf(i)); rule.setAttribute('x2', xOf(i)); rule.setAttribute('opacity', 1);
+    showDay(ev, i);
+  });
+  hit.addEventListener('pointerleave', function(){ rule.setAttribute('opacity', 0); hideTip(); });
+
+  /* ---------- tooltip ---------- */
+  var tip = document.getElementById('tip');
+  function place(ev){
+    var w = tip.offsetWidth || 300, h = tip.offsetHeight || 90;
+    var x = ev.clientX + 16, y = ev.clientY + 16;
+    if (x + w > innerWidth - 8) x = ev.clientX - w - 16;
+    if (y + h > innerHeight - 8) y = ev.clientY - h - 16;
+    tip.style.left = Math.max(8, x) + 'px';
+    tip.style.top  = Math.max(8, y) + 'px';
+  }
+  function hideTip(){ tip.dataset.on = '0'; }
+  // Best post per account per day, indexed once so hover stays cheap.
+  var bestByDay = { seb:{}, baiee:{} };
+  ['seb','baiee'].forEach(function(k){
+    DATA[k].posts.forEach(function(q){
+      var cur = bestByDay[k][q.date];
+      if (!cur || q.likes > cur.likes) bestByDay[k][q.date] = q;
+    });
+  });
+  var esc = function(t){ return String(t||'').replace(/[<>&]/g, function(c){ return {'<':'&lt;','>':'&gt;','&':'&amp;'}[c]; }); };
+
+  function showDay(ev, i){
+    var sd = DATA.seb.daily[i], bd = DATA.baiee.daily[i];
+    function line(handle, d, best, cls){
+      var top = best ? '<div class="t-txt" style="margin:5px 0 0;color:var(--ink-2)">\u201c' +
+        esc(best.textShort).slice(0,110) + '\u201d <b style="color:'+cls+'">'+fmt(best.likes)+'</b></div>' : '';
+      return '<div style="margin-top:9px"><span style="font-family:var(--font-mono);font-size:11px;color:var(--ink-2)">'+
+        handle+' &nbsp; <b style="color:var(--ink-0)">'+d.posts+'</b> posts \u00b7 <b style="color:var(--ink-0)">'+
+        fmt(d.likes)+'</b> likes</span>'+top+'</div>';
+    }
+    tip.innerHTML = '<div class="t-date">'+sd.date+'</div>'+
+      line('@seb__design', sd, bestByDay.seb[sd.date], 'var(--ink-0)')+
+      line('@bai_ee', bd, bestByDay.baiee[bd.date], 'var(--baiee)');
+    tip.dataset.on = '1'; place(ev);
+  }
+
+
+  /* ---------- instruments ---------- */
+  var ORDER = ['retweet','quote-react','quote-commentary','original-showcase','original-text','self-quote','reply'];
+  function bars(node, rows, max, fmtV){
+    node.innerHTML = rows.map(function(r){
+      var pct = max ? Math.max(0.6, (r.v / max) * 100) : 0;
+      return '<div class="bar-row"><span class="k" title="'+r.k+'">'+r.k+'</span>'+
+        '<span class="track"><span class="fill" style="width:'+pct.toFixed(1)+'%;background:'+r.c+'"></span></span>'+
+        '<span class="v">'+fmtV(r.v)+'</span></div>';
+    }).join('');
+  }
+
+  // mix \u2014 share of output
+  var mixRows = [];
+  [B,A].forEach(function(acct){
+    var tb = DATA[acct.key].typeBreakdown, tot = DATA[acct.key].meta.totalPosts;
+    ['retweet','quote-react','original-showcase'].forEach(function(t){
+      var n = tb[t] ? tb[t].n : 0;
+      mixRows.push({ k:acct.label.slice(0,7)+' '+t.replace('original-',''), v:n/tot*100, c:acct.color });
+    });
+  });
+  bars(document.getElementById('mix'), mixRows, 100, function(v){ return v.toFixed(0)+'%'; });
+
+  // reach per kind
+  var reachRows = [];
+  ['quote-react','original-showcase','original-text'].forEach(function(t){
+    [A,B].forEach(function(acct){
+      var tb = DATA[acct.key].typeBreakdown[t];
+      if (!tb) return;
+      reachRows.push({ k:acct.label.slice(0,7)+' '+t.replace('original-',''), v:tb.avgLikes, c:acct.color });
+    });
+  });
+  var reachMax = reachRows.reduce(function(m,r){ return Math.max(m,r.v); }, 0);
+  bars(document.getElementById('reach'), reachRows, reachMax, function(v){ return v.toFixed(1); });
+
+  // ER inversion
+  var invNode = document.getElementById('inv');
+  var invRows = ['quote-react','quote-commentary','original-showcase','original-text'].map(function(t){
+      var a = DATA.baiee.typeBreakdown[t], b = DATA.seb.typeBreakdown[t];
+      if (!a || !b || a.pooledER == null || b.pooledER == null) return '';
+      var wins = a.pooledER > b.pooledER;
+      return '<div class="inv-row"><span class="k">'+t.replace('original-','')+
+        ' <span style="opacity:.5">n'+a.nSampled+'/'+b.nSampled+'</span></span>'+
+        '<span class="a">'+a.pooledER.toFixed(2)+'%'+(wins?'<span class="win">&#9650;</span>':'')+'</span>'+
+        '<span class="b">'+b.pooledER.toFixed(2)+'%</span></div>';
+    }).join('');
+  invNode.innerHTML =
+    '<div class="inv-row" style="border-bottom-color:var(--border-hi)"><span class="k" style="color:var(--ink-3)">FORMAT</span>'+
+    '<span class="a" style="color:var(--ink-3);font-weight:400">@bai_ee</span><span class="b" style="color:var(--ink-3)">@seb</span></div>' +
+    invRows +
+    '<div class="inv-row" style="border-top:1px solid var(--border-hi);padding-top:12px;margin-top:2px">'+
+      '<span class="k" style="color:var(--ink-1)">ALL POSTS</span>'+
+      '<span class="a">'+DATA.baiee.overallPooledER.toFixed(2)+'%</span>'+
+      '<span class="b">'+DATA.seb.overallPooledER.toFixed(2)+'%</span></div>';
+
+  /* ---------- cause -> mechanism -> solution ---------- */
+  var tbB = DATA.baiee.typeBreakdown, tbA = DATA.seb.typeBreakdown;
+  var rtN = tbB.retweet ? tbB.retweet.n : 0;
+  var rtShare = Math.round(rtN / DATA.baiee.meta.totalPosts * 100);
+  var qrB = tbB['quote-react'] ? Math.round(tbB['quote-react'].avgViews) : 0;
+  var qrA = tbA['quote-react'] ? Math.round(tbA['quote-react'].avgViews) : 0;
+  var vids = DATA.baiee.posts.filter(function(p){ return p.media === 'video'; }).length;
+
+  var CAUSES = [
+    { cause:'Two-thirds of your output cannot reach a stranger',
+      fig: rtShare + '% retweets',
+      detail: rtN + ' of ' + DATA.baiee.meta.totalPosts + ' posts are retweets, against his ' + Math.round((tbA.retweet?tbA.retweet.n:0)/DATA.seb.meta.totalPosts*100) + '%.',
+      mech:'<b>OONRetweetReplyFilter</b> removes reposts and replies from non-followed accounts before scoring even begins. A retweet is not merely low-value \u2014 it is structurally invisible to everyone who does not already follow you.',
+      src:'CONFIRMED \u00b7 pre-scoring filters',
+      fix:'Convert the retweet habit into quote-reacts. Same click, same source material, six words of your own on top \u2014 and the post becomes stranger-eligible. This one change moves more of your output into the reachable pool than everything else on this list combined.' },
+
+    { cause:'Your quote-tweets borrow from accounts with no audience',
+      fig: qrB + ' vs ' + qrA + ' views',
+      detail:'Identical format, ' + Math.round(qrA/Math.max(1,qrB)) + '\u00d7 the result.',
+      mech:'A quote inherits the reading audience of the post it quotes. The format is not what differs \u2014 he quotes posts already accelerating, you quoted small accounts with no readership to inherit.',
+      src:'Observed \u00b7 both corpora',
+      fix:'Keep a standing list of 30\u201340 accounts whose work reliably goes wide, and quote from that list only. The cheapest fix here: it changes nothing about what you write.' },
+
+    { cause:'Your volume is too low to enter enough sessions',
+      fig:'80 vs 570 posts',
+      detail:'Stranger-eligible posts over the same 65 days \u2014 a 7.1\u00d7 gap, far wider than the 3.2\u00d7 gap in raw post count.',
+      mech:'<b>Author Diversity</b> decays each post after your first <em>within a single ranked session</em>. That does not penalise posting often \u2014 it means each additional post pays off in a <em>different</em> viewer\u2019s session rather than stacking in one. More posts means more independent auctions entered.',
+      src:'CONFIRMED \u00b7 ranking_scorer.rs',
+      fix:'Raise stranger-eligible volume, and match his density rather than avoiding it \u2014 he averages 1.96 posts per active hour and puts 73% of his posts in an hour that already has one. Add hours as volume grows; do not ration posts per hour.' },
+
+    { cause:'You reply to almost nobody',
+      fig:(tbB.reply?tbB.reply.n:0) + ' replies / 65 days',
+      detail:'Roughly one reply every sixteen days.',
+      mech:'Replies do not travel through For You \u2014 they are OON-filtered too. They work through the <em>conversation view</em> of a post people are already reading, and through the profile click that follows. That is a different surface, and it is the only one that reliably introduces you to strangers.',
+      src:'CONFIRMED filter \u00b7 HYPOTHESIS on early window',
+      fix:'Ten replies a day on posts under six hours old with visible acceleration. Judge a reply by whether someone would click your name after reading it \u2014 not by whether it earns a like.' },
+
+    { cause:'You post across five professional clusters, not one',
+      fig:'5 clusters \u00b7 80 one-off accounts',
+      detail:'Politics and speculative crypto are <b>5.3%</b> of your posts \u2014 too small to be the problem, and an earlier version of this page wrongly named them as it. The real spread is legitimate work: music-archive-dj (16 accounts amplified), design-engineering (15), ai-tooling (11), web3-gaming (8), web3-design-work (8) \u2014 plus 80 accounts amplified exactly once each.',
+      mech:'Out-of-network candidates are retrieved by embedding similarity over a <b>hashed author identity</b>. An author who sits across five unrelated clusters is confidently retrievable for none of them. This costs far more than the handful of off-topic posts does.',
+      src:'CONFIRMED retrieval \u00b7 HYPOTHESIS that spread dilutes it',
+      fix:'Pick one cluster to be retrievable for \u2014 design-engineering is the one your craft, your model account and your best-performing posts all sit in. Keep the others; stop giving them equal share of your output. Cutting politics is not the lever, and cutting people you enjoy reading costs you nothing but the enjoyment.' },
+
+    { cause:'You own a video pipeline and post almost no video',
+      fig: vids + ' videos / 65 days',
+      detail:'Video reaches ' + Math.round((DATA.baiee.posts.filter(function(p){return p.media==='video'&&p.views!=null;}).reduce(function(a,b){return a+b.views;},0) / Math.max(1,DATA.baiee.posts.filter(function(p){return p.media==='video'&&p.views!=null;}).length)) / Math.max(1,(DATA.baiee.posts.filter(function(p){return p.media==='none'&&p.views!=null;}).reduce(function(a,b){return a+b.views;},0) / Math.max(1,DATA.baiee.posts.filter(function(p){return p.media==='none'&&p.views!=null;}).length)))) + '\u00d7 what text does on your own account.',
+      mech:'<code>video_view</code> and the dwell-time regression heads are positive prediction targets; <code>not_dwelled</code> is a negative one. Motion buys dwell, and dwell is scored directly.',
+      src:'CONFIRMED \u00b7 Phoenix action taxonomy',
+      fix:'Two showcase videos a day, under fifteen seconds, no intro card. Your Studio tools emit video on demand \u2014 batch ten captures in one sitting so the slot is never blocked on having something to film.' },
+
+    { cause:'Static images are worse than posting nothing',
+      fig:'79 vs 82 views',
+      detail:'Images underperform even plain text on your account, and badly underperform video.',
+      mech:'<code>photo_expand</code> is a weaker positive signal than <code>video_view</code> plus dwell, and a still image gives a scroller no reason to stop \u2014 which risks <code>not_dwelled</code>.',
+      src:'Observed \u00b7 consistent with the action taxonomy',
+      fix:'If the work moves, post the motion. Reserve stills for things that genuinely cannot move, like typography and print.' }
+  ];
+
+  document.getElementById('cause-list').innerHTML = CAUSES.map(function(c){
+    return '<div class="mech-row">'+
+      '<div class="mech-col"><h4>Cause</h4><span class="mech-fig">'+c.fig+'</span>'+
+        '<p>'+c.cause+'</p><p class="dim" style="margin-top:7px">'+c.detail+'</p></div>'+
+      '<div class="mech-col"><h4>Mechanism</h4><p class="dim">'+c.mech+'</p>'+
+        '<span class="mech-src">'+c.src+'</span></div>'+
+      '<div class="mech-col"><h4>Solution</h4><p>'+c.fix+'</p></div>'+
+    '</div>';
+  }).join('');
+
+  /* ---------- composition matrices ---------- */
+  var MEDIA = ['video','image','gif','none'];
+  var mxHtml = [A, B].map(function(acct){
+    var tm = DATA[acct.key].composition.typeMedia;
+    var order = Object.keys(tm).sort(function(a,b){ return tm[b].total - tm[a].total; });
+    var rows = order.map(function(ty){
+      // Best-performing media cell in this row gets the accent tint.
+      var best = null;
+      MEDIA.forEach(function(m){ var c = tm[ty][m]; if (c && (!best || c.avgLikes > tm[ty][best].avgLikes)) best = m; });
+      var cells = MEDIA.map(function(m){
+        var c = tm[ty][m];
+        if (!c) return '<td class="empty">&mdash;</td>';
+        var isBest = (m === best && c.avgLikes > 0);
+        return '<td'+(isBest?' class="best"':'')+'><span class="cell-n">'+c.n+'p</span> '+
+               '<span class="cell-l">'+c.avgLikes.toFixed(0)+'L</span></td>';
+      }).join('');
+      return '<tr><td>'+ty+'</td>'+cells+'<td class="cell-l">'+tm[ty].total+'</td></tr>';
+    }).join('');
+    return '<div class="mx-head"><span class="chip" style="background:'+acct.color+'"></span>'+
+           '<h3>'+acct.handle+'</h3></div>'+
+           '<div class="tbl-wrap"><table class="matrix"><thead><tr><th>Post type</th>'+
+           MEDIA.map(function(m){ return '<th>'+m+'</th>'; }).join('')+'<th>Total</th></tr></thead>'+
+           '<tbody>'+rows+'</tbody></table></div>';
+  }).join('');
+  document.getElementById('matrices').innerHTML = mxHtml +
+    '<p class="sec-note" style="margin-top:18px">Cells read <span class="num">posts / average likes</span>; the tinted cell is the best-performing media for that row. '+
+    'Two things to take from it. <b>Inside his own showcase posts, video beats image by 3.4&times;</b> (95.6 vs 28.4 average likes) &mdash; yet he still posts twice as many images as videos, so even the model account is leaving reach unclaimed. '+
+    'And <b>his quote-reacts carry no media at all</b>: 179 of 183 are a bare caption over someone else&rsquo;s post. That is the whole format. '+
+    '<b>You are already shaped correctly here</b> &mdash; video is 31% of your authored posts against his 10%, and 24 of your 26 quote-reacts are text-only. The formats are right; the distribution underneath them is not.</p>';
+
+  /* ---------- occupied-hour table ---------- */
+  var hs = DATA.seb.composition.hours, hb = DATA.baiee.composition.hours;
+  var HROWS = [
+    ['Posts per occupied hour', hs.postsPerOccupiedHour.toFixed(2), hb.postsPerOccupiedHour.toFixed(2)],
+    ['Occupied hours per day', hs.occupiedHoursPerDay.toFixed(2), hb.occupiedHoursPerDay.toFixed(2)],
+    ['Hours holding 2+ posts', hs.multi + ' of ' + hs.occupied, hb.multi + ' of ' + hb.occupied],
+    ['Share of posts in a stacked hour', hs.shareOfPostsInMultiHour.toFixed(1) + '%', hb.shareOfPostsInMultiHour.toFixed(1) + '%'],
+    ['Stacked hours holding mixed types', hs.mixedClusterShare.toFixed(0) + '%', hb.mixedClusterShare.toFixed(0) + '%'],
+    ['Most posts in one hour', hs.busiestHour, hb.busiestHour]
+  ];
+  document.getElementById('hours-tbl').innerHTML =
+    '<thead><tr><th>Measure</th><th>@seb__design</th><th>@bai_ee</th></tr></thead><tbody>' +
+    HROWS.map(function(r){ return '<tr><td>'+r[0]+'</td><td class="hi">'+r[1]+'</td><td class="acc">'+r[2]+'</td></tr>'; }).join('') +
+    '</tbody>';
+
+  document.getElementById('seq-note').innerHTML =
+    '<div class="instruments" style="margin-top:26px">'+
+    [[A, hs], [B, hb]].map(function(pair){
+      var acct = pair[0], h = pair[1];
+      return '<div class="inst"><h3>'+acct.handle+' &middot; most common in-hour sequences</h3>'+
+        '<p class="sub">What follows what, when two posts share an hour.</p>'+
+        '<div class="bars">'+ h.topSequences.map(function(sq){
+          var max = h.topSequences[0].n;
+          return '<div class="bar-row"><span class="k" title="'+sq.pair+'">'+sq.pair+'</span>'+
+            '<span class="track"><span class="fill" style="width:'+(sq.n/max*100).toFixed(0)+'%;background:'+acct.color+'"></span></span>'+
+            '<span class="v">'+sq.n+'</span></div>';
+        }).join('') + '</div></div>';
+    }).join('') + '</div>';
+
+  /* ---------- prescription ---------- */
+  var RX = [
+    ['Daily posts', '8', false, 'Tier 2. Start at 5 for two weeks, then move up. He runs 11.85.'],
+    ['Stranger-eligible', '7 of 8', false, 'Everything except the one retweet. This is the number that actually grows the account.'],
+    ['Active hours', '4&ndash;5', false, 'A consequence of volume, not a rule. At 8 posts his density puts you here on its own.'],
+    ['Posts per active hour', '~2', false, 'Match his 1.96. Stacking is fine. Two in an hour is normal, not a mistake.'],
+    ['Replies', '10', true, 'The one number most likely to move reach, and the one you are furthest from at 0.06 a day.'],
+    ['Videos', '2', true, 'Showcase slots. Video out-reaches image 3.4&times; inside the same post type.'],
+    ['Retweets', 'max 1', true, 'OON-filtered. Every retweet past this is a post that cannot reach anyone new.'],
+    ['Inline links', '0', true, 'Link goes in the first self-reply. Costs 44% of engagement otherwise.']
+  ];
+  document.getElementById('rx').innerHTML = RX.map(function(r){
+    return '<div class="rx-item"><span class="k">'+r[0]+'</span>'+
+      '<span class="v'+(r[2]?' acc':'')+'">'+r[1]+'</span><span class="n">'+r[3]+'</span></div>';
+  }).join('');
+
+  /* ---------- strategy pack (campaigns + replies) ---------- */
+  var PACK = null;
+  try { PACK = JSON.parse(document.getElementById('pack').textContent); } catch(e){}
+
+  /* ---------- audience graph ---------- */
+  if (PACK && PACK.audienceGraph) {
+    var AG  = PACK.audienceGraph;
+    var agA = AG.accounts.seb, agB = AG.accounts.baiee;
+
+    document.getElementById('aud-fol-b').textContent = fmt(agB.followers);
+    document.getElementById('aud-fol-a').textContent = fmt(agA.followers);
+    document.getElementById('aud-gap').textContent   = AG.ratios.likesPerFollower.toFixed(1) + '×';
+
+    // Likes per follower — the one reach measure with complete data on both sides.
+    var lpfRows = [
+      { k:B.label.slice(0,7), v:agB.reach.likesPerFollowerPct, c:B.color },
+      { k:A.label.slice(0,7), v:agA.reach.likesPerFollowerPct, c:A.color }
+    ];
+    bars(document.getElementById('audience-per-follower-bars'), lpfRows,
+      Math.max(agA.reach.likesPerFollowerPct, agB.reach.likesPerFollowerPct),
+      function(v){ return v.toFixed(2)+'%'; });
+
+    // Views per follower is the more vivid number and the less trustworthy one —
+    // it carries seb's top-weighted sample, so it ships as prose with the caveat
+    // attached rather than as a bar that invites a direct comparison.
+    document.getElementById('audience-per-follower-note').innerHTML =
+      'By impressions the same gap reads wider still: his median authored post draws <b>'+
+      agA.reach.viewsPerFollowerPct.toFixed(0)+'%</b> of his follower count, yours <b>'+
+      agB.reach.viewsPerFollowerPct.toFixed(0)+'%</b> of yours — his median post reaches beyond his list, '+
+      'yours reaches a twenty-fifth of it. Treat his figure as a ceiling, not a measurement: views resolve for '+
+      agA.reach.viewsCoveragePct.toFixed(0)+'% of his authored posts and that sample was drawn from his best, '+
+      'against '+agB.reach.viewsCoveragePct.toFixed(0)+'% of yours.';
+
+    // Amplification vehicle — quote (stranger-eligible) against retweet (OON-filtered).
+    var vehRows = [
+      { k:B.label.slice(0,7)+' QT', v:agB.amplification.quoteSharePct,       c:B.color },
+      { k:B.label.slice(0,7)+' RT', v:100 - agB.amplification.quoteSharePct, c:B.color },
+      { k:A.label.slice(0,7)+' QT', v:agA.amplification.quoteSharePct,       c:A.color },
+      { k:A.label.slice(0,7)+' RT', v:100 - agA.amplification.quoteSharePct, c:A.color }
+    ];
+    bars(document.getElementById('audience-vehicle-bars'), vehRows, 100,
+      function(v){ return v.toFixed(0)+'%'; });
+
+    var CROWS = [
+      ['Accounts amplified',  agB.amplification.distinctAccounts,                agA.amplification.distinctAccounts,               false],
+      ['Amplified once only', agB.amplification.onceOnlyShare.toFixed(0)+'%',    agA.amplification.onceOnlyShare.toFixed(0)+'%',   false],
+      ['Top-5 share',         agB.amplification.top5Share.toFixed(0)+'%',        agA.amplification.top5Share.toFixed(0)+'%',       false],
+      ['Amplified 3+ times',  agB.amplification.repeat3Plus,                     agA.amplification.repeat3Plus,                    false],
+      ['Self-quotes',         agB.amplification.selfQuotes,                      agA.amplification.selfQuotes,                     true]
+    ];
+    document.getElementById('audience-concentration').innerHTML =
+      '<div class="inv-row" style="border-bottom-color:var(--border-hi)">'+
+        '<span class="k" style="color:var(--ink-3)">MEASURE</span>'+
+        '<span class="a" style="color:var(--ink-3);font-weight:400">@bai_ee</span>'+
+        '<span class="b" style="color:var(--ink-3)">@seb</span></div>'+
+      CROWS.map(function(r){
+        return '<div class="inv-row"'+(r[3]?' style="border-top:1px solid var(--border-hi);padding-top:12px"':'')+'>'+
+          '<span class="k">'+r[0]+'</span>'+
+          '<span class="a">'+r[1]+'</span><span class="b">'+r[2]+'</span></div>';
+      }).join('');
+
+    var AMECH = [
+      { cause:'A follower who never engages costs you the first gate',
+        fig: agB.reach.likesPerFollowerPct.toFixed(2)+'% vs '+agA.reach.likesPerFollowerPct.toFixed(2)+'%',
+        detail:'Likes per follower on an authored post. Your list is 11% longer than his and returns '+
+          AG.ratios.likesPerFollower.toFixed(1)+'× less. Pooled engagement rate says the people who do see you convert at his level — there are simply too few of them reacting early.',
+        mech:'In-network candidates are sourced from your followers’ graphs, then ranked. Early engagement velocity is what carries a post past that first pass into wider fanout. A dormant follower is not neutral — it is a served impression that returns no signal, and <code>not_dwelled</code> is itself a negative action.',
+        src:'CONFIRMED · Phoenix action taxonomy + in-network sourcing',
+        fix:'Stop treating 1,725 as the audience. The working number is whoever reacts in the first thirty minutes, and on current evidence it is in the low tens. Build that number deliberately — reply into the same rooms daily until the same faces show up under your posts.' },
+
+      { cause:'Four in five of your amplifications cannot reach a stranger',
+        fig: (100 - agB.amplification.quoteSharePct).toFixed(0)+'% by retweet',
+        detail:'When he hands someone else’s post to his audience he quotes it '+agA.amplification.quoteSharePct.toFixed(0)+
+          '% of the time. You retweet it '+(100 - agB.amplification.quoteSharePct).toFixed(0)+'% of the time. Same generosity, opposite distribution — and '+
+          agB.activity.retweets+' of your '+agB.activity.total+' posts resolved to zero impressions of your own.',
+        mech:'<code>OONRetweetReplyFilter</code> strips reposts from accounts a viewer does not follow during pre-scoring. A quote is a new post carrying your own text and is not in that filter.',
+        src:'CONFIRMED · OONRetweetReplyFilter',
+        fix:'Keep amplifying the same people — change the vehicle. A quote with one line of your own reading on it does everything the retweet did for them, and gives you a stranger-eligible post you did not have.' },
+
+      { cause:'You resurface your own work once; he does it 106 times',
+        fig: agA.amplification.selfQuotes + ' vs ' + agB.amplification.selfQuotes,
+        detail:'Self-quoting is his single most-used amplification target — more than thirteen times his next one. It is how a post that underperformed on Tuesday gets a second, differently-timed auction on Friday without being reposted.',
+        mech:'Each self-quote is a fresh post with its own candidate entry, its own session, and a fresh Author Diversity slot. The quoted original rides along carrying whatever engagement it already earned.',
+        src:'Observed · per-post candidate sourcing',
+        fix:'Once or twice a week, quote your own best post from 3–10 days ago with a new angle on it — what changed, what you learned, what someone asked. Your archive is not spent; it has only been auctioned once.' }
+    ];
+    document.getElementById('audience-mechanism-list').innerHTML = AMECH.map(function(c){
+      return '<div class="mech-row">'+
+        '<div class="mech-col"><h4>Cause</h4><span class="mech-fig">'+c.fig+'</span>'+
+          '<p>'+c.cause+'</p><p class="dim" style="margin-top:7px">'+c.detail+'</p></div>'+
+        '<div class="mech-col"><h4>Mechanism</h4><p class="dim">'+c.mech+'</p>'+
+          '<span class="mech-src">'+c.src+'</span></div>'+
+        '<div class="mech-col"><h4>Solution</h4><p>'+c.fix+'</p></div>'+
+      '</div>';
+    }).join('');
+  }
+
+  if (PACK && PACK.replyPlaybook) {
+    var rp = PACK.replyPlaybook;
+    document.getElementById('reply-list').innerHTML =
+      '<div class="mech-row">'+
+        '<div class="mech-col"><h4>The rule</h4><span class="mech-fig">'+(rp.targetsPerDay||10)+' a day \u00b7 '+(rp.windowHours||6)+'h window</span><p class="dim">'+(rp.rule||'')+'</p></div>'+
+        '<div class="mech-col"><h4>How to pick a target</h4><p class="dim">'+(rp.howToPick||[]).map(function(x){return '\u00b7 '+x;}).join('<br>')+'</p></div>'+
+        '<div class="mech-col"><h4>Never waste a reply on</h4><p class="dim">'+(rp.antipatterns||[]).map(function(x){return '\u00b7 '+x;}).join('<br>')+'</p></div>'+
+      '</div>'+
+      '<div class="mech-row"><div class="mech-col" style="grid-column:1/-1"><h4>Reply shapes that earn a profile click</h4><p class="dim">'+
+        (rp.replyShapes||[]).map(function(x){return '\u00b7 '+x;}).join('<br>')+'</p></div></div>';
+  }
+
+  if (PACK && PACK.campaigns) {
+    document.getElementById('camp-list').innerHTML = PACK.campaigns.map(function(c){
+      return '<div class="camp">'+
+        '<div class="camp-top"><h3>'+c.name+'</h3><span class="run">'+(c.runsFor||'')+'</span></div>'+
+        '<p>'+(c.premise||'')+'</p>'+
+        '<ul>'+(c.postShapes||[]).slice(0,4).map(function(x){return '<li>'+x+'</li>';}).join('')+'</ul>'+
+        '<div class="foot">CADENCE &nbsp;'+(c.cadence||'\u2014')+'<br>MEASURE &nbsp;'+(c.successMetric||'\u2014')+'<br>WHY &nbsp;'+(c.whyItWorks||'\u2014')+'</div>'+
+      '</div>';
+    }).join('');
+  }
+
+  /* ---------- calendar ---------- */
+  var CAL = null;
+  try { CAL = JSON.parse(document.getElementById('cal').textContent); } catch(e){}
+  if (CAL && CAL.days) {
+    var scored = [];
+    CAL.days.forEach(function(d){ d.slots.forEach(function(sl){ if (sl.score != null) scored.push(sl.score); }); });
+    document.getElementById('cal-meta').textContent =
+      CAL.days.length + ' days · ' + CAL.days.reduce(function(a,d){return a+d.slots.length;},0) + ' slots' +
+      (scored.length ? ' · mean score ' + (scored.reduce(function(a,b){return a+b;},0)/scored.length).toFixed(3) : '');
+
+    document.getElementById('cal-list').innerHTML = CAL.days.map(function(d, di){
+      var slots = d.slots.map(function(sl){
+        var copy = sl.copy ? String(sl.copy).replace(/[<>&]/g, function(c){return {'<':'&lt;','>':'&gt;','&':'&amp;'}[c];}) : '';
+        var meta = '';
+        if (sl.brief)     meta += '<span class="meta"><b>FIND</b> ' + sl.brief + '</span>';
+        if (sl.asset)     meta += '<span class="meta"><b>FILM</b> ' + sl.asset + '</span>';
+        if (sl.selfReply) meta += '<span class="meta"><b>SELF-REPLY</b> ' + sl.selfReply + '</span>';
+        return '<div class="slot"><span class="tm">'+(sl.timeCT||sl.slot||'')+'</span>'+
+          '<span class="ty">'+(sl.type||'')+(sl.score!=null?'<span class="sc">'+sl.score.toFixed(2)+'</span>':'')+'</span>'+
+          '<span class="cp">'+copy+meta+'</span></div>';
+      }).join('');
+      return '<details'+(di===0?' open':'')+'><summary><span class="d">DAY '+String(d.day).padStart(2,'0')+'</span>'+
+        '<span class="th">'+(d.theme||'')+'</span><span class="ct">'+(d.weekday||'')+' \u00b7 '+d.slots.length+' slots</span></summary>'+
+        '<div class="slots">'+slots+'</div></details>';
+    }).join('');
+  }
+})();
+</script>
