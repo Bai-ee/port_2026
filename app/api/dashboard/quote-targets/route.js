@@ -4,8 +4,11 @@ import { createSocialPost } from '../../../../features/social-posting/twitter-se
 import { buildDayPlan } from '../../../../features/x-quote-targets/day-plan.js';
 // Static import so Next bundles the calendar — docs/audits/ is NOT in
 // .vercelignore, but a runtime fs read of a repo path is fragile on serverless.
-import calendar from '../../../../docs/audits/x-calendar-15day.json' with { type: 'json' };
+import bundledCalendar from '../../../../docs/audits/x-calendar-15day.json' with { type: 'json' };
 import { guardXPost } from '../../../../features/x-content-guard/index.js';
+import { compareToBenchmark, resolveXGrowthProfile, resolveTier } from '../../../../features/x-benchmark/index.js';
+import { buildCalendar } from '../../../../features/x-benchmark/build-calendar.js';
+import { readCorpus, readCorpora, saveGapReport } from '../../../../features/x-benchmark/store.js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -75,6 +78,28 @@ async function readQuoteTargets(clientId) {
   return snap.data()?.marketingBrief?.quoteTargets ?? null;
 }
 
+/**
+ * The client's own generated calendar, falling back to the bundled one.
+ *
+ * A generated calendar (features/x-benchmark/build-calendar.js, written by the
+ * gap-report run) is per-client and lives in Firestore. The bundled 15-day JSON
+ * is @bai_ee's hand-written calendar and stays as the fallback so the original
+ * account keeps working unchanged — and so a client whose corpus has not been
+ * ingested yet sees a plan rather than an empty card.
+ */
+async function readCalendar(clientId) {
+  try {
+    const snap = await fb.adminDb.collection('dashboard_state').doc(clientId).get();
+    const stored = snap.exists ? snap.data()?.marketingBrief?.xGrowth?.calendar : null;
+    if (stored && Array.isArray(stored.days) && stored.days.length) {
+      return { calendar: stored, source: 'generated' };
+    }
+  } catch {
+    // A read failure must not cost the card its calendar.
+  }
+  return { calendar: bundledCalendar, source: 'bundled' };
+}
+
 export async function GET(request) {
   let context;
   try {
@@ -93,6 +118,8 @@ export async function GET(request) {
     const requestedDay = Number(url.searchParams.get('day'));
     const dayNumber = Number.isFinite(requestedDay) && requestedDay >= 1 ? Math.floor(requestedDay) : 1;
 
+    const { calendar, source: calendarSource } = await readCalendar(context.clientId);
+
     let dayPlan = null;
     try {
       dayPlan = buildDayPlan({
@@ -106,7 +133,23 @@ export async function GET(request) {
       dayPlan = null;
     }
 
-    return json({ ok: true, quoteTargets, dayPlan, clientId: context.clientId });
+    let xGrowth = null;
+    try {
+      const stateSnap = await fb.adminDb.collection('dashboard_state').doc(context.clientId).get();
+      xGrowth = stateSnap.exists ? (stateSnap.data()?.marketingBrief?.xGrowth ?? null) : null;
+    } catch {
+      // The gap report is additive context; never let it take the GET down.
+    }
+
+    return json({
+      ok: true,
+      quoteTargets,
+      dayPlan,
+      calendarSource,
+      gapReport: xGrowth?.gapReport ?? null,
+      analysisComputedAt: xGrowth?.computedAt ?? null,
+      clientId: context.clientId,
+    });
   } catch (err) {
     // A missing/broken Firestore read is a clean error, not a stack trace —
     // an unscanned account is a normal state (handled above), this is only
@@ -196,7 +239,77 @@ async function handleDismiss(clientId, body) {
   return { ok: true, dismissed };
 }
 
-const SUPPORTED_ACTIONS = ['draft-quote', 'dismiss'];
+const SUPPORTED_ACTIONS = ['draft-quote', 'dismiss', 'refresh-analysis'];
+
+/**
+ * Recompute the client's gap report and calendar from already-ingested corpora.
+ *
+ * Free and offline: it reads stat blocks that scripts/x-content/ingest-corpus.mjs
+ * already stored and runs two pure functions over them. No X API, no
+ * ScrapeCreators, no LLM — the ingest that costs something is the separate,
+ * local, human-run step.
+ */
+async function handleRefreshAnalysis(context) {
+  const snap = await fb.adminDb.collection('client_configs').doc(context.clientId).get();
+  const profile = resolveXGrowthProfile({
+    config: snap.exists ? snap.data()?.marketingBriefConfig?.xGrowth : null,
+  });
+
+  if (!profile.ready) {
+    const err = new Error(`X growth profile is incomplete — missing: ${profile.missing.join(', ')}.`);
+    err.status = 400;
+    throw err;
+  }
+
+  const ownCorpus = await readCorpus(profile.ownHandle);
+  if (!ownCorpus?.stats) {
+    const err = new Error(`No ingested corpus for @${profile.ownHandle}. Run: node scripts/x-content/ingest-corpus.mjs --handle ${profile.ownHandle} --write`);
+    err.status = 409;
+    throw err;
+  }
+
+  const benchmarks = await readCorpora(profile.benchmarkHandles);
+  if (!benchmarks.length) {
+    const err = new Error(`No ingested corpus for any benchmark account (${profile.benchmarkHandles.join(', ')}).`);
+    err.status = 409;
+    throw err;
+  }
+
+  // One report per benchmark. They are kept separate rather than averaged:
+  // two benchmark accounts can disagree, and an average of two strategies is
+  // usually neither. The first is the primary and drives the calendar.
+  const reports = benchmarks
+    .map((b) => compareToBenchmark({ own: ownCorpus.stats, benchmark: b.stats }))
+    .filter((r) => Array.isArray(r.gaps));
+  const primary = reports[0];
+
+  const tier = resolveTier({
+    tierOverride: profile.tierOverride,
+    currentAuthoredPerDay: ownCorpus.stats?.cadence?.authoredPerActiveDay,
+  });
+  const calendar = buildCalendar({
+    report: primary,
+    ownStats: ownCorpus.stats,
+    tier,
+    profile,
+    days: 15,
+    startDate: new Date().toISOString().slice(0, 10),
+  });
+
+  const report = {
+    ...primary,
+    tier,
+    // Secondary benchmarks are reported but never merged into the primary.
+    alternates: reports.slice(1).map((r) => ({ benchmarkHandle: r.benchmarkHandle, gaps: r.gaps, projection: r.projection })),
+    corpora: {
+      own: { handle: ownCorpus.handle, ...(ownCorpus.meta ?? {}) },
+      benchmarks: benchmarks.map((b) => ({ handle: b.handle, ...(b.meta ?? {}) })),
+    },
+  };
+
+  await saveGapReport(context.clientId, { report, calendar });
+  return { ok: true, report, calendar, tier };
+}
 
 export async function POST(request) {
   let context;
@@ -217,6 +330,10 @@ export async function POST(request) {
   try {
     if (action === 'draft-quote') {
       const result = await handleDraftQuote(context, body);
+      return json(result);
+    }
+    if (action === 'refresh-analysis') {
+      const result = await handleRefreshAnalysis(context);
       return json(result);
     }
     if (action === 'dismiss') {

@@ -456,6 +456,16 @@ export function compareToBenchmark(input = {}) {
     // average and computed from its own per-type performance wherever that
     // exists. A value of 1 means the comparison supports no mix change.
     mixMultiplier: round2(mixMultiplier),
+    // The mix the calendar should actually be built from: current shares with
+    // only the actionable types moved, renormalized. Exposed so the calendar
+    // generator consumes this decision rather than re-deriving it from raw
+    // shares and quietly disagreeing with the report shown next to it.
+    targetMix: targetTotal > 0
+      ? Object.fromEntries(types
+        .map((t) => [t, round2((targetShares.get(t) / targetTotal) * 100)])
+        .filter(([, share]) => share > 0)
+        .sort((a, b) => b[1] - a[1]))
+      : {},
     // Pure output ratio. NOT a reach multiplier.
     volumeRatio: round2(volumeRatio),
     combined: round2(mixMultiplier != null && volumeRatio != null ? mixMultiplier * volumeRatio : null),
