@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Clock, PenSquare, Quote, Send, Trash2 } from 'lucide-react';
+import { AlertTriangle, BarChart3, CalendarDays, Clock, PenSquare, Quote, RefreshCw, Send, Trash2 } from 'lucide-react';
 
 // X Calendar — surfaces posts worth quote-reacting to, ranked by a local,
 // zero-cost scan (see scripts/x-content/scan-quote-targets.mjs). The scan runs
@@ -59,8 +59,27 @@ function mediaLabel(candidate) {
   return 'no media';
 }
 
+// A gap's `unit` decides how its number reads. perDay is about how much you
+// publish, perPost about what a post earns, shape about a finding with no
+// modelled effect — they are deliberately not comparable, so each is labelled
+// rather than merged into one "impact" column. See features/x-benchmark/compare.js.
+const UNIT_LABEL = { perDay: 'per day', perPost: 'per post', shape: 'finding' };
+
+function impactLabel(gap) {
+  if (!gap || gap.unit === 'shape' || !Number.isFinite(Number(gap.impact)) || Number(gap.impact) === 0) return null;
+  const value = Number(gap.impact);
+  if (gap.unit === 'perDay') return `${(1 + value).toFixed(2)}× output`;
+  return `${value > 0 ? '+' : ''}${Math.round(value * 100)}% per post`;
+}
+
 export default function XCalendarCard({ getIdToken, activeClientId, clientName }) {
   const [quoteTargets, setQuoteTargets] = useState(null);
+  const [dayPlan, setDayPlan] = useState(null);
+  const [gapReport, setGapReport] = useState(null);
+  const [analysisComputedAt, setAnalysisComputedAt] = useState(null);
+  const [calendarSource, setCalendarSource] = useState('');
+  const [analysisBusy, setAnalysisBusy] = useState(false);
+  const [analysisNotice, setAnalysisNotice] = useState(null);
   const [responseClientId, setResponseClientId] = useState('');
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState(null);
@@ -89,6 +108,10 @@ export default function XCalendarCard({ getIdToken, activeClientId, clientName }
       const { ok, status, data } = await apiFetch();
       if (!ok) throw Object.assign(new Error(data?.hint || data?.error || `HTTP ${status}`), { status });
       setQuoteTargets(data?.quoteTargets || null);
+      setDayPlan(data?.dayPlan || null);
+      setGapReport(data?.gapReport || null);
+      setAnalysisComputedAt(data?.analysisComputedAt || null);
+      setCalendarSource(data?.calendarSource || '');
       setResponseClientId(data?.clientId || '');
       setNotice(null);
     } catch (err) {
@@ -97,6 +120,30 @@ export default function XCalendarCard({ getIdToken, activeClientId, clientName }
       setLoading(false);
     }
   }, [apiFetch]);
+
+  // Recomputing is free and offline — it reads corpus stat blocks already in
+  // Firestore and runs two pure functions. The step that costs anything (the
+  // corpus ingest) is a separate local script, which is why this button exists
+  // and a "re-scan" button does not.
+  const refreshAnalysis = useCallback(async () => {
+    if (analysisBusy) return;
+    setAnalysisBusy(true);
+    setAnalysisNotice(null);
+    try {
+      const { ok, status, data } = await apiFetch({ action: 'refresh-analysis' });
+      if (!ok) {
+        setAnalysisNotice({ kind: 'error', text: data?.error || `HTTP ${status}` });
+        return;
+      }
+      setGapReport(data?.report || null);
+      setAnalysisNotice({ kind: 'ok', text: 'Recomputed from the stored corpora.' });
+      await load();
+    } catch (err) {
+      setAnalysisNotice({ kind: 'error', text: err.message || 'Could not recompute.' });
+    } finally {
+      setAnalysisBusy(false);
+    }
+  }, [apiFetch, analysisBusy, load]);
 
   useEffect(() => {
     load();
@@ -214,6 +261,93 @@ export default function XCalendarCard({ getIdToken, activeClientId, clientName }
         {notice ? <p className={`xc-notice xc-notice-${notice.kind}`}>{notice.text}</p> : null}
       </section>
 
+      {/* ── Benchmark gap report ───────────────────────────────────────── */}
+      {!loading ? (
+        <section id="x-calendar-gap-report-panel" className="xc-panel">
+          <div className="xc-head">
+            <span className="xc-kicker"><BarChart3 size={13} /> Against {gapReport?.benchmarkHandle ? `@${gapReport.benchmarkHandle}` : 'benchmark'}</span>
+            <button type="button" id="x-calendar-recompute-button" className="xc-ghost" onClick={refreshAnalysis} disabled={analysisBusy}>
+              {analysisBusy
+                ? <span className="comet-spinner" style={{ width: 13, height: 13, ['--comet-ring']: '2px' }} aria-hidden="true" />
+                : <RefreshCw size={13} />}
+              Recompute
+            </button>
+          </div>
+
+          {gapReport ? (
+            <>
+              <div id="x-calendar-projection-row" className="xc-projection">
+                <span><strong>{gapReport.projection?.volumeRatio ?? '—'}×</strong> their authored output</span>
+                <span><strong>{gapReport.projection?.mixMultiplier ?? '—'}×</strong> per post if the mix moves</span>
+                <span className="xc-tier">Tier {gapReport.tier?.tier ?? '—'} · {gapReport.tier?.authoredPerDay ?? '—'}/day</span>
+              </div>
+
+              <ol id="x-calendar-gap-list" className="xc-gap-list">
+                {(Array.isArray(gapReport.gaps) ? gapReport.gaps : []).slice(0, 6).map((gap) => (
+                  <li id={`x-calendar-gap-${String(gap.id).replace(/[^a-z0-9]+/gi, '-')}`} key={gap.id} className="xc-gap">
+                    <div className="xc-gap-head">
+                      <span className={`xc-chip xc-dir-${gap.direction || gap.unit}`}>{gap.direction || UNIT_LABEL[gap.unit] || gap.unit}</span>
+                      {impactLabel(gap) ? <span className="xc-gap-impact">{impactLabel(gap)}</span> : null}
+                      <span className={`xc-gap-conf xc-conf-${gap.confidence}`}>{gap.confidence}</span>
+                    </div>
+                    <p className="xc-gap-text">{gap.headline}</p>
+                  </li>
+                ))}
+              </ol>
+
+              {Array.isArray(gapReport.warnings) && gapReport.warnings.length ? (
+                <details id="x-calendar-gap-warnings" className="xc-warnings">
+                  <summary>{gapReport.warnings.length} caveat{gapReport.warnings.length === 1 ? '' : 's'} on this comparison</summary>
+                  <ul>{gapReport.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
+                </details>
+              ) : null}
+
+              <p className="xc-foot">
+                {analysisComputedAt ? `Computed ${formatRelative(new Date(analysisComputedAt).toISOString())}` : 'Never computed'}
+                {gapReport.corpora?.own?.lastDate ? ` · corpus through ${gapReport.corpora.own.lastDate}` : ''}
+              </p>
+            </>
+          ) : (
+            <div id="x-calendar-gap-empty" className="xc-empty">
+              <p>No comparison yet. Ingest the account and its benchmark, then recompute:</p>
+              <pre className="xc-command"><code>node scripts/x-content/ingest-corpus.mjs --handle &lt;account&gt; --write</code></pre>
+            </div>
+          )}
+          {analysisNotice ? <p className={`xc-notice xc-notice-${analysisNotice.kind}`}>{analysisNotice.text}</p> : null}
+        </section>
+      ) : null}
+
+      {/* ── Today's slots ──────────────────────────────────────────────── */}
+      {!loading && dayPlan && Array.isArray(dayPlan.slots) && dayPlan.slots.length ? (
+        <section id="x-calendar-day-plan-section" className="xc-panel">
+          <div className="xc-head">
+            <span className="xc-kicker"><CalendarDays size={13} /> Day {dayPlan.day ?? 1} plan{dayPlan.theme ? ` · ${dayPlan.theme}` : ''}</span>
+            <small>
+              {dayPlan.coverage ? `${dayPlan.coverage.quoteSlotsFilled}/${dayPlan.coverage.quoteSlots} quote slots filled · ` : ''}
+              {calendarSource === 'generated' ? 'generated' : 'standing calendar'}
+            </small>
+          </div>
+          <ol id="x-calendar-day-slot-list" className="xc-slots">
+            {dayPlan.slots.map((slot, i) => (
+              <li
+                id={`x-calendar-day-slot-${slot.slot || i}`}
+                key={`${slot.slot || i}-${slot.timeCT || i}`}
+                className={`xc-slot xc-slot-${slot.status || 'planned'}`}
+              >
+                <span className="xc-slot-time">{slot.timeCT || '—'}</span>
+                <span className="xc-slot-type">{slot.type}</span>
+                <span className="xc-slot-body">
+                  {slot.candidate
+                    ? <>@{slot.candidate.author} · {Number(slot.candidate.score ?? 0).toFixed(2)}{slot.copy ? <em className="xc-slot-copy"> “{slot.copy}”</em> : null}</>
+                    : (slot.copy || slot.brief || slot.fillReason || '—')}
+                </span>
+                <span className="xc-slot-status">{slot.status || 'planned'}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      ) : null}
+
       {/* ── Candidates ─────────────────────────────────────────────────── */}
       {!loading ? (
         candidates.length ? (
@@ -312,6 +446,37 @@ export default function XCalendarCard({ getIdToken, activeClientId, clientName }
         #x-calendar-card .xc-notice-error { color: #9f1f17; }
         #x-calendar-card .xc-notice-ok { color: #285f3b; }
 
+        #x-calendar-card .xc-ghost { min-height: 30px; padding: 0 12px; font-size: 11px; }
+        #x-calendar-card .xc-projection { display: flex; flex-wrap: wrap; gap: 14px; margin: 0 0 12px; font-size: 12px; color: rgba(42,36,32,0.7); }
+        #x-calendar-card .xc-projection strong { font-family: var(--font-mono); font-size: 13px; color: #2a2420; }
+        #x-calendar-card .xc-tier { margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: rgba(42,36,32,0.55); }
+        #x-calendar-card .xc-gap-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+        #x-calendar-card .xc-gap { border: 1px solid rgba(42,36,32,0.1); border-radius: 10px; background: rgba(255,255,255,0.6); padding: 9px 11px; }
+        #x-calendar-card .xc-gap-head { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; flex-wrap: wrap; }
+        #x-calendar-card .xc-gap-impact { font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: #2a2420; }
+        #x-calendar-card .xc-gap-conf { margin-left: auto; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(42,36,32,0.45); }
+        #x-calendar-card .xc-conf-low { color: #8a5a15; }
+        #x-calendar-card .xc-gap-text { margin: 0; font-size: 12.5px; line-height: 1.5; color: #2a2420; }
+        /* Direction is the recommendation, so it carries the colour: act on
+           increase/decrease, leave hold alone, look into investigate. */
+        #x-calendar-card .xc-dir-increase { background: rgba(47,158,107,0.12); border-color: rgba(47,158,107,0.3); color: #23684a; }
+        #x-calendar-card .xc-dir-decrease { background: rgba(159,31,23,0.08); border-color: rgba(159,31,23,0.24); color: #9f1f17; }
+        #x-calendar-card .xc-dir-hold { background: rgba(42,36,32,0.05); color: rgba(42,36,32,0.6); }
+        #x-calendar-card .xc-dir-investigate { background: rgba(183,121,31,0.1); border-color: rgba(183,121,31,0.3); color: #8a5a15; }
+        #x-calendar-card .xc-warnings { margin-top: 10px; font-size: 11.5px; color: rgba(42,36,32,0.6); }
+        #x-calendar-card .xc-warnings summary { cursor: pointer; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; }
+        #x-calendar-card .xc-warnings ul { margin: 8px 0 0; padding-left: 16px; display: grid; gap: 6px; line-height: 1.5; }
+        #x-calendar-card .xc-foot { margin: 10px 0 0; font-family: var(--font-mono); font-size: 10.5px; color: rgba(42,36,32,0.45); }
+
+        #x-calendar-card .xc-slots { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+        #x-calendar-card .xc-slot { display: grid; grid-template-columns: 52px 130px 1fr auto; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 9px; border: 1px solid rgba(42,36,32,0.08); background: rgba(255,255,255,0.55); font-size: 12px; }
+        #x-calendar-card .xc-slot-ready { border-color: rgba(47,158,107,0.32); background: rgba(47,158,107,0.06); }
+        #x-calendar-card .xc-slot-time { font-family: var(--font-mono); font-size: 11.5px; font-weight: 700; color: #2a2420; }
+        #x-calendar-card .xc-slot-type { font-family: var(--font-mono); font-size: 11px; color: rgba(42,36,32,0.6); }
+        #x-calendar-card .xc-slot-body { color: rgba(42,36,32,0.78); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        #x-calendar-card .xc-slot-copy { color: rgba(42,36,32,0.55); font-style: italic; }
+        #x-calendar-card .xc-slot-status { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(42,36,32,0.45); }
+
         #x-calendar-card .xc-stack { display: grid; gap: 12px; }
         #x-calendar-card .xc-card { border: 1px solid rgba(42,36,32,0.12); background: rgba(255,255,255,0.78); border-radius: 14px; padding: 14px 16px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.5); }
         #x-calendar-card .xc-cand-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
@@ -355,6 +520,14 @@ export default function XCalendarCard({ getIdToken, activeClientId, clientName }
         @media (max-width: 480px) {
           #x-calendar-card .xc-panel, #x-calendar-card .xc-card { padding: 12px; border-radius: 12px; }
           #x-calendar-card .xc-actions button { flex: 1 1 auto; }
+          /* The four-column slot row cannot hold its shape at phone width —
+             stack time+type on one line and let the body wrap under it. */
+          #x-calendar-card .xc-slot { grid-template-columns: 52px 1fr; grid-template-areas: 'time type' 'body body' 'status status'; row-gap: 4px; }
+          #x-calendar-card .xc-slot-time { grid-area: time; }
+          #x-calendar-card .xc-slot-type { grid-area: type; }
+          #x-calendar-card .xc-slot-body { grid-area: body; white-space: normal; }
+          #x-calendar-card .xc-slot-status { grid-area: status; }
+          #x-calendar-card .xc-tier { margin-left: 0; }
         }
       `}</style>
     </div>

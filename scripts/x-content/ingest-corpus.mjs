@@ -37,6 +37,7 @@ import path from 'node:path';
 import { normalizeTimeline } from '../../features/x-benchmark/normalize-corpus.js';
 import { summarizeCorpus } from '../../features/x-benchmark/summarize.js';
 import { untaggedShare } from '../../features/x-benchmark/taxonomy.js';
+import { deriveWatchlist } from '../../features/x-benchmark/derive-watchlist.js';
 
 const DEFAULT_DAYS = 65;
 const MAX_ROUNDS = 12;
@@ -151,6 +152,9 @@ async function main() {
     since,
   });
   const stats = summarizeCorpus(rows, { handle });
+  // Derived here, at ingest, because it is the one artifact that needs the raw
+  // rows — and the rows are not stored.
+  const watchlist = deriveWatchlist(rows, { ownHandle: handle });
 
   const meta = {
     source: 'bird',
@@ -161,12 +165,15 @@ async function main() {
     tzOffsetHours: args.tz,
     since,
     clientId: args.client || null,
+    watchlistAccounts: watchlist.accounts.length,
+    watchlistCoverage: watchlist.meta.coverageAchieved,
   };
 
   process.stdout.write(`\n@${handle} — ${rows.length} posts over ${stats.cadence.activeDays} active days\n`);
   process.stdout.write(`  ${stats.cadence.postsPerActiveDay}/day  ·  ${stats.cadence.authoredPerActiveDay} authored/day  ·  ${stats.cadence.postsPerOccupiedHour}/occupied hour\n`);
   process.stdout.write(`  authored ${stats.authoredShare}%  ·  stranger-eligible ${stats.strangerEligibleShare}%  ·  views coverage ${Math.round((stats.base.viewsCoverage ?? 0) * 100)}%\n`);
   process.stdout.write(`  untagged ${Math.round((untaggedShare(rows) ?? 0) * 100)}% (45–55% is normal)\n`);
+  process.stdout.write(`  watchlist: ${watchlist.accounts.length} accounts covering ${Math.round(watchlist.meta.coverageAchieved * 100)}% of quote-derived likes\n`);
   const byType = Object.entries(stats.byType).sort((a, b) => b[1].n - a[1].n);
   for (const [type, cell] of byType) {
     process.stdout.write(`    ${type.padEnd(20)} n=${String(cell.n).padStart(4)}  ${String(cell.share).padStart(5)}%  lift ${cell.lift}\n`);
@@ -183,7 +190,7 @@ async function main() {
   }
 
   const { saveCorpus } = await import('../../features/x-benchmark/store.js');
-  await saveCorpus(handle, { stats, meta });
+  await saveCorpus(handle, { stats, watchlistSeed: watchlist.accounts, meta });
   process.stdout.write(`\nSaved x_corpora/${handle.toLowerCase()} (stat block only — rows are not stored).\n`);
 }
 

@@ -1,6 +1,11 @@
 # X Growth — productization plan
 
-> **Status:** PLAN. Nothing in Phases 1–6 is built. The as-built single-account system is documented in
+> **Status:** Phases 0–5 are BUILT (2026-09-12). Phase 6 remains blocked, for the reasons below.
+> As-built reference now lives in
+> [`docs/source-of-truth/X-GROWTH-SYSTEM.md`](../source-of-truth/X-GROWTH-SYSTEM.md) §8b — this doc
+> keeps the phase-by-phase rationale and the decisions, not the current contract.
+>
+> **Original status:** PLAN. Nothing in Phases 1–6 was built. The as-built single-account system is documented in
 > [`docs/source-of-truth/X-GROWTH-SYSTEM.md`](../source-of-truth/X-GROWTH-SYSTEM.md) — that doc wins on
 > anything describing current behavior. This doc only describes the path from "works for `@bai_ee`" to
 > "every signed-up client runs it on their own data."
@@ -96,13 +101,14 @@ derived watchlist  →  scan (local, bird)  →  rank  →  day-plan  →  compo
 
 ## Storage contract
 
-Proposed, additive — no existing field changes meaning.
+Additive — no existing field changes meaning. **As built**, with the two places the build departed from
+this proposal marked.
 
 | Data | Location | Notes |
 |---|---|---|
-| X growth profile | `client_configs/{clientId}.xGrowth` | `{ ownHandle, benchmarkHandles[], lanes[], enabled }`. ⚠️ the `marketing-brief/config` save route normalizes an **explicit field list** — a new block is dropped unless added there, same trap `brandXHandle` hit. |
-| Corpora (own + benchmark) | `x_monitor/{accountId}/posts` | Already the right shape: `{id, text, url, createdAt, kind, metrics, history[]}`, account-keyed, so one benchmark account shared by several clients is stored once. |
-| Corpus stat block | `x_monitor/{accountId}.stats` | Output of the analyzer; input to the compare engine. |
+| X growth profile | `client_configs/{clientId}.`**`marketingBriefConfig.xGrowth`** | ⬅ **changed:** nested under `marketingBriefConfig` rather than a top-level key, so it rides the one save route that already normalizes and stale-form-guards client config. ⚠️ that route normalizes an **explicit field list** — a block it does not name is dropped on every save, the trap `brandXHandle` already hit. |
+| Corpus stat block + watchlist seed | **`x_corpora/{handle}`** | ⬅ **changed:** its own collection, not `x_monitor`. That one is keyed by immutable X user id; a corpus arrives keyed by handle, and mixing key types in one collection fails silently months later. Shared across clients — one benchmark ingested once. |
+| Raw corpus rows | *not stored* | ~650KB per account and nothing downstream reads them. The one artifact that needs them (the watchlist) is derived at ingest. |
 | Gap report | `dashboard_state/{clientId}.marketingBrief.xGrowth.gapReport` | Recomputed on ingest, not on read. |
 | Generated calendar | `dashboard_state/{clientId}.marketingBrief.xGrowth.calendar` | Replaces the static `x-calendar-15day.json` import. |
 | Scan output | `dashboard_state/{clientId}.marketingBrief.quoteTargets` | **As-built, unchanged.** |
@@ -177,12 +183,22 @@ build settled, which the rest of the phases inherit:
 - **Two units, never mixed.** `perDay` (how much you publish) and `perPost` (what a post earns) are
   ranked separately; `shape` findings carry no modelled impact at all.
 
-**Phase 2 — Client X profile.** The `client_configs/{clientId}.xGrowth` contract + normalization in the
-config save route + resolution helpers. No UI yet; `@bai_ee`'s profile is written directly.
+**Phase 2 — Client X profile. ✅ BUILT** (`profile.js`, normalized in the config save route).
+Stored at `client_configs/{clientId}.marketingBriefConfig.xGrowth` rather than as a top-level key —
+same contract, but under the one route that already normalizes, stale-form-guards and persists client
+config. `mode` defaults to `approval`, never `auto`; an omitted field preserves what is stored; the
+recommended tier is the next step above current output, not the benchmark's rate in one jump.
 
-**Phase 3 — Parameterized ingest.** Collapse `pull-timeline` + `analyze-corpus` into
-`scripts/x-content/ingest-corpus.mjs --handle --write`, writing to `x_monitor/{accountId}` instead of
-`docs/audits/`. Includes the ScrapeCreators benchmark-ingest test from constraint 3.
+**Phase 3 — Parameterized ingest. ✅ BUILT** (`taxonomy.js`, `normalize-corpus.js`, `store.js`,
+`scripts/x-content/ingest-corpus.mjs`). Corpora are stored in their own `x_corpora/{handle}` collection,
+NOT in `x_monitor` as this plan first proposed — that one is keyed by immutable X user id and a corpus
+arrives keyed by handle; mixing key types in one collection fails silently later. Stat blocks and the
+derived watchlist are stored; raw rows are not.
+
+**Constraint 3 is settled, negatively.** ScrapeCreators' `/v1/twitter/user-tweets` returns
+`{success:true, tweets:[]}` for `@seb__design` — 1,549 followers, 782 posts in the window (probed
+2026-09-12, 1 credit). It cannot serve timelines for accounts this size at all, historical or fresh.
+Hosted ingest is not available at any price short of the spend-gated X API.
 
 ⚠️ **Must ship a shared topic taxonomy.** The two existing corpora were tagged by two *different*
 hand-written taggers and share **1 topic label out of 28**, which made every benchmark topic read as
@@ -191,18 +207,30 @@ vocabulary overlap and warns; that is a guard, not a fix. Per-client ingest must
 corpus and its benchmarks' from one vocabulary, or topic comparison stays permanently disabled and the
 strongest signal in the benchmark data (its top veins) never reaches the client.
 
-**Phase 4 — Derived watchlist + generated calendar.** `deriveWatchlist()` (code the 80%-coverage rule
-that produced the 39 handles) and `buildCalendar(gapReport, days)`. `day-plan.js` contract unchanged;
-the route reads the calendar from Firestore and the static JSON import is deleted.
+**Phase 4 — Derived watchlist + generated calendar. ✅ BUILT** (`derive-watchlist.js`,
+`build-calendar.js`, `refresh-analysis` action). Run against the corpus the original list was read off
+by hand, `deriveWatchlist` returns **31 accounts covering 80.08%**, 30 of them on the hand-written list —
+evidence the cut was a rule, not taste. The static JSON import is **kept as a fallback** rather than
+deleted: `@bai_ee` keeps working unchanged, and a client with no ingested corpus sees a plan instead of
+an empty card. `calendarSource` in the GET says which one is in play.
 
-**Phase 5 — Multi-client daily loop + UI.** Shared-budget scan across enrolled clients; `XCalendarCard`
-renders the slot view (known open item: `dayPlan` already ships in the GET, the component still renders
-the flat candidate list) plus a gap panel; compose path adds Client Brain voice + guard + score.
-Enrollment and approval mode mirror **Social Auto-Publish** (off / approval / auto), which is the
-existing pattern for per-client publishing.
+**Phase 5 — Multi-client daily loop + UI. ✅ BUILT** (`features/x-quote-targets/scan-plan.js`,
+`scripts/x-content/scan-all-clients.mjs`, `XCalendarCard` gap panel + day-plan slot view).
+The sweep budget is **shared across clients**, not per client: rate limit is the scarce resource (a
+39-account sweep returned 429 on 32), so each unique account is fetched once, ranked by value summed
+across every client that wants it, and the pool is split back out afterwards. A client starved by the
+cap is named rather than silently handed an empty scan. Enrollment is `xGrowth.enabled`; mode mirrors
+Social Auto-Publish.
 
-**Phase 6 — Not now.** Auto-posting cadence (blocked on Hobby cron), hosted ingest (blocked on `bird`),
-self-serve benchmark discovery.
+**Still open in Phase 5:** the compose path does not yet pull Client Brain voice into generated slot
+copy — the guard and the scorer run on drafts, the voice string does not. `resolveXGrowthProfile`
+accepts the Brain's lanes already, so this is a wiring step, not a design question.
+
+**Phase 6 — Not now, and two of the three are hard-blocked.** Auto-posting cadence is blocked on the
+Hobby once-daily cron. Hosted ingest is blocked outright: `bird` needs browser cookies and
+ScrapeCreators returns nothing for accounts this size, so per-client corpus ingest is an operator-run
+local step until someone pays for the X API. Self-serve benchmark discovery remains a design question,
+not a blocked one.
 
 ---
 
