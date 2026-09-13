@@ -15,6 +15,7 @@
 // that ranks across units is comparing unlike things.
 
 import { MIN_CLASS_N } from './summarize.js';
+import { UNTAGGED } from './taxonomy.js';
 
 /** Type-mix differences smaller than this (in percentage points of authored
  * output) are noise at these corpus sizes and are not reported. */
@@ -418,6 +419,10 @@ export function compareToBenchmark(input = {}) {
 
   const benchTopics = topicsComparable
     ? Object.entries(benchmark.byTopic ?? {})
+      // The untagged class is a real post type (~half of an active account's
+      // output is subject-less riffing) but it is not a recommendation — "post
+      // more untagged riffs" is not advice anyone can act on.
+      .filter(([topic]) => topic !== UNTAGGED)
       .filter(([, v]) => (v.n ?? 0) >= MIN_CLASS_N && num(v.lift) != null && v.lift > 1)
       .sort((a, b) => b[1].lift - a[1].lift)
       .slice(0, 5)
