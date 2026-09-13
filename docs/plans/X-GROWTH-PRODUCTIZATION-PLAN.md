@@ -142,6 +142,12 @@ All verified in the 2026-09-10/11 build session.
    auto-post. Approval-mode drafting is the honest product until Pro or an external trigger.
 5. **`scoreXPost` has no borrowed-reach model** — valid on originals, wrong on quote-reacts. The compare
    engine must supply quote-react guidance from the corpus, not the scorer.
+5b. **Engagement rate is the wrong headline metric here, and one earlier claim used it.** The "3.36%
+   engagement rate" cited for `@bai_ee`'s `original-showcase` is `avgER` — the mean of per-post ratios,
+   which a few low-view posts inflate badly. Pooled ER for the same set is **1.68%**, *below* that
+   account's 1.84% average. The conclusion survives on a sounder statistic (showcase is its best type at
+   **1.61× its own average likes**), but any consumer rendering per-type ER should use pooled, and view
+   coverage must be shown next to it — the benchmark's views are a 25% top-liked sample.
 6. **`docs/audits/` is not deployed** — the route static-imports the calendar JSON so Next bundles it.
    Generated calendars must come from Firestore, which removes that workaround rather than extending it.
 7. **Vercel Hobby 12-function packaging cap** — prefer new actions on the existing `quote-targets` route
@@ -155,9 +161,21 @@ Each phase stops for approval. Phases 1–4 are pure/offline and cost nothing to
 
 **Phase 0 — Commit what exists.** The entire X system is untracked. No new work until it is in git.
 
-**Phase 1 — Compare engine.** `features/x-benchmark/compare.js`: two stat blocks → ranked gap report.
-Pure, no network, no cost. Fixtures are the seb/bai_ee JSON already on disk, so the numbers asserted in
-`x-dashboard.html` become regression tests. *Delivers the A/B ask on its own.*
+**Phase 1 — Compare engine. ✅ BUILT** (`features/x-benchmark/`: `summarize.js`, `compare.js`, 31 tests).
+Pure, no network, no cost. The real corpora are the regression fixtures, so the measured findings
+(11.85 posts/day, 1.96 vs 1.31 per occupied hour, 73% multi-hour share, 60.8 self-quote avg likes, the
+3.4× video-over-image lift inside one type) now fail a test if a refactor moves them. Three things the
+build settled, which the rest of the phases inherit:
+
+- **Lift, not likes.** Every comparison unit is a post class's performance relative to the *same*
+  account's average, so a 66-median-view account and a 2,205-median-view account are comparable.
+- **A share delta is not a recommendation.** Blind mix-matching scored 0.84× on the real pair — copying
+  the benchmark's shape would have made the account *worse*, because it would have cut the account's
+  best type (`original-showcase`, 1.61× own average, which the benchmark posts less of) and added a type
+  the account executes badly (`original-text`, 0.16×). Gaps now carry a direction —
+  increase / decrease / **hold** / **investigate** — and only the actionable two carry impact.
+- **Two units, never mixed.** `perDay` (how much you publish) and `perPost` (what a post earns) are
+  ranked separately; `shape` findings carry no modelled impact at all.
 
 **Phase 2 — Client X profile.** The `client_configs/{clientId}.xGrowth` contract + normalization in the
 config save route + resolution helpers. No UI yet; `@bai_ee`'s profile is written directly.
@@ -165,6 +183,13 @@ config save route + resolution helpers. No UI yet; `@bai_ee`'s profile is writte
 **Phase 3 — Parameterized ingest.** Collapse `pull-timeline` + `analyze-corpus` into
 `scripts/x-content/ingest-corpus.mjs --handle --write`, writing to `x_monitor/{accountId}` instead of
 `docs/audits/`. Includes the ScrapeCreators benchmark-ingest test from constraint 3.
+
+⚠️ **Must ship a shared topic taxonomy.** The two existing corpora were tagged by two *different*
+hand-written taggers and share **1 topic label out of 28**, which made every benchmark topic read as
+"0% of your output" — a property of the tagger, not a finding. Phase 1 suppresses topic gaps below 30%
+vocabulary overlap and warns; that is a guard, not a fix. Per-client ingest must tag both the client's
+corpus and its benchmarks' from one vocabulary, or topic comparison stays permanently disabled and the
+strongest signal in the benchmark data (its top veins) never reaches the client.
 
 **Phase 4 — Derived watchlist + generated calendar.** `deriveWatchlist()` (code the 80%-coverage rule
 that produced the 39 handles) and `buildCalendar(gapReport, days)`. `day-plan.js` contract unchanged;
