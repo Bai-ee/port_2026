@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
+// ESM feature module — imported, not createRequire'd, same as the other
+// features/x-* modules the dashboard routes use.
+import { normalizeXGrowthProfile } from '../../../../../features/x-benchmark/profile.js';
 
 const require = createRequire(import.meta.url);
 const fb = require('../../../../../api/_lib/firebase-admin.cjs');
@@ -271,12 +274,14 @@ export async function POST(request) {
   let priorAuditSeed = null;
   let priorCalendar = null;
   let priorOpportunitySignals = null;
+  let priorXGrowth = null;
   let priorBrandXHandle = '';
   try {
     const priorSnap = await fb.adminDb.collection('client_configs').doc(context.clientId).get();
     priorWeather = priorSnap.data()?.marketingBriefConfig?.weather || null;
     priorCalendar = priorSnap.data()?.marketingBriefConfig?.calendar || null;
     priorOpportunitySignals = priorSnap.data()?.marketingBriefConfig?.opportunitySignals || null;
+    priorXGrowth = priorSnap.data()?.marketingBriefConfig?.xGrowth || null;
     priorBrandXHandle = String(priorSnap.data()?.marketingBriefConfig?.brandXHandle || '').trim();
     priorScoutConfig = priorSnap.data()?.scoutConfig || null;
     priorSourceWebsiteUrl = priorSnap.data()?.sourceInputs?.websiteUrl || null;
@@ -372,6 +377,10 @@ export async function POST(request) {
     opportunitySignals: body?.opportunitySignals !== undefined
       ? normalizeOpportunitySignals(body.opportunitySignals, priorOpportunitySignals)
       : (priorOpportunitySignals || DEFAULT_OPPORTUNITY_SIGNALS),
+    // X growth profile (X Calendar card) — own handle, benchmark accounts to be
+    // measured against, lanes, cadence tier. Normalized here because a block
+    // this route does not name is dropped on every save.
+    xGrowth: normalizeXGrowthProfile(body?.xGrowth, priorXGrowth),
     updatedAtIso: new Date().toISOString(),
   };
 
