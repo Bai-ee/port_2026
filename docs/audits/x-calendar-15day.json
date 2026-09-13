@@ -1,0 +1,1977 @@
+{
+  "meta": {
+    "days": 15,
+    "postsPerDay": 8,
+    "handle": "bai_ee",
+    "tier": "2",
+    "charLimit": 280,
+    "repliesTargetPerDay": 10
+  },
+  "days": [
+    {
+      "day": 1,
+      "weekday": "Mon",
+      "theme": "cloth that isn't fabric",
+      "slots": [
+        {
+          "slot": "A",
+          "timeCT": "07:00",
+          "type": "quote-react",
+          "lane": "craft",
+          "brief": "find a striking verlet or soft-body cloth-sim clip from another creative coder",
+          "copy": "verlet integration making fabric look scared of gravity",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "craft",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "B",
+          "timeCT": "09:00",
+          "type": "quote-react",
+          "lane": "work",
+          "brief": "find a post about a designer explaining the invisible groundwork behind a finished client deliverable",
+          "copy": "the invisible groundwork is always the actual work",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "C",
+          "timeCT": "10:30",
+          "type": "original-showcase",
+          "lane": "craft",
+          "brief": null,
+          "copy": "grabbed a corner, flung it, watched the cloth remember how to fall",
+          "asset": "screen capture of HOLO PAPER: grab a paper sheet, fling it, let it rebound and rumple back to rest",
+          "selfReply": "built in-browser with verlet physics, no plugin. holo paper lives inside clothstudio.",
+          "score": 0.25650000000000006,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "D",
+          "timeCT": "13:00",
+          "type": "quote-react",
+          "lane": "work",
+          "brief": "find a case-study post that shows the internal system or decision behind a client ui, not just the final screenshot",
+          "copy": "this is the part nobody screenshots, the decision not the shot",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "E",
+          "timeCT": "15:00",
+          "type": "original-text",
+          "lane": "craft",
+          "brief": null,
+          "copy": "spent the week on paper that isn't paper, a browser cloth sim with verlet points, constraints, a grab-and-fling gesture, and a rebound curve so it settles instead of flopping. none of that is visible. what's visible is that it feels right.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.2195,
+          "guard": {
+            "hardBlock": false,
+            "lane": "craft",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "F",
+          "timeCT": "16:30",
+          "type": "original-showcase",
+          "lane": "craft",
+          "brief": null,
+          "copy": "same sheet, different pass, holographic light catching the fold",
+          "asset": "slow pan across HOLO PAPER's surface as it catches simulated light mid-fold",
+          "selfReply": "presentation layer only, never touches the exported invoice file.",
+          "score": 0.2325,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "G",
+          "timeCT": "19:00",
+          "type": "original-text",
+          "lane": "craft",
+          "brief": null,
+          "copy": "the boring part of a physics sim is edge cases, a cloth clipping through itself looks broken even when the math is right. most of this week was constraint tuning nobody will ever notice. that's how you know it's done.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.2195,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "H",
+          "timeCT": "21:00",
+          "type": "retweet",
+          "lane": "craft",
+          "brief": null,
+          "copy": "retweet: a decades-old demoscene reel doing real-time cloth on a fraction of today's compute, the trick predates webgl by a long way",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "craft",
+            "reviewRequired": true
+          }
+        }
+      ]
+    },
+    {
+      "day": 2,
+      "weekday": "Tue",
+      "theme": "an invoice that prints exactly what you see",
+      "slots": [
+        {
+          "slot": "A",
+          "timeCT": "07:00",
+          "type": "quote-react",
+          "lane": "craft",
+          "brief": "find a designer's before/after post fixing a print or pdf pagination bug",
+          "copy": "pagination bugs are the quietest kind of broken",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "craft",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "B",
+          "timeCT": "09:00",
+          "type": "quote-react",
+          "lane": "work",
+          "brief": "find a post about a client presentation that sells a design decision instead of just showing it",
+          "copy": "selling the decision is a different skill than making it",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "C",
+          "timeCT": "10:30",
+          "type": "original-showcase",
+          "lane": "work",
+          "brief": null,
+          "copy": "three themes, one invoice, zero surprises when it prints",
+          "asset": "flip through Invoice Studio's three built-in themes on canvas, then open print preview to show it matches exactly",
+          "selfReply": "canvas and print share one render path, what you see is what prints, page breaks included.",
+          "score": 0.2325,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "D",
+          "timeCT": "13:00",
+          "type": "quote-react",
+          "lane": "craft",
+          "brief": "find a post about a two-way live-edit bridge where canvas edits update a form and form edits update the canvas",
+          "copy": "two-way binding done right disappears, you stop noticing which side you edited",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "E",
+          "timeCT": "15:00",
+          "type": "original-text",
+          "lane": "craft",
+          "brief": null,
+          "copy": "print-correct pagination sounds boring until you've shipped one that isn't. the canvas has to know exactly where a browser's print engine will break a page, before it breaks it. we built that math once and every theme inherits it.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.23450000000000001,
+          "guard": {
+            "hardBlock": false,
+            "lane": "craft",
+            "reviewRequired": false
+          }
+        },
+        {
+          "slot": "F",
+          "timeCT": "16:30",
+          "type": "original-showcase",
+          "lane": "craft",
+          "brief": null,
+          "copy": "a holographic sheet under an invoice, because paper can still surprise you",
+          "asset": "toggle Holo Paper on for an invoice in Invoice Studio, tilt or interact to show the shimmer layer",
+          "selfReply": "editor-only presentation layer, lazy-loaded, never reaches the printed or downloaded file.",
+          "score": 0.25,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "G",
+          "timeCT": "19:00",
+          "type": "original-text",
+          "lane": "craft",
+          "brief": null,
+          "copy": "the hardest bug this month wasn't a crash, it was a client logo rendering one pixel low on page two only, print-only, canvas fine. fixed by treating the page-break math as its own module instead of a css hack. small fix, long chase.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.2195,
+          "guard": {
+            "hardBlock": false,
+            "lane": "craft",
+            "reviewRequired": false
+          }
+        },
+        {
+          "slot": "H",
+          "timeCT": "21:00",
+          "type": "self-quote",
+          "lane": "craft",
+          "brief": "resurface an earlier post or thread about building the print-correct pagination engine for Invoice Studio",
+          "copy": "revisiting this one, the pagination engine underneath every invoice theme, in case anyone's fighting the same print bug right now",
+          "asset": null,
+          "selfReply": "full breakdown was in the original thread, happy to walk through the page-break math if it's useful.",
+          "guard": {
+            "hardBlock": false,
+            "lane": "craft",
+            "reviewRequired": true
+          }
+        }
+      ]
+    },
+    {
+      "day": 3,
+      "weekday": "Wed",
+      "theme": "the marketplace a collection actually trades on",
+      "slots": [
+        {
+          "slot": "A",
+          "timeCT": "07:00",
+          "type": "quote-react",
+          "lane": "work",
+          "brief": "find a marketplace or storefront ui redesign post with strong filtering or sorting patterns",
+          "copy": "filtering that doesn't fight the user is harder than it looks",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "B",
+          "timeCT": "09:00",
+          "type": "quote-react",
+          "lane": "craft",
+          "brief": "find a grid or card-layout post with clean empty and loading states",
+          "copy": "the loading state got more thought than the happy path, correctly",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "C",
+          "timeCT": "10:30",
+          "type": "original-showcase",
+          "lane": "work",
+          "brief": null,
+          "copy": "built the marketplace this collection actually trades on",
+          "asset": "walk through the Critters Quest marketplace UI: browse, filter by trait, open a listing",
+          "selfReply": "full ui system for critters.quest, browse, filter, list, buy, all one build.",
+          "score": 0.2325,
+          "guard": {
+            "hardBlock": false,
+            "lane": "work",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "D",
+          "timeCT": "13:00",
+          "type": "quote-react",
+          "lane": "work",
+          "brief": "find a post about designing a trait or attribute grid for a collectible catalog",
+          "copy": "a trait grid is a database pretending to be a poster",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "work",
+            "reviewRequired": false
+          }
+        },
+        {
+          "slot": "E",
+          "timeCT": "15:00",
+          "type": "original-text",
+          "lane": "work",
+          "brief": null,
+          "copy": "a marketplace for a collectible game has to do two jobs at once, read like a catalog and perform like a store. most of the design time went into the filter bar, trait, rarity, price, because that's where people actually decide to buy.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.23700000000000002,
+          "guard": {
+            "hardBlock": false,
+            "lane": "work",
+            "reviewRequired": false
+          }
+        },
+        {
+          "slot": "F",
+          "timeCT": "16:30",
+          "type": "original-showcase",
+          "lane": "work",
+          "brief": null,
+          "copy": "clone collection, same system, different rules",
+          "asset": "show the Clone collection view inside the marketplace, highlighting how it reuses the base UI with new listing rules",
+          "selfReply": "second collection, same marketplace shell, the system had to bend without breaking.",
+          "score": 0.2325,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "G",
+          "timeCT": "19:00",
+          "type": "original-text",
+          "lane": "work",
+          "brief": null,
+          "copy": "the mistake in most marketplace uis is treating every listing type the same. a clone, a genesis piece, and a redeemable asset all need different metadata front and center. that decision happens in the data model, long before any pixels.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.2195,
+          "guard": {
+            "hardBlock": false,
+            "lane": "work",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "H",
+          "timeCT": "21:00",
+          "type": "retweet",
+          "lane": "work",
+          "brief": null,
+          "copy": "retweet: a strong case study on redesigning a collectibles marketplace's filter ux, the kind of write-up worth the reshare",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "work",
+            "reviewRequired": true
+          }
+        }
+      ]
+    },
+    {
+      "day": 4,
+      "weekday": "Thu",
+      "theme": "a browser slicer writing files for hardware",
+      "slots": [
+        {
+          "slot": "A",
+          "timeCT": "07:00",
+          "type": "quote-react",
+          "lane": "music",
+          "brief": "find a hardware sampler or drum machine demo, sp-16, mpc, or similar, with a clean workflow clip",
+          "copy": "hardware workflow this clean is its own genre of satisfying",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "B",
+          "timeCT": "09:00",
+          "type": "quote-react",
+          "lane": "music",
+          "brief": "find a record sleeve or mixtape cover design post with strong type and grid choices",
+          "copy": "a sleeve that reads before it plays is doing its job",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "music",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "C",
+          "timeCT": "10:30",
+          "type": "original-showcase",
+          "lane": "music",
+          "brief": null,
+          "copy": "sliced a loop in the browser, loaded it straight onto hardware",
+          "asset": "show LoopStudio slicing a WAV into regions, then exporting an SP-16 .scn scene file",
+          "selfReply": "browser slicer to hardware scene file, no export step in between. loopstudio, on the dashboard.",
+          "score": 0.2325,
+          "guard": {
+            "hardBlock": false,
+            "lane": "music",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "D",
+          "timeCT": "13:00",
+          "type": "quote-react",
+          "lane": "craft",
+          "brief": "find a post about writing a binary or file-format exporter for a niche hardware target",
+          "copy": "reverse-engineering a binary format is the least glamorous kind of respect",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "E",
+          "timeCT": "15:00",
+          "type": "original-text",
+          "lane": "music",
+          "brief": null,
+          "copy": "sp-16 scenes are a binary format with zero public docs, so the exporter started as a hex-diff exercise, save a scene twice, compare the bytes, guess what changed. slow. now loopstudio writes valid scenes straight from a browser slicer.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.23500000000000001,
+          "guard": {
+            "hardBlock": false,
+            "lane": "music",
+            "reviewRequired": false
+          }
+        },
+        {
+          "slot": "F",
+          "timeCT": "16:30",
+          "type": "original-showcase",
+          "lane": "music",
+          "brief": null,
+          "copy": "same session, exported two ways, a scene file and a shareable player",
+          "asset": "show LoopStudio's export panel producing both an SP-16 .scn file and an EditTrax interactive player zip from one session",
+          "selfReply": "one slicing session, two outputs, hardware scene and a self-contained web player.",
+          "score": 0.2325,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "G",
+          "timeCT": "19:00",
+          "type": "original-text",
+          "lane": "craft",
+          "brief": null,
+          "copy": "a template-fill writer is the safest way to touch a binary format you don't fully own, you never invent bytes, you only swap the ones inside a known-good blank scene. slower to build, much harder to corrupt.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.2195,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "H",
+          "timeCT": "21:00",
+          "type": "self-quote",
+          "lane": "music",
+          "brief": "resurface an earlier post explaining how the SP-16 .scn export was reverse-engineered from a blank scene template",
+          "copy": "bringing this one back, how a browser tool ended up writing files for hardware with no public spec, one hex diff at a time",
+          "asset": null,
+          "selfReply": "if you're staring down a similar undocumented format, the hex-diff approach generalizes better than you'd think.",
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        }
+      ]
+    },
+    {
+      "day": 5,
+      "weekday": "Fri",
+      "theme": "an archive that can't 404",
+      "slots": [
+        {
+          "slot": "A",
+          "timeCT": "07:00",
+          "type": "quote-react",
+          "lane": "infra",
+          "brief": "find a post about archiving media to a permanent or decentralized storage layer with a clear before and after",
+          "copy": "a link that can't 404 changes how you think about the archive",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "infra",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "B",
+          "timeCT": "09:00",
+          "type": "quote-react",
+          "lane": "music",
+          "brief": "find a dj set or rave-archive post with strong tracklist or context documentation",
+          "copy": "a set is only as good as its paper trail",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "music",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "C",
+          "timeCT": "10:30",
+          "type": "original-showcase",
+          "lane": "infra",
+          "brief": null,
+          "copy": "years of sets, uploaded once, gone nowhere since",
+          "asset": "scroll through the Underground Existence archive page showing mix entries with their permanent storage links",
+          "selfReply": "underground existence, my own rave and dj archive, stored on arweave. one upload, no renewal, no takedown.",
+          "score": 0.2325,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "D",
+          "timeCT": "13:00",
+          "type": "quote-react",
+          "lane": "infra",
+          "brief": "find a post about self-hosting or owning your own media instead of renting a platform's feed",
+          "copy": "owning the file beats owning the account every time",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "E",
+          "timeCT": "15:00",
+          "type": "original-text",
+          "lane": "infra",
+          "brief": null,
+          "copy": "most archives die from neglect, not deletion, a hosting bill lapses, a platform changes terms, a drive fails. arweave's pitch is boring and correct, pay once, store it in a way nobody has to keep paying to maintain. that's the whole appeal.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.2195,
+          "guard": {
+            "hardBlock": false,
+            "lane": "infra",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "F",
+          "timeCT": "16:30",
+          "type": "original-showcase",
+          "lane": "infra",
+          "brief": null,
+          "copy": "old mix, same energy, still findable in five years",
+          "asset": "pull up one specific archived mix on Underground Existence and play a clip while showing its permanent link",
+          "selfReply": "recorded years ago, still resolves at the same address. that's the point.",
+          "score": 0.2325,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "G",
+          "timeCT": "19:00",
+          "type": "original-text",
+          "lane": "infra",
+          "brief": null,
+          "copy": "permanence sounds abstract until you've lost a mix to a dead link. the fix isn't a better backup habit, it's removing the thing that can lapse, no subscription, no account to suspend, no server to forget to renew.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.2195,
+          "guard": {
+            "hardBlock": false,
+            "lane": "infra",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "H",
+          "timeCT": "21:00",
+          "type": "retweet",
+          "lane": "infra",
+          "brief": null,
+          "copy": "retweet: a clear explainer on why permanent storage is an ownership question, not a hype question, worth the reshare",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "infra",
+            "reviewRequired": true
+          }
+        }
+      ]
+    },
+    {
+      "day": 6,
+      "weekday": "Sat",
+      "theme": "a url in, a mirror out",
+      "slots": [
+        {
+          "slot": "A",
+          "timeCT": "07:00",
+          "type": "quote-react",
+          "lane": "craft",
+          "brief": "find a post about scraping or cloning a live site's dom into a clean static rebuild",
+          "copy": "a clean static rebuild of a messy live site is oddly satisfying",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "B",
+          "timeCT": "09:00",
+          "type": "quote-react",
+          "lane": "infra",
+          "brief": "find a post about moving personal or client media off a platform that could disappear tomorrow",
+          "copy": "moving media off a platform that could vanish tomorrow is just prudent",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "C",
+          "timeCT": "10:30",
+          "type": "original-showcase",
+          "lane": "craft",
+          "brief": null,
+          "copy": "gave it a url, got back an exact static mirror",
+          "asset": "submit a live site URL to Site Recreate, show the live preview and downloadable zip it produces",
+          "selfReply": "site recreate, url in, static mirror out. built for the handoff, not the pitch deck.",
+          "score": 0.2325,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "D",
+          "timeCT": "13:00",
+          "type": "quote-react",
+          "lane": "craft",
+          "brief": "find a post about image or asset pipeline work that shrank a page's load weight dramatically",
+          "copy": "shaving load weight is unglamorous and it's most of the job",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "E",
+          "timeCT": "15:00",
+          "type": "original-text",
+          "lane": "craft",
+          "brief": null,
+          "copy": "cloning a live site sounds simple until you hit a platform's checkout scripts, analytics tags, and tracking pixels, none of which belong in a static mirror. most of the engineering here is a killlist, knowing exactly what not to copy.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.2195,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "F",
+          "timeCT": "16:30",
+          "type": "original-showcase",
+          "lane": "infra",
+          "brief": null,
+          "copy": "the mirror doesn't need the original site to stay up",
+          "asset": "show a recreated site loading fully with the original site's tab closed, to prove independence",
+          "selfReply": "a static mirror you own outright, no dependency on the source staying online.",
+          "score": 0.2325,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "G",
+          "timeCT": "19:00",
+          "type": "original-text",
+          "lane": "craft",
+          "brief": null,
+          "copy": "platforms update their checkout and analytics scripts constantly, which means a cloning tool's killlist drifts. every real re-run against a client site finds a new script pattern to exclude. less one build, more ongoing maintenance.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.2295,
+          "guard": {
+            "hardBlock": false,
+            "lane": "work",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "H",
+          "timeCT": "21:00",
+          "type": "self-quote",
+          "lane": "infra",
+          "brief": "resurface an earlier post walking through how Site Recreate's cloning pipeline handles a real client site end to end",
+          "copy": "back to this one, the full url-to-static-mirror pipeline, including the parts that only show up on a real client site, not a demo",
+          "asset": null,
+          "selfReply": "happy to go deeper on the killlist problem if anyone's building something similar.",
+          "guard": {
+            "hardBlock": false,
+            "lane": "work",
+            "reviewRequired": true
+          }
+        }
+      ]
+    },
+    {
+      "day": 7,
+      "weekday": "Sun",
+      "theme": "a promo video that never repeats itself",
+      "slots": [
+        {
+          "slot": "A",
+          "timeCT": "07:00",
+          "type": "quote-react",
+          "lane": "craft",
+          "brief": "find a gpu-rendered motion graphics demo with strong camera pacing and no cuts",
+          "copy": "camera pacing carrying a shot that has no cuts",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "B",
+          "timeCT": "09:00",
+          "type": "quote-react",
+          "lane": "work",
+          "brief": "find a site-to-video mockup or promo tool showcase from another studio",
+          "copy": "turning a static site into something that moves is a genuinely hard brief",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "C",
+          "timeCT": "10:30",
+          "type": "original-showcase",
+          "lane": "work",
+          "brief": null,
+          "copy": "every client's site becomes its own motion mockup, rendered fresh each time",
+          "asset": "show Video Promo generating a motion mockup of a client site, a camera dive into a section, background variation",
+          "selfReply": "gpu-rendered on cloud run, one recipe per run, no two outputs are identical.",
+          "score": 0.2325,
+          "guard": {
+            "hardBlock": false,
+            "lane": "work",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "D",
+          "timeCT": "13:00",
+          "type": "quote-react",
+          "lane": "craft",
+          "brief": "find a post about a seeded or procedural variation system that avoids repeating the same output twice",
+          "copy": "a seeded variation system beats a template every time it's reused",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "E",
+          "timeCT": "15:00",
+          "type": "original-text",
+          "lane": "craft",
+          "brief": null,
+          "copy": "the hard rule on this render pipeline is that speed can't come from the site's scroll speed, it desyncs the camera from the content instantly. speed is camera pacing, full stop. sounds like a small distinction. it's the whole render.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.2195,
+          "guard": {
+            "hardBlock": false,
+            "lane": "craft",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "F",
+          "timeCT": "16:30",
+          "type": "original-showcase",
+          "lane": "work",
+          "brief": null,
+          "copy": "same recipe, different client, a different render every single time",
+          "asset": "render two Video Promo outputs back to back for different client sites to show the variation engine at work",
+          "selfReply": "a per-client counter seeds the variation, zoom depth, background, pacing all shift run to run.",
+          "score": 0.2325,
+          "guard": {
+            "hardBlock": false,
+            "lane": "work",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "G",
+          "timeCT": "19:00",
+          "type": "original-text",
+          "lane": "work",
+          "brief": null,
+          "copy": "a promo video generator only earns trust if it never repeats itself for the same client. that meant building a variation engine before the renderer, corner dives, background choice, pacing, all seeded per client so it stays coherent over time.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.23450000000000001,
+          "guard": {
+            "hardBlock": false,
+            "lane": "work",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "H",
+          "timeCT": "21:00",
+          "type": "retweet",
+          "lane": "craft",
+          "brief": null,
+          "copy": "retweet: a genuinely clever camera-choreography system for procedural video, worth studying the pacing decisions here",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        }
+      ]
+    },
+    {
+      "day": 8,
+      "weekday": "Mon",
+      "theme": "a wheel that has to feel like it earned its result",
+      "slots": [
+        {
+          "slot": "A",
+          "timeCT": "07:00",
+          "type": "quote-react",
+          "lane": "craft",
+          "brief": "find a game ui post about a rewards or multiplier mechanic with clean state feedback",
+          "copy": "state feedback on a rewards mechanic is where trust is won or lost",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "B",
+          "timeCT": "09:00",
+          "type": "quote-react",
+          "lane": "craft",
+          "brief": "find a post about designing a wheel or spin mechanic ui with satisfying motion",
+          "copy": "a spin mechanic lives or dies on the deceleration curve",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "C",
+          "timeCT": "10:30",
+          "type": "original-showcase",
+          "lane": "work",
+          "brief": null,
+          "copy": "built the flow for locking assets into a multi-tier rewards system",
+          "asset": "walk through the Genesis Quest asset-lock flow: select assets, choose a tier, confirm, see the state update",
+          "selfReply": "genesis quest staking for critters.quest, the full lock, tier, and reward ui.",
+          "score": 0.2325,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "D",
+          "timeCT": "13:00",
+          "type": "quote-react",
+          "lane": "craft",
+          "brief": "find a post about clear before, after, and pending states in a rewards or account dashboard",
+          "copy": "pending states are where most rewards dashboards quietly fail",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "E",
+          "timeCT": "15:00",
+          "type": "original-text",
+          "lane": "work",
+          "brief": null,
+          "copy": "a rewards-lock flow's whole job is to make an irreversible action feel safe to take. that meant three confirmation states, a clear lock-period display, and a rewards preview that updates live as you change the tier, before anything is committed.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.2195,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "F",
+          "timeCT": "16:30",
+          "type": "original-showcase",
+          "lane": "work",
+          "brief": null,
+          "copy": "spin, land, payout, the multiplier flow end to end",
+          "asset": "show the Multiplier Spins UI: trigger a spin, watch it decelerate and land, show the payout state",
+          "selfReply": "multiplier spins for critters.quest, the wheel, the landing, the payout, all one component.",
+          "score": 0.2325,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "G",
+          "timeCT": "19:00",
+          "type": "original-text",
+          "lane": "work",
+          "brief": null,
+          "copy": "the multiplier spin mechanic needed a deceleration curve that reads as fair even when it isn't random in the way people assume. that's a design problem before it's a math problem, the wheel has to feel like it earned its result.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.2195,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "H",
+          "timeCT": "21:00",
+          "type": "retweet",
+          "lane": "work",
+          "brief": null,
+          "copy": "retweet: a well-argued breakdown of designing loot mechanics so they feel fair instead of manipulative, good read",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        }
+      ]
+    },
+    {
+      "day": 9,
+      "weekday": "Tue",
+      "theme": "a paint tool that runs entirely on the gpu",
+      "slots": [
+        {
+          "slot": "A",
+          "timeCT": "07:00",
+          "type": "quote-react",
+          "lane": "craft",
+          "brief": "find a striking webgpu or tsl node-material shader demo",
+          "copy": "node-based shaders making this look easier than it is",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "B",
+          "timeCT": "09:00",
+          "type": "quote-react",
+          "lane": "music",
+          "brief": "find a post about a musician's tactile hardware performance setup with excellent visual staging",
+          "copy": "a good hardware setup is a visual instrument too",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "C",
+          "timeCT": "10:30",
+          "type": "original-showcase",
+          "lane": "craft",
+          "brief": null,
+          "copy": "a paint tool that runs entirely on the gpu, brush and all",
+          "asset": "show PaintStudio's WebGPU and TSL brush strokes rendering in real time on a large canvas with no lag",
+          "selfReply": "paintstudio, three.js, webgpu, tsl shaders, gsap for the ui polish.",
+          "score": 0.2325,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "D",
+          "timeCT": "13:00",
+          "type": "quote-react",
+          "lane": "music",
+          "brief": "find a post about a producer explaining their sample-chopping or slicing workflow",
+          "copy": "a slicing workflow explained well is a tutorial in disguise",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "E",
+          "timeCT": "15:00",
+          "type": "original-text",
+          "lane": "craft",
+          "brief": null,
+          "copy": "moving a brush engine to webgpu wasn't about a benchmark win, it was about removing a ceiling. webgl hits a wall on large-canvas, high-brush-count work that tsl node materials just don't hit the same way. the ceiling moving changes what you'll attempt.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.2195,
+          "guard": {
+            "hardBlock": false,
+            "lane": "craft",
+            "reviewRequired": false
+          }
+        },
+        {
+          "slot": "F",
+          "timeCT": "16:30",
+          "type": "original-showcase",
+          "lane": "craft",
+          "brief": null,
+          "copy": "same shader, live-tuned, no reload",
+          "asset": "adjust a TSL shader parameter live in PaintStudio and show the render updating instantly with no rebuild",
+          "selfReply": "node materials mean the shader graph is inspectable and tunable at runtime, not just at build time.",
+          "score": 0.2325,
+          "guard": {
+            "hardBlock": false,
+            "lane": "craft",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "G",
+          "timeCT": "19:00",
+          "type": "original-text",
+          "lane": "craft",
+          "brief": null,
+          "copy": "tsl is a better way to write shaders than raw glsl once you're already thinking in three.js nodes, but the docs assume you know why a node graph beats a text shader. took longer to unlearn glsl habits than to learn tsl.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.2265,
+          "guard": {
+            "hardBlock": false,
+            "lane": "craft",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "H",
+          "timeCT": "21:00",
+          "type": "self-quote",
+          "lane": "craft",
+          "brief": "resurface an earlier post explaining the migration decision from raw glsl to tsl node materials",
+          "copy": "surfacing this again, the actual reasoning for moving off raw glsl into tsl node materials, not just the demo reel",
+          "asset": null,
+          "selfReply": "if you're mid-migration on the same thing, ask, happy to compare notes on where it got annoying.",
+          "guard": {
+            "hardBlock": false,
+            "lane": "craft",
+            "reviewRequired": true
+          }
+        }
+      ]
+    },
+    {
+      "day": 10,
+      "weekday": "Wed",
+      "theme": "a session that exports itself into a player",
+      "slots": [
+        {
+          "slot": "A",
+          "timeCT": "07:00",
+          "type": "quote-react",
+          "lane": "music",
+          "brief": "find an interactive audio player or web-based daw-lite demo with a clean embedded ui",
+          "copy": "an embeddable player this clean usually means someone fought the css hard",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "craft",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "B",
+          "timeCT": "09:00",
+          "type": "quote-react",
+          "lane": "music",
+          "brief": "find a post about a self-contained or offline-first web export with no server dependency",
+          "copy": "self-contained exports are underrated, nothing to keep alive on your end",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "C",
+          "timeCT": "10:30",
+          "type": "original-showcase",
+          "lane": "music",
+          "brief": null,
+          "copy": "a loop session exported as its own interactive player, zip and all",
+          "asset": "show LoopStudio's EditTrax export producing a self-contained interactive player zip, then open the player and toggle parts",
+          "selfReply": "editrax player export, the whole session becomes a shareable, self-contained web player.",
+          "score": 0.2325,
+          "guard": {
+            "hardBlock": false,
+            "lane": "music",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "D",
+          "timeCT": "13:00",
+          "type": "quote-react",
+          "lane": "music",
+          "brief": "find a post about a producer building a custom tool to speed up their own sampling workflow",
+          "copy": "building your own tool to fix your own workflow, respect",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "E",
+          "timeCT": "15:00",
+          "type": "original-text",
+          "lane": "music",
+          "brief": null,
+          "copy": "the export target that mattered most wasn't another file format, it was a player, a zip someone can open with no install and no account, that boots straight into an interactive version of the loop session. static files doing the work an app usually does.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.2195,
+          "guard": {
+            "hardBlock": false,
+            "lane": "music",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "F",
+          "timeCT": "16:30",
+          "type": "original-showcase",
+          "lane": "music",
+          "brief": null,
+          "copy": "mute a part, solo a part, the player just handles it",
+          "asset": "in the exported EditTrax player, toggle parts on and off live to show the interactive mixing controls",
+          "selfReply": "the exported player carries real per-part toggles, not a flattened bounce.",
+          "score": 0.2325,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "G",
+          "timeCT": "19:00",
+          "type": "original-text",
+          "lane": "craft",
+          "brief": null,
+          "copy": "the one rule on the player export that took a while to earn, preset zero can never be all-off. an interactive export that boots silent reads as broken in the first two seconds, no matter how good the mixing controls are underneath it.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.2195,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "H",
+          "timeCT": "21:00",
+          "type": "retweet",
+          "lane": "music",
+          "brief": null,
+          "copy": "retweet: a good thread on building lightweight, dependency-free audio players for the web, the constraints here are the interesting part",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        }
+      ]
+    },
+    {
+      "day": 11,
+      "weekday": "Thu",
+      "theme": "a dashboard that admits when there's nothing to report",
+      "slots": [
+        {
+          "slot": "A",
+          "timeCT": "07:00",
+          "type": "quote-react",
+          "lane": "work",
+          "brief": "find a post about a client-facing dashboard surfacing real signal instead of vanity metrics",
+          "copy": "a dashboard that admits when there's nothing to report is rare",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "B",
+          "timeCT": "09:00",
+          "type": "quote-react",
+          "lane": "craft",
+          "brief": "find a post about designing an admin control panel with granular per-item toggles",
+          "copy": "granular toggles beat one on/off switch once someone actually uses the tool",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "C",
+          "timeCT": "10:30",
+          "type": "original-showcase",
+          "lane": "work",
+          "brief": null,
+          "copy": "one panel, every source a client cares about, toggled per item",
+          "asset": "walk through the Market Signals control panel: toggle a source on and off, run a live test, preview the report block",
+          "selfReply": "market signals, per-source live test plus granular on/off, built as a real control panel, not a settings page.",
+          "score": 0.2325,
+          "guard": {
+            "hardBlock": false,
+            "lane": "work",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "D",
+          "timeCT": "13:00",
+          "type": "quote-react",
+          "lane": "work",
+          "brief": "find a post about compressing a brand's tone and voice into a reusable reference document for a team",
+          "copy": "a brand-voice doc that's actually specific enough to be useful is rare",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "E",
+          "timeCT": "15:00",
+          "type": "original-text",
+          "lane": "work",
+          "brief": null,
+          "copy": "client brain started as one idea: an approved document that answers what this brand sounds like, so every downstream piece of copy pulls from the same source instead of drifting a little more each time. the hard part was making it admit gaps instead of guessing.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.20750000000000002,
+          "guard": {
+            "hardBlock": false,
+            "lane": "work",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "F",
+          "timeCT": "16:30",
+          "type": "original-showcase",
+          "lane": "work",
+          "brief": null,
+          "copy": "an empty section is the honest answer, and the dashboard says so",
+          "asset": "show a report block rendering an explicit empty state instead of hiding or faking data",
+          "selfReply": "no fallback-to-everything trick, if a search genuinely returns nothing on-brand, the section says so.",
+          "score": 0.2325,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "G",
+          "timeCT": "19:00",
+          "type": "original-text",
+          "lane": "work",
+          "brief": null,
+          "copy": "the easiest way to make a client dashboard feel trustworthy is to let it be honestly empty sometimes. a search that returns nothing on-brand should say nothing, not quietly pad itself with unrelated chatter to look busy. that restraint is a design decision.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.2195,
+          "guard": {
+            "hardBlock": false,
+            "lane": "work",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "H",
+          "timeCT": "21:00",
+          "type": "self-quote",
+          "lane": "work",
+          "brief": "resurface an earlier post or thread about how the market signals control panel's per-source toggles were designed",
+          "copy": "pulling this one back up, the per-source toggle pattern in market signals, for anyone designing a similar control-heavy admin panel",
+          "asset": null,
+          "selfReply": "the on/off pattern generalizes well beyond this specific tool if it's useful to you.",
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        }
+      ]
+    },
+    {
+      "day": 12,
+      "weekday": "Fri",
+      "theme": "a reveal that has to feel earned",
+      "slots": [
+        {
+          "slot": "A",
+          "timeCT": "07:00",
+          "type": "quote-react",
+          "lane": "craft",
+          "brief": "find a post about a mystery-box or loot-reveal ui with a satisfying open animation",
+          "copy": "the open animation is doing more trust-building than the odds disclosure",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "craft",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "B",
+          "timeCT": "09:00",
+          "type": "quote-react",
+          "lane": "work",
+          "brief": "find a post about designing a real-world-asset or physical-redemption flow inside a digital product",
+          "copy": "bridging digital and physical redemption is a genuinely underrated design problem",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "C",
+          "timeCT": "10:30",
+          "type": "original-showcase",
+          "lane": "work",
+          "brief": null,
+          "copy": "open the box, see the reveal, land on the reward",
+          "asset": "show the Mystery Box UI: open animation, reveal sequence, landing on the reward state",
+          "selfReply": "mystery box for critters.quest, reveal sequence built to feel earned, not random-feeling.",
+          "score": 0.2325,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "D",
+          "timeCT": "13:00",
+          "type": "quote-react",
+          "lane": "craft",
+          "brief": "find a post about clear, non-manipulative disclosure of odds or rates in a rewards system",
+          "copy": "showing the odds plainly is the harder and better version of this ui",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "work",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "E",
+          "timeCT": "15:00",
+          "type": "original-text",
+          "lane": "work",
+          "brief": null,
+          "copy": "a spin wheel and a mystery box are the same underlying problem twice, a randomized reward that has to feel fair. that meant clear odds up front, a landing sequence with weight to it, and a result state that doesn't rush past what someone just got.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.2195,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "F",
+          "timeCT": "16:30",
+          "type": "original-showcase",
+          "lane": "work",
+          "brief": null,
+          "copy": "redeeming a digital asset for something real, start to finish",
+          "asset": "walk through the RWA Redemption flow: select an asset, confirm redemption, see the fulfillment state",
+          "selfReply": "rwa redemption for critters.quest, the digital-to-physical handoff, designed as one clean flow.",
+          "score": 0.2325,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "G",
+          "timeCT": "19:00",
+          "type": "original-text",
+          "lane": "work",
+          "brief": null,
+          "copy": "designing a redemption flow for a physical reward means the ui's job doesn't end at confirmed. someone needs a clear record of what happens next, shipping status, timeline, a way to check back, or the flow feels like it swallowed their asset.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.23450000000000001,
+          "guard": {
+            "hardBlock": false,
+            "lane": "work",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "H",
+          "timeCT": "21:00",
+          "type": "retweet",
+          "lane": "work",
+          "brief": null,
+          "copy": "retweet: a sharp critique of loot-box dark patterns that still respects the mechanic itself, the distinction it draws is the right one",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        }
+      ]
+    },
+    {
+      "day": 13,
+      "weekday": "Sat",
+      "theme": "a warehouse that didn't exist yet",
+      "slots": [
+        {
+          "slot": "A",
+          "timeCT": "07:00",
+          "type": "quote-react",
+          "lane": "music",
+          "brief": "find a 3d or blender environment build post for a live event or venue visualization",
+          "copy": "building the venue before the event exists is a fun kind of cheating",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "B",
+          "timeCT": "09:00",
+          "type": "quote-react",
+          "lane": "craft",
+          "brief": "find a blender modeling or lighting post with strong attention to real-world scale and materials",
+          "copy": "getting the scale right is most of why a render reads as real",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "craft",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "C",
+          "timeCT": "10:30",
+          "type": "original-showcase",
+          "lane": "music",
+          "brief": null,
+          "copy": "built a warehouse in blender with my son, for a party that hadn't happened yet",
+          "asset": "walk-through render of the Blender warehouse model built for the EditTrax NYE event visualization",
+          "selfReply": "modeled and lit for the editrax nye event, a proof of the space before load-in.",
+          "score": 0.2325,
+          "guard": {
+            "hardBlock": false,
+            "lane": "craft",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "D",
+          "timeCT": "13:00",
+          "type": "quote-react",
+          "lane": "music",
+          "brief": "find a post about designing a stage or lighting layout digitally before a live event",
+          "copy": "pre-visualizing a stage layout catches problems load-in day can't afford",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "work",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "E",
+          "timeCT": "15:00",
+          "type": "original-text",
+          "lane": "music",
+          "brief": null,
+          "copy": "my son and I built a warehouse in blender for a new year's eve show before the venue was even confirmed. it wasn't a portfolio piece, it was planning, where the rig goes, where the crowd flows, what the room feels like at capacity. cheaper to fix in blender than at load-in.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.2175,
+          "guard": {
+            "hardBlock": false,
+            "lane": "craft",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "F",
+          "timeCT": "16:30",
+          "type": "original-showcase",
+          "lane": "music",
+          "brief": null,
+          "copy": "same room, lights up, crowd density mocked in",
+          "asset": "show the Blender warehouse scene with the lighting rig activated and rough crowd placeholders to gauge sightlines",
+          "selfReply": "sightline and lighting checks done in blender, weeks before anyone loaded gear in.",
+          "score": 0.2325,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "G",
+          "timeCT": "19:00",
+          "type": "original-text",
+          "lane": "music",
+          "brief": null,
+          "copy": "the most useful thing about modeling a venue before an event is that it forces every logistics question early, rig height, sightlines, crowd flow, exits. a render doesn't care that you haven't figured it out yet. the room does, later, expensively.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.2195,
+          "guard": {
+            "hardBlock": false,
+            "lane": "craft",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "H",
+          "timeCT": "21:00",
+          "type": "self-quote",
+          "lane": "music",
+          "brief": "resurface an earlier post or thread about building the EditTrax NYE warehouse in Blender with his son",
+          "copy": "bringing this one back, the blender build for editrax nye, done with my son before the venue was even locked in",
+          "asset": null,
+          "selfReply": "happy to share the modeling approach if anyone's pre-visualizing a venue for their own event.",
+          "guard": {
+            "hardBlock": false,
+            "lane": "craft",
+            "reviewRequired": true
+          }
+        }
+      ]
+    },
+    {
+      "day": 14,
+      "weekday": "Sun",
+      "theme": "a record that outlives the app that made it",
+      "slots": [
+        {
+          "slot": "A",
+          "timeCT": "07:00",
+          "type": "quote-react",
+          "lane": "infra",
+          "brief": "find a post about a client or creator losing work to a platform shutdown or account suspension",
+          "copy": "a platform shutdown taking years of work with it never stops being avoidable",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "B",
+          "timeCT": "09:00",
+          "type": "quote-react",
+          "lane": "infra",
+          "brief": "find a post about a well-documented, transparent asset-provenance or ownership record in a digital product",
+          "copy": "a clear provenance record is doing quiet trust-building work",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "music",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "C",
+          "timeCT": "10:30",
+          "type": "original-showcase",
+          "lane": "infra",
+          "brief": null,
+          "copy": "archived the client's renders the same way, gone nowhere since",
+          "asset": "show the Archive/Publishing card archiving an approved client video to Arweave, then the manifest confirming it's stored",
+          "selfReply": "archive/publishing, approved media to arweave, plus a deployed microsite so it's actually reachable, not just stored.",
+          "score": 0.2325,
+          "guard": {
+            "hardBlock": false,
+            "lane": "work",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "D",
+          "timeCT": "13:00",
+          "type": "quote-react",
+          "lane": "infra",
+          "brief": "find a post about deploying a decentralized or censorship-resistant microsite for permanence",
+          "copy": "a site that can't be taken down is a different kind of deliverable",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "E",
+          "timeCT": "15:00",
+          "type": "original-text",
+          "lane": "infra",
+          "brief": null,
+          "copy": "archiving a client's approved work to arweave is only half the job, the other half is a manifest that says exactly what's stored and a microsite that actually serves it. permanence without a way to find the thing is just an expensive backup.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.23,
+          "guard": {
+            "hardBlock": false,
+            "lane": "infra",
+            "reviewRequired": false
+          }
+        },
+        {
+          "slot": "F",
+          "timeCT": "16:30",
+          "type": "original-showcase",
+          "lane": "infra",
+          "brief": null,
+          "copy": "a redemption record that outlives the app that made it",
+          "asset": "show the RWA Redemption confirmation screen and its permanent transaction record",
+          "selfReply": "the redemption record persists independent of the game's servers staying up.",
+          "score": 0.2325,
+          "guard": {
+            "hardBlock": false,
+            "lane": "music",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "G",
+          "timeCT": "19:00",
+          "type": "original-text",
+          "lane": "infra",
+          "brief": null,
+          "copy": "the pitch for permanent storage isn't blockchain, it's this stops being your problem to maintain. no renewal, no platform terms changing under you, no drive failure. a genuinely boring value proposition, which is exactly why it's the right one.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.2265,
+          "guard": {
+            "hardBlock": false,
+            "lane": "infra",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "H",
+          "timeCT": "21:00",
+          "type": "retweet",
+          "lane": "infra",
+          "brief": null,
+          "copy": "retweet: a good thread on the real cost math of permanent decentralized storage versus a recurring hosting bill, worth the numbers",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "infra",
+            "reviewRequired": true
+          }
+        }
+      ]
+    },
+    {
+      "day": 15,
+      "weekday": "Mon",
+      "theme": "same instinct, five different surfaces",
+      "slots": [
+        {
+          "slot": "A",
+          "timeCT": "07:00",
+          "type": "quote-react",
+          "lane": "craft",
+          "brief": "find a strong end-of-week or portfolio-recap post from another designer-developer showing range across tools",
+          "copy": "range across tools shown without a word of self-promotion",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "B",
+          "timeCT": "09:00",
+          "type": "quote-react",
+          "lane": "music",
+          "brief": "find a sleeve, cover-art, or visual-identity post for a mix or record with strong restraint",
+          "copy": "restraint on a sleeve is harder to pull off than density",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "music",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "C",
+          "timeCT": "10:30",
+          "type": "original-showcase",
+          "lane": "craft",
+          "brief": null,
+          "copy": "cloth, paper, paint, all running on the same physics instincts",
+          "asset": "quick supercut: HOLO PAPER fling, Invoice Studio print preview, PaintStudio brush stroke, back to back",
+          "selfReply": "different tools, same instinct, make the physics disappear so the interaction feels obvious.",
+          "score": 0.2325,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "D",
+          "timeCT": "13:00",
+          "type": "quote-react",
+          "lane": "work",
+          "brief": "find a post reflecting on what a designer learned building for one client over a long stretch of time",
+          "copy": "the lessons that only show up after a year on one client are the real ones",
+          "asset": null,
+          "selfReply": null,
+          "guard": {
+            "hardBlock": false,
+            "lane": "work",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "E",
+          "timeCT": "15:00",
+          "type": "original-text",
+          "lane": "craft",
+          "brief": null,
+          "copy": "this week was cloth, pagination, a marketplace, a hardware export, an archive, a clone tool, a render pipeline, a rewards flow, shaders, a player export, a dashboard, a reveal mechanic, a blender warehouse. same question every time: obvious, or built.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.2195,
+          "guard": {
+            "hardBlock": false,
+            "lane": "craft",
+            "reviewRequired": false
+          }
+        },
+        {
+          "slot": "F",
+          "timeCT": "16:30",
+          "type": "original-showcase",
+          "lane": "work",
+          "brief": null,
+          "copy": "the whole week's builds, in the tools that made them",
+          "asset": "split-screen montage cycling through ClothStudio, Invoice Studio, LoopStudio, the Critters Quest marketplace, and the Blender warehouse",
+          "selfReply": "five different problems, one week, same underlying question, does it feel obvious or does it feel built.",
+          "score": 0.2325,
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        },
+        {
+          "slot": "G",
+          "timeCT": "19:00",
+          "type": "original-text",
+          "lane": "work",
+          "brief": null,
+          "copy": "the best-performing thing I post is always the same shape, a client system explained as a design problem, not as an affiliation. the moment it becomes about who the client is instead of what the interface solves, the reach and the interest both drop. easy rule, easy to forget.",
+          "asset": null,
+          "selfReply": null,
+          "score": 0.20750000000000002,
+          "guard": {
+            "hardBlock": false,
+            "lane": "work",
+            "reviewRequired": false
+          }
+        },
+        {
+          "slot": "H",
+          "timeCT": "21:00",
+          "type": "self-quote",
+          "lane": "craft",
+          "brief": "resurface the single highest-performing earlier post, a tutorial or behind-the-scenes breakdown of a shipped system, as a week-closer",
+          "copy": "closing the week with this one again, still the most useful breakdown I've posted, and the reminder to write more like it",
+          "asset": null,
+          "selfReply": "if there's a specific system from this week you want the same treatment for, say which one.",
+          "guard": {
+            "hardBlock": false,
+            "lane": "unknown",
+            "reviewRequired": true
+          }
+        }
+      ]
+    }
+  ]
+}

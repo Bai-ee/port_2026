@@ -1,0 +1,287 @@
+{
+  "handle": "bai_ee",
+  "tzOffsetHours": -5,
+  "pulledAt": "2026-09-11T03:02:42.248Z",
+  "posts": 246,
+  "firstPost": "2026-07-07T20:57:18.000Z",
+  "lastPost": "2026-09-10T14:29:12.000Z",
+  "daysCovered": 61,
+  "spanDays": 65,
+  "postsPerActiveDay": 4.03,
+  "byType": {
+    "retweet": 162,
+    "quote-react": 26,
+    "quote-commentary": 14,
+    "original-showcase": 29,
+    "original-text": 10,
+    "reply": 4,
+    "self-quote": 1
+  },
+  "hourHist": [
+    {
+      "hour": 0,
+      "n": 2,
+      "avgLikes": 0
+    },
+    {
+      "hour": 1,
+      "n": 1,
+      "avgLikes": 0
+    },
+    {
+      "hour": 2,
+      "n": 1,
+      "avgLikes": 0
+    },
+    {
+      "hour": 3,
+      "n": 1,
+      "avgLikes": 0
+    },
+    {
+      "hour": 4,
+      "n": 0,
+      "avgLikes": 0
+    },
+    {
+      "hour": 5,
+      "n": 2,
+      "avgLikes": 0
+    },
+    {
+      "hour": 6,
+      "n": 0,
+      "avgLikes": 0
+    },
+    {
+      "hour": 7,
+      "n": 3,
+      "avgLikes": 1.3
+    },
+    {
+      "hour": 8,
+      "n": 12,
+      "avgLikes": 2.8
+    },
+    {
+      "hour": 9,
+      "n": 19,
+      "avgLikes": 0.8
+    },
+    {
+      "hour": 10,
+      "n": 18,
+      "avgLikes": 0.8
+    },
+    {
+      "hour": 11,
+      "n": 13,
+      "avgLikes": 0.5
+    },
+    {
+      "hour": 12,
+      "n": 22,
+      "avgLikes": 1.2
+    },
+    {
+      "hour": 13,
+      "n": 19,
+      "avgLikes": 2.3
+    },
+    {
+      "hour": 14,
+      "n": 8,
+      "avgLikes": 0.1
+    },
+    {
+      "hour": 15,
+      "n": 18,
+      "avgLikes": 0.4
+    },
+    {
+      "hour": 16,
+      "n": 10,
+      "avgLikes": 0.2
+    },
+    {
+      "hour": 17,
+      "n": 10,
+      "avgLikes": 0.3
+    },
+    {
+      "hour": 18,
+      "n": 16,
+      "avgLikes": 0.6
+    },
+    {
+      "hour": 19,
+      "n": 10,
+      "avgLikes": 0.5
+    },
+    {
+      "hour": 20,
+      "n": 21,
+      "avgLikes": 0.2
+    },
+    {
+      "hour": 21,
+      "n": 13,
+      "avgLikes": 1.2
+    },
+    {
+      "hour": 22,
+      "n": 19,
+      "avgLikes": 0.7
+    },
+    {
+      "hour": 23,
+      "n": 8,
+      "avgLikes": 0.3
+    }
+  ],
+  "dayHist": {
+    "Thu": {
+      "n": 42,
+      "likes": 65
+    },
+    "Wed": {
+      "n": 34,
+      "likes": 18
+    },
+    "Tue": {
+      "n": 40,
+      "likes": 7
+    },
+    "Mon": {
+      "n": 39,
+      "likes": 37
+    },
+    "Sun": {
+      "n": 21,
+      "likes": 12
+    },
+    "Sat": {
+      "n": 32,
+      "likes": 42
+    },
+    "Fri": {
+      "n": 38,
+      "likes": 26
+    }
+  },
+  "topicStats": {
+    "untagged-riff": {
+      "n": 122,
+      "avgLikes": 0.4,
+      "avgReplies": 0,
+      "avgReposts": 305.6,
+      "avgViews": 89
+    },
+    "web3-gaming": {
+      "n": 24,
+      "avgLikes": 3.4,
+      "avgReplies": 0.5,
+      "avgReposts": 6.8,
+      "avgViews": 764
+    },
+    "web3-design-work": {
+      "n": 26,
+      "avgLikes": 3,
+      "avgReplies": 0.5,
+      "avgReposts": 28.1,
+      "avgViews": 554
+    },
+    "ai-tooling": {
+      "n": 30,
+      "avgLikes": 0.6,
+      "avgReplies": 0.1,
+      "avgReposts": 116.1,
+      "avgViews": 69
+    },
+    "music-archive-dj": {
+      "n": 36,
+      "avgLikes": 1.4,
+      "avgReplies": 0.1,
+      "avgReposts": 20.7,
+      "avgViews": 103
+    },
+    "platform-complaint": {
+      "n": 11,
+      "avgLikes": 0.6,
+      "avgReplies": 0.1,
+      "avgReposts": 49.6,
+      "avgViews": 81
+    },
+    "personal-life": {
+      "n": 6,
+      "avgLikes": 2.8,
+      "avgReplies": 0.5,
+      "avgReposts": 0.2,
+      "avgViews": 83
+    },
+    "design-engineering": {
+      "n": 25,
+      "avgLikes": 1,
+      "avgReplies": 0.1,
+      "avgReposts": 111.4,
+      "avgViews": 77
+    },
+    "decentralized-infra": {
+      "n": 8,
+      "avgLikes": 1.3,
+      "avgReplies": 0.1,
+      "avgReposts": 7.8,
+      "avgViews": 76
+    },
+    "craft-opinion": {
+      "n": 10,
+      "avgLikes": 3,
+      "avgReplies": 0.4,
+      "avgReposts": 5.2,
+      "avgViews": 842
+    },
+    "client-work-status": {
+      "n": 14,
+      "avgLikes": 1.6,
+      "avgReplies": 0.1,
+      "avgReposts": 1.6,
+      "avgViews": 94
+    },
+    "crypto-speculation": {
+      "n": 9,
+      "avgLikes": 3.7,
+      "avgReplies": 0.6,
+      "avgReposts": 7.2,
+      "avgViews": 502
+    },
+    "us-politics": {
+      "n": 4,
+      "avgLikes": 0,
+      "avgReplies": 0,
+      "avgReposts": 457,
+      "avgViews": 59
+    }
+  },
+  "mediaStats": {
+    "none": {
+      "n": 47,
+      "avgLikes": 1.4,
+      "avgViews": 82
+    },
+    "video": {
+      "n": 26,
+      "avgLikes": 4.9,
+      "avgViews": 339
+    },
+    "image": {
+      "n": 10,
+      "avgLikes": 1.1,
+      "avgViews": 79
+    },
+    "gif": {
+      "n": 1,
+      "avgLikes": 1,
+      "avgViews": 44
+    }
+  }
+}
