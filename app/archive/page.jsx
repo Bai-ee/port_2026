@@ -7,6 +7,8 @@ const pipeline = ['NAS SOURCE', 'HASH + DEDUPE', 'TWELVELABS', 'JEV', 'HUMAN REV
 export default function ArchivePage() {
   const [workers, setWorkers] = useState([]);
   const [status, setStatus] = useState('CONNECTING');
+  const [relativePath, setRelativePath] = useState('.');
+  const [commandState, setCommandState] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -30,6 +32,19 @@ export default function ArchivePage() {
   const worker = workers[0];
   const counters = worker?.counters || {};
 
+  async function processCollection() {
+    if (!worker?.workerId || !worker?.sourceId) { setCommandState('WAITING FOR WORKER + SOURCE'); return; }
+    setCommandState('QUEUING');
+    try {
+      const response = await fetch('/api/archive/commands/process', {
+        method:'POST', headers:{'content-type':'application/json'},
+        body:JSON.stringify({workerId:worker.workerId, sourceId:worker.sourceId, relativePath:relativePath || '.'}),
+      });
+      const body = await response.json();
+      setCommandState(response.ok ? `QUEUED · ${body.commandId.slice(0,8)}` : (body.error || 'QUEUE FAILED'));
+    } catch { setCommandState('QUEUE FAILED'); }
+  }
+
   return (
     <main style={{minHeight:'100vh',background:'#080808',color:'#f4f4f0',fontFamily:'Arial, sans-serif',padding:'32px'}}>
       <div style={{maxWidth:1180,margin:'0 auto'}}>
@@ -46,6 +61,14 @@ export default function ArchivePage() {
           <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12}}>
             {['discovered','hashed','duplicates','failed'].map(k=><div key={k}><div style={{fontSize:11,opacity:.4,textTransform:'uppercase'}}>{k}</div><div style={{fontSize:24,marginTop:6}}>{counters[k] ?? '—'}</div></div>)}
           </div>
+        </section>
+        <section style={{marginTop:16,border:'1px solid #262626',borderRadius:20,padding:24,background:'#101010'}}>
+          <div style={{fontSize:12,opacity:.45}}>PROCESS A COLLECTION</div>
+          <div style={{display:'flex',gap:10,marginTop:12,flexWrap:'wrap'}}>
+            <input aria-label="NAS relative folder" value={relativePath} onChange={e=>setRelativePath(e.target.value)} placeholder="Housepit/San Francisco/2008" style={{flex:'1 1 420px',background:'#080808',border:'1px solid #333',borderRadius:10,padding:'14px 16px',color:'#f4f4f0'}} />
+            <button onClick={processCollection} style={{background:'#f4f4f0',color:'#080808',border:0,borderRadius:10,padding:'14px 20px',fontWeight:700,cursor:'pointer'}}>PROCESS FOLDER</button>
+          </div>
+          <div style={{fontSize:11,opacity:.5,marginTop:10}}>{commandState || 'Relative to the registered NAS source. Originals remain untouched.'}</div>
         </section>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10,marginTop:16}}>
           {pipeline.map((x,i)=><div key={x} style={{border:'1px solid #252525',borderRadius:14,padding:16,minHeight:90,background:i<2?'#151515':'#0c0c0c'}}><div style={{fontSize:11,opacity:.4}}>0{i+1}</div><div style={{fontSize:12,marginTop:28}}>{x}</div></div>)}
