@@ -43,3 +43,29 @@ function archiveTags({fileName,sizeBytes,contentType='application/octet-stream',
 }
 
 module.exports={estimateArchiveCost,archiveTags};
+
+
+function parseWalletJwk(){
+  const raw=process.env.ARWEAVE_WALLET_JWK;
+  if(!raw) throw new Error('ARWEAVE_WALLET_JWK is not configured');
+  let value=raw.trim();
+  if((value.startsWith('"')&&value.endsWith('"'))||(value.startsWith("'")&&value.endsWith("'"))) value=value.slice(1,-1);
+  value=value.replace(/\\n/g,'').replace(/\r?\n/g,'');
+  const jwk=JSON.parse(value);
+  for(const field of ['d','dp','dq','e','kty','n','p','q','qi']) if(!jwk[field]) throw new Error('ARWEAVE_WALLET_JWK is missing '+field);
+  return jwk;
+}
+
+async function uploadArchiveBuffer({data,fileName,contentType,sha256,collectionId}){
+  if(!Buffer.isBuffer(data)&&!(data instanceof Uint8Array)) throw new Error('Archive upload data must be bytes');
+  const {TurboFactory,ArweaveSigner}=await import('@ardrive/turbo-sdk');
+  const signer=new ArweaveSigner(parseWalletJwk());
+  const turbo=TurboFactory.authenticated({signer,config:{gatewayUrl:'https://turbo.ardrive.io',uploadUrl:'https://turbo.ardrive.io'}});
+  const tags=archiveTags({fileName,sizeBytes:data.length,contentType,sha256,collectionId});
+  const result=await turbo.upload({data,dataItemOpts:{tags},turboOpts:{payment:{token:'arweave'}}});
+  if(!result?.id) throw new Error('Turbo upload returned no transaction id');
+  return {transactionId:result.id,arweaveUrl:`https://arweave.net/${result.id}`,fileName,sizeBytes:data.length,tags};
+}
+
+module.exports.uploadArchiveBuffer=uploadArchiveBuffer;
+module.exports.parseWalletJwk=parseWalletJwk;
