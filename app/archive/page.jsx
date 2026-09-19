@@ -20,6 +20,27 @@ export default function ArchivePage() {
   const [browseState, setBrowseState] = useState('');
   const [reviewItems,setReviewItems]=useState([]);
   const [reviewState,setReviewState]=useState('');
+  const [archiveBytes,setArchiveBytes]=useState('');
+  const [archiveQuote,setArchiveQuote]=useState(null);
+  const [archiveState,setArchiveState]=useState('');
+  const [collectionId,setCollectionId]=useState('');
+  const [collectionTitle,setCollectionTitle]=useState('');
+
+  async function quoteArchive(){
+    const sizeBytes=Number(archiveBytes);
+    if(!Number.isFinite(sizeBytes)||sizeBytes<=0){setArchiveState('ENTER COLLECTION BYTES');return;}
+    setArchiveState('QUOTING');
+    const r=await authedFetch('/api/archive/arweave/quote',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sizeBytes})});
+    const b=await r.json();if(r.ok){setArchiveQuote(b.quote);setArchiveState('ESTIMATE READY');}else setArchiveState(b.error||'QUOTE FAILED');
+  }
+
+  async function finalizeCollection(){
+    if(!collectionId){setArchiveState('COLLECTION ID REQUIRED');return;}
+    if(!confirm('This permanently archives the approved collection manifest to Arweave. Continue?'))return;
+    setArchiveState('FINALIZING');
+    const r=await authedFetch('/api/archive/arweave/collection',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({collection:{id:collectionId,title:collectionTitle||collectionId},assets:[],approved:true})});
+    const b=await r.json();setArchiveState(r.ok?`ARCHIVED · ${b.upload.transactionId}`:(b.error||'ARCHIVE FAILED'));
+  }
 
   const loadReview=useCallback(async()=>{
     if(!user)return;
@@ -132,6 +153,18 @@ export default function ArchivePage() {
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10,marginTop:16}}>
           {pipeline.map((x,i)=><div key={x} style={{border:'1px solid #252525',borderRadius:14,padding:16,minHeight:90,background:i<2?'#151515':'#0c0c0c'}}><div style={{fontSize:11,opacity:.4}}>0{i+1}</div><div style={{fontSize:12,marginTop:28}}>{x}</div></div>)}
         </div>
+        <section style={{marginTop:16,border:'1px solid #262626',borderRadius:20,padding:24,background:'#101010'}}>
+          <div style={{fontSize:12,opacity:.45}}>ARWEAVE CHECKPOINT</div><h3 style={{fontSize:24,margin:'8px 0'}}>Approve permanent archive</h3>
+          <p style={{maxWidth:720,opacity:.6,lineHeight:1.5}}>Permanent upload happens only after human approval. The current cost figure is the legacy estimate from the existing Underground Existence / EditVideos Arweave system, not a live Turbo quote.</p>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:8,marginTop:16}}>
+            <input value={collectionId} onChange={e=>setCollectionId(e.target.value)} placeholder="Collection ID" style={{background:'#080808',border:'1px solid #333',borderRadius:10,padding:12,color:'#fff'}}/>
+            <input value={collectionTitle} onChange={e=>setCollectionTitle(e.target.value)} placeholder="Collection title" style={{background:'#080808',border:'1px solid #333',borderRadius:10,padding:12,color:'#fff'}}/>
+            <input value={archiveBytes} onChange={e=>setArchiveBytes(e.target.value)} inputMode="numeric" placeholder="Approved bytes" style={{background:'#080808',border:'1px solid #333',borderRadius:10,padding:12,color:'#fff'}}/>
+          </div>
+          <div style={{display:'flex',gap:8,marginTop:12,flexWrap:'wrap'}}><button onClick={quoteArchive} style={{background:'transparent',color:'#fff',border:'1px solid #444',borderRadius:10,padding:'10px 14px'}}>CALCULATE ESTIMATE</button><button onClick={finalizeCollection} style={{background:'#f4f4f0',color:'#080808',border:0,borderRadius:10,padding:'10px 14px',fontWeight:700}}>APPROVE + ARCHIVE MANIFEST</button><a href="/archive-viewer/" target="_blank" style={{color:'#ddd',padding:'10px 6px'}}>OPEN PERMANENT VIEWER ↗</a></div>
+          {archiveQuote&&<div style={{marginTop:16,fontFamily:'monospace',fontSize:12}}>~ {archiveQuote.costAR} AR · ~ ${archiveQuote.costUSD} USD · {(archiveQuote.sizeMB||0).toLocaleString()} MB <span style={{opacity:.45}}>· {archiveQuote.quoteType}</span></div>}
+          <div style={{fontSize:11,opacity:.5,marginTop:10}}>{archiveState}</div>
+        </section>
         <section style={{marginTop:16,border:'1px solid #262626',borderRadius:20,padding:24}}>
           <div style={{fontSize:12,opacity:.45}}>CURRENT CHECKPOINT</div><h3 style={{fontSize:24,margin:'10px 0'}}>NAS → Jev review → permanent archive</h3>
           <p style={{maxWidth:720,opacity:.65,lineHeight:1.6}}>The control surface is now authenticated and includes the human review gate for Jev decisions. Originals remain read-only; permanent Arweave upload remains explicitly approval-gated.</p>
