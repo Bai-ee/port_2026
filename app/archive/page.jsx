@@ -1,10 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useAuth } from '../AuthContext';
 
 const pipeline = ['NAS SOURCE', 'HASH + DEDUPE', 'TWELVELABS', 'JEV', 'HUMAN REVIEW', 'ARWEAVE'];
 
 export default function ArchivePage() {
+  const { user, loading: authLoading } = useAuth();
+  const authedFetch = useCallback(async (url, init={}) => {
+    if (!user) throw new Error('ADMIN AUTH REQUIRED');
+    const token = await user.getIdToken();
+    return fetch(url,{...init,headers:{...(init.headers||{}),Authorization:`Bearer ${token}`},cache:init.cache||'no-store'});
+  },[user]);
   const [workers, setWorkers] = useState([]);
   const [status, setStatus] = useState('CONNECTING');
   const [relativePath, setRelativePath] = useState('.');
@@ -18,7 +25,9 @@ export default function ArchivePage() {
       try {
         // This endpoint is admin-authenticated. Existing HITLOOP auth may return 403
         // until the operator is signed in; the WIP surface handles that explicitly.
-        const response = await fetch('/api/archive/workers', { cache: 'no-store' });
+        if (authLoading) return;
+        if (!user) { setStatus('ADMIN AUTH REQUIRED'); return; }
+        const response = await authedFetch('/api/archive/workers');
         if (!active) return;
         if (!response.ok) { setStatus(response.status === 403 ? 'ADMIN AUTH REQUIRED' : 'CONTROL PLANE ERROR'); return; }
         const body = await response.json();
@@ -29,7 +38,7 @@ export default function ArchivePage() {
     refresh();
     const timer = setInterval(refresh, 15000);
     return () => { active = false; clearInterval(timer); };
-  }, []);
+  }, [user, authLoading, authedFetch]);
 
   const worker = workers[0];
   const counters = worker?.counters || {};
@@ -37,12 +46,12 @@ export default function ArchivePage() {
   async function browse(path = relativePath) {
     if (!worker?.workerId || !worker?.sourceId) { setBrowseState('WAITING FOR WORKER + SOURCE'); return; }
     setBrowseState('LOADING');
-    const response=await fetch('/api/archive/browse',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({workerId:worker.workerId,sourceId:worker.sourceId,relativePath:path||'.'})});
+    const response=await authedFetch('/api/archive/browse',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({workerId:worker.workerId,sourceId:worker.sourceId,relativePath:path||'.'})});
     const body=await response.json();
     if(!response.ok){setBrowseState(body.error||'BROWSE FAILED');return;}
     for(let i=0;i<20;i++){
       await new Promise(r=>setTimeout(r,500));
-      const poll=await fetch(`/api/archive/browse?commandId=${body.commandId}`,{cache:'no-store'});
+      const poll=await authedFetch(`/api/archive/browse?commandId=${body.commandId}`);
       const data=await poll.json();
       if(data.state==='COMPLETE'){setRelativePath(data.result.relativePath||'.');setFolders(data.result.folders||[]);setBrowseState('');return;}
       if(data.state==='FAILED'){setBrowseState(data.error||'BROWSE FAILED');return;}
@@ -57,7 +66,7 @@ export default function ArchivePage() {
     if (!worker?.workerId || !worker?.sourceId) { setCommandState('WAITING FOR WORKER + SOURCE'); return; }
     setCommandState('QUEUING');
     try {
-      const response = await fetch('/api/archive/commands/process', {
+      const response = await authedFetch('/api/archive/commands/process', {
         method:'POST', headers:{'content-type':'application/json'},
         body:JSON.stringify({workerId:worker.workerId, sourceId:worker.sourceId, relativePath:relativePath || '.'}),
       });
@@ -92,6 +101,7 @@ export default function ArchivePage() {
           <div style={{display:'flex',gap:8,marginTop:12}}><button onClick={()=>browse(relativePath)} style={{background:'transparent',color:'#ddd',border:'1px solid #333',borderRadius:8,padding:'8px 12px'}}>BROWSE</button><button onClick={goUp} disabled={relativePath==='.'} style={{background:'transparent',color:'#ddd',border:'1px solid #333',borderRadius:8,padding:'8px 12px'}}>↑ UP</button><span style={{fontSize:11,opacity:.5,alignSelf:'center'}}>{browseState}</span></div>
           {folders.length>0 && <div style={{marginTop:12,borderTop:'1px solid #252525'}}>{folders.map(name=><button key={name} onClick={()=>openFolder(name)} style={{display:'block',width:'100%',textAlign:'left',background:'transparent',color:'#eee',border:0,borderBottom:'1px solid #1e1e1e',padding:'12px 4px',cursor:'pointer'}}>▸ {name}</button>)}</div>}
           <div style={{fontSize:11,opacity:.5,marginTop:10}}>{commandState || 'Select a folder, then process it. Originals remain untouched.'}</div>
+          <div style={{fontSize:11,opacity:.42,marginTop:8}}>Signed in: {user?.email || (authLoading ? 'checking…' : 'not authenticated')}</div>
         </section>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10,marginTop:16}}>
           {pipeline.map((x,i)=><div key={x} style={{border:'1px solid #252525',borderRadius:14,padding:16,minHeight:90,background:i<2?'#151515':'#0c0c0c'}}><div style={{fontSize:11,opacity:.4}}>0{i+1}</div><div style={{fontSize:12,marginTop:28}}>{x}</div></div>)}
