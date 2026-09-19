@@ -25,6 +25,14 @@ export default function ArchivePage() {
   const [archiveState,setArchiveState]=useState('');
   const [collectionId,setCollectionId]=useState('');
   const [collectionTitle,setCollectionTitle]=useState('');
+  const [approvedAssets,setApprovedAssets]=useState([]);
+
+  const loadApproved=useCallback(async()=>{
+    if(!user)return;
+    try{const r=await authedFetch('/api/archive/approved');const b=await r.json();if(r.ok){setApprovedAssets(b.assets||[]);setArchiveBytes(String(b.totalBytes||0));}}
+    catch{}
+  },[user,authedFetch]);
+  useEffect(()=>{loadApproved();},[loadApproved]);
 
   async function quoteArchive(){
     const sizeBytes=Number(archiveBytes);
@@ -38,7 +46,7 @@ export default function ArchivePage() {
     if(!collectionId){setArchiveState('COLLECTION ID REQUIRED');return;}
     if(!confirm('This permanently archives the approved collection manifest to Arweave. Continue?'))return;
     setArchiveState('FINALIZING');
-    const r=await authedFetch('/api/archive/arweave/collection',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({collection:{id:collectionId,title:collectionTitle||collectionId},assets:[],approved:true})});
+    const r=await authedFetch('/api/archive/arweave/collection',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({collection:{id:collectionId,title:collectionTitle||collectionId},assets:approvedAssets.filter(a=>a.transactionId),approved:true})});
     const b=await r.json();setArchiveState(r.ok?`ARCHIVED · ${b.upload.transactionId}`:(b.error||'ARCHIVE FAILED'));
   }
 
@@ -53,7 +61,7 @@ export default function ArchivePage() {
   async function confirmDecision(item,decision,value){
     setReviewState('SAVING');
     const r=await authedFetch('/api/archive/review',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({id:item.id,decisionId:decision.id||decision.question,value})});
-    if(r.ok){setReviewItems(xs=>xs.filter(x=>x.id!==item.id));setReviewState('CONFIRMED');}else setReviewState('SAVE FAILED');
+    if(r.ok){setReviewItems(xs=>xs.filter(x=>x.id!==item.id));setReviewState('CONFIRMED');await loadApproved();}else setReviewState('SAVE FAILED');
   }
 
   useEffect(() => {
@@ -155,11 +163,11 @@ export default function ArchivePage() {
         </div>
         <section style={{marginTop:16,border:'1px solid #262626',borderRadius:20,padding:24,background:'#101010'}}>
           <div style={{fontSize:12,opacity:.45}}>ARWEAVE CHECKPOINT</div><h3 style={{fontSize:24,margin:'8px 0'}}>Approve permanent archive</h3>
-          <p style={{maxWidth:720,opacity:.6,lineHeight:1.5}}>Permanent upload happens only after human approval. The current cost figure is the legacy estimate from the existing Underground Existence / EditVideos Arweave system, not a live Turbo quote.</p>
+          <p style={{maxWidth:720,opacity:.6,lineHeight:1.5}}>Permanent upload happens only after human approval. ${approvedAssets.length} assets are currently human-approved. Approved byte totals are populated automatically. The current cost figure is the legacy estimate from the existing Underground Existence / EditVideos Arweave system, not a live Turbo quote.</p>
           <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:8,marginTop:16}}>
             <input value={collectionId} onChange={e=>setCollectionId(e.target.value)} placeholder="Collection ID" style={{background:'#080808',border:'1px solid #333',borderRadius:10,padding:12,color:'#fff'}}/>
             <input value={collectionTitle} onChange={e=>setCollectionTitle(e.target.value)} placeholder="Collection title" style={{background:'#080808',border:'1px solid #333',borderRadius:10,padding:12,color:'#fff'}}/>
-            <input value={archiveBytes} onChange={e=>setArchiveBytes(e.target.value)} inputMode="numeric" placeholder="Approved bytes" style={{background:'#080808',border:'1px solid #333',borderRadius:10,padding:12,color:'#fff'}}/>
+            <input value={archiveBytes} readOnly inputMode="numeric" placeholder="Approved bytes" style={{background:'#080808',border:'1px solid #333',borderRadius:10,padding:12,color:'#fff'}}/>
           </div>
           <div style={{display:'flex',gap:8,marginTop:12,flexWrap:'wrap'}}><button onClick={quoteArchive} style={{background:'transparent',color:'#fff',border:'1px solid #444',borderRadius:10,padding:'10px 14px'}}>CALCULATE ESTIMATE</button><button onClick={finalizeCollection} style={{background:'#f4f4f0',color:'#080808',border:0,borderRadius:10,padding:'10px 14px',fontWeight:700}}>APPROVE + ARCHIVE MANIFEST</button><a href="/archive-viewer/" target="_blank" style={{color:'#ddd',padding:'10px 6px'}}>OPEN PERMANENT VIEWER ↗</a></div>
           {archiveQuote&&<div style={{marginTop:16,fontFamily:'monospace',fontSize:12}}>~ {archiveQuote.costAR} AR · ~ ${archiveQuote.costUSD} USD · {(archiveQuote.sizeMB||0).toLocaleString()} MB <span style={{opacity:.45}}>· {archiveQuote.quoteType}</span></div>}
