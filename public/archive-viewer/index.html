@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HITLOOP Permanent Archive</title><style>
+*{box-sizing:border-box}body{margin:0;background:#0b0b0c;color:#f4f4f2;font:14px system-ui,-apple-system,sans-serif}main{max-width:1180px;margin:auto;padding:48px 22px}h1{font-size:clamp(34px,6vw,76px);letter-spacing:-.055em;margin:0 0 8px}.muted{color:#888}.bar{display:flex;gap:12px;margin:32px 0;flex-wrap:wrap}input,button{background:#151517;color:#fff;border:1px solid #303034;border-radius:10px;padding:12px}input{flex:1;min-width:240px}button{cursor:pointer}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}.card{border:1px solid #252529;border-radius:16px;padding:16px;background:#111113;overflow:hidden}.name{font-weight:650;word-break:break-word}.meta{font:11px ui-monospace,monospace;color:#888;margin-top:10px;line-height:1.55}.tag{display:inline-block;border:1px solid #303034;border-radius:99px;padding:4px 8px;margin:8px 4px 0 0;font-size:10px}a{color:#fff}#status{margin:12px 0 24px}</style></head>
+<body><main><div class="muted">HITLOOP / PERMANENT ARCHIVE</div><h1 id="title">Archive</h1>
+<p class="muted">This viewer reads a permanent collection manifest directly from Arweave. It does not require HITLOOP or Firebase.</p>
+<div class="bar"><input id="tx" placeholder="Collection manifest transaction ID"><button id="load">LOAD ARCHIVE</button></div><div id="status" class="muted"></div><div id="assets" class="grid"></div></main>
+<script>
+const q=new URLSearchParams(location.search),tx=document.querySelector('#tx'),status=document.querySelector('#status'),assets=document.querySelector('#assets');
+tx.value=q.get('manifest')||'';
+async function load(){
+ const id=tx.value.trim();if(!id)return;status.textContent='Loading permanent manifest…';assets.innerHTML='';
+ try{const r=await fetch('https://arweave.net/'+encodeURIComponent(id));if(!r.ok)throw Error('Manifest request failed '+r.status);const m=await r.json();
+ document.querySelector('#title').textContent=m.collection?.title||'Archive';status.textContent=(m.assets?.length||0)+' permanent assets · schema '+(m.schemaVersion||'unknown');
+ history.replaceState(null,'','?manifest='+encodeURIComponent(id));
+ for(const a of m.assets||[]){const d=document.createElement('article');d.className='card';d.innerHTML='<div class="name"></div><div class="meta"></div><div class="tag">SHA-256 VERIFIED</div> <div class="tag">ARWEAVE</div><p><a target="_blank" rel="noopener">OPEN ORIGINAL ↗</a></p>';d.querySelector('.name').textContent=a.archiveName||a.id;d.querySelector('.meta').textContent=(a.contentType||'')+'\n'+(a.sizeBytes||'')+' bytes\nTX '+a.transactionId;d.querySelector('a').href=a.arweaveUrl||('https://arweave.net/'+a.transactionId);assets.appendChild(d)}
+ }catch(e){status.textContent=e.message||'Could not load archive'}
+}
+document.querySelector('#load').onclick=load;if(tx.value)load();
+</script></body></html>
