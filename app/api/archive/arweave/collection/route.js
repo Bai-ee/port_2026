@@ -11,6 +11,7 @@ export async function POST(request){
   try{await verifyAdminRequest(buildAuthRequestShim(request));}catch(e){return NextResponse.json({error:'Forbidden.'},{status:403});}
   const {collection,assets,approved}=await request.json();
   if(!approved)return NextResponse.json({error:'Explicit collection approval required'},{status:409});
+  if(!Array.isArray(assets)||assets.length===0)return NextResponse.json({error:'Collection must contain approved permanent assets before finalization'},{status:409});
   try{
     const manifest=buildCollectionManifest({collection,assets});
     const data=Buffer.from(JSON.stringify(manifest,null,2));
