@@ -18,8 +18,8 @@ export async function GET(request) {
 export async function PATCH(request) {
   if (!authorized(request)) return NextResponse.json({ error: 'Unauthorized' }, { status: token ? 401 : 503 });
   const body = await request.json();
-  const { commandId, state, jobId = null, error = null } = body || {};
+  const { commandId, state, jobId = null, error = null, result = null } = body || {};
   if (!commandId || !['CLAIMED','RUNNING','COMPLETE','FAILED'].includes(state)) return NextResponse.json({ error:'Invalid command update' }, {status:400});
-  await fb.adminDb.collection('archive_commands').doc(commandId).set({ state, jobId, error, updatedAt:fb.FieldValue.serverTimestamp() }, {merge:true});
+  await fb.adminDb.collection('archive_commands').doc(commandId).set({ state, jobId, error, result, updatedAt:fb.FieldValue.serverTimestamp() }, {merge:true});
   return NextResponse.json({ok:true});
 }
