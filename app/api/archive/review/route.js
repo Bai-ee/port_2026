@@ -17,8 +17,17 @@ export async function PATCH(request){
   const denied=await auth(request);if(denied)return denied;
   const {id,decisionId,value}=await request.json();
   if(!id||!decisionId||!value)return NextResponse.json({error:'id, decisionId and value required'},{status:400});
-  await fb.adminDb.collection('archive_review').doc(id).set({
-    state:'CONFIRMED',humanDecision:{decisionId,value},confirmedAt:fb.FieldValue.serverTimestamp(),updatedAt:fb.FieldValue.serverTimestamp()
+  const ref=fb.adminDb.collection('archive_review').doc(id);
+  const existing=await ref.get();
+  if(!existing.exists)return NextResponse.json({error:'Review item not found'},{status:404});
+  const data=existing.data();
+  const confirmations={...(data.humanConfirmations||{}),[decisionId]:value};
+  const required=(data.decisions||[]).map(d=>d.id||d.question);
+  const complete=required.length>0&&required.every(key=>Object.prototype.hasOwnProperty.call(confirmations,key));
+  await ref.set({
+    state:complete?'CONFIRMED':'REVIEW_PENDING',humanConfirmations:confirmations,
+    humanDecision:{decisionId,value},confirmedAt:complete?fb.FieldValue.serverTimestamp():null,
+    updatedAt:fb.FieldValue.serverTimestamp()
   },{merge:true});
   return NextResponse.json({ok:true});
 }
