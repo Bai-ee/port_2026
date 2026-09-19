@@ -18,6 +18,22 @@ export default function ArchivePage() {
   const [commandState, setCommandState] = useState('');
   const [folders, setFolders] = useState([]);
   const [browseState, setBrowseState] = useState('');
+  const [reviewItems,setReviewItems]=useState([]);
+  const [reviewState,setReviewState]=useState('');
+
+  const loadReview=useCallback(async()=>{
+    if(!user)return;
+    try{const r=await authedFetch('/api/archive/review?state=REVIEW_PENDING');const b=await r.json();if(r.ok)setReviewItems(b.items||[]);}
+    catch{setReviewState('REVIEW OFFLINE');}
+  },[user,authedFetch]);
+
+  useEffect(()=>{loadReview();},[loadReview]);
+
+  async function confirmDecision(item,decision,value){
+    setReviewState('SAVING');
+    const r=await authedFetch('/api/archive/review',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({id:item.id,decisionId:decision.id||decision.question,value})});
+    if(r.ok){setReviewItems(xs=>xs.filter(x=>x.id!==item.id));setReviewState('CONFIRMED');}else setReviewState('SAVE FAILED');
+  }
 
   useEffect(() => {
     let active = true;
@@ -103,12 +119,22 @@ export default function ArchivePage() {
           <div style={{fontSize:11,opacity:.5,marginTop:10}}>{commandState || 'Select a folder, then process it. Originals remain untouched.'}</div>
           <div style={{fontSize:11,opacity:.42,marginTop:8}}>Signed in: {user?.email || (authLoading ? 'checking…' : 'not authenticated')}</div>
         </section>
+        <section style={{marginTop:16,border:'1px solid #262626',borderRadius:20,padding:24,background:'#101010'}}>
+          <div style={{display:'flex',justifyContent:'space-between',gap:16}}><div><div style={{fontSize:12,opacity:.45}}>HUMAN REVIEW</div><h3 style={{fontSize:24,margin:'8px 0'}}>Jev decisions</h3></div><div style={{fontSize:11,opacity:.5}}>{reviewItems.length} pending · {reviewState}</div></div>
+          {reviewItems.length===0?<div style={{opacity:.5,padding:'18px 0'}}>No decisions waiting for review.</div>:reviewItems.map(item=><div key={item.id} style={{borderTop:'1px solid #252525',padding:'16px 0'}}>
+            <div style={{fontSize:13,fontWeight:700}}>{item.archiveName||item.fileName||item.assetId||item.id}</div>
+            {(item.decisions||[]).map((d,i)=><div key={d.id||i} style={{display:'flex',justifyContent:'space-between',gap:16,alignItems:'center',marginTop:12,flexWrap:'wrap'}}>
+              <div><div style={{fontSize:12}}>{d.question}</div><div style={{fontSize:11,opacity:.5,marginTop:4}}>JEV · {d.selectedValue||d.selected||'—'} · {Math.round(Number(d.confidence||0)*100)}% · {d.reviewBand||''}</div></div>
+              <div style={{display:'flex',gap:6}}>{(d.choices||[]).slice(0,4).map(ch=>{const value=typeof ch==='string'?ch:(ch.value||ch.label);return <button key={value} onClick={()=>confirmDecision(item,d,value)} style={{background:value===(d.selectedValue||d.selected)?'#f4f4f0':'transparent',color:value===(d.selectedValue||d.selected)?'#080808':'#ddd',border:'1px solid #444',borderRadius:999,padding:'7px 10px',cursor:'pointer'}}>{value}</button>})}</div>
+            </div>)}
+          </div>)}
+        </section>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10,marginTop:16}}>
           {pipeline.map((x,i)=><div key={x} style={{border:'1px solid #252525',borderRadius:14,padding:16,minHeight:90,background:i<2?'#151515':'#0c0c0c'}}><div style={{fontSize:11,opacity:.4}}>0{i+1}</div><div style={{fontSize:12,marginTop:28}}>{x}</div></div>)}
         </div>
         <section style={{marginTop:16,border:'1px solid #262626',borderRadius:20,padding:24}}>
-          <div style={{fontSize:12,opacity:.45}}>CURRENT CHECKPOINT</div><h3 style={{fontSize:24,margin:'10px 0'}}>NAS worker → HITLOOP control plane</h3>
-          <p style={{maxWidth:720,opacity:.65,lineHeight:1.6}}>Worker heartbeats are now persisted in HITLOOP and this surface polls the control plane every 15 seconds. Originals remain read-only. Analysis, Jev review and Arweave remain downstream gates.</p>
+          <div style={{fontSize:12,opacity:.45}}>CURRENT CHECKPOINT</div><h3 style={{fontSize:24,margin:'10px 0'}}>NAS → Jev review → permanent archive</h3>
+          <p style={{maxWidth:720,opacity:.65,lineHeight:1.6}}>The control surface is now authenticated and includes the human review gate for Jev decisions. Originals remain read-only; permanent Arweave upload remains explicitly approval-gated.</p>
         </section>
       </div>
     </main>
