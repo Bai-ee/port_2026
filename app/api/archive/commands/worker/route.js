@@ -21,5 +21,11 @@ export async function PATCH(request) {
   const { commandId, state, jobId = null, error = null, result = null } = body || {};
   if (!commandId || !['CLAIMED','RUNNING','COMPLETE','FAILED'].includes(state)) return NextResponse.json({ error:'Invalid command update' }, {status:400});
   await fb.adminDb.collection('archive_commands').doc(commandId).set({ state, jobId, error, result, updatedAt:fb.FieldValue.serverTimestamp() }, {merge:true});
+  if(state==='COMPLETE' && result?.transactionId && result?.contentAssetId){
+    await fb.adminDb.collection('archive_uploads').doc(result.transactionId).set({
+      kind:'original',state:'UPLOADED',transactionId:result.transactionId,contentAssetId:result.contentAssetId,
+      arweaveUrl:result.arweaveUrl,sizeBytes:result.sizeBytes||null,updatedAt:fb.FieldValue.serverTimestamp(),createdAt:fb.FieldValue.serverTimestamp()
+    },{merge:true});
+  }
   return NextResponse.json({ok:true});
 }
