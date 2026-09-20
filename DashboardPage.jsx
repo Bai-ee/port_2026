@@ -134,6 +134,11 @@ const ArchiveInboxCard = dynamic(() => import('./components/dashboard/ArchiveInb
   ssr: false,
 });
 
+const XContentEngineCard = dynamic(() => import('./components/dashboard/XContentEngineCard'), {
+  loading: () => null,
+  ssr: false,
+});
+
 const MediaLibraryCard = dynamic(() => import('./components/dashboard/MediaLibraryCard'), {
   loading: () => null,
   ssr: false,
@@ -9554,6 +9559,25 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       footerRight: 'ADMIN',
     }] : []),
 
+    ...(isAdmin ? [{
+      id: 'x-content',
+      category: 'social',
+      number: 'XE',
+      label: 'CONTENT',
+      title: 'Content Engine',
+      description: 'What to post in each of the day\u2019s slots, matched from your own catalogue \u2014 and the catalogue itself. An unfilled slot names what is missing instead of showing a blank.',
+      placeholderLabel: 'CONTENT\nENGINE',
+      rows: [
+        { key: 'xe-plan', label: 'Plan', value: 'Today\u2019s slots with content matched in' },
+        { key: 'xe-inventory', label: 'Content', value: 'Records, flyers, releases, tools \u2014 editable here' },
+        { key: 'xe-why', label: 'Why today', value: 'Anniversary, past winner, live scan' },
+        { key: 'xe-gaps', label: 'Gaps', value: 'Each names the kind of piece it needs' },
+        { key: 'xe-cost', label: 'Cost', value: 'Free \u2014 no model calls from this card' },
+      ],
+      footerLeft: 'Inventory',
+      footerRight: 'ADMIN',
+    }] : []),
+
     // \u2500\u2500 DAILY BRIEFS \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
     ...(isAdmin ? [{
       id: 'submit-custom-brief',
@@ -16106,6 +16130,24 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     <div className="tile-detail-tab-content">
                       <div className="tile-detail-tab-pane">
                         <XCalendarCard
+                          getIdToken={brandSystemGetIdToken}
+                          activeClientId={client?.clientId || client?.id || bootstrap?.effectiveClientId}
+                          clientName={client?.companyName || client?.name || client?.dashboardTitle || null}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Content Engine — what fills each slot, and the catalogue behind it */}
+                {activeTileModal.cardId === 'x-content' && (
+                  <div id="x-content-modal-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
+                    <div className="tile-detail-tabs">
+                      <button type="button" className="tile-detail-tab tile-detail-tab--active">CONTENT ENGINE</button>
+                    </div>
+                    <div className="tile-detail-tab-content">
+                      <div className="tile-detail-tab-pane">
+                        <XContentEngineCard
                           getIdToken={brandSystemGetIdToken}
                           activeClientId={client?.clientId || client?.id || bootstrap?.effectiveClientId}
                           clientName={client?.companyName || client?.name || client?.dashboardTitle || null}
