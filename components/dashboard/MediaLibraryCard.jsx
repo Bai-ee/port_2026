@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, FolderPlus, Pencil, RotateCw, Trash2, Upload, X } from 'lucide-react';
+import { uploadFileToSignedUrl } from '../../lib/dashboard/upload-signed-url';
 
 // Media Library — a management-only workspace over the shared EditVideos
 // source bucket: folder rail + file grid, drag-and-drop move, multi-select,
@@ -94,25 +95,6 @@ function captureVideoPoster(file) {
     video.addEventListener('seeked', onSeeked);
     video.addEventListener('error', onError);
     video.src = objectUrl;
-  });
-}
-
-function uploadFileToSignedUrl({ file, upload, onProgress }) {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open(upload.method || 'PUT', upload.uploadUrl);
-    xhr.setRequestHeader('Content-Type', upload.contentType || file.type || 'application/octet-stream');
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable && typeof onProgress === 'function') {
-        onProgress(Math.round((event.loaded / event.total) * 100));
-      }
-    };
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) resolve();
-      else reject(new Error(`Upload failed (${xhr.status})`));
-    };
-    xhr.onerror = () => reject(new Error('Upload failed before storage accepted the file.'));
-    xhr.send(file);
   });
 }
 

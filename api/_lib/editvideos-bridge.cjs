@@ -1396,6 +1396,11 @@ module.exports = {
   enqueueVideoJob,
   triggerWorker,
   getVideoJob,
+  // Exposed (2026-09-20, W2 archive intake) so other callers can mint their
+  // own signed URLs / probe object existence under a different prefix
+  // without duplicating the EditVideos Firebase app wiring above. Every
+  // existing caller in this file is unchanged — this is an additive export.
+  bridgeBucket,
   listSourceFolders,
   listSourceFoldersWithCounts,
   listFolderMedia,
