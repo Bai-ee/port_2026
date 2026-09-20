@@ -24,7 +24,7 @@ const { randomUUID } = require('crypto');
 const fb = require('./firebase-admin.cjs');
 const { buildArchiveRecord, resolveDecisionValue, basename } = require('./archive-record.cjs');
 const { buildCollectionManifestV11 } = require('./archive-manifest.cjs');
-const { estimateArchiveCost } = require('./archive-arweave.cjs');
+const { estimateArchiveCostLive } = require('./archive-arweave.cjs');
 
 const IN_FLIGHT_STATES = ['QUEUED', 'CLAIMED', 'RUNNING'];
 const UPLOAD_ACTIVE_STATES = ['QUEUED', 'CLAIMED', 'RUNNING', 'COMPLETE'];
@@ -555,14 +555,15 @@ async function getPermanentArchiveSummary() {
     }
   }
 
-  const collections = [...byCollection.values()]
-    .map((b) => ({
+  const collections = (await Promise.all([...byCollection.values()].map(async (b) => ({
       ...b,
-      cost: estimateArchiveCost(b.uploadedBytes),
+      // Live Turbo quote (cached 10 min); falls back to the legacy estimate
+      // with isLiveQuote:false so the page can label it honestly.
+      cost: await estimateArchiveCostLive(b.uploadedBytes),
       viewerUrl: viewer?.transactionId
         ? `https://arweave.net/${viewer.transactionId}${b.manifestTransactionId ? `?manifest=${b.manifestTransactionId}` : ''}`
         : `/archive-viewer/index.html${b.manifestTransactionId ? `?manifest=${b.manifestTransactionId}` : ''}`,
-    }))
+    }))))
     .sort((a, b) => String(a.title).localeCompare(String(b.title)));
 
   return {

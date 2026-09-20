@@ -318,7 +318,9 @@ export default function ArchivePage() {
                     <div>
                       manifest {c.manifestVersion ? <>v{c.manifestVersion} · <a href={`https://arweave.net/${c.manifestTransactionId}`} target="_blank" rel="noreferrer" style={{color:'#ddd'}}>{String(c.manifestTransactionId||'').slice(0,10)}…</a></> : 'not built yet'}
                       {' · '}record versions {c.recordVersionsTotal}
-                      {' · '}~{c.cost?.costAR ?? 0} AR <span style={{opacity:.5}}>(estimate)</span>
+                      {' · '}{c.cost?.isLiveQuote
+                        ? <>≈ ${c.cost.costUSD} <span style={{opacity:.5}}>(Turbo live · ${c.cost.usdPerGb}/GB)</span></>
+                        : <>~{c.cost?.costAR ?? 0} AR <span style={{opacity:.5}}>(legacy estimate, not live)</span></>}
                     </div>
                     <div style={{display:'flex',gap:10,alignItems:'center'}}>
                       <a href={c.viewerUrl} target="_blank" rel="noreferrer" style={{color:'#ddd'}}>OPEN VIEWER ↗</a>

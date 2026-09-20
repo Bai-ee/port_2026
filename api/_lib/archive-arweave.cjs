@@ -42,7 +42,52 @@ function archiveTags({fileName,sizeBytes,contentType='application/octet-stream',
   ];
 }
 
-module.exports={estimateArchiveCost,archiveTags};
+// Live Turbo rate. The legacy calculator above was ~100x low against reality
+// (first real batch, 2026-09-20: Turbo quoted ≈ $91/GB). Rate is fetched
+// unauthenticated (no wallet needed) and cached briefly so the /archive
+// status poll does not hammer the price endpoint.
+const RATE_CACHE_MS=10*60*1000;
+const BYTES_PER_GB=1e9;
+let _rateCache=null; // {usdPerGb, wincPerGb, wincPerUsd, quotedAt}
+
+async function defaultTurboRateClient(){
+  const {TurboFactory,USD}=await import('@ardrive/turbo-sdk');
+  const turbo=TurboFactory.unauthenticated();
+  return {
+    async wincForBytes(bytes){const [c]=await turbo.getUploadCosts({bytes:[bytes]});return Number(c.winc);},
+    async wincForUsd(usd){const r=await turbo.getWincForFiat({amount:USD(usd)});return Number(r.winc);},
+  };
+}
+
+async function getTurboRate({client,now=Date.now()}={}){
+  if(_rateCache&&now-_rateCache.quotedAt<RATE_CACHE_MS) return _rateCache;
+  const c=client||await defaultTurboRateClient();
+  const wincPerGb=await c.wincForBytes(BYTES_PER_GB);
+  const wincPerUsd=(await c.wincForUsd(10))/10;
+  if(!(wincPerGb>0)||!(wincPerUsd>0)) throw new Error('Turbo rate quote returned no usable numbers');
+  _rateCache={usdPerGb:wincPerGb/wincPerUsd,wincPerGb,wincPerUsd,quotedAt:now};
+  return _rateCache;
+}
+
+/** Live Turbo quote for `sizeBytes`; falls back to the legacy estimate (clearly
+ * labelled `isLiveQuote:false`) when the price endpoint is unreachable. */
+async function estimateArchiveCostLive(sizeBytes,opts={}){
+  const bytes=Math.max(0,Number(sizeBytes)||0);
+  try{
+    const rate=await getTurboRate(opts);
+    return {
+      quoteType:'TURBO_LIVE',sizeBytes:bytes,sizeGB:Number((bytes/BYTES_PER_GB).toFixed(4)),
+      usdPerGb:Number(rate.usdPerGb.toFixed(2)),costUSD:Number((bytes/BYTES_PER_GB*rate.usdPerGb).toFixed(2)),
+      quotedAt:new Date(rate.quotedAt).toISOString(),source:'ardrive turbo getUploadCosts + getWincForFiat',isLiveQuote:true,
+    };
+  }catch(error){
+    return {...estimateArchiveCost(bytes),liveQuoteError:error instanceof Error?error.message:String(error)};
+  }
+}
+
+function _resetTurboRateCache(){_rateCache=null;}
+
+module.exports={estimateArchiveCost,estimateArchiveCostLive,getTurboRate,_resetTurboRateCache,archiveTags};
 
 
 function parseWalletJwk(){
