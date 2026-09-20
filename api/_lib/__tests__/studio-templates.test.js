@@ -34,6 +34,11 @@ const RECIPES = {
   element: { type: 'kinetic-rings', values: { material: { color: '#7dd3fc' }, motion: { speed: 0.4 } } },
   look: { envId: 'room', bgColor: '#101114', fxPresetId: 'studio-clean' },
   render: { videoSeconds: 5, videoFormat: 'mp4', frameId: 'off', elementQualityTier: 'draft' },
+  loop: {
+    enginePath: 'tracks/demo.wav', sourceName: 'demo.wav', bpm: 128, barsPerLoop: 4, offsetSamples: 0, meter: 4,
+    phaseOverride: null, overlays: { beats: true, downbeats: false, phaseCandidates: false, boundaries: true, transientRisk: false, clickRisk: false },
+    zoomFactor: 2, repairStrategy: 'equal_power_crossfade', repeatCount: 4,
+  },
 };
 
 const CLIENT_A = { clientId: 'client-a', uid: 'user-a1' };
@@ -47,7 +52,7 @@ async function createFor(kind, scope, who, overrides = {}) {
   });
 }
 
-// ── All four kinds, basic create/list/read round-trip ───────────────────────
+// ── All kinds, basic create/list/read round-trip ─────────────────────────────
 
 for (const kind of templates.KINDS) {
   test(`${kind}: create -> list -> get round-trip for a client-scope template`, async () => {
@@ -433,7 +438,7 @@ test('updateTemplate: two concurrent updates racing on the same expectedVersion 
 
 // ── Local-to-cloud import validation (the "explicit copy" path IS createTemplate) ──
 
-test('importing each of the four local recipe shapes into cloud storage stores and round-trips correctly', async () => {
+test('importing each local recipe shape into cloud storage stores and round-trips correctly', async () => {
   for (const kind of templates.KINDS) {
     const created = await templates.createTemplate({
       kind, scope: 'client', ownerUid: CLIENT_A.uid, clientId: CLIENT_A.clientId, name: `Imported ${kind}`, recipe: RECIPES[kind], isAdmin: false,

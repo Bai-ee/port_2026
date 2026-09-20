@@ -1,0 +1,16 @@
+numpy
+soundfile
+librosa
+essentia
+pyrubberband
+beat-this
+Cython
+setuptools<81
+
+# madmom, BeatNet: install but fail at import on Python 3.14 (madmom is
+# unmaintained since ~2018, uses removed `collections.MutableSequence`).
+# Not usable on this interpreter. See PHASE0_REPORT.md.
+#
+# beat-this: modern (ISMIR 2024) beat/downbeat tracker, works cleanly on
+# Python 3.14 (torch 2.13 has 3.14 wheels). No subprocess/second-env needed.
+# See PHASE_A_REPORT.md.

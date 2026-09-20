@@ -53,6 +53,7 @@ import SubscribeModal from './components/payments/SubscribeModal';
 import DashboardCreationFailedModal from './components/dashboard/DashboardCreationFailedModal';
 import { AdminEmailDigestView, AdminCreateClientView } from './components/AdminEmailModals';
 import { CreativeBriefComposerView } from './components/dashboard/CreativeBriefComposerCard';
+import { InvoiceBuilderCard } from './components/dashboard/InvoiceBuilderCard';
 import { AdminOperatingCostView } from './components/AdminCostView';
 import { CalendarConnectView } from './components/CalendarConnectModal';
 import { ContactCapabilitiesPanel } from './StackedSlidesSection';
@@ -9226,6 +9227,23 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       footerRight: 'ADMIN',
       readinessBadge: { tone: 'ok', label: 'Live' },
     }, {
+      id: 'invoice-builder',
+      category: 'admin',
+      number: 'IV',
+      label: 'INVOICE BUILDER',
+      title: 'Invoice Builder',
+      description: 'Builds a custom invoice — line items, totals, and terms — toggles which sections appear, previews it live, and publishes it to a hosted public URL with a downloadable PDF.',
+      placeholderLabel: 'INVOICE',
+      rows: [
+        { key: 'iv-editor', label: 'Editor', value: 'Line items · totals · terms' },
+        { key: 'iv-preview', label: 'Live preview', value: 'Debounced iframe render' },
+        { key: 'iv-publish', label: 'Publish', value: 'Hosted URL + PDF' },
+        { key: 'iv-access', label: 'Access', value: 'Admin only' },
+      ],
+      footerLeft: 'Live',
+      footerRight: 'ADMIN',
+      readinessBadge: { tone: 'ok', label: 'Live' },
+    }, {
       id: 'create-client',
       category: 'admin',
       number: 'NC',
@@ -13844,6 +13862,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 {/* Admin · Brief Composer — organize/toggle the new-signup Creative Brief */}
                 {activeTileModal.cardId === 'creative-brief-composer' && (
                   <CreativeBriefComposerView user={user} />
+                )}
+
+                {/* Admin · Invoice Builder — line items/totals/terms editor, live preview, publish */}
+                {activeTileModal.cardId === 'invoice-builder' && (
+                  <InvoiceBuilderCard user={user} apiPath={apiPath} />
                 )}
 
                 {/* Admin · Create Client — website-less workspace */}

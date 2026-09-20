@@ -1,0 +1,184 @@
+:root {
+
+    /*FONTS*/
+    --font: serif;
+
+    /*PAGE BACKGROUND COLOR*/
+    /* --primary: rgb(255, 255, 255); */
+    /* --img-bg: url('bg.jpg');   */
+    --loop-up:transparent;
+    --loop-down:transparent;
+
+    /*WRAPPER BACKGROUND COLOR*/
+    --card-bg-color:rgba(247, 239, 230, 0.9);
+    --card-border-radius: 10px;
+    --img-wrapper-bg-large:url("wrapper_cont_bg.jpg");
+    --loop-iterate: transparent;
+    
+    /*HEADER IMAGE*/
+    /* --img-header: url("header.svg"); 
+    --img-header-mobile: url("header_mobile.svg");  */
+
+    /*ALERT*/
+    --alert-width: 450px;
+    --alert-height: 250px;
+    --slider-size: 20px;
+    --alert-bg-color:white;
+    --alert-bg-image:url("unlock_message.svg");
+
+    /*COLORS*/
+    --primary: black;
+    --secondary: rgb(0, 0, 0);
+    --progress-color:  #4F5B53;
+
+    /*STAGE BACKGROUND*/ 
+    --img-bg: url("backround.png");
+
+    /*PREVIEW*/
+    --preview-img: url("preview.svg");
+    --preview-border-radius:0px;
+    /* --preview-border-stroke:solid 1px #E6E6E6; */
+
+    /*WRAPPER (player card)*/
+    /* --card-border: solid 4px #622A00; */
+    --radius-lg: 0px;
+
+    /*front*/
+    /* --wrapper-color-front:rgba(255, 14, 14, 0); */
+    /* --img-card-front: url('player_cover_front_OnlyYou.jpg'); */
+    /*back*/
+    /* --bg-card-bk: rgb(255, 255, 255); */
+    --back-bg-image: url('directions_small.png');
+
+    /* --back-bg-image-direx:url('directions.svg'); */
+    /*slider*/
+    --max_height_slider_boxes:40vh; /* !!! only vh !!!! */
+    --shadow: 5px 24px 54px rgba(59, 50, 50, 0.5);
+    /*size managed in JS*/
+    /* --card-init-width: 413px;
+    --card-init-height: 678px; */
+
+    /*BACK OF CARD*/
+    --img-direx-bg-large: url('directions_small.png');
+    --img-direx-bg-small: url('directions_small.png');
+
+    /*LOOPS*/
+    --bg-box: transparent;
+
+    --active-border: transparent; /* sets color of the loops-border which is playing */
+    --boxes_cont_padding: 5px;
+    --img-box-play: url("component_preview_img.svg");
+    --img-box-stop: url("component_preview_stop_img.svg");
+    --img-box-btn-up: url("sort-up.svg");
+    --img-box-btn-down: url("sort-down.svg");
+    --border: transparent;
+
+    /*MASTER PLAY*/
+    --bg-master: transparent;
+    --bg-btn-updown: transparent;
+    --txt-master: #576B68;
+    --img-master-play: url("master_play.svg");
+    --img-master-stop: url("master_stop.svg");
+    --txt_progress_color:#4F5B53;
+    --radius-sm:0px;
+    --radius-sm-samples:0px;
+    
+    /*download*/
+    --img-download: url("download_img.svg");    
+    /* --color-download: blue; */
+    
+    /*lock*/
+    --img-purchase:url("lock.svg");
+    /* --color-purchase:red; */
+
+    /*SLIDER*/
+    --bg-slider: #232429;
+    --slider: #23302D;
+    --slider-size: 17px;
+
+    /*PLAY BUTTONS*/
+    --btn-hover: #dfdbdb;
+    --txt: grey;
+    --txt-box: #23302D;
+
+    /*MARQUEE*/
+
+
+    /*RANDOM*/
+    /* --radius-md: 0px; */
+    /* --btn-play: #00B93F; */
+    /* --btn-stop: red; */
+    /* --txt-pre2: yellow; */
+    --card-border: solid 1px rgb(0, 0, 0); 
+    /* border: solid 0.5px red; */
+    /* --img-header-right: url("viva_acid_logo2.svg"); for hex value - comment img out */
+    /* --bg-header-right: transparent;
+    /*  --bg-header-left: transparent; */
+    /* --wrapper-color-front:grey; */
+
+    /*colors*/
+    --primary: #23302D;
+    --secondary: #555;
+    --progress-color: #AD8EC3;
+    --bg-card: #2324298f;
+    --bg-master: #576B68;
+    --bg-btn-updown: #33373C;
+    --bg-slider: #576B68;
+    --slider: #576B68;
+    --btn-hover: #6e6e6e;
+    --txt: grey;
+    --txt-box: #576B68;
+    --progress-bg: yellow;
+
+    --txt-marquee: white;
+    /* --border: black; */
+    /* --btn-play: #00B93F; */
+    /* --btn-stop: red; */
+    /* --btn-download: #ffcc00; */
+    --txt-pre2: black;
+    /* --card-border: solid 2px #0A252B; */
+
+
+    --boxes_cont_bg: transparent;
+
+
+    --boxes_cont_padding: 5px;
+    --boxes_cont_border-radius: 10px;
+    /* border: solid 0.5px white; */
+
+    /*settings*/
+    --notactive-opacity:0.3; /* of the loops which are not playing */
+    --active-border: #23302D; /* sets color of the loops-border which is playing */
+
+    --radius-sm: 10px;
+    --radius-md: 0px;
+    --radius-lg: 0px;
+
+    --card-init-width: 280px;
+    --card-init-height: 100vh;
+    --alert-width: 300px;
+    --slider-size: 17px;
+
+    --shadow: 0px 24px 54px rgb(0 0 0 / 25%);
+
+    /*images*/
+    --img-bg: url("background.jpg");
+    --img-card-bg: url('wrapper_back.png');
+    /* --img-card-front: url('wrapper_front.png'); */
+    --img-box-play: url("component_preview_img.svg");
+    --img-box-stop: url("component_preview_stop_img.svg");
+    --img-box-btn-up: url("sort-up.svg");
+    --img-box-btn-down: url("sort-down.svg");
+    --master--img-box-btn-up: url("master-sort-up.svg");
+    --master--img-box-btn-down: url("master-sort-down.svg");
+    --img-master-box-btn-down: url("master-sort-down.svg");
+    --img-master-play: url("master_play.svg");
+    --img-master-stop: url("master_stop.svg");
+    --img-download: url("download_img.svg");
+
+    /* --img-header-right: url("viva_acid_logo2.svg"); for hex value - comment img out */
+    --bg-header-right: transparent;
+    --img-header-left: url("header.svg");  /*for hex value - comment img out */
+    --bg-header-left: transparent;
+
+}

@@ -11,7 +11,7 @@ const SIMPLE_SCROLL_MEDIA_QUERY = '(max-width: 680px) and (pointer: coarse)';
 
 // Lines the subheadline cycles through. Add/remove freely — any length works.
 const SUBHEADLINE_PHRASES = [
-  'BRYAN BALLI',
+  'HUMAN IN THE LOOP',
   'Brand Identity & Design',
   'Websites & Landing Pages',
   'Social Media & Content',
@@ -35,7 +35,34 @@ const HOLD_MS = 1600;        // coarse-pointer fallback: hold between phrases
 const SCRAMBLE_MS = 340;     // time spent scrambling into the next phrase
 const IDLE_REVEAL_MS = 220;  // cursor stillness that triggers the reveal
 
-const HEADLINE_LINES = ['HUMAN', 'IN THE', 'LOOP'];
+// The last headline line abbreviates on narrow viewports: at the phone type
+// scale below (22vw) the full word overruns the panel, so phones get PORT.
+// Same 620px breakpoint as that type-scale override — keep the two in step.
+const HEADLINE_NARROW_QUERY = '(max-width: 620px)';
+const HEADLINE_LINES_WIDE = ['BRYAN', 'BALLI', 'PORTFOLIO'];
+const HEADLINE_LINES_NARROW = ['BRYAN', 'BALLI', 'PORT'];
+
+const headlineLinesFor = (narrow) => (narrow ? HEADLINE_LINES_NARROW : HEADLINE_LINES_WIDE);
+
+// Gradient lifted from the HITLOOP.AGENCY card: the last line runs rose to
+// periwinkle, left to right, under the solid name above it. width:'fit-content'
+// keeps the gradient box the width of the WORD rather than the panel, so the
+// ramp reads identically whether the line says PORTFOLIO or the narrow PORT.
+// Painted on the line span itself, never on inner markup — the intro scramble
+// rewrites textContent character by character and would wipe any child nodes.
+const HEADLINE_ACCENT_STYLE = {
+  width: 'fit-content',
+  backgroundImage: 'linear-gradient(90deg, #bda7b4 0%, #a09fc0 50%, #8294b6 100%)',
+  WebkitBackgroundClip: 'text',
+  backgroundClip: 'text',
+  WebkitTextFillColor: 'transparent',
+  color: 'transparent',
+};
+
+const matchesNarrowHeadline = () =>
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia(HEADLINE_NARROW_QUERY).matches;
 
 // Hero text load sequence. This component owns the whole thing on ONE gsap
 // timeline — panel reveal, headline scramble, then the subheadline — so the
@@ -87,6 +114,29 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420', cursorStageRef = n
   const headlineContentRef = useRef(null);
   const scrambleTextRef = useRef(null);
 
+  // The last line's copy is owned imperatively, like every other string in this
+  // component: React renders the wide word, the intro effect below types
+  // whichever word the viewport actually calls for, and this listener swaps it
+  // if the breakpoint is crossed afterwards. Deliberately NOT React state — a
+  // state-driven swap changes the span's identity and remounts it, which leaves
+  // the intro timeline animating a node that is no longer in the document.
+  // No sync on mount: the intro owns the first write.
+  useLayoutEffect(() => {
+    const contentEl = headlineContentRef.current;
+    if (!contentEl || typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return undefined;
+    }
+    const mq = window.matchMedia(HEADLINE_NARROW_QUERY);
+    const sync = () => {
+      const node = contentEl.querySelector('[data-hero-headline-accent]');
+      if (!node) return;
+      const copy = headlineLinesFor(mq.matches);
+      node.textContent = copy[copy.length - 1];
+    };
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
+
   // Hero text load sequence + the subheadline's ongoing phrase cycle. Both live
   // in one effect because they share the same node and must not overlap: the
   // cycle only starts once the intro scramble has handed the subheadline over.
@@ -101,7 +151,11 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420', cursorStageRef = n
     if (!subEl) return;
 
     const lines = Array.from(contentEl.querySelectorAll('[data-hero-headline-line]'));
-    const lineCopy = lines.map((node, i) => HEADLINE_LINES[i] ?? node.textContent);
+    // Read the breakpoint here rather than closing over render state, so the
+    // intro types the same copy the markup is about to settle on regardless of
+    // which effect resolves the media query first.
+    const introLines = headlineLinesFor(matchesNarrowHeadline());
+    const lineCopy = lines.map((node, i) => introLines[i] ?? node.textContent);
 
     const prefersReducedMotion =
       typeof window !== 'undefined' &&
@@ -242,22 +296,37 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420', cursorStageRef = n
       { autoAlpha: 1, duration: HERO_INTRO.panelFadeS, ease: 'power2.out' },
       0,
     );
-    if (!window.matchMedia(SIMPLE_SCROLL_MEDIA_QUERY).matches) {
-      tl.fromTo(
-        panelEl,
-        { filter: `blur(${HERO_INTRO.blurPx}px)` },
-        { filter: 'blur(0px)', duration: HERO_INTRO.blurInS, ease: 'power2.out' },
-        0,
-      );
-    }
+    // The blur-in rides each LINE's cue rather than the panel as a whole, so
+    // every line resolves out of the same blur on the same beat as its own
+    // scramble. One blanket panel tween finished at 0.8s, before the later lines
+    // had even started churning, so only the first line ever read as resolving.
+    // Still skipped on the simple-scroll viewport, matching applyLayout's
+    // scroll-out blur, which is likewise absent there.
+    const blurIn = !window.matchMedia(SIMPLE_SCROLL_MEDIA_QUERY).matches;
     lines.forEach((node, i) => {
+      const lineCue = i * HERO_INTRO.headlineLineStaggerS;
+      if (blurIn) {
+        tl.fromTo(
+          node,
+          { filter: `blur(${HERO_INTRO.blurPx}px)` },
+          {
+            filter: 'blur(0px)',
+            duration: HERO_INTRO.blurInS,
+            ease: 'power2.out',
+            // Drop the property once it lands rather than parking a blur(0px):
+            // that would leave every line its own containing block for nothing.
+            onComplete: () => { node.style.filter = ''; },
+          },
+          lineCue,
+        );
+      }
       tl.call(() => {
         introCancels.push(scrambleTextTo(node, lineCopy[i], {
           durationMs: HERO_INTRO.headlineScrambleS * 1000,
           preserveWhitespace: true,
           growIn: true,
         }));
-      }, null, i * HERO_INTRO.headlineLineStaggerS);
+      }, null, lineCue);
     });
     tl.to(subEl, { autoAlpha: 1, duration: HERO_INTRO.subheadFadeS, ease: 'power2.out' }, subheadCue);
     tl.call(() => {
@@ -282,7 +351,10 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420', cursorStageRef = n
       if (cursorStageRef?.current) cursorStageRef.current.phase = 'idle';
       clearTimeout(holdTimer);
       clearTimeout(idleTimer);
-      lines.forEach((node, i) => { node.textContent = lineCopy[i]; });
+      lines.forEach((node, i) => {
+        node.textContent = lineCopy[i];
+        node.style.filter = '';
+      });
     };
   }, []);
 
@@ -459,7 +531,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420', cursorStageRef = n
         }}
       >
         <div ref={headlineContentRef}>
-          <h1 style={{
+          <h1 id="hero-headline-primary" style={{
             fontWeight: 700,
             fontFamily: "'Doto', 'Space Mono', monospace",
             letterSpacing: '-0.02em',
@@ -469,11 +541,29 @@ const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420', cursorStageRef = n
             fontSize: 'clamp(1.25rem, min(13vw, calc(var(--hero-gap-height) / 5)), 7.83rem)',
             textTransform: 'none',
           }}>
-            {HEADLINE_LINES.map((line) => (
-              // minHeight holds the line box while the intro types the text in
-              // from empty, so the panel's centred position never recomputes.
-              <span key={line} data-hero-headline-line style={{ display: 'block', minHeight: '1.05em' }}>{line}</span>
-            ))}
+            {/* Rendered from the wide copy with index keys so a breakpoint swap
+                rewrites text in place instead of replacing the node the intro
+                timeline holds. The panel is visibility:hidden until the intro
+                runs, so the wide word never paints on a phone. */}
+            {HEADLINE_LINES_WIDE.map((line, i) => {
+              const isAccent = i === HEADLINE_LINES_WIDE.length - 1;
+              return (
+                // minHeight holds the line box while the intro types the text in
+                // from empty, so the panel's centred position never recomputes.
+                <span
+                  key={i}
+                  data-hero-headline-line
+                  {...(isAccent ? { 'data-hero-headline-accent': '' } : null)}
+                  style={{
+                    display: 'block',
+                    minHeight: '1.05em',
+                    ...(isAccent ? HEADLINE_ACCENT_STYLE : null),
+                  }}
+                >
+                  {line}
+                </span>
+              );
+            })}
           </h1>
           <p id="hero-subheadline" style={{
             margin: '1rem 0 0',

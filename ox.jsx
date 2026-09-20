@@ -2,6 +2,10 @@ import React, { useRef, useMemo, useEffect, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 
 const SIMPLE_SCROLL_MEDIA_QUERY = '(max-width: 680px) and (pointer: coarse)';
 const MOBILE_MEDIA_QUERY = '(max-width: 767px), (pointer: coarse)';
@@ -84,7 +88,183 @@ export function createSilhouetteBuffer() {
   };
 }
 
-const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {}, snapRef = null, scatterRef = null, silhouetteRef = null }) => {
+// Click-to-reform also returns the view to where it sat on page load: autoRotate
+// and any user orbit/zoom drift the camera away over time, so the reform would
+// otherwise re-assemble the loop at whatever angle the camera had wandered to.
+const HOME_CAMERA_POSITION = [0, 0, 100];
+const CAMERA_RESET_SECONDS = 0.7;
+
+const CameraHomeReset = ({ resetRef = null, controlsRef = null }) => {
+  const { camera } = useThree();
+  const progressRef = useRef(-1);
+  const fromVec = useMemo(() => new THREE.Vector3(), []);
+  const homeVec = useMemo(() => new THREE.Vector3(...HOME_CAMERA_POSITION), []);
+
+  // ⚠️ Default priority (0) only. Any useFrame with priority > 0 makes R3F hand
+  // the render loop to that callback (`if (!state.internal.priority) gl.render(...)`)
+  // — the scene then never paints and the loop disappears entirely. Ordering is
+  // still correct: subscribers sort by priority, and drei's OrbitControls
+  // updates at -1, so this runs after it and its eased position wins the frame.
+  useFrame((state, delta) => {
+    if (resetRef?.current) {
+      resetRef.current = false;
+      fromVec.copy(camera.position);
+      progressRef.current = 0;
+    }
+    if (progressRef.current < 0) return;
+
+    progressRef.current = Math.min(1, progressRef.current + delta / CAMERA_RESET_SECONDS);
+    const eased = 1 - Math.pow(1 - progressRef.current, 3);
+    camera.position.lerpVectors(fromVec, homeVec, eased);
+
+    const controls = controlsRef?.current;
+    if (controls) {
+      controls.target.set(0, 0, 0);
+      controls.update();
+    } else {
+      camera.lookAt(0, 0, 0);
+    }
+
+    if (progressRef.current >= 1) progressRef.current = -1;
+  });
+
+  return null;
+};
+
+// Screen-space lens diffusion. Unlike the old particle-alpha treatment, this
+// actually samples neighbouring pixels, so colour spreads softly instead of
+// becoming denser/darker. The field is centred on a local-space point on the
+// swarm, projected every frame after the group's rotation/parallax is applied.
+const RADIAL_DIFFUSION_SHADER = {
+  uniforms: {
+    tDiffuse: { value: null },
+    uResolution: { value: new THREE.Vector2(1, 1) },
+    uOrigin: { value: new THREE.Vector2(0.5, 0.5) },
+    uStrength: { value: 0 },
+    uFalloff: { value: 0.015 },
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform vec2 uResolution;
+    uniform vec2 uOrigin;
+    uniform float uStrength;
+    uniform float uFalloff;
+    varying vec2 vUv;
+
+    void main() {
+      vec4 base = texture2D(tDiffuse, vUv);
+      float distancePx = length((vUv - uOrigin) * uResolution);
+      float radiusPx = max(uStrength, 0.0) * exp(-distancePx * max(uFalloff, 0.0));
+
+      if (radiusPx < 0.35) {
+        gl_FragColor = base;
+        return;
+      }
+
+      vec2 texel = 1.0 / max(uResolution, vec2(1.0));
+      vec4 sum = base * 2.0;
+      float weight = 2.0;
+
+      // Golden-angle samples fill a disc instead of making a visible ring.
+      // Twelve fixed taps keep the effect bounded on the 25k-particle scene.
+      const int DIFFUSION_TAPS = 12;
+      for (int i = 0; i < DIFFUSION_TAPS; i++) {
+        float fi = float(i);
+        float angle = fi * 2.39996323;
+        float discRadius = sqrt((fi + 0.5) / float(DIFFUSION_TAPS));
+        vec2 offset = vec2(cos(angle), sin(angle)) * discRadius * radiusPx * texel;
+        sum += texture2D(tDiffuse, vUv + offset);
+        weight += 1.0;
+      }
+
+      vec4 blurred = sum / weight;
+      float blurMix = smoothstep(0.35, 3.0, radiusPx);
+      gl_FragColor = mix(base, blurred, blurMix);
+    }
+  `,
+};
+
+const RadialDiffusionEffect = ({ diffusionStateRef }) => {
+  const { gl, scene, camera, size } = useThree();
+  const composerRef = useRef(null);
+  const passRef = useRef(null);
+  const projectedOrigin = useMemo(() => new THREE.Vector3(), []);
+  const drawingBufferSize = useMemo(() => new THREE.Vector2(), []);
+
+  useEffect(() => {
+    const composer = new EffectComposer(gl);
+    const renderPass = new RenderPass(scene, camera);
+    const diffusionPass = new ShaderPass(RADIAL_DIFFUSION_SHADER);
+    const outputPass = new OutputPass();
+    composer.addPass(renderPass);
+    composer.addPass(diffusionPass);
+    composer.addPass(outputPass);
+    composer.setPixelRatio(gl.getPixelRatio());
+    composer.setSize(size.width, size.height);
+    composerRef.current = composer;
+    passRef.current = diffusionPass;
+
+    return () => {
+      composerRef.current = null;
+      passRef.current = null;
+      diffusionPass.dispose();
+      outputPass.dispose();
+      composer.dispose();
+    };
+  }, [camera, gl, scene]);
+
+  useEffect(() => {
+    const composer = composerRef.current;
+    if (!composer) return;
+    composer.setPixelRatio(gl.getPixelRatio());
+    composer.setSize(size.width, size.height);
+  }, [gl, size.height, size.width]);
+
+  // Priority 1 intentionally owns rendering only while this /looper-only
+  // effect is mounted. All simulation/camera callbacks at priority 0 run first.
+  useFrame(() => {
+    const composer = composerRef.current;
+    const pass = passRef.current;
+    if (!composer || !pass) {
+      gl.render(scene, camera);
+      return;
+    }
+
+    const diffusion = diffusionStateRef.current;
+    const pixelRatio = gl.getPixelRatio();
+    gl.getDrawingBufferSize(drawingBufferSize);
+    pass.uniforms.uResolution.value.copy(drawingBufferSize);
+
+    if (!diffusion?.group) {
+      pass.uniforms.uStrength.value = 0;
+    } else {
+      diffusion.group.updateMatrixWorld(true);
+      projectedOrigin.copy(diffusion.origin)
+        .applyMatrix4(diffusion.group.matrixWorld)
+        .project(camera);
+      pass.uniforms.uOrigin.value.set(
+        projectedOrigin.x * 0.5 + 0.5,
+        projectedOrigin.y * 0.5 + 0.5,
+      );
+      // UI values are CSS pixels; the shader operates on drawing-buffer pixels.
+      pass.uniforms.uStrength.value = Math.max(0, diffusion.strength) * pixelRatio;
+      pass.uniforms.uFalloff.value = Math.max(0, diffusion.falloff) / pixelRatio;
+    }
+
+    composer.render();
+  }, 1);
+
+  return null;
+};
+
+const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {}, snapRef = null, scatterRef = null, silhouetteRef = null, diffusionStateRef = null }) => {
   const meshRef = useRef();
   const groupRef = useRef();
   const simTimeRef = useRef(0);
@@ -120,6 +300,13 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {},
     // Animation params
     animationSpeed: 1.0,
     sphereSegments: 16,
+    // /looper-only camera blur. Origin is in the same local space as each
+    // particle position (pre-group-rotation), roughly the -scale..scale range.
+    diffuseOriginX: 100,
+    diffuseOriginY: 0,
+    diffuseOriginZ: 0,
+    diffuseStrength: 0,
+    diffuseFalloff: 0.015,
   };
 
   const staticParams = useMemo(() => ({ ...defaultParams, ...params }), [params]);
@@ -130,6 +317,40 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {},
   const targetKeysRef = useRef({ src: null, keys: null });
   const { camera, size } = useThree();
   const projVec = useMemo(() => new THREE.Vector3(), []);
+
+  // Cursor parallax: normalized -1..1 pointer target + its eased follower.
+  // Refs, not state — this runs per frame and must never re-render the canvas.
+  // Applied as an ADDITIVE rotation/offset on the group so the scroll-driven
+  // params (scale, chaos, torus radii) stay exactly as they were.
+  const pointerTargetRef = useRef({ x: 0, y: 0 });
+  const pointerRef = useRef({ x: 0, y: 0 });
+  const pointerInfluence = runtimeProfile.pointerInfluence ?? 0;
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || pointerInfluence <= 0) return undefined;
+
+    // The canvas is pointer-events:none (it sits under the hero copy), so the
+    // move has to be read at the window level.
+    const handlePointerMove = (event) => {
+      if (event.pointerType && event.pointerType !== 'mouse') return;
+      const w = window.innerWidth || 1;
+      const h = window.innerHeight || 1;
+      pointerTargetRef.current.x = (event.clientX / w) * 2 - 1;
+      pointerTargetRef.current.y = (event.clientY / h) * 2 - 1;
+    };
+
+    const handlePointerLeave = () => {
+      pointerTargetRef.current.x = 0;
+      pointerTargetRef.current.y = 0;
+    };
+
+    window.addEventListener('pointermove', handlePointerMove, { passive: true });
+    document.addEventListener('pointerleave', handlePointerLeave);
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('pointerleave', handlePointerLeave);
+    };
+  }, [pointerInfluence]);
 
   const positions = useMemo(() => {
     const arr = new Float32Array(count * 3);
@@ -266,11 +487,37 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {},
     if (PARAMS.tireSpinAxis === 'x') rotX += spinAngle;
     else if (PARAMS.tireSpinAxis === 'y') rotY += spinAngle;
     else if (PARAMS.tireSpinAxis === 'z') rotZ += spinAngle;
+    // Subtle cursor reaction: ease the follower toward the pointer, then tilt
+    // and drift the whole group by a small amount. Deliberately additive and
+    // capped — it must read as parallax, never as a second scroll animation.
+    if (pointerInfluence > 0) {
+      const pEase = 1 - Math.exp(-clampedDelta * 3.2);
+      const pt = pointerTargetRef.current;
+      const pc = pointerRef.current;
+      pc.x += (pt.x - pc.x) * pEase;
+      pc.y += (pt.y - pc.y) * pEase;
+      rotY += pc.x * 0.16 * pointerInfluence;
+      rotX += pc.y * 0.11 * pointerInfluence;
+      groupRef.current.position.x = pc.x * 3.5 * pointerInfluence;
+      groupRef.current.position.y = -pc.y * 2.5 * pointerInfluence;
+    }
+
     groupRef.current.rotation.x = rotX;
     groupRef.current.rotation.y = rotY;
     groupRef.current.rotation.z = rotZ;
 
     material.uniforms.uOpacity.value = PARAMS.opacity ?? 1;
+    if (diffusionStateRef) {
+      const diffusion = diffusionStateRef.current;
+      diffusion.group = groupRef.current;
+      diffusion.origin.set(
+        PARAMS.diffuseOriginX ?? 0,
+        PARAMS.diffuseOriginY ?? 0,
+        PARAMS.diffuseOriginZ ?? 0,
+      );
+      diffusion.strength = PARAMS.diffuseStrength ?? 0;
+      diffusion.falloff = PARAMS.diffuseFalloff ?? 0.015;
+    }
 
     // Hoist hot-path params & pre-compute time-dependent values (loop-invariant)
     const scale = PARAMS.scale;
@@ -422,7 +669,17 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {},
   );
 };
 
-export default function App({ params = {}, liveParamsRef = null, backgroundColor = '#1a1a1a', onReady = null, snapRef = null, scatterRef = null, silhouetteRef = null }) {
+// `pointerInfluenceScale` (optional, default 1 = unchanged homepage behavior):
+// multiplies the desktop profile's cursor-parallax strength — /looper passes
+// >1 for a stronger cursor reaction across the page.
+export default function App({ params = {}, liveParamsRef = null, backgroundColor = '#1a1a1a', onReady = null, snapRef = null, scatterRef = null, silhouetteRef = null, viewResetRef = null, pointerInfluenceScale = 1, enableDiffusion = false }) {
+  const controlsRef = useRef(null);
+  const diffusionStateRef = useRef({
+    group: null,
+    origin: new THREE.Vector3(),
+    strength: 0,
+    falloff: 0.015,
+  });
   const useSimpleScrollViewport = useMediaMatch(SIMPLE_SCROLL_MEDIA_QUERY);
   const isMobile = useMediaMatch(MOBILE_MEDIA_QUERY);
   const prefersReducedMotion = useMediaMatch(REDUCED_MOTION_QUERY);
@@ -440,6 +697,7 @@ export default function App({ params = {}, liveParamsRef = null, backgroundColor
         sphereSegments: 8,
         maxDelta: 1 / 60,
         paramSmoothing: 12,
+        pointerInfluence: 0,
       };
     }
 
@@ -455,6 +713,7 @@ export default function App({ params = {}, liveParamsRef = null, backgroundColor
         sphereSegments: 8,
         maxDelta: 1 / 60,
         paramSmoothing: 12,
+        pointerInfluence: 0,
       };
     }
 
@@ -469,8 +728,9 @@ export default function App({ params = {}, liveParamsRef = null, backgroundColor
       sphereSegments: 16,
       maxDelta: 1 / 45,
       paramSmoothing: 10,
+      pointerInfluence: 1 * pointerInfluenceScale,
     };
-  }, [isMobile, prefersReducedMotion]);
+  }, [isMobile, prefersReducedMotion, pointerInfluenceScale]);
 
   const optimizedParams = useMemo(() => {
     const resolvedParticleCount = params.particleCount ?? 25000;
@@ -517,9 +777,11 @@ export default function App({ params = {}, liveParamsRef = null, backgroundColor
         }}
       >
         <SceneBackground color={backgroundColor} />
-        <ParticleSwarm params={optimizedParams} liveParamsRef={liveParamsRef} runtimeProfile={qualityProfile} snapRef={snapRef} scatterRef={scatterRef} silhouetteRef={silhouetteRef} />
+        <ParticleSwarm params={optimizedParams} liveParamsRef={liveParamsRef} runtimeProfile={qualityProfile} snapRef={snapRef} scatterRef={scatterRef} silhouetteRef={silhouetteRef} diffusionStateRef={enableDiffusion ? diffusionStateRef : null} />
+        <CameraHomeReset resetRef={viewResetRef} controlsRef={controlsRef} />
+        {enableDiffusion ? <RadialDiffusionEffect diffusionStateRef={diffusionStateRef} /> : null}
         {qualityProfile.enableControls ? (
-          <OrbitControls autoRotate={qualityProfile.autoRotate} enableZoom enablePan={false} enableRotate enableDamping dampingFactor={0.08} rotateSpeed={0.45} zoomSpeed={0.75} minDistance={45} maxDistance={180} />
+          <OrbitControls ref={controlsRef} autoRotate={qualityProfile.autoRotate} enableZoom enablePan={false} enableRotate enableDamping dampingFactor={0.08} rotateSpeed={0.45} zoomSpeed={0.75} minDistance={45} maxDistance={180} />
         ) : null}
       </Canvas>
     </div>

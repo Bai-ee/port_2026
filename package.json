@@ -48,7 +48,8 @@
     "three": "0.165.0",
     "three-stdlib": "^2.26.10",
     "twitter-api-v2": "^1.29.0",
-    "uuid": "^13.0.0"
+    "uuid": "^13.0.0",
+    "wavesurfer.js": "^7.12.11"
   },
   "overrides": {
     "gaxios": {

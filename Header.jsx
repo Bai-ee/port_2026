@@ -3,7 +3,11 @@ import Image from 'next/image';
 import { useAuth } from './AuthContext';
 import UpRightArrow from './components/UpRightArrow';
 
-const Header = ({ logoRef, onOpenPage, logoSrc = '/img/sig.png' }) => {
+// `actions` is an optional right-side slot: pass a node to replace the default
+// "Clients" CTA for a page that needs its own nav action (e.g. /looper's info
+// button). Omitted everywhere else, so the homepage/FAQ/inner-page nav is
+// unchanged.
+const Header = ({ logoRef, onOpenPage, logoSrc = '/img/sig.png', actions = null }) => {
   const isSignatureLogo = logoSrc === '/img/sig.png';
   const { user } = useAuth();
   const [isMobile, setIsMobile] = useState(false);
@@ -52,16 +56,18 @@ const Header = ({ logoRef, onOpenPage, logoSrc = '/img/sig.png' }) => {
           </a>
 
           <div id="founders-top-actions">
-            <button
-              type="button"
-              id="founders-chat-cta"
-              className="founders-chat-cta--light"
-              onClick={handleDashboardCta}
-            >
-              <span className="founders-chat-label-full">Clients</span>
-              <span className="founders-chat-label-short">Clients</span>
-              <UpRightArrow id="founders-chat-cta-icon" />
-            </button>
+            {actions || (
+              <button
+                type="button"
+                id="founders-chat-cta"
+                className="founders-chat-cta--light"
+                onClick={handleDashboardCta}
+              >
+                <span className="founders-chat-label-full">Clients</span>
+                <span className="founders-chat-label-short">Clients</span>
+                <UpRightArrow id="founders-chat-cta-icon" />
+              </button>
+            )}
           </div>
         </div>
       </header>

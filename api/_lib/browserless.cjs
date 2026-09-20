@@ -751,7 +751,20 @@ async function persistWebsiteScreenshotArtifact({
 // Posts an HTML document to Browserless /pdf and persists the returned PDF
 // buffer as a Firebase Storage artifact. Mirrors the screenshot flow.
 
-function injectPdfPrintCss(html, mode = 'default') {
+function injectPdfPrintCss(html, mode = 'default', heightPx = null) {
+  if (mode === 'invoice') {
+    const h = invoicePageHeight(heightPx);
+    const css = `<style id="hitl-pdf-print-css">
+@page { size: ${INVOICE_PDF_WIDTH_PX}px ${h}px; margin: 0; }
+html, body { width: ${INVOICE_PDF_WIDTH_PX}px !important; margin: 0 !important; padding: 0 !important; background: #fff !important; overflow: visible !important; }
+body { min-width: ${INVOICE_PDF_WIDTH_PX}px !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+.invoice-sheet { width: ${INVOICE_PDF_WIDTH_PX}px !important; max-width: none !important; margin: 0 !important; padding: 56px 64px !important; box-sizing: border-box !important; }
+.invoice-pdf-link { display: none !important; }
+</style>`;
+    const body = String(html || '');
+    return /<\/head>/i.test(body) ? body.replace(/<\/head>/i, `${css}</head>`) : `${css}${body}`;
+  }
+
   if (mode !== 'edge-to-edge') return String(html || '');
 
   const printCss = `<style id="hitl-pdf-print-css">
@@ -843,7 +856,32 @@ table {
   return `<!doctype html><html><head>${printCss}</head><body>${body}</body></html>`;
 }
 
-function pdfOptionsForMode(mode = 'default') {
+const INVOICE_PDF_WIDTH_PX = 1200;
+const INVOICE_PDF_MIN_H = 900;
+const INVOICE_PDF_MAX_H = 6000;
+
+function invoicePageHeight(heightPx) {
+  const n = Number(heightPx);
+  if (!Number.isFinite(n)) return 2200;
+  return Math.round(Math.min(INVOICE_PDF_MAX_H, Math.max(INVOICE_PDF_MIN_H, n)));
+}
+
+function pdfOptionsForMode(mode = 'default', heightPx = null) {
+  // Invoices print as a SINGLE page, whatever their length: the page box is
+  // the document, not Letter/A4. A paginated invoice was splitting the totals
+  // away from the line items they settle.
+  if (mode === 'invoice') {
+    return {
+      width: `${INVOICE_PDF_WIDTH_PX}px`,
+      height: `${invoicePageHeight(heightPx)}px`,
+      printBackground: true,
+      preferCSSPageSize: true,
+      displayHeaderFooter: false,
+      scale: 1,
+      margin: { top: '0', right: '0', bottom: '0', left: '0' },
+    };
+  }
+
   if (mode === 'edge-to-edge') {
     return {
       width: '1200px',
@@ -863,7 +901,7 @@ function pdfOptionsForMode(mode = 'default') {
   };
 }
 
-async function renderPdfBuffer({ clientId, runId, html, pdfMode = 'default' }) {
+async function renderPdfBuffer({ clientId, runId, html, pdfMode = 'default', pdfHeightPx = null }) {
   const config = getBrowserlessConfig();
   if (!config.enabled) {
     return {
@@ -901,8 +939,8 @@ async function renderPdfBuffer({ clientId, runId, html, pdfMode = 'default' }) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        html: injectPdfPrintCss(html, pdfMode),
-        options: pdfOptionsForMode(pdfMode),
+        html: injectPdfPrintCss(html, pdfMode, pdfHeightPx),
+        options: pdfOptionsForMode(pdfMode, pdfHeightPx),
         gotoOptions: { waitUntil: 'networkidle2', timeout: config.gotoTimeoutMs },
         waitForTimeout: config.postLoadWaitMs,
       }),
@@ -997,11 +1035,12 @@ async function persistBriefPdfArtifact({
   storageClientKey = null,
   storageBriefKey = null,
   pdfMode = 'default',
+  pdfHeightPx = null,
 }) {
   const renderedAt = new Date().toISOString();
 
   try {
-    const rendered = await renderPdfBuffer({ clientId, runId, html, pdfMode });
+    const rendered = await renderPdfBuffer({ clientId, runId, html, pdfMode, pdfHeightPx });
 
     if (!rendered.ok) {
       return { ok: false, warning: rendered.warning };

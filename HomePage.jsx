@@ -145,6 +145,14 @@ const HomePage = () => {
   // not state — all three run per-frame and must never re-render this page.
   const silhouetteRef = useRef(null);
   const cursorStageRef = useRef(createHeroCursorStage());
+  // Click-to-reform: ox.jsx watches this flag, re-randomizes the live particle
+  // positions into the spawn cloud, and lets its per-frame lerp re-assemble the
+  // loop — the exact same disintegrate/reform the page plays on load.
+  const heroScatterRef = useRef(false);
+  // Same click also eases the camera back to its page-load framing, so the loop
+  // reforms at the original angle instead of wherever autoRotate has drifted to.
+  const heroViewResetRef = useRef(false);
+  const lastHeroScatterAtRef = useRef(0);
 
   // Pre-paint so the copy never flashes into the recorded video.
   useLayoutEffect(() => {
@@ -180,6 +188,34 @@ const HomePage = () => {
       window.removeEventListener('resize', applyPeek);
       window.removeEventListener('orientationchange', applyPeek);
     };
+  }, []);
+
+  // Mouse click anywhere over the hero replays the load-in formation.
+  // Mouse-only (a touch pointerdown fires on every scroll start), skips real
+  // interactive targets, and only while the hero is still on screen.
+  useEffect(() => {
+    const INTERACTIVE = 'a, button, input, textarea, select, label, summary, [role="button"], [contenteditable="true"]';
+    const COOLDOWN_MS = 450;
+
+    const handlePointerDown = (event) => {
+      if (event.pointerType && event.pointerType !== 'mouse') return;
+      if (event.button !== 0) return;
+      if (event.target?.closest?.(INTERACTIVE)) return;
+
+      const hero = heroSectionRef.current;
+      if (!hero) return;
+      const rect = hero.getBoundingClientRect();
+      if (rect.bottom <= 0 || rect.top >= window.innerHeight) return;
+
+      const now = performance.now();
+      if (now - lastHeroScatterAtRef.current < COOLDOWN_MS) return;
+      lastHeroScatterAtRef.current = now;
+      heroScatterRef.current = true;
+      heroViewResetRef.current = true;
+    };
+
+    window.addEventListener('pointerdown', handlePointerDown);
+    return () => window.removeEventListener('pointerdown', handlePointerDown);
   }, []);
 
   useLayoutEffect(() => {
@@ -381,7 +417,7 @@ const HomePage = () => {
       >
         <div id="hero-gradient-overlay" style={heroGradientStyle} />
         <div id="hero-canvas-wrapper" ref={canvasWrapperRef} style={{ position: 'absolute', inset: 0, opacity: 0 }}>
-          <AppCanvas params={params} liveParamsRef={paramsRef} backgroundColor={canvasBackground} silhouetteRef={silhouetteRef} />
+          <AppCanvas params={params} liveParamsRef={paramsRef} backgroundColor={canvasBackground} silhouetteRef={silhouetteRef} scatterRef={heroScatterRef} viewResetRef={heroViewResetRef} />
         </div>
         <HeroSchematicOverlay
           silhouetteRef={silhouetteRef}

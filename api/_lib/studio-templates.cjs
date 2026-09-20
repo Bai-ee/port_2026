@@ -71,7 +71,7 @@ const realFb = require('./firebase-admin.cjs');
 
 const COLLECTION = 'studio_templates';
 const SCHEMA_VERSION = 1;
-const KINDS = ['scene', 'element', 'look', 'render'];
+const KINDS = ['scene', 'element', 'look', 'render', 'loop'];
 const SCOPES = ['user', 'client', 'global'];
 const MAX_NAME_LENGTH = 60;
 // Generous single-field-query fetch cap, not a per-tenant display cap — see
@@ -102,7 +102,8 @@ function loadStudioModules() {
     _studioModulesPromise = Promise.all([
       import('../../app/dashboard/studio/elements/preset-kinds.js'),
       import('../../app/dashboard/studio/elements/scene-recipe.js'),
-    ]).then(([presetKinds, sceneRecipe]) => ({ presetKinds, sceneRecipe }));
+      import('../../app/dashboard/studio/loop/loop-session.js'),
+    ]).then(([presetKinds, sceneRecipe, loopSession]) => ({ presetKinds, sceneRecipe, loopSession }));
   }
   return _studioModulesPromise;
 }
@@ -294,10 +295,19 @@ async function validateAndSanitizeRecipe(kind, raw) {
   try { serialized = JSON.stringify(raw); } catch { throw httpError('recipe must be JSON-serializable.', 400); }
   if (serialized.length > 200_000) throw httpError('recipe is too large.', 400);
 
-  const { presetKinds, sceneRecipe } = await loadStudioModules();
+  const { presetKinds, sceneRecipe, loopSession } = await loadStudioModules();
   if (kind === 'element') return presetKinds.sanitizeElementPresetRecipe(raw, {});
   if (kind === 'look') return presetKinds.sanitizeLookPresetRecipe(raw, {});
   if (kind === 'render') return presetKinds.sanitizeRenderPresetRecipe(raw, {});
+  if (kind === 'loop') {
+    // sanitizeLoopSessionRecipe only returns null for a non-plain-object
+    // `raw`, which the guard above already rejects with 400 before this
+    // point is ever reached — this branch exists purely as a defensive
+    // backstop against storing a null recipe, not a reachable path today.
+    const sanitized = loopSession.sanitizeLoopSessionRecipe(raw);
+    if (!sanitized) throw httpError('recipe must be a plain object.', 400);
+    return sanitized;
+  }
   return sanitizeSceneRecipeForCloud(raw, sceneRecipe);
 }
 

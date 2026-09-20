@@ -16,6 +16,8 @@ import { SlidersHorizontal, Clapperboard, Images, ChevronRight, Monitor, Downloa
 import { useAuth } from '../../../AuthContext';
 import UpRightArrow from '../../../components/UpRightArrow';
 import GlassTooltipLayer from '../../../components/GlassTooltipLayer';
+import { STUDIO_DEFAULT_TOOL, resolveStudioTool } from './studio-tools-meta';
+import { useRailReveal } from './components/useRailReveal';
 
 // HOLO PAPER mode (?tool=cloth) — the cloth/foil simulator. Client-only and
 // lazy so the mockup-video path pays nothing for it.
@@ -23,6 +25,13 @@ const ClothStudio = dynamic(() => import('./ClothStudio'), { ssr: false });
 // PAINT mode (?tool=paint) — the p5.js procedural wallpaper studio. Client-only
 // and lazy so neither the mockup nor cloth paths pay anything for it.
 const PaintStudio = dynamic(() => import('./paint/PaintStudio'), { ssr: false });
+// LOOP mode (?tool=loop) — browser-only audio loop slicer. Client-only and lazy.
+const LoopStudio = dynamic(() => import('./LoopStudio'), { ssr: false });
+// INVOICE mode (?tool=invoice) — live-editable invoice canvas. Client-only and lazy.
+const InvoiceStudio = dynamic(() => import('./invoice/InvoiceStudio'), { ssr: false });
+// REMIX mode (?tool=remix) — the EditVideos video-remix recipe builder. Client-only
+// and lazy; it only talks to /api/dashboard/media, nothing renders in the browser.
+const RemixStudio = dynamic(() => import('./remix/RemixStudio'), { ssr: false });
 
 const VIEWPORTS = {
   desktop: { width: 1440, height: 900,  bezel: 30, depth: 40, corner: 26, screenCorner: 14, camZ: 2700, label: 'DESKTOP' },
@@ -241,7 +250,8 @@ const getSupportedVideoMimeType = () => {
 // UI tokens — mirror the live dashboard/site surfaces
 // (DashboardPage.jsx --surface/--border + cool near-white bg + cyan→purple→pink
 // accent gradient). Cool neutral, NOT warm/tan. Space Grotesk for controls,
-// Space Mono only for small uppercase eyebrow labels.
+// GLASS.mono (a plain system sans, despite the name) for small uppercase
+// eyebrow labels.
 const GLASS = {
   surface: {
     background: 'rgba(255,255,255,0.72)',
@@ -259,7 +269,14 @@ const GLASS = {
   hair: '#E4E4E4',
   hairSoft: 'rgba(0,0,0,0.06)',
   sans: '"Space Grotesk", system-ui, -apple-system, sans-serif',
-  mono: '"Space Mono", ui-monospace, monospace',
+  // `mono` is the Studio's LABEL face (small, uppercase, tracked) — the name
+  // is historical. It is deliberately no longer a monospace or a webfont:
+  // Space Mono read as generated-template chrome, and a plain Arial swap
+  // after that read too heavy/chunky at 9-11px with inconsistent
+  // line-height — the native system UI stack is engineered for exactly this
+  // (small text, predictable metrics, zero webfont load). Keep this in sync
+  // with the same token in ./components/rail-ui.jsx, which the tool rails import.
+  mono: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, system-ui, sans-serif',
 };
 
 // Horizontal inset (px) for the timeline track's usable region. Keyframes, the
@@ -321,8 +338,8 @@ const ui = {
     fontSize: 13,
     padding: '0 16px',
   },
-  // Small uppercase eyebrow — the ONLY place Space Mono is used (matches dashboard
-  // tab labels / CLIENT·ACCOUNT·STATUS rows).
+  // Small uppercase eyebrow (matches dashboard tab labels /
+  // CLIENT·ACCOUNT·STATUS rows).
   label: {
     fontSize: 9,
     fontFamily: GLASS.mono,
@@ -486,7 +503,7 @@ export default function StudioPage() {
       const url = new URL(window.location.href);
       // 'mockup' stays the clean, param-less default URL; every other tool
       // (cloth, paint, …) gets an explicit ?tool= value.
-      if (next === 'mockup') url.searchParams.delete('tool');
+      if (next === STUDIO_DEFAULT_TOOL) url.searchParams.delete('tool');
       else url.searchParams.set('tool', next);
       window.history.replaceState(null, '', url.toString());
     } catch { /* URL update is cosmetic */ }
@@ -546,6 +563,7 @@ export default function StudioPage() {
   // there's no backend stream to subscribe to. Closeable + non-blocking: the
   // render keeps running if the user dismisses the console; a toast reports the
   // outcome either way (mirrors the dashboard #run-error-toast pattern).
+  const railInnerRef = useRailReveal();
   const [renderConsoleOpen, setRenderConsoleOpen] = useState(false);
   const [renderLog, setRenderLog] = useState([]); // { prefix, text, type, cursor }
   const [renderPhase, setRenderPhase] = useState('running'); // running | done | failed
@@ -631,8 +649,9 @@ export default function StudioPage() {
 	    if (qTemplate && CAMERA_TEMPLATES.some((tpl) => tpl.id === qTemplate)) setTemplateId(qTemplate);
 	    autoVideoRequestedRef.current = params.get('autovideo') === '1';
 	    if (params.get('director') === '1') setDirectorOpen(true);
-	    const qTool = params.get('tool');
-	    setTool(qTool === 'cloth' ? 'cloth' : qTool === 'paint' ? 'paint' : 'mockup');
+	    // Same resolver the server wrapper's generateMetadata uses, so the tool
+	    // that mounts always matches the social preview the shared link showed.
+	    setTool(resolveStudioTool(params.get('tool')));
 	  }, []);
 
   // Source the site from the account's established website (no manual input).
@@ -2301,8 +2320,10 @@ export default function StudioPage() {
       </a>
 
       {/* Tool switch — MOCKUP VIDEO (device scene) ⇄ HOLO PAPER (cloth sim).
-          Right-aligned to the canvas's right edge (the rail starts at RAIL_W)
-          so it never floats over the artwork. */}
+          Centred across the CANVAS, not the window: the band runs from the
+          left edge to where the rail starts (RAIL_W), and `margin-inline:auto`
+          on a fit-content pill centres it inside that band. Anchoring it to
+          the canvas's right edge instead left it reading as part of the rail. */}
       {tool ? (
         <div
           id="studio-tool-toggle"
@@ -2311,12 +2332,12 @@ export default function StudioPage() {
             position: 'absolute', top: 14, zIndex: 30,
             ...(isNarrow
               ? { left: 12, right: 12, width: 'calc(100% - 24px)', boxSizing: 'border-box', justifyContent: 'center', overflowX: 'hidden', overscrollBehaviorX: 'contain', scrollbarWidth: 'none' }
-              : { right: RAIL_W + 24 }),
+              : { left: 0, right: RAIL_W, width: 'fit-content', marginInline: 'auto' }),
             display: 'flex', gap: 4, padding: isNarrow ? 4 : 4, borderRadius: 999,
             ...GLASS.surface,
           }}
         >
-          {[['mockup', 'MOCKUP VIDEO'], ['cloth', 'HOLO PAPER'], ['paint', 'PAINT']].map(([id, label]) => (
+          {[['mockup', 'MOCKUP VIDEO'], ['cloth', 'HOLO PAPER'], ['paint', 'PAINT'], ['loop', 'LOOPS'], ['remix', 'REMIX'], ['invoice', 'INVOICE']].map(([id, label]) => (
             <button
               key={id}
               onClick={() => switchTool(id)}
@@ -2336,8 +2357,14 @@ export default function StudioPage() {
       <div id="studio-main-row" style={{ flex: 1, position: 'relative', minHeight: 0, display: isNarrow ? 'flex' : 'block', flexDirection: isNarrow ? 'column' : undefined }}>
         {tool === 'paint' ? (
           <PaintStudio isNarrow={isNarrow} railW={RAIL_W} authedFetch={authedFetch} />
+        ) : tool === 'loop' ? (
+          <LoopStudio isNarrow={isNarrow} railW={RAIL_W} authedFetch={authedFetch} />
         ) : tool === 'cloth' ? (
           <ClothStudio isNarrow={isNarrow} railW={RAIL_W} isAdmin={isAdmin} authedFetch={authedFetch} />
+        ) : tool === 'remix' ? (
+          <RemixStudio isNarrow={isNarrow} railW={RAIL_W} authedFetch={authedFetch} user={user} />
+        ) : tool === 'invoice' ? (
+          <InvoiceStudio isNarrow={isNarrow} railW={RAIL_W} isAdmin={isAdmin} authedFetch={authedFetch} user={user} />
         ) : tool === 'mockup' ? (
         <>
         {/* Canvas/board — the page bg shows through as the board surface. Desktop:
@@ -2716,9 +2743,9 @@ export default function StudioPage() {
             }
           `}</style>
 
-          {/* Inner column — margin:auto vertically centers the cards in the
-              viewport when short, and lets the rail scroll when they're tall. */}
-          <div id="studio-rail-inner" style={{ margin: 'auto 0', display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
+          {/* Inner column — top-aligned, matching the Loop and cloth rails, so a
+              card stack starts at the same y in every tool. */}
+          <div id="studio-rail-inner" ref={railInnerRef} style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
 
           {/* SIZE — output format (landscape / square / reel). Reshapes the exportable
               artboard on the canvas and the rendered output. Now its own collapsible nav card;
@@ -3082,7 +3109,7 @@ export default function StudioPage() {
           <style>{`
             @keyframes srt-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
             @keyframes srt-blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
-            #studio-render-console .srt-line { display: grid; grid-template-columns: 4.2rem 1fr; gap: 0.5em; font-family: "Space Mono", monospace; font-size: 0.68rem; line-height: 1.65; align-items: baseline; }
+            #studio-render-console .srt-line { display: grid; grid-template-columns: 4.2rem 1fr; gap: 0.5em; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.68rem; line-height: 1.65; align-items: baseline; }
             #studio-render-console .srt-pfx { text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; font-size: 0.64rem; letter-spacing: 0.02em; }
             #studio-render-console .srt-msg { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
             #studio-render-console .srt-line { color: var(--term-fg); }
@@ -3110,13 +3137,13 @@ export default function StudioPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', justifyContent: 'space-between' }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/img/circle_logo.png" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', display: 'block' }} />
-              <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.44)', fontWeight: 700, fontFamily: '"Space Mono", monospace' }}>Mockup Video</span>
+              <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.44)', fontWeight: 700, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' }}>Mockup Video</span>
               <button
                 type="button"
                 id="studio-render-console-close"
                 onClick={() => setRenderConsoleOpen(false)}
                 aria-label="Close render console"
-                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: '"Space Mono", monospace', fontSize: '0.8rem', color: 'rgba(42,36,32,0.55)', letterSpacing: '0.06em' }}
+                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: '0.8rem', color: 'rgba(42,36,32,0.55)', letterSpacing: '0.06em' }}
               >[ ✕ ]</button>
             </div>
 
@@ -3124,7 +3151,7 @@ export default function StudioPage() {
             <div style={{ width: '100%', overflow: 'hidden', margin: '0 0 0.7rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', width: 'max-content', animation: 'srt-marquee 18s linear infinite', willChange: 'transform' }}>
                 {['a', 'b'].map((k) => (
-                  <span key={k} aria-hidden={k === 'b' ? 'true' : undefined} style={{ margin: 0, flexShrink: 0, whiteSpace: 'nowrap', color: '#2a2420', fontSize: 'clamp(2rem, 8.5vw, 7rem)', lineHeight: 1, letterSpacing: '-0.04em', fontFamily: '"Doto", "Space Mono", monospace', fontWeight: 700 }}>{'RENDERING MOCKUP VIDEO · '.repeat(2)}</span>
+                  <span key={k} aria-hidden={k === 'b' ? 'true' : undefined} style={{ margin: 0, flexShrink: 0, whiteSpace: 'nowrap', color: '#2a2420', fontSize: 'clamp(2rem, 8.5vw, 7rem)', lineHeight: 1, letterSpacing: '-0.04em', fontFamily: '"Doto", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontWeight: 700 }}>{'RENDERING MOCKUP VIDEO · '.repeat(2)}</span>
                 ))}
               </div>
             </div>
@@ -3135,7 +3162,7 @@ export default function StudioPage() {
                 <span style={{ width: '0.52rem', height: '0.52rem', borderRadius: 999, background: 'rgba(255,95,86,0.65)' }} />
                 <span style={{ width: '0.52rem', height: '0.52rem', borderRadius: 999, background: 'rgba(255,189,46,0.65)' }} />
                 <span style={{ width: '0.52rem', height: '0.52rem', borderRadius: 999, background: 'rgba(39,201,63,0.65)' }} />
-                <span style={{ flex: 1, textAlign: 'center', fontFamily: '"Space Mono", monospace', fontSize: '0.62rem', letterSpacing: '0.08em', color: 'var(--term-title-fg)' }}>render.process</span>
+                <span style={{ flex: 1, textAlign: 'center', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: '0.62rem', letterSpacing: '0.08em', color: 'var(--term-title-fg)' }}>render.process</span>
               </div>
               <div
                 ref={renderLogRef}
@@ -3154,10 +3181,10 @@ export default function StudioPage() {
             </div>
 
             {/* Footer — host (left) + Open Video link on success, like the RUN modal */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontFamily: '"Space Mono", monospace', fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.32)', marginTop: '0.9rem', borderTop: '1px solid rgba(212,196,171,0.4)', paddingTop: '0.7rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.32)', marginTop: '0.9rem', borderTop: '1px solid rgba(212,196,171,0.4)', paddingTop: '0.7rem' }}>
               <span>{renderHost || ' '}</span>
               {renderPhase === 'done' && renderVideoUrl ? (
-                <a href={renderVideoUrl} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 'auto', textDecoration: 'underline', color: '#2a2420', fontFamily: '"Space Mono", monospace', fontSize: '0.72rem', textTransform: 'none', letterSpacing: 0 }}>Open Video <UpRightArrow style={{ marginLeft: '0.15rem', opacity: 0.82 }} /></a>
+                <a href={renderVideoUrl} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 'auto', textDecoration: 'underline', color: '#2a2420', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: '0.72rem', textTransform: 'none', letterSpacing: 0 }}>Open Video <UpRightArrow style={{ marginLeft: '0.15rem', opacity: 0.82 }} /></a>
               ) : (
                 <span style={{ marginLeft: 'auto', textTransform: 'none', letterSpacing: '0.02em' }}>
                   {renderPhase === 'failed' ? 'Render failed — close and try again.' : 'Rendering on GPU — saves to your assets.'}
@@ -3180,7 +3207,7 @@ export default function StudioPage() {
             display: 'flex', alignItems: 'flex-start', gap: '0.6rem', padding: '0.75rem 1rem', borderRadius: 10,
             backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
             boxShadow: '0px 5px 10px rgba(0,0,0,0.1), 0px 15px 30px rgba(0,0,0,0.12)',
-            fontFamily: '"Space Mono", monospace', fontSize: '0.72rem', lineHeight: 1.4, letterSpacing: '0.02em',
+            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: '0.72rem', lineHeight: 1.4, letterSpacing: '0.02em',
             background: renderToast.type === 'error' ? 'rgba(255,250,248,0.92)' : 'rgba(248,255,250,0.94)',
             border: '1px solid ' + (renderToast.type === 'error' ? 'rgba(215,25,33,0.32)' : 'rgba(33,150,83,0.32)'),
             color: renderToast.type === 'error' ? 'rgba(150,22,28,0.92)' : 'rgba(22,110,60,0.95)',

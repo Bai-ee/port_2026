@@ -27,6 +27,7 @@ import {
   Monitor, Smartphone, Square as SquareIcon, Type, CaseSensitive,
 } from 'lucide-react';
 import { GLASS, ui, RailCard, Slider } from '../components/rail-ui';
+import { useRailReveal } from '../components/useRailReveal';
 import { createRecipe, normalizeRecipe, migrateRecipe, buildProvenance } from './recipe';
 import {
   listSavedRecipes, saveRecipe, updateRecipe as updateSavedRecipe, loadRecipe, duplicateRecipe, deleteRecipe,
@@ -91,6 +92,7 @@ export default function PaintStudio({ isNarrow = false, railW = 336, authedFetch
   const [exporting, setExporting] = useState(false);
   const [toast, setToast] = useState(null); // { kind: 'success'|'error', text }
   const [seedCopied, setSeedCopied] = useState(false);
+  const railInnerRef = useRailReveal();
   const [openCards, setOpenCards] = useState({
     template: false, palette: false, composition: false, texture: false,
     variation: false, printPlate: false, typography: false, legibility: false, exportCard: false, saved: false,
@@ -448,7 +450,7 @@ export default function PaintStudio({ isNarrow = false, railW = 336, authedFetch
           }
         `}</style>
 
-        <div id="paint-studio-rail-inner" style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
+        <div id="paint-studio-rail-inner" ref={railInnerRef} style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
 
           <RailCard
             id="paint-template-card" icon={<LayoutTemplate size={18} strokeWidth={2} />} title="Template"

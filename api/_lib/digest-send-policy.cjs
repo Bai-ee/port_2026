@@ -34,4 +34,35 @@ function resolveSendPolicy({ isPreview = false, isTemplate = false, isSendNow = 
   };
 }
 
-module.exports = { resolveSendPolicy };
+function validateVideoPublishEmailGate({
+  isRealSend = false,
+  allowSocialSideEffects = false,
+  wantRemix = false,
+  homeClientId = '',
+  publishMode = 'off',
+  publishResult = null,
+  remixVideo = null,
+  videoSourceClientId = '',
+} = {}) {
+  if (!isRealSend || !wantRemix || !homeClientId || publishMode === 'off') return null;
+
+  if (!remixVideo || remixVideo.stale) {
+    return new Error(`No completed Video Remix is available for the selected video source; email was not sent.`);
+  }
+
+  if (!allowSocialSideEffects) return null;
+
+  if (publishResult?.skipped === 'not-connected') {
+    return new Error(`X is not connected for video owner ${videoSourceClientId}; email was not sent because no working approval/publish action could be created.`);
+  }
+  if (publishMode === 'approval' && !publishResult?.approvalUrl) {
+    return new Error(`Approval link could not be created for video owner ${videoSourceClientId}; email was not sent.`);
+  }
+  if (publishResult?.skipped === 'enqueue-failed' || publishResult?.skipped === 'publish-failed') {
+    return new Error(`Daily video ${publishMode} setup failed for video owner ${videoSourceClientId}; email was not sent.`);
+  }
+
+  return null;
+}
+
+module.exports = { resolveSendPolicy, validateVideoPublishEmailGate };

@@ -221,7 +221,7 @@ export default function DeliverableHoverCard({ id, shown = true, rot = 3.2, offX
           <span style={footStatusStyle}><span style={dotStyle} />Active</span>
           <span style={btnGroupStyle}>
             <span style={btnStyle}>{card.action}</span>
-            <span style={btnStyle}>Details <UpRightArrow style={{ marginLeft: '0.1rem', opacity: 0.85 }} /></span>
+            <span style={btnStyle}>Details <UpRightArrow style={{ opacity: 0.85 }} /></span>
           </span>
         </div>
       </article>

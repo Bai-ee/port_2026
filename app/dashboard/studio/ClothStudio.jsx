@@ -16,6 +16,7 @@ import {
   Sparkles, Shuffle, Undo2, Redo2, Cloud, Orbit, MousePointer2, RefreshCw, Aperture,
 } from 'lucide-react';
 import { GLASS, ui, RailCard, Slider } from './components/rail-ui';
+import { useRailReveal } from './components/useRailReveal';
 import { getElementDefinition, listElementDefinitions, MAX_EXTRA_INSTANCES } from './elements/catalog';
 import { normalizeElementInstance } from './elements/schema';
 import { mulberry32, deriveSeed, snapToStep } from './elements/randomize';
@@ -2441,6 +2442,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336, isAdmin = f
     () => restoreExtraInstances(legacyTshirtMigration.remainingExtraInstances, { primaryId: PRIMARY_ELEMENT_ID, maxCount: MAX_EXTRA_INSTANCES })
   );
   const [selectedElementId, setSelectedElementId] = useState(PRIMARY_ELEMENT_ID);
+  const railInnerRef = useRailReveal();
   const [elementsOpen, setElementsOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [randomizeScopeOpen, setRandomizeScopeOpen] = useState(false);
@@ -3570,7 +3572,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336, isAdmin = f
   }, [liveCapturePrep, liveCaptureElapsed]);
 
   // Panel disclosure — Material opens by default (it's the tool's heart).
-  const [materialOpen, setMaterialOpen] = useState(true);
+  const [materialOpen, setMaterialOpen] = useState(false);
   const [animOpen, setAnimOpen] = useState(false);
   const [physicsOpen, setPhysicsOpen] = useState(false);
   const [imagesOpen, setImagesOpen] = useState(false); // retired "Images" flag — now drives the Subject card (STUDIO-RAIL-IA-REORG-PLAN.md)
@@ -4638,7 +4640,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336, isAdmin = f
         };
         if (live.hudOn) {
           const cx = proj(new THREE.Vector3(0, 0, 0));
-          g2.font = '700 9px "Space Mono", monospace';
+          g2.font = '700 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
           // Light cans — colored dot + line to stage center.
           world.cans.forEach((can, i) => {
             if (!can.visible) return;
@@ -4672,7 +4674,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336, isAdmin = f
             }
           } else {
             g2.fillStyle = 'rgba(236,72,153,0.9)';
-            g2.font = '700 10px "Space Mono", monospace';
+            g2.font = '700 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
             g2.fillText('SHOT CAM LIVE', 12, 20);
           }
         }
@@ -4708,7 +4710,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336, isAdmin = f
           g2.fillRect(0, r.y, r.x, r.h);
           g2.fillRect(r.x + r.w, r.y, cw - r.x - r.w, r.h);
         }
-        g2.font = '700 9px "Space Mono", monospace';
+        g2.font = '700 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
         FRAME_IDS.forEach((id, i) => {
           const isActive = i === activeIdx;
           const size = sizes[i];
@@ -9394,12 +9396,7 @@ export default function ClothStudio({ isNarrow = false, railW = 336, isAdmin = f
             made every card expansion shift the whole stack both up AND down
             into neighboring cards). Anchored to the top, an opening card
             only pushes content below it downward — nothing above moves. */}
-        <div id="cloth-studio-rail-inner" style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
-
-          <div id="cloth-rail-bucket-stage" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 2px 0' }}>
-            <span style={{ ...ui.label, whiteSpace: 'nowrap' }}>STAGE</span>
-            <span aria-hidden="true" style={{ flex: 1, height: 1, background: GLASS.hair }}></span>
-          </div>
+        <div id="cloth-studio-rail-inner" ref={railInnerRef} style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
 
           {/* SUBJECT — the primary shape (Flyer/T-Shirt/Device) and each
               shape's own controls; split from the former Images card

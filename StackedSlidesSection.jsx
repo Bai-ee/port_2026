@@ -206,6 +206,11 @@ const INTRO_SOCIALS = [
 const MARQUEE_PX_PER_SEC = 42;
 const MARQUEE_PX_PER_SEC_TOUCH = 28;
 
+// HELLO-marquee hover swap: how long the scramble runs. One number for every
+// word, HELLO included — the swap is the only thing that changes between the
+// four URLs, so they all take the same time and ride the same unbroken crawl.
+const SWAP_DURATION_MS = 1000;
+
 const INTRO_COPY_PRIMARY = 'I guide projects from early direction through launch, growth, and support, providing hands-on design, development, and marketing solutions.';
 const INTRO_COPY_SECONDARY = 'Get a dashboard.';
 
@@ -464,7 +469,8 @@ function HitloopAboutBlock() {
 // rotation ride on CSS custom properties (--peek-left / --peek-rotate) so the
 // responsive rules stay count-agnostic — adding a card here needs no CSS edit.
 // NOTE: the hover word in the HELLO marquee is derived from the FILENAME by
-// peekCardImageWord, so renaming a file changes what the marquee says.
+// peekCardImageWord, so renaming a file changes what the marquee says. Set an
+// explicit `word` on a card to say something other than its filename.
 // `left` runs 0% -> 67% in even steps: a card is 33% wide, so the last one at
 // 67% sits flush against the shell's right edge. Re-space these when the count
 // changes (step = 67 / (count - 1)).
@@ -476,10 +482,27 @@ function HitloopAboutBlock() {
 const PEEK_CARDS = [
   // Outermost two sit straight: they overhang the edges of #cmo-dashboard-card,
   // where a tilt makes them poke into the "I guide projects" copy area.
-  { id: 'dash-peek-card-1', img: '/img/Claire Calls.png',   left: '0%',    rotate: '0deg',    ratio: '305 / 155' },
-  { id: 'dash-peek-card-2', img: '/img/Critters Quest.png', left: '22.3%', rotate: '1.8deg',  ratio: '304 / 155' },
-  { id: 'dash-peek-card-3', img: '/img/Viva Acid.png',      left: '44.7%', rotate: '-2.1deg', ratio: '304 / 155' },
-  { id: 'dash-peek-card-4', img: '/img/Passion House.png',  left: '67%',   rotate: '0deg',    ratio: '305 / 157' },
+  // `left` values are evenly spaced across the same 0%–67% span whatever the
+  // card count (each card is ~33% wide, so 67% + 33% = the shell's full width).
+  // Adding a card tightens the overlap rather than widening the deck, which is
+  // what keeps it from poking into the "I guide projects" copy beside it.
+  { id: 'dash-peek-card-1', img: '/img/Claire Calls.png',   left: '0%',     rotate: '0deg',    ratio: '305 / 155', word: 'CLAIRECALLS.COM' },
+  { id: 'dash-peek-card-2', img: '/img/Critters Quest.png', left: '13.4%',  rotate: '1.8deg',  ratio: '304 / 155', word: 'CRITTERS.QUEST' },
+  { id: 'dash-peek-card-3', img: '/img/Viva Acid.png',      left: '26.8%',  rotate: '-2.1deg', ratio: '304 / 155', word: 'VIVAACID.COM' },
+  // The one moving card, sat mid-deck where it reads as the deck's focal point.
+  // `video` swaps the <Image> for a muted autoplaying loop in the render below;
+  // `img` stays as its poster so the card is never an empty rectangle on a slow
+  // connection or with autoplay blocked.
+  // `left: 33.5%` puts its CENTRE on the deck's midpoint (a card is ~33% wide,
+  // so centre = left + 16.5), and `z` lifts it above its neighbours instead of
+  // taking the index-order z the others get — the moving card is the one that
+  // should be seen whole rather than half-covered.
+  { id: 'dash-peek-card-4', video: '/vid/vtc-thumbnail.mp4', img: '/img/VTC.jpg', left: '33.5%', rotate: '1.5deg', ratio: '305 / 155', word: 'VTC', z: 7 },
+  // Explicit z for the last three: VTC on top (7), then Passion House (6),
+  // then Not The Rug (5). Index-order z would put Not The Rug above Passion
+  // House, and the centred VTC card would bury Passion House to a sliver.
+  { id: 'dash-peek-card-5', img: '/img/Passion House.png',  left: '42%',    rotate: '-1.4deg', ratio: '305 / 157', word: 'PASSIONHOUSECOFFEE.COM', z: 6 },
+  { id: 'dash-peek-card-6', img: '/img/Not The Rug.png',    left: '67%',    rotate: '0deg',    ratio: '305 / 149', word: 'NOTTHERUG.COM', z: 5 },
 ];
 
 const AUTOMATION_CAPABILITIES = [
@@ -736,6 +759,88 @@ function classifyHomepageInput(raw) {
   return { kind: 'empty', value: '' };
 }
 
+// Services list, rebuilt as an accordion (was a 2-up grid of static cards).
+// One row open at a time; the open row reveals its copy plus a self-scrolling
+// strip of portfolio samples. The strip is tagged data-marquee-track so
+// useConstantSpeedMarquees retimes it to the same px/sec as every other marquee
+// on the page instead of inventing a second pace.
+//
+// Each service gets its own rotation of PORTFOLIO_IMAGES, offset by its index,
+// so two open rows never show the same run of samples. These are placeholders —
+// swap in per-service work by giving the item its own `samples` array.
+const SERVICE_SAMPLE_COUNT = 6;
+// Cap for the open panel's max-height. Only has to exceed the tallest panel
+// (copy + one carousel row, ~260px at desktop widths); content clips above it.
+const SERVICE_PANEL_MAX_PX = 640;
+const serviceSamples = (item, index) => {
+  if (Array.isArray(item.samples) && item.samples.length) return item.samples;
+  const out = [];
+  for (let i = 0; i < SERVICE_SAMPLE_COUNT; i += 1) {
+    out.push(PORTFOLIO_IMAGES[(index * 3 + i) % PORTFOLIO_IMAGES.length]);
+  }
+  return out;
+};
+
+function ServiceAccordionRow({ item, index, isOpen, onToggle }) {
+  const panelId = `service-panel-${index}`;
+  const samples = serviceSamples(item, index);
+  return (
+    <article
+      data-capability-card
+      data-service-row
+      data-open={isOpen || undefined}
+      className="service-row"
+      style={{ '--service-accent': item.badgeColor }}
+    >
+      <button
+        type="button"
+        className="service-row-trigger"
+        aria-expanded={isOpen}
+        aria-controls={panelId}
+        onClick={() => onToggle(item.title)}
+      >
+        <span className="service-row-title" style={{ color: isOpen ? item.badgeColor : undefined }}>{item.title}</span>
+        <span className="service-row-sign" data-open={isOpen || undefined} aria-hidden="true" />
+      </button>
+      {/* grid-template-rows 0fr -> 1fr animates to the content's natural height
+          with no JS measuring. The samples only mount while the row is open —
+          every row rendering its strip up front would be ~100 idle images. */}
+      {/* Open/close height is driven from here rather than a [data-open] CSS
+          rule. Either works; this keeps the open state in one place with the
+          accent colour below, and makes the panel's height readable from JS
+          without resolving the cascade. SERVICE_PANEL_MAX_PX caps it. */}
+      <div
+        id={panelId}
+        className="service-row-panel"
+        role="region"
+        style={{ maxHeight: isOpen ? SERVICE_PANEL_MAX_PX : 0 }}
+      >
+        <div
+          className="service-row-panel-inner"
+          style={{ opacity: isOpen ? 1 : 0, transform: isOpen ? 'none' : 'translateY(-6px)' }}
+        >
+          {item.body ? <p className="service-row-body">{item.body}</p> : null}
+          {isOpen ? (
+            <div className="service-row-carousel">
+              <div className="service-row-carousel-track" data-marquee-track>
+                {[0, 1].map((dup) => (
+                  <div className="service-row-carousel-set" key={dup} aria-hidden={dup > 0 ? 'true' : undefined}>
+                    {samples.map((src, i) => (
+                      <span className="service-row-sample" key={`${dup}-${src}-${i}`}>
+                        <Image src={src} alt="" width={320} height={200} sizes="320px" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                      </span>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </article>
+  );
+}
+
 // CSS marquees animate to a fixed DURATION, which makes their speed a function
 // of how wide their content happens to be. Every one of them ran `agentMarquee
 // 28s` over a -50% translate, so the pace was setWidth / 28: "WORK &
@@ -791,10 +896,6 @@ const StackedSlidesSection = () => {
   const peekCard4Ref = useRef(null);
   const helloMarqueeTrackRef = useRef(null);
   const helloMarqueeSetRef = useRef(null);
-  // Published by the marquee drive effect below: { park(node), release() }.
-  // The swap handler lives outside that effect's closure but has to be able to
-  // stop the track and hold one word in the middle of the shell.
-  const helloMarqueeDriveRef = useRef(null);
 
   // HELLO marquee ⇄ peek-card hover: the scrolling marquee words scramble in
   // place into the hovered card's image name (SS3 / CLAIRE / UNDERGROUNDEX)
@@ -829,47 +930,36 @@ const StackedSlidesSection = () => {
     // Longer than a plain reveal on purpose: this swap has to communicate one
     // word turning into another, so it churns the whole way (churnBeforeLock)
     // at a readable ~15Hz (churnIntervalMs) and eases in and out rather than
-    // sweeping at a constant rate. The track is parked below while it runs, so
-    // the word resolves standing still in the middle of the shell.
+    // sweeping at a constant rate. The track keeps scrolling underneath it —
+    // the words scramble in motion, they never come to a stop.
     const nextWord = word || 'HELLO';
     const prevWord = helloMarqueeWordRef.current;
     helloMarqueeWordRef.current = nextWord;
 
-    // Park the track on the word already closest to the middle of the shell —
-    // that one has the shortest distance to travel, so the marquee eases to a
-    // stop rather than yanking a far-off word into frame. Releasing on hover-out
-    // hands the scroll back mid-unscramble, which is where it was before.
-    const drive = helloMarqueeDriveRef.current;
-    if (drive) {
-      if (word) {
-        const shellRect = document.getElementById('testimonials-marquee-shell')?.getBoundingClientRect();
-        let nearest = null;
-        let nearestGap = Infinity;
-        marqueeWords.forEach((node) => {
-          if (!shellRect) return;
-          const rect = node.getBoundingClientRect();
-          const gap = Math.abs((rect.left + rect.width / 2) - (shellRect.left + shellRect.width / 2));
-          if (gap < nearestGap) { nearestGap = gap; nearest = node; }
-        });
-        if (nearest) drive.park(nearest);
-      } else {
-        drive.release();
-      }
-    }
     // Churn only through the letters the two words are made of, so the swap
     // reads as HELLO physically rearranging into the card's name instead of the
     // line dissolving into symbol static.
     const charPool = poolFromWords(prevWord, nextWord);
+    // Lock the character COUNT to the incoming word before the churn starts.
+    // scrambleTextTo renders max(prev.length, next.length) glyphs while it
+    // churns, so leaving VIVAACID.COM churns 12 characters the whole way and
+    // then writes HELLO — 5 — on its final frame. The set collapses in one
+    // frame and everything downstream of it snaps sideways, which reads as the
+    // scramble finishing and THEN the marquee jumping. Seeding a same-length
+    // mask moves that one width change to the start of the swap, where it is
+    // part of the transition instead of a jolt after it.
+    marqueeWords.forEach((node) => { node.textContent = scrambleMask(nextWord); });
     marqueeWords.forEach((node) => scrambleNode(node, nextWord, {
-      durationMs: word ? 1000 : 760,
+      durationMs: SWAP_DURATION_MS,
       churnBeforeLock: true,
       churnIntervalMs: 66,
       ease: easeInOutCubic,
       charPool,
     }));
-    // Dots fade rather than unmount so the track's word spacing never jumps.
+    // The • separators stay up through the swap — they are what keeps the
+    // hovered URL reading as one repeating item rather than a run-on line.
     gsap.killTweensOf(marqueeDots);
-    gsap.to(marqueeDots, { opacity: word ? 0 : 1, duration: word ? 0.6 : 0.8, ease: 'power2.inOut' });
+    gsap.set(marqueeDots, { opacity: 1 });
   };
 
   useEffect(() => () => cancelHelloScrambles(), []);
@@ -893,10 +983,6 @@ const StackedSlidesSection = () => {
     let measureFrameId = 0;
     let lastTime = 0;
     let isVisible = false;
-    let parked = false;
-    let parkNode = null;
-    let parkFrameId = 0;
-    let parkLastTime = 0;
 
     const applyTransform = () => {
       track.style.transform = `translate3d(${offset}px, 0, 0)`;
@@ -908,12 +994,19 @@ const StackedSlidesSection = () => {
       // Constant px/sec, not a fixed loop time — see MARQUEE_PX_PER_SEC. This
       // used to be itemWidth / 28, which tied the pace to the word on screen.
       speed = isTouchScrollDevice() ? MARQUEE_PX_PER_SEC_TOUCH : MARQUEE_PX_PER_SEC;
-      // Only re-snap when the offset actually fell out of range. The set's
-      // width changes continuously during a helloMarqueeSwap (the words are
-      // literally getting longer or shorter), which fires the ResizeObserver
-      // many times a second — re-snapping on each of those jerked the whole
-      // track sideways mid-scramble. tick() already handles the normal wrap.
-      if (offset <= -itemWidth) offset = -(Math.abs(offset) % itemWidth);
+      // Leave the offset ALONE when the set resizes. The track's left edge is
+      // the first word's left edge, so an untouched offset means that word
+      // stays put and the growth happens to its right — the least movement
+      // available. Scaling the offset with the width ratio was tried and is
+      // worse: it holds the same fraction through the set, which in pixels
+      // hauls the whole track sideways the moment the words change size.
+      //
+      // Only the range still has to hold. Whole-set shifts are invisible (the
+      // track holds two identical sets), so the loop can always pull the offset
+      // back without anything moving on screen — needed when the set SHRINKS
+      // out from under a large offset, which would otherwise leave the right of
+      // the shell uncovered.
+      while (offset <= -itemWidth) offset += itemWidth;
       applyTransform();
     };
 
@@ -929,6 +1022,13 @@ const StackedSlidesSection = () => {
       lastTime = 0;
     };
 
+    // The track's motion is the ONE thing a swap never touches: offset is a
+    // pure integral of the house speed, so HELLO and every URL travel at the
+    // same 42px/sec and a word scrambles in exactly where it already sits. An
+    // earlier version eased the track to put the URL's first character at a
+    // read position — it made each word arrive differently depending on how far
+    // it had to come, which is the opposite of consistent. Words change, the
+    // scroll does not.
     const tick = (time) => {
       if (!isVisible || document.hidden || !itemWidth) {
         stop();
@@ -938,65 +1038,15 @@ const StackedSlidesSection = () => {
       const delta = Math.min((time - lastTime) / 1000, 0.05);
       lastTime = time;
       offset -= delta * speed;
-      if (offset <= -itemWidth) offset += itemWidth;
+      while (offset <= -itemWidth) offset += itemWidth;
       applyTransform();
       frameId = requestAnimationFrame(tick);
     };
 
     const start = () => {
-      if (parked || frameId || document.hidden || !isVisible || !itemWidth) return;
+      if (frameId || document.hidden || !isVisible || !itemWidth) return;
       lastTime = 0;
       frameId = requestAnimationFrame(tick);
-    };
-
-    // Parking: hovering a peek card stops the scroll and glides one word to the
-    // centre of the shell, where it stays put while it scrambles into the card's
-    // name. Re-aiming at the target every frame rather than tweening to a fixed
-    // offset is what keeps it centred THROUGH the scramble — the word is
-    // physically getting longer or shorter as characters lock (HELLO ->
-    // UNDERGROUNDEX is more than double the width), so any offset computed up
-    // front would be wrong by the time it arrived.
-    const PARK_APPROACH = 9; // higher converges harder
-    const parkFrame = (time) => {
-      if (!parkNode || !itemWidth) { parkFrameId = 0; return; }
-      if (!parkLastTime) parkLastTime = time;
-      const dt = Math.min((time - parkLastTime) / 1000, 0.05);
-      parkLastTime = time;
-      const shellRect = shell.getBoundingClientRect();
-      const nodeRect = parkNode.getBoundingClientRect();
-      const delta = (shellRect.left + shellRect.width / 2) - (nodeRect.left + nodeRect.width / 2);
-      offset += delta * (1 - Math.exp(-dt * PARK_APPROACH));
-      applyTransform();
-      parkFrameId = requestAnimationFrame(parkFrame);
-    };
-
-    // Shifting by exactly one set width is visually identical — the track holds
-    // two identical sets — so the offset can always be pulled back into range
-    // without anything moving on screen.
-    const normalize = () => {
-      if (!itemWidth) return;
-      while (offset <= -itemWidth) offset += itemWidth;
-      while (offset > 0) offset -= itemWidth;
-    };
-
-    helloMarqueeDriveRef.current = {
-      park: (node) => {
-        if (!node) return;
-        parked = true;
-        parkNode = node;
-        parkLastTime = 0;
-        stop();
-        if (!parkFrameId) parkFrameId = requestAnimationFrame(parkFrame);
-      },
-      release: () => {
-        parked = false;
-        parkNode = null;
-        cancelAnimationFrame(parkFrameId);
-        parkFrameId = 0;
-        normalize();
-        applyTransform();
-        start();
-      },
     };
 
     const handleVisibility = () => {
@@ -1019,8 +1069,6 @@ const StackedSlidesSection = () => {
     return () => {
       stop();
       cancelAnimationFrame(measureFrameId);
-      cancelAnimationFrame(parkFrameId);
-      helloMarqueeDriveRef.current = null;
       resizeObserver?.disconnect();
       intersectionObserver.disconnect();
       document.removeEventListener('visibilitychange', handleVisibility);
@@ -1029,11 +1077,10 @@ const StackedSlidesSection = () => {
   const peekCardImageWord = (img) =>
     img.split('/').pop().replace(/\.[a-z0-9]+$/i, '').replace(/_ss$/i, '').toUpperCase();
 
-  // ⚠️ PARKED, not orphaned: the peek deck's hover state (this block, peekApply
-  // below, helloMarqueeSwap above, and the drive's park/release) is intact but
-  // no longer wired — the cards' onMouseEnter/onMouseLeave were deliberately
-  // removed, so the deck is static and the marquee just scrolls HELLO. Re-add
-  // those two handlers on the card in the render to switch it all back on.
+  // The peek deck's hover state: this block, peekApply below, and
+  // helloMarqueeSwap above. Wired from the card's onMouseEnter/onMouseLeave in
+  // the render, both guarded by isTouchScrollDevice — on touch the deck is
+  // statically lifted by CSS instead.
   //
   // Hovering one card lifts it and settles the rest of the deck a few pixels
   // down, so the hovered thumbnail reads as pulled out of the stack rather than
@@ -1134,6 +1181,8 @@ const StackedSlidesSection = () => {
   const [particleParams, setParticleParams] = useState(PARTICLE_DEFAULTS);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [activeMobileCapability, setActiveMobileCapability] = useState(null);
+  // Services accordion: title of the open row, or null. One at a time.
+  const [openService, setOpenService] = useState(null);
   const [dailyBriefOpen, setDailyBriefOpen] = useState(false); // deliverables table: Daily Brief section collapsed by default
   const [dashboardOpen, setDashboardOpen] = useState(false); // deliverables table: DASHBOARD section collapsed by default
   const [subscribeOpen, setSubscribeOpen] = useState(false);
@@ -2660,6 +2709,122 @@ const StackedSlidesSection = () => {
             height: clamp(2.75rem, 14vw, 3.5rem) !important;
           }
         }
+        /* ── Services accordion ─────────────────────────────────────────────
+           Replaces the old 2-up grid of static service cards. Rows span the
+           full grid width, so the parent's two columns do not apply here. */
+        .service-row {
+          grid-column: 1 / -1;
+          position: relative;
+          border-top: 1px solid rgba(42, 36, 32, 0.12);
+        }
+        .service-row:last-of-type { border-bottom: 1px solid rgba(42, 36, 32, 0.12); }
+        .service-row-trigger {
+          width: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: clamp(1rem, 3vw, 2rem);
+          padding: clamp(0.9rem, 2.2vw, 1.5rem) 0;
+          background: none;
+          border: 0;
+          cursor: pointer;
+          text-align: left;
+          color: #2a2420;
+          font-family: 'Space Grotesk', system-ui, sans-serif;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .service-row-title {
+          font-size: clamp(1.5rem, 4.2vw, 2.6rem);
+          line-height: 1.08;
+          letter-spacing: -0.03em;
+          font-weight: 400;
+          transition: color 0.28s ease;
+        }
+        /* Plus that rotates into a cross — the horizontal bar spins 90deg to
+           meet the vertical one, so open/close reads as one continuous move. */
+        .service-row-sign {
+          position: relative;
+          flex-shrink: 0;
+          width: clamp(18px, 2.4vw, 26px);
+          height: clamp(18px, 2.4vw, 26px);
+        }
+        .service-row-sign::before,
+        .service-row-sign::after {
+          content: '';
+          position: absolute;
+          top: 50%;
+          left: 0;
+          width: 100%;
+          height: 1.5px;
+          background: rgba(42, 36, 32, 0.55);
+          transform: translateY(-50%);
+          transition: transform 0.34s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.28s ease;
+        }
+        .service-row-sign::after { transform: translateY(-50%) rotate(90deg); }
+        .service-row-sign[data-open]::before { transform: translateY(-50%) rotate(135deg); }
+        .service-row-sign[data-open]::after { transform: translateY(-50%) rotate(45deg); }
+        .service-row-sign[data-open]::before,
+        .service-row-sign[data-open]::after { background: var(--service-accent, #2a2420); }
+        /* max-height, NOT the grid 0fr -> 1fr trick. That trick resolves to a
+           0px track here: this grid container has no free space, so every
+           interpolated fr value below 1 sizes to nothing and the panel stays
+           shut. max-height animates reliably in the same situation.
+           The cap only has to exceed the tallest panel (copy + one carousel
+           row, ~260px at desktop widths) — content is clipped above it, so
+           raise it if a service ever gets a long body. */
+        .service-row-panel {
+          overflow: hidden;
+          max-height: 0;
+          transition: max-height 0.44s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .service-row-panel-inner {
+          opacity: 0;
+          transform: translateY(-6px);
+          transition: opacity 0.3s ease, transform 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .service-row-body {
+          margin: 0 0 clamp(0.9rem, 2vw, 1.25rem);
+          max-width: 46ch;
+          font-size: clamp(0.9rem, 1.2vw, 1.02rem);
+          line-height: 1.5;
+          color: rgba(42, 36, 32, 0.62);
+          font-family: 'Space Grotesk', system-ui, sans-serif;
+        }
+        .service-row-carousel {
+          overflow: hidden;
+          padding-bottom: clamp(1rem, 2.4vw, 1.6rem);
+          mask-image: linear-gradient(to right, transparent 0%, black 4%, black 96%, transparent 100%);
+          -webkit-mask-image: linear-gradient(to right, transparent 0%, black 4%, black 96%, transparent 100%);
+        }
+        .service-row-carousel-track {
+          display: flex;
+          width: max-content;
+          will-change: transform;
+          animation: agentMarquee 28s linear infinite;
+        }
+        .service-row-carousel-set {
+          display: flex;
+          gap: clamp(0.5rem, 1.2vw, 0.75rem);
+          padding-right: clamp(0.5rem, 1.2vw, 0.75rem);
+          flex-shrink: 0;
+        }
+        .service-row-sample {
+          display: block;
+          flex-shrink: 0;
+          width: clamp(150px, 22vw, 260px);
+          aspect-ratio: 16 / 10;
+          overflow: hidden;
+          border-radius: 0.7rem;
+          border: 1px solid rgba(42, 36, 32, 0.1);
+          background: rgba(42, 36, 32, 0.04);
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .service-row-panel { transition: none; }
+          .service-row-panel-inner { transition: none; transform: none; }
+          .service-row-carousel-track { animation: none; }
+          .service-row-sign::before,
+          .service-row-sign::after { transition: none; }
+        }
         /* ── Automations Modal ─────────────────────────────────────────────── */
         @property --cta-angle { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
         @keyframes cmoMarqueeScroll { from { transform: translate3d(0,0,0); } to { transform: translate3d(-50%,0,0); } }
@@ -2778,7 +2943,7 @@ const StackedSlidesSection = () => {
         }
         #cmo-modal-url-input::placeholder { color: rgba(42,36,32,0.45); }
         #cmo-url-pill-submit {
-          display: inline-flex; align-items: center; gap: 0.35rem; flex-shrink: 0;
+          display: inline-flex; align-items: center; gap: 0.25rem; flex-shrink: 0;
           border-radius: 999px; padding: 0.5rem 0.75rem; line-height: 1;
           font-family: 'Space Grotesk', system-ui, sans-serif; font-size: clamp(0.8rem, 1.1vw, 0.875rem); font-weight: 700;
           letter-spacing: 0.01em; cursor: pointer;
@@ -2993,12 +3158,22 @@ const StackedSlidesSection = () => {
                                 id="dashboard-stack-shell"
                                 style={{ position: 'relative', gridColumn: '1 / -1', paddingTop: '70px', zIndex: isMobileCapabilityOpen ? 6 : 1 }}
                               >
-                                {PEEK_CARDS.map(({ id, left, rotate, img, ratio }, i) => (
+                                {PEEK_CARDS.map(({ id, left, rotate, img, video, ratio, word, z }, i) => (
                                   <div
                                     key={id}
                                     data-peek-card
                                     className="dash-peek-card"
                                     id={id}
+                                    onMouseEnter={(e) => {
+                                      if (isTouchScrollDevice()) return;
+                                      peekHoverIn(e.currentTarget);
+                                      helloMarqueeSwap(word || peekCardImageWord(img));
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      if (isTouchScrollDevice()) return;
+                                      peekHoverOut(e.currentTarget);
+                                      helloMarqueeSwap(null);
+                                    }}
                                     style={{
                                       '--peek-left': left,
                                       '--peek-rotate': rotate,
@@ -3008,7 +3183,9 @@ const StackedSlidesSection = () => {
                                       width: 'clamp(140px, 33%, 400px)',
                                       height: 'auto',
                                       aspectRatio: ratio,
-                                      zIndex: i + 1,
+                                      // Index order by default (each card overlaps the
+                                      // one before it); `z` opts a card out of that.
+                                      zIndex: z ?? i + 1,
                                       borderRadius: '10px',
                                       border: '1px solid rgba(200,200,200,0.85)',
                                       background: '#fcfaf4',
@@ -3019,7 +3196,31 @@ const StackedSlidesSection = () => {
                                       boxShadow: '0 6px 20px rgba(0,0,0,0.09), 0 1px 0 rgba(255,255,255,0.85)',
                                     }}
                                   >
-                                    <Image src={img} alt="" fill sizes="(max-width: 768px) 33vw, 400px" style={{ objectFit: 'cover', objectPosition: 'top center', pointerEvents: 'none', userSelect: 'none' }} />
+                                    {video ? (
+                                      <video
+                                        // muted + playsInline + autoPlay is the
+                                        // combination every mobile browser
+                                        // requires before it will start a video
+                                        // without a tap. The ref sets `muted` on
+                                        // the element too: React drops the muted
+                                        // ATTRIBUTE on hydration, and Safari
+                                        // checks the property, so without this
+                                        // the autoplay is refused.
+                                        ref={(el) => { if (el) el.muted = true; }}
+                                        src={video}
+                                        poster={img}
+                                        autoPlay
+                                        loop
+                                        muted
+                                        playsInline
+                                        preload="metadata"
+                                        aria-hidden="true"
+                                        tabIndex={-1}
+                                        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top center', pointerEvents: 'none', userSelect: 'none' }}
+                                      />
+                                    ) : (
+                                      <Image src={img} alt="" fill sizes="(max-width: 768px) 33vw, 400px" style={{ objectFit: 'cover', objectPosition: 'top center', pointerEvents: 'none', userSelect: 'none' }} />
+                                    )}
                                   </div>
                                 ))}
                                 <article
@@ -3076,35 +3277,7 @@ const StackedSlidesSection = () => {
                                   </div>
                                 </article>
                               </div>
-                            ) : (
-                              <article
-                                data-capability-card
-                                style={{ ...capabilityCardStyle, zIndex: isMobileCapabilityOpen ? 6 : 1 }}
-                                onClick={() => {
-                                  if (!isTouchScrollDevice()) return;
-                                  setActiveMobileCapability((current) => (current === item.title ? null : item.title));
-                                }}
-                              >
-                                {isMobileCapabilityOpen ? (
-                                  <div style={mobileCapabilityPreviewStyle} aria-hidden="true">
-                                    {item.previewVideo ? (
-                                      <video src={item.previewVideo} autoPlay muted loop playsInline style={mobileCapabilityPreviewImageStyle} />
-                                    ) : (
-                                      <Image src={item.previewImage} alt="" fill sizes="90vw" style={{ objectFit: 'cover', display: 'block' }} />
-                                    )}
-                                  </div>
-                                ) : null}
-                                <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 'clamp(0.8rem, 1.5vw, 1rem)' }}>
-                                  <div style={capabilityContentStyle}>
-                                    <h4 style={capabilityCardTitleStyle}>{item.title}</h4>
-                                    {item.body && <p style={capabilityCardBodyStyle}>{item.body}</p>}
-                                  </div>
-                                  <div style={{ ...capabilityBadgeStyle, color: item.badgeColor, flexShrink: 0 }}>
-                                    {Icon ? <Icon size={20} strokeWidth={2.1} /> : item.badge}
-                                  </div>
-                                </div>
-                              </article>
-                            )}
+                            ) : null}
                             {item.tablePreview && null}
                             </React.Fragment>
                           );
@@ -3140,10 +3313,22 @@ const StackedSlidesSection = () => {
                               key={item.src}
                               id={`portfolio-sample-thumb-${itemIndex}`}
                               className="testimonials-port-img"
-                              // Create Case Study modal click temporarily disabled — see
-                              // CreateCaseStudyModal.jsx / caseStudyImage state below.
-                              // onClick={() => setCaseStudyImage(item.src)}
-                              style={{ position: 'relative', width: '100%', borderRadius: '0.75rem', overflow: 'hidden', border: '1px solid rgba(42,36,32,0.1)', aspectRatio: '16 / 5', boxSizing: 'border-box' }}
+                              // Opens CreateCaseStudyModal on the sample's own image —
+                              // caseStudyImage state above, modal rendered at the end of
+                              // this component. It's a div rather than a button because
+                              // the thumb is a full-bleed cover image, so it carries the
+                              // button role and key handling explicitly.
+                              role="button"
+                              tabIndex={0}
+                              aria-label="Create a case study from this sample"
+                              onClick={() => setCaseStudyImage(item.src)}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                  event.preventDefault();
+                                  setCaseStudyImage(item.src);
+                                }
+                              }}
+                              style={{ position: 'relative', width: '100%', borderRadius: '0.75rem', overflow: 'hidden', border: '1px solid rgba(42,36,32,0.1)', aspectRatio: '16 / 5', boxSizing: 'border-box', cursor: 'pointer' }}
                             >
                               <Image src={item.src} alt="" fill sizes="(max-width: 768px) 100vw, 50vw" style={{ objectFit: 'cover' }} />
                             </div>
@@ -3198,29 +3383,19 @@ const StackedSlidesSection = () => {
             <div id="panel-capabilities-layout" style={gridLayoutStyle}>
               <section id="capability-cards-section" data-capability-grid style={capabilitySectionStyle}>
                 <div id="capability-cards-grid" style={{ ...capabilityGridStyle, marginTop: '5.75rem' }}>
-                  {/* Service cards are presentational only — no tap-to-preview, no
-                      hover state, nothing clickable. `data-capability-card` stays
-                      because the scroll-reveal in this file selects on it. */}
-                  {AUTOMATION_CAPABILITIES.filter((item) => !item.tablePreview).map((item) => {
-                    const Icon = AUTOMATION_ICON_COMPONENTS[item.icon];
-                    return (
-                      <article
-                        key={item.title}
-                        data-capability-card
-                        style={{ ...capabilityCardStyle, zIndex: 1 }}
-                      >
-                        <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 'clamp(0.8rem, 1.5vw, 1rem)' }}>
-                          <div style={capabilityContentStyle}>
-                            <h4 style={capabilityCardTitleStyle}>{item.title}</h4>
-                            {item.body && <p style={capabilityCardBodyStyle}>{item.body}</p>}
-                          </div>
-                          <div style={{ ...capabilityBadgeStyle, color: item.badgeColor, flexShrink: 0 }}>
-                            {Icon ? <Icon size={20} strokeWidth={2.1} /> : item.badge}
-                          </div>
-                        </div>
-                      </article>
-                    );
-                  })}
+                  {/* Services accordion — one row open at a time, each revealing its
+                      copy plus a self-scrolling strip of portfolio samples.
+                      `data-capability-card` stays on the row because the
+                      scroll-reveal in this file selects on it. */}
+                  {AUTOMATION_CAPABILITIES.filter((item) => !item.tablePreview).map((item, index) => (
+                    <ServiceAccordionRow
+                      key={item.title}
+                      item={item}
+                      index={index}
+                      isOpen={openService === item.title}
+                      onToggle={(title) => setOpenService((current) => (current === title ? null : title))}
+                    />
+                  ))}
                 </div>
               </section>
               <div data-grid-window style={gridWindowStyle}>
@@ -3611,7 +3786,9 @@ const ctaStyle = {
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
-  gap: '0.5rem',
+  // Label→arrow spacing. Tightened from 0.5rem; the pills are auto-width
+  // inline-flex, so the button narrows with it (no padding compensation).
+  gap: '0.3rem',
   padding: '0.5rem 0.75rem',
   lineHeight: 1,
   fontSize: 'clamp(0.8rem, 1.1vw, 0.875rem)',
@@ -3652,10 +3829,11 @@ const ctaAvatarStyle = {
   display: 'block',
 };
 
+// No marginLeft: the button's `gap` is the single source of label→arrow
+// spacing (and an icon-only mobile CTA gets no stray leading offset).
 const ctaIconStyle = {
   fontSize: '0.95rem',
   opacity: 0.9,
-  marginLeft: '0.1rem',
 };
 
 // No padding-bottom here: [data-grid-inner]'s last child is #stacked-inline-footer,

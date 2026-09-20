@@ -355,6 +355,9 @@ function serializeBriefDoc({ doc, data, clientId, client, origin }) {
     briefSlug: data.briefSlug || doc.id,
     publicBriefSlug,
     title: data.title || doc.id,
+    kind: data.kind === 'invoice' ? 'invoice' : 'brief',
+    invoice: data.invoice || null,
+    sections: data.sections || null,
     description: data.description || '',
     ogLabel: data.ogLabel || 'BRYAN BALLI',
     hideOgSubhead: data.hideOgSubhead === true,
@@ -406,9 +409,14 @@ export async function GET(request) {
       .get();
 
     const origin = request.nextUrl.origin;
+    // Optional ?kind=invoice (or ?kind=brief) filter for the card's
+    // separate invoice list; omitted/unrecognized = no filtering, so
+    // existing callers keep getting every public brief as before.
+    const kindFilter = request.nextUrl.searchParams.get('kind');
     const briefs = snapshot.docs
       .map((doc) => serializeBriefDoc({ doc, data: doc.data() || {}, clientId, client: bootstrap?.client || null, origin }))
       .filter((brief) => brief.public)
+      .filter((brief) => !kindFilter || brief.kind === kindFilter)
       .sort((a, b) => Math.max(toMillis(b.updatedAt), toMillis(b.importedAt)) - Math.max(toMillis(a.updatedAt), toMillis(a.importedAt)));
 
     return NextResponse.json({ clientId, briefs });
@@ -434,19 +442,82 @@ export async function POST(request) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const html = String(body.html || '').trim();
-    if (!html) {
-      return NextResponse.json({ error: 'HTML is required.' }, { status: 400 });
-    }
-    if (!/<html[\s>]/i.test(html) && !/<!doctype html/i.test(html)) {
-      return NextResponse.json({ error: 'Submit a complete HTML document.' }, { status: 400 });
-    }
-    if (Buffer.byteLength(html, 'utf8') > 3 * 1024 * 1024) {
-      return NextResponse.json({ error: 'HTML brief is too large. Keep it under 3MB.' }, { status: 413 });
+    // Only 'invoice' is a recognized alternate kind; anything else
+    // (including omitted) is the original pasted-HTML brief path, which
+    // runs unchanged below.
+    const kind = body.kind === 'invoice' ? 'invoice' : 'brief';
+
+    let html = '';
+    let invoiceModel = null;
+    let invoiceSections = null;
+    let renderInvoiceHtmlFn = null;
+    let skippedSections = [];
+    let invoicePdfHeightPx = null;
+
+    if (kind === 'invoice') {
+      // Structured-invoice path: build the complete HTML document
+      // server-side from features/invoices/* instead of accepting pasted
+      // HTML. Dynamic import (not a static top-of-file import) so a
+      // missing/broken invoices module can only ever fail kind:'invoice'
+      // requests — never the brief path above, which must behave exactly
+      // as it does today whether or not that module has landed yet.
+      let normalizeInvoice;
+      let normalizeInvoiceSectionConfig;
+      // DEFAULT_FROM and resolvePaymentQr are dynamic imports for the same
+      // reason renderInvoiceDocument's `brand` option is: features/invoices/
+      // model.js and render.js are also imported by the PUBLIC Invoice
+      // Studio client bundle, so a static top-level import of either the
+      // owner's real identity (default-from.js) or the Venmo QR/handle
+      // (payment-qr.js) would ship those bytes into that bundle regardless
+      // of whether this server-only route ever runs. This route is
+      // server-only, so the dynamic import costs nothing but keeps the
+      // pattern consistent with the client-side callers.
+      let DEFAULT_FROM;
+      let resolvePaymentQr;
+      try {
+        ({ normalizeInvoice } = await import('../../../../features/invoices/model.js'));
+        ({ normalizeInvoiceSectionConfig } = await import('../../../../features/invoices/registry.js'));
+        ({ renderInvoiceDocument: renderInvoiceHtmlFn } = await import('../../../../features/invoices/render.js'));
+        ({ DEFAULT_FROM } = await import('../../../../features/invoices/default-from.js'));
+        ({ resolvePaymentQr } = await import('../../../../features/invoices/payment-qr.js'));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Invoice module unavailable.';
+        return NextResponse.json({ error: `Invoice rendering is not available: ${message}` }, { status: 500 });
+      }
+
+      try {
+        // defaultFrom explicit here (model.js's own default flipped to "no
+        // backfill" — D13 follow-up): the STORED invoiceModel must keep
+        // today's behavior of backfilling a blank `from` with the owner's
+        // real identity, same as the render call below.
+        invoiceModel = normalizeInvoice(body.invoice, { clientId, defaultFrom: DEFAULT_FROM });
+        invoiceSections = normalizeInvoiceSectionConfig(body.sections);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Invalid invoice payload.';
+        return NextResponse.json({ error: message }, { status: 400 });
+      }
+    } else {
+      html = String(body.html || '').trim();
+      if (!html) {
+        return NextResponse.json({ error: 'HTML is required.' }, { status: 400 });
+      }
+      if (!/<html[\s>]/i.test(html) && !/<!doctype html/i.test(html)) {
+        return NextResponse.json({ error: 'Submit a complete HTML document.' }, { status: 400 });
+      }
+      if (Buffer.byteLength(html, 'utf8') > 3 * 1024 * 1024) {
+        return NextResponse.json({ error: 'HTML brief is too large. Keep it under 3MB.' }, { status: 413 });
+      }
     }
 
-    const title = String(body.title || extractTitle(html, 'Custom brief')).trim().slice(0, 140);
-    const briefSlug = slugify(body.briefSlug || title, 'custom-brief');
+    const title = kind === 'invoice'
+      ? String(
+          body.title
+          || (invoiceModel?.invoiceNumber ? `Invoice ${invoiceModel.invoiceNumber}` : '')
+          || invoiceModel?.billTo?.name
+          || 'Invoice'
+        ).trim().slice(0, 140)
+      : String(body.title || extractTitle(html, 'Custom brief')).trim().slice(0, 140);
+    const briefSlug = slugify(body.briefSlug || title, kind === 'invoice' ? 'invoice' : 'custom-brief');
     const publicBriefSlug = compactPathSlug(body.publicBriefSlug || body.briefSlug || title, briefSlug);
     const description = String(body.description || '').trim().slice(0, 500);
     const ogLabel = String(body.ogLabel || 'BRYAN BALLI').trim().slice(0, 80) || 'BRYAN BALLI';
@@ -456,8 +527,55 @@ export async function POST(request) {
     const publicClientSlug = publicClientSlugFor(bootstrap?.client || null, clientId, body.publicClientSlug);
     const publicPath = `/briefs/${publicClientSlug}/${publicBriefSlug}`;
     const publicUrl = `${request.nextUrl.origin}${publicPath}`;
+
+    if (kind === 'invoice') {
+      // render.js no longer imports brand-marks.js (nor payment-qr.js)
+      // itself (Invoice Studio plan D8/D10, and the D13 bundle-inspection
+      // follow-up — a public client bundle must never carry the HITLOOP
+      // logo/signature or the Venmo QR/handle unless it explicitly asks for
+      // them), so the server publish path — which keeps today's
+      // HITLOOP-branded, fully-identified look — sources both here and
+      // passes them through explicitly.
+      const { HITLOOP_BRAND } = await import('../../../../features/invoices/brand-marks.js');
+      const paymentQr = resolvePaymentQr(invoiceModel.payment?.qr) || null;
+      // Render now that publicPath/publicUrl/pdfPath are known — the
+      // invoice document links to its own PDF download route.
+      const rendered = renderInvoiceHtmlFn(invoiceModel, {
+        sections: invoiceSections,
+        clientId,
+        publicUrl,
+        pdfPath: `${publicPath}/pdf`,
+        origin: request.nextUrl.origin,
+        brandLabel: ogLabel,
+        brand: HITLOOP_BRAND,
+        defaultFrom: DEFAULT_FROM,
+        paymentQr,
+      });
+      html = String(rendered.html);
+      // Enabled sections that produced nothing (no data yet) — the live
+      // preview surfaces these so a sparse page reads as "nothing to show
+      // there yet" rather than a broken render.
+      skippedSections = Array.isArray(rendered.skippedSections) ? rendered.skippedSections : [];
+      // Sizes the PDF page box to the document so an invoice prints as one page.
+      invoicePdfHeightPx = Number(rendered.estimatedHeightPx) || null;
+      if (Buffer.byteLength(html, 'utf8') > 3 * 1024 * 1024) {
+        return NextResponse.json({ error: 'Invoice document is too large. Keep it under 3MB.' }, { status: 413 });
+      }
+      // Preview: pure render only — no Firestore write, no Storage, no
+      // Browserless PDF render/spend. The card's live-preview iframe calls
+      // this on every edit, so it must stay a side-effect-free function.
+      if (body.preview === true) {
+        return NextResponse.json({ ok: true, html, skippedSections });
+      }
+    }
+
     const sourceHash = hashHtml(html);
-    const addToClientBrain = body.addToClientBrain !== false;
+    // Briefs feed the Client Brain by default; invoices must NOT — a pricing
+    // document is not brand knowledge, and silently ingesting it would leak
+    // rates into every downstream copy consumer of the Brain. Opt-in only.
+    const addToClientBrain = kind === 'invoice'
+      ? body.addToClientBrain === true
+      : body.addToClientBrain !== false;
     const ref = fb.adminDb
       .collection('clients')
       .doc(clientId)
@@ -474,7 +592,8 @@ export async function POST(request) {
       fileName: pdfFileName,
       storageClientKey: publicClientSlug,
       storageBriefKey: publicBriefSlug,
-      pdfMode: 'edge-to-edge',
+      pdfMode: kind === 'invoice' ? 'invoice' : 'edge-to-edge',
+      pdfHeightPx: invoicePdfHeightPx,
     });
     const warnings = [];
     if (!pdfResult?.ok && pdfResult?.warning) warnings.push(pdfResult.warning);
@@ -527,6 +646,8 @@ export async function POST(request) {
       ogLabel,
       hideOgSubhead,
       html,
+      kind,
+      ...(kind === 'invoice' ? { invoice: invoiceModel, sections: invoiceSections } : {}),
       public: isPublic,
       publicClientSlug,
       pdfFileName,

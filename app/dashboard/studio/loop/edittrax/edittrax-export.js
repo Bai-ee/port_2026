@@ -1,0 +1,259 @@
+// Loop Studio — EDITTRAX player export module. Pure ESM, no React/DOM/fetch
+// imports (same standalone-module tier as ../wav-encode.js; directly
+// testable under node:test).
+//
+// `generateTrackJs` is the SINGLE canonical generator for the player's
+// config script. Its output text is used for BOTH:
+//   - the export zip's `track.js` file        (parts[].file = "audio/seg.N.wav")
+//   - the in-studio embedded player's srcdoc  (parts[].file = a `blob:` URL)
+// Same generator, same output shape — only the `file` strings passed in
+// `parts` differ between the two call sites. Do not fork this logic; a
+// parallel embed module consumes this function's return value as an opaque
+// string, it does not know how the text was assembled.
+
+const PROJECT_BASE_FALLBACK = 'edittrax-player';
+
+// --- loader status DOM tail — copied VERBATIM from edittrax_player/track.js
+// lines ~40-48. The player's loading screen hard-depends on these globals
+// (`statusScript` / `statusScriptIcon` DOM writes) existing in track.js —
+// never edit this text without re-checking the template file. ---
+const LOADER_STATUS_TAIL_LINES = [
+  '// --- loader status DOM (leave as-is; the loading screen depends on these) ---',
+  "const svgElement2 = document.getElementById('statusScriptIcon');",
+  'const newSvgContent2 = `',
+  '<circle cx="20" cy="20" r="18" stroke="#CEC6B3" stroke-width="4" fill="#576B68" />',
+  '<path d="M13 20 l5 5 l10 -10" stroke="#CEC6B3" stroke-width="4" fill="none" />`;',
+  '',
+  'document.getElementById("statusScript").innerHTML = "Visual Assets Loaded";',
+  "document.getElementById('statusScript').style.color = '#576B68';",
+  'svgElement2.innerHTML = newSvgContent2;',
+];
+
+function isFiniteNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function assertNonNegativeInteger(value, label) {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+    throw new Error(`generateTrackJs: ${label} must be a non-negative integer (got ${JSON.stringify(value)})`);
+  }
+}
+
+function arrayLiteral(numbers) {
+  return `[${numbers.join(', ')}]`;
+}
+
+/**
+ * Generates a complete, standalone `track.js` config script matching the
+ * exact contract of `edittrax_player/track.js` (top-level `const`s the
+ * player engine reads synchronously at parse time — see BUILD_NOTES §4-5).
+ *
+ * @param {object} options
+ * @param {number} options.bpm - track tempo, finite and > 0 (fractional allowed).
+ * @param {Array<{file: string, length: number, loop: number}>} options.parts -
+ *   one entry per loop segment. `file` is a URL/path string (either
+ *   "audio/seg.N.wav" for the export zip, or a `blob:` URL for the embed).
+ *   `length` is the segment's musical length in bars (non-negative integer).
+ *   `loop` is the part's current/default repeat count (non-negative integer,
+ *   the player's own up/down UI clamps display to 0-9 but does not validate
+ *   the initial value it's handed).
+ * @param {string} options.downloadName - exported filename baked into the
+ *   player's own "EDIT THIS TRACK" download button.
+ * @param {number} [options.boxHeight=60] - loop-box pixel height (template
+ *   default; player README notes 40 as a practical minimum for tap targets,
+ *   not enforced here).
+ * @param {boolean} [options.reverseScrolling=false]
+ * @returns {string} complete track.js source text.
+ */
+export function generateTrackJs({
+  bpm, parts, downloadName, boxHeight = 60, reverseScrolling = false,
+}) {
+  if (!Array.isArray(parts) || parts.length === 0) {
+    throw new Error('generateTrackJs: parts must be a non-empty array');
+  }
+  if (!isFiniteNumber(bpm) || bpm <= 0) {
+    throw new Error(`generateTrackJs: bpm must be a finite number > 0 (got ${JSON.stringify(bpm)})`);
+  }
+  if (typeof downloadName !== 'string' || downloadName.trim() === '') {
+    throw new Error('generateTrackJs: downloadName must be a non-empty string');
+  }
+  if (!isFiniteNumber(boxHeight) || boxHeight <= 0) {
+    throw new Error(`generateTrackJs: boxHeight must be a finite number > 0 (got ${JSON.stringify(boxHeight)})`);
+  }
+
+  parts.forEach((part, i) => {
+    if (!part || typeof part !== 'object') {
+      throw new Error(`generateTrackJs: parts[${i}] must be an object`);
+    }
+    if (typeof part.file !== 'string' || part.file.trim() === '') {
+      throw new Error(`generateTrackJs: parts[${i}].file must be a non-empty string`);
+    }
+    assertNonNegativeInteger(part.length, `parts[${i}].length`);
+    assertNonNegativeInteger(part.loop, `parts[${i}].loop`);
+  });
+
+  const lines = [];
+
+  // -- generated-file header (single source of truth note) ------------------
+  lines.push('// ===========================================================================');
+  lines.push('// EDITTRAX PLAYER — TRACK CONFIG (GENERATED)');
+  lines.push('// ---------------------------------------------------------------------------');
+  lines.push('// Generated by generateTrackJs() in');
+  lines.push('// app/dashboard/studio/loop/edittrax/edittrax-export.js — the single source');
+  lines.push('// of truth for player config generation. This exact text is consumed both by');
+  lines.push('// the export zip\'s track.js (parts[].file = "audio/seg.N.wav") and by the');
+  lines.push('// in-studio embedded player\'s srcdoc (parts[].file = a blob: URL). Do not');
+  lines.push('// hand-edit; regenerate from Loop Studio.');
+  lines.push('// ===========================================================================');
+  lines.push('');
+
+  lines.push('const trackDir = "";');
+  lines.push(`const bpm = ${bpm};`);
+  lines.push('');
+
+  lines.push('const parts = [');
+  parts.forEach((part) => {
+    lines.push(`  { file: ${JSON.stringify(part.file)}, length: ${part.length}, loop: ${part.loop} },`);
+  });
+  lines.push('];');
+  // Classic (non-module) <script> top-level `const` never attaches to
+  // `window` — without this, `readLivePartLoops` (which reads
+  // `iframe.contentWindow.parts`) always sees `undefined` and every export
+  // silently falls back to last-known/default counts. Harmless in the
+  // exported standalone player (nothing there reads `window.parts`).
+  lines.push("window.parts = parts; // expose for the studio embed's live count read-back (readLivePartLoops)");
+  lines.push('');
+
+  const zeros = parts.map(() => 0);
+  const ones = parts.map(() => 1);
+  const current = parts.map((p) => p.loop);
+  const twos = parts.map(() => 2);
+
+  // ⚠️ The player auto-applies preset 0 once audio loads
+  // (script_unlocked.js:161 `loadPreset(0)`), so preset 0 MUST carry the
+  // current per-part counts — an all-off preset 0 wipes the build (and the
+  // studio embed's counts) on every boot.
+  lines.push('const presets = [];');
+  lines.push(`presets.push(${arrayLiteral(current)}); // 0: PREVIEW (current build — applied on boot)`);
+  lines.push(`presets.push(${arrayLiteral(ones)}); // 1: FULL (every part once)`);
+  lines.push(`presets.push(${arrayLiteral(twos)}); // 2: EXTENDED (all doubled)`);
+  lines.push(`presets.push(${arrayLiteral(zeros)}); // 3: ZERO (all off)`);
+  lines.push('');
+
+  lines.push(...LOADER_STATUS_TAIL_LINES);
+  lines.push('');
+
+  lines.push(`const downloadName = ${JSON.stringify(downloadName)};`);
+  lines.push(`const boxHeight = ${boxHeight};`);
+  lines.push(`const reverseScrolling = ${reverseScrolling ? 'true' : 'false'};`);
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+function getTemplateBytes(templateBytesByPath, path) {
+  if (templateBytesByPath instanceof Map) return templateBytesByPath.get(path);
+  return templateBytesByPath ? templateBytesByPath[path] : undefined;
+}
+
+/**
+ * Assembles the full set of `{ name, data }` entries for the export zip,
+ * ready to hand to `buildStoreZip` (../wav-encode.js) — this module never
+ * imports that function directly, keeping it decoupled/pure.
+ *
+ * @param {object} options
+ * @param {string} options.projectBase - sanitized folder name; every entry
+ *   name is prefixed `${projectBase}/`.
+ * @param {{generatedAt?: string, files: Array<{path: string, bytes?: number}>}} options.manifest -
+ *   the Phase 0 sync script's file list (POSIX-relative paths; never
+ *   includes README.md, BUILD_NOTES.md, track.js, or audio/).
+ * @param {Map<string, Uint8Array>|Record<string, Uint8Array>} options.templateBytesByPath -
+ *   bytes for every manifest path.
+ * @param {string} options.trackJsText - generateTrackJs() output.
+ * @param {Array<{name: string, data: Uint8Array}>} options.audioEntries -
+ *   e.g. `{ name: "seg.1.wav", data }` — written under `${projectBase}/audio/`.
+ * @returns {Array<{name: string, data: Uint8Array}>}
+ */
+export function buildPlayerZipEntries({
+  projectBase, manifest, templateBytesByPath, trackJsText, audioEntries,
+}) {
+  if (typeof projectBase !== 'string' || projectBase.trim() === '') {
+    throw new Error('buildPlayerZipEntries: projectBase must be a non-empty string');
+  }
+  const files = Array.isArray(manifest?.files) ? manifest.files : null;
+  if (!files) {
+    throw new Error('buildPlayerZipEntries: manifest.files must be an array');
+  }
+  if (typeof trackJsText !== 'string' || trackJsText.length === 0) {
+    throw new Error('buildPlayerZipEntries: trackJsText must be a non-empty string');
+  }
+  if (!Array.isArray(audioEntries) || audioEntries.length === 0) {
+    throw new Error('buildPlayerZipEntries: audioEntries must be a non-empty array');
+  }
+
+  const missing = [];
+  const templateEntries = files.map((f) => {
+    const path = f?.path;
+    const bytes = getTemplateBytes(templateBytesByPath, path);
+    if (!(bytes instanceof Uint8Array)) missing.push(String(path));
+    return { path, bytes };
+  });
+  if (missing.length > 0) {
+    throw new Error(`buildPlayerZipEntries: missing template bytes for: ${missing.join(', ')}`);
+  }
+
+  const templatePathSet = new Set(templateEntries.map((e) => e.path));
+
+  const seenAudioNames = new Set();
+  const audioOut = audioEntries.map((entry, i) => {
+    const name = entry?.name;
+    if (typeof name !== 'string' || name.trim() === '') {
+      throw new Error(`buildPlayerZipEntries: audioEntries[${i}].name must be a non-empty string`);
+    }
+    if (!(entry?.data instanceof Uint8Array)) {
+      throw new Error(`buildPlayerZipEntries: audioEntries[${i}].data must be a Uint8Array`);
+    }
+    const relPath = `audio/${name}`;
+    if (templatePathSet.has(relPath)) {
+      throw new Error(`buildPlayerZipEntries: audio entry "${name}" collides with template path "${relPath}"`);
+    }
+    if (seenAudioNames.has(name)) {
+      throw new Error(`buildPlayerZipEntries: duplicate audio entry name "${name}"`);
+    }
+    seenAudioNames.add(name);
+    return { name: `${projectBase}/${relPath}`, data: entry.data };
+  });
+
+  const entries = [];
+  templateEntries.forEach(({ path, bytes }) => {
+    entries.push({ name: `${projectBase}/${path}`, data: bytes });
+  });
+  entries.push({ name: `${projectBase}/track.js`, data: new TextEncoder().encode(trackJsText) });
+  audioOut.forEach((e) => entries.push(e));
+
+  return entries;
+}
+
+/**
+ * Sanitizes an arbitrary track/project name into a safe zip folder + file
+ * base: trims, strips diacritics, replaces anything outside
+ * [A-Za-z0-9._-] with '-', collapses repeated separators, trims leading/
+ * trailing separators, and falls back to 'edittrax-player' when the result
+ * is empty.
+ *
+ * @param {string} name
+ * @returns {string}
+ */
+export function sanitizePlayerProjectBase(name) {
+  if (typeof name !== 'string') return PROJECT_BASE_FALLBACK;
+
+  let out = name.trim();
+  if (out === '') return PROJECT_BASE_FALLBACK;
+
+  out = out.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+  out = out.replace(/[^A-Za-z0-9._-]+/g, '-');
+  out = out.replace(/-{2,}/g, '-').replace(/\.{2,}/g, '.').replace(/_{2,}/g, '_');
+  out = out.replace(/^[-._]+/, '').replace(/[-._]+$/, '');
+
+  return out === '' ? PROJECT_BASE_FALLBACK : out;
+}
