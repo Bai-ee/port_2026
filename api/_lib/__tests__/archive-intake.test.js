@@ -1,7 +1,8 @@
 'use strict';
 
-// Mocks firebase-admin.cjs (fake Firestore) and editvideos-bridge.cjs (fake
-// Storage bucket) via require.cache injection — same technique as
+// Mocks firebase-admin.cjs (fake Firestore) and archive-intake-bucket.cjs
+// (fake Storage bucket, HITLOOP's own default bucket — not the
+// EditVideos-bridge bucket) via require.cache injection — same technique as
 // deleted-accounts.test.js. archive-intake.cjs is the browser-side Lane 2
 // intake logic (app/api/archive/intake/route.js is a thin wrapper around it
 // that isn't imported directly here because next/server can't be resolved
@@ -13,7 +14,7 @@ const path = require('node:path');
 const { makeFakeContext } = require('./fake-firestore.cjs');
 
 const firebaseAdminPath = path.resolve(__dirname, '../firebase-admin.cjs');
-const editvideosBridgePath = path.resolve(__dirname, '../editvideos-bridge.cjs');
+const archiveIntakeBucketPath = path.resolve(__dirname, '../archive-intake-bucket.cjs');
 const archiveIntakePath = path.resolve(__dirname, '../archive-intake.cjs');
 
 function loadModuleWithFakes() {
@@ -22,13 +23,13 @@ function loadModuleWithFakes() {
   const bucket = fake.adminStorage.bucket();
 
   require.cache[firebaseAdminPath] = { id: firebaseAdminPath, filename: firebaseAdminPath, loaded: true, exports: fake };
-  require.cache[editvideosBridgePath] = {
-    id: editvideosBridgePath,
-    filename: editvideosBridgePath,
+  require.cache[archiveIntakeBucketPath] = {
+    id: archiveIntakeBucketPath,
+    filename: archiveIntakeBucketPath,
     loaded: true,
     exports: {
-      bridgeBucket: () => bucket,
-      ensureUploadCors: async () => {},
+      intakeBucket: () => bucket,
+      ensureIntakeCors: async () => {},
     },
   };
 

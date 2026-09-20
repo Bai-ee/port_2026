@@ -8,10 +8,11 @@
 // for that sha256 — see docs/archive/INTAKE_CONTRACT.md § purge rule).
 //
 // D1 (master plan): nothing here ever writes the NAS. This module only talks
-// to Firestore + the EditVideos-bridge Firebase Storage bucket.
+// to Firestore + HITLOOP's own default Firebase Storage bucket
+// (api/_lib/archive-intake-bucket.cjs) — not the EditVideos-bridge bucket.
 
 const fb = require('./firebase-admin.cjs');
-const { bridgeBucket } = require('./editvideos-bridge.cjs');
+const { intakeBucket } = require('./archive-intake-bucket.cjs');
 const {
   UPLOADED_STATE,
   FAILED_STATE,
@@ -42,7 +43,7 @@ async function listUploadedForWorker({ workerId }) {
     const x = d.data();
     let downloadUrl = null;
     try {
-      const [url] = await bridgeBucket().file(x.storagePath).getSignedUrl({
+      const [url] = await intakeBucket().file(x.storagePath).getSignedUrl({
         version: 'v4',
         action: 'read',
         expires: Date.now() + SIGNED_DOWNLOAD_TTL_MS,
@@ -130,7 +131,7 @@ async function purgeArchivedIntake({ intakeId, workerId }) {
   }
 
   if (doc.storagePath) {
-    await bridgeBucket().file(doc.storagePath).delete({ ignoreNotFound: true });
+    await intakeBucket().file(doc.storagePath).delete({ ignoreNotFound: true });
   }
 
   await ref.set({ state: PURGED_STATE, updatedAt: fb.FieldValue.serverTimestamp() }, { merge: true });

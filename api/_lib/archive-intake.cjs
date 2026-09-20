@@ -12,7 +12,7 @@
 
 const { randomUUID } = require('crypto');
 const fb = require('./firebase-admin.cjs');
-const { bridgeBucket, ensureUploadCors } = require('./editvideos-bridge.cjs');
+const { intakeBucket, ensureIntakeCors } = require('./archive-intake-bucket.cjs');
 const {
   PENDING_UPLOAD_STATE,
   UPLOADED_STATE,
@@ -23,7 +23,7 @@ const {
 } = require('./archive-intake-transitions.cjs');
 
 const COLLECTION = 'archive_intake';
-const SIGNED_UPLOAD_TTL_MS = 15 * 60 * 1000; // matches editvideos-bridge.cjs createUploadSession
+const SIGNED_UPLOAD_TTL_MS = 15 * 60 * 1000;
 
 function httpError(message, status) {
   return Object.assign(new Error(message), { status });
@@ -55,12 +55,12 @@ async function createIntake({ fileName, contentType, sizeBytes, createdBy }) {
   const storagePath = storagePathFor(intakeId, safeFileName);
 
   try {
-    await ensureUploadCors();
+    await ensureIntakeCors();
   } catch (err) {
     throw httpError(`Could not configure intake upload CORS: ${err?.message || err}`, 503);
   }
 
-  const [uploadUrl] = await bridgeBucket().file(storagePath).getSignedUrl({
+  const [uploadUrl] = await intakeBucket().file(storagePath).getSignedUrl({
     version: 'v4',
     action: 'write',
     expires: Date.now() + SIGNED_UPLOAD_TTL_MS,
@@ -105,7 +105,7 @@ async function markUploaded({ intakeId, sizeBytes }) {
     return { intakeId, state: UPLOADED_STATE }; // idempotent — already confirmed
   }
 
-  const file = bridgeBucket().file(doc.storagePath);
+  const file = intakeBucket().file(doc.storagePath);
   const [exists] = await file.exists();
   if (!exists) {
     throw httpError('Upload object was not found in storage yet. Try again once the upload finishes.', 409);

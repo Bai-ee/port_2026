@@ -227,8 +227,33 @@ class FakeStorageFile {
 }
 
 class FakeStorageBucket {
-  constructor(name = 'fake-bucket') { this._name = name; this._store = new Map(); }
+  constructor(name = 'fake-bucket') {
+    this._name = name;
+    this._store = new Map();
+    // CORS metadata state — added for archive-intake-bucket.cjs's
+    // ensureIntakeCors() (reads existing bucket.cors via getMetadata(),
+    // merges a new rule in via setMetadata() without dropping others).
+    // Call counters let a test assert a merge/write only happened once
+    // (per-process memoization).
+    this._cors = [];
+    this._getMetadataCalls = 0;
+    this._setMetadataCalls = 0;
+  }
   file(path) { return new FakeStorageFile(this, path); }
+  // Mirrors the real @google-cloud/storage bucket.getMetadata()/setMetadata()
+  // tuple shapes, scoped to the one field (`cors`) archive-intake-bucket.cjs
+  // reads/writes.
+  async getMetadata() {
+    this._getMetadataCalls += 1;
+    return [{ cors: this._cors }];
+  }
+  async setMetadata(patch) {
+    this._setMetadataCalls += 1;
+    if (patch && Array.isArray(patch.cors)) this._cors = patch.cors;
+    return [{ cors: this._cors }];
+  }
+  // test helper — seed a pre-existing CORS rule set before exercising a merge.
+  _setCors(rules) { this._cors = rules; }
   // Mirrors the real @google-cloud/storage bucket.getFiles({prefix,
   // maxResults}) shape (a [files] tuple, each file exposing `.name`) —
   // added for the P2-2 orphan-reclaim sweep, which needs to list Storage
