@@ -14,6 +14,7 @@ import { readCorpus, readCorpora, saveGapReport } from '../../../../features/x-b
 // that one merges a calendar day with scanned quote candidates, this one plans
 // a day of authored posts out of the content inventory.
 import { buildDayPlan as buildContentDayPlan } from '../../../../features/x-content-inventory/plan-day.js';
+import { projectDayPlan } from '../../../../features/x-content-inventory/day-plan-projection.js';
 import { validateInventory } from '../../../../features/x-content-inventory/schema.js';
 import { readInventory, upsertPackage, deletePackage } from '../../../../features/x-content-inventory/store.js';
 // Same static-import reasoning as bundledCalendar above. These are the two
@@ -300,7 +301,13 @@ async function handleContentPlan(context, body) {
 
   // `seeded` travels with the plan so the card can say the gaps come from the
   // example rows, not from an inventory someone actually curated.
-  return { ok: true, plan, seeded };
+  //
+  // `summary` is the narrowed view (day-plan-projection.js): it names each
+  // slot's state once and counts each route into a slot separately, because
+  // `plan.filled` counts inventory matches only — a day carrying a re-surfaced
+  // winner and two scan slots would otherwise read as one-fifth built. Additive;
+  // the panel keeps reading `plan`.
+  return { ok: true, plan, seeded, summary: projectDayPlan(plan, { posts }).summary };
 }
 
 async function handleInventoryList(context) {
