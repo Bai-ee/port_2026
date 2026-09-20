@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "1.1",
+  "recordType": "archive-record",
+  "version": 1,
+  "previousRecordTransactionId": null,
+  "asset": {
+    "id": "asset-001",
+    "archiveName": "critters-quest-launch-teaser.mp4",
+    "sha256": "a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff0",
+    "sizeBytes": 15831022,
+    "mediaType": "video",
+    "contentType": "video/mp4",
+    "originalTransactionId": "origTx000111111111111111111111111111111"
+  },
+  "collection": { "id": "critters-quest-launch", "title": "Critters Quest Launch Archive" },
+  "provenance": { "sourceSystem": "HITLOOP Archive", "originalsReadOnly": true, "contentAddressing": "sha256" },
+  "evidence": [
+    {
+      "provider": "TwelveLabs",
+      "kind": "video-summary",
+      "summary": "Teaser clip shows the Critters Quest launch trailer with brand mascots.",
+      "status": "complete",
+      "at": "2026-09-17T10:00:00.000Z"
+    }
+  ],
+  "decisions": [
+    {
+      "id": "contentPillar",
+      "question": "Content pillar",
+      "value": "Announcement",
+      "jev": { "value": "Announcement", "confidence": 0.62, "reviewBand": "QUICK_REVIEW", "choices": ["Product Launch", "Announcement", "Brand"] },
+      "human": null
+    },
+    {
+      "id": "platform",
+      "question": "Origin platform",
+      "value": "X",
+      "jev": { "value": "X", "confidence": 0.95, "reviewBand": "AUTO_CONFIRM", "choices": ["X", "Instagram", "Reddit"] },
+      "human": null
+    }
+  ],
+  "corrections": [],
+  "generatedAt": "2026-09-17T11:00:00.000Z"
+}

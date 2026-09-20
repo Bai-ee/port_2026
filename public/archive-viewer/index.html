@@ -1,20 +1,625 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>HITLOOP Permanent Archive</title><style>
-*{box-sizing:border-box}body{margin:0;background:#0b0b0c;color:#f4f4f2;font:14px system-ui,-apple-system,sans-serif}main{max-width:1180px;margin:auto;padding:48px 22px}h1{font-size:clamp(34px,6vw,76px);letter-spacing:-.055em;margin:0 0 8px}.muted{color:#888}.bar{display:flex;gap:12px;margin:32px 0;flex-wrap:wrap}input,button{background:#151517;color:#fff;border:1px solid #303034;border-radius:10px;padding:12px}input{flex:1;min-width:240px}button{cursor:pointer}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}.card{border:1px solid #252529;border-radius:16px;padding:16px;background:#111113;overflow:hidden}.name{font-weight:650;word-break:break-word}.meta{font:11px ui-monospace,monospace;color:#888;margin-top:10px;line-height:1.55}.tag{display:inline-block;border:1px solid #303034;border-radius:99px;padding:4px 8px;margin:8px 4px 0 0;font-size:10px}a{color:#fff}#status{margin:12px 0 24px}</style></head>
-<body><main><div class="muted">HITLOOP / PERMANENT ARCHIVE</div><h1 id="title">Archive</h1>
-<p class="muted">This viewer reads a permanent collection manifest directly from Arweave. It does not require HITLOOP or Firebase.</p>
-<div class="bar"><input id="tx" placeholder="Collection manifest transaction ID"><button id="load">LOAD ARCHIVE</button></div><div id="status" class="muted"></div><div id="assets" class="grid"></div></main>
-<script>
-const q=new URLSearchParams(location.search),tx=document.querySelector('#tx'),status=document.querySelector('#status'),assets=document.querySelector('#assets');
-tx.value=q.get('manifest')||'';
-async function load(){
- const id=tx.value.trim();if(!id)return;status.textContent='Loading permanent manifest…';assets.innerHTML='';
- try{const r=await fetch('https://arweave.net/'+encodeURIComponent(id));if(!r.ok)throw Error('Manifest request failed '+r.status);const m=await r.json();
- document.querySelector('#title').textContent=m.collection?.title||'Archive';status.textContent=(m.assets?.length||0)+' permanent assets · schema '+(m.schemaVersion||'unknown');
- history.replaceState(null,'','?manifest='+encodeURIComponent(id));
- for(const a of m.assets||[]){const d=document.createElement('article');d.className='card';d.innerHTML='<div class="name"></div><div class="meta"></div><div class="tag">SHA-256 VERIFIED</div> <div class="tag">ARWEAVE</div><p><a target="_blank" rel="noopener">OPEN ORIGINAL ↗</a></p>';d.querySelector('.name').textContent=a.archiveName||a.id;d.querySelector('.meta').textContent=(a.contentType||'')+'\n'+(a.sizeBytes||'')+' bytes\nTX '+a.transactionId;d.querySelector('a').href=a.arweaveUrl||('https://arweave.net/'+a.transactionId);assets.appendChild(d)}
- }catch(e){status.textContent=e.message||'Could not load archive'}
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HITLOOP Permanent Archive</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#0b0b0c;color:#f4f4f2;font:14px system-ui,-apple-system,sans-serif}
+main{max-width:1180px;margin:auto;padding:48px 22px}
+h1{font-size:clamp(28px,6vw,64px);letter-spacing:-.05em;margin:0 0 8px}
+h2{font-size:20px;margin:0 0 4px;word-break:break-word}
+h3{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#888;margin:20px 0 8px}
+.muted{color:#888}
+.mono{font:11px ui-monospace,monospace;word-break:break-all}
+.bar{display:flex;gap:12px;margin:24px 0;flex-wrap:wrap}
+input,button{background:#151517;color:#fff;border:1px solid #303034;border-radius:10px;padding:12px;font:inherit}
+input{flex:1;min-width:200px}
+button{cursor:pointer}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.card{border:1px solid #252529;border-radius:16px;padding:16px;background:#111113;overflow:hidden}
+.name{font-weight:650;word-break:break-word;margin-bottom:8px}
+.preview{width:100%;border-radius:10px;margin-bottom:8px;display:block;background:#000;max-height:220px;object-fit:cover}
+.meta{font:11px ui-monospace,monospace;color:#888;margin-top:6px;line-height:1.55}
+.meta.hash{cursor:pointer;word-break:break-all}
+.tag{display:inline-block;border:1px solid #303034;border-radius:99px;padding:4px 8px;margin:8px 4px 0 0;font-size:10px}
+.badge-legacy{border-color:#a66a3d;color:#e6ab6e}
+a{color:#fff}
+.link-button{background:none;border:none;color:#8fb8ff;padding:0;text-decoration:underline;cursor:pointer;font:inherit}
+#viewer-collection-header{margin-bottom:8px}
+.meta-row{display:flex;gap:14px;flex-wrap:wrap;font:12px ui-monospace,monospace;color:#aaa;margin:8px 0}
+#viewer-manifest-links-row{font-size:11px}
+#viewer-previous-manifest-link{margin-left:12px}
+#viewer-status-message{margin:12px 0 24px}
+#viewer-filter-row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:16px 0 24px}
+#viewer-search-input{flex:2;min-width:220px}
+#viewer-pillar-chip-row{display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid #303034;border-radius:99px;padding:6px 12px;font-size:11px;background:#151517;color:#fff;cursor:pointer}
+.chip-active{background:#2c6cff;border-color:#2c6cff}
+.toggle-label{display:flex;align-items:center;gap:6px;font-size:12px;color:#ccc}
+#viewer-filter-result-count{font-size:11px}
+.decision-list{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:11px;margin:10px 0 0;padding:0}
+.decision-list dt{color:#888;grid-column:1}
+.decision-list dd{margin:0;grid-column:2;word-break:break-word}
+.error-box{border:1px solid #4a2a2a;background:#1a0f0f;border-radius:12px;padding:16px;grid-column:1/-1}
+.error-box button{margin-top:10px}
+#viewer-record-drawer{display:none}
+#viewer-record-drawer.drawer-open{display:block;position:fixed;inset:0;z-index:50}
+#viewer-record-drawer-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.65)}
+#viewer-record-drawer-panel{position:absolute;top:0;right:0;bottom:0;width:min(520px,100%);background:#111113;border-left:1px solid #252529;padding:24px;overflow:auto}
+#viewer-record-drawer-close{position:absolute;top:16px;right:16px}
+.evidence-box{border:1px solid #252529;border-radius:10px;padding:10px;font-size:12px;margin-bottom:8px;background:#151517}
+.decision-row{border-top:1px solid #202024;padding:10px 0;font-size:12px}
+.decision-question{font-weight:600;margin-bottom:6px}
+.badge{display:inline-block;border-radius:6px;padding:1px 6px;font-size:10px;margin-right:6px}
+.badge-jev{background:#2c3a55;color:#9fc3ff}
+.badge-human{background:#2c5535;color:#a0e6ad}
+.correction-row{font-size:11px;color:#ccc;border-top:1px solid #202024;padding:8px 0}
+@media (max-width:480px){
+main{padding:20px 14px}
+#viewer-record-drawer-panel{width:100%;padding:16px}
+.grid{grid-template-columns:1fr}
+#viewer-filter-row{flex-direction:column;align-items:stretch}
+#viewer-search-input{min-width:0}
 }
-document.querySelector('#load').onclick=load;if(tx.value)load();
-</script></body></html>
+</style>
+</head>
+<body>
+<main>
+<div class="muted">HITLOOP / PERMANENT ARCHIVE</div>
+
+<header id="viewer-collection-header" hidden>
+<h1 id="viewer-collection-title">Archive</h1>
+<div id="viewer-collection-meta-row" class="meta-row">
+<span id="viewer-schema-badge" class="tag"></span>
+<span id="viewer-manifest-version-value"></span>
+<span id="viewer-generated-at-value"></span>
+<span id="viewer-asset-count-value"></span>
+<span id="viewer-total-bytes-value"></span>
+</div>
+<div id="viewer-manifest-links-row" class="muted mono">
+manifest tx <span id="viewer-manifest-tx-value"></span>
+<a id="viewer-previous-manifest-link" href="#" hidden>&larr; previous manifest</a>
+</div>
+</header>
+
+<div id="viewer-manifest-input-row" class="bar">
+<input id="viewer-manifest-tx-input" placeholder="Collection manifest transaction ID">
+<button id="viewer-load-manifest-button">LOAD ARCHIVE</button>
+</div>
+
+<div id="viewer-status-message" class="muted"></div>
+
+<section id="viewer-filter-row" hidden>
+<input id="viewer-search-input" type="text" placeholder="Search archive name or decisions&hellip;">
+<div id="viewer-pillar-chip-row"></div>
+<label id="viewer-has-corrections-label" class="toggle-label">
+<input type="checkbox" id="viewer-has-corrections-toggle"> has corrections
+</label>
+<span id="viewer-filter-result-count" class="muted"></span>
+</section>
+
+<div id="viewer-asset-list" class="grid"></div>
+</main>
+
+<div id="viewer-record-drawer" aria-hidden="true">
+<div id="viewer-record-drawer-backdrop"></div>
+<div id="viewer-record-drawer-panel" role="dialog" aria-label="Archive record">
+<button id="viewer-record-drawer-close" type="button" aria-label="Close">&times;</button>
+<div id="viewer-record-drawer-body"></div>
+</div>
+</div>
+
+<script>
+'use strict';
+var ARWEAVE_BASE = 'https://arweave.net/';
+
+/* ARCHIVE_VIEWER_PURE_START */
+function formatBytes(bytes) {
+  var n = Number(bytes);
+  if (!isFinite(n) || n <= 0) return '0 B';
+  var units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  var i = 0, v = n;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  var precision = (i > 0 && v < 10) ? 1 : 0;
+  return v.toFixed(precision) + ' ' + units[i];
+}
+
+function truncateHash(hash, head, tail) {
+  var h = String(hash || '');
+  head = head || 8; tail = tail || 6;
+  if (h.length <= head + tail + 1) return h;
+  return h.slice(0, head) + '…' + h.slice(-tail);
+}
+
+function normalizeDecisionValue(d) {
+  if (!d) return null;
+  var value = d.value;
+  if (value === undefined) value = d.selectedValue;
+  return { id: d.id || d.question || '', question: d.question || d.id || '', value: value };
+}
+
+function normalizeManifestAsset(a, legacy) {
+  a = a || {};
+  if (legacy) {
+    var origTx = a.transactionId || null;
+    return {
+      id: a.id,
+      archiveName: a.archiveName || a.id || '',
+      sha256: a.sha256 || '',
+      sizeBytes: Number(a.sizeBytes) || 0,
+      mediaType: (a.contentType || '').split('/')[0] || '',
+      contentType: a.contentType || 'application/octet-stream',
+      originalTransactionId: origTx,
+      originalUrl: a.arweaveUrl || (origTx ? ARWEAVE_BASE + origTx : ''),
+      recordTransactionId: null,
+      recordVersion: null,
+      decisions: (a.decisions || []).map(normalizeDecisionValue)
+    };
+  }
+  var oTx = a.originalTransactionId || null;
+  return {
+    id: a.id,
+    archiveName: a.archiveName || a.id || '',
+    sha256: a.sha256 || '',
+    sizeBytes: Number(a.sizeBytes) || 0,
+    mediaType: a.mediaType || (a.contentType || '').split('/')[0] || '',
+    contentType: a.contentType || 'application/octet-stream',
+    originalTransactionId: oTx,
+    originalUrl: a.originalUrl || (oTx ? ARWEAVE_BASE + oTx : ''),
+    recordTransactionId: a.recordTransactionId || null,
+    recordVersion: a.recordVersion || null,
+    decisions: (a.decisions || []).map(normalizeDecisionValue)
+  };
+}
+
+function normalizeManifest(m) {
+  if (!m || typeof m !== 'object') throw new Error('Manifest is empty or invalid');
+  var schemaVersion = m.schemaVersion || '1.0';
+  var legacy = schemaVersion !== '1.1';
+  var assets = (m.assets || []).map(function (a) { return normalizeManifestAsset(a, legacy); });
+  return {
+    schemaVersion: schemaVersion,
+    legacy: legacy,
+    version: m.version || 1,
+    previousManifestTransactionId: m.previousManifestTransactionId || null,
+    collection: {
+      id: (m.collection && m.collection.id) || '',
+      title: (m.collection && m.collection.title) || 'Archive',
+      generatedAt: (m.collection && m.collection.generatedAt) || null
+    },
+    assets: assets,
+    viewerTransactionId: m.viewerTransactionId || null,
+    provenance: m.provenance || {}
+  };
+}
+
+function isPillarDecision(d) {
+  var probe = ((d && d.id) || '') + ' ' + ((d && d.question) || '');
+  return /pillar/i.test(probe);
+}
+
+function collectPillarValues(assets) {
+  var counts = {};
+  (assets || []).forEach(function (a) {
+    (a.decisions || []).forEach(function (d) {
+      if (!isPillarDecision(d)) return;
+      if (d.value === undefined || d.value === null || d.value === '') return;
+      var key = String(d.value);
+      counts[key] = (counts[key] || 0) + 1;
+    });
+  });
+  return Object.keys(counts).sort().map(function (value) { return { value: value, count: counts[value] }; });
+}
+
+function filterAssets(assets, opts) {
+  opts = opts || {};
+  var query = String(opts.query || '').trim().toLowerCase();
+  var pillarValue = opts.pillarValue || null;
+  var hasCorrectionsOnly = Boolean(opts.hasCorrectionsOnly);
+  return (assets || []).filter(function (a) {
+    if (hasCorrectionsOnly && !(a.recordVersion && a.recordVersion > 1)) return false;
+    if (pillarValue) {
+      var matchPillar = (a.decisions || []).some(function (d) { return isPillarDecision(d) && String(d.value) === String(pillarValue); });
+      if (!matchPillar) return false;
+    }
+    if (query) {
+      var hay = [a.archiveName || ''].concat((a.decisions || []).map(function (d) { return d.value === undefined || d.value === null ? '' : String(d.value); })).join(' ').toLowerCase();
+      if (hay.indexOf(query) === -1) return false;
+    }
+    return true;
+  });
+}
+
+function totalBytes(assets) {
+  return (assets || []).reduce(function (sum, a) { return sum + (Number(a.sizeBytes) || 0); }, 0);
+}
+
+function normalizeRecord(r) {
+  if (!r || typeof r !== 'object') throw new Error('Record is empty or invalid');
+  var schemaVersion = r.schemaVersion || '1.0';
+  return {
+    schemaVersion: schemaVersion,
+    legacy: schemaVersion !== '1.1',
+    version: r.version || 1,
+    previousRecordTransactionId: r.previousRecordTransactionId || null,
+    asset: r.asset || {},
+    collection: r.collection || {},
+    provenance: r.provenance || {},
+    evidence: r.evidence || [],
+    decisions: r.decisions || [],
+    corrections: r.corrections || [],
+    generatedAt: r.generatedAt || null
+  };
+}
+/* ARCHIVE_VIEWER_PURE_END */
+
+var els = {
+  header: document.getElementById('viewer-collection-header'),
+  title: document.getElementById('viewer-collection-title'),
+  schemaBadge: document.getElementById('viewer-schema-badge'),
+  version: document.getElementById('viewer-manifest-version-value'),
+  generatedAt: document.getElementById('viewer-generated-at-value'),
+  assetCount: document.getElementById('viewer-asset-count-value'),
+  totalBytesEl: document.getElementById('viewer-total-bytes-value'),
+  manifestTxValue: document.getElementById('viewer-manifest-tx-value'),
+  prevLink: document.getElementById('viewer-previous-manifest-link'),
+  txInput: document.getElementById('viewer-manifest-tx-input'),
+  loadBtn: document.getElementById('viewer-load-manifest-button'),
+  status: document.getElementById('viewer-status-message'),
+  filterRow: document.getElementById('viewer-filter-row'),
+  searchInput: document.getElementById('viewer-search-input'),
+  chipRow: document.getElementById('viewer-pillar-chip-row'),
+  correctionsToggle: document.getElementById('viewer-has-corrections-toggle'),
+  resultCount: document.getElementById('viewer-filter-result-count'),
+  list: document.getElementById('viewer-asset-list'),
+  drawer: document.getElementById('viewer-record-drawer'),
+  drawerBackdrop: document.getElementById('viewer-record-drawer-backdrop'),
+  drawerClose: document.getElementById('viewer-record-drawer-close'),
+  drawerBody: document.getElementById('viewer-record-drawer-body')
+};
+
+var state = { manifest: null, filter: { query: '', pillarValue: null, hasCorrectionsOnly: false }, drawerHop: 0, drawerAssetLabel: '' };
+
+function setStatus(msg) { els.status.textContent = msg || ''; }
+
+function showInstructions() {
+  setStatus('Paste a collection manifest transaction ID above, or open this viewer with ?manifest=<tx>.');
+  els.filterRow.hidden = true;
+  els.list.innerHTML = '';
+  els.header.hidden = true;
+}
+
+function showError(message, retryFn) {
+  els.list.innerHTML = '';
+  els.filterRow.hidden = true;
+  var wrap = document.createElement('div');
+  wrap.className = 'error-box';
+  var p = document.createElement('p');
+  p.textContent = message;
+  wrap.appendChild(p);
+  if (retryFn) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = 'RETRY';
+    btn.onclick = retryFn;
+    wrap.appendChild(btn);
+  }
+  els.list.appendChild(wrap);
+  setStatus('');
+}
+
+function fetchJson(txId) {
+  return fetch(ARWEAVE_BASE + encodeURIComponent(txId)).then(function (r) {
+    if (!r.ok) throw new Error('Request failed (' + r.status + ') for ' + txId);
+    return r.json();
+  });
+}
+
+function renderHeader(m, manifestTx) {
+  els.header.hidden = false;
+  els.title.textContent = m.collection.title;
+  els.schemaBadge.textContent = m.legacy ? 'schema ' + m.schemaVersion + ' (legacy)' : 'schema ' + m.schemaVersion;
+  els.schemaBadge.className = 'tag' + (m.legacy ? ' badge-legacy' : '');
+  els.version.textContent = 'version ' + m.version;
+  els.generatedAt.textContent = m.collection.generatedAt ? new Date(m.collection.generatedAt).toLocaleString() : '';
+  els.assetCount.textContent = m.assets.length + ' asset' + (m.assets.length === 1 ? '' : 's');
+  els.totalBytesEl.textContent = formatBytes(totalBytes(m.assets));
+  els.manifestTxValue.textContent = manifestTx;
+  if (m.previousManifestTransactionId) {
+    els.prevLink.hidden = false;
+    els.prevLink.href = '?manifest=' + encodeURIComponent(m.previousManifestTransactionId);
+  } else {
+    els.prevLink.hidden = true;
+  }
+}
+
+function renderChips(m) {
+  var pillars = collectPillarValues(m.assets);
+  els.chipRow.innerHTML = '';
+  pillars.forEach(function (p) {
+    var chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'chip' + (state.filter.pillarValue === p.value ? ' chip-active' : '');
+    chip.textContent = p.value + ' (' + p.count + ')';
+    chip.onclick = function () {
+      state.filter.pillarValue = state.filter.pillarValue === p.value ? null : p.value;
+      renderChips(m);
+      renderList();
+    };
+    els.chipRow.appendChild(chip);
+  });
+}
+
+function previewNode(asset) {
+  if (!asset.originalUrl) return null;
+  var ct = asset.contentType || '';
+  if (ct.indexOf('image/') === 0) {
+    var img = document.createElement('img');
+    img.loading = 'lazy';
+    img.src = asset.originalUrl;
+    img.alt = asset.archiveName;
+    img.className = 'preview';
+    return img;
+  }
+  if (ct.indexOf('video/') === 0) {
+    var video = document.createElement('video');
+    video.preload = 'none';
+    video.controls = true;
+    video.className = 'preview';
+    var source = document.createElement('source');
+    source.src = asset.originalUrl;
+    source.type = ct;
+    video.appendChild(source);
+    return video;
+  }
+  return null;
+}
+
+function renderAssetCard(asset) {
+  var card = document.createElement('article');
+  card.className = 'card';
+  card.id = 'viewer-asset-card-' + asset.id;
+
+  var name = document.createElement('div');
+  name.className = 'name';
+  name.textContent = asset.archiveName;
+  card.appendChild(name);
+
+  var preview = previewNode(asset);
+  if (preview) card.appendChild(preview);
+
+  var meta = document.createElement('div');
+  meta.className = 'meta';
+  meta.textContent = (asset.contentType || '') + ' · ' + formatBytes(asset.sizeBytes);
+  card.appendChild(meta);
+
+  var hashRow = document.createElement('div');
+  hashRow.className = 'meta hash';
+  hashRow.textContent = 'SHA-256 ' + truncateHash(asset.sha256);
+  hashRow.title = 'Click to show / copy full hash';
+  var hashFull = false;
+  hashRow.onclick = function () {
+    hashFull = !hashFull;
+    hashRow.textContent = 'SHA-256 ' + (hashFull ? asset.sha256 : truncateHash(asset.sha256));
+    try { if (navigator.clipboard) navigator.clipboard.writeText(asset.sha256); } catch (e) {}
+  };
+  card.appendChild(hashRow);
+
+  var tagRow = document.createElement('div');
+  var verifiedTag = document.createElement('span');
+  verifiedTag.className = 'tag';
+  verifiedTag.textContent = 'SHA-256 VERIFIED';
+  tagRow.appendChild(verifiedTag);
+  var arweaveTag = document.createElement('span');
+  arweaveTag.className = 'tag';
+  arweaveTag.textContent = 'ARWEAVE';
+  tagRow.appendChild(arweaveTag);
+  card.appendChild(tagRow);
+
+  if (asset.decisions && asset.decisions.length) {
+    var dl = document.createElement('dl');
+    dl.className = 'decision-list';
+    asset.decisions.forEach(function (d) {
+      var dt = document.createElement('dt');
+      dt.textContent = d.question;
+      var dd = document.createElement('dd');
+      dd.textContent = d.value === undefined || d.value === null || d.value === '' ? '—' : String(d.value);
+      dl.appendChild(dt);
+      dl.appendChild(dd);
+    });
+    card.appendChild(dl);
+  }
+
+  var linkRow = document.createElement('p');
+  if (asset.originalUrl) {
+    var a = document.createElement('a');
+    a.href = asset.originalUrl;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = 'OPEN ORIGINAL ↗';
+    linkRow.appendChild(a);
+  }
+  if (asset.recordTransactionId) {
+    var recordBtn = document.createElement('button');
+    recordBtn.type = 'button';
+    recordBtn.className = 'link-button';
+    recordBtn.textContent = 'record v' + (asset.recordVersion || 1);
+    recordBtn.onclick = function () { openRecordDrawer(asset); };
+    linkRow.appendChild(document.createTextNode(' · '));
+    linkRow.appendChild(recordBtn);
+  }
+  card.appendChild(linkRow);
+
+  return card;
+}
+
+function renderList() {
+  var m = state.manifest;
+  if (!m) return;
+  var filtered = filterAssets(m.assets, state.filter);
+  els.resultCount.textContent = filtered.length + ' of ' + m.assets.length + ' shown';
+  els.list.innerHTML = '';
+  filtered.forEach(function (a) { els.list.appendChild(renderAssetCard(a)); });
+}
+
+function loadManifest(txId) {
+  txId = String(txId || '').trim();
+  if (!txId) return;
+  setStatus('Loading permanent manifest…');
+  els.header.hidden = true;
+  els.filterRow.hidden = true;
+  els.list.innerHTML = '';
+  history.replaceState(null, '', '?manifest=' + encodeURIComponent(txId));
+  fetchJson(txId).then(function (json) {
+    var m;
+    try { m = normalizeManifest(json); } catch (e) { throw new Error('Manifest did not match a known schema: ' + e.message); }
+    state.manifest = m;
+    state.filter = { query: '', pillarValue: null, hasCorrectionsOnly: false };
+    els.searchInput.value = '';
+    els.correctionsToggle.checked = false;
+    renderHeader(m, txId);
+    renderChips(m);
+    els.filterRow.hidden = false;
+    renderList();
+    setStatus('');
+  }).catch(function (e) {
+    showError(e.message || 'Could not load archive', function () { loadManifest(txId); });
+  });
+}
+
+function openRecordDrawer(asset) {
+  state.drawerHop = 0;
+  state.drawerAssetLabel = asset.archiveName;
+  els.drawer.className = 'drawer-open';
+  els.drawer.setAttribute('aria-hidden', 'false');
+  fetchRecordInto(asset.recordTransactionId);
+}
+
+function fetchRecordInto(recordTx) {
+  els.drawerBody.innerHTML = '<p class="muted">Loading record…</p>';
+  fetchJson(recordTx).then(function (json) {
+    var r;
+    try { r = normalizeRecord(json); } catch (e) { throw new Error('Record did not match a known schema: ' + e.message); }
+    renderRecordDrawer(r, recordTx);
+  }).catch(function (e) {
+    els.drawerBody.innerHTML = '';
+    var p = document.createElement('p');
+    p.textContent = e.message || 'Could not load record';
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = 'RETRY';
+    btn.onclick = function () { fetchRecordInto(recordTx); };
+    els.drawerBody.appendChild(p);
+    els.drawerBody.appendChild(btn);
+  });
+}
+
+function renderRecordDrawer(r, recordTx) {
+  els.drawerBody.innerHTML = '';
+
+  var h = document.createElement('h2');
+  h.textContent = state.drawerAssetLabel + ' — record v' + r.version;
+  els.drawerBody.appendChild(h);
+
+  var sub = document.createElement('div');
+  sub.className = 'muted mono';
+  sub.textContent = 'tx ' + recordTx + (r.legacy ? ' · schema 1.0 (legacy)' : ' · schema ' + r.schemaVersion);
+  els.drawerBody.appendChild(sub);
+
+  if (r.evidence.length) {
+    var evH = document.createElement('h3');
+    evH.textContent = 'Evidence';
+    els.drawerBody.appendChild(evH);
+    r.evidence.forEach(function (e) {
+      var box = document.createElement('div');
+      box.className = 'evidence-box';
+      box.textContent = '[' + (e.provider || '') + '] ' + (e.summary || '') + (e.status ? ' (' + e.status + ')' : '');
+      els.drawerBody.appendChild(box);
+    });
+  }
+
+  if (r.decisions.length) {
+    var decH = document.createElement('h3');
+    decH.textContent = 'Decisions';
+    els.drawerBody.appendChild(decH);
+    r.decisions.forEach(function (d) {
+      var row = document.createElement('div');
+      row.className = 'decision-row';
+      var q = document.createElement('div');
+      q.className = 'decision-question';
+      q.textContent = d.question || d.id;
+      row.appendChild(q);
+      if (d.jev) {
+        var jevLine = document.createElement('div');
+        var jevTag = document.createElement('span');
+        jevTag.className = 'badge badge-jev';
+        jevTag.textContent = 'JEV';
+        jevLine.appendChild(jevTag);
+        jevLine.appendChild(document.createTextNode(' ' + d.jev.value + ' · ' + Math.round((d.jev.confidence || 0) * 100) + '% · ' + (d.jev.reviewBand || '')));
+        row.appendChild(jevLine);
+      }
+      if (d.human) {
+        var humanLine = document.createElement('div');
+        var humanTag = document.createElement('span');
+        humanTag.className = 'badge badge-human';
+        humanTag.textContent = 'HUMAN';
+        humanLine.appendChild(humanTag);
+        humanLine.appendChild(document.createTextNode(' ' + d.human.value + (d.human.at ? ' · ' + new Date(d.human.at).toLocaleString() : '')));
+        row.appendChild(humanLine);
+      }
+      els.drawerBody.appendChild(row);
+    });
+  }
+
+  if (r.corrections.length) {
+    var corH = document.createElement('h3');
+    corH.textContent = 'Corrections';
+    els.drawerBody.appendChild(corH);
+    r.corrections.forEach(function (c) {
+      var row = document.createElement('div');
+      row.className = 'correction-row';
+      row.textContent = (c.actor || 'unknown') + ' · ' + (c.at ? new Date(c.at).toLocaleString() : '') + ' — ' + c.decisionId + ': ' + c.previousValue + ' → ' + c.value;
+      els.drawerBody.appendChild(row);
+    });
+  }
+
+  if (r.previousRecordTransactionId) {
+    var prevBtn = document.createElement('button');
+    prevBtn.type = 'button';
+    if (state.drawerHop >= 10) {
+      prevBtn.disabled = true;
+      prevBtn.textContent = 'Version history limit reached (10)';
+    } else {
+      prevBtn.textContent = '← previous version';
+      prevBtn.onclick = function () {
+        state.drawerHop++;
+        fetchRecordInto(r.previousRecordTransactionId);
+      };
+    }
+    els.drawerBody.appendChild(prevBtn);
+  }
+}
+
+function closeRecordDrawer() {
+  els.drawer.className = '';
+  els.drawer.setAttribute('aria-hidden', 'true');
+  els.drawerBody.innerHTML = '';
+}
+
+els.drawerClose.onclick = closeRecordDrawer;
+els.drawerBackdrop.onclick = closeRecordDrawer;
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeRecordDrawer(); });
+
+els.loadBtn.onclick = function () { loadManifest(els.txInput.value); };
+els.searchInput.oninput = function () { state.filter.query = els.searchInput.value; renderList(); };
+els.correctionsToggle.onchange = function () { state.filter.hasCorrectionsOnly = els.correctionsToggle.checked; renderList(); };
+
+var qs = new URLSearchParams(location.search);
+var initialTx = qs.get('manifest') || '';
+els.txInput.value = initialTx;
+if (initialTx) { loadManifest(initialTx); } else { showInstructions(); }
+</script>
+</body>
+</html>

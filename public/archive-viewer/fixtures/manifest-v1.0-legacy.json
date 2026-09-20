@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "1.0",
+  "collection": {
+    "id": "legacy-collection",
+    "title": "Legacy Collection",
+    "description": "",
+    "generatedAt": "2026-06-01T00:00:00.000Z"
+  },
+  "assets": [
+    {
+      "id": "legacy-001",
+      "archiveName": "legacy-clip.mov",
+      "sha256": "c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff01122",
+      "sizeBytes": 9021233,
+      "contentType": "video/quicktime",
+      "transactionId": "legacyTx00055555555555555555555555555555",
+      "arweaveUrl": "https://arweave.net/legacyTx00055555555555555555555555555555",
+      "sourcePaths": ["/incoming/legacy-clip.mov"],
+      "observations": [],
+      "decisions": [
+        { "id": "platform", "question": "Origin platform", "selectedValue": "X" }
+      ]
+    }
+  ],
+  "decisions": [],
+  "provenance": {
+    "sourceSystem": "HITLOOP Archive",
+    "originalsReadOnly": true,
+    "contentAddressing": "sha256"
+  }
+}
