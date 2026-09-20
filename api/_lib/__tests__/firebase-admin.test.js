@@ -109,14 +109,24 @@ test('a partially-set Vercel trio (only one of the three vars) still falls to th
   assert.equal(applicationDefaultCalled, true);
 });
 
-test('an already-initialized app (getApps() non-empty) short-circuits — initializeApp is never called again', () => {
+test('an already-initialized DEFAULT app short-circuits — initializeApp is never called again', () => {
   let initializeAppCalled = false;
-  fbAdmin._internals.getApps = () => [fakeApp('existing')];
+  fbAdmin._internals.getApps = () => [{ ...fakeApp('existing'), name: '[DEFAULT]' }];
   fbAdmin._internals.initializeApp = () => { initializeAppCalled = true; return fakeApp('new'); };
 
   const app = fbAdmin.adminApp;
   assert.equal(app.__tag, 'existing');
   assert.equal(initializeAppCalled, false);
+});
+
+test('a NAMED app from another module (e.g. the EditVideos bridge) is never reused as HITLOOP\'s app', () => {
+  let initializeAppCalled = false;
+  fbAdmin._internals.getApps = () => [{ ...fakeApp('editvideos'), name: 'editvideos-bridge' }];
+  fbAdmin._internals.initializeApp = () => { initializeAppCalled = true; return fakeApp('new'); };
+
+  const app = fbAdmin.adminApp;
+  assert.equal(app.__tag, 'new');
+  assert.equal(initializeAppCalled, true);
 });
 
 test('storageBucket is passed through on the ADC path from FIREBASE_ADMIN_STORAGE_BUCKET', () => {

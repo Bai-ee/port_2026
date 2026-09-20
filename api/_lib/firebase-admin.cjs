@@ -63,9 +63,12 @@ let _adminStorage = null;
  *    so ADC's own metadata-server auto-discovery resolves it.
  */
 function initAdminApp() {
-  if (_internals.getApps().length > 0) {
-    return _internals.getApps()[0];
-  }
+  // Only reuse the DEFAULT app. Other modules initialize NAMED apps in the
+  // same process (editvideos-bridge.cjs registers its own project under
+  // APP_NAME), and `getApps()[0]` would hand back whichever loaded first —
+  // i.e. HITLOOP silently running on EditVideos' credentials.
+  const existingDefault = _internals.getApps().find((app) => app && app.name === '[DEFAULT]');
+  if (existingDefault) return existingDefault;
 
   const storageBucket =
     process.env.FIREBASE_ADMIN_STORAGE_BUCKET ||
