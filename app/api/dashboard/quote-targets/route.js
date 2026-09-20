@@ -288,7 +288,7 @@ async function handleContentPlan(context, body) {
     ? body.date.trim()
     : new Date().toISOString().slice(0, 10);
 
-  const { packages, seeded } = await readInventory(context.clientId);
+  const { packages, seeded } = await readInventory();
 
   const plan = buildContentDayPlan({
     corpusRows: ownCorpusRows,
@@ -304,19 +304,19 @@ async function handleContentPlan(context, body) {
 }
 
 async function handleInventoryList(context) {
-  const { packages, updatedAt, seeded } = await readInventory(context.clientId);
+  const { packages, updatedAt, seeded } = await readInventory();
   return { ok: true, packages, updatedAt, seeded, audit: validateInventory(packages) };
 }
 
 async function handleInventorySave(context, body) {
-  const { pkg, packages, warnings, created } = await upsertPackage(context.clientId, body?.pkg);
+  const { pkg, packages, warnings, created } = await upsertPackage(body?.pkg);
   // The whole-inventory audit, not just this row's: duplicate ids and series
   // coverage only exist as properties of the set.
   return { ok: true, pkg, created, warnings, audit: validateInventory(packages) };
 }
 
 async function handleInventoryDelete(context, body) {
-  const { removed } = await deletePackage(context.clientId, body?.id);
+  const { removed } = await deletePackage(body?.id);
   return { ok: true, removed };
 }
 

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 import { buildDayPlan } from '../../../../features/x-content-inventory/plan-day.js';
 import { projectDayPlan } from '../../../../features/x-content-inventory/day-plan-projection.js';
-import { mergeInventory } from '../../../../features/x-content-inventory/archive-ingest.js';
+import { readInventory } from '../../../../features/x-content-inventory/store.js';
 import { SERIES, REPLY_QUOTA_PER_DAY } from '../../../../features/x-content-inventory/categories.js';
 
 // Corpora and inventory are imported, not read with fs. A computed readFileSync
@@ -18,19 +18,17 @@ export const dynamic = 'force-dynamic';
 
 const require = createRequire(import.meta.url);
 const { verifyRequestUser, isAdminEmail } = require('../../../../api/_lib/auth.cjs');
-const fb = require('../../../../api/_lib/firebase-admin.cjs');
 
-const PACKAGES_COLLECTION = 'x_content_packages';
-
-/** Packages held in storage — archive-derived rows and the stories written
- * against them. Degrades to the committed file alone rather than failing the
- * plan: a day plan from the seed is still a day plan. */
-async function readStoredPackages() {
+/** The inventory comes from `store.js` — the one module allowed to touch
+ * Firestore for this feature — so this route and the Content Engine card can
+ * never disagree about what the inventory contains. Degrades to the committed
+ * seed rather than failing the plan: a day plan from the seed is still a day
+ * plan, and a dashboard that shows nothing teaches nothing. */
+async function readInventorySafely() {
   try {
-    const snap = await fb.adminDb.collection(PACKAGES_COLLECTION).limit(500).get();
-    return snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
+    return await readInventory();
   } catch {
-    return [];
+    return { packages, updatedAt: null, seeded: true };
   }
 }
 
@@ -94,13 +92,12 @@ export async function GET(request) {
     // The committed file is a seed. Storage is where the Archive's assets and
     // the operator's stories live, and a plan that reads only the file can see
     // neither — a story written in the Archive Inbox would reach nothing.
-    const stored = await readStoredPackages();
-    const inventory = mergeInventory(packages, stored);
+    const inventory = await readInventorySafely();
 
     const plan = buildDayPlan({
       corpusRows: ownCorpus,
       benchmarkRows: benchmarkCorpus,
-      packages: inventory,
+      packages: inventory.packages,
       date,
       posts,
       handle: url.searchParams.get('handle') || 'bai_ee',
@@ -108,7 +105,7 @@ export async function GET(request) {
 
     return json({
       ...projectDayPlan(plan, { posts, replies: REPLY_QUOTA_PER_DAY }),
-      inventorySource: { seed: packages.length, stored: stored.length, merged: inventory.length },
+      inventorySource: { seed: packages.length, merged: inventory.packages.length, seeded: inventory.seeded },
       // The card names the series behind a gap ("a VIDEO package from: C1, C2…"),
       // so it needs the labels without importing the module into the client bundle.
       series: Object.fromEntries(Object.entries(SERIES).map(([k, s]) => [k, s.label])),
