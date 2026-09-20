@@ -13,7 +13,14 @@ export async function POST(request){
   if(!approved)return NextResponse.json({error:'Explicit collection approval required'},{status:409});
   if(!Array.isArray(assets)||assets.length===0)return NextResponse.json({error:'Collection must contain approved permanent assets before finalization'},{status:409});
   try{
-    const manifest=buildCollectionManifest({collection,assets});
+    const permanent=await fb.adminDb.collection('archive_uploads').where('kind','==','original').get();
+  const txByAsset=new Map(permanent.docs.map(d=>[d.data().contentAssetId,d.data()]));
+  for(const asset of assets){
+    const stored=txByAsset.get(asset.id);
+    if(!stored||stored.transactionId!==asset.transactionId||stored.sha256!==asset.sha256||stored.collectionId!==collection.id)
+      return NextResponse.json({error:`Permanent asset verification failed for ${asset.id}`},{status:409});
+  }
+  const manifest=buildCollectionManifest({collection,assets});
     const data=Buffer.from(JSON.stringify(manifest,null,2));
     const uploaded=await uploadArchiveBuffer({data,fileName:`${collection.id}-manifest.json`,contentType:'application/json',collectionId:collection.id});
     await fb.adminDb.collection('archive_collections').doc(String(collection.id)).set({
