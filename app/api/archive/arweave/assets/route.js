@@ -15,6 +15,12 @@ export async function POST(request){
     return NextResponse.json({error:'Missing approved asset upload fields'},{status:400});
   if(relativePath.startsWith('/')||relativePath.split(/[\\/]+/).includes('..'))
     return NextResponse.json({error:'Invalid relative path'},{status:400});
+  const review=await fb.adminDb.collection('archive_review').doc(String(contentAssetId)).get();
+  if(!review.exists||review.data().state!=='CONFIRMED')return NextResponse.json({error:'Asset is not human-approved'},{status:409});
+  if(review.data().sha256!==expectedSha256)return NextResponse.json({error:'Approved hash does not match review record'},{status:409});
+  const existing=await fb.adminDb.collection('archive_commands').where('type','==','UPLOAD_ASSET_ARWEAVE').where('contentAssetId','==',String(contentAssetId)).get();
+  const active=existing.docs.find(d=>['QUEUED','CLAIMED','RUNNING','COMPLETE'].includes(d.data().state)&&d.data().collectionId===String(collectionId));
+  if(active)return NextResponse.json({ok:true,commandId:active.id,state:active.data().state,idempotent:true},{status:200});
   const id=randomUUID();
   await fb.adminDb.collection('archive_commands').doc(id).set({
     id,type:'UPLOAD_ASSET_ARWEAVE',workerId:String(workerId),sourceId:String(sourceId),relativePath:String(relativePath),
