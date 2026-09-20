@@ -3,11 +3,22 @@ import { createRequire } from 'module';
 const require=createRequire(import.meta.url);
 const {buildAuthRequestShim,verifyAdminRequest}=require('../../../../api/_lib/auth.cjs');
 const fb=require('../../../../api/_lib/firebase-admin.cjs');
+const {getPermanentArchiveSummary}=require('../../../../api/_lib/archive-permanent-archive.cjs');
 
 async function auth(r){try{await verifyAdminRequest(buildAuthRequestShim(r));return null}catch{return NextResponse.json({error:'Forbidden.'},{status:403})}}
 
 export async function GET(request){
  const denied=await auth(request);if(denied)return denied;
+
+ // ?summary=1 backs the /archive page's PERMANENT ARCHIVE status card
+ // (per-collection documented/uploading/uploaded/failed counts, manifest
+ // version, record-version count, cost estimate, viewer link). See
+ // api/_lib/archive-permanent-archive.cjs getPermanentArchiveSummary.
+ if(request.nextUrl.searchParams.get('summary')==='1'){
+   const summary=await getPermanentArchiveSummary();
+   return NextResponse.json(summary,{headers:{'cache-control':'no-store'}});
+ }
+
  const jobId=request.nextUrl.searchParams.get('jobId');
  let q=fb.adminDb.collection('archive_review').where('state','==','CONFIRMED');
  if(jobId)q=q.where('collectionJobId','==',jobId);

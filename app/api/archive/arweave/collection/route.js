@@ -5,11 +5,33 @@ const {buildAuthRequestShim,verifyAdminRequest}=require('../../../../../api/_lib
 const fb=require('../../../../../api/_lib/firebase-admin.cjs');
 const {buildCollectionManifest}=require('../../../../../api/_lib/archive-manifest.cjs');
 const {uploadArchiveBuffer}=require('../../../../../api/_lib/archive-arweave.cjs');
+const {deployViewerIfChanged,rebuildManifestManual}=require('../../../../../api/_lib/archive-permanent-archive.cjs');
 export const runtime='nodejs';
 
 export async function POST(request){
   try{await verifyAdminRequest(buildAuthRequestShim(request));}catch(e){return NextResponse.json({error:'Forbidden.'},{status:403});}
-  const {collection,assets,approved}=await request.json();
+  const body=await request.json();
+
+  // W7a command-based flow (docs/archive/PERMANENT_ARCHIVE_CONTRACT.md): the
+  // /archive page's PERMANENT ARCHIVE panel calls these two actions instead
+  // of the legacy {collection,assets,approved} finalize body below. Both
+  // enqueue a worker UPLOAD_JSON command rather than uploading bytes here —
+  // the Arweave wallet lives only on the worker.
+  if(body?.action==='deploy-viewer'){
+    try{ return NextResponse.json(await deployViewerIfChanged()); }
+    catch(e){ return NextResponse.json({error:e instanceof Error?e.message:'Viewer deploy failed'},{status:e?.status||500}); }
+  }
+  if(body?.action==='rebuild-manifest'){
+    try{ return NextResponse.json(await rebuildManifestManual({collectionId:body.collectionId})); }
+    catch(e){ return NextResponse.json({error:e instanceof Error?e.message:'Manifest rebuild failed'},{status:e?.status||500}); }
+  }
+
+  // Legacy path (pre-W7a): HITLOOP itself uploading the manifest bytes with
+  // the wallet in this process. The /archive page no longer calls this
+  // without an `action` — kept working for compatibility only. The
+  // automatic UPLOAD_JSON collection-manifest command path above
+  // (api/_lib/archive-permanent-archive.cjs rebuildManifest) is authoritative.
+  const {collection,assets,approved}=body;
   if(!approved)return NextResponse.json({error:'Explicit collection approval required'},{status:409});
   if(!Array.isArray(assets)||assets.length===0)return NextResponse.json({error:'Collection must contain approved permanent assets before finalization'},{status:409});
   try{

@@ -60,64 +60,54 @@ export default function ArchivePage() {
   const [browseState, setBrowseState] = useState('');
   const [reviewItems,setReviewItems]=useState([]);
   const [reviewState,setReviewState]=useState('');
-  const [archiveBytes,setArchiveBytes]=useState('');
-  const [archiveQuote,setArchiveQuote]=useState(null);
-  const [archiveState,setArchiveState]=useState('');
-  const [collectionId,setCollectionId]=useState('');
-  const [collectionTitle,setCollectionTitle]=useState('');
-  const [approvedAssets,setApprovedAssets]=useState([]);
-  const [uploadState,setUploadState]=useState('');
-  const [manifestTx,setManifestTx]=useState('');
   const [recentCommands,setRecentCommands]=useState([]);
 
-  const loadApproved=useCallback(async()=>{
+  // PERMANENT ARCHIVE status (W7a) — no per-asset approval click, no
+  // collection form. Documented assets are auto-uploaded by the worker;
+  // this card is a read-only aggregate over archive_collections /
+  // archive_review / archive_uploads / archive_records, plus the two admin
+  // actions that still make sense as explicit buttons (viewer deploy, a
+  // manual manifest-rebuild fallback). See api/_lib/archive-permanent-archive.cjs.
+  const [permanentSummary,setPermanentSummary]=useState({collections:[],viewer:null});
+  const [permanentSummaryState,setPermanentSummaryState]=useState('');
+  const [viewerDeployState,setViewerDeployState]=useState('');
+  const [manifestRebuildState,setManifestRebuildState]=useState({});
+
+  const loadPermanentSummary=useCallback(async()=>{
     if(!user)return;
-    try{const r=await authedFetch('/api/archive/approved');const b=await r.json();if(r.ok){setApprovedAssets(b.assets||[]);setArchiveBytes(String(b.totalBytes||0));}}
-    catch{}
+    try{
+      const r=await authedFetch('/api/archive/approved?summary=1');
+      const b=await r.json();
+      if(r.ok){setPermanentSummary({collections:b.collections||[],viewer:b.viewer||null});setPermanentSummaryState('');}
+      else setPermanentSummaryState(b.error||'SUMMARY FAILED');
+    }catch{setPermanentSummaryState('SUMMARY OFFLINE');}
   },[user,authedFetch]);
-  useEffect(()=>{loadApproved();},[loadApproved]);
+  useEffect(()=>{loadPermanentSummary();},[loadPermanentSummary]);
   useEffect(()=>{
     if(!user)return;
-    const t=setInterval(()=>loadApproved(),10000);
+    const t=setInterval(()=>loadPermanentSummary(),10000);
     return()=>clearInterval(t);
-  },[user,loadApproved]);
+  },[user,loadPermanentSummary]);
 
-  async function queueApprovedUploads(){
-    if(!collectionId){setUploadState('COLLECTION ID REQUIRED');return;}
-    const pending=approvedAssets.filter(a=>!a.transactionId);
-    if(!pending.length){setUploadState('ALL APPROVED ASSETS ALREADY UPLOADED');return;}
-    if(!confirm(`Queue ${pending.length} human-approved original(s) for permanent Arweave upload?`))return;
-    setUploadState(`QUEUING 0 / ${pending.length}`);
-    let queued=0,failed=0;
-    for(const a of pending){
-      const relativePath=a.sourcePaths?.[0];
-      if(!a.workerId||!a.sourceId||!relativePath){failed++;continue;}
-      try{
-        const r=await authedFetch('/api/archive/arweave/assets',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({
-          workerId:a.workerId,sourceId:a.sourceId,relativePath,contentAssetId:a.id,collectionId,
-          archiveName:a.archiveName||relativePath.split('/').pop(),expectedSha256:a.sha256,approved:true
-        })});
-        if(r.ok)queued++;else failed++;
-      }catch{failed++;}
-      setUploadState(`QUEUED ${queued} / ${pending.length}${failed?` · ${failed} FAILED`:''}`);
-    }
-    await loadApproved();
+  async function deployViewer(){
+    setViewerDeployState('DEPLOYING');
+    try{
+      const r=await authedFetch('/api/archive/arweave/collection',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'deploy-viewer'})});
+      const b=await r.json();
+      if(!r.ok){setViewerDeployState(b.error||'DEPLOY FAILED');return;}
+      setViewerDeployState(b.skipped?'ALREADY CURRENT':`QUEUED · ${(b.commandId||'').slice(0,8)}`);
+      await loadPermanentSummary();
+    }catch{setViewerDeployState('DEPLOY FAILED');}
   }
 
-  async function quoteArchive(){
-    const sizeBytes=Number(archiveBytes);
-    if(!Number.isFinite(sizeBytes)||sizeBytes<=0){setArchiveState('ENTER COLLECTION BYTES');return;}
-    setArchiveState('QUOTING');
-    const r=await authedFetch('/api/archive/arweave/quote',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({sizeBytes})});
-    const b=await r.json();if(r.ok){setArchiveQuote(b.quote);setArchiveState('ESTIMATE READY');}else setArchiveState(b.error||'QUOTE FAILED');
-  }
-
-  async function finalizeCollection(){
-    if(!collectionId){setArchiveState('COLLECTION ID REQUIRED');return;}
-    if(!confirm('This permanently archives the approved collection manifest to Arweave. Continue?'))return;
-    setArchiveState('FINALIZING');
-    const r=await authedFetch('/api/archive/arweave/collection',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({collection:{id:collectionId,title:collectionTitle||collectionId},assets:approvedAssets.filter(a=>a.transactionId),approved:true})});
-    const b=await r.json();if(r.ok){setManifestTx(b.upload.transactionId);setArchiveState(`ARCHIVED · ${b.upload.transactionId}`);}else setArchiveState(b.error||'ARCHIVE FAILED');
+  async function rebuildManifestFor(collectionId){
+    setManifestRebuildState(s=>({...s,[collectionId]:'REBUILDING'}));
+    try{
+      const r=await authedFetch('/api/archive/arweave/collection',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action:'rebuild-manifest',collectionId})});
+      const b=await r.json();
+      setManifestRebuildState(s=>({...s,[collectionId]:r.ok?`QUEUED · ${(b.commandId||'').slice(0,8)}`:(b.error||'FAILED')}));
+      if(r.ok)await loadPermanentSummary();
+    }catch{setManifestRebuildState(s=>({...s,[collectionId]:'FAILED'}));}
   }
 
   const loadReview=useCallback(async()=>{
@@ -131,7 +121,12 @@ export default function ArchivePage() {
   async function confirmDecision(item,decision,value){
     setReviewState('SAVING');
     const r=await authedFetch('/api/archive/review',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({id:item.id,decisionId:decision.id||decision.question,value})});
-    if(r.ok){setReviewItems(xs=>xs.filter(x=>x.id!==item.id));setReviewState('CONFIRMED');await loadApproved();}else setReviewState('SAVE FAILED');
+    if(r.ok){
+      const b=await r.json();
+      setReviewItems(xs=>xs.filter(x=>x.id!==item.id));
+      setReviewState(b.recordVersionQueued?`CONFIRMED · record v${b.recordVersionQueued} queued`:'CONFIRMED');
+      await loadPermanentSummary();
+    }else setReviewState('SAVE FAILED');
   }
 
   useEffect(() => {
@@ -276,7 +271,7 @@ export default function ArchivePage() {
         </section>
         <QuickIngestPanel authedFetch={authedFetch} />
         <section style={{marginTop:16,border:'1px solid #262626',borderRadius:20,padding:24,background:'#101010'}}>
-          <div style={{display:'flex',justifyContent:'space-between',gap:16}}><div><div style={{fontSize:12,opacity:.45}}>HUMAN REVIEW</div><h3 style={{fontSize:24,margin:'8px 0'}}>Jev decisions</h3></div><div style={{fontSize:11,opacity:.5}}>{reviewItems.length} pending · {reviewState}</div></div>
+          <div style={{display:'flex',justifyContent:'space-between',gap:16}}><div><div style={{fontSize:12,opacity:.45}}>HUMAN REVIEW</div><h3 style={{fontSize:24,margin:'8px 0'}}>Jev decisions · corrections mint a new record version</h3></div><div style={{fontSize:11,opacity:.5}}>{reviewItems.length} pending · {reviewState}</div></div>
           {reviewItems.length===0?<div style={{opacity:.5,padding:'18px 0'}}>No decisions waiting for review.</div>:reviewItems.map(item=><div key={item.id} style={{borderTop:'1px solid #252525',padding:'16px 0'}}>
             <div style={{fontSize:13,fontWeight:700}}>{item.archiveName||item.fileName||item.assetId||item.id}</div>
             {(item.decisions||[]).map((d,i)=><div key={d.id||i} style={{display:'flex',justifyContent:'space-between',gap:16,alignItems:'center',marginTop:12,flexWrap:'wrap'}}>
@@ -288,22 +283,56 @@ export default function ArchivePage() {
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10,marginTop:16}}>
           {pipeline.map((x,i)=><div key={x} style={{border:'1px solid #252525',borderRadius:14,padding:16,minHeight:90,background:i<2?'#151515':'#0c0c0c'}}><div style={{fontSize:11,opacity:.4}}>0{i+1}</div><div style={{fontSize:12,marginTop:28}}>{x}</div></div>)}
         </div>
-        <section style={{marginTop:16,border:'1px solid #262626',borderRadius:20,padding:24,background:'#101010'}}>
-          <div style={{fontSize:12,opacity:.45}}>ARWEAVE CHECKPOINT</div><h3 style={{fontSize:24,margin:'8px 0'}}>Approve permanent archive</h3>
-          <p style={{maxWidth:720,opacity:.6,lineHeight:1.5}}>Permanent upload happens only after human approval. ${approvedAssets.length} assets are currently human-approved. Approved byte totals are populated automatically. The current cost figure is the legacy estimate from the existing Underground Existence / EditVideos Arweave system, not a live Turbo quote.</p>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:8,marginTop:16}}>
-            <input value={collectionId} onChange={e=>setCollectionId(e.target.value)} placeholder="Collection ID" style={{background:'#080808',border:'1px solid #333',borderRadius:10,padding:12,color:'#fff'}}/>
-            <input value={collectionTitle} onChange={e=>setCollectionTitle(e.target.value)} placeholder="Collection title" style={{background:'#080808',border:'1px solid #333',borderRadius:10,padding:12,color:'#fff'}}/>
-            <input value={archiveBytes} readOnly inputMode="numeric" placeholder="Approved bytes" style={{background:'#080808',border:'1px solid #333',borderRadius:10,padding:12,color:'#fff'}}/>
+        <section id="archive-permanent-status-panel" style={{marginTop:16,border:'1px solid #262626',borderRadius:20,padding:24,background:'#101010'}}>
+          <div style={{display:'flex',justifyContent:'space-between',gap:16,flexWrap:'wrap'}}>
+            <div><div style={{fontSize:12,opacity:.45}}>PERMANENT ARCHIVE</div><h3 style={{fontSize:24,margin:'8px 0'}}>Auto-uploaded once documented</h3></div>
+            <div style={{fontSize:11,opacity:.5,textAlign:'right'}}>{permanentSummaryState}</div>
           </div>
-          <div style={{fontSize:12,opacity:.65,marginTop:12}}>{approvedAssets.filter(a=>a.transactionId).length} permanent · {approvedAssets.filter(a=>!a.transactionId).length} waiting for upload</div>
-          <div style={{display:'flex',gap:8,marginTop:12,flexWrap:'wrap'}}><button onClick={queueApprovedUploads} disabled={!approvedAssets.some(a=>!a.transactionId)} style={{background:'transparent',color:'#fff',border:'1px solid #444',borderRadius:10,padding:'10px 14px'}}>UPLOAD APPROVED ORIGINALS</button><button onClick={quoteArchive} style={{background:'transparent',color:'#fff',border:'1px solid #444',borderRadius:10,padding:'10px 14px'}}>CALCULATE ESTIMATE</button><button onClick={finalizeCollection} disabled={!approvedAssets.length||approvedAssets.some(a=>!a.transactionId)} style={{background:'#f4f4f0',color:'#080808',border:0,borderRadius:10,padding:'10px 14px',fontWeight:700}}>APPROVE + ARCHIVE MANIFEST</button><a href={manifestTx?`/archive-viewer/index.html?manifest=${manifestTx}`:'/archive-viewer/index.html'} target="_blank" style={{color:'#ddd',padding:'10px 6px'}}>OPEN PERMANENT VIEWER ↗</a></div>
-          {archiveQuote&&<div style={{marginTop:16,fontFamily:'monospace',fontSize:12}}>~ {archiveQuote.costAR} AR · ~ ${archiveQuote.costUSD} USD · {(archiveQuote.sizeMB||0).toLocaleString()} MB <span style={{opacity:.45}}>· {archiveQuote.quoteType}</span></div>}
-          <div style={{fontSize:11,opacity:.5,marginTop:10}}>{uploadState}{uploadState&&archiveState?' · ':''}{archiveState}</div>
+          <p style={{maxWidth:720,opacity:.6,lineHeight:1.5,fontSize:13}}>There is no approval click. Once an asset is hashed, has READY TwelveLabs evidence and six Jev decisions, the worker uploads the original and a per-asset archive-record JSON to Arweave on its own — this card is a live status read, not a control. A human correction in Human Review above mints a new archive-record version; the collection manifest rebuilds automatically once every in-flight upload for that collection settles.</p>
+
+          <div id="archive-permanent-viewer-row" style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap',marginTop:16,paddingTop:16,borderTop:'1px solid #252525'}}>
+            <div>
+              <div style={{fontSize:11,opacity:.45,textTransform:'uppercase'}}>Viewer</div>
+              <div style={{fontSize:13,marginTop:4}}>
+                {permanentSummary.viewer?.transactionId
+                  ? <span>deployed · <a href={`https://arweave.net/${permanentSummary.viewer.transactionId}`} target="_blank" rel="noreferrer" style={{color:'#ddd'}}>{permanentSummary.viewer.transactionId.slice(0,10)}…</a></span>
+                  : 'not deployed to Arweave yet'}
+              </div>
+            </div>
+            <div style={{display:'flex',gap:8,alignItems:'center'}}>
+              <span style={{fontSize:11,opacity:.5}}>{viewerDeployState}</span>
+              <button onClick={deployViewer} style={{background:'transparent',color:'#fff',border:'1px solid #444',borderRadius:10,padding:'10px 14px',cursor:'pointer'}}>DEPLOY VIEWER</button>
+            </div>
+          </div>
+
+          <div id="archive-permanent-collections-list" style={{marginTop:16}}>
+            {permanentSummary.collections.length===0
+              ? <div style={{opacity:.5,padding:'12px 0'}}>No collections yet — process a NAS folder above to start one.</div>
+              : permanentSummary.collections.map(c=>(
+                <div key={c.id} style={{borderTop:'1px solid #252525',padding:'16px 0',display:'flex',flexDirection:'column',gap:8}}>
+                  <div style={{display:'flex',justifyContent:'space-between',gap:12,flexWrap:'wrap'}}>
+                    <div style={{fontSize:14,fontWeight:700}}>{c.title}</div>
+                    <div style={{fontSize:12,opacity:.7}}>{c.documented} documented · {c.uploading} uploading · {c.uploaded} uploaded{c.failed?` · ${c.failed} failed`:''}</div>
+                  </div>
+                  <div style={{display:'flex',justifyContent:'space-between',gap:12,flexWrap:'wrap',fontSize:12,opacity:.65}}>
+                    <div>
+                      manifest {c.manifestVersion ? <>v{c.manifestVersion} · <a href={`https://arweave.net/${c.manifestTransactionId}`} target="_blank" rel="noreferrer" style={{color:'#ddd'}}>{String(c.manifestTransactionId||'').slice(0,10)}…</a></> : 'not built yet'}
+                      {' · '}record versions {c.recordVersionsTotal}
+                      {' · '}~{c.cost?.costAR ?? 0} AR <span style={{opacity:.5}}>(estimate)</span>
+                    </div>
+                    <div style={{display:'flex',gap:10,alignItems:'center'}}>
+                      <a href={c.viewerUrl} target="_blank" rel="noreferrer" style={{color:'#ddd'}}>OPEN VIEWER ↗</a>
+                      <span style={{opacity:.5}}>{manifestRebuildState[c.id]}</span>
+                      <button onClick={()=>rebuildManifestFor(c.id)} style={{background:'transparent',color:'#fff',border:'1px solid #444',borderRadius:8,padding:'6px 10px',cursor:'pointer',fontSize:11}}>REBUILD MANIFEST</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+          </div>
         </section>
         <section style={{marginTop:16,border:'1px solid #262626',borderRadius:20,padding:24}}>
           <div style={{fontSize:12,opacity:.45}}>CURRENT CHECKPOINT</div><h3 style={{fontSize:24,margin:'10px 0'}}>NAS → Jev review → permanent archive</h3>
-          <p style={{maxWidth:720,opacity:.65,lineHeight:1.6}}>The control surface is now authenticated and includes the human review gate for Jev decisions. Originals remain read-only; permanent Arweave upload remains explicitly approval-gated.</p>
+          <p style={{maxWidth:720,opacity:.65,lineHeight:1.6}}>The control surface is now authenticated. Originals remain read-only; permanent Arweave upload is automatic once an asset is documented, and human review corrects the record afterward rather than gating it.</p>
         </section>
       </div>
     </main>
