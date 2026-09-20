@@ -44,6 +44,12 @@ test('registering a source upserts the parent archive_workers/{workerId} doc so 
 
   const source = fake.adminDb._raw('archive_workers/w1/sources', 's1');
   assert.equal(source.label, 'Bryan NAS');
+  assert.equal(source.kind, undefined, 'kind is only stored when the worker sends one');
+
+  const r2 = await mod.POST(fakeRequest({ headers: auth, body: { workerId: 'w1', sourceId: 's2', label: 'Cloud intake', kind: 'cloud-intake' } }));
+  assert.equal(r2.status, 200);
+  const intakeSource = fake.adminDb._raw('archive_workers/w1/sources', 's2');
+  assert.equal(intakeSource.kind, 'cloud-intake', 'a cloud-intake source keeps its kind so /archive can hide it from Browse');
   assert.equal(source.state, 'ONLINE');
 });
 

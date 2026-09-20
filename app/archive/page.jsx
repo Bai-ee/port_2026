@@ -54,6 +54,7 @@ export default function ArchivePage() {
   const [workers, setWorkers] = useState([]);
   const [status, setStatus] = useState('CONNECTING');
   const [relativePath, setRelativePath] = useState('.');
+  const [selectedSourceId, setSelectedSourceId] = useState('');
   const [commandState, setCommandState] = useState('');
   const [folders, setFolders] = useState([]);
   const [browseState, setBrowseState] = useState('');
@@ -156,6 +157,13 @@ export default function ArchivePage() {
 
   const worker = workers[0];
   const workerDisplay = deriveWorkerDisplay(worker);
+  // Browsable sources = the worker's registered sources minus its cloud-intake
+  // scratch source. The worker doc's own `sourceId` is just the last source
+  // that heartbeated, so it must not drive Browse / Process Folder.
+  const browsableSources = (worker?.sources || []).filter((s) => s.kind !== 'cloud-intake' && s.label !== 'Cloud intake');
+  const activeSourceId = (selectedSourceId && browsableSources.some((s) => s.sourceId === selectedSourceId))
+    ? selectedSourceId
+    : (browsableSources[0]?.sourceId || null);
   // A live processing job's counters win; once idle, fall back to the last
   // completed job's numbers instead of showing "—" (heartbeat route no
   // longer blanks `counters`, but a worker that hasn't run a job since this
@@ -182,9 +190,9 @@ export default function ArchivePage() {
   }, [user, worker?.workerId, loadRecentCommands]);
 
   async function browse(path = relativePath) {
-    if (!worker?.workerId || !worker?.sourceId) { setBrowseState('WAITING FOR WORKER + SOURCE'); return; }
+    if (!worker?.workerId || !activeSourceId) { setBrowseState('WAITING FOR WORKER + SOURCE'); return; }
     setBrowseState('LOADING');
-    const response=await authedFetch('/api/archive/browse',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({workerId:worker.workerId,sourceId:worker.sourceId,relativePath:path||'.'})});
+    const response=await authedFetch('/api/archive/browse',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({workerId:worker.workerId,sourceId:activeSourceId,relativePath:path||'.'})});
     const body=await response.json();
     if(!response.ok){setBrowseState(body.error||'BROWSE FAILED');return;}
     for(let i=0;i<20;i++){
@@ -201,12 +209,12 @@ export default function ArchivePage() {
   function goUp(){ if(relativePath==='.') return; const parts=relativePath.split('/').filter(Boolean); parts.pop(); browse(parts.join('/')||'.'); }
 
   async function processCollection() {
-    if (!worker?.workerId || !worker?.sourceId) { setCommandState('WAITING FOR WORKER + SOURCE'); return; }
+    if (!worker?.workerId || !activeSourceId) { setCommandState('WAITING FOR WORKER + SOURCE'); return; }
     setCommandState('QUEUING');
     try {
       const response = await authedFetch('/api/archive/commands/process', {
         method:'POST', headers:{'content-type':'application/json'},
-        body:JSON.stringify({workerId:worker.workerId, sourceId:worker.sourceId, relativePath:relativePath || '.'}),
+        body:JSON.stringify({workerId:worker.workerId, sourceId:activeSourceId, relativePath:relativePath || '.'}),
       });
       const body = await response.json();
       setCommandState(response.ok ? `QUEUED · ${body.commandId.slice(0,8)}` : (body.error || 'QUEUE FAILED'));
@@ -249,6 +257,14 @@ export default function ArchivePage() {
         </section>
         <section style={{marginTop:16,border:'1px solid #262626',borderRadius:20,padding:24,background:'#101010'}}>
           <div style={{fontSize:12,opacity:.45}}>PROCESS A COLLECTION</div>
+          <div id="archive-source-select-row" style={{display:'flex',gap:10,alignItems:'center',marginTop:12,fontSize:12,opacity:.7}}>
+            <span>SOURCE</span>
+            {browsableSources.length > 1
+              ? <select id="archive-source-select" aria-label="Archive source" value={activeSourceId || ''} onChange={e=>{setSelectedSourceId(e.target.value);setFolders([]);setRelativePath('.');}} style={{background:'#080808',color:'#f4f4f0',border:'1px solid #333',borderRadius:8,padding:'6px 10px'}}>
+                  {browsableSources.map(s=><option key={s.sourceId} value={s.sourceId}>{s.label}{s.state&&s.state!=='ONLINE'?` · ${s.state}`:''}</option>)}
+                </select>
+              : <span style={{color:'#f4f4f0'}}>{browsableSources[0]?.label || 'no browsable source registered'}</span>}
+          </div>
           <div style={{display:'flex',gap:10,marginTop:12,flexWrap:'wrap'}}>
             <input aria-label="NAS relative folder" value={relativePath} onChange={e=>setRelativePath(e.target.value)} placeholder="Housepit/San Francisco/2008" style={{flex:'1 1 420px',background:'#080808',border:'1px solid #333',borderRadius:10,padding:'14px 16px',color:'#f4f4f0'}} />
             <button onClick={processCollection} style={{background:'#f4f4f0',color:'#080808',border:0,borderRadius:10,padding:'14px 20px',fontWeight:700,cursor:'pointer'}}>PROCESS FOLDER</button>

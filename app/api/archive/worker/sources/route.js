@@ -13,6 +13,9 @@ export async function POST(request) {
   const { workerId, sourceId, label } = body || {};
   if (!workerId || !sourceId || !label) return NextResponse.json({error:'workerId, sourceId and label required'}, {status:400});
   const record = { workerId:String(workerId), sourceId:String(sourceId), label:String(label), state:body.state || 'ONLINE', updatedAt:fb.FieldValue.serverTimestamp() };
+  // `kind` distinguishes browsable NAS sources from the worker's cloud-intake
+  // scratch source ('cloud-intake'), which /archive must never offer for browsing.
+  if (typeof body.kind === 'string' && body.kind) record.kind = body.kind;
 
   // Only the heartbeat route used to create archive_workers/{workerId}, so a
   // freshly registered worker stayed invisible on /archive until its first
