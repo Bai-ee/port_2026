@@ -158,6 +158,48 @@ export function packageFromReviewRecord(record) {
 }
 
 /**
+ * Combine the committed inventory file with the packages held in storage.
+ *
+ * ⚠️ THE SEAM THIS CLOSES. The file (`content-packages.json`) holds
+ * hand-written rows. Storage holds everything the Archive produced plus the
+ * stories an operator wrote against them. A day plan built from the file alone
+ * cannot see a single archive asset, and a story written in the Archive Inbox
+ * reaches nothing — which was true of this code until it was not.
+ *
+ * Stored rows WIN on the fields a person edits, because storage is where the
+ * editing happens; the file is a seed, not an authority. A stored row with no
+ * counterpart in the file is added, since that is what an ingested archive
+ * asset looks like.
+ *
+ * @param {object[]} seed    rows from content-packages.json
+ * @param {object[]} stored  rows from the package store
+ */
+export function mergeInventory(seed, stored) {
+  const base = Array.isArray(seed) ? seed.filter(Boolean) : [];
+  const held = Array.isArray(stored) ? stored.filter(Boolean) : [];
+  const byId = new Map(base.map((p) => [p.id, { ...p }]));
+
+  for (const s of held) {
+    if (!s.id) continue;
+    const existing = byId.get(s.id);
+    if (!existing) { byId.set(s.id, { ...s }); continue; }
+    // Merge field-by-field rather than replacing: a stored row written by
+    // save-story carries only the handful of fields that endpoint writes, and
+    // spreading it wholesale would blank series, rights and media on a row the
+    // file describes fully.
+    const merged = { ...existing };
+    for (const [k, v] of Object.entries(s)) {
+      if (v === null || v === undefined) continue;
+      if (typeof v === 'string' && v.trim() === '') continue;
+      merged[k] = v;
+    }
+    byId.set(s.id, merged);
+  }
+
+  return [...byId.values()];
+}
+
+/**
  * Ingest a set of records. Existing packages are matched by sha256 so a re-run
  * updates rather than duplicates — a package a human has since written a story
  * into must survive the next ingest untouched.

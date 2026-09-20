@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 import { buildDayPlan } from '../../../../features/x-content-inventory/plan-day.js';
 import { projectDayPlan } from '../../../../features/x-content-inventory/day-plan-projection.js';
+import { mergeInventory } from '../../../../features/x-content-inventory/archive-ingest.js';
 import { SERIES, REPLY_QUOTA_PER_DAY } from '../../../../features/x-content-inventory/categories.js';
 
 // Corpora and inventory are imported, not read with fs. A computed readFileSync
@@ -17,6 +18,21 @@ export const dynamic = 'force-dynamic';
 
 const require = createRequire(import.meta.url);
 const { verifyRequestUser, isAdminEmail } = require('../../../../api/_lib/auth.cjs');
+const fb = require('../../../../api/_lib/firebase-admin.cjs');
+
+const PACKAGES_COLLECTION = 'x_content_packages';
+
+/** Packages held in storage — archive-derived rows and the stories written
+ * against them. Degrades to the committed file alone rather than failing the
+ * plan: a day plan from the seed is still a day plan. */
+async function readStoredPackages() {
+  try {
+    const snap = await fb.adminDb.collection(PACKAGES_COLLECTION).limit(500).get();
+    return snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
+  } catch {
+    return [];
+  }
+}
 
 // X content engine — the day view, read-only.
 //
@@ -75,10 +91,16 @@ export async function GET(request) {
     // walks, so an unbounded query param is an unbounded loop.
     const posts = Math.min(MAX_POSTS, Math.max(1, Number(url.searchParams.get('posts')) || 5));
 
+    // The committed file is a seed. Storage is where the Archive's assets and
+    // the operator's stories live, and a plan that reads only the file can see
+    // neither — a story written in the Archive Inbox would reach nothing.
+    const stored = await readStoredPackages();
+    const inventory = mergeInventory(packages, stored);
+
     const plan = buildDayPlan({
       corpusRows: ownCorpus,
       benchmarkRows: benchmarkCorpus,
-      packages,
+      packages: inventory,
       date,
       posts,
       handle: url.searchParams.get('handle') || 'bai_ee',
@@ -86,6 +108,7 @@ export async function GET(request) {
 
     return json({
       ...projectDayPlan(plan, { posts, replies: REPLY_QUOTA_PER_DAY }),
+      inventorySource: { seed: packages.length, stored: stored.length, merged: inventory.length },
       // The card names the series behind a gap ("a VIDEO package from: C1, C2…"),
       // so it needs the labels without importing the module into the client bundle.
       series: Object.fromEntries(Object.entries(SERIES).map(([k, s]) => [k, s.label])),

@@ -7,6 +7,7 @@ import {
   confirmationKey,
   questionIdFor,
   eraYearFromLabel,
+  mergeInventory,
 } from '../archive-ingest.js';
 import { routeDecision } from '../jev-taxonomy.js';
 
@@ -168,4 +169,53 @@ test('never throws on junk', () => {
   }
   assert.doesNotThrow(() => ingestArchiveRecords({ records: [null], existing: [null] }));
   assert.doesNotThrow(() => ingestArchiveRecords(null));
+});
+
+/* ---- mergeInventory: the seam between the file, the Archive and the plan ---- */
+
+test('a stored story reaches the plan instead of dying in the store', () => {
+  // The defect this pins: Archive Inbox wrote stories to the package store
+  // while the day plan read only the committed file, so a story an operator
+  // wrote reached nothing at all.
+  const seed = [{ id: 'asset-abc', series: 'C3', pillar: 'was-there', mediaState: 'still', rights: 'owned', effort: 'ready', story: '', title: '' }];
+  const stored = [{ id: 'asset-abc', story: 'The night the PA died.', title: 'East Room' }];
+  const merged = mergeInventory(seed, stored);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].story, 'The night the PA died.');
+  assert.equal(merged[0].title, 'East Room');
+  // ...without blanking the fields the store never wrote.
+  assert.equal(merged[0].series, 'C3');
+  assert.equal(merged[0].rights, 'owned');
+  assert.equal(merged[0].mediaState, 'still');
+});
+
+test('a partial stored row never blanks a fully described one', () => {
+  // save-story writes a handful of fields. Spreading it wholesale would wipe
+  // series/rights/media off a row the file describes completely.
+  const seed = [{ id: 'p1', series: 'C1', pillar: 'found-this', rights: 'owned', mediaState: 'video', effort: 'ready', story: 'old', title: 'T' }];
+  const stored = [{ id: 'p1', story: 'new', title: '', series: null, pillar: undefined }];
+  const [row] = mergeInventory(seed, stored);
+  assert.equal(row.story, 'new');
+  assert.equal(row.title, 'T', 'an empty string must not overwrite a real title');
+  assert.equal(row.series, 'C1', 'null must not overwrite');
+  assert.equal(row.pillar, 'found-this', 'undefined must not overwrite');
+  assert.equal(row.mediaState, 'video');
+});
+
+test('an archive-derived row with no counterpart in the file is added', () => {
+  const merged = mergeInventory(
+    [{ id: 'seeded', series: 'C3' }],
+    [{ id: 'asset-from-archive', series: 'C2', story: 'a test pressing' }],
+  );
+  assert.deepEqual(merged.map((p) => p.id).sort(), ['asset-from-archive', 'seeded']);
+});
+
+test('mergeInventory never throws on junk and keeps the seed', () => {
+  for (const junk of [undefined, null, 'nope', 42, {}]) {
+    assert.doesNotThrow(() => mergeInventory(junk, junk));
+  }
+  assert.deepEqual(mergeInventory([{ id: 'a' }], null), [{ id: 'a' }]);
+  assert.deepEqual(mergeInventory(null, null), []);
+  // A stored row with no id cannot be matched or added — dropped, not crashed.
+  assert.deepEqual(mergeInventory([], [{ story: 'orphan' }]), []);
 });
