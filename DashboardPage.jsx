@@ -496,6 +496,18 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	  // (e.g. the Video Remix "Upload media" button → SOURCE MEDIA), it parks the
 	  // tab here; the default-tab effect consumes it once instead of its default.
 	  const desiredModalTabRef = useRef(null);
+	  // --- X Content Engine day plan (Knowledge Officer, admin-only) --------
+	  // Read-only view over scripts/x-content/day-view.mjs. Costs nothing, posts
+	  // nothing, drafts nothing — drafting spends and publishing is P4/blocked.
+	  const [xContentPlan, setXContentPlan] = useState(null);
+	  const [xContentLoading, setXContentLoading] = useState(false);
+	  const [xContentError, setXContentError] = useState('');
+	  const [xContentPosts, setXContentPosts] = useState(5);
+	  // The post count is mirrored into a ref so the loader below can stay
+	  // identity-stable. With `xContentPosts` in its dependency list, changing the
+	  // count re-created the loader, which re-fired the open-effect that depends
+	  // on it — two fetches for one change.
+	  const xContentPostsRef = useRef(5);
 	  // --- Archive / Publishing card (Knowledge Officer, admin-only) ---------
 	  const [archiveSources, setArchiveSources] = useState([]);
 	  const [archiveSourcesLoading, setArchiveSourcesLoading] = useState(false);
@@ -1116,6 +1128,25 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    const token = await user.getIdToken();
 	    return { Authorization: `Bearer ${token}` };
 	  }, [user]);
+
+	  const refreshXContentPlan = useCallback(async (posts) => {
+	    if (!user) return;
+	    const n = Number.isFinite(posts) ? posts : xContentPostsRef.current;
+	    setXContentLoading(true);
+	    setXContentError('');
+	    try {
+	      const headers = await archiveAuthHeaders();
+	      const res = await fetch(apiPath(`/api/dashboard/x-content?action=day-plan&posts=${n}`), { headers, cache: 'no-store' });
+	      const data = await res.json();
+	      if (!res.ok) throw new Error(data?.error || 'Could not build the day plan.');
+	      setXContentPlan(data);
+	    } catch (err) {
+	      setXContentError(err?.message || 'Could not build the day plan.');
+	      setXContentPlan(null);
+	    } finally {
+	      setXContentLoading(false);
+	    }
+	  }, [user, apiPath, archiveAuthHeaders]);
 
 	  const refreshArchiveSources = useCallback(async (mode = archiveSourceMode, folder = archiveSelectedFolder) => {
 	    if (!user) return;
@@ -2812,6 +2843,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    if (id === 'ui-teaser') { setModalTab('render'); return; }
 	    if (id === 'media-library') { setModalTab('source'); return; }
 	    if (id === 'archive-publishing') { setModalTab('archive'); return; }
+	    if (id === 'x-content-day') { setModalTab('plan'); return; }
 	    setModalTab(CUSTOM_DETAIL_CARD_IDS.has(id) ? 'solutions' : 'report');
   }, [activeTileModal?.cardId, bootstrap?.dashboardState?.artifacts?.skillDocs]);
 
@@ -2862,6 +2894,15 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     refreshVideoRemixFolders().catch(() => {});
     return undefined;
   }, [activeTileModal?.cardId, loadMediaLibraryUsage, refreshVideoRemixFolders]);
+
+  // Build the day plan when the X Content modal opens. Pure local computation
+  // on the server — no X API call, no LLM, so refetching on open is free.
+  useEffect(() => {
+    if (activeTileModal?.cardId !== 'x-content-day') return undefined;
+    if (!user) return undefined;
+    refreshXContentPlan().catch(() => {});
+    return undefined;
+  }, [activeTileModal?.cardId, user, refreshXContentPlan]);
 
   // Load archive sources + manifest when the Archive / Publishing modal opens.
   useEffect(() => {
@@ -8522,6 +8563,45 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           loading: uiTeaserRenderLoading,
           onClick: () => runUiTeaserRender(),
         },
+      };
+    })()] : []),
+    // Hidden entirely for non-admins rather than shown and 403'd on open: this
+    // is one specific real account's strategy surface, not client data.
+    ...(isAdmin ? [(() => {
+      // The plan is computed on open, not mirrored into dashboard_state: it is a
+      // pure function of committed corpora + the local inventory, so caching it
+      // would only create a second version of the day that can go stale.
+      const plan = xContentPlan;
+      const s = plan?.summary || null;
+      const inv = plan?.inventory || null;
+      return {
+        id: 'x-content-day',
+        category: 'knowledge',
+        adminOnly: true,
+        number: 'XC',
+        label: 'X DAY PLAN',
+        title: 'X Content Engine',
+        description: 'Today’s posting plan: every slot, what content fills it, and what is missing. Read-only — it proposes, it cannot post or draft. Admin only.',
+        placeholderLabel: s ? 'OPEN\nDAY PLAN' : 'BUILD\nDAY PLAN',
+        rows: s
+          ? [
+              { key: 'xc-slots',  label: 'Slots today',  value: `${s.slots} · ${s.fromInventory} inventory · ${s.fromLedger} re-surfaced · ${s.fromScan} scan` },
+              { key: 'xc-gaps',   label: 'Gaps',         value: s.gaps ? `${s.gaps} slot${s.gaps === 1 ? '' : 's'} with nothing to fill them` : 'None — every slot has content' },
+              { key: 'xc-inv',    label: 'Inventory',    value: `${inv?.total ?? 0} packages (${inv?.valid ?? 0} valid)` },
+              { key: 'xc-adopt',  label: 'Adopted',      value: s.adopted ? `${s.adopted} slot borrowed on lift` : '—' },
+            ]
+          : [
+              { key: 'xc-about',  label: 'About',  value: 'Slots come from the measured benchmark gap; content comes from the archive inventory and your own past winners.' },
+              { key: 'xc-cost',   label: 'Cost',   value: 'Zero. Local computation over committed corpora — no X API, no LLM.' },
+              { key: 'xc-safe',   label: 'Safety', value: 'Read-only. Drafting and publishing stay in the terminal behind an explicit action.' },
+            ],
+        footerLeft: xContentLoading ? 'Building…' : xContentError ? 'Plan failed' : s ? `${s.gaps} gap${s.gaps === 1 ? '' : 's'}` : 'Ready',
+        footerRight: 'ADMIN',
+        readinessBadge: xContentLoading
+          ? { tone: 'partial', label: 'Building…' }
+          : xContentError ? { tone: 'fail', label: 'Failed' }
+          : s ? (s.gaps ? { tone: 'partial', label: `${s.gaps} gap${s.gaps === 1 ? '' : 's'}` } : { tone: 'ok', label: 'Day covered' })
+          : null,
       };
     })()] : []),
     (() => {
@@ -17235,6 +17315,156 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                )}
 
 	                {/* Archive / Publishing — Archive · Manifest · Website · ArNS · Cost */}
+	                {activeTileModal.cardId === 'x-content-day' && (() => {
+	                  const plan = xContentPlan;
+	                  const tab = ['plan', 'gaps', 'inventory'].includes(modalTab) ? modalTab : 'plan';
+	                  const s = plan?.summary || null;
+	                  const seriesLabels = plan?.series || {};
+	                  // One label per slot state, so the legend and the rows can
+	                  // never disagree about what a state means.
+	                  const STATE = {
+	                    inventory: { label: 'From inventory', tone: 'ok' },
+	                    ledger:    { label: 'Your past winner', tone: 'ok' },
+	                    scan:      { label: 'Daily scan fills it', tone: 'info' },
+	                    gap:       { label: 'GAP', tone: 'warn' },
+	                    empty:     { label: 'No eligible winner', tone: 'info' },
+	                  };
+	                  return (
+	                    <div id="x-content-day-modal-tabs-container" className="xcd-scope tile-detail-bento-cell panel">
+	                      <div className="xcd-tabs">
+	                        {[['plan', 'PLAN'], ['gaps', `GAPS${s?.gaps ? ` (${s.gaps})` : ''}`], ['inventory', 'INVENTORY']].map(([k, label]) => (
+	                          <button key={k} type="button" className={`xcd-tab${tab === k ? ' is-active' : ''}`} onClick={() => setModalTab(k)}>{label}</button>
+	                        ))}
+	                        <div className="xcd-tabs-right">
+	                          <label className="xcd-posts">
+	                            Posts
+	                            <select
+	                              className="xcd-select"
+	                              value={xContentPosts}
+	                              disabled={xContentLoading}
+	                              onChange={(e) => {
+	                                const n = Number(e.target.value) || 5;
+	                                setXContentPosts(n);
+	                                xContentPostsRef.current = n;
+	                                refreshXContentPlan(n).catch(() => {});
+	                              }}
+	                            >
+	                              {[3, 5, 8, 10].map((n) => <option key={n} value={n}>{n}</option>)}
+	                            </select>
+	                          </label>
+	                          <button type="button" className="xcd-btn" disabled={xContentLoading} onClick={() => refreshXContentPlan().catch(() => {})}>
+	                            {xContentLoading ? '…' : 'Rebuild'}
+	                          </button>
+	                        </div>
+	                      </div>
+
+	                      {xContentError ? <div className="xcd-error">{xContentError}</div> : null}
+
+	                      {!plan && !xContentError ? (
+	                        <div className="xcd-empty">{xContentLoading ? 'Building the day plan…' : 'No plan yet.'}</div>
+	                      ) : null}
+
+	                      {plan && (
+	                        <div className="xcd-head">
+	                          <span className="xcd-date">{plan.date}</span>
+	                          <span className="xcd-meta">{s.posts} authored{s.replies != null ? ` + ${s.replies} replies` : ''}</span>
+	                          <span className="xcd-meta">{s.fromInventory} inventory · {s.fromLedger} re-surfaced · {s.fromScan} scan · {s.gaps} gap{s.gaps === 1 ? '' : 's'}</span>
+	                          {/* Without a benchmark corpus buildCalendar falls back to the
+	                              account's own current mix — a self-fulfilling loop. Say so
+	                              rather than presenting it as a measured plan. */}
+	                          {!plan.benchmarked ? <span className="xcd-warn-pill">no benchmark — mix repeats current habits</span> : null}
+	                        </div>
+	                      )}
+
+	                      {plan && tab === 'plan' && (
+	                        <div className="xcd-body">
+	                          {plan.slots.map((row) => {
+	                            const meta = STATE[row.state] || STATE.gap;
+	                            const gap = row.state === 'gap' ? plan.gaps.find((g) => g.slot === row.slot) : null;
+	                            return (
+	                              <div key={`${row.slot}-${row.timeCT}`} className={`xcd-slot is-${meta.tone}`}>
+	                                <div className="xcd-slot-head">
+	                                  <span className="xcd-time">{row.timeCT}</span>
+	                                  <span className="xcd-slot-id">{row.slot}</span>
+	                                  <span className="xcd-type">{row.type}</span>
+	                                  {row.lane ? <span className="xcd-lane">{row.lane}</span> : null}
+	                                  <span className={`xcd-state is-${meta.tone}`}>{meta.label}</span>
+	                                  {row.adopted ? <span className="xcd-adopted">adopted</span> : null}
+	                                </div>
+	                                {/* The adoption floor is a proposed change to a shared,
+	                                    tested module applied outside it — a moved slot says so. */}
+	                                {row.adoptReason ? <div className="xcd-adopt-why">Borrowed from {row.adoptedFrom}: {row.adoptReason}</div> : null}
+	                                {row.story ? <div className="xcd-story">{row.story}</div> : null}
+	                                {gap ? <div className="xcd-need">Need: {gap.need}</div> : null}
+	                                <div className="xcd-slot-foot">
+	                                  {row.packageId ? <span>{row.packageId}{row.series ? ` · ${row.series}${seriesLabels[row.series] ? ` ${seriesLabels[row.series]}` : ''}` : ''}</span> : null}
+	                                  {row.asset ? <span className="xcd-asset">{row.asset}</span> : null}
+	                                  {row.selfReply ? <span>self-reply: {row.selfReply}</span> : null}
+	                                  {row.why ? <span className="xcd-why">{row.why}</span> : null}
+	                                </div>
+	                              </div>
+	                            );
+	                          })}
+	                          <div className="xcd-note">
+	                            Read-only. This proposes a day; it cannot post. Draft the copy with
+	                            {' '}<code>node scripts/x-content/draft-day.mjs</code>, which spends and stays in the terminal.
+	                          </div>
+	                        </div>
+	                      )}
+
+	                      {plan && tab === 'gaps' && (
+	                        <div className="xcd-body">
+	                          {plan.gaps.length === 0 ? (
+	                            <div className="xcd-empty">No gaps — every slot has something to fill it.</div>
+	                          ) : (
+	                            <>
+	                              {plan.gaps.map((g) => (
+	                                <div key={g.slot} className="xcd-gap">
+	                                  <div className="xcd-gap-head">Slot {g.slot} · {g.type}{g.lane ? ` · ${g.lane}` : ''}</div>
+	                                  <div className="xcd-need">{g.need}</div>
+	                                </div>
+	                              ))}
+	                              <div className="xcd-note">
+	                                A gap is an inventory shortfall, not a scheduling bug. Add packages in the
+	                                series named above, or lower the post count until the inventory can carry the day.
+	                              </div>
+	                            </>
+	                          )}
+	                        </div>
+	                      )}
+
+	                      {plan && tab === 'inventory' && (
+	                        <div className="xcd-body">
+	                          <div className="xcd-inv-head">
+	                            {plan.inventory.total} package{plan.inventory.total === 1 ? '' : 's'} · {plan.inventory.valid} valid
+	                            {plan.inventory.invalid ? ` · ${plan.inventory.invalid} with errors` : ''}
+	                          </div>
+	                          {Object.keys(plan.inventory.bySeries || {}).length > 0 && (
+	                            <div className="xcd-series-row">
+	                              {Object.entries(plan.inventory.bySeries).map(([k, n]) => (
+	                                <span key={k} className="xcd-series-pill">{k}{seriesLabels[k] ? ` ${seriesLabels[k]}` : ''}: {n}</span>
+	                              ))}
+	                            </div>
+	                          )}
+	                          {plan.inventory.issues.length === 0 ? (
+	                            <div className="xcd-empty">Every package validates clean.</div>
+	                          ) : plan.inventory.issues.map((it, idx) => (
+	                            <div key={it.id || `issue-${idx}`} className={`xcd-issue${it.ok ? '' : ' is-error'}`}>
+	                              <div className="xcd-issue-id">{it.id || '(no id)'}</div>
+	                              {it.errors.map((e, i) => <div key={`e${i}`} className="xcd-issue-line is-error">{e}</div>)}
+	                              {it.warnings.map((w, i) => <div key={`w${i}`} className="xcd-issue-line">{w}</div>)}
+	                            </div>
+	                          ))}
+	                          <div className="xcd-note">
+	                            The inventory is the bottleneck: everything downstream works and has nothing to work on.
+	                            Edit <code>features/x-content-inventory/content-packages.json</code>.
+	                          </div>
+	                        </div>
+	                      )}
+	                    </div>
+	                  );
+	                })()}
+
 	                {activeTileModal.cardId === 'archive-publishing' && (() => {
 	                  const ap = dashboardState?.archivePublishing || {};
 	                  const tab = ['archive', 'manifest', 'website', 'arns', 'cost'].includes(modalTab) ? modalTab : 'archive';
