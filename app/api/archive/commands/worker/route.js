@@ -3,6 +3,7 @@ import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
 const fb = require('../../../../../api/_lib/firebase-admin.cjs');
+const { handleCommandComplete } = require('../../../../../api/_lib/archive-permanent-archive.cjs');
 const token = process.env.HITLOOP_ARCHIVE_WORKER_TOKEN;
 
 function authorized(request) { return token && request.headers.get('authorization') === `Bearer ${token}`; }
@@ -20,15 +21,24 @@ export async function PATCH(request) {
   const body = await request.json();
   const { commandId, state, jobId = null, error = null, result = null } = body || {};
   if (!commandId || !['CLAIMED','RUNNING','COMPLETE','FAILED'].includes(state)) return NextResponse.json({ error:'Invalid command update' }, {status:400});
-  await fb.adminDb.collection('archive_commands').doc(commandId).set({ state, jobId, error, result, updatedAt:fb.FieldValue.serverTimestamp() }, {merge:true});
-  if(state==='COMPLETE' && result?.transactionId && result?.contentAssetId){
-    await fb.adminDb.collection('archive_uploads').doc(result.transactionId).set({
-      kind:'original',state:'UPLOADED',transactionId:result.transactionId,contentAssetId:result.contentAssetId,
-      arweaveUrl:result.arweaveUrl,sizeBytes:result.sizeBytes||null,
-      collectionId:result.collectionId||null,archiveName:result.archiveName||null,sha256:result.sha256||null,
-      contentType:result.contentType||null,sourceId:result.sourceId||null,relativePath:result.relativePath||null,
-      updatedAt:fb.FieldValue.serverTimestamp(),createdAt:fb.FieldValue.serverTimestamp()
-    },{merge:true});
+
+  // Read the command before overwriting its state — handleCommandComplete
+  // needs its type/workerId/refs, which the incoming PATCH body doesn't carry.
+  const cmdRef = fb.adminDb.collection('archive_commands').doc(commandId);
+  const cmdSnap = await cmdRef.get();
+  const cmdData = cmdSnap.exists ? cmdSnap.data() : null;
+
+  await cmdRef.set({ state, jobId, error, result, updatedAt: fb.FieldValue.serverTimestamp() }, { merge: true });
+
+  // UPLOAD_ASSET_ARWEAVE COMPLETE -> archive_uploads write + versions the
+  // asset's archive-record JSON. UPLOAD_JSON COMPLETE -> upserts
+  // archive_records / archive_collections / archive_settings per kind, and
+  // (for archive-record) re-checks whether the collection's manifest can now
+  // rebuild. See api/_lib/archive-permanent-archive.cjs.
+  if (state === 'COMPLETE' && cmdData) {
+    try { await handleCommandComplete({ command: cmdData, result }); }
+    catch (e) { console.error('[archive] handleCommandComplete failed for', commandId, e); }
   }
+
   return NextResponse.json({ok:true});
 }
