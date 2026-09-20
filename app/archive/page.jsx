@@ -26,6 +26,8 @@ export default function ArchivePage() {
   const [collectionId,setCollectionId]=useState('');
   const [collectionTitle,setCollectionTitle]=useState('');
   const [approvedAssets,setApprovedAssets]=useState([]);
+  const [uploadState,setUploadState]=useState('');
+  const [manifestTx,setManifestTx]=useState('');
 
   const loadApproved=useCallback(async()=>{
     if(!user)return;
@@ -33,6 +35,33 @@ export default function ArchivePage() {
     catch{}
   },[user,authedFetch]);
   useEffect(()=>{loadApproved();},[loadApproved]);
+  useEffect(()=>{
+    if(!user)return;
+    const t=setInterval(()=>loadApproved(),10000);
+    return()=>clearInterval(t);
+  },[user,loadApproved]);
+
+  async function queueApprovedUploads(){
+    if(!collectionId){setUploadState('COLLECTION ID REQUIRED');return;}
+    const pending=approvedAssets.filter(a=>!a.transactionId);
+    if(!pending.length){setUploadState('ALL APPROVED ASSETS ALREADY UPLOADED');return;}
+    if(!confirm(`Queue ${pending.length} human-approved original(s) for permanent Arweave upload?`))return;
+    setUploadState(`QUEUING 0 / ${pending.length}`);
+    let queued=0,failed=0;
+    for(const a of pending){
+      const relativePath=a.sourcePaths?.[0];
+      if(!a.workerId||!a.sourceId||!relativePath){failed++;continue;}
+      try{
+        const r=await authedFetch('/api/archive/arweave/assets',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({
+          workerId:a.workerId,sourceId:a.sourceId,relativePath,contentAssetId:a.id,collectionId,
+          archiveName:a.archiveName||relativePath.split('/').pop(),expectedSha256:a.sha256,approved:true
+        })});
+        if(r.ok)queued++;else failed++;
+      }catch{failed++;}
+      setUploadState(`QUEUED ${queued} / ${pending.length}${failed?` · ${failed} FAILED`:''}`);
+    }
+    await loadApproved();
+  }
 
   async function quoteArchive(){
     const sizeBytes=Number(archiveBytes);
@@ -47,7 +76,7 @@ export default function ArchivePage() {
     if(!confirm('This permanently archives the approved collection manifest to Arweave. Continue?'))return;
     setArchiveState('FINALIZING');
     const r=await authedFetch('/api/archive/arweave/collection',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({collection:{id:collectionId,title:collectionTitle||collectionId},assets:approvedAssets.filter(a=>a.transactionId),approved:true})});
-    const b=await r.json();setArchiveState(r.ok?`ARCHIVED · ${b.upload.transactionId}`:(b.error||'ARCHIVE FAILED'));
+    const b=await r.json();if(r.ok){setManifestTx(b.upload.transactionId);setArchiveState(`ARCHIVED · ${b.upload.transactionId}`);}else setArchiveState(b.error||'ARCHIVE FAILED');
   }
 
   const loadReview=useCallback(async()=>{
@@ -169,9 +198,10 @@ export default function ArchivePage() {
             <input value={collectionTitle} onChange={e=>setCollectionTitle(e.target.value)} placeholder="Collection title" style={{background:'#080808',border:'1px solid #333',borderRadius:10,padding:12,color:'#fff'}}/>
             <input value={archiveBytes} readOnly inputMode="numeric" placeholder="Approved bytes" style={{background:'#080808',border:'1px solid #333',borderRadius:10,padding:12,color:'#fff'}}/>
           </div>
-          <div style={{display:'flex',gap:8,marginTop:12,flexWrap:'wrap'}}><button onClick={quoteArchive} style={{background:'transparent',color:'#fff',border:'1px solid #444',borderRadius:10,padding:'10px 14px'}}>CALCULATE ESTIMATE</button><button onClick={finalizeCollection} style={{background:'#f4f4f0',color:'#080808',border:0,borderRadius:10,padding:'10px 14px',fontWeight:700}}>APPROVE + ARCHIVE MANIFEST</button><a href="/archive-viewer/" target="_blank" style={{color:'#ddd',padding:'10px 6px'}}>OPEN PERMANENT VIEWER ↗</a></div>
+          <div style={{fontSize:12,opacity:.65,marginTop:12}}>{approvedAssets.filter(a=>a.transactionId).length} permanent · {approvedAssets.filter(a=>!a.transactionId).length} waiting for upload</div>
+          <div style={{display:'flex',gap:8,marginTop:12,flexWrap:'wrap'}}><button onClick={queueApprovedUploads} disabled={!approvedAssets.some(a=>!a.transactionId)} style={{background:'transparent',color:'#fff',border:'1px solid #444',borderRadius:10,padding:'10px 14px'}}>UPLOAD APPROVED ORIGINALS</button><button onClick={quoteArchive} style={{background:'transparent',color:'#fff',border:'1px solid #444',borderRadius:10,padding:'10px 14px'}}>CALCULATE ESTIMATE</button><button onClick={finalizeCollection} disabled={!approvedAssets.length||approvedAssets.some(a=>!a.transactionId)} style={{background:'#f4f4f0',color:'#080808',border:0,borderRadius:10,padding:'10px 14px',fontWeight:700}}>APPROVE + ARCHIVE MANIFEST</button><a href={manifestTx?`/archive-viewer/?manifest=${manifestTx}`:'/archive-viewer/'} target="_blank" style={{color:'#ddd',padding:'10px 6px'}}>OPEN PERMANENT VIEWER ↗</a></div>
           {archiveQuote&&<div style={{marginTop:16,fontFamily:'monospace',fontSize:12}}>~ {archiveQuote.costAR} AR · ~ ${archiveQuote.costUSD} USD · {(archiveQuote.sizeMB||0).toLocaleString()} MB <span style={{opacity:.45}}>· {archiveQuote.quoteType}</span></div>}
-          <div style={{fontSize:11,opacity:.5,marginTop:10}}>{archiveState}</div>
+          <div style={{fontSize:11,opacity:.5,marginTop:10}}>{uploadState}{uploadState&&archiveState?' · ':''}{archiveState}</div>
         </section>
         <section style={{marginTop:16,border:'1px solid #262626',borderRadius:20,padding:24}}>
           <div style={{fontSize:12,opacity:.45}}>CURRENT CHECKPOINT</div><h3 style={{fontSize:24,margin:'10px 0'}}>NAS → Jev review → permanent archive</h3>
