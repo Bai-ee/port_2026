@@ -4,10 +4,11 @@ How the X work fits together: what measures the account, what decides a post, an
 
 Built 2026-09-10. The account is **@bai_ee** (`bryan-balli-WUoltG84`). The goal is creative enquiries into HITLOOP.
 
-> Three docs own different slices and none of them repeat each other:
+> Four docs own different slices and none of them repeat each other:
 > - **This doc** — the map, the strategy, the guard, the calendar. Start here.
 > - [`X-MONITOR-CARD.md`](./X-MONITOR-CARD.md) — the live measurement card. Owns its own data model, cost model and traps.
 > - [`X-API-AND-PROFILE-OPERATIONS.md`](./X-API-AND-PROFILE-OPERATIONS.md) — **the spend gate.** Read §0 before anything that writes.
+> - [`X-STRATEGY-SESSION-PROTOCOL.md`](./X-STRATEGY-SESSION-PROTOCOL.md) — how to *run a strategy conversation* off all of this: the free boot (`scripts/x-content/session-brief.mjs`), the read-path cost table, the guardrails, and what is already decided. Paired with the `x-strategy` skill.
 
 ---
 
@@ -275,6 +276,28 @@ name is dropped on every save.
   holds on likes-lift at **1.61×**; the statistic did not.
 
 ---
+
+## 8c. The content layer — `features/x-content-inventory/`
+
+Everything above decides **when** to post and **what type**. It emits slots with `copy: null, asset: null` because nothing in it knows what content exists. This layer is the supply side, joining the archive of 30 years of material to those slots.
+
+Built 2026-09-20. Continuity doc: [`../plans/X-CONTENT-ENGINE-HANDOFF.md`](../plans/X-CONTENT-ENGINE-HANDOFF.md) — **start there**, not here.
+
+| Module | Does |
+|---|---|
+| `categories.js` | 6 pillars, the pillar→lane→topic mapping, 9 series (C1–C9) with cadence/slot-type/media/CTA |
+| `schema.js` | the `ContentPackage` contract + validator (errors structural, warnings strategic) |
+| `match.js` | slot ← package: rights gate, media gate, effort horizon, anniversary, fatigue, named gaps |
+| `ledger.js` | post history → fatigue by artifact + self-quote resurrection candidates |
+| `triggers.js` | 21 occasions ("why post this today"), with detection method and what feeds each |
+| `jev-taxonomy.js` | the questions the Archive's Jev layer should answer, so a processed asset arrives as a half-built package |
+| `scripts/x-content/day-view.mjs` | the daily plan — free, local, cannot post |
+
+### ⚠️ Three things this layer found in the layers above it
+
+- **A showcase slot needs video, always.** `match.js` refuses a still rather than filling the slot badly — an image reaches *less* than plain text. Most of an archive is stills, so the archive cannot fill showcase slots until a still→video render step exists.
+- **`build-calendar.js` echoes the account's habits back at it** unless it is handed a gap report: the mix falls back to the account's own history, so a type it never posts stays never-posted.
+- **A high-lift, low-share type cannot enter the plan at all.** Mix moves are damped on purpose *and* gap analysis is share-based, so self-quote — the benchmark's **highest-lift type at 1.67×, on 2.49% share** — is invisible to both. The proposed adoption floor lives in `day-view.mjs` pending a decision to move it into `build-calendar.js`.
 
 ## 9. Current state (2026-09-10)
 

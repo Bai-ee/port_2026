@@ -261,12 +261,16 @@ Sundays get the strongest asset of the week. Fridays are worth the least — sch
 ## 7. Mechanical rules — non-negotiable
 
 1. **No hashtags. Ever.** He used zero in 603 posts.
+   ⚠️ **Scope corrected 2026-09-20:** measured on design-Twitter only. `@toshioueki` tags every record post (`#vinyl #record #アナログ`) and performs fine, so this is a design-lane rule, not a law of the platform. Unresolved for the music lane — see [`x-copy-patterns.md`](../audits/x-copy-patterns.md) §5.
 2. **No link in the main post.** Put it in the first self-reply. Costs you 44% of engagement otherwise.
 3. **Video over image, always.** A static image performs worse than posting nothing but text.
-4. **Keep it short.** Originals ~117 characters, quote captions ~46.
+4. ~~**Keep it short.** Originals ~117 characters, quote captions ~46.~~
+   ⚠️ **CORRECTED 2026-09-20 — this was wrong as stated.** Ranked by likes, his **top 30 average 265 chars / 3.9 lines**; the **bottom 200 average 102 / 1.9**. Short is the *losing* end. The 117-char median describes the whole corpus, most of which is filler.
+   **Restated:** *quote captions* stay short (median 46 — the borrowed object carries the post), and *originals that win are longer and structured* — claim, line break, substance. Full table: [`x-copy-patterns.md`](../audits/x-copy-patterns.md) §1.
 5. **Credits go in the reply**, with the post staying clean.
 6. **Post every day.** Gaps cost more than any single post gains.
 7. **Never explain the joke.** His best post is six words over someone else's image.
+8. **Promo is not a post type.** Added 2026-09-20: across three accounts, event and release announcements are the worst-performing thing each publishes (`@toshioueki` 16–26 vs 100–235 for records; `@moorhaus_` ~60 vs 1,622). Gigs and releases belong in the self-reply and the bio. [`x-monetization-research.md`](../audits/x-monetization-research.md) §1–2.
 
 ---
 
