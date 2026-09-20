@@ -1,14 +1,35 @@
 # Archive Lane 2 Intake Contract (W2, 2026-09-20)
 
 Lane 2 = a single image/video uploaded from a phone on `/archive`. It lands
-transiently in Firebase Storage (the EditVideos-bridge bucket, same one Media
-Library uploads to — `bridgeBucket()` in `api/_lib/editvideos-bridge.cjs`),
+transiently in Firebase Storage — **HITLOOP's own default bucket**
+(`intakeBucket()` in `api/_lib/archive-intake-bucket.cjs`, via
+`fb.adminStorage.bucket()` off `api/_lib/firebase-admin.cjs`'s `adminApp`),
 under prefix `archive-intake/{intakeId}/{safeFileName}`. An `archive_intake`
 Firestore doc tracks its lifecycle. The NAS worker (W3, a separate
 agent/repo) polls, claims, downloads, runs the identical hash → dedupe →
 analyze → review → Arweave pipeline Lane 1 uses, and is the **only** thing
 that ever deletes the Firebase object — and only after that asset's Arweave
 upload succeeds.
+
+**Storage note (2026-09-20, revised from the original plan):** the plan
+originally called for reusing the EditVideos-bridge bucket
+(`bridgeBucket()` in `api/_lib/editvideos-bridge.cjs`, same one Media
+Library uploads to). A live localhost test found `bridgeBucket()` fails in
+this environment — the EditVideos service-account key
+(`EDITVIDEOS_FIREBASE_SERVICE_ACCOUNT_KEY`) is rejected by Google
+(`invalid_grant: Invalid JWT Signature`), so `POST /api/archive/intake`
+503'd before minting a URL. Lane 2 now uses HITLOOP's own default bucket
+instead — it works in this environment, already carries a CORS entry for
+`http://localhost:3000`, and is the cleaner ownership boundary anyway:
+archive intake data belongs in HITLOOP's project, not EditVideos'. The
+storage **path prefix is unchanged** (`archive-intake/{intakeId}/{safeFileName}`).
+CORS is ensured by `ensureIntakeCors()` (same file), which **merges** a
+single rule for `http://localhost:3000`, `https://hitloop.agency`,
+`https://www.hitloop.agency`, and `NEXT_PUBLIC_SITE_URL` (if set) into the
+bucket's existing CORS config — it never replaces or drops any other rule
+already on the bucket — and skips the write entirely when an existing rule
+already covers every required origin/method/header. Success is memoized for
+the life of the process.
 
 This mirrors master plan decisions D1–D4:
 Firebase is an inbox, never a library (D3); nothing here ever touches the NAS
