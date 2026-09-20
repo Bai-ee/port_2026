@@ -130,6 +130,11 @@ const XCalendarCard = dynamic(() => import('./components/dashboard/XCalendarCard
   ssr: false,
 });
 
+const ArchiveInboxCard = dynamic(() => import('./components/dashboard/ArchiveInboxCard'), {
+  loading: () => null,
+  ssr: false,
+});
+
 const XContentEngineCard = dynamic(() => import('./components/dashboard/XContentEngineCard'), {
   loading: () => null,
   ssr: false,
@@ -1122,6 +1127,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    const token = await user.getIdToken();
 	    return { Authorization: `Bearer ${token}` };
 	  }, [user]);
+
 
 	  const refreshArchiveSources = useCallback(async (mode = archiveSourceMode, folder = archiveSelectedFolder) => {
 	    if (!user) return;
@@ -2868,6 +2874,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     refreshVideoRemixFolders().catch(() => {});
     return undefined;
   }, [activeTileModal?.cardId, loadMediaLibraryUsage, refreshVideoRemixFolders]);
+
 
   // Load archive sources + manifest when the Archive / Publishing modal opens.
   useEffect(() => {
@@ -9469,6 +9476,27 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       footerRight: 'ADMIN',
     }] : []),
 
+    // The Archive feeds this bucket: a confirmed archive asset is where a post
+    // comes from. Sits with the scheduler, not with Archive/Publishing \u2014 that
+    // card is about permanence, this one is about what to post.
+    ...(isAdmin ? [{
+      id: 'archive-inbox',
+      category: 'social',
+      number: 'AI',
+      label: 'ARCHIVE INBOX',
+      title: 'Archive Inbox',
+      description: 'Archive assets a human has confirmed, and what each one became. Write the story here \u2014 it is the one field no model can produce, and nothing fills a slot without it.',
+      placeholderLabel: 'ARCHIVE\nINBOX',
+      rows: [
+        { key: 'ai-source', label: 'Source', value: 'Confirmed assets from /archive \u2014 read-only' },
+        { key: 'ai-owns', label: 'This card writes', value: 'The story and title, nothing else' },
+        { key: 'ai-gate', label: 'Rights', value: 'Client work stays out of the plan until cleared' },
+        { key: 'ai-next', label: 'Next', value: 'A row with a story can fill an X Content slot' },
+      ],
+      footerLeft: 'Archive \u2192 post',
+      footerRight: 'ADMIN',
+    }] : []),
+
     ...(isAdmin ? [{
       id: 'x-content',
       category: 'social',
@@ -11177,8 +11205,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
                   }
                   if (activeCapabilityFilter === 'social') {
-                    // Social Media Manager: review creative → schedule & publish.
-                    const order = ['platform-coverage', 'creative-builder', 'draft-post', 'social-media-posting'];
+                    // Social Media Manager: source the content → plan the day →
+                    // review creative → schedule & publish. Archive Inbox leads
+                    // because a post starts as a confirmed archive asset.
+                    const order = ['archive-inbox', 'x-content', 'x-calendar', 'x-monitor', 'platform-coverage', 'creative-builder', 'draft-post', 'social-media-posting'];
                     const ai = order.indexOf(a.id); const bi = order.indexOf(b.id);
                     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
                   }
@@ -16015,6 +16045,20 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     <div className="tile-detail-tab-content">
                       <div className="tile-detail-tab-pane">
                         <XMonitorCard getIdToken={brandSystemGetIdToken} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Archive Inbox — confirmed archive assets, and the story each one still needs */}
+                {activeTileModal.cardId === 'archive-inbox' && (
+                  <div id="archive-inbox-modal-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
+                    <div className="tile-detail-tabs">
+                      <button type="button" className="tile-detail-tab tile-detail-tab--active">ARCHIVE INBOX</button>
+                    </div>
+                    <div className="tile-detail-tab-content">
+                      <div className="tile-detail-tab-pane">
+                        <ArchiveInboxCard getIdToken={brandSystemGetIdToken} />
                       </div>
                     </div>
                   </div>

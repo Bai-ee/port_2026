@@ -2,14 +2,24 @@
 //
 // Layout:
 //
-//   dashboard_state/{clientId}.marketingBrief.contentInventory
-//     { packages: ContentPackage[], updatedAt: epoch ms }
+//   x_content_packages/{packageId}   → one ContentPackage per document
 //
-// ONE FIELD ON THE EXISTING STATE DOC, not a new collection. The inventory is
-// bounded (PACKAGE_CAP rows), is always read whole, and is never queried by
-// anything but clientId — a collection would buy nothing and would introduce a
-// query surface that eventually wants a composite index, which this repo does
-// not allow. Same reasoning as marketingBrief.quoteTargets next door.
+// ⚠️ THIS WAS A FIELD ON `dashboard_state/{clientId}.marketingBrief`, and the
+// reasoning for that was sound while the inventory was hand-curated: bounded,
+// always read whole, never queried by anything but clientId. The Archive
+// changes the premise. A confirmed archive asset becomes a package
+// automatically (`archive-ingest.js`), so the row count is now set by how much
+// of a 30-year archive gets reviewed, not by how much one person types. A
+// 1MB document with a 200-row cap fails exactly when the archive starts
+// delivering, and it fails by refusing saves.
+//
+// It is also no longer per-client. The inventory feeds ONE account's posting
+// plan; `buildDayPlan` is @bai_ee's regardless of which dashboard is open, so
+// scoping the rows by clientId while the plan ignored it was an inconsistency,
+// not a feature.
+//
+// One document per package also means the Archive Inbox can write a single
+// story without reading, rewriting and re-saving the whole array.
 //
 // Pure-ish: this module is the ONLY place in the inventory feature that touches
 // Firestore. schema.js / match.js / plan-day.js stay pure so the local scripts
@@ -18,6 +28,7 @@
 
 import { createRequire } from 'node:module';
 import { validatePackage } from './schema.js';
+import { mergeInventory } from './archive-ingest.js';
 // Static import so Next bundles the seed rows — same reason as the route's
 // bundledCalendar: a runtime fs read of a repo path is fragile on serverless.
 import seedRows from './content-packages.json' with { type: 'json' };
@@ -25,18 +36,20 @@ import seedRows from './content-packages.json' with { type: 'json' };
 const require = createRequire(import.meta.url);
 const fb = require('../../api/_lib/firebase-admin.cjs');
 
-/** A Firestore doc caps at 1MB and this field shares dashboard_state with
- * everything else the client owns. 200 rows of prose is ~200KB — comfortably
- * inside, and far past the point where a human is still curating by hand. */
-export const PACKAGE_CAP = 200;
+export const COLLECTION = 'x_content_packages';
+
+/** Still a cap, just a far larger one, and no longer a document-size limit —
+ * it bounds one read, so the card cannot be made to pull the whole archive. */
+export const PACKAGE_CAP = 2000;
+
+/** Marks that the inventory has been written at least once. Lives in its own
+ * collection rather than as a `__meta` document inside the package collection,
+ * because a sentinel row in the same collection is one forgotten filter away
+ * from being rendered as a package. */
+const META_COLLECTION = 'x_content_inventory_meta';
+const META_DOC = 'state';
 
 const ID_SLUG_MAX = 48;
-
-function stateRef(clientId) {
-  const id = String(clientId ?? '').trim();
-  if (!id) throw Object.assign(new Error('clientId is required.'), { status: 400 });
-  return fb.adminDb.collection('dashboard_state').doc(id);
-}
 
 /** The bundled JSON is a module singleton. Handing it out by reference means the
  * first caller that mutates a row corrupts the seed for every later request in
@@ -45,67 +58,55 @@ function freshSeed() {
   return structuredClone(seedRows);
 }
 
-/**
- * Decide whether a stored blob counts as "the client has an inventory".
- *
- * ⚠️ `updatedAt` is the marker, NOT emptiness. Seeding on any empty array means
- * deleting your last row resurrects three example rows you already threw away —
- * so an inventory that has been written and then emptied stays empty. Only a
- * never-written field falls back to the repo seed.
- */
-function resolveStored(stored) {
-  const packages = Array.isArray(stored?.packages) ? stored.packages : null;
-  if (packages && (packages.length || stored.updatedAt)) {
-    return { packages, updatedAt: stored.updatedAt ?? null, seeded: false };
+async function readMeta() {
+  try {
+    const snap = await fb.adminDb.collection(META_COLLECTION).doc(META_DOC).get();
+    return snap.exists ? (snap.data() || {}) : {};
+  } catch {
+    return {};
   }
-  return { packages: freshSeed(), updatedAt: null, seeded: true };
 }
 
 /**
- * Read a client's inventory, falling back to the repo seed.
+ * Read the inventory, falling back to the repo seed.
+ *
+ * ⚠️ `updatedAt` is the marker, NOT emptiness. Seeding on any empty collection
+ * means deleting your last row resurrects three example rows you already threw
+ * away — so an inventory that has been written and then emptied stays empty.
+ * Only a never-written inventory falls back to the repo seed.
  *
  * ⚠️ NEVER WRITES. A read that persists its own fallback turns "look at the
  * card" into "you now own three example rows", and there is no way for the next
  * reader to tell a seeded doc from a curated one. The seed materializes on the
- * first real save instead (see mutateInventory).
+ * first real save instead (see upsertPackage).
+ *
+ * Stored rows are merged OVER the seed rather than replacing it, so a row the
+ * Archive Inbox has only written a story against still carries the series,
+ * rights and media the seed describes (see mergeInventory).
  *
  * @returns {Promise<{ packages: object[], updatedAt: number|null, seeded: boolean }>}
  */
-export async function readInventory(clientId) {
-  const snap = await stateRef(clientId).get();
-  const stored = snap.exists ? snap.data()?.marketingBrief?.contentInventory : null;
-  return resolveStored(stored);
+export async function readInventory() {
+  const [snap, meta] = await Promise.all([
+    fb.adminDb.collection(COLLECTION).limit(PACKAGE_CAP).get(),
+    readMeta(),
+  ]);
+  const stored = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
+  const updatedAt = Number.isFinite(meta.updatedAt) ? meta.updatedAt : null;
+
+  if (!stored.length && !updatedAt) {
+    return { packages: freshSeed(), updatedAt: null, seeded: true };
+  }
+  return { packages: mergeInventory(freshSeed(), stored), updatedAt, seeded: false };
 }
 
-/**
- * Read-modify-write the packages array under a transaction.
- *
- * A transaction rather than a bare merge because every mutation here is
- * read-modify-write on a single array: two tabs saving at once would otherwise
- * silently drop one of the two edits. Mirrors handleDismiss in
- * app/api/dashboard/quote-targets/route.js.
- *
- * The seed is what a first write starts FROM, because that is what the caller
- * was just shown — starting from `[]` would delete the other seed rows the
- * moment someone edits one of them.
- */
-async function mutateInventory(clientId, mutate) {
-  const ref = stateRef(clientId);
-  return fb.adminDb.runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    const current = resolveStored(snap.exists ? snap.data()?.marketingBrief?.contentInventory : null).packages;
-    const { packages, result } = mutate(current);
-    const updatedAt = Date.now();
-    tx.set(
-      ref,
-      {
-        marketingBrief: { contentInventory: { packages, updatedAt } },
-        updatedAt: fb.FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
-    return { ...result, packages, updatedAt };
-  });
+async function touchMeta() {
+  const updatedAt = Date.now();
+  await fb.adminDb.collection(META_COLLECTION).doc(META_DOC).set({
+    updatedAt,
+    touchedAt: fb.FieldValue.serverTimestamp(),
+  }, { merge: true });
+  return updatedAt;
 }
 
 function slugify(value) {
@@ -139,48 +140,62 @@ function stripUndefined(obj) {
 /**
  * Insert or replace one package, by id.
  *
+ * No transaction over the whole array any more: one package is one document, so
+ * two tabs editing two different rows no longer contend at all, and two tabs
+ * editing the SAME row is a last-write-wins on that row rather than one of them
+ * silently losing the other's unrelated edits.
+ *
  * Validation is structural only — `validatePackage` warnings are returned, not
  * enforced, because a row that will underperform is still a row the owner is
  * allowed to keep. Errors mean the matcher cannot use it at all, so they reject.
  *
- * @param {string} clientId
- * @param {object} pkg
- * @returns {Promise<{ pkg: object, packages: object[], warnings: string[], created: boolean, updatedAt: number }>}
+ * @returns {Promise<{ pkg, packages, warnings, created, updatedAt }>}
  */
-export async function upsertPackage(clientId, pkg) {
+export async function upsertPackage(pkg) {
   if (!pkg || typeof pkg !== 'object' || Array.isArray(pkg)) {
     throw Object.assign(new Error('pkg must be an object.'), { status: 400 });
   }
 
-  return mutateInventory(clientId, (current) => {
-    const taken = new Set(current.map((p) => p?.id).filter(Boolean));
-    const providedId = typeof pkg.id === 'string' ? pkg.id.trim() : '';
-    // ⚠️ Mint BEFORE validating: `id` is in REQUIRED_FIELDS, so a new row with
-    // no id yet would otherwise fail validation for a field only this function
-    // is supposed to supply.
-    const id = providedId || mintId(pkg, taken);
+  const before = await readInventory();
+  const taken = new Set(before.packages.map((p) => p?.id).filter(Boolean));
+  const providedId = typeof pkg.id === 'string' ? pkg.id.trim() : '';
+  // ⚠️ Mint BEFORE validating: `id` is in REQUIRED_FIELDS, so a new row with no
+  // id yet would otherwise fail validation for a field only this function is
+  // supposed to supply.
+  const id = providedId || mintId(pkg, taken);
+  const created = !taken.has(id);
 
-    const candidate = stripUndefined({ ...pkg, id, updatedAt: Date.now() });
-    const verdict = validatePackage(candidate);
-    if (!verdict.ok) {
-      throw Object.assign(new Error(verdict.errors.join('; ')), { status: 400, errors: verdict.errors });
+  const candidate = stripUndefined({ ...pkg, id, updatedAt: Date.now() });
+  const verdict = validatePackage(candidate);
+  if (!verdict.ok) {
+    throw Object.assign(new Error(verdict.errors.join('; ')), { status: 400, errors: verdict.errors });
+  }
+
+  // Reject rather than trim. Dropping the oldest row to make room is fine for a
+  // dismissed-ids list; here every row is something a human wrote or confirmed,
+  // and losing one silently is worse than refusing the save.
+  if (created && before.packages.length >= PACKAGE_CAP) {
+    throw Object.assign(
+      new Error(`Inventory is full (${PACKAGE_CAP} packages). Retire or delete a row before adding another.`),
+      { status: 409 },
+    );
+  }
+
+  // A first write materializes the seed, because that is what the caller was
+  // just shown — writing only the edited row would leave the other seed rows
+  // with no document, and the next read would still call them seed.
+  const batch = fb.adminDb.batch();
+  if (before.seeded) {
+    for (const row of before.packages) {
+      if (row?.id && row.id !== id) batch.set(fb.adminDb.collection(COLLECTION).doc(row.id), row, { merge: true });
     }
+  }
+  batch.set(fb.adminDb.collection(COLLECTION).doc(id), candidate, { merge: true });
+  await batch.commit();
+  const updatedAt = await touchMeta();
 
-    const idx = current.findIndex((p) => p?.id === id);
-    const packages = idx === -1 ? [...current, candidate] : current.map((p, i) => (i === idx ? candidate : p));
-
-    // Reject rather than trim. Dropping the oldest row to make room is fine for
-    // a dismissed-ids list; here every row is something a human wrote by hand,
-    // and losing one silently is worse than refusing the save.
-    if (packages.length > PACKAGE_CAP) {
-      throw Object.assign(
-        new Error(`Inventory is full (${PACKAGE_CAP} packages). Retire or delete a row before adding another.`),
-        { status: 409 },
-      );
-    }
-
-    return { packages, result: { pkg: candidate, warnings: verdict.warnings, created: idx === -1 } };
-  });
+  const after = await readInventory();
+  return { pkg: candidate, packages: after.packages, warnings: verdict.warnings, created, updatedAt };
 }
 
 /**
@@ -191,12 +206,25 @@ export async function upsertPackage(clientId, pkg) {
  *
  * @returns {Promise<{ removed: boolean, packages: object[], updatedAt: number }>}
  */
-export async function deletePackage(clientId, id) {
+export async function deletePackage(id) {
   const key = typeof id === 'string' ? id.trim() : '';
   if (!key) throw Object.assign(new Error('id is required.'), { status: 400 });
 
-  return mutateInventory(clientId, (current) => {
-    const packages = current.filter((p) => p?.id !== key);
-    return { packages, result: { removed: packages.length !== current.length } };
-  });
+  const before = await readInventory();
+  const existed = before.packages.some((p) => p?.id === key);
+
+  // Materialize the seed on a delete too, or deleting one seed row leaves the
+  // inventory still "never written" and the row comes straight back.
+  const batch = fb.adminDb.batch();
+  if (before.seeded) {
+    for (const row of before.packages) {
+      if (row?.id && row.id !== key) batch.set(fb.adminDb.collection(COLLECTION).doc(row.id), row, { merge: true });
+    }
+  }
+  batch.delete(fb.adminDb.collection(COLLECTION).doc(key));
+  await batch.commit();
+  const updatedAt = await touchMeta();
+
+  const after = await readInventory();
+  return { removed: existed, packages: after.packages, updatedAt };
 }

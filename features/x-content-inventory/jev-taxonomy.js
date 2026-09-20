@@ -93,10 +93,18 @@ export const QUESTIONS = [
 ];
 
 /** Where a decision goes based on its confidence. Gate questions never
- * auto-apply, whatever the band says. */
-export function routeDecision({ questionId, confidence } = {}) {
+ * auto-apply on a MODEL answer, whatever the band says.
+ *
+ * `humanConfirmed` is the archive's human confirmation for this question
+ * (`archive_review.humanConfirmations`), which the worker keeps separate from
+ * the model's `selectedValue` precisely so the two are never confused. A human
+ * answer applies unconditionally — including on a gate, which is what the gate
+ * has been waiting for, and regardless of the model's confidence, which is a
+ * statement about the model and not about the person who overruled it. */
+export function routeDecision({ questionId, confidence, humanConfirmed } = {}) {
   const q = QUESTIONS.find((x) => x.id === questionId);
   if (!q) return { action: 'reject', reason: `unknown question: ${questionId}` };
+  if (humanConfirmed) return { action: 'apply', reason: 'human-confirmed' };
   if (q.gate) {
     return { action: 'review', reason: 'gate question — a model answer is evidence, never permission' };
   }
@@ -116,7 +124,7 @@ export function routeDecision({ questionId, confidence } = {}) {
  * @param {object} input
  * @param {string} input.sha256
  * @param {string} [input.mediaType]  from AssetState
- * @param {Array<{questionId:string,value:string,confidence:number}>} input.decisions
+ * @param {Array<{questionId:string,value:string,confidence:number,humanConfirmed?:boolean}>} input.decisions
  */
 export function draftPackageFromDecisions({ sha256, mediaType, decisions = [] } = {}) {
   const pick = (id) => decisions.find((d) => d.questionId === id);

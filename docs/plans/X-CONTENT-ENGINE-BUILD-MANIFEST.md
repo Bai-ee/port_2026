@@ -6,6 +6,8 @@ Everything built in the 2026-09-20 session, where it lives, and how to verify it
 
 Committed on branch `feat/brief-rendered-scrape-phase-1`.
 
+**Since (2026-09-20, same branch):** the day view has a dashboard card — 4 new files, **202/202 X tests passing**, still $0 and still nothing posted. See §10.
+
 ---
 
 ## 1. Run it
@@ -41,6 +43,8 @@ Every one is free, local, read-only, and cannot post.
 | `__tests__/draft.test.js` | 85 | 8 tests — the refusals, the rules, the quote-URL exemption |
 | `__tests__/match.test.js` | 96 | 9 tests — rights, media, effort, anniversary, fatigue, gap naming, no-double-use, thin story |
 | `__tests__/ledger.test.js` | 85 | 7 tests, incl. a regression guard that view-ranking surfaces the two documented breakout posts |
+| `day-plan-projection.js` | 141 | The card payload. Names each slot's state ONCE (`inventory`/`ledger`/`scan`/`gap`/`empty`), counts each route into a slot separately, trims post text for the wire. Pure |
+| `__tests__/day-plan-projection.test.js` | 118 | 10 tests — the state machine, the empty-vs-gap distinction, adoption carried to the UI, truncation, junk tolerance |
 
 ## 3. Code — `scripts/x-content/` (new scripts)
 
@@ -92,7 +96,7 @@ Every one is free, local, read-only, and cannot post.
 | Publish path | P4 | Hobby cron is once daily; X API write credits unknown |
 | Still → video render | P5 | nothing — this is what unlocks the archive for showcase slots |
 | Pillar lift reporting | P6 | 60 days of ledger data |
-| Card UI for the day view | — | nothing; `day-view.mjs` is terminal-only today |
+| Drafting from the card | — | deliberate: `--execute` spends per slot, so drafting stays a terminal action |
 | Entity-fed triggers (artist playing, venue news, reissue) | — | the Archive has **no entity table**; these are the strongest occasions in the catalog |
 
 ## 9. Three findings that changed the build
@@ -100,3 +104,27 @@ Every one is free, local, read-only, and cannot post.
 1. **A showcase slot needs video, always** — caught by a test. A still reaches less than plain text, so the matcher refuses rather than filling the slot badly. Most of the archive is stills, which is why P5 matters more than first ranked.
 2. **Rank resurrections on views, not likes** — likes-ranking buried both documented breakout posts (4,712 and 1,870 views) under a 4-like post 60 people saw.
 3. **A high-lift, low-share type cannot enter the plan** — mix moves are damped on purpose *and* gap analysis is share-based, so self-quote (benchmark's best type at 1.67× lift, 2.49% share) is invisible to both. The adoption floor lives in `day-view.mjs` as a **proposed** change to `build-calendar.js`, not a silent edit of it.
+
+---
+
+## 10. The day-view card (the front end)
+
+`day-view.mjs` was terminal-only. This is the same day, in the dashboard.
+
+| Layer | File | What it owns |
+|---|---|---|
+| Projection | `features/x-content-inventory/day-plan-projection.js` | **Pure.** `buildDayPlan` output → card payload. Names each slot's state once; counts each route into a slot separately |
+| Tests | `features/x-content-inventory/__tests__/day-plan-projection.test.js` | 10 cases |
+| Route | `app/api/dashboard/x-content/route.js` | `GET ?action=day-plan[&posts=&date=&handle=]`, admin-only |
+| Card + modal | `DashboardPage.jsx` | Card `x-content-day` (`category: 'knowledge'`), 3-tab modal (Plan / Gaps / Inventory) |
+| Styles | `styles/dashboard/12-x-content.css` | `.xcd-*`, appended to `index.css` — never inserted, the cascade above it is load-bearing |
+
+**It is read-only and it cannot post or draft.** Drafting spends (one Anthropic call per slot) and publishing is P4/blocked, so both stay in the terminal behind an explicit human action (§3 decision 7 in the handoff).
+
+Three decisions worth knowing:
+
+1. **Nothing is mirrored into `dashboard_state`.** The plan is a pure function of committed corpora + the local inventory, so caching it would only create a second version of the day that can go stale. The card computes on open; there is no write path and no cron.
+2. **`plan.filled` is not the number on screen.** It counts inventory matches only, so a day carrying a re-surfaced winner and two scan slots would read as one-fifth built. The card counts inventory / ledger / scan / gap separately and labels each.
+3. **The corpora are `import`ed, not `readFileSync`'d.** A computed path is invisible to the Next tracer, so the files would be missing from the deployed function — a 500 in production that passes locally.
+
+Still terminal-only, on purpose: drafting (`draft-day.mjs`), the session brief, and everything that spends.
