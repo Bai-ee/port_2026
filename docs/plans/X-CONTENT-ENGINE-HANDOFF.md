@@ -52,7 +52,10 @@ The join is an inventory, a matcher, and a ledger. Architecture: [`ARCHIVE-X-CON
 | Competitive + monetization research | [`x-monetization-research.md`](../audits/x-monetization-research.md), [`x-music-scene-graph.json`](../audits/x-music-scene-graph.json) | ✅ |
 | Copy patterns | [`x-copy-patterns.md`](../audits/x-copy-patterns.md) | ✅ |
 | Post ledger + resurrection | `features/x-content-inventory/ledger.js` + 7 tests | ✅ P2, **backfilled from the corpus** |
-| Jev question set (archive ⇄ engine seam) | `features/x-content-inventory/jev-taxonomy.js` | ✅ data; worker must vendor the JSON export |
+| Jev question set (archive ⇄ engine seam) | `features/x-content-inventory/jev-taxonomy.js` | ✅ data |
+| Vocabulary export for the worker | `scripts/x-content/export-jev-taxonomy.mjs` → `jev-taxonomy.export.json` | ✅ artifact committed; `--check` fails when stale, and a test guards it. **Still to do: the worker must actually vendor it** |
+| Archive → package adapter | `features/x-content-inventory/archive-ingest.js` + 14 tests | ✅ a CONFIRMED `archive_review` record becomes a draft ContentPackage; human confirmations beat model answers, and clear the rights gate |
+| Archive Inbox card | `components/dashboard/ArchiveInboxCard.jsx`, `app/api/dashboard/archive-inbox/route.js` | ✅ `social` bucket, admin, full-width. Reads the archive, writes only the story |
 | Copy drafting | `features/x-content-inventory/draft.js` + 8 tests, `scripts/x-content/draft-day.mjs` | ✅ P3 |
 | Shared day-plan builder | `features/x-content-inventory/plan-day.js` | ✅ (day-view and draft-day share it) |
 | Publish path | — | ❌ P4, **blocked** (§5) |
@@ -116,6 +119,8 @@ The floor (benchmark lift ≥1.3, benchmark n ≥8, own share <3% → one slot/d
 ## 7. Next actions, in order
 
 1. **Fill the inventory.** 10 records, 5 flyers, 5 productions → rows in `content-packages.json`. Validate with `validateInventory`. **This is the only blocker on everything else.** The card's **Gaps** tab names what is missing per slot and its **Inventory** tab lists every row that fails or warns, so the shortfall is now visible without running anything.
+
+   The Archive is now a second way to fill it: any asset confirmed in `/archive` arrives as a draft package through `archive-ingest.js`, carrying pillar, series, era, media and rights — everything except the story. That path needs no hand-written JSON at all, but it produces nothing until assets are confirmed on the archive side (Phase 5).
 2. ~~P2 — the ledger.~~ ✅ done, and backfilled: self-quote slots propose real past winners today, with no new content and no new posts.
 3. ~~P3 — copy drafting.~~ ✅ done. Shapes per series, refuses an empty story, guard + score on every draft, `--execute` instrumented through `logAnthropicCall`. **Does not write to `social_posts` yet** — that is the first step of P4.
 4. **P4 — publish path**, after the owner answers §5.2 and §5.3.
