@@ -13,7 +13,21 @@ export async function POST(request) {
   const { workerId, sourceId, label } = body || {};
   if (!workerId || !sourceId || !label) return NextResponse.json({error:'workerId, sourceId and label required'}, {status:400});
   const record = { workerId:String(workerId), sourceId:String(sourceId), label:String(label), state:body.state || 'ONLINE', updatedAt:fb.FieldValue.serverTimestamp() };
-  await fb.adminDb.collection('archive_workers').doc(String(workerId)).collection('sources').doc(String(sourceId)).set(record,{merge:true});
+
+  // Only the heartbeat route used to create archive_workers/{workerId}, so a
+  // freshly registered worker stayed invisible on /archive until its first
+  // heartbeat landed. Source registration now upserts the parent doc too.
+  const workerRef = fb.adminDb.collection('archive_workers').doc(String(workerId));
+  const existing = await workerRef.get();
+  const workerUpsert = { workerId: String(workerId), updatedAt: fb.FieldValue.serverTimestamp() };
+  if (!existing.exists || !existing.data()?.registeredAt) {
+    workerUpsert.registeredAt = fb.FieldValue.serverTimestamp();
+  }
+
+  await Promise.all([
+    workerRef.set(workerUpsert, { merge: true }),
+    workerRef.collection('sources').doc(String(sourceId)).set(record, { merge: true }),
+  ]);
   return NextResponse.json({ok:true});
 }
 

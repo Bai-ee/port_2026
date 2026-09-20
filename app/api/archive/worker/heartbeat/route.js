@@ -23,16 +23,27 @@ export async function POST(request) {
   if (Number.isNaN(Date.parse(at))) return json({ error: 'Invalid heartbeat timestamp' }, 400);
 
   const now = new Date().toISOString();
+  // The daemon sends an idle ONLINE heartbeat with no counters on startup and
+  // every ~60s. Writing `counters: null` for that heartbeat used to blank out
+  // a completed job's numbers the instant the job finished. Only touch the
+  // `counters` field when this heartbeat actually carries one.
+  const hasCounters = Boolean(counters) && typeof counters === 'object';
   const record = {
     workerId: String(workerId),
     sourceId: String(sourceId),
     jobId: jobId ? String(jobId) : null,
     state,
     workerAt: at,
-    counters: counters || null,
     lastHeartbeatAt: fb.FieldValue.serverTimestamp(),
     updatedAt: fb.FieldValue.serverTimestamp(),
   };
+  if (hasCounters) {
+    record.counters = counters;
+    // Survives even if a later job's own early heartbeats reset `counters`
+    // to a fresh zero state before the UI ever reads them.
+    record.lastJobCounters = counters;
+    record.lastJobAt = fb.FieldValue.serverTimestamp();
+  }
 
   // One stable worker document gives the operator surface a cheap current-state read.
   // A source subdocument preserves per-NAS/source status without exposing local paths.
@@ -43,7 +54,7 @@ export async function POST(request) {
     sourceRef.set({ ...record, workerId: String(workerId) }, { merge: true }),
   ]);
 
-  return json({ ok: true, received: { workerId, sourceId, jobId: jobId || null, state, at, counters: counters || null }, serverAt: now });
+  return json({ ok: true, received: { workerId, sourceId, jobId: jobId || null, state, at, counters: hasCounters ? counters : null }, serverAt: now });
 }
 
 export async function GET() {
