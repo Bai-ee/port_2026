@@ -52,8 +52,8 @@ feature gets a known source, owner, test gate, and rollback point.
 
 | Priority | Source | Live divergence (behind/ahead) | Status | What it contains | Next safe action |
 | --- | --- | ---: | --- | --- | --- |
-| P0 | `origin/claude/archive-poc-finalization-6qmg7k` | 0 / 45 | INTEGRATE | Archive control plane, worker command APIs, human Jev review, approval-gated Arweave workflow, static viewer, build fixes | Branch from this exact head; run archive tests and a production build |
-| P0 | `/Users/bballi/Documents/Repos/assetManager` `origin/feat/archive-master-plan` | external; local is 8 commits behind | EXTERNAL | NAS-side worker, SQLite state, hashing, dedupe, analysis, Jev boundary, re-hash-and-upload behavior | Update worker checkout separately; never merge its UI/code into HITLOOP |
+| P0 | `origin/claude/archive-poc-finalization-6qmg7k` | 0 / 45 | INTEGRATE | Archive control plane, worker command APIs, human Jev review, approval-gated Arweave workflow, static viewer, build fixes | Focused tests and production build pass; continue to small-worker validation |
+| P0 | `/Users/bballi/Documents/Repos/assetManager` `origin/feat/archive-master-plan` | external; local is 8 commits behind | EXTERNAL | NAS-side worker, SQLite state, hashing, dedupe, analysis, Jev boundary, re-hash-and-upload behavior | Apply the validated retry-state fix branch, then run a controlled worker/control-plane handshake |
 | P1 | `origin/claude/archive-poc-finalization-f0u17f` | 22 / 51 | REBASE | X day view, Archive Inbox, archive-to-content-package bridge, Jev taxonomy export | Rebase onto live after P0; resolve its Dashboard/X-content divergence deliberately |
 | P1 | `feat/brief-rendered-scrape-phase-1` | 22 / 46 | REBASE + SNAPSHOT | Email scheduler, rendered brief scrape, dashboard recovery, home work, Paint Studio, X-content frontend | Snapshot dirty work; use as source for focused lanes, not a direct merge |
 | P1 | local untracked Studio source | not committed | SNAPSHOT | Invoice Studio, standalone Looper, Loop Studio, SP-16 export, Edittrax player, loopcore service | Preserve in WIP snapshot, then split by product boundary |
@@ -162,6 +162,33 @@ TwelveLabs: the operator confirms the credential exists. This checkout only has
 secrets. Record the actual runtime location and variable name during the P0
 environment check; do not print the secret or commit it.
 
+## Validation Evidence - 2026-09-20
+
+Completed on the isolated P0 sources:
+
+- HITLOOP archive-control branch: 18 focused archive tests passed.
+- HITLOOP archive-control branch: `npm run build` passed after installing the
+  lockfile-declared `@ardrive/turbo-sdk` dependency.
+- HITLOOP build warning: Turbopack reports a dynamic filesystem/import trace
+  through `next.config.mjs` and the lead-generation route. It does not fail the
+  build, but it should be reduced before a general performance-hardening pass.
+- Archive Worker: 9 archive tests passed after worker fix `049249e`
+  (`codex/archive-worker-retryable-file-state`). The fix persists a file
+  location before the stability dwell so a changing file becomes
+  `RETRYABLE_FAILED` rather than disappearing from durable retry state.
+
+Not yet validated:
+
+- The Archive Worker full `npm run typecheck` remains red in unrelated legacy
+  UI code (`lib/utils`, obsolete `ArchiveBox` imports, and UI index typing).
+  Archive-specific CI should remain separate until those legacy errors are
+  repaired.
+- HITLOOP-to-worker authenticated heartbeat/source/command handshake.
+- A real small NAS collection, TwelveLabs analysis, a human review decision,
+  an Arweave quote/upload, permanent manifest/viewer, and Archive Inbox/X
+  propagation.
+- The exact deployment runtime location/name of the confirmed TwelveLabs key.
+
 ## Integration Sequence
 
 1. Snapshot the current HITLOOP working tree on a dated WIP branch. This is a
@@ -198,8 +225,8 @@ environment check; do not print the secret or commit it.
 | Branch | Create from | Purpose | Do not merge until |
 | --- | --- | --- | --- |
 | `codex/wip/hitloop-local-snapshot-20260920` | current dirty worktree | Preserve all current HITLOOP source | It is split into focused feature commits |
-| `codex/integration/archive-control-plane` | `origin/claude/archive-poc-finalization-6qmg7k` | P0 archive control plane | Archive build/tests and small-worker validation pass |
-| `codex/integration/archive-inbox-x-content` | current production, with selected P1 commits | Archive-to-X bridge | P0 shape is stable and X divergence is resolved |
+| `codex/archive-control-plane-integration` | `origin/claude/archive-poc-finalization-6qmg7k` | P0 archive control plane | Archive build/tests pass; small-worker validation remains |
+| `codex/archive-inbox-x-content-source` | `origin/claude/archive-poc-finalization-f0u17f` | Preserve the P1 archive-to-X source | A production-based integration branch is created after P0 shape is stable |
 | `codex/feature/studio-*` | latest promoted Studio shell/integration branch | Invoice, Paint, Looper, Edittrax lanes | Their focused test and route checks pass |
 | `codex/feature/home-layout-experiments` | current production after functional lanes | Optional homepage direction | A layout is selected and visual QA passes |
 
