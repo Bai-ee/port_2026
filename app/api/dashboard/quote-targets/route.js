@@ -9,6 +9,19 @@ import { guardXPost } from '../../../../features/x-content-guard/index.js';
 import { compareToBenchmark, resolveXGrowthProfile, resolveTier } from '../../../../features/x-benchmark/index.js';
 import { buildCalendar } from '../../../../features/x-benchmark/build-calendar.js';
 import { readCorpus, readCorpora, saveGapReport } from '../../../../features/x-benchmark/store.js';
+// Aliased: features/x-quote-targets/day-plan.js already owns the name
+// `buildDayPlan` in this file, and the two build entirely different things —
+// that one merges a calendar day with scanned quote candidates, this one plans
+// a day of authored posts out of the content inventory.
+import { buildDayPlan as buildContentDayPlan } from '../../../../features/x-content-inventory/plan-day.js';
+import { validateInventory } from '../../../../features/x-content-inventory/schema.js';
+import { readInventory, upsertPackage, deletePackage } from '../../../../features/x-content-inventory/store.js';
+// Same static-import reasoning as bundledCalendar above. These are the two
+// ingested corpora the planner needs as ROWS — x_corpora stores summarized stat
+// blocks, which summarizeCorpus cannot be fed, so the committed JSON is the
+// only source of rows a serverless request can reach.
+import ownCorpusRows from '../../../../docs/audits/bai-ee-x-corpus.json' with { type: 'json' };
+import benchmarkCorpusRows from '../../../../docs/audits/seb-design-x-corpus.json' with { type: 'json' };
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -239,7 +252,73 @@ async function handleDismiss(clientId, body) {
   return { ok: true, dismissed };
 }
 
-const SUPPORTED_ACTIONS = ['draft-quote', 'dismiss', 'refresh-analysis'];
+const SUPPORTED_ACTIONS = [
+  'draft-quote',
+  'dismiss',
+  'refresh-analysis',
+  'content-plan',
+  'inventory-list',
+  'inventory-save',
+  'inventory-delete',
+];
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+/** Slot count per day. The upper bound is not a guess: tier 2 in
+ * build-calendar.js tops out well below it, and a caller asking for 50 slots is
+ * asking the planner to invent content that does not exist. */
+const MAX_PLAN_POSTS = 12;
+
+/**
+ * Plan one day of authored posts from the content inventory.
+ *
+ * Free and offline in the same sense as refresh-analysis: two committed corpora,
+ * the client's saved inventory, and pure functions over both. No X API, no
+ * ScrapeCreators, no LLM — drafting the actual copy is a separate, explicit step.
+ *
+ * ⚠️ The corpora are @bai_ee's, so the mix this returns is benchmarked against
+ * @bai_ee's history regardless of which client is loaded. Per-client planning
+ * needs per-client corpus ROWS, which nothing stores yet.
+ */
+async function handleContentPlan(context, body) {
+  const requestedPosts = Number(body?.posts);
+  const posts = Number.isFinite(requestedPosts) && requestedPosts >= 1
+    ? Math.min(Math.floor(requestedPosts), MAX_PLAN_POSTS)
+    : 5;
+  const date = typeof body?.date === 'string' && DATE_RE.test(body.date.trim())
+    ? body.date.trim()
+    : new Date().toISOString().slice(0, 10);
+
+  const { packages, seeded } = await readInventory(context.clientId);
+
+  const plan = buildContentDayPlan({
+    corpusRows: ownCorpusRows,
+    benchmarkRows: benchmarkCorpusRows,
+    packages,
+    date,
+    posts,
+  });
+
+  // `seeded` travels with the plan so the card can say the gaps come from the
+  // example rows, not from an inventory someone actually curated.
+  return { ok: true, plan, seeded };
+}
+
+async function handleInventoryList(context) {
+  const { packages, updatedAt, seeded } = await readInventory(context.clientId);
+  return { ok: true, packages, updatedAt, seeded, audit: validateInventory(packages) };
+}
+
+async function handleInventorySave(context, body) {
+  const { pkg, packages, warnings, created } = await upsertPackage(context.clientId, body?.pkg);
+  // The whole-inventory audit, not just this row's: duplicate ids and series
+  // coverage only exist as properties of the set.
+  return { ok: true, pkg, created, warnings, audit: validateInventory(packages) };
+}
+
+async function handleInventoryDelete(context, body) {
+  const { removed } = await deletePackage(context.clientId, body?.id);
+  return { ok: true, removed };
+}
 
 /**
  * Recompute the client's gap report and calendar from already-ingested corpora.
@@ -338,6 +417,22 @@ export async function POST(request) {
     }
     if (action === 'dismiss') {
       const result = await handleDismiss(context.clientId, body);
+      return json(result);
+    }
+    if (action === 'content-plan') {
+      const result = await handleContentPlan(context, body);
+      return json(result);
+    }
+    if (action === 'inventory-list') {
+      const result = await handleInventoryList(context);
+      return json(result);
+    }
+    if (action === 'inventory-save') {
+      const result = await handleInventorySave(context, body);
+      return json(result);
+    }
+    if (action === 'inventory-delete') {
+      const result = await handleInventoryDelete(context, body);
       return json(result);
     }
     return json({ error: `Unknown action: ${action}`, supportedActions: SUPPORTED_ACTIONS }, 400);
