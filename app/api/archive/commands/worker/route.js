@@ -24,7 +24,10 @@ export async function PATCH(request) {
   if(state==='COMPLETE' && result?.transactionId && result?.contentAssetId){
     await fb.adminDb.collection('archive_uploads').doc(result.transactionId).set({
       kind:'original',state:'UPLOADED',transactionId:result.transactionId,contentAssetId:result.contentAssetId,
-      arweaveUrl:result.arweaveUrl,sizeBytes:result.sizeBytes||null,updatedAt:fb.FieldValue.serverTimestamp(),createdAt:fb.FieldValue.serverTimestamp()
+      arweaveUrl:result.arweaveUrl,sizeBytes:result.sizeBytes||null,
+      collectionId:result.collectionId||null,archiveName:result.archiveName||null,sha256:result.sha256||null,
+      contentType:result.contentType||null,sourceId:result.sourceId||null,relativePath:result.relativePath||null,
+      updatedAt:fb.FieldValue.serverTimestamp(),createdAt:fb.FieldValue.serverTimestamp()
     },{merge:true});
   }
   return NextResponse.json({ok:true});
