@@ -2,9 +2,9 @@
 
 Everything built in the 2026-09-20 session, where it lives, and how to verify it. For *why* any of it exists, read [`X-CONTENT-ENGINE-HANDOFF.md`](./X-CONTENT-ENGINE-HANDOFF.md) — this file is the inventory, not the reasoning.
 
-**Totals:** 10 new files of code (1,939 lines incl. tests) · 6 new docs · 3 existing docs edited · 1 skill · **184/184 X tests passing** · **$0 spent** · **nothing posted**.
+**Totals:** 13 new files of code · 7 new docs · 3 existing docs edited · 1 skill · **192/192 X tests passing** · **$0 spent** · **nothing posted**.
 
-All of it is **uncommitted** on branch `feat/brief-rendered-scrape-phase-1`.
+Committed on branch `feat/brief-rendered-scrape-phase-1`.
 
 ---
 
@@ -15,7 +15,9 @@ node scripts/x-content/session-brief.mjs --days 14                 # where the a
 node scripts/x-content/session-brief.mjs --benchmark seb__design   # + A/B gap report
 node scripts/x-content/session-brief.mjs --handle <anyone>         # profile any account
 node scripts/x-content/day-view.mjs --posts 5                      # today's posting plan
-node --test 'features/x-*/__tests__/**/*.test.{js,mjs}'            # 184 tests
+node scripts/x-content/draft-day.mjs                               # draft the copy (dry run, free)
+node scripts/x-content/draft-day.mjs --execute --max 3             # real drafts, ~$0.001 each
+node --test 'features/x-*/__tests__/**/*.test.{js,mjs}'            # 192 tests
 /x-strategy                                                        # session-boot skill
 ```
 
@@ -34,6 +36,9 @@ Every one is free, local, read-only, and cannot post.
 | `triggers.js` | 252 | **21 occasions** — why post this today. Each carries strength, detection method, the data it needs. `passing` (a death) is hard-flagged `neverAutomate` |
 | `jev-taxonomy.js` | 174 | The 6 questions the Archive's Jev layer should answer so a processed asset arrives as a half-built package. Choices derive from `categories.js` so the two repos cannot drift. `clientWork` is a gate; `entities` is marked blocked |
 | `content-packages.json` | — | **The live inventory. 3 rows: 1 real, 2 skeletons.** This is the bottleneck |
+| `draft.js` | 190 | Copy shapes per series (from the measured patterns) · `buildDraftPrompt` — **refuses an empty story rather than inventing** · `validateDraft` (280, hashtags, inline links, quote-caption length, bait) · deterministic fallback that truncates the author instead of paraphrasing |
+| `plan-day.js` | 140 | The shared day-plan builder — corpus → gap report → calendar → adoption floor → match. `day-view` and `draft-day` both use it so they can never describe different slots |
+| `__tests__/draft.test.js` | 85 | 8 tests — the refusals, the rules, the quote-URL exemption |
 | `__tests__/match.test.js` | 96 | 9 tests — rights, media, effort, anniversary, fatigue, gap naming, no-double-use, thin story |
 | `__tests__/ledger.test.js` | 85 | 7 tests, incl. a regression guard that view-ranking surfaces the two documented breakout posts |
 
@@ -42,7 +47,8 @@ Every one is free, local, read-only, and cannot post.
 | File | Lines | What it does |
 |---|---:|---|
 | `session-brief.mjs` | 337 | The session boot. Pulls a timeline via `bird`, normalizes it with the **same** `x-benchmark` functions the corpora use, prints cadence vs targets, mix deltaed against baseline, mechanical-rule violations, quote-target audit vs watchlist, gap days, and an explicit **NOT MEASURED** block. `--benchmark` adds the A/B gap report; `--json` for machine output |
-| `day-view.mjs` | 214 | The daily plan. Builds the calendar from the measured gap report, applies the **adoption floor**, matches inventory + ledger into slots, prints what fills each one and names what is missing |
+| `draft-day.mjs` | 185 | Drafts the copy. Dry run is free and makes no network call; `--execute` makes one Anthropic call per slot, **instrumented via `logAnthropicCall`**, then runs guard + score on the result. Cannot post — output is terminal text only |
+| `day-view.mjs` | 120 | The daily plan. Builds the calendar from the measured gap report, applies the **adoption floor**, matches inventory + ledger into slots, prints what fills each one and names what is missing |
 
 ---
 
@@ -82,7 +88,7 @@ Every one is free, local, read-only, and cannot post.
 
 | | Phase | Blocked on |
 |---|---|---|
-| Copy drafting | P3 | inventory (it drafts from `story`) |
+| Writing drafts to `social_posts` | P4 | nothing — first step of the publish path |
 | Publish path | P4 | Hobby cron is once daily; X API write credits unknown |
 | Still → video render | P5 | nothing — this is what unlocks the archive for showcase slots |
 | Pillar lift reporting | P6 | 60 days of ledger data |

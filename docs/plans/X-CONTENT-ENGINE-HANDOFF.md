@@ -2,7 +2,7 @@
 
 > **Pick up here.** This is the continuity doc for the X growth + archive-content workstream. It owns no findings — it says what exists, what was decided, what is blocked, and what to do next. Every claim links to the doc or module that owns it.
 
-**Last updated:** 2026-09-20 (P0–P2 complete, 184 X tests passing) · **Branch:** `feat/brief-rendered-scrape-phase-1` · **Everything below is uncommitted.**
+**Last updated:** 2026-09-20 (P0–P3 complete, 192 X tests passing) · **Branch:** `feat/brief-rendered-scrape-phase-1` · **Everything below is uncommitted.**
 
 ---
 
@@ -12,7 +12,8 @@
 /x-strategy                                             # the skill: loads docs, verifies read path, pulls state
 node scripts/x-content/session-brief.mjs --days 14      # where the account stands now
 node scripts/x-content/day-view.mjs --posts 5           # today's plan: slots, matched content, named gaps
-node --test 'features/x-*/__tests__/**/*.test.{js,mjs}' # 184 tests, all passing as of this doc
+node scripts/x-content/draft-day.mjs                     # draft the copy (dry run, free)
+node --test 'features/x-*/__tests__/**/*.test.{js,mjs}' # 192 tests, all passing as of this doc
 ```
 
 All three are free, local, read-only, and cannot post.
@@ -50,7 +51,8 @@ The join is an inventory, a matcher, and a ledger. Architecture: [`ARCHIVE-X-CON
 | Copy patterns | [`x-copy-patterns.md`](../audits/x-copy-patterns.md) | ✅ |
 | Post ledger + resurrection | `features/x-content-inventory/ledger.js` + 7 tests | ✅ P2, **backfilled from the corpus** |
 | Jev question set (archive ⇄ engine seam) | `features/x-content-inventory/jev-taxonomy.js` | ✅ data; worker must vendor the JSON export |
-| Copy drafting | — | ❌ P3 |
+| Copy drafting | `features/x-content-inventory/draft.js` + 8 tests, `scripts/x-content/draft-day.mjs` | ✅ P3 |
+| Shared day-plan builder | `features/x-content-inventory/plan-day.js` | ✅ (day-view and draft-day share it) |
 | Publish path | — | ❌ P4, **blocked** (§5) |
 | Still → video render | — | ❌ P5 |
 | Pillar lift reporting | — | ❌ P6 |
@@ -113,7 +115,7 @@ The floor (benchmark lift ≥1.3, benchmark n ≥8, own share <3% → one slot/d
 
 1. **Fill the inventory.** 10 records, 5 flyers, 5 productions → rows in `content-packages.json`. Validate with `validateInventory`. **This is the only blocker on everything else.**
 2. ~~P2 — the ledger.~~ ✅ done, and backfilled: self-quote slots propose real past winners today, with no new content and no new posts.
-3. **P3 — copy drafting.** Package story + Client Brain voice + the shapes in `x-copy-patterns.md` §6 → guard → score → `social_posts` draft.
+3. ~~P3 — copy drafting.~~ ✅ done. Shapes per series, refuses an empty story, guard + score on every draft, `--execute` instrumented through `logAnthropicCall`. **Does not write to `social_posts` yet** — that is the first step of P4.
 4. **P4 — publish path**, after the owner answers §5.2 and §5.3.
 5. **P5 — still → video**, which is what unlocks the archive for showcase slots at all.
 
