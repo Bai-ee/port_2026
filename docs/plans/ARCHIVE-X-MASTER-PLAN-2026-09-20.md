@@ -75,7 +75,9 @@ Worker = `Bai-ee/assetManager` (`lib/archive/*`, `npm run archive:worker`).
 - **W4** streaming Arweave upload → worker branch `a51b562` (20 tests).
 - **W1** analysis + Jev wiring → worker branch `91a13c3` (33 tests); follow-up for the analyze endpoint in progress.
 - **W5** control-plane hardening → dev branch `aa5c9e7b`; verified live (ONLINE + last-seen age, Recent Commands strip).
-- **W2** Quick Ingest → dev branch `cfd87e1f` + bucket move `def2b1f0`; **verified live**: a 4.8 KB PNG uploaded from the page, object present at `archive-intake/{id}/…` in HITLOOP's own bucket, `archive_intake` doc `UPLOADED`. Contract: `docs/archive/INTAKE_CONTRACT.md`. W3 can start once W1 lands (both edit `daemon.ts`).
+- **W2** Quick Ingest → dev branch `cfd87e1f` + bucket move `def2b1f0`; **verified live**: a 4.8 KB PNG uploaded from the page, object present at `archive-intake/{id}/…` in HITLOOP's own bucket, `archive_intake` doc `UPLOADED`. Contract: `docs/archive/INTAKE_CONTRACT.md`.
+- **W3** worker cloud intake → worker branch `81d61e8` (51 tests); **verified live**: the staged PNG was claimed, streamed to `os.tmpdir()/hitloop-archive-intake/{intakeId}/`, hashed (`e12c95ae…`), synced to `archive_review`, intake doc `HASHED`. A second source `Cloud intake` now registers ONLINE beside `Bryan NAS`. REVIEWED/ARCHIVED/PURGED transitions are wired to the Arweave command path but not yet exercised.
+- **Live TwelveLabs run failed before spend:** direct upload 413 at ~140 MB (docs say 200 MB); stale AppleDouble asset submitted (404); daemon logged nothing. W1 follow-up 2 (multipart upload, skip stale `._*`, failure logging) in progress. No TwelveLabs or Anthropic spend has occurred yet.
 
 ### 2b. Process Folder outcome (`hpit03_finals`, first real NAS job)
 - Command `PROCESS_COLLECTION` → COMPLETE in ~84 s over SMB.
