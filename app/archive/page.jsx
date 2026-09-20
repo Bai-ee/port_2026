@@ -5,6 +5,44 @@ import { useAuth } from '../../AuthContext';
 
 const pipeline = ['NAS SOURCE', 'HASH + DEDUPE', 'TWELVELABS', 'JEV', 'HUMAN REVIEW', 'ARWEAVE'];
 
+// A worker heartbeats at most every ~60s while idle; 3x that is a generous
+// margin before treating it as gone rather than a missed poll.
+const WORKER_OFFLINE_MS = 180000;
+
+function relativeTime(iso) {
+  if (!iso) return '';
+  const ms = Date.now() - Date.parse(iso);
+  if (!Number.isFinite(ms)) return '';
+  if (ms < 0) return 'just now';
+  const s = Math.floor(ms / 1000);
+  if (s < 5) return 'just now';
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+// PROCESSING/ERROR/PAUSED are trusted as-sent (the worker explicitly reported
+// them). Anything else (ONLINE, or no state at all) is only trustworthy while
+// recent — a heartbeat older than WORKER_OFFLINE_MS means the worker likely
+// died without ever sending an OFFLINE heartbeat, so render it OFFLINE instead
+// of a stale ONLINE forever.
+function deriveWorkerDisplay(worker) {
+  if (!worker) return { label: null, color: '#555', detail: '' };
+  const { state, lastHeartbeatAt } = worker;
+  const heartbeatAgo = lastHeartbeatAt ? relativeTime(lastHeartbeatAt) : '';
+  if (state === 'PROCESSING') return { label: 'PROCESSING', color: '#4ade80', detail: heartbeatAgo };
+  if (state === 'ERROR') return { label: 'ERROR', color: '#e0524f', detail: heartbeatAgo };
+  if (state === 'PAUSED') return { label: 'PAUSED', color: '#e0b34d', detail: heartbeatAgo };
+  const ageMs = lastHeartbeatAt ? Date.now() - Date.parse(lastHeartbeatAt) : Infinity;
+  if (!Number.isFinite(ageMs) || ageMs > WORKER_OFFLINE_MS) {
+    return { label: 'OFFLINE', color: '#555', detail: lastHeartbeatAt ? `last seen ${heartbeatAgo}` : 'never seen' };
+  }
+  return { label: state || 'ONLINE', color: '#4ade80', detail: heartbeatAgo };
+}
+
 export default function ArchivePage() {
   const { user, loading: authLoading } = useAuth();
   const authedFetch = useCallback(async (url, init={}) => {
@@ -28,6 +66,7 @@ export default function ArchivePage() {
   const [approvedAssets,setApprovedAssets]=useState([]);
   const [uploadState,setUploadState]=useState('');
   const [manifestTx,setManifestTx]=useState('');
+  const [recentCommands,setRecentCommands]=useState([]);
 
   const loadApproved=useCallback(async()=>{
     if(!user)return;
@@ -115,7 +154,31 @@ export default function ArchivePage() {
   }, [user, authLoading, authedFetch]);
 
   const worker = workers[0];
-  const counters = worker?.counters || {};
+  const workerDisplay = deriveWorkerDisplay(worker);
+  // A live processing job's counters win; once idle, fall back to the last
+  // completed job's numbers instead of showing "—" (heartbeat route no
+  // longer blanks `counters`, but a worker that hasn't run a job since this
+  // fix shipped, or was reset, still only has lastJobCounters to show).
+  const liveCounters = worker?.counters;
+  const lastJobCounters = worker?.lastJobCounters;
+  const counters = liveCounters || lastJobCounters || {};
+  const countersFromLastJob = !liveCounters && !!lastJobCounters;
+
+  const loadRecentCommands = useCallback(async () => {
+    if (!user || !worker?.workerId) return;
+    try {
+      const r = await authedFetch(`/api/archive/commands/process?workerId=${encodeURIComponent(worker.workerId)}`);
+      const b = await r.json();
+      if (r.ok) setRecentCommands(b.commands || []);
+    } catch { /* strip stays on its last known list */ }
+  }, [user, authedFetch, worker?.workerId]);
+
+  useEffect(() => { loadRecentCommands(); }, [loadRecentCommands]);
+  useEffect(() => {
+    if (!user || !worker?.workerId) return;
+    const t = setInterval(() => loadRecentCommands(), 15000);
+    return () => clearInterval(t);
+  }, [user, worker?.workerId, loadRecentCommands]);
 
   async function browse(path = relativePath) {
     if (!worker?.workerId || !worker?.sourceId) { setBrowseState('WAITING FOR WORKER + SOURCE'); return; }
@@ -156,14 +219,31 @@ export default function ArchivePage() {
           <div><div style={{fontSize:12,letterSpacing:2,opacity:.5}}>HITLOOP / CREATIVE ARCHIVE</div><h1 style={{fontSize:48,margin:'8px 0'}}>Archive</h1></div>
           <div style={{border:'1px solid #333',borderRadius:999,padding:'8px 14px',fontSize:12}}>WIP · PHASE 2</div>
         </div>
-        <section style={{border:'1px solid #262626',borderRadius:20,padding:24,background:'#101010'}}>
+        <section id="archive-source-panel" style={{border:'1px solid #262626',borderRadius:20,padding:24,background:'#101010'}}>
           <div style={{display:'flex',justifyContent:'space-between',gap:24,flexWrap:'wrap'}}>
             <div><div style={{fontSize:12,opacity:.45}}>ARCHIVE SOURCE</div><h2 style={{margin:'8px 0'}}>Bryan NAS</h2><div style={{opacity:.6}}>WD My Cloud EX2 Ultra · ~1 TB</div></div>
-            <div style={{textAlign:'right'}}><div style={{fontSize:12,opacity:.45}}>WORKER</div><div style={{marginTop:8}}>● {worker?.state || status}</div><div style={{fontSize:11,opacity:.4,marginTop:6}}>{worker?.lastHeartbeatAt || ''}</div></div>
+            <div id="archive-worker-status-header" style={{textAlign:'right'}}>
+              <div style={{fontSize:12,opacity:.45}}>WORKER</div>
+              <div style={{marginTop:8}}>{worker ? <span><span style={{color:workerDisplay.color}}>●</span> {workerDisplay.label}</span> : `● ${status}`}</div>
+              <div style={{fontSize:11,opacity:.4,marginTop:6}}>{worker ? workerDisplay.detail : ''}</div>
+            </div>
           </div>
           <div style={{height:1,background:'#252525',margin:'24px 0'}} />
-          <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12}}>
+          <div id="archive-worker-counters-row" style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12}}>
             {['discovered','hashed','duplicates','failed'].map(k=><div key={k}><div style={{fontSize:11,opacity:.4,textTransform:'uppercase'}}>{k}</div><div style={{fontSize:24,marginTop:6}}>{counters[k] ?? '—'}</div></div>)}
+          </div>
+          {countersFromLastJob && <div style={{fontSize:11,opacity:.4,marginTop:10}}>From last completed job{worker?.lastJobAt ? ` · ${relativeTime(worker.lastJobAt)}` : ''}</div>}
+          <div id="archive-recent-commands-row" style={{marginTop:20,paddingTop:16,borderTop:'1px solid #252525'}}>
+            <div style={{fontSize:11,opacity:.4,textTransform:'uppercase',marginBottom:8}}>Recent commands</div>
+            {recentCommands.length === 0
+              ? <div style={{opacity:.4,fontSize:12}}>No commands yet.</div>
+              : recentCommands.map(c => (
+                <div key={c.id} style={{display:'flex',justifyContent:'space-between',gap:12,fontSize:12,padding:'6px 0',borderTop:'1px solid #1e1e1e'}}>
+                  <span>{c.type}</span>
+                  <span style={{opacity:.7}}>{c.state}{c.state === 'FAILED' && c.error ? ` · ${c.error}` : ''}</span>
+                  <span style={{opacity:.4}}>{relativeTime(c.updatedAt || c.createdAt)}</span>
+                </div>
+              ))}
           </div>
         </section>
         <section style={{marginTop:16,border:'1px solid #262626',borderRadius:20,padding:24,background:'#101010'}}>
