@@ -71,6 +71,12 @@ Worker = `Bai-ee/assetManager` (`lib/archive/*`, `npm run archive:worker`).
 - HITLOOP `.env.local`: full Firebase admin/client set; `HITLOOP_ARCHIVE_WORKER_TOKEN` added this session (generated, local only). **Missing:** `ARWEAVE_WALLET_JWK`.
 - Worker `.env.local`: `HITLOOP_ARCHIVE_CONTROL_URL=http://localhost:3000`, `HITLOOP_ARCHIVE_WORKER_ID=bryan-macbook-worker`, token set. **Empty:** `TWELVELABS_API_KEY`, `TWELVELABS_INDEX_ID`, `JEV_API_KEY`, `JEV_API_URL`, `ARWEAVE_WALLET_JWK`. The earlier claim that the worker had a TwelveLabs key was wrong; the variable exists, its value is empty. Owner says a key exists somewhere; location unknown.
 
+### 2a. Wave 1 landed (same day)
+- **W4** streaming Arweave upload → worker branch `a51b562` (20 tests).
+- **W1** analysis + Jev wiring → worker branch `91a13c3` (33 tests); follow-up for the analyze endpoint in progress.
+- **W5** control-plane hardening → dev branch `aa5c9e7b`; verified live (ONLINE + last-seen age, Recent Commands strip).
+- **W2** Quick Ingest → dev branch `cfd87e1f` + bucket move `def2b1f0`; **verified live**: a 4.8 KB PNG uploaded from the page, object present at `archive-intake/{id}/…` in HITLOOP's own bucket, `archive_intake` doc `UPLOADED`. Contract: `docs/archive/INTAKE_CONTRACT.md`. W3 can start once W1 lands (both edit `daemon.ts`).
+
 ### 2b. Process Folder outcome (`hpit03_finals`, first real NAS job)
 - Command `PROCESS_COLLECTION` → COMPLETE in ~84 s over SMB.
 - 12 files discovered → **7 content assets** (882,808,161 bytes): the 6 MP4s, plus **one** 368-byte asset shared by all six macOS AppleDouble `._*` files (identical bytes → 1 asset, 6 locations, 5 marked `DUPLICATE`). Byte-identity dedupe proven.
@@ -90,6 +96,10 @@ Worker = `Bai-ee/assetManager` (`lib/archive/*`, `npm run archive:worker`).
 | Stale `.next/dev/lock` after killing a dev server makes the next `npm run dev` fall to :3001 while printing Ready on :3000. | HITLOOP local | Runbook step (§7). |
 | Two competing fixes for the dropped-file durability bug: remote `8d9fa08` (Claude, in `feat/archive-master-plan`) and local `codex/archive-worker-retryable-file-state` `049249e`. | assetManager | Remote taken (pulled ff). Codex branch to be deleted in W7. |
 | `x-profile` and `x-calendar` share badge `XC`. | HITLOOP dashboard | Cosmetic, pre-existing, untouched. |
+| **HITLOOP reused the wrong Firebase app.** `firebase-admin.cjs` returned `getApps()[0]`; `editvideos-bridge.cjs` registers a NAMED app (`editvideos`), so whichever loaded first won and HITLOOP's own Storage/Firestore calls could run on EditVideos' credentials (`invalid_grant: Invalid JWT Signature`). Surfaced by the first Quick Ingest upload. | `api/_lib/firebase-admin.cjs` | **Fixed `a94cd167`**: reuse only the app named `[DEFAULT]`. |
+| **EditVideos service-account key in local `.env.local` is rejected by Google** (same `invalid_grant`). Every local call through `editvideos-bridge.cjs` fails, so Media Library / Video Remix bucket operations are broken on localhost. Prod (Vercel env) may hold a valid key; not checked. | local env, not code | **Open, owner action**: refresh `EDITVIDEOS_FIREBASE_SERVICE_ACCOUNT_KEY` locally. Archive intake no longer depends on it (W2 moved to HITLOOP's own bucket). |
+| **`api/_lib/*.cjs` is require-cached by the dev server.** Edits to those files are invisible until `npm run dev` restarts (already documented in CLAUDE.md for other modules; bit us again on the intake bucket switch). | local dev | Runbook rule. |
+| **TwelveLabs index path never reached READY.** `advanceVideo` submitted to a Marengo index and never polled completion. Resolution (W1 follow-up): use `POST /v1.3/analyze` with `video.type=asset_id` + Pegasus 1.5, which needs only asset `status=ready`, no index. Marengo index becomes optional (search only). | assetManager | In progress on `claude/w1-analysis-wiring`. |
 | Homepage `HeroSchematicOverlay.jsx:147` destructures null `shape` (seen in old dev log). | HITLOOP homepage lane | Not archive scope; log for the homepage lane. |
 
 ---
