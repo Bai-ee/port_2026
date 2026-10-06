@@ -8,6 +8,8 @@
 
 ## 0. Resume in one minute
 
+> Registry thread: `~/.claude/threads/2026-09-21-x-content-engine.md` — terminal **X Content Engine + Strategy**. Reopen with `/open x-content-engine`; it carries the live state, the traps and the restart prompt this doc does not.
+
 ```bash
 /x-strategy                                             # the skill: loads docs, verifies read path, pulls state
 node scripts/x-content/session-brief.mjs --days 14      # where the account stands now

@@ -10,7 +10,7 @@ This doc is the session contract. It owns no findings of its own — the evidenc
 | [`../plans/X-STRATEGY-SEB-MODEL.md`](../plans/X-STRATEGY-SEB-MODEL.md) | The strategy: format table, veins, cadence tiers, daily slots, 30-day targets |
 | [`X-API-AND-PROFILE-OPERATIONS.md`](./X-API-AND-PROFILE-OPERATIONS.md) | **The spend gate.** §0 before anything that writes |
 | [`X-MONITOR-CARD.md`](./X-MONITOR-CARD.md) | The live measurement card and its traps |
-| [`../audits/x-algo-review.md`](../audits/x-algo-review.md) + `features/x-growth/algorithm-profiles/x-2026-05-15.json` | The algorithm model — Phoenix actions, 9 assumptions with confidence labels |
+| [`../audits/x-algo-review.md`](../audits/x-algo-review.md) + `features/x-growth/algorithm-profiles/x-2026-10-03.json` | The algorithm model — real ranking weights from xai-org/x-algorithm @ b412112d (2026-10-03), assumptions with confidence + status labels |
 | [`../plans/X-GROWTH-PRODUCTIZATION-PLAN.md`](../plans/X-GROWTH-PRODUCTIZATION-PLAN.md) | Why the analysis is functions (`features/x-benchmark/`) and not prose |
 
 ---

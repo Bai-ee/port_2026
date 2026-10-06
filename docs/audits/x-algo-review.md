@@ -1,18 +1,77 @@
 # X Algorithm Review
 
-**Profile ID:** `x-2026-05-15`
-**Reviewed at:** 2026-06-18
-**Note:** Weights below are community-derived estimates from reverse-engineering published architecture docs and public engagement studies. X does not publish exact numeric weights. Treat all numeric values as hypotheses, not facts.
+**Profile ID:** `x-2026-10-03` (supersedes `x-2026-05-15`)
+**Reviewed at:** 2026-10-05, against upstream commit `b412112d` (2026-10-03)
+**Note:** Since 2026-08-13 X publishes its real ranking weight defaults. The numbers in the 2026-10 section are read from source, not estimated. They are population defaults; X runs A/B arms that override them per user. The Phoenix model's predicted probabilities (what the weights multiply) are not public. Sections below the 2026-10 refresh are the June review, kept for history — where they disagree, the refresh wins.
+
+**How to re-check:** `git clone --depth 1 https://github.com/xai-org/x-algorithm`, then read `home-mixer/params/param.rs` (weights), `vm-ranker/params.rs` (OON + author diversity), and any new `docs/*.md` change notes. Upstream pushes near-daily; re-review monthly or when X announces a change.
+
+---
+
+## 2026-10 refresh — verified weights
+
+### Positive actions (score = Σ P(action) × weight)
+| Action | Weight | vs like |
+|---|---|---|
+| `share_via_copy_link` | 20.0 | 40× |
+| `reply` | 5.0 (+15 = 20.0 when author is a mutual follow, originals only) | 10× (40×) |
+| `quote` | 5.0 | 10× |
+| `share_via_dm` | 5.0 | 10× |
+| `follow_author` | 4.0 | 8× |
+| `share` | 2.0 | 4× |
+| `repost` | 1.0 | 2× |
+| `favorite` (like) | 0.5 | 1× |
+| `cont_click_dwell_time` | 0.4 | — |
+| `click` | 0.3 | — |
+| `open_link` | 0.2 | — |
+| `video_open` | 0.07 | — |
+| `photo_expand` / `dwell` / `quoted_click` | 0.05 | — |
+| `profile_click` / `vqv` / `quoted_vqv` | **0.0** | — |
+
+### Negative actions
+| Action | Weight | Likes erased |
+|---|---|---|
+| `report` | −234.0 | 468 |
+| `mute_author` | −58.8 | 118 |
+| `not_interested` | −47.52 | 95 |
+| `block_author` | −31.2 | 62 |
+| `not_dwelled` | −0.02 | — |
+
+### Multipliers and small-account rules
+- **Out-of-network:** non-followers see posts scored ×0.75 (×0.5 via topic retrieval).
+- **Author diversity:** in one viewer's feed, an author's 2nd post ×0.5, 3rd+ ×0.25 (floor). Bunching posts wastes them.
+- **Cold start (accounts < 50k followers):** posts < 2h old with < 200 impressions get exploration slots (positions ~15–16, Thompson sampling). The first 2 hours decide a post's reach.
+- **Video:** clips under 10s don't count as a video quality view; VQV itself carries 0 weight.
+- **Links:** no hard-coded penalty — `has_url` is a learned model feature. Our measured ~44% engagement penalty on @bai_ee stays the operative number.
+- **Tone:** third-party claims that Grok down-ranks combative tone are not visible as a weight in source. Treat as unverified.
+
+### What changed vs the June profile
+| June assumption | Now |
+|---|---|
+| Repost is a top signal | **Downgraded.** Repost = 1.0; reply/quote/DM share = 5.0, copy-link = 20.0 |
+| Profile click is a primary action (authority posts) | **Wrong.** Weight 0.0. Authority posts should target `follow_author` (4.0) |
+| Media boost — high confidence | **Downgraded to medium.** Media weights are tiny (≤0.07); media helps only through dwell/replies/shares. Our measured video > text > still result still governs slot routing |
+| Dwell length — low confidence | **Medium.** Dwell *after tapping in* (0.4) is ~8× in-feed dwell (0.05) |
+| Author diversity — hypothesis | **Confirmed in code** (0.5 decay, 0.25 floor) |
+| — | **New:** mutual-follow reply boost (+15), share signals, OON ×0.75, small-account cold start |
+
+### Not yet applied
+`features/x-growth/score-draft.js` composite weights still reflect the June model (repost and profile-click weighted, share signals not modelled). Re-weighting it is a separate, test-gated change — it moves every stored and live `xGrowthScore`.
 
 ---
 
 ## Sources
 
-- https://github.com/xai-org/x-algorithm
-- https://github.com/xai-org/x-algorithm/blob/main/README.md
-- https://github.com/xai-org/x-algorithm/blob/main/phoenix/README.md
+- https://github.com/xai-org/x-algorithm/blob/b412112d/home-mixer/params/param.rs
+- https://github.com/xai-org/x-algorithm/blob/b412112d/vm-ranker/params.rs
+- https://github.com/xai-org/x-algorithm/blob/b412112d/xai-value-model/scoring.rs
+- https://github.com/xai-org/x-algorithm/blob/b412112d/home-mixer/scorers/author_cold_start.rs
+- https://github.com/xai-org/x-algorithm/blob/b412112d/docs/BIDIRECTIONAL_BOOST_CHANGE.md
+- June sources: README.md and phoenix/README.md in the same repo
 
 ---
+
+# June 2026 review (historical — `x-2026-05-15`)
 
 ## Predicted Phoenix Actions
 

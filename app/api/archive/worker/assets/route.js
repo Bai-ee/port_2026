@@ -41,6 +41,13 @@ export async function POST(request){
    syncedAt:fb.FieldValue.serverTimestamp(),updatedAt:fb.FieldValue.serverTimestamp()
  };
  if(collectionId){patch.collectionId=collectionId;patch.collectionTitle=collectionTitle;}
+ // Organizer (W-B) stamp: {path relative to the source root, appliedAt iso}
+ // carried by the worker's asset sync payload once ORGANIZE_COLLECTION
+ // (mode:'apply') has moved the canonical file. Merge-set only when present —
+ // an unrelated resync must never clear a prior organize stamp.
+ if(asset.organized&&typeof asset.organized==='object'&&asset.organized.path){
+   patch.organized={path:String(asset.organized.path),appliedAt:asset.organized.appliedAt||null};
+ }
  await ref.set(patch,{merge:true});
 
  // Auto-enqueue the permanent Arweave upload once this asset is "documented"

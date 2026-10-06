@@ -47,7 +47,7 @@ New exports in `twitter-service.js`: `updateSocialPost`, `enhancePost` (both doc
 
 ## 4. Live score (evaluate) — free & deterministic
 
-- Module: **`features/x-growth/`** — `scoreXPost(text, { mediaType, objective, kind })` returns `{ xGrowthScore (0..1), postType, targetAction, scores, warnings, recommendations, … }`. Pure pattern-matching against `algorithm-profiles/x-2026-05-15.json`; **no LLM, no network cost**.
+- Module: **`features/x-growth/`** — `scoreXPost(text, { mediaType, objective, kind })` returns `{ xGrowthScore (0..1), postType, targetAction, scores, warnings, recommendations, … }`. Pure pattern-matching against `algorithm-profiles/x-2026-10-03.json` (composite weights in `score-draft.js` still predate it — see `docs/audits/x-algo-review.md` "Not yet applied"); **no LLM, no network cost**.
 - The card debounces (~500 ms, race-safe via a request-id ref) and POSTs `{action:'score', content}`. Scoring runs on the **raw** composer text (not the hashtag-stripped `optimize` output).
 - ⚠️ `scoreXPost` can't run client-side (`algorithm-profile.js` uses `createRequire`), so the `score` server action is the single source. Keep it ahead of the KB-context fetch in the route or every keystroke triggers an expensive retrieval.
 

@@ -12,6 +12,17 @@ promotion to `main`). Read those for rationale; execute from this file.
 
 ## 0. Locked owner decisions (do not reopen)
 
+> **Superseded 2026-09-20 evening:** D1 and D6 below are superseded by
+> [`ARCHIVE-NAS-STAGING-MASTER-PLAN-2026-09-20.md`](ARCHIVE-NAS-STAGING-MASTER-PLAN-2026-09-20.md)
+> after the first automatic Arweave batch ran the wallet dry (3 of 6 uploads
+> FAILED `402`). New rule: the NAS is now written, but only inside one owned
+> root (`HITLOOP-ARCHIVE/`, journaled); and there is **no automatic Arweave
+> upload** — it requires an explicit per-collection approval gated by
+> `archive_settings/permanence.autoUpload` (default off) plus a per-asset
+> `ARWEAVE_APPROVED` state. Read that plan before touching NAS writes or the
+> auto-upload path. Everything else on this page (D2–D5, D7, D8, the
+> architecture, the runbook, W1–W5 as-built, traps) still holds.
+
 | # | Decision | Consequence |
 |---|---|---|
 | D1 | **NAS is analysis-only.** The WD My Cloud EX2 Ultra is a master drive the owner sorts over time. Nothing is ever written to it by this system. | No "copy uploads to NAS" step anywhere. |

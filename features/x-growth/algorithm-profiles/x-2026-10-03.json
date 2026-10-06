@@ -1,0 +1,201 @@
+{
+  "id": "x-2026-10-03",
+  "reviewedAt": "2026-10-05",
+  "supersedes": "x-2026-05-15",
+  "upstream": {
+    "repo": "https://github.com/xai-org/x-algorithm",
+    "commit": "b412112d",
+    "commitDate": "2026-10-03",
+    "cadence": "Upstream pushes near-daily since 2026-08-13; per-change diffs are documented in docs/*.md (first one: BIDIRECTIONAL_BOOST_CHANGE.md)."
+  },
+  "sources": [
+    "https://github.com/xai-org/x-algorithm/blob/b412112d/home-mixer/params/param.rs",
+    "https://github.com/xai-org/x-algorithm/blob/b412112d/vm-ranker/params.rs",
+    "https://github.com/xai-org/x-algorithm/blob/b412112d/xai-value-model/scoring.rs",
+    "https://github.com/xai-org/x-algorithm/blob/b412112d/home-mixer/scorers/author_cold_start.rs",
+    "https://github.com/xai-org/x-algorithm/blob/b412112d/docs/BIDIRECTIONAL_BOOST_CHANGE.md"
+  ],
+  "note": "Since 2026-08-13 X publishes the real ranking weight defaults. The weights below are read from source at the pinned commit, not estimated. They are DEFAULTS: X runs A/B arms that override them per user, so treat them as the population baseline. The predicted probabilities that the weights multiply come from the Phoenix model and are not public. Link and tone effects are learned inside the model, not hard-coded.",
+  "rankingWeights": {
+    "positive": {
+      "share_via_copy_link": 20.0,
+      "reply": 5.0,
+      "quote": 5.0,
+      "share_via_dm": 5.0,
+      "follow_author": 4.0,
+      "share": 2.0,
+      "retweet": 1.0,
+      "favorite": 0.5,
+      "cont_click_dwell_time": 0.4,
+      "click": 0.3,
+      "open_link": 0.2,
+      "video_open": 0.07,
+      "photo_expand": 0.05,
+      "dwell": 0.05,
+      "quoted_click": 0.05,
+      "post_unexplored": 0.02,
+      "cont_dwell_time": 0.004,
+      "profile_click": 0.0,
+      "vqv": 0.0,
+      "quoted_vqv": 0.0
+    },
+    "negative": {
+      "report": -234.0,
+      "mute_author": -58.8,
+      "not_interested": -47.52,
+      "block_author": -31.2,
+      "not_dwelled": -0.02
+    },
+    "boosts": {
+      "bidirectional_follow_reply_weight_boost": 15.0,
+      "bidirectional_follow_dwell_weight_boost": 0.0
+    },
+    "multipliers": {
+      "oon_weight_factor": 0.75,
+      "topic_oon_weight_factor": 0.5,
+      "author_diversity_decay": 0.5,
+      "author_diversity_floor": 0.25
+    },
+    "coldStart": {
+      "follower_cap": 50000,
+      "max_post_age_secs": 7200,
+      "impression_threshold": 200,
+      "slot_min": 15,
+      "slot_max": 16,
+      "thompson_sampling": true
+    },
+    "video": {
+      "min_video_duration_ms": 10000
+    }
+  },
+  "predictedActions": {
+    "positive": [
+      { "id": "share_via_copy_link", "weight": 20.0, "description": "User copies the post link (strongest single positive signal)" },
+      { "id": "reply",               "weight": 5.0,  "description": "User replies (+15 when the author is a mutual follow and the post is an original)" },
+      { "id": "quote",               "weight": 5.0,  "description": "User quote-posts" },
+      { "id": "share_via_dm",        "weight": 5.0,  "description": "User sends the post by DM" },
+      { "id": "follow_author",       "weight": 4.0,  "description": "User follows the author from the post" },
+      { "id": "share",               "weight": 2.0,  "description": "User shares externally" },
+      { "id": "repost",              "weight": 1.0,  "description": "User reposts" },
+      { "id": "favorite",            "weight": 0.5,  "description": "User likes the post" },
+      { "id": "click_dwell",         "weight": 0.4,  "description": "Continuous dwell time after opening the post" },
+      { "id": "click",               "weight": 0.3,  "description": "User opens the post" },
+      { "id": "open_link",           "weight": 0.2,  "description": "User opens an external link" },
+      { "id": "video_open",          "weight": 0.07, "description": "User opens attached video" },
+      { "id": "photo_expand",        "weight": 0.05, "description": "User expands attached image" },
+      { "id": "dwell",               "weight": 0.05, "description": "User dwells on the post in-feed" },
+      { "id": "profile_click",       "weight": 0.0,  "description": "User clicks author profile (ZERO ranking weight by default)" }
+    ],
+    "negative": [
+      { "id": "report",         "weight": -234.0, "description": "User reports the post (= 468 likes of lost score)" },
+      { "id": "mute_author",    "weight": -58.8,  "description": "User mutes the author" },
+      { "id": "not_interested", "weight": -47.52, "description": "User marks as not interested" },
+      { "id": "block_author",   "weight": -31.2,  "description": "User blocks the author" },
+      { "id": "not_dwelled",    "weight": -0.02,  "description": "User scrolls past without dwelling" }
+    ]
+  },
+  "assumptions": {
+    "linkRisk": {
+      "confidence": "medium",
+      "status": "unchanged",
+      "hypothesis": "Posts with external links are distributed less aggressively in For You feed. X prefers native content.",
+      "evidence": "No hard-coded link penalty exists in source; has_url is a learned model feature, so the effect is real but model-dependent. Our own measured ~44% engagement penalty on @bai_ee link posts is the operative number.",
+      "suggestedWorkaround": "Put link in first reply, or use 'link in bio' approach."
+    },
+    "replyBoost": {
+      "confidence": "high",
+      "status": "confirmed",
+      "hypothesis": "A reply is worth 5.0 vs a like at 0.5 (10x) and a repost at 1.0 (5x). Posts that earn real replies outrank posts that earn likes.",
+      "evidence": "ReplyWeight=5.0, FavoriteWeight=0.5, RetweetWeight=1.0 in home-mixer/params/param.rs.",
+      "caveat": "Asking a question is not the same as earning replies — on @bai_ee, audience questions measured below baseline. Do not recommend 'add a question' by default."
+    },
+    "mutualFollowReplyBoost": {
+      "confidence": "high",
+      "status": "new",
+      "hypothesis": "Original posts from accounts the viewer mutually follows get +15 on the reply weight (5 -> 20). Mutual follows inside the scene are a distribution asset.",
+      "evidence": "BidirectionalFollowReplyWeightBoost=15.0 (shipped 2026-07-13 at 20, cut to 15 on 2026-07-24). Applies to originals only, not replies or reposts."
+    },
+    "shareSignals": {
+      "confidence": "high",
+      "status": "new",
+      "hypothesis": "Copy-link (20) and DM share (5) are the highest-value positive actions. Content people send to a friend — a reference, a rare record, a how-it-was-made — ranks above content people merely like.",
+      "evidence": "ShareViaCopyLinkWeight=20.0, ShareViaDmWeight=5.0."
+    },
+    "negativeFeedbackDominance": {
+      "confidence": "high",
+      "status": "confirmed",
+      "hypothesis": "One report erases ~468 likes; one mute ~118; one not-interested ~95. Avoiding negative feedback matters more than chasing any positive action.",
+      "evidence": "ReportWeight=-234, MuteAuthorWeight=-58.8, NotInterestedWeight=-47.52, BlockAuthorWeight=-31.2."
+    },
+    "engagementBaitPenalty": {
+      "confidence": "high",
+      "status": "unchanged",
+      "hypothesis": "Explicit engagement-bait phrases ('like if', 'rt if', 'drop a like') trigger P(not_interested) and are likely filtered pre-rank."
+    },
+    "hardSellPenalty": {
+      "confidence": "medium",
+      "status": "unchanged",
+      "hypothesis": "'Buy now', 'limited time', 'act now' patterns correlate with high P(not_interested) and P(mute_author)."
+    },
+    "mediaBoost": {
+      "confidence": "medium",
+      "status": "downgraded",
+      "hypothesis": "Media helps indirectly (dwell, replies, shares), not through its own weight. video_open=0.07, photo_expand=0.05, vqv=0.0 — tiny next to reply/share. Video under 10s does not count as a video quality view.",
+      "evidence": "VideoOpenWeight=0.07, PhotoExpandWeight=0.05, VqvWeight=0.0, MinVideoDurationMs=10000. Our measured @bai_ee result (still < text, video > text) still governs slot routing."
+    },
+    "profileClickNoWeight": {
+      "confidence": "high",
+      "status": "new",
+      "hypothesis": "Profile clicks carry ZERO ranking weight. They still matter for follower conversion, but follow_author (4.0) is the ranked signal.",
+      "evidence": "ProfileClickWeight=0.0."
+    },
+    "dwellLengthCorrelation": {
+      "confidence": "medium",
+      "status": "updated",
+      "hypothesis": "Dwell after opening the post (cont_click_dwell_time 0.4) is weighted ~8x in-feed dwell (0.05). Posts that make people tap in and read — long-form, threads, a detail worth opening — earn more than posts read in passing."
+    },
+    "authorDiversityAttenuation": {
+      "confidence": "high",
+      "status": "confirmed",
+      "hypothesis": "Within one viewer's feed, an author's 2nd post is scored x0.5 and the 3rd and later x0.25 (floor). Spread posts across the day; bunching wastes them.",
+      "evidence": "EnableAuthorDiversity=true, AuthorDiversityDecay=0.5, AuthorDiversityFloor=0.25 (vm-ranker/params.rs)."
+    },
+    "outOfNetworkDiscount": {
+      "confidence": "high",
+      "status": "new",
+      "hypothesis": "Posts shown to non-followers are scored x0.75 (x0.5 via topic retrieval). Reaching new people needs a stronger predicted-engagement score than reaching followers.",
+      "evidence": "OonWeightFactor=0.75, TopicOonWeightFactor=0.5."
+    },
+    "smallAccountColdStart": {
+      "confidence": "high",
+      "status": "new",
+      "hypothesis": "Authors under 50k followers get exploration slots (feed positions ~15-16, Thompson sampling) for posts under 2h old with under 200 impressions. The first 2 hours decide whether a post earns its own reach — post when the audience is awake and be present to reply.",
+      "evidence": "ColdStartFollowerCap=50000, ColdStartMaxPostAgeSecs=7200, ColdStartImpressionThreshold=200, ColdStartSlotMin/Max=15/16."
+    },
+    "replyEarlyWindow": {
+      "confidence": "medium",
+      "status": "unchanged",
+      "hypothesis": "Replying to a young, accelerating post rides its rising distribution. Velocity (engagement / age) matters more than totals. replyWindowHours = 6 for replies; quote-react window is 36h (measured)."
+    },
+    "topicConsistency": {
+      "confidence": "medium",
+      "status": "unchanged",
+      "hypothesis": "Consistent topical posting helps candidate retrieval surface posts to relevant audiences."
+    },
+    "toneRanking": {
+      "confidence": "low",
+      "status": "unverified",
+      "hypothesis": "Third-party write-ups claim Grok down-ranks combative tone. Not found as an explicit weight in source; if real it is learned inside the model. Do not build scoring on it."
+    }
+  },
+  "postTypeScoringHints": {
+    "authority":             { "primaryAction": "follow_author", "secondaryAction": "share_via_dm" },
+    "reply-loop":            { "primaryAction": "reply",         "secondaryAction": "quote" },
+    "proof-loop":            { "primaryAction": "quote",         "secondaryAction": "share_via_copy_link" },
+    "kol-adjacent":          { "primaryAction": "reply",         "secondaryAction": "quote" },
+    "case-study":            { "primaryAction": "share_via_copy_link", "secondaryAction": "click_dwell" },
+    "offer":                 { "primaryAction": "click",         "secondaryAction": "follow_author" },
+    "asset":                 { "primaryAction": "share_via_dm",  "secondaryAction": "reply" },
+    "conversation-starter":  { "primaryAction": "reply",         "secondaryAction": "quote" }
+  }
+}

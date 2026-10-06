@@ -1,5 +1,8 @@
 # Underground Existence artists.json integrity and missing-mix recovery
 
+> **2026-10-04 status update — read first:** current state, the Google Drive master mix folder, the 53-mix not-on-site backlog, staged fixes, the Firestore write-path trap and the wallet budget live in `arweave-video-generator/docs/audits/integrity-2026-10-04/README.md`. The defect list below is partly stale (Akila is fixed locally; Blue Jay/Bernard resolved by evidence — the shared file is Blue Jay's).
+
+
 **Status:** implementation-ready plan  
 **Target repository:** `/Users/bballi/Documents/Repos/EditVideos/arweave-video-generator`  
 **Primary data file:** `artists.json` (canonical mix records; mirrored to Firestore)  

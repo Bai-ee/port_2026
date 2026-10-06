@@ -13,7 +13,7 @@ import { createRequire } from 'module';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
 
-const ACTIVE_PROFILE_ID = 'x-2026-05-15';
+const ACTIVE_PROFILE_ID = 'x-2026-10-03';
 const require = createRequire(import.meta.url);
 const profile = require(`../features/x-growth/algorithm-profiles/${ACTIVE_PROFILE_ID}.json`);
 
