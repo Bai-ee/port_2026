@@ -13,6 +13,7 @@ import { compareToBenchmark } from '../x-benchmark/compare.js';
 import { matchDay } from './match.js';
 import { buildPostLedger, pickResurrectionCandidates, assetFatigue } from './ledger.js';
 import { validateInventory } from './schema.js';
+import { DEFAULT_ENGINE_CONFIG, allocateEngines } from './engine-quota.js';
 
 /** A type has to earn this much more than the benchmark's own average before
  * it is worth adopting on lift alone. */
@@ -80,7 +81,9 @@ export function applyAdoptionFloor(slots, own, bench) {
  * @param {object[]} [input.benchmarkRows]  a benchmark corpus, for the gap report
  * @param {object[]} input.packages     the content inventory
  * @param {string} input.date           YYYY-MM-DD
- * @param {number} [input.posts]        authored posts for the day
+ * @param {number} [input.posts]        authored posts for the day (default: engine config target)
+ * @param {object} [input.engineConfig]  from mergeEngineConfig; defaults to the approved starting config
+ * @param {{engine:string, postedAt:string|number}[]} [input.recentPosts]  engine-tagged post history for daily/weekly quotas + cooldowns
  * @param {string} [input.handle]
  * @param {string[]} [input.lanes]
  * @param {number} [input.now]          epoch ms, injected for testability
@@ -89,7 +92,8 @@ export function buildDayPlan(input = {}) {
   const {
     corpusRows = [], benchmarkRows = null, packages = [],
     date = new Date().toISOString().slice(0, 10),
-    posts = 5, handle = 'bai_ee', lanes = ['music', 'craft', 'work', 'meta'],
+    posts = input.engineConfig?.authored?.targetPerDay ?? DEFAULT_ENGINE_CONFIG.authored.targetPerDay,
+    engineConfig = DEFAULT_ENGINE_CONFIG, recentPosts = [], handle = 'bai_ee', lanes = ['music', 'craft', 'work', 'meta'],
     now = Date.now(),
   } = input;
 
@@ -120,13 +124,24 @@ export function buildDayPlan(input = {}) {
 
   // Effort gating needs to know how far away each slot is, so a 07:00 slot on
   // a day that has already started is not offered a five-hour shoot.
-  const slots = applyAdoptionFloor(day.slots, ownStats, benchStats).map((s) => {
+  // Engine allocation runs AFTER the adoption floor (so an adopted self-quote
+  // slot is seen as identity) and BEFORE matching, and may shift a slot later
+  // to honour the spacing — so hoursFromNow is computed from the final time.
+  const adopted = applyAdoptionFloor(day.slots, ownStats, benchStats);
+  const allocation = allocateEngines({ slots: adopted, config: engineConfig, recentPosts, now, date });
+
+  const slots = allocation.slots.map((s) => {
     const [h, m] = String(s.timeCT ?? '12:00').split(':').map(Number);
     const when = Date.parse(`${date}T${String(h).padStart(2, '0')}:${String(m || 0).padStart(2, '0')}:00Z`);
     return { ...s, hoursFromNow: Math.max(0, (when - now) / 3_600_000) };
   });
 
-  const matched = matchDay({ slots, packages, today: now, ledger: fatigue, resurrections });
+  const matched = matchDay({ slots, packages, today: now, ledger: fatigue, resurrections, engineConfig, recentPosts });
 
-  return { date, audit, ownStats, benchStats, report, ...matched };
+  return {
+    date, audit, ownStats, benchStats, report,
+    engineConfig,
+    engineAllocation: { counts: allocation.counts, weekly: allocation.weekly, warnings: allocation.warnings },
+    ...matched,
+  };
 }

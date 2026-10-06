@@ -1,0 +1,272 @@
+[
+  {
+    "id": "ue-build-permanent-hosting",
+    "series": "C5",
+    "engine": "ue",
+    "pillar": "how-made",
+    "title": "How a DJ archive site stays up with no server",
+    "story": "[add your memory]",
+    "assetRefs": [],
+    "mediaState": "none",
+    "format": "text",
+    "effort": "10-min",
+    "rights": "owned",
+    "approval": {
+      "state": "none"
+    },
+    "platforms": [
+      "x"
+    ],
+    "cta": "https://undergroundexistence.info",
+    "eraYear": 2026,
+    "eventDate": null,
+    "entities": [
+      "Underground Existence"
+    ],
+    "status": "idea",
+    "lastPostedAt": null,
+    "postCount": 0,
+    "priority": "evergreen",
+    "expiresAt": null,
+    "campaign": null,
+    "related": [],
+    "tags": [
+      "ue-build-story",
+      "permanent-hosting"
+    ],
+    "source": {
+      "kind": "manual",
+      "externalId": "ue-build-permanent-hosting"
+    },
+    "variants": {
+      "x": {
+        "suggestedStory": "Underground Existence has no server to keep alive. The site is bundled and uploaded to Arweave, a manifest ties its pages together, and the domain points at that manifest. The pages and the mixes live in the same permanent place."
+      }
+    }
+  },
+  {
+    "id": "ue-build-ffmpeg-render-worker",
+    "series": "C5",
+    "engine": "ue",
+    "pillar": "how-made",
+    "title": "The FFmpeg worker that cuts a video for every DJ",
+    "story": "[add your memory]",
+    "assetRefs": [],
+    "mediaState": "none",
+    "format": "text",
+    "effort": "10-min",
+    "rights": "owned",
+    "approval": {
+      "state": "none"
+    },
+    "platforms": [
+      "x"
+    ],
+    "cta": "https://undergroundexistence.info",
+    "eraYear": 2026,
+    "eventDate": null,
+    "entities": [
+      "Underground Existence"
+    ],
+    "status": "idea",
+    "lastPostedAt": null,
+    "postCount": 0,
+    "priority": "evergreen",
+    "expiresAt": null,
+    "campaign": null,
+    "related": [],
+    "tags": [
+      "ue-build-story",
+      "ffmpeg-render-worker"
+    ],
+    "source": {
+      "kind": "manual",
+      "externalId": "ue-build-ffmpeg-render-worker"
+    },
+    "variants": {
+      "x": {
+        "suggestedStory": "A GitHub Actions worker renders each artist clip with FFmpeg: 5 second segments stitched into a 30 second 720x720 video, with 13 visual looks and beat-synced cuts. No render server to run, it spins up per job."
+      }
+    }
+  },
+  {
+    "id": "ue-build-integrity-audit",
+    "series": "C5",
+    "engine": "ue",
+    "pillar": "how-made",
+    "title": "The audit that found 10 mixes we thought were missing",
+    "story": "[add your memory]",
+    "assetRefs": [],
+    "mediaState": "none",
+    "format": "text",
+    "effort": "10-min",
+    "rights": "owned",
+    "approval": {
+      "state": "none"
+    },
+    "platforms": [
+      "x"
+    ],
+    "cta": "https://undergroundexistence.info",
+    "eraYear": 2026,
+    "eventDate": null,
+    "entities": [
+      "Underground Existence"
+    ],
+    "status": "idea",
+    "lastPostedAt": null,
+    "postCount": 0,
+    "priority": "evergreen",
+    "expiresAt": null,
+    "campaign": null,
+    "related": [],
+    "tags": [
+      "ue-build-story",
+      "integrity-audit"
+    ],
+    "source": {
+      "kind": "manual",
+      "externalId": "ue-build-integrity-audit"
+    },
+    "variants": {
+      "x": {
+        "suggestedStory": "Before paying to upload a 53-file backlog of mixes, we matched each file by exact bytes against what the archive already held on Arweave. 10 of the \"missing\" mixes were already there. Link, do not re-upload."
+      }
+    }
+  },
+  {
+    "id": "ue-build-spend-gates",
+    "series": "C5",
+    "engine": "ue",
+    "pillar": "how-made",
+    "title": "Every upload is gated: estimate, approve, kill switch",
+    "story": "[add your memory]",
+    "assetRefs": [],
+    "mediaState": "none",
+    "format": "text",
+    "effort": "10-min",
+    "rights": "owned",
+    "approval": {
+      "state": "none"
+    },
+    "platforms": [
+      "x"
+    ],
+    "cta": "https://undergroundexistence.info",
+    "eraYear": 2026,
+    "eventDate": null,
+    "entities": [
+      "Underground Existence"
+    ],
+    "status": "idea",
+    "lastPostedAt": null,
+    "postCount": 0,
+    "priority": "evergreen",
+    "expiresAt": null,
+    "campaign": null,
+    "related": [],
+    "tags": [
+      "ue-build-story",
+      "spend-gates"
+    ],
+    "source": {
+      "kind": "manual",
+      "externalId": "ue-build-spend-gates"
+    },
+    "variants": {
+      "x": {
+        "suggestedStory": "Anything that costs money runs the same way: a free cost estimate first, then an explicit approval for that specific batch, with a kill switch that stops it by default. Permanent storage is irreversible, so the gate comes before the spend."
+      }
+    }
+  },
+  {
+    "id": "ue-build-skyline-thumbnails",
+    "series": "C5",
+    "engine": "ue",
+    "pillar": "how-made",
+    "title": "Thumbnails generated from skyline video, deduped by hash",
+    "story": "[add your memory]",
+    "assetRefs": [],
+    "mediaState": "none",
+    "format": "text",
+    "effort": "10-min",
+    "rights": "owned",
+    "approval": {
+      "state": "none"
+    },
+    "platforms": [
+      "x"
+    ],
+    "cta": "https://undergroundexistence.info",
+    "eraYear": 2026,
+    "eventDate": null,
+    "entities": [
+      "Underground Existence"
+    ],
+    "status": "idea",
+    "lastPostedAt": null,
+    "postCount": 0,
+    "priority": "evergreen",
+    "expiresAt": null,
+    "campaign": null,
+    "related": [],
+    "tags": [
+      "ue-build-story",
+      "skyline-thumbnails"
+    ],
+    "source": {
+      "kind": "manual",
+      "externalId": "ue-build-skyline-thumbnails"
+    },
+    "variants": {
+      "x": {
+        "suggestedStory": "Each mix thumbnail is a frame pulled from skyline footage. A perceptual hash (dHash) of every candidate frame keeps two mixes from getting near-identical covers. Same pipeline, versioned, so a bad cover can be regenerated."
+      }
+    }
+  },
+  {
+    "id": "ue-build-record-validator",
+    "series": "C5",
+    "engine": "ue",
+    "pillar": "how-made",
+    "title": "The validator that caught shared audio IDs",
+    "story": "[add your memory]",
+    "assetRefs": [],
+    "mediaState": "none",
+    "format": "text",
+    "effort": "10-min",
+    "rights": "owned",
+    "approval": {
+      "state": "none"
+    },
+    "platforms": [
+      "x"
+    ],
+    "cta": "https://undergroundexistence.info",
+    "eraYear": 2026,
+    "eventDate": null,
+    "entities": [
+      "Underground Existence"
+    ],
+    "status": "idea",
+    "lastPostedAt": null,
+    "postCount": 0,
+    "priority": "evergreen",
+    "expiresAt": null,
+    "campaign": null,
+    "related": [],
+    "tags": [
+      "ue-build-story",
+      "record-validator"
+    ],
+    "source": {
+      "kind": "manual",
+      "externalId": "ue-build-record-validator"
+    },
+    "variants": {
+      "x": {
+        "suggestedStory": "The archive has 44 mix records but only 36 distinct audio files. A validator flags records that share one audio ID, truncated IDs and 0:00 durations before they reach the site, so a mix never plays the wrong set."
+      }
+    }
+  }
+]

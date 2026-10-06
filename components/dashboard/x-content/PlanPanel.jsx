@@ -197,6 +197,13 @@ export default function PlanPanel({
                       </>
                     ) : null}
 
+                    {!gap && slot?.source === 'none' ? (
+                      <>
+                        <p className="xce-gap-label xce-skipped-label">Skipped (engine quota)</p>
+                        {slot?.matchReason ? <p className="xce-reason">{slot.matchReason}</p> : null}
+                      </>
+                    ) : null}
+
                     {!gap && slot?.source === 'scan' ? (
                       <p className="xce-muted">From the daily scan</p>
                     ) : null}

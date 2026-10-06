@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 import {
+  approveDraft,
   attachMediaToPost,
   createSocialPost,
   diagnoseTwitterAccess,
@@ -77,8 +78,16 @@ export async function GET(request) {
   if (new URL(request.url).searchParams.get('action') === 'process-due') {
     if (!isCronRequest(request)) return json({ error: 'Unauthorized.' }, 401);
     try {
-      const result = await processDuePostsForAllClients();
-      return json({ ok: true, posted: result.posted.length, failed: result.failed.length });
+      const maxParam = Number(new URL(request.url).searchParams.get('max'));
+      const result = await processDuePostsForAllClients(Number.isFinite(maxParam) && maxParam > 0 ? { maxPerRun: Math.min(maxParam, 10) } : {});
+      return json({
+        ok: true,
+        posted: result.posted.length,
+        failed: result.failed.length,
+        skipped: result.skipped.length,
+        deferred: result.deferred,
+        needsReview: result.needsReview.map((p) => p.id),
+      });
     } catch (err) {
       return json({ error: err.message || 'Failed to process due social posts.' }, err.status || 500);
     }
@@ -105,8 +114,9 @@ export async function GET(request) {
 
 export async function POST(request) {
   let context;
+  let decoded;
   try {
-    ({ context } = await resolveContext(request));
+    ({ context, decoded } = await resolveContext(request));
   } catch (err) {
     return json({ error: err.message || 'Unauthorized.' }, err.status || 401);
   }
@@ -236,6 +246,12 @@ export async function POST(request) {
     if (action === 'update') {
       const agents = body.agents || runPostingAgents(body.content, agentContext).agents;
       const post = await updateSocialPost(context.clientId, body.postId, { ...body, agents });
+      return json({ ok: true, post });
+    }
+
+    // draft -> approved (stamps reviewedAt/reviewedBy). Does not schedule or publish.
+    if (action === 'approve-draft') {
+      const post = await approveDraft(context.clientId, body.postId, { reviewedBy: decoded?.email || decoded?.uid || null });
       return json({ ok: true, post });
     }
 

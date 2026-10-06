@@ -11,6 +11,8 @@
 //
 // Pure data + pure helpers. No fs, no network, no clock.
 
+import { SERIES_ENGINE } from './engines.js';
+
 /** The six pillars — the human-facing label. This is how Bryan thinks about
  * the archive, and it is deliberately NOT the same axis as the guard's lanes
  * (which police what a post is about) or the benchmark's topics (which measure
@@ -88,6 +90,7 @@ export const PROPOSED_ARCHIVE_TOPICS = [
 export const SERIES = {
   C1: {
     id: 'record-of-the-day',
+    engine: SERIES_ENGINE.C1,
     label: 'Record of the Day',
     pillar: 'found-this',
     slotTypes: ['original-showcase'],
@@ -105,6 +108,7 @@ export const SERIES = {
   },
   C2: {
     id: 'label-vault',
+    engine: SERIES_ENGINE.C2,
     label: 'Label Vault',
     pillar: 'made-this',
     slotTypes: ['original-showcase'],
@@ -116,6 +120,7 @@ export const SERIES = {
   },
   C3: {
     id: 'event-archive',
+    engine: SERIES_ENGINE.C3,
     label: 'Event Archive',
     pillar: 'was-there',
     slotTypes: ['original-showcase', 'original-text'],
@@ -130,6 +135,7 @@ export const SERIES = {
   },
   C4: {
     id: 'own-productions',
+    engine: SERIES_ENGINE.C4,
     label: 'Own Productions',
     pillar: 'made-this',
     slotTypes: ['original-showcase'],
@@ -141,6 +147,7 @@ export const SERIES = {
   },
   C5: {
     id: 'hardware-process',
+    engine: SERIES_ENGINE.C5,
     label: 'Hardware / Process',
     pillar: 'how-made',
     slotTypes: ['original-showcase'],
@@ -152,6 +159,7 @@ export const SERIES = {
   },
   C6: {
     id: 'design-dev-artifacts',
+    engine: SERIES_ENGINE.C6,
     label: 'Design/Dev Artifacts',
     pillar: 'building-now',
     slotTypes: ['original-showcase'],
@@ -163,6 +171,7 @@ export const SERIES = {
   },
   C7: {
     id: 'takes-with-receipts',
+    engine: SERIES_ENGINE.C7,
     label: 'Takes with Receipts',
     pillar: 'thirty-years',
     slotTypes: ['original-text'],
@@ -179,6 +188,7 @@ export const SERIES = {
   },
   C8: {
     id: 'quote-react',
+    engine: SERIES_ENGINE.C8,
     label: 'Quote-react',
     pillar: null,
     slotTypes: ['quote-react'],
@@ -193,6 +203,7 @@ export const SERIES = {
   },
   C9: {
     id: 'self-quote',
+    engine: SERIES_ENGINE.C9,
     label: 'Self-quote Resurrection',
     pillar: null,
     slotTypes: ['self-quote'],
@@ -213,7 +224,7 @@ export const SERIES = {
  * invisible to the calendar (X hides most of them on a profile timeline). */
 export const REPLY_QUOTA_PER_DAY = 10;
 
-/** What a full day looks like at tier 2. Sums to 11 authored posts. */
+/** What a full day looks like at tier 2. Sums to 10 authored posts. */
 export const DAILY_PLAN = ['C1', 'C1', 'C3', 'C6', 'C6', 'C7', 'C8', 'C8', 'C8', 'C9'];
 
 /** Series that can fill a given slot type, in draw order. */

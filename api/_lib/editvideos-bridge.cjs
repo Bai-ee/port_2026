@@ -1391,6 +1391,19 @@ async function updateArns({ manifestId } = {}) {
   };
 }
 
+// --- Rendered videos (Content Engine v2 "Rendered Videos" bucket) ----------
+// Read-only page over EditVideos `videos/{jobId}` where status == completed.
+// Cursor = last doc id (pass back as `startAfter`; nextCursor null = done).
+// Equality + __name__ ordering needs no composite index.
+async function listRenderedVideos({ limit = 200, startAfter = null } = {}) {
+  const pageSize = Math.max(1, Math.min(Number(limit) || 200, 500));
+  let q = bridgeDb().collection('videos').where('status', '==', 'completed').orderBy('__name__');
+  if (startAfter) q = q.startAfter(String(startAfter));
+  const snap = await q.limit(pageSize).get();
+  const videos = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
+  return { videos, nextCursor: videos.length === pageSize ? videos[videos.length - 1].id : null };
+}
+
 module.exports = {
   mapRecipeToVideoJob,
   enqueueVideoJob,
@@ -1400,6 +1413,8 @@ module.exports = {
   listSourceFoldersWithCounts,
   listFolderMedia,
   signReadUrl,
+  listRenderedVideos,
+  bridgeBucket,
   createUploadSession,
   getMediaUsage,
   deleteSourceFiles,

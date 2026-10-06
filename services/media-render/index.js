@@ -179,3 +179,4 @@ export { VideoSegmentCompositor } from './lib/VideoSegmentCompositor.js';
 export { ArweaveAudioClient } from './lib/ArweaveAudioClient.js';
 export { LocalMediaStore, isMediaFile, safeRelative } from './lib/MediaStore.js';
 export { getFilter, getAllFilterKeys, VIDEO_FILTERS } from './lib/VideoFilters.js';
+export { renderStillVideo, clampSeconds, probe as probeMedia } from './lib/StillVideo.js';

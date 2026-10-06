@@ -65,5 +65,18 @@ export async function PATCH(request) {
     catch (e) { console.error('[archive] handleCommandComplete failed for', commandId, e); }
   }
 
+  // STAGE_FOR_PUBLISH COMPLETE -> record the staged storage path on the NAS
+  // package (assetRefs += path, staged:{storagePath,at}). Lazy import keeps
+  // the content-inventory store off every other command's path.
+  if (state === 'COMPLETE' && cmdData?.type === 'STAGE_FOR_PUBLISH') {
+    try {
+      const [{ getPackage, upsertPackage }, { applyStageComplete }] = await Promise.all([
+        import('../../../../../features/x-content-inventory/store.js'),
+        import('../../../../../features/x-content-inventory/nas.js'),
+      ]);
+      await applyStageComplete({ getPackage, upsertPackage: (pkg) => upsertPackage(pkg, { returnPackages: false }), now: () => Date.now() }, { command: cmdData, result });
+    } catch (e) { console.error('[archive] stage write-back failed for', commandId, e); }
+  }
+
   return NextResponse.json({ok:true});
 }

@@ -16,7 +16,7 @@
 // how drafted copy ends up describing a different slot than the one on screen.
 //
 // Usage:
-//   node scripts/x-content/day-view.mjs                 # today, tier 1 (5 posts)
+//   node scripts/x-content/day-view.mjs                 # today, engine-config target (4 posts)
 //   node scripts/x-content/day-view.mjs --posts 8       # tier 2
 //   node scripts/x-content/day-view.mjs --date 2026-09-25
 //   node scripts/x-content/day-view.mjs --json
@@ -25,6 +25,8 @@ import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDayPlan } from '../../features/x-content-inventory/plan-day.js';
+import { DEFAULT_ENGINE_CONFIG } from '../../features/x-content-inventory/engine-quota.js';
+import { ENGINE_IDS } from '../../features/x-content-inventory/engines.js';
 import { SERIES, REPLY_QUOTA_PER_DAY } from '../../features/x-content-inventory/categories.js';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
@@ -33,10 +35,10 @@ const CORPUS = path.join(REPO, 'docs/audits/bai-ee-x-corpus.json');
 const BENCHMARK = path.join(REPO, 'docs/audits/seb-design-x-corpus.json');
 
 function parseArgs(argv) {
-  const out = { posts: 5, date: new Date().toISOString().slice(0, 10), json: false, handle: 'bai_ee' };
+  const out = { posts: DEFAULT_ENGINE_CONFIG.authored.targetPerDay, date: new Date().toISOString().slice(0, 10), json: false, handle: 'bai_ee' };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
-    if (a === '--posts') out.posts = Number(argv[++i]) || 5;
+    if (a === '--posts') out.posts = Number(argv[++i]) || DEFAULT_ENGINE_CONFIG.authored.targetPerDay;
     else if (a === '--date') out.date = argv[++i] || out.date;
     else if (a === '--handle') out.handle = argv[++i] || out.handle;
     else if (a === '--json') out.json = true;
@@ -71,8 +73,27 @@ out.push(`POSTING PLAN — ${plan.date}  ·  ${args.posts} authored posts + ${RE
 out.push(`  inventory: ${plan.audit.total} packages (${plan.audit.valid} valid) · filled ${plan.filled}/${plan.slots.length} slots`);
 out.push('');
 
+const bound = (c) => {
+  const day = c.minPerDay != null || c.maxPerDay != null ? `day ${c.minPerDay ?? 0}–${c.maxPerDay ?? '∞'}` : null;
+  const week = c.weeklyMin != null ? `week ${c.weeklyMin}–${c.weeklyMax ?? '∞'}` : null;
+  const share = c.maxSharePct != null ? `≤${c.maxSharePct}% share` : null;
+  return [day, week, share].filter(Boolean).join(', ');
+};
+out.push('  ENGINES (today planned+posted · this week · config)');
+for (const e of ENGINE_IDS) {
+  const c = plan.engineConfig?.engines?.[e] ?? {};
+  out.push(`    ${e.padEnd(9)} ${String(plan.engineAllocation?.counts?.[e] ?? 0).padStart(2)} today · ${String(plan.engineAllocation?.weekly?.[e] ?? 0).padStart(2)} wk · ${bound(c)}`);
+}
+for (const w of plan.engineAllocation?.warnings ?? []) out.push(`    ⚠️ ${w}`);
+out.push('');
+
 for (const s of plan.slots) {
-  const head = `  ${s.timeCT}  ${String(s.slot).padEnd(2)} ${String(s.type).padEnd(18)} ${String(s.lane ?? '').padEnd(6)}`;
+  const moved = s.spacingShifted ? ` (was ${s.calendarTimeCT})` : '';
+  const head = `  ${s.timeCT}${moved}  ${String(s.slot).padEnd(2)} ${String(s.type).padEnd(18)} ${String(s.lane ?? '').padEnd(6)} [${String(s.engine ?? '—').padEnd(8)}]`;
+  if (s.engineSkipped) {
+    out.push(`${head} — skipped: ${s.engineReason}`);
+    continue;
+  }
   if (s.source === 'scan') {
     out.push(`${head} ← daily scan (quote target found at 06:30)`);
     continue;

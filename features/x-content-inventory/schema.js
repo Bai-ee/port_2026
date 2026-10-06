@@ -15,6 +15,7 @@
 // Pure: no fs, no network, no clock.
 
 import { PILLARS, SERIES } from './categories.js';
+import { ENGINE_IDS } from './engines.js';
 
 export const MEDIA_STATES = ['none', 'still', 'video', 'audio', 'needs-capture'];
 
@@ -33,6 +34,21 @@ export const RIGHTS_STATES = ['owned', 'cleared', 'client-approval-needed', 'nev
 export const STATUSES = ['idea', 'drafted', 'scheduled', 'posted', 'retired'];
 
 export const PLATFORMS = ['x', 'instagram', 'youtube', 'site', 'email', 'bandcamp'];
+
+// --- Additive content-model fields (plan §3a). All OPTIONAL: validated only
+// when present, so every pre-existing row stays valid unchanged. ---
+
+export const SOURCE_KINDS = ['discogs', 'ue', 'manual', 'thread', 'rendered-video', 'nas-archive', 'ideas'];
+
+/** `pinned` outranks `timely` outranks `evergreen` — lets a client launch beat
+ * the archive without hand-editing the calendar. */
+export const PRIORITIES = ['pinned', 'timely', 'evergreen'];
+
+/** Publishing INTENT. Distinct from `mediaState`, which is what exists today. */
+export const FORMATS = ['video', 'still', 'text', 'thread', 'carousel'];
+
+/** Sits alongside the rights gate, not instead of it. */
+export const APPROVAL_STATES = ['none', 'needed', 'approved', 'rejected'];
 
 /**
  * @typedef {object} ContentPackage
@@ -57,11 +73,90 @@ export const PLATFORMS = ['x', 'instagram', 'youtube', 'site', 'email', 'bandcam
  * @property {string} status            one of STATUSES
  * @property {string|null} lastPostedAt ISO, written by the ledger
  * @property {number} postCount         written by the ledger
+ * @property {string} [engine]          one of ENGINE_IDS; overrides the series default
+ * @property {{kind:string, externalId?:string, url?:string}} [source]
+ * @property {string} [priority]        one of PRIORITIES
+ * @property {string|null} [expiresAt]  ISO; null = never
+ * @property {string|null} [campaign]
+ * @property {string[]} [related]       other package ids
+ * @property {string[]} [tags]
+ * @property {string} [format]          one of FORMATS
+ * @property {{state:string, by?:string, at?:string}} [approval]
+ * @property {object} [variants]        keyed by PLATFORMS; per-channel copy/format
+ * @property {string} [thumbRef]        Hitloop storage path of the 320px thumb (content-thumbs/<clientId>/<id>.jpg)
+ * @property {string} [rightsSetBy]     'human' once the owner set `rights`; sync then never overwrites rights
+ * @property {string} [rightsSetAt]     ISO
+ * @property {string} [syncHash]        rendered-video sync content hash (skip-unchanged)
+ * @property {object} [metrics]         reserved (feedback layer); type-checked only
+ * @property {object} [signals]         reserved (recommendation layer); type-checked only
  */
 
 export const REQUIRED_FIELDS = ['id', 'series', 'pillar', 'title', 'story', 'mediaState', 'effort', 'rights'];
 
 function isStr(v) { return typeof v === 'string' && v.trim().length > 0; }
+function isObj(v) { return v !== null && typeof v === 'object' && !Array.isArray(v); }
+function isIso(v) { return isStr(v) && Number.isFinite(Date.parse(v)); }
+function isStrArray(v) { return Array.isArray(v) && v.every(isStr); }
+
+/** Does this package need a human sign-off before it can go out? An explicit
+ * `approval` wins; with none recorded, the rights gate decides, so legacy
+ * client-approval rows keep behaving as before. */
+export function needsApproval(pkg) {
+  const state = pkg?.approval?.state;
+  if (state) return state === 'needed' || state === 'rejected';
+  return pkg?.rights === 'client-approval-needed';
+}
+
+export function isApproved(pkg) {
+  return pkg?.approval?.state === 'approved';
+}
+
+/** Validate the optional fields; pushes onto `errors`. Absent (undefined) = skip. */
+function validateOptionalFields(pkg, errors) {
+  if (pkg.engine !== undefined && !ENGINE_IDS.includes(pkg.engine)) errors.push(`bad engine: ${pkg.engine}`);
+  if (pkg.source !== undefined) {
+    if (!isObj(pkg.source)) errors.push('bad source: must be an object');
+    else {
+      if (!SOURCE_KINDS.includes(pkg.source.kind)) errors.push(`bad source.kind: ${pkg.source.kind}`);
+      if (pkg.source.externalId !== undefined && !isStr(pkg.source.externalId)) errors.push('bad source.externalId');
+      if (pkg.source.url !== undefined && !isStr(pkg.source.url)) errors.push('bad source.url');
+    }
+  }
+  if (pkg.priority !== undefined && !PRIORITIES.includes(pkg.priority)) errors.push(`bad priority: ${pkg.priority}`);
+  if (pkg.expiresAt !== undefined && pkg.expiresAt !== null && !isIso(pkg.expiresAt)) errors.push('bad expiresAt: not a parseable date');
+  if (pkg.campaign !== undefined && pkg.campaign !== null && !isStr(pkg.campaign)) errors.push('bad campaign');
+  if (pkg.related !== undefined && !isStrArray(pkg.related)) errors.push('bad related: must be an array of package ids');
+  if (pkg.tags !== undefined && !isStrArray(pkg.tags)) errors.push('bad tags: must be an array of strings');
+  if (pkg.format !== undefined && !FORMATS.includes(pkg.format)) errors.push(`bad format: ${pkg.format}`);
+  if (pkg.approval !== undefined) {
+    if (!isObj(pkg.approval)) errors.push('bad approval: must be an object');
+    else {
+      if (!APPROVAL_STATES.includes(pkg.approval.state)) errors.push(`bad approval.state: ${pkg.approval.state}`);
+      if (pkg.approval.by !== undefined && !isStr(pkg.approval.by)) errors.push('bad approval.by');
+      if (pkg.approval.at !== undefined && !isIso(pkg.approval.at)) errors.push('bad approval.at: not a parseable date');
+    }
+  }
+  if (pkg.variants !== undefined) {
+    if (!isObj(pkg.variants)) errors.push('bad variants: must be an object keyed by platform');
+    else {
+      for (const [k, v] of Object.entries(pkg.variants)) {
+        if (!PLATFORMS.includes(k)) errors.push(`bad variants key: ${k}`);
+        else if (!isObj(v)) errors.push(`bad variants.${k}: must be an object`);
+      }
+    }
+  }
+  if (pkg.bucketId !== undefined && pkg.bucketId !== null && !(isStr(pkg.bucketId) && /^[a-z0-9][a-z0-9-]{0,39}$/.test(pkg.bucketId))) errors.push('bad bucketId: lowercase kebab-case, ≤40 chars');
+  if (pkg.thumbRef !== undefined && pkg.thumbRef !== null && !isStr(pkg.thumbRef)) errors.push('bad thumbRef: must be a storage path string');
+  if (pkg.rightsSetBy !== undefined && pkg.rightsSetBy !== null && pkg.rightsSetBy !== 'human') errors.push("bad rightsSetBy: only 'human'");
+  if (pkg.rightsSetAt !== undefined && pkg.rightsSetAt !== null && !isIso(pkg.rightsSetAt)) errors.push('bad rightsSetAt: not a parseable date');
+  if (pkg.syncHash !== undefined && pkg.syncHash !== null && !isStr(pkg.syncHash)) errors.push('bad syncHash');
+  if (pkg.facets !== undefined && !isObj(pkg.facets)) errors.push('bad facets: must be an object');
+  if (pkg.humanEdits !== undefined && !isObj(pkg.humanEdits)) errors.push('bad humanEdits: must be an object');
+  if (pkg.facetVersion !== undefined && !Number.isInteger(pkg.facetVersion)) errors.push('bad facetVersion: must be an integer');
+  if (pkg.searchTokens !== undefined && !isStrArray(pkg.searchTokens)) errors.push('bad searchTokens: must be an array of strings');
+  if (pkg.metrics !== undefined && !isObj(pkg.metrics)) errors.push('bad metrics: must be an object');
+  if (pkg.signals !== undefined && !isObj(pkg.signals)) errors.push('bad signals: must be an object');
+}
 
 /**
  * Validate one row. Returns `{ ok, errors[], warnings[] }`.
@@ -89,6 +184,8 @@ export function validatePackage(pkg = {}) {
   if (pkg.effort && !EFFORT_LEVELS.includes(pkg.effort)) errors.push(`bad effort: ${pkg.effort}`);
   if (pkg.rights && !RIGHTS_STATES.includes(pkg.rights)) errors.push(`bad rights: ${pkg.rights}`);
   if (pkg.status && !STATUSES.includes(pkg.status)) errors.push(`bad status: ${pkg.status}`);
+
+  validateOptionalFields(pkg, errors);
 
   const series = SERIES[pkg.series];
   if (series) {

@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { CalendarDays, Library } from 'lucide-react';
+import { CalendarDays, CalendarRange, FolderTree, Library, LineChart, Users } from 'lucide-react';
 import { fallbackDraft, validateDraft } from '../../features/x-content-inventory/draft.js';
 
 // Content Engine — the supply side of the posting plan.
@@ -28,8 +28,23 @@ import { fallbackDraft, validateDraft } from '../../features/x-content-inventory
 
 const PlanPanel = dynamic(() => import('./x-content/PlanPanel'), { ssr: false });
 const InventoryPanel = dynamic(() => import('./x-content/InventoryPanel'), { ssr: false });
+const CalendarPanel = dynamic(() => import('./x-content/CalendarPanel'), { ssr: false });
+const PerformancePanel = dynamic(() => import('./x-content/PerformancePanel'), { ssr: false });
+const ClientCapturePanel = dynamic(() => import('./x-content/ClientCapturePanel'), { ssr: false });
+const BucketsPanel = dynamic(() => import('./x-content/BucketsPanel'), { ssr: false });
 
 const ENDPOINT = '/api/dashboard/quote-targets';
+// Approve/schedule reuse the EXISTING social-posting route. There is no post-now
+// control anywhere in this card.
+const SOCIAL_ENDPOINT = '/api/social-posting';
+
+function todayCT() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' }).format(new Date());
+}
+
+function shiftDate(date, days) {
+  return new Date(Date.parse(`${date}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+}
 
 export default function XContentEngineCard({ getIdToken, activeClientId, clientName }) {
   const [tab, setTab] = useState('plan');
@@ -44,6 +59,16 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
   const [savingId, setSavingId] = useState(null);
   const [draftingId, setDraftingId] = useState(null);
   const [drafts, setDrafts] = useState({});
+
+  const [weekStart, setWeekStart] = useState(todayCT);
+  const [calendar, setCalendar] = useState(null);
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [calendarError, setCalendarError] = useState('');
+  const [calendarBusyId, setCalendarBusyId] = useState(null);
+  const [clientError, setClientError] = useState('');
+  const [perf, setPerf] = useState(null);
+  const [perfLoading, setPerfLoading] = useState(false);
+  const [perfError, setPerfError] = useState('');
 
   const call = useCallback(async (action, body = {}) => {
     const token = getIdToken ? await getIdToken() : null;
@@ -79,6 +104,114 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
   }, [call, posts]);
 
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [activeClientId]);
+  useEffect(() => {
+    if (tab === 'calendar') loadCalendar();
+    if (tab === 'performance') loadPerformance();
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [tab, activeClientId]);
+
+  const callSocial = useCallback(async (body) => {
+    const token = getIdToken ? await getIdToken() : null;
+    const res = await fetch(SOCIAL_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `${body.action} failed.`);
+    return data;
+  }, [getIdToken]);
+
+  const loadCalendar = useCallback(async (start = weekStart) => {
+    setCalendarLoading(true);
+    setCalendarError('');
+    try {
+      const res = await call('week-calendar', { start });
+      setCalendar(res?.calendar || null);
+    } catch (err) {
+      setCalendarError(err.message || 'Could not load the calendar.');
+    } finally {
+      setCalendarLoading(false);
+    }
+  }, [call, weekStart]);
+
+  const loadPerformance = useCallback(async () => {
+    setPerfLoading(true);
+    setPerfError('');
+    try {
+      setPerf(await call('engine-performance', { windowDays: 30 }));
+    } catch (err) {
+      setPerfError(err.message || 'Could not load performance.');
+    } finally {
+      setPerfLoading(false);
+    }
+  }, [call]);
+
+  const onShiftWeek = useCallback((days) => {
+    const next = shiftDate(weekStart, days);
+    setWeekStart(next);
+    loadCalendar(next);
+  }, [weekStart, loadCalendar]);
+
+  const onCalendarApprove = useCallback(async (slot) => {
+    setCalendarBusyId(slot.id);
+    setCalendarError('');
+    try {
+      await callSocial({ action: 'approve-draft', postId: slot.id });
+      await loadCalendar();
+    } catch (err) {
+      setCalendarError(err.message || 'Could not approve.');
+    } finally {
+      setCalendarBusyId(null);
+    }
+  }, [callSocial, loadCalendar]);
+
+  // Scheduling an EXISTING approved post goes through the route's `update`
+  // (same as the Copywriter card): `schedule` would mint a second post.
+  const onCalendarSchedule = useCallback(async (slot, localValue) => {
+    setCalendarBusyId(slot.id);
+    setCalendarError('');
+    try {
+      const iso = new Date(localValue).toISOString();
+      await callSocial({ action: 'update', postId: slot.id, content: slot.content, scheduledAt: iso });
+      await loadCalendar();
+    } catch (err) {
+      setCalendarError(err.message || 'Could not schedule.');
+    } finally {
+      setCalendarBusyId(null);
+    }
+  }, [callSocial, loadCalendar]);
+
+  const onCaptureClient = useCallback(async (capture) => {
+    setSavingId('capture');
+    setClientError('');
+    try {
+      await call('capture-client-story', { capture });
+      await load();
+      return true;
+    } catch (err) {
+      setClientError(err.message || 'Could not capture.');
+      return false;
+    } finally {
+      setSavingId(null);
+    }
+  }, [call, load]);
+
+  const onDecidePackage = useCallback(async (action, id) => {
+    setSavingId(id);
+    setClientError('');
+    try {
+      await call(action, { id });
+      await load();
+    } catch (err) {
+      setClientError(err.message || 'Could not update approval.');
+    } finally {
+      setSavingId(null);
+    }
+  }, [call, load]);
 
   const onPostsChange = useCallback((next) => {
     setPosts(next);
@@ -151,6 +284,46 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
         >
           <Library size={13} /> Content{packages.length ? ` (${packages.length})` : ''}
         </button>
+        <button
+          type="button"
+          id="x-content-tab-buckets"
+          className={`xce-tab${tab === 'buckets' ? ' xce-tab-active' : ''}`}
+          onClick={() => setTab('buckets')}
+          role="tab"
+          aria-selected={tab === 'buckets'}
+        >
+          <FolderTree size={13} /> Buckets
+        </button>
+        <button
+          type="button"
+          id="x-content-tab-calendar"
+          className={`xce-tab${tab === 'calendar' ? ' xce-tab-active' : ''}`}
+          onClick={() => setTab('calendar')}
+          role="tab"
+          aria-selected={tab === 'calendar'}
+        >
+          <CalendarRange size={13} /> Calendar
+        </button>
+        <button
+          type="button"
+          id="x-content-tab-clients"
+          className={`xce-tab${tab === 'clients' ? ' xce-tab-active' : ''}`}
+          onClick={() => setTab('clients')}
+          role="tab"
+          aria-selected={tab === 'clients'}
+        >
+          <Users size={13} /> Clients
+        </button>
+        <button
+          type="button"
+          id="x-content-tab-performance"
+          className={`xce-tab${tab === 'performance' ? ' xce-tab-active' : ''}`}
+          onClick={() => setTab('performance')}
+          role="tab"
+          aria-selected={tab === 'performance'}
+        >
+          <LineChart size={13} /> Results
+        </button>
       </div>
 
       {clientName ? <p id="x-content-client-line" className="xce-client">{clientName}</p> : null}
@@ -166,6 +339,37 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
           onDraft={onDraft}
           draftingId={draftingId}
           drafts={drafts}
+        />
+      ) : tab === 'buckets' ? (
+        <BucketsPanel call={call} packages={packages} loading={loading} error={error} onReload={() => load()} />
+      ) : tab === 'calendar' ? (
+        <CalendarPanel
+          calendar={calendar}
+          loading={calendarLoading}
+          error={calendarError}
+          busyId={calendarBusyId}
+          onRefresh={() => loadCalendar()}
+          onShift={onShiftWeek}
+          onApprove={onCalendarApprove}
+          onSchedule={onCalendarSchedule}
+        />
+      ) : tab === 'performance' ? (
+        <PerformancePanel
+          stats={perf?.stats}
+          lastCapturedAt={perf?.lastCapturedAt}
+          loading={perfLoading}
+          error={perfError}
+          onRefresh={loadPerformance}
+        />
+      ) : tab === 'clients' ? (
+        <ClientCapturePanel
+          packages={packages}
+          loading={loading}
+          error={clientError || error}
+          savingId={savingId}
+          onCapture={onCaptureClient}
+          onApprove={(id) => onDecidePackage('approve-package', id)}
+          onReject={(id) => onDecidePackage('reject-package', id)}
         />
       ) : (
         <InventoryPanel
@@ -384,6 +588,198 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
           #x-content-card .xce-slot { grid-template-columns: 44px 1fr; }
           #x-content-card .xce-form-grid { grid-template-columns: 1fr 1fr; }
           #x-content-card .xce-field-wide { grid-column: 1 / -1; }
+        }
+        /* ── Calendar + Clients ───────────────────────────────────────── */
+        #x-content-card .xce-tabs { flex-wrap: wrap; }
+        #x-content-card .xce-tab { flex: 1 1 auto; min-width: 0; }
+        #x-content-card .xce-engine-counts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        #x-content-card .xce-engine-count { display: grid; gap: 2px; padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(42,36,32,0.1); background: rgba(255,255,255,0.6); border-left-width: 4px; min-width: 0; }
+        #x-content-card .xce-engine-short { background: rgba(183,121,31,0.06); }
+        #x-content-card .xce-engine-name { font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(42,36,32,0.6); }
+        #x-content-card .xce-engine-num { font-family: var(--font-mono); font-size: 16px; font-weight: 700; color: #2a2420; }
+        #x-content-card .xce-engine-limit { font-size: 10.5px; color: rgba(42,36,32,0.5); overflow-wrap: anywhere; }
+        #x-content-card .xce-engine-record { border-left-color: #b7791f; }
+        #x-content-card .xce-engine-ue { border-left-color: #3b6fd4; }
+        #x-content-card .xce-engine-client { border-left-color: #2f9e6b; }
+        #x-content-card .xce-engine-identity { border-left-color: #7a4bd0; }
+        #x-content-card .xce-engine-untagged { border-left-color: rgba(42,36,32,0.3); }
+        #x-content-card .xce-engine-chip { border-left-width: 1px; background: rgba(42,36,32,0.05); }
+        #x-content-card .xce-flag-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+        #x-content-card .xce-week-grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+        #x-content-card .xce-week-day { display: grid; gap: 6px; padding: 10px; border-radius: 12px; border: 1px solid rgba(42,36,32,0.1); background: rgba(255,255,255,0.5); min-width: 0; }
+        #x-content-card .xce-week-day-head { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11.5px; font-weight: 700; color: #2a2420; }
+        #x-content-card .xce-week-slots { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+        #x-content-card .xce-week-slot { display: grid; gap: 6px; padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(42,36,32,0.1); border-left-width: 4px; background: rgba(255,255,255,0.7); min-width: 0; }
+        #x-content-card .xce-skipped-label { color: rgba(42,36,32,0.55); }
+        #x-content-card .xce-textarea-short { min-height: 64px; }
+        #x-content-card .xce-week-slot .xce-input { max-width: 100%; }
+
+        /* ── Results (performance) ────────────────────────────────────── */
+        #x-content-card .xce-perf-list { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 8px; }
+        #x-content-card .xce-perf-row { display: grid; gap: 6px; padding: 10px; border-radius: 10px; border: 1px solid rgba(42,36,32,0.1); border-left-width: 4px; background: rgba(255,255,255,0.7); min-width: 0; }
+        #x-content-card .xce-perf-name { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        #x-content-card .xce-perf-flag { font-family: var(--font-mono); font-size: 10px; font-weight: 700; color: #b7791f; }
+        #x-content-card .xce-perf-rank { font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: #2a2420; }
+        #x-content-card .xce-perf-grid { margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 6px; }
+        #x-content-card .xce-perf-grid dt { font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(42,36,32,0.5); }
+        #x-content-card .xce-perf-grid dd { margin: 0; font-family: var(--font-mono); font-size: 13px; font-weight: 700; color: #2a2420; overflow-wrap: anywhere; }
+        #x-content-card .xce-perf-meaning { margin: 0; font-size: 12px; line-height: 1.45; color: rgba(42,36,32,0.7); overflow-wrap: anywhere; }
+        @media (max-width: 480px) {
+          #x-content-card .xce-perf-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+        }
+
+        /* ── Buckets ──────────────────────────────────────────────────── */
+        #x-content-card .xce-bk { display: grid; gap: 10px; }
+        #x-content-card .xce-bk-search { display: grid; gap: 4px; }
+        #x-content-card .xce-bk-search > svg { display: none; }
+        #x-content-card .xce-bk-layout { display: grid; gap: 10px; min-width: 0; }
+        #x-content-card .xce-bk-main { display: grid; gap: 10px; min-width: 0; align-content: start; }
+        /* Rail: fixed-height rows that never stretch with the grid beside them
+           (the grid grows as content populates; the rail must not). Buttons
+           follow the card's established button spec: 38px, 10px radius. */
+        #x-content-card .xce-bk-rail { display: flex; flex-direction: column; gap: 8px; min-width: 0; align-self: start; }
+        #x-content-card .xce-bk-rail > * { flex: 0 0 auto; }
+        #x-content-card .xce-bk-list { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; overflow-x: auto; max-width: 100%; align-items: flex-start; }
+        #x-content-card .xce-bk-item { display: flex; flex-direction: column; gap: 4px; flex: 0 0 auto; min-width: 0; }
+        #x-content-card .xce-bk-item.is-inactive { opacity: 0.55; }
+        #x-content-card .xce-bk-chip { display: inline-flex; align-items: center; gap: 8px; height: 38px; min-height: 38px; padding: 0 12px; box-sizing: border-box; border-radius: 10px; border: 1px solid rgba(42,36,32,0.12); background: rgba(255,255,255,0.6); font-size: 12px; font-weight: 700; color: #2a2420; cursor: pointer; white-space: nowrap; text-align: left; }
+        #x-content-card .xce-bk-chip.is-active { background: #2a2420; border-color: #2a2420; color: #fff; }
+        #x-content-card .xce-bk-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+        #x-content-card .xce-bk-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+        #x-content-card .xce-bk-count { flex: 0 0 auto; font-family: var(--font-mono); font-size: 10.5px; opacity: 0.65; }
+        #x-content-card .xce-bk-share { display: none; padding-left: 12px; font-family: var(--font-mono); font-size: 10px; line-height: 1.2; color: rgba(42,36,32,0.5); }
+        #x-content-card .xce-bk-tools { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 6px; }
+        #x-content-card .xce-bk-rename { display: grid; grid-template-columns: minmax(0,1fr) 38px 38px; gap: 6px; align-items: center; }
+        #x-content-card .xce-bk-icon { display: inline-flex; align-items: center; justify-content: center; width: 100%; min-width: 38px; height: 38px; box-sizing: border-box; border-radius: 10px; border: 1px solid rgba(42,36,32,0.12); background: rgba(255,255,255,0.6); color: #2a2420; cursor: pointer; }
+        #x-content-card #x-content-bucket-add { width: 100%; }
+        /* Rail row = bucket button + fixed 38px "⋯" menu on EVERY row (no row ever grows or shifts). */
+        #x-content-card .xce-bk-row { display: grid; grid-template-columns: minmax(0,1fr) 38px; gap: 6px; align-items: center; width: 100%; }
+        #x-content-card .xce-bk-more-spacer { width: 38px; height: 38px; }
+        #x-content-card .xce-bk-more .xce-pop-trigger { border-color: transparent; background: transparent; color: rgba(42,36,32,0.45); }
+        #x-content-card .xce-bk-more .xce-pop-trigger:hover, #x-content-card .xce-bk-more .xce-pop-trigger.is-open { border-color: rgba(42,36,32,0.12); background: rgba(255,255,255,0.6); color: #2a2420; }
+        /* Toolbar: one fixed-height row, identical for every bucket. */
+        #x-content-card .xce-bk-toolbar { display: flex; align-items: center; gap: 8px; height: 38px; min-width: 0; }
+        #x-content-card .xce-bk-view { height: 38px; min-height: 38px; flex: 0 1 260px; min-width: 0; border-radius: 10px; font-size: 12px; font-weight: 700; }
+        #x-content-card .xce-bk-toolbar-count { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 11px; color: rgba(42,36,32,0.55); }
+        #x-content-card .xce-bk-toolbar-icons { display: inline-flex; gap: 6px; flex: 0 0 auto; }
+        #x-content-card .xce-bk-toolbar-icons .xce-bk-icon { width: 38px; }
+        #x-content-card .xce-spin { animation: xce-spin 0.9s linear infinite; }
+        @keyframes xce-spin { to { transform: rotate(360deg); } }
+        /* Popovers float over content — opening one never moves the layout. */
+        #x-content-card .xce-pop { position: relative; display: inline-flex; }
+        #x-content-card .xce-pop-panel { position: absolute; top: calc(100% + 6px); z-index: 40; min-width: 220px; max-width: min(320px, 86vw); max-height: 60vh; overflow-y: auto; padding: 6px; border-radius: 12px; border: 1px solid rgba(42,36,32,0.12); background: #fbfaf8; box-shadow: 0 10px 28px rgba(0,0,0,0.12); box-sizing: border-box; }
+        #x-content-card .xce-pop-panel.align-right { right: 0; }
+        #x-content-card .xce-pop-panel.align-left { left: 0; }
+        #x-content-card .xce-pop-panel .xce-bk-form { border: 0; background: transparent; padding: 4px; }
+        #x-content-card .xce-pop-panel .xce-bk-legend { display: grid; gap: 8px; padding: 6px; }
+        #x-content-card .xce-pop-list { display: grid; gap: 2px; }
+        #x-content-card .xce-pop-item { display: flex; align-items: center; gap: 8px; width: 100%; height: 36px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; font: inherit; font-size: 12px; font-weight: 600; color: #2a2420; text-align: left; cursor: pointer; }
+        #x-content-card .xce-pop-item:hover:not(:disabled) { background: rgba(42,36,32,0.06); }
+        #x-content-card .xce-pop-item:disabled { opacity: 0.4; cursor: default; }
+        #x-content-card .xce-pop-item.is-danger { color: #9f1f17; }
+        #x-content-card .xce-pop-item .xce-bk-count { margin-left: auto; }
+        #x-content-card .xce-bk-results { display: grid; gap: 16px; }
+        #x-content-card .xce-bk-result-group { display: grid; gap: 8px; }
+        #x-content-card .xce-bk-result-head { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 12px; font-weight: 700; color: #2a2420; }
+        #x-content-card .xce-bk-result-head .xce-bk-count { margin-left: 2px; }
+        #x-content-card .xce-pop-label { margin: 4px 10px; font-family: var(--font-mono); font-size: 10px; color: rgba(42,36,32,0.5); }
+        #x-content-card .xce-bk-icon:disabled { opacity: 0.4; cursor: default; }
+        #x-content-card .xce-bk-link { border: 0; background: none; padding: 0; font: inherit; color: #9f1f17; cursor: pointer; text-decoration: underline; }
+        #x-content-card .xce-bk-form { display: grid; gap: 8px; padding: 10px; border-radius: 12px; border: 1px solid rgba(42,36,32,0.1); background: rgba(255,255,255,0.5); }
+        #x-content-card .xce-bk-share-row { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; }
+        #x-content-card .xce-bk-folder-section { display: grid; gap: 6px; }
+        #x-content-card .xce-bk-folders { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+        #x-content-card .xce-bk-folder { display: inline-flex; align-items: center; gap: 6px; height: 38px; min-height: 38px; box-sizing: border-box; padding: 0 12px; border-radius: 10px; border: 1px solid rgba(42,36,32,0.12); background: rgba(255,255,255,0.6); font-size: 11.5px; font-weight: 700; color: #2a2420; cursor: pointer; max-width: 100%; }
+        #x-content-card .xce-bk-folder.is-active { background: #2a2420; border-color: #2a2420; color: #fff; }
+        #x-content-card .xce-bk-folder-add, #x-content-card .xce-bk-suggest { border-style: dashed; }
+        #x-content-card .xce-bk-rule { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        #x-content-card .xce-bk-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+        #x-content-card .xce-bk-card-li { min-width: 0; }
+        #x-content-card .xce-bk-card { display: grid; gap: 6px; width: 100%; padding: 6px 6px 8px; text-align: left; border-radius: 10px; border: 1px solid rgba(42,36,32,0.1); background: rgba(255,255,255,0.6); font: inherit; cursor: pointer; align-content: start; }
+        #x-content-card .xce-bk-card.is-active { border-color: #2a2420; }
+        #x-content-card .xce-bk-thumb { display: block; aspect-ratio: 1 / 1; border-radius: 8px; overflow: hidden; background: linear-gradient(135deg, rgba(42,36,32,0.10), rgba(42,36,32,0.04)); }
+        #x-content-card .xce-bk-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        #x-content-card .xce-bk-thumb-ph { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; width: 100%; height: 100%; color: rgba(42,36,32,0.55); }
+        #x-content-card .xce-bk-card-title { padding: 0 2px; font-size: 12px; font-weight: 600; line-height: 1.35; color: #2a2420; overflow-wrap: break-word; hyphens: auto; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: calc(1.35em * 2); }
+        #x-content-card .xce-bk-card-meta { display: flex; flex-wrap: wrap; gap: 4px; }
+        /* Status as dots, not text pills: bucket · status · story · rights · daily-auto. Meaning on hover + in the legend. */
+        #x-content-card .xce-bk-card-dots { display: flex; align-items: center; gap: 5px; padding: 0 2px; min-height: 10px; }
+        #x-content-card .xce-bk-dotmark { display: inline-block; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid transparent; box-sizing: border-box; flex: 0 0 auto; }
+        #x-content-card .xce-bk-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-family: var(--font-mono); font-size: 10px; color: rgba(42,36,32,0.55); }
+        #x-content-card .xce-bk-legend-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+        #x-content-card .xce-bk-drawer-backdrop { position: fixed; inset: 0; z-index: 60; background: rgba(42,36,32,0.35); display: flex; justify-content: flex-end; }
+        #x-content-card .xce-bk-drawer { width: 100%; max-width: 100%; height: 100%; overflow-y: auto; overflow-x: hidden; background: #fbfaf8; padding: 14px var(--mobile-gutter, 8px) 24px; display: grid; gap: 12px; align-content: start; box-sizing: border-box; }
+        #x-content-card .xce-bk-drawer-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+        #x-content-card .xce-bk-facets { display: grid; gap: 8px; }
+        #x-content-card .xce-bk-media-preview { width: 100%; border-radius: 12px; overflow: hidden; background: #1f1b18; display: flex; justify-content: center; }
+        #x-content-card .xce-bk-media-preview video, #x-content-card .xce-bk-media-preview img { display: block; width: 100%; max-width: 100%; max-height: 52vh; object-fit: contain; }
+        #x-content-card .xce-bk-source { margin: 0; font-size: 12px; line-height: 1.4; color: rgba(42,36,32,0.7); overflow-wrap: anywhere; min-width: 0; }
+        #x-content-card .xce-bk-chips { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+        #x-content-card .xce-chip-ok { border-color: rgba(31,122,76,0.3); background: rgba(31,122,76,0.08); color: #1f6b44; }
+        #x-content-card .xce-bk-sync-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+        #x-content-card .xce-bk-sync-row .xce-sub { margin: 0; overflow-wrap: anywhere; min-width: 0; }
+        #x-content-card .xce-bk-sync-row .xce-error { flex: 1 0 100%; margin: 0; }
+        #x-content-card .xce-bk-thumb { position: relative; }
+        #x-content-card .xce-bk-thumb-flag { position: absolute; right: 6px; top: 6px; width: 9px; height: 9px; border-radius: 50%; background: #d97706; box-shadow: 0 0 0 2px rgba(255,255,255,0.9); }
+        #x-content-card .xce-bk-action-row { display: flex; flex-wrap: wrap; gap: 8px; }
+        #x-content-card .xce-bk-action-row > button { min-height: 38px; border-radius: 10px; box-sizing: border-box; }
+        #x-content-card .xce-bk-thumb-summary { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; padding: 8px; box-sizing: border-box; text-align: center; font-size: 11px; line-height: 1.3; font-weight: 600; }
+        #x-content-card #x-content-nas-preview .xce-field-hint { color: rgba(255,255,255,0.8); padding: 12px; margin: 0; }
+        #x-content-card .xce-nas-panel { display: grid; gap: 12px; min-width: 0; }
+        #x-content-card .xce-nas-status { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: 12px; font-weight: 600; color: #2a2420; }
+        #x-content-card .xce-nas-status .xce-bk-dotmark { flex: 0 0 auto; margin-top: 3px; }
+        #x-content-card .xce-nas-browser { display: grid; gap: 6px; min-width: 0; }
+        #x-content-card .xce-nas-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; font-size: 11px; color: rgba(42,36,32,0.55); }
+        #x-content-card .xce-nas-crumb { border: 0; background: transparent; padding: 4px 6px; border-radius: 6px; font: inherit; font-weight: 700; color: #2a2420; cursor: pointer; }
+        #x-content-card .xce-nas-crumb:hover { background: rgba(42,36,32,0.06); }
+        #x-content-card .xce-nas-list { list-style: none; margin: 0; padding: 4px; height: 240px; overflow-y: auto; overflow-x: hidden; border: 1px solid rgba(42,36,32,0.12); border-radius: 10px; background: rgba(255,255,255,0.6); box-sizing: border-box; }
+        #x-content-card .xce-nas-row { display: flex; align-items: center; gap: 8px; min-height: 36px; min-width: 0; }
+        #x-content-card .xce-nas-name { display: flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; height: 36px; border: 0; background: transparent; padding: 0 6px; border-radius: 8px; font: inherit; font-size: 12px; font-weight: 600; color: #2a2420; text-align: left; cursor: pointer; }
+        #x-content-card .xce-nas-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        #x-content-card .xce-nas-name.is-file { cursor: default; font-weight: 500; color: rgba(42,36,32,0.75); }
+        #x-content-card button.xce-nas-name:hover { background: rgba(42,36,32,0.06); }
+        #x-content-card .xce-nas-empty { padding: 12px; font-size: 12px; color: rgba(42,36,32,0.55); }
+        #x-content-card .xce-nas-empty.is-error { color: #9f1f17; }
+        #x-content-card .xce-nas-controls { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+        #x-content-card .xce-nas-cap { flex: 1 1 120px; min-width: 0; }
+        #x-content-card .xce-nas-estimate { margin: 0; font-family: var(--font-mono); font-size: 11px; color: rgba(42,36,32,0.7); overflow-wrap: anywhere; }
+        #x-content-card .xce-nas-connect-row { display: grid; gap: 8px; min-width: 0; }
+        #x-content-card .xce-nas-cmd { display: block; padding: 8px 10px; border-radius: 8px; background: rgba(42,36,32,0.06); font-family: var(--font-mono); font-size: 11px; user-select: all; overflow-wrap: anywhere; }
+        #x-content-card .xce-nas-selall { display: flex; align-items: center; gap: 8px; min-height: 32px; font-size: 12px; font-weight: 600; cursor: pointer; }
+        #x-content-card .xce-nas-meta { margin-left: auto; padding-left: 8px; flex: 0 0 auto; font-style: normal; font-size: 10px; font-weight: 500; color: rgba(42,36,32,0.5); }
+        #x-content-card .xce-nas-selected { margin: 0; font-size: 11px; color: rgba(42,36,32,0.7); }
+        #x-content-card .xce-nas-clear { border: 0; background: transparent; padding: 0; font: inherit; font-weight: 700; color: #2a2420; text-decoration: underline; cursor: pointer; }
+        #x-content-card .xce-nas-crumb:disabled { opacity: 0.35; cursor: default; }
+        #x-content-card .xce-nas-start { width: 100%; }
+        #x-content-card .xce-nas-jobs { display: grid; gap: 8px; }
+        #x-content-card .xce-nas-job { display: grid; gap: 4px; padding: 8px; border: 1px solid rgba(42,36,32,0.12); border-radius: 10px; background: rgba(255,255,255,0.6); }
+        #x-content-card .xce-nas-job-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+        #x-content-card .xce-nas-job-state { font-size: 11px; font-weight: 700; text-transform: capitalize; }
+        #x-content-card .xce-nas-job-head .xce-bk-count { margin-left: auto; }
+        #x-content-card .xce-nas-cancel { width: 38px; min-width: 38px; flex: 0 0 auto; }
+        #x-content-card .xce-nas-bar { height: 6px; border-radius: 3px; background: rgba(42,36,32,0.1); overflow: hidden; }
+        #x-content-card .xce-nas-bar > span { display: block; height: 100%; background: #2a2420; transition: width 0.3s; }
+        #x-content-card .xce-bk-usage { font-family: var(--font-mono); font-size: 11px; color: rgba(42,36,32,0.6); }
+        @media (min-width: 481px) {
+          #x-content-card .xce-bk-grid { grid-template-columns: repeat(3, minmax(0,1fr)); }
+          #x-content-card .xce-bk-drawer { max-width: 440px; padding: 16px; box-shadow: -8px 0 24px rgba(0,0,0,0.12); }
+        }
+        @media (min-width: 640px) {
+          #x-content-card .xce-bk-layout { grid-template-columns: 220px minmax(0,1fr); align-items: start; }
+          #x-content-card .xce-bk-rail { position: sticky; top: 12px; }
+          #x-content-card .xce-bk-list { flex-direction: column; align-items: stretch; overflow: visible; }
+          #x-content-card .xce-bk-item { flex: 0 0 auto; }
+          #x-content-card .xce-bk-chip { width: 100%; }
+          #x-content-card .xce-bk-share { display: block; }
+          #x-content-card .xce-bk-grid { grid-template-columns: repeat(4, minmax(0,1fr)); }
+        }
+
+        @media (max-width: 480px) {
+          #x-content-card .xce-tab { padding: 0 6px; font-size: 10px; } }
+        }
+        @media (min-width: 640px) {
+          #x-content-card .xce-engine-counts { grid-template-columns: repeat(4, minmax(0,1fr)); }
+          #x-content-card .xce-week-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
         }
       `}</style>
     </div>

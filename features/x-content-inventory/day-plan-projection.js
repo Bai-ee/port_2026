@@ -27,9 +27,15 @@ export const STORY_PREVIEW_CHARS = 280;
  * - `scan`      — a dynamic slot the 06:30 quote scan fills
  * - `gap`       — nothing in inventory can fill it, and `gaps` says what would
  * - `empty`     — a ledger slot with no eligible winner (not an inventory gap)
+ * - `skipped`   — the engine quota held the slot back (source 'none' with no
+ *                 gap entry): a decision, not an inventory shortfall
+ *
+ * @param {object} slot
+ * @param {Set<string>} [gapSlots] slot keys that DO have a gap entry
  */
-export function slotState(slot) {
+export function slotState(slot, gapSlots) {
   const s = slot ?? {};
+  if (s.source === 'none' && !s.packageId && !(gapSlots && gapSlots.has(s.slot))) return 'skipped';
   if (s.source === 'scan') return 'scan';
   if (s.source === 'ledger') return s.story ? 'ledger' : 'empty';
   if (s.packageId) return 'inventory';
@@ -70,9 +76,10 @@ export function projectDayPlan(plan, opts) {
   const rawSlots = Array.isArray(p.slots) ? p.slots : [];
   const audit = p.audit ?? {};
 
+  const gapSlots = new Set((Array.isArray(p.gaps) ? p.gaps : []).map((g) => g?.slot));
   const slots = rawSlots.map((raw) => {
     const s = raw ?? {};
-    const state = slotState(s);
+    const state = slotState(s, gapSlots);
     return {
       slot: s.slot ?? null,
       timeCT: s.timeCT ?? null,
@@ -117,6 +124,7 @@ export function projectDayPlan(plan, opts) {
       fromScan: countBy('scan'),
       gaps: countBy('gap'),
       empty: countBy('empty'),
+      skipped: countBy('skipped'),
       adopted: slots.filter((s) => s.adopted).length,
     },
     slots,

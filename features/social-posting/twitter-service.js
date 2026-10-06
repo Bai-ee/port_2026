@@ -7,6 +7,7 @@ import { scoreXPost } from '../x-growth/index.js';
 import { compactTwitterError, mapTwitterError } from './twitter-errors.js';
 import { getAdapter } from './adapters/index.js';
 import { storySyncPlan } from '../discogs-ingest/draft-builder.js';
+import { needsApproval } from '../x-content-inventory/schema.js';
 import { assertNoMemoryPlaceholder, hasMemoryPlaceholder, sanitizeMediaVariants, sanitizeSelfReply, sanitizeSourceRef } from './self-reply.js';
 
 const require = createRequire(import.meta.url);
@@ -254,11 +255,26 @@ async function patchPost(postId, patch) {
   await postsCol().doc(postId).set(patch, { merge: true });
 }
 
-// Due posts = scheduled/queued/failed whose time has arrived. The status filter
-// runs in memory so the query needs only a scheduledAt range (+ clientId when
-// scoped), keeping the index requirements minimal. Null scheduledAt (drafts)
-// are a different Firestore type than the ISO-string bound and are excluded.
+// Due posts = scheduled/queued (plus explicitly retryable 'failed') whose time
+// has arrived. The status filter runs in memory so the query needs only a
+// scheduledAt range (+ clientId when scoped), keeping the index requirements
+// minimal. Null scheduledAt (drafts, approved, seeded packages) is a different
+// Firestore type than the ISO-string bound and is excluded: nothing without an
+// explicit schedule is ever published by the sweep.
+//
+// Status machine (social_posts):
+//   draft -> approved -> scheduled|queued -> posting -> posted
+//                                              |-> failed (retry only if retryable && attempts < MAX_ATTEMPTS)
+//                                              |-> needs_review (claim went stale; may already be live)
+//   scheduled|queued|failed -> expired (>26h late)
 const DUE_STATUSES = new Set(['scheduled', 'queued', 'failed']);
+const CLAIMABLE_STATUSES = DUE_STATUSES;
+
+export const MAX_ATTEMPTS = 3;
+export const DEFAULT_MAX_PER_RUN = 3;
+// A 'posting' claim older than this means the sweeper died or timed out mid-publish.
+// The tweet may already be live, so it is surfaced for review, never retried.
+export const STALE_CLAIM_MS = 15 * 60 * 1000;
 
 // A post whose scheduledAt slipped this far into the past is not "a bit late"
 // — it's stale history. Without this, the FIRST run of a due-sweep cron would
@@ -270,33 +286,105 @@ const DUE_STATUSES = new Set(['scheduled', 'queued', 'failed']);
 // period. If this project moves to Vercel Pro and the cron goes back to a
 // sub-daily schedule (*/30), drop this to 12h.
 const STALE_DUE_MS = 26 * 60 * 60 * 1000; // 26h — must stay > the cron period
+const STALE_DUE_HOURS = STALE_DUE_MS / 3600000;
 
-async function readDuePosts(clientId = null) {
-  const nowIso = new Date().toISOString();
+// The request never left this machine — X cannot have accepted the post.
+const PRE_SEND_ERROR_RE = /ENOTFOUND|EAI_AGAIN|ECONNREFUSED/i;
+// The request may have reached X — the post may already be live.
+const AMBIGUOUS_NETWORK_RE = /ECONNRESET|ETIMEDOUT|EPIPE|socket hang up|fetch failed|network/i;
+
+// Is this publish failure worth another automatic attempt? Only failures that
+// prove X did not accept the post: 429 (rejected) and pre-send network errors.
+// 5xx and mid-request network errors are AMBIGUOUS — X has no idempotency key,
+// so a retry can double-post on the live account; those wait for a human.
+// 402 (credits), 4xx content/auth errors and anything unrecognised never retry.
+export function classifyPublishError(error) {
+  const code = Number(error?.code ?? error?.twitterError?.code);
+  if (code === 402) return { retryable: false, errorClass: 'credits-depleted' };
+  if (code === 429) return { retryable: true, errorClass: 'rate-limited' };
+  if (Number.isFinite(code) && code >= 500 && code < 600) return { retryable: false, errorClass: 'server-error-ambiguous' };
+  if (Number.isFinite(code) && code >= 400 && code < 500) return { retryable: false, errorClass: 'client-error' };
+  const text = `${error?.code || ''} ${error?.message || ''} ${error?.details || ''}`;
+  if (PRE_SEND_ERROR_RE.test(text)) return { retryable: true, errorClass: 'network-pre-send' };
+  if (AMBIGUOUS_NETWORK_RE.test(text)) return { retryable: false, errorClass: 'network-ambiguous' };
+  return { retryable: false, errorClass: 'unknown' };
+}
+
+function isRetryableFailure(post) {
+  return post.status === 'failed' && post.retryable === true && (Number(post.attempts) || 0) < MAX_ATTEMPTS;
+}
+
+// Atomically take ownership of one due post: status scheduled|queued|failed(retryable)
+// -> 'posting', stamping claimedAt and attempts+1. Returns the claimed post, or null
+// when the doc is gone or no longer claimable (another sweeper got it, already
+// posted, edited back to draft, ...). The transaction re-reads the doc, so the
+// decision is made on fresh state, never on the sweep's stale snapshot.
+export async function claimDuePost(postId, { now = Date.now() } = {}) {
+  const ref = postsCol().doc(postId);
+  return fb.adminDb.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return null;
+    const post = snap.data();
+    if (!CLAIMABLE_STATUSES.has(post.status)) return null;
+    if (post.status === 'failed' && !isRetryableFailure(post)) return null;
+    const scheduledMs = Date.parse(post.scheduledAt);
+    if (!Number.isFinite(scheduledMs) || scheduledMs > now) return null;
+    const stamp = new Date(now).toISOString();
+    const claimed = {
+      ...post,
+      status: 'posting',
+      claimedAt: stamp,
+      attempts: (Number(post.attempts) || 0) + 1,
+      idempotencyKey: post.id,
+      updatedAt: stamp,
+    };
+    tx.set(ref, { status: claimed.status, claimedAt: stamp, attempts: claimed.attempts, idempotencyKey: post.id, updatedAt: stamp }, { merge: true });
+    return claimed;
+  });
+}
+
+async function readDuePosts(clientId = null, { now = Date.now() } = {}) {
+  const nowIso = new Date(now).toISOString();
   let q = postsCol().where('scheduledAt', '<=', nowIso);
   if (clientId) q = q.where('clientId', '==', clientId);
   const snap = await q.get();
 
   const due = [];
-  const expireWrites = [];
-  const now = Date.now();
-  const nowStamp = new Date(now).toISOString();
+  const stale = [];
+  const writes = [];
+  const nowStamp = nowIso;
   for (const doc of snap.docs) {
     const post = doc.data();
+    if (post.status === 'posting') {
+      // Stale claim: report, never auto-retry (the tweet may already be live).
+      const claimedMs = Date.parse(post.claimedAt);
+      if (Number.isFinite(claimedMs) && now - claimedMs > STALE_CLAIM_MS) {
+        const marked = {
+          status: 'needs_review',
+          error: 'Publish claim went stale (sweeper died or timed out mid-publish). The post may already be live on X — check before re-scheduling. Not retried automatically.',
+          updatedAt: nowStamp,
+        };
+        writes.push(patchPost(post.id, marked));
+        stale.push({ ...post, ...marked });
+      }
+      continue;
+    }
     if (!DUE_STATUSES.has(post.status)) continue;
+    if (post.status === 'failed' && !isRetryableFailure(post)) continue;
     const scheduledMs = Date.parse(post.scheduledAt);
     if (Number.isFinite(scheduledMs) && now - scheduledMs > STALE_DUE_MS) {
-      expireWrites.push(patchPost(post.id, {
+      writes.push(patchPost(post.id, {
         status: 'expired',
-        error: 'Scheduled time was more than 12h in the past when the due sweep ran — not posted.',
+        error: `Scheduled time was more than ${STALE_DUE_HOURS}h in the past when the due sweep ran — not posted.`,
         updatedAt: nowStamp,
       }));
       continue;
     }
     due.push(post);
   }
-  if (expireWrites.length) await Promise.all(expireWrites);
-  return due;
+  if (writes.length) await Promise.all(writes);
+  due.sort((a, b) => String(a.scheduledAt).localeCompare(String(b.scheduledAt)));
+  return { due, stale };
 }
 
 function makeId() {
@@ -568,7 +656,7 @@ async function uploadPostMedia(media) {
   return mediaId || null;
 }
 
-export async function postToTwitter(content, media = null, { clientId, platform = 'x', selfReply = null } = {}) {
+export async function postToTwitter(content, media = null, { clientId, platform = 'x', selfReply = null, idempotencyKey = null } = {}) {
   const text = normalizePostText(content);
   if (!text) {
     const err = new Error('Post content is required.');
@@ -585,7 +673,7 @@ export async function postToTwitter(content, media = null, { clientId, platform 
   // account, per platform). No clientId keeps today's env-credential path
   // below, unchanged, for any caller that hasn't been made client-aware yet.
   if (clientId) {
-    return getAdapter(platform).publish({ clientId, text, media, selfReply });
+    return getAdapter(platform).publish({ clientId, text, media, selfReply, idempotencyKey });
   }
   if (selfReply) {
     const err = new Error('A self-reply needs a clientId (connected X account).');
@@ -644,7 +732,7 @@ async function publishStoredPost(post, now) {
       return { ...result, selfReplyTwitterId: null, selfReplyError: error.message || 'Self-reply failed.' };
     }
   }
-  return postToTwitter(post.content, postMedia(post), { clientId: post.clientId, platform, selfReply: post.selfReply || null });
+  return postToTwitter(post.content, postMedia(post), { clientId: post.clientId, platform, selfReply: post.selfReply || null, idempotencyKey: post.id });
 }
 
 // Pull the media descriptor off a stored post (null when text-only).
@@ -655,6 +743,13 @@ function postMedia(post) {
     mediaType: post.mediaType || null,
     mediaContentType: post.mediaContentType || null,
   };
+}
+
+const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
+
+function cleanStr(value, max) {
+  if (value === undefined || value === null || value === '') return null;
+  return String(value).slice(0, max);
 }
 
 export async function createSocialPost(clientId, payload) {
@@ -714,6 +809,14 @@ export async function createSocialPost(clientId, payload) {
     sourceRef: sanitizeSourceRef(payload.sourceRef),
     mediaVariants: sanitizeMediaVariants(payload.mediaVariants),
     needsStory: payload.needsStory === true,
+    // Content-system joins/metadata (all optional). packageId links to an
+    // x_content_packages row for the posted write-back and the approval gate.
+    packageId: cleanStr(payload.packageId, 160),
+    engine: cleanStr(payload.engine, 40),
+    campaign: cleanStr(payload.campaign, 120),
+    priority: cleanStr(payload.priority, 20),
+    needsApproval: payload.needsApproval === true,
+    attempts: 0,
   };
 
   await savePost(post);
@@ -738,6 +841,7 @@ export async function postNow(clientId, payload) {
       ...selfReplyFields(draft, result, now),
     };
     await savePost(updated);
+    await recordPackagePosted(updated, now);
     return updated;
   } catch (error) {
     const failed = {
@@ -791,6 +895,7 @@ export async function publishApprovedPost(clientId, postId, { source = 'email' }
       ...selfReplyFields(post, result, now),
     };
     await savePost(updated);
+    await recordPackagePosted(updated, now);
     return updated;
   } catch (error) {
     const failed = {
@@ -863,6 +968,56 @@ export async function rejectSocialPost(clientId, postId) {
   return updated;
 }
 
+// Approval gate for scheduling. A post may be scheduled directly (legacy path)
+// UNLESS the post itself (needsApproval flag) or its linked package (client-
+// approval-needed rights, or approval.state needed/rejected) requires sign-off —
+// then it must be an approved post first (status 'approved', or it carries the
+// reviewedAt stamp from approve-draft). A package lookup error fails closed.
+async function assertSchedulable(post) {
+  const reviewed = post.status === 'approved' || Boolean(post.reviewedAt);
+  if (reviewed) return;
+  let needs = post.needsApproval === true;
+  if (!needs && post.packageId) {
+    const { getPackage } = await import('../x-content-inventory/store.js');
+    const pkg = await getPackage(post.packageId);
+    needs = Boolean(pkg) && needsApproval(pkg);
+  }
+  if (needs) {
+    const err = new Error('This post needs approval before it can be scheduled. Approve the draft first.');
+    err.status = 409;
+    err.code = 'approval-required';
+    throw err;
+  }
+}
+
+// draft -> approved. The story gate runs here: a post still carrying the
+// "[add your memory]" placeholder (or flagged needsStory) cannot be approved.
+// Idempotent for an already-approved post. Approving never schedules anything.
+export async function approveDraft(clientId, postId, { reviewedBy = null } = {}) {
+  const post = await getSocialPost(clientId, postId);
+  if (!post) throw Object.assign(new Error('Post not found.'), { status: 404 });
+  if (post.status === 'approved') return post;
+  if (post.status !== 'draft') {
+    throw Object.assign(new Error(`Only a draft can be approved (this post is ${post.status}).`), { status: 409, code: 'not-draft' });
+  }
+  if (post.needsStory === true) {
+    throw Object.assign(new Error('This draft still needs its story before it can be approved.'), { status: 409, code: 'needs-story' });
+  }
+  assertNoMemoryPlaceholder(post.content);
+  assertNoMemoryPlaceholder(post.selfReply?.text);
+  const now = new Date().toISOString();
+  const updated = {
+    ...post,
+    status: 'approved',
+    reviewedAt: now,
+    reviewedBy: reviewedBy ? String(reviewedBy).slice(0, 200) : null,
+    error: null,
+    updatedAt: now,
+  };
+  await savePost(updated);
+  return updated;
+}
+
 export async function schedulePost(clientId, payload) {
   assertNoMemoryPlaceholder(normalizePostText(payload.content));
   assertNoMemoryPlaceholder(payload.selfReply?.text);
@@ -872,6 +1027,7 @@ export async function schedulePost(clientId, payload) {
     err.status = 400;
     throw err;
   }
+  await assertSchedulable({ ...payload, status: 'draft' });
   return createSocialPost(clientId, {
     ...payload,
     status: scheduledAt.getTime() <= Date.now() ? 'queued' : 'scheduled',
@@ -1052,10 +1208,19 @@ export async function updateSocialPost(clientId, postId, payload = {}) {
   // it (queued if already due, scheduled otherwise).
   let scheduledAt = post.scheduledAt || null;
   let status = post.status;
-  if (Object.prototype.hasOwnProperty.call(payload, 'scheduledAt')) {
+  // Editing the text of an approved-but-unscheduled draft voids the approval.
+  const contentChanged = content !== post.content;
+  let reviewedAt = post.reviewedAt || null;
+  let reviewedBy = post.reviewedBy || null;
+  if (contentChanged && post.status === 'approved') {
+    status = 'draft';
+    reviewedAt = null;
+    reviewedBy = null;
+  }
+  if (hasOwn(payload, 'scheduledAt')) {
     if (!payload.scheduledAt) {
       scheduledAt = null;
-      if (status === 'scheduled' || status === 'queued') status = 'draft';
+      if (status === 'scheduled' || status === 'queued') status = reviewedAt ? 'approved' : 'draft';
     } else {
       const dt = new Date(payload.scheduledAt);
       if (Number.isNaN(dt.getTime())) {
@@ -1064,6 +1229,13 @@ export async function updateSocialPost(clientId, postId, payload = {}) {
         throw err;
       }
       scheduledAt = dt.toISOString();
+      await assertSchedulable({
+        ...post,
+        status,
+        reviewedAt,
+        packageId: hasOwn(payload, 'packageId') ? cleanStr(payload.packageId, 160) : post.packageId,
+        needsApproval: payload.needsApproval === true || post.needsApproval === true,
+      });
       status = dt.getTime() <= Date.now() ? 'queued' : 'scheduled';
     }
   }
@@ -1080,6 +1252,13 @@ export async function updateSocialPost(clientId, postId, payload = {}) {
     ...(Object.prototype.hasOwnProperty.call(payload, 'sourceRef') ? { sourceRef: sanitizeSourceRef(payload.sourceRef) } : {}),
     ...(Object.prototype.hasOwnProperty.call(payload, 'mediaVariants') ? { mediaVariants: sanitizeMediaVariants(payload.mediaVariants) } : {}),
     ...(typeof payload.needsStory === 'boolean' ? { needsStory: payload.needsStory } : {}),
+    ...(hasOwn(payload, 'packageId') ? { packageId: cleanStr(payload.packageId, 160) } : {}),
+    ...(hasOwn(payload, 'engine') ? { engine: cleanStr(payload.engine, 40) } : {}),
+    ...(hasOwn(payload, 'campaign') ? { campaign: cleanStr(payload.campaign, 120) } : {}),
+    ...(hasOwn(payload, 'priority') ? { priority: cleanStr(payload.priority, 20) } : {}),
+    ...(payload.needsApproval === true ? { needsApproval: true } : {}),
+    reviewedAt,
+    reviewedBy,
     updatedAt: new Date().toISOString(),
   };
   const plan = storySyncPlan(post, content, null);
@@ -1095,8 +1274,7 @@ async function syncDiscogsStory(post, content) {
     if (post.source !== 'discogs-ingest') return;
     const store = await import('../x-content-inventory/store.js');
     const releaseId = post.sourceRef?.releaseId;
-    const { packages } = await store.readInventory();
-    const existing = packages.find((p) => p?.id === `discogs-${releaseId}`) || null;
+    const existing = await store.getPackage(`discogs-${releaseId}`);
     const plan = storySyncPlan(post, content, existing);
     if (!plan?.packagePatch || !existing) return;
     await store.upsertPackage({ ...existing, ...plan.packagePatch });
@@ -1106,8 +1284,12 @@ async function syncDiscogsStory(post, content) {
 }
 
 // Post one due row and write the result back. Never throws — the due sweep must
-// keep going past a single failure.
-async function postAndRecord(post) {
+// keep going past a single failure. Claims the row first (atomic transaction);
+// returns { skipped: true } when another sweeper already owns it or it is no
+// longer claimable, so a double sweep can never publish the same post twice.
+async function postAndRecord(snapshot) {
+  const post = await claimDuePost(snapshot.id);
+  if (!post) return { ok: false, skipped: true, updated: snapshot };
   // Placeholder guard (same rule as post-now/schedule): never publish a draft
   // that still says "[add your memory]". Park it as a draft with a reason.
   if (hasMemoryPlaceholder(post.content) || hasMemoryPlaceholder(post.selfReply?.text)) {
@@ -1130,19 +1312,47 @@ async function postAndRecord(post) {
       postedAt: post.postedAt || now,
       updatedAt: now,
       error: null,
+      retryable: false,
+      errorClass: null,
       ...selfReplyFields(post, result, now),
     };
     await savePost(updated);
+    await recordPackagePosted(updated, now);
     return { ok: true, updated };
   } catch (error) {
+    const { retryable, errorClass } = classifyPublishError(error);
     const updated = {
       ...post,
       status: 'failed',
       error: error.message || 'Failed to post.',
+      retryable,
+      errorClass,
       updatedAt: new Date().toISOString(),
     };
     await savePost(updated);
     return { ok: false, updated };
+  }
+}
+
+// Write a published post back onto its content package (post.packageId join):
+// lastPostedAt, postCount+1, lastTwitterId, status 'posted'. Best-effort — a
+// package failure must never turn a live tweet into a failed post. Idempotent per
+// tweet (skips when the package already carries this twitterId).
+async function recordPackagePosted(post, now) {
+  if (!post?.packageId || !post.twitterId) return;
+  try {
+    const store = await import('../x-content-inventory/store.js');
+    const pkg = await store.getPackage(post.packageId);
+    if (!pkg || pkg.lastTwitterId === post.twitterId) return;
+    await store.upsertPackage({
+      ...pkg,
+      status: 'posted',
+      lastPostedAt: now,
+      postCount: (Number(pkg.postCount) || 0) + 1,
+      lastTwitterId: post.twitterId,
+    }, { returnPackages: false });
+  } catch (error) {
+    console.warn('[package-writeback] package update failed:', error.message);
   }
 }
 
@@ -1177,22 +1387,31 @@ export async function retrySelfReply(clientId, postId) {
   }
 }
 
-async function runDueSweep(due) {
+// maxPerRun caps live publishes per sweep (oldest-due first); the rest simply stay
+// due for the next sweep. Rows skipped because another sweeper claimed them do not
+// count against the cap.
+async function runDueSweep({ due, stale }, { maxPerRun = DEFAULT_MAX_PER_RUN } = {}) {
   const posted = [];
   const failed = [];
+  const skipped = [];
+  let attempted = 0;
+  let deferred = 0;
   for (const post of due) {
-    const { ok, updated } = await postAndRecord(post);
+    if (attempted >= maxPerRun) { deferred += 1; continue; }
+    const { ok, skipped: wasSkipped, updated } = await postAndRecord(post);
+    if (wasSkipped) { skipped.push(updated); continue; }
+    attempted += 1;
     (ok ? posted : failed).push(updated);
   }
-  return { posted, failed };
+  return { posted, failed, skipped, needsReview: stale, deferred };
 }
 
-export async function processDuePosts(clientId) {
-  return runDueSweep(await readDuePosts(clientId));
+export async function processDuePosts(clientId, opts = {}) {
+  return runDueSweep(await readDuePosts(clientId), opts);
 }
 
-export async function processDuePostsForAllClients() {
-  return runDueSweep(await readDuePosts(null));
+export async function processDuePostsForAllClients(opts = {}) {
+  return runDueSweep(await readDuePosts(null), opts);
 }
 
 // ── X READ — fetch the actual recent posts of specific handles ────────────────

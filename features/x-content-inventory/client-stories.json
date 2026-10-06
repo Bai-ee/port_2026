@@ -1,0 +1,562 @@
+[
+  {
+    "id": "client-critters-quest-cq-clones-follow-up",
+    "series": "C6",
+    "engine": "client",
+    "pillar": "building-now",
+    "title": "Critters Quest — CQ clones follow-up",
+    "story": "[add your memory]",
+    "assetRefs": [],
+    "mediaState": "none",
+    "effort": "10-min",
+    "rights": "client-approval-needed",
+    "platforms": [
+      "x"
+    ],
+    "cta": "HITLOOP",
+    "entities": [
+      "Critters Quest",
+      "CQ clones follow-up"
+    ],
+    "status": "idea",
+    "lastPostedAt": null,
+    "postCount": 0,
+    "priority": "evergreen",
+    "approval": {
+      "state": "needed"
+    },
+    "source": {
+      "kind": "manual"
+    },
+    "variants": {
+      "x": {
+        "suggestedStory": "Follow-up to the clones post (4,712 views)."
+      }
+    }
+  },
+  {
+    "id": "client-critters-quest-cq-1-of-1-claim-demo",
+    "series": "C6",
+    "engine": "client",
+    "pillar": "building-now",
+    "title": "Critters Quest — CQ 1-of-1 claim demo",
+    "story": "[add your memory]",
+    "assetRefs": [],
+    "mediaState": "none",
+    "effort": "10-min",
+    "rights": "client-approval-needed",
+    "platforms": [
+      "x"
+    ],
+    "cta": "HITLOOP",
+    "entities": [
+      "Critters Quest",
+      "CQ 1-of-1 claim demo"
+    ],
+    "status": "idea",
+    "lastPostedAt": null,
+    "postCount": 0,
+    "priority": "evergreen",
+    "approval": {
+      "state": "needed"
+    },
+    "source": {
+      "kind": "manual"
+    },
+    "variants": {
+      "x": {
+        "suggestedStory": "A 1-of-1 claim demo built from the blind-box UI and the existing wallet."
+      }
+    }
+  },
+  {
+    "id": "client-nottherug-plan-013-release",
+    "series": "C6",
+    "engine": "client",
+    "pillar": "building-now",
+    "title": "NotTheRug — Plan 013 release",
+    "story": "[add your memory]",
+    "assetRefs": [],
+    "mediaState": "none",
+    "effort": "10-min",
+    "rights": "client-approval-needed",
+    "platforms": [
+      "x"
+    ],
+    "cta": "HITLOOP",
+    "entities": [
+      "NotTheRug",
+      "Plan 013 release"
+    ],
+    "status": "idea",
+    "lastPostedAt": null,
+    "postCount": 0,
+    "priority": "evergreen",
+    "approval": {
+      "state": "needed"
+    },
+    "source": {
+      "kind": "manual"
+    },
+    "variants": {
+      "x": {
+        "suggestedStory": "Plan 013 release with independent-agent review and CI-on-SHA."
+      }
+    }
+  },
+  {
+    "id": "client-nottherug-homepage-paw-walk-scroll-trail",
+    "series": "C6",
+    "engine": "client",
+    "pillar": "building-now",
+    "title": "NotTheRug — Homepage paw-walk scroll trail",
+    "story": "[add your memory]",
+    "assetRefs": [],
+    "mediaState": "none",
+    "effort": "10-min",
+    "rights": "client-approval-needed",
+    "platforms": [
+      "x"
+    ],
+    "cta": "HITLOOP",
+    "entities": [
+      "NotTheRug",
+      "Homepage paw-walk scroll trail"
+    ],
+    "status": "idea",
+    "lastPostedAt": null,
+    "postCount": 0,
+    "priority": "evergreen",
+    "approval": {
+      "state": "needed"
+    },
+    "source": {
+      "kind": "manual"
+    },
+    "variants": {
+      "x": {
+        "suggestedStory": "Homepage paw-walk scroll trail and the dev route editor."
+      }
+    }
+  },
+  {
+    "id": "client-nottherug-tracking-and-admin",
+    "series": "C6",
+    "engine": "client",
+    "pillar": "building-now",
+    "title": "NotTheRug — Tracking and admin",
+    "story": "[add your memory]",
+    "assetRefs": [],
+    "mediaState": "none",
+    "effort": "10-min",
+    "rights": "client-approval-needed",
+    "platforms": [
+      "x"
+    ],
+    "cta": "HITLOOP",
+    "entities": [
+      "NotTheRug",
+      "Tracking and admin"
+    ],
+    "status": "idea",
+    "lastPostedAt": null,
+    "postCount": 0,
+    "priority": "evergreen",
+    "approval": {
+      "state": "needed"
+    },
+    "source": {
+      "kind": "manual"
+    },
+    "variants": {
+      "x": {
+        "suggestedStory": "NTR tracking and admin."
+      }
+    }
+  },
+  {
+    "id": "client-edittrades-flag-flow-and-negative-backtest",
+    "series": "C6",
+    "engine": "client",
+    "pillar": "building-now",
+    "title": "EditTrades — Flag flow and negative backtest",
+    "story": "[add your memory]",
+    "assetRefs": [],
+    "mediaState": "none",
+    "effort": "10-min",
+    "rights": "owned",
+    "platforms": [
+      "x"
+    ],
+    "cta": "HITLOOP",
+    "entities": [
+      "EditTrades",
+      "Flag flow and negative backtest"
+    ],
+    "status": "idea",
+    "lastPostedAt": null,
+    "postCount": 0,
+    "priority": "evergreen",
+    "approval": {
+      "state": "none"
+    },
+    "source": {
+      "kind": "manual"
+    },
+    "variants": {
+      "x": {
+        "suggestedStory": "EditTrades flag flow and an honest negative 200-day backtest."
+      }
+    }
+  },
+  {
+    "id": "client-edittrades-edge-research-borrow-kills-slow-perps-edges",
+    "series": "C6",
+    "engine": "client",
+    "pillar": "building-now",
+    "title": "EditTrades — Edge research: borrow kills slow perps edges",
+    "story": "[add your memory]",
+    "assetRefs": [],
+    "mediaState": "none",
+    "effort": "10-min",
+    "rights": "owned",
+    "platforms": [
+      "x"
+    ],
+    "cta": "HITLOOP",
+    "entities": [
+      "EditTrades",
+      "Edge research: borrow kills slow perps edges"
+    ],
+    "status": "idea",
+    "lastPostedAt": null,
+    "postCount": 0,
+    "priority": "evergreen",
+    "approval": {
+      "state": "none"
+    },
+    "source": {
+      "kind": "manual"
+    },
+    "variants": {
+      "x": {
+        "suggestedStory": "EditTrades edge research: borrow kills slow perps edges."
+      }
+    }
+  },
+  {
+    "id": "client-edittrades-read-only-mcp-connector",
+    "series": "C6",
+    "engine": "client",
+    "pillar": "building-now",
+    "title": "EditTrades — Read-only MCP connector",
+    "story": "[add your memory]",
+    "assetRefs": [],
+    "mediaState": "none",
+    "effort": "10-min",
+    "rights": "owned",
+    "platforms": [
+      "x"
+    ],
+    "cta": "HITLOOP",
+    "entities": [
+      "EditTrades",
+      "Read-only MCP connector"
+    ],
+    "status": "idea",
+    "lastPostedAt": null,
+    "postCount": 0,
+    "priority": "evergreen",
+    "approval": {
+      "state": "none"
+    },
+    "source": {
+      "kind": "manual"
+    },
+    "variants": {
+      "x": {
+        "suggestedStory": "EditTrades MCP read-only connector, 154 tests."
+      }
+    }
+  },
+  {
+    "id": "client-edittrax-self-hosted-nft-players",
+    "series": "C6",
+    "engine": "client",
+    "pillar": "building-now",
+    "title": "EditTrax — Self-hosted NFT players",
+    "story": "[add your memory]",
+    "assetRefs": [],
+    "mediaState": "none",
+    "effort": "10-min",
+    "rights": "client-approval-needed",
+    "platforms": [
+      "x"
+    ],
+    "cta": "HITLOOP",
+    "entities": [
+      "EditTrax",
+      "Self-hosted NFT players"
+    ],
+    "status": "idea",
+    "lastPostedAt": null,
+    "postCount": 0,
+    "priority": "evergreen",
+    "approval": {
+      "state": "needed"
+    },
+    "source": {
+      "kind": "manual"
+    },
+    "variants": {
+      "x": {
+        "suggestedStory": "EditTrax self-hosted NFT players."
+      }
+    }
+  },
+  {
+    "id": "client-rosita-s-site-recreate",
+    "series": "C6",
+    "engine": "client",
+    "pillar": "building-now",
+    "title": "Rosita's — Site Recreate",
+    "story": "[add your memory]",
+    "assetRefs": [],
+    "mediaState": "none",
+    "effort": "10-min",
+    "rights": "client-approval-needed",
+    "platforms": [
+      "x"
+    ],
+    "cta": "HITLOOP",
+    "entities": [
+      "Rosita's",
+      "Site Recreate"
+    ],
+    "status": "idea",
+    "lastPostedAt": null,
+    "postCount": 0,
+    "priority": "evergreen",
+    "approval": {
+      "state": "needed"
+    },
+    "source": {
+      "kind": "manual"
+    },
+    "variants": {
+      "x": {
+        "suggestedStory": "Site Recreate on Rosita's: 211 assets, and the workaround for the Vercel 10MB inline cap."
+      }
+    }
+  },
+  {
+    "id": "client-holo-paper-real-verlet-cloth",
+    "series": "C6",
+    "engine": "client",
+    "pillar": "building-now",
+    "title": "HOLO PAPER — Real Verlet cloth",
+    "story": "[add your memory]",
+    "assetRefs": [],
+    "mediaState": "none",
+    "effort": "10-min",
+    "rights": "owned",
+    "platforms": [
+      "x"
+    ],
+    "cta": "HITLOOP",
+    "entities": [
+      "HOLO PAPER",
+      "Real Verlet cloth"
+    ],
+    "status": "idea",
+    "lastPostedAt": null,
+    "postCount": 0,
+    "priority": "evergreen",
+    "approval": {
+      "state": "none"
+    },
+    "source": {
+      "kind": "manual"
+    },
+    "variants": {
+      "x": {
+        "suggestedStory": "HOLO PAPER: real Verlet cloth."
+      }
+    }
+  },
+  {
+    "id": "client-vtc-release-discipline",
+    "series": "C6",
+    "engine": "client",
+    "pillar": "building-now",
+    "title": "VTC — Release discipline",
+    "story": "[add your memory]",
+    "assetRefs": [],
+    "mediaState": "none",
+    "effort": "10-min",
+    "rights": "client-approval-needed",
+    "platforms": [
+      "x"
+    ],
+    "cta": "HITLOOP",
+    "entities": [
+      "VTC",
+      "Release discipline"
+    ],
+    "status": "idea",
+    "lastPostedAt": null,
+    "postCount": 0,
+    "priority": "evergreen",
+    "approval": {
+      "state": "needed"
+    },
+    "source": {
+      "kind": "manual"
+    },
+    "variants": {
+      "x": {
+        "suggestedStory": "VTC release discipline."
+      }
+    }
+  },
+  {
+    "id": "client-invoice-studio-canvas-and-rail-live-edit",
+    "series": "C6",
+    "engine": "client",
+    "pillar": "building-now",
+    "title": "Invoice Studio — Canvas and rail live edit",
+    "story": "[add your memory]",
+    "assetRefs": [],
+    "mediaState": "none",
+    "effort": "10-min",
+    "rights": "owned",
+    "platforms": [
+      "x"
+    ],
+    "cta": "HITLOOP",
+    "entities": [
+      "Invoice Studio",
+      "Canvas and rail live edit"
+    ],
+    "status": "idea",
+    "lastPostedAt": null,
+    "postCount": 0,
+    "priority": "evergreen",
+    "approval": {
+      "state": "none"
+    },
+    "source": {
+      "kind": "manual"
+    },
+    "variants": {
+      "x": {
+        "suggestedStory": "Invoice Studio canvas and rail live edit."
+      }
+    }
+  },
+  {
+    "id": "client-client-brain-method-research-is-never-runtime",
+    "series": "C6",
+    "engine": "client",
+    "pillar": "building-now",
+    "title": "Client Brain — Method: research is never runtime",
+    "story": "[add your memory]",
+    "assetRefs": [],
+    "mediaState": "none",
+    "effort": "10-min",
+    "rights": "owned",
+    "platforms": [
+      "x"
+    ],
+    "cta": "HITLOOP",
+    "entities": [
+      "Client Brain",
+      "Method: research is never runtime"
+    ],
+    "status": "idea",
+    "lastPostedAt": null,
+    "postCount": 0,
+    "priority": "evergreen",
+    "approval": {
+      "state": "none"
+    },
+    "source": {
+      "kind": "manual"
+    },
+    "variants": {
+      "x": {
+        "suggestedStory": "Client Brain method: research is never runtime."
+      }
+    }
+  },
+  {
+    "id": "client-brief-pipeline-before-and-after",
+    "series": "C6",
+    "engine": "client",
+    "pillar": "building-now",
+    "title": "Brief pipeline — Before and after",
+    "story": "[add your memory]",
+    "assetRefs": [],
+    "mediaState": "none",
+    "effort": "10-min",
+    "rights": "client-approval-needed",
+    "platforms": [
+      "x"
+    ],
+    "cta": "HITLOOP",
+    "entities": [
+      "Brief pipeline",
+      "Before and after"
+    ],
+    "status": "idea",
+    "lastPostedAt": null,
+    "postCount": 0,
+    "priority": "evergreen",
+    "approval": {
+      "state": "needed"
+    },
+    "source": {
+      "kind": "manual"
+    },
+    "variants": {
+      "x": {
+        "suggestedStory": "Brief pipeline before/after (07-comparison)."
+      }
+    }
+  },
+  {
+    "id": "client-x-content-engine-the-engine-itself",
+    "series": "C6",
+    "engine": "client",
+    "pillar": "building-now",
+    "title": "X content engine — The engine itself",
+    "story": "[add your memory]",
+    "assetRefs": [],
+    "mediaState": "none",
+    "effort": "10-min",
+    "rights": "owned",
+    "platforms": [
+      "x"
+    ],
+    "cta": "HITLOOP",
+    "entities": [
+      "X content engine",
+      "The engine itself"
+    ],
+    "status": "idea",
+    "lastPostedAt": null,
+    "postCount": 0,
+    "priority": "evergreen",
+    "approval": {
+      "state": "none"
+    },
+    "source": {
+      "kind": "manual"
+    },
+    "variants": {
+      "x": {
+        "suggestedStory": "The X content engine itself."
+      }
+    }
+  }
+]

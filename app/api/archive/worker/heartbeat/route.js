@@ -18,7 +18,7 @@ export async function POST(request) {
   try { payload = await request.json(); }
   catch { return json({ error: 'Invalid JSON' }, 400); }
 
-  const { workerId, sourceId, jobId, state, at, counters } = payload || {};
+  const { workerId, sourceId, jobId, state, at, counters, capabilities, localThumbBase } = payload || {};
   if (!workerId || !sourceId || !state || !at || !allowedStates.has(state)) return json({ error: 'Invalid heartbeat payload' }, 400);
   if (Number.isNaN(Date.parse(at))) return json({ error: 'Invalid heartbeat timestamp' }, 400);
 
@@ -37,6 +37,9 @@ export async function POST(request) {
     lastHeartbeatAt: fb.FieldValue.serverTimestamp(),
     updatedAt: fb.FieldValue.serverTimestamp(),
   };
+  // Analyzer heartbeats advertise what they can do and where local thumbs live.
+  if (Array.isArray(capabilities)) record.capabilities = capabilities.map(String).slice(0, 20);
+  if (typeof localThumbBase === 'string' && localThumbBase) record.localThumbBase = localThumbBase.slice(0, 500);
   if (hasCounters) {
     record.counters = counters;
     // Survives even if a later job's own early heartbeats reset `counters`

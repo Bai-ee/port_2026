@@ -56,6 +56,15 @@
         { "fieldPath": "embeddingStatus", "order": "ASCENDING" },
         { "fieldPath": "embedding", "vectorConfig": { "dimension": 1536, "flat": {} } }
       ]
+    },
+    {
+      "collectionGroup": "x_content_packages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "engine", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "lastPostedAt", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

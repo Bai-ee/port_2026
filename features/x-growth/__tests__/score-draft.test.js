@@ -14,9 +14,73 @@ test('question/conversation post gets higher replyPotential', () => {
     `expected replyPotential to increase with question`);
 });
 
-test('direct conversation invite raises replyPotential', () => {
+// Changed: invites/questions are weak signals now (measured below baseline on @bai_ee), so the bar drops from 0.40 to "above a neutral post".
+test('direct conversation invite still nudges replyPotential above neutral', () => {
+  const neutral = scoreXPost('Hello there.');
   const result = scoreXPost('What do you think about this? Thoughts? Hot take incoming.');
-  assert.ok(result.scores.replyPotential > 0.40, `expected replyPotential > 0.40, got ${result.scores.replyPotential}`);
+  assert.ok(result.scores.replyPotential > neutral.scores.replyPotential);
+});
+
+test('substantive claim earns more replyPotential than a bare question', () => {
+  const question = scoreXPost('Anyone have thoughts?');
+  const claim = scoreXPost('Most logo refreshes fail because teams skip the 3 audits that actually matter.');
+  assert.ok(claim.scores.replyPotential > question.scores.replyPotential);
+});
+
+test('sharePotential rewards reference / rare / how-made content', () => {
+  const plain = scoreXPost('Good morning everyone.');
+  const shareable = scoreXPost('Rare unreleased demo found in the archive, plus a breakdown of how it was made.');
+  assert.ok(shareable.scores.sharePotential > plain.scores.sharePotential + 0.2);
+  assert.ok(shareable.xGrowthScore > plain.xGrowthScore);
+});
+
+test('followPotential rewards consistent identity / authority signals', () => {
+  const plain = scoreXPost('Good morning everyone.');
+  const authority = scoreXPost('I design identity systems for web3 clients. Case study from my studio since 2019.');
+  assert.ok(authority.scores.followPotential > plain.scores.followPotential + 0.2);
+});
+
+test('profileClickPotential stays in output but carries ~0 composite weight', () => {
+  const base = 'Good morning everyone.';
+  const a = scoreXPost(base);
+  const b = scoreXPost(base + ' Check out my profile, see more, learn more.');
+  assert.ok(b.scores.profileClickPotential > a.scores.profileClickPotential);
+  assert.ok(Math.abs(b.xGrowthScore - a.xGrowthScore) < 1e-9, 'profile-click phrasing must not move the composite');
+});
+
+test('negative-feedback risk is asymmetric: one bait phrase outweighs the repost framing bonus', () => {
+  const clean = scoreXPost('New breakdown: how we built the thing.');
+  const bait = scoreXPost('New breakdown: how we built the thing. Like if you agree!');
+  assert.ok(clean.xGrowthScore - bait.xGrowthScore > 0.10, `clean=${clean.xGrowthScore} bait=${bait.xGrowthScore}`);
+});
+
+test('does not recommend "Add a question" by default', () => {
+  for (const text of ['We shipped a thing.', 'Hello.', 'Nice day for design work.']) {
+    const r = scoreXPost(text);
+    assert.ok(!r.recommendations.some((x) => /question/i.test(x.action)), `question rec for: ${text}`);
+  }
+});
+
+test('thin post recommends share-earning substance', () => {
+  const r = scoreXPost('Hello.');
+  assert.ok(r.recommendations.some((x) => /worth sending|reference/i.test(x.action)));
+});
+
+test('link post recommends moving the link to the first reply and scores lower', () => {
+  const text = 'Full breakdown of how it was made https://example.com/post';
+  const r = scoreXPost(text);
+  assert.ok(r.recommendations.some((x) => /first reply/i.test(x.action)));
+  const noLink = scoreXPost('Full breakdown of how it was made');
+  assert.ok(r.xGrowthScore < noLink.xGrowthScore);
+});
+
+test('video scores above text above still image (measured prior)', () => {
+  const t = 'Studio session from last night.';
+  const video = scoreXPost(t, { mediaType: 'video' }).xGrowthScore;
+  const text = scoreXPost(t).xGrowthScore;
+  const image = scoreXPost(t, { mediaType: 'image' }).xGrowthScore;
+  assert.ok(video > text);
+  assert.ok(image <= text);
 });
 
 test('post with external link gets positive linkRisk', () => {

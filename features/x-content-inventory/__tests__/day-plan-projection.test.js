@@ -120,3 +120,18 @@ test('never throws on junk', () => {
   assert.equal(out.slots.length, 1);
   assert.equal(out.slots[0].state, 'gap');
 });
+
+test('a quota-skipped slot (source none, no gap entry) is skipped, not a gap', () => {
+  const out = projectDayPlan({
+    slots: [
+      { slot: 'A', source: 'none', matchReason: 'skipped by the engine quota' },
+      { slot: 'B', source: 'none' },
+    ],
+    gaps: [{ slot: 'B', type: 'original-showcase', need: 'a VIDEO package' }],
+  });
+  assert.equal(out.slots[0].state, 'skipped');
+  assert.equal(out.slots[1].state, 'gap');
+  assert.equal(out.summary.skipped, 1);
+  assert.equal(out.summary.gaps, 1);
+  assert.equal(slotState({ slot: 'A', source: 'none' }), 'skipped');
+});

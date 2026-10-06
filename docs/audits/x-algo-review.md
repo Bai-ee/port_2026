@@ -55,8 +55,10 @@
 | Author diversity — hypothesis | **Confirmed in code** (0.5 decay, 0.25 floor) |
 | — | **New:** mutual-follow reply boost (+15), share signals, OON ×0.75, small-account cold start |
 
-### Not yet applied
-`features/x-growth/score-draft.js` composite weights still reflect the June model (repost and profile-click weighted, share signals not modelled). Re-weighting it is a separate, test-gated change — it moves every stored and live `xGrowthScore`.
+### Scorer re-weighting (applied 2026-10-06)
+`features/x-growth/score-draft.js` now follows the verified weights. Composite (post mode) = sqrt-compressed `rankingWeights` over reply+quote (10), copy-link+DM share (25), follow (4), repost (1), click-dwell (0.4), profile_click (0), scaled by a measured link factor (x0.56, ~44% penalty), plus a small measured video prior, minus 0.60 x negative-feedback risk (asymmetric). New dimensions: `sharePotential`, `followPotential`. `profileClickPotential` is still emitted but carries zero weight. Pattern banks are labelled heuristics. "Add a question" is no longer recommended (questions measured below baseline on @bai_ee); recommendations favour share-earning substance and "move link to first reply". Reply mode keeps its own weighting.
+Evidence: `node scripts/x-content/research/replay-scorer.mjs` (84 originals; Spearman vs views old 0.04 -> new 0.10, vs likes -0.14 -> -0.14). Both are weak: text heuristics barely predict reach, and the composite was deliberately not fit to this corpus.
+Caveat: `xGrowthScore` values stored on existing `social_posts` are from the old model and are not comparable to new scores.
 
 ---
 

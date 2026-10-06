@@ -13,6 +13,8 @@
 // action (see docs/source-of-truth/X-API-AND-PROFILE-OPERATIONS.md §0).
 
 import { SERIES, resolveLabels } from './categories.js';
+import { resolveEngine } from './engines.js';
+import { DEFAULT_ENGINE_CONFIG } from './engine-quota.js';
 
 /** A package this far above `ready` cannot be promised to a slot inside this
  * many hours — a plan that queues a video shoot for 13:00 today is a plan that
@@ -30,6 +32,38 @@ export const FATIGUE_DAYS = 45;
 export const ANNIVERSARY_WINDOW_DAYS = 2;
 
 function daysBetween(aMs, bMs) { return Math.abs(aMs - bMs) / 86_400_000; }
+
+/** Client work needs a recorded approval. Local on purpose (schema.js has its
+ * own copy of the rule): `approval` wins; with none recorded the rights gate
+ * decides, so legacy client-approval rows keep behaving as before. */
+export function needsApproval(pkg) {
+  const state = pkg?.approval?.state;
+  if (state) return state === 'needed' || state === 'rejected';
+  return pkg?.rights === 'client-approval-needed';
+}
+export function isApproved(pkg) { return pkg?.approval?.state === 'approved'; }
+
+/** Normalized entity keys (labels, artists, ...) for cooldown/diversity. */
+export function entityKeys(pkg) {
+  return (Array.isArray(pkg?.entities) ? pkg.entities : [])
+    .map((e) => String(e ?? '').trim().toLowerCase())
+    .filter(Boolean);
+}
+
+/** A `posted` package is not retired forever: evergreen content is eligible
+ * again once the engine's recycle window has passed. Non-evergreen content
+ * keeps the old one-shot behaviour. A missing priority counts as evergreen
+ * for the record engine only (the archive is the evergreen supply). */
+function recycleVerdict(pkg, engineConfig, today) {
+  const engine = resolveEngine(pkg);
+  const evergreen = pkg.priority === 'evergreen' || (!pkg.priority && engine === 'record');
+  if (!evergreen) return { ok: false };
+  const days = engineConfig?.engines?.[engine]?.evergreenRecycleDays;
+  const last = Date.parse(pkg.lastPostedAt ?? '');
+  if (!Number.isFinite(days) || !Number.isFinite(last)) return { ok: false };
+  const age = daysBetween(last, today);
+  return age >= days ? { ok: true, reason: `recycled after ${Math.round(age)}d (window ${days}d)` } : { ok: false };
+}
 
 /** Rights is a GATE, not a score. `never-public` rows are removed before
  * anything else runs, and client-owned material cannot be proposed until it is
@@ -59,12 +93,36 @@ export function anniversaryYears(pkg, today) {
  * measured rule from the strategy, and `reasons` is carried through to the UI
  * so a human can see WHY something was proposed rather than trusting a number.
  */
-export function scoreMatch(pkg, slot, { today = Date.now(), ledger = {} } = {}) {
+// A placeholder is not a story. Seed skeletons ("TODO — ...") and Discogs drafts
+// still waiting on Bryan's words ("[add your memory]") must never fill a slot:
+// the story is the one field automation cannot produce.
+const PLACEHOLDER_STORY_RE = /^\s*TODO\b|\[add your memory\]/i;
+
+export function hasPlaceholderStory(pkg) {
+  return PLACEHOLDER_STORY_RE.test(String(pkg?.story ?? ''));
+}
+
+export function scoreMatch(pkg, slot, { today = Date.now(), ledger = {}, engineConfig = DEFAULT_ENGINE_CONFIG } = {}) {
   const series = SERIES[pkg?.series];
   if (!series) return null;
   if (!isPublishable(pkg)) return null;
-  if (pkg.status === 'retired' || pkg.status === 'posted') return null;
+  if (pkg.status === 'retired') return null;
+  if (hasPlaceholderStory(pkg)) return null;
+  const extraReasons = [];
+  if (pkg.status === 'posted') {
+    const r = recycleVerdict(pkg, engineConfig, today);
+    if (!r.ok) return null;
+    extraReasons.push(r.reason);
+  }
   if (!series.slotTypes.includes(slot?.type)) return null;
+
+  // Engine gate: a slot reserved for an engine accepts only that engine's
+  // packages (legacy rows resolve through their series default). A slot with
+  // no `engine` is unconstrained, as before.
+  const engine = resolveEngine(pkg);
+  if (slot?.engine && slot.engine !== engine) return null;
+  // Client work is approval-gated: needed-and-not-approved never fills a slot.
+  if (engine === 'client' && needsApproval(pkg) && !isApproved(pkg)) return null;
 
   // ⚠️ A SHOWCASE SLOT ALWAYS NEEDS VIDEO, whatever the series declares.
   // Measured: a static image reaches LESS than a plain text post, and video
@@ -83,7 +141,7 @@ export function scoreMatch(pkg, slot, { today = Date.now(), ledger = {} } = {}) 
   const hoursOut = Number.isFinite(slot?.hoursFromNow) ? slot.hoursFromNow : 24;
   if (horizon > hoursOut) return null;
 
-  const reasons = [];
+  const reasons = [...extraReasons];
   let score = 0.5;
 
   // Lane agreement. A slot's lane comes from the client's own profile; a
@@ -142,9 +200,47 @@ export function matchDay(input = {}) {
   const ledger = input.ledger ?? {};
   const today = input.today ?? Date.now();
 
+  const engineConfig = input.engineConfig ?? DEFAULT_ENGINE_CONFIG;
+  const recentPosts = Array.isArray(input.recentPosts) ? input.recentPosts : [];
+
   const used = new Set();
   const out = [];
   const gaps = [];
+
+  // Entity cooldown: a label/artist named by anything posted inside its
+  // engine's window is off the table. Built from recent posts AND from the
+  // packages' own lastPostedAt, so it works before any post history exists.
+  const cooldown = new Map(); // entity key -> engine -> latest post ms
+  const noteEntities = (keys, engine, ms) => {
+    if (!Number.isFinite(ms)) return;
+    for (const k of keys) {
+      const byEngine = cooldown.get(k) ?? new Map();
+      byEngine.set(engine, Math.max(byEngine.get(engine) ?? 0, ms));
+      cooldown.set(k, byEngine);
+    }
+  };
+  for (const p of packages) noteEntities(entityKeys(p), resolveEngine(p), Date.parse(p.lastPostedAt ?? ''));
+  for (const r of recentPosts) {
+    const ms = typeof r?.postedAt === 'number' ? r.postedAt : Date.parse(r?.postedAt ?? '');
+    noteEntities(entityKeys(r), r?.engine, ms);
+  }
+  const onCooldown = (pkg) => {
+    const engine = resolveEngine(pkg);
+    const days = engineConfig?.engines?.[engine]?.entityCooldownDays;
+    if (!days) return null;
+    for (const k of entityKeys(pkg)) {
+      const ms = cooldown.get(k)?.get(engine);
+      if (ms && daysBetween(ms, today) < days && ms <= today) return k;
+    }
+    return null;
+  };
+
+  // Diversity: what today's earlier picks already used. Penalties, not gates,
+  // so a thin inventory still fills a day rather than reporting false gaps.
+  const dayEngines = {};
+  const daySeries = {};
+  const dayEntities = new Set();
+  const DIVERSITY_PENALTY = { engine: 0.05, series: 0.1, entity: 0.25 };
 
   // Self-quote slots are filled from the POST LEDGER, not the inventory: what
   // to re-surface is a question about what already worked, and the answer is
@@ -153,6 +249,13 @@ export function matchDay(input = {}) {
   const resurrections = Array.isArray(input.resurrections) ? [...input.resurrections] : [];
 
   for (const slot of slots) {
+    // The allocator could not give this slot an engine (daily cap, spacing,
+    // max/share reached). That is a quota decision, not an inventory gap.
+    if (slot.engineSkipped) {
+      out.push({ ...slot, source: 'none', matchReason: slot.engineReason ?? 'skipped by the engine quota' });
+      continue;
+    }
+
     if (slot.type === 'quote-react' || slot.type === 'quote-commentary') {
       out.push({ ...slot, source: 'scan', matchReason: 'dynamic slot — filled by the daily scan' });
       continue;
@@ -176,24 +279,48 @@ export function matchDay(input = {}) {
 
     const ranked = packages
       .filter((p) => !used.has(p.id))
-      .map((p) => ({ pkg: p, m: scoreMatch(p, slot, { today, ledger }) }))
+      .map((p) => {
+        const m = scoreMatch(p, slot, { today, ledger, engineConfig });
+        if (!m) return { pkg: p, m: null };
+        const cool = onCooldown(p);
+        if (cool) return { pkg: p, m: null };
+        // Diversity-aware, not greedy: repeating an engine/series/entity
+        // within the day costs score, so one series cannot take every slot.
+        let penalty = 0;
+        const why = [];
+        const eng = resolveEngine(p);
+        if (dayEngines[eng]) { penalty += DIVERSITY_PENALTY.engine * dayEngines[eng]; why.push(`engine ${eng} already used`); }
+        if (daySeries[p.series]) { penalty += DIVERSITY_PENALTY.series * daySeries[p.series]; why.push(`series ${p.series} already used`); }
+        if (entityKeys(p).some((k) => dayEntities.has(k))) { penalty += DIVERSITY_PENALTY.entity; why.push('entity already used today'); }
+        return {
+          pkg: p,
+          m: penalty
+            ? { score: Math.round((m.score - penalty) * 1000) / 1000, reasons: [...m.reasons, `diversity -${penalty.toFixed(2)} (${why.join(', ')})`] }
+            : m,
+        };
+      })
       .filter((r) => r.m)
-      .sort((a, b) => b.m.score - a.m.score);
+      .sort((a, b) => b.m.score - a.m.score || String(a.pkg.id).localeCompare(String(b.pkg.id)));
 
     const best = ranked[0];
     if (!best) {
       // An unfilled slot is reported as a NAMED GAP, not silently dropped:
       // "nothing in inventory can fill a 13:00 showcase" is the single most
       // actionable output this module produces.
-      gaps.push({ slot: slot.slot, type: slot.type, lane: slot.lane, need: SERIES_NEED(slot.type) });
+      gaps.push({ slot: slot.slot, type: slot.type, lane: slot.lane, engine: slot.engine ?? null, need: SERIES_NEED(slot.type, slot.engine) });
       out.push({ ...slot, source: 'inventory', matchReason: 'no eligible package' });
       continue;
     }
 
     used.add(best.pkg.id);
+    const bestEngine = resolveEngine(best.pkg);
+    dayEngines[bestEngine] = (dayEngines[bestEngine] ?? 0) + 1;
+    daySeries[best.pkg.series] = (daySeries[best.pkg.series] ?? 0) + 1;
+    for (const k of entityKeys(best.pkg)) dayEntities.add(k);
     out.push({
       ...slot,
       source: 'inventory',
+      engine: slot.engine ?? bestEngine,
       packageId: best.pkg.id,
       series: best.pkg.series,
       pillar: best.pkg.pillar,
@@ -216,15 +343,17 @@ export function matchDay(input = {}) {
 
 /** What kind of package would have filled a slot of this type — printed next
  * to a gap so the answer to "what should I make" is explicit. */
-function SERIES_NEED(type) {
+function SERIES_NEED(type, engine) {
   // A showcase slot needs video whatever the series holds, so listing a
   // still-based series here as a candidate would contradict the gate above and
   // send someone off to prepare something that still cannot fill the slot.
   const needsVideo = type === 'original-showcase';
   const candidates = Object.entries(SERIES)
     .filter(([, s]) => s.slotTypes.includes(type))
+    .filter(([k]) => !engine || resolveEngine({ series: k }) === engine)
     .filter(([, s]) => !needsVideo || s.media === 'video' || s.media === 'still');
-  if (!candidates.length) return 'no series covers this slot type';
+  if (!candidates.length) return engine ? `no ${engine}-engine series covers this slot type` : 'no series covers this slot type';
   const names = candidates.map(([k, s]) => `${k} ${s.label}`).join(', ');
-  return needsVideo ? `a VIDEO package from: ${names}` : `a package from: ${names}`;
+  const forEngine = engine ? ` (${engine} engine)` : '';
+  return needsVideo ? `a VIDEO package${forEngine} from: ${names}` : `a package${forEngine} from: ${names}`;
 }

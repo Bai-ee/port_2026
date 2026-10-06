@@ -5,10 +5,20 @@ import { getAlgorithmProfile, getActiveProfileId } from './algorithm-profile.js'
 // Weights are relative scoring nudges, NOT official X numeric values.
 // ---------------------------------------------------------------------------
 
+// HEURISTIC pattern banks: these are text-pattern guesses at what the Phoenix
+// model might predict, not X-published values. The VERIFIED numbers are the
+// action weights in the algorithm profile (rankingWeights), used in the composite.
+//
+// Owner-measured on @bai_ee: audience questions landed BELOW baseline, so a '?'
+// is only a token nudge; reply potential comes from substance (a specific claim,
+// a number, a contrarian read) that gives people something to answer.
 const REPLY_BOOSTERS = [
-  { pattern: /\?/, delta: 0.15, reason: 'Question increases P(reply)' },
-  { pattern: /\b(what do you think|thoughts\?|agree\?|disagree\?|hot take|unpopular opinion)\b/i, delta: 0.10, reason: 'Explicit conversation invitation' },
-  { pattern: /\b(comment|reply|let me know|tell me)\b/i, delta: 0.06, reason: 'Soft reply prompt' },
+  { pattern: /\?/, delta: 0.03, reason: 'Question (weak: measured below baseline on @bai_ee)' },
+  { pattern: /\b(what do you think|thoughts\?|agree\?|disagree\?|hot take|unpopular opinion)\b/i, delta: 0.04, reason: 'Explicit conversation invitation' },
+  { pattern: /\b(comment|reply|let me know|tell me)\b/i, delta: 0.02, reason: 'Soft reply prompt' },
+  { pattern: /\b(most \w+ (are|get|think)|nobody|everyone|wrong|overrated|underrated|actually|instead)\b/i, delta: 0.10, reason: 'Opinionated claim people can answer' },
+  { pattern: /\d+/, delta: 0.05, reason: 'Specific number gives replies something to engage' },
+  { pattern: /\b(because|the reason|here is why|here's why)\b/i, delta: 0.06, reason: 'Reasoned claim invites a substantive reply' },
 ];
 
 const REPOST_BOOSTERS = [
@@ -17,6 +27,26 @@ const REPOST_BOOSTERS = [
   { pattern: /\b(new|update|feature)\b/i, delta: 0.05, reason: 'Informational freshness' },
 ];
 
+// Copy-link (20) and DM share (5) are the top positive actions: people send
+// things that are references, rare/useful, or show how something was made.
+const SHARE_BOOSTERS = [
+  { pattern: /\b(reference|resource|resources|cheat ?sheet|template|checklist|list of|toolkit|free to use|bookmark)\b/i, delta: 0.14, reason: 'Reference/resource worth saving and sending' },
+  { pattern: /\b(rare|unreleased|never released|out of print|lost|first ever|only copy|archive|archived|found|discovered)\b/i, delta: 0.12, reason: 'Rare or hard-to-find information' },
+  { pattern: /\b(how (i|we) (made|built|designed|did)|how it was made|behind the scenes|process|breakdown|made with|built with|step-by-step)\b/i, delta: 0.14, reason: 'How-it-was-made detail people forward' },
+  { pattern: /\d+/, delta: 0.04, reason: 'Concrete specifics are easier to send' },
+  { check: (t) => t.length >= 100, delta: 0.04, reason: 'Enough substance to be worth sending' },
+];
+
+// Follow-author (4.0) follows from consistent identity and authority, not from
+// a one-off post: first-person craft, named work, track record.
+const FOLLOW_BOOSTERS = [
+  { pattern: /\b(i (design|make|build|write|ship|draw|produce|run)|we (design|make|build|ship)|my (work|studio|process|practice))\b/i, delta: 0.14, reason: 'First-person craft identity' },
+  { pattern: /\b(case study|client|clients|portfolio|years of|since \d{4})\b/i, delta: 0.10, reason: 'Track-record / authority signal' },
+  { pattern: /\b(founder|ceo|creator|engineer|designer|director)\b/i, delta: 0.06, reason: 'Authority role mention' },
+  { pattern: /\b(building|shipping|working on|we built|we shipped)\b/i, delta: 0.06, reason: 'Builder credibility' },
+];
+
+// Kept for output stability only: profile_click carries ZERO ranking weight.
 const PROFILE_CLICK_BOOSTERS = [
   { pattern: /\b(building|shipping|working on|we built|we shipped)\b/i, delta: 0.10, reason: 'Builder credibility signals' },
   { pattern: /\b(founder|ceo|creator|engineer)\b/i, delta: 0.06, reason: 'Authority role mention' },
@@ -42,6 +72,37 @@ const SPAM_CHECKS = [
 ];
 
 const LINK_PATTERN = /https?:\/\/\S+/;
+
+// Owner-measured on @bai_ee: link posts lose ~44% engagement.
+const LINK_ENGAGEMENT_FACTOR = 0.56;
+const REPLY_LINK_ENGAGEMENT_FACTOR = 0.40;
+// One report/mute/not-interested outweighs hundreds of likes (rankingWeights
+// negative), so negative risk is weighted asymmetrically, well above any single
+// positive term in the composite.
+const NEG_RISK_PENALTY = 0.60;
+// Measured on @bai_ee (video > text > still); the verified media weights are ~0.
+const VIDEO_MEASURED_BONUS = 0.05;
+
+// Post-mode composite weights come from the profile's verified action weights.
+// Weights are sqrt-compressed because the p(action) inputs are coarse text
+// heuristics: raw 20:1 ratios would let one heuristic decide the whole score.
+function compositeWeights() {
+  const pos = getAlgorithmProfile().rankingWeights?.positive || {};
+  const w = (v, fallback) => Math.sqrt(Math.max(0, Number.isFinite(v) ? v : fallback));
+  return {
+    reply: w((pos.reply ?? 5) + (pos.quote ?? 5), 10),
+    share: w((pos.share_via_copy_link ?? 20) + (pos.share_via_dm ?? 5), 25),
+    follow: w(pos.follow_author ?? 4, 4),
+    repost: w(pos.retweet ?? 1, 1),
+    dwell: w(pos.cont_click_dwell_time ?? 0.4, 0.4),
+    profileClick: w(pos.profile_click ?? 0, 0),
+  };
+}
+
+// Reply-mode weights: a reply earns reach through substance (heuristic split in
+// the same spirit as the verified weights: reply/dwell/authority first, follow
+// and share secondary, repost irrelevant).
+const REPLY_MODE_WEIGHTS = { reply: 0.30, dwell: 0.25, topicAuthority: 0.25, follow: 0.10, share: 0.10 };
 
 // ---------------------------------------------------------------------------
 
@@ -113,6 +174,10 @@ export function scoreXPost(text, context = {}) {
   // Profile click potential
   const profileClickResult = applyPatternBoosters(t, PROFILE_CLICK_BOOSTERS, 0.20);
 
+  // Share + follow potential (verified top-weighted actions)
+  const shareResult = applyPatternBoosters(t, SHARE_BOOSTERS, 0.15);
+  const followResult = applyPatternBoosters(t, FOLLOW_BOOSTERS, 0.15);
+
   // Dwell potential
   const dwellResult = applyPatternBoosters(t, DWELL_BOOSTERS, 0.25);
 
@@ -144,38 +209,37 @@ export function scoreXPost(text, context = {}) {
   const hasLink = LINK_PATTERN.test(t);
   const linkRisk = hasLink ? 0.65 : 0.0;
 
-  // Media boosts
+  // Media: verified weights are ~0; only the measured video > text > still prior applies.
   const mediaType = String(context.mediaType || 'none');
-  let mediaBonus = 0;
-  if (mediaType === 'video') mediaBonus = 0.20;
-  else if (mediaType === 'image') mediaBonus = 0.15;
+  const mediaBonus = mediaType === 'video' ? VIDEO_MEASURED_BONUS : 0;
 
-  // Composite xGrowthScore — weight positive signals, penalise neg feedback.
-  // Reply mode re-weights toward substance and credibility (dwell + topic
-  // authority) and away from announcement/repost framing, and penalises links
-  // harder: links in replies are down-ranked with no "move to first reply" escape.
+  // Composite xGrowthScore: expected-value over the verified action weights
+  // (share/reply dominate, repost small, profile_click zero), scaled by the
+  // measured link penalty, minus an asymmetric negative-feedback penalty.
   const isReply = String(context.kind || '') === 'reply';
-  const raw = isReply
-    ? (
-        replyResult.score * 0.20 +
-        dwellResult.score * 0.30 +
-        topicAuthority * 0.25 +
-        profileClickResult.score * 0.10 +
-        repostResult.score * 0.05 +
-        mediaBonus * 0.05 -
-        negFeedbackRisk * 0.30 -
-        linkRisk * 0.20
-      )
-    : (
-        replyResult.score * 0.25 +
-        repostResult.score * 0.20 +
-        profileClickResult.score * 0.15 +
-        dwellResult.score * 0.15 +
-        topicAuthority * 0.10 +
-        mediaBonus * 0.15 -
-        negFeedbackRisk * 0.30 -
-        linkRisk * 0.10
-      );
+  let positive;
+  if (isReply) {
+    const rw = REPLY_MODE_WEIGHTS;
+    positive =
+      replyResult.score * rw.reply +
+      dwellResult.score * rw.dwell +
+      topicAuthority * rw.topicAuthority +
+      followResult.score * rw.follow +
+      shareResult.score * rw.share;
+  } else {
+    const w = compositeWeights();
+    const total = w.reply + w.share + w.follow + w.repost + w.dwell + w.profileClick;
+    positive = total > 0 ? (
+      replyResult.score * w.reply +
+      shareResult.score * w.share +
+      followResult.score * w.follow +
+      repostResult.score * w.repost +
+      dwellResult.score * w.dwell +
+      profileClickResult.score * w.profileClick
+    ) / total : 0;
+  }
+  const linkFactor = hasLink ? (isReply ? REPLY_LINK_ENGAGEMENT_FACTOR : LINK_ENGAGEMENT_FACTOR) : 1;
+  const raw = positive * linkFactor + mediaBonus - negFeedbackRisk * NEG_RISK_PENALTY;
 
   const xGrowthScore = clamp01(raw);
 
@@ -190,11 +254,10 @@ export function scoreXPost(text, context = {}) {
   // Recommendations
   const recommendations = [];
   if (isReply) {
-    // A reply earns reach through substance — a specific insight or a genuine
-    // question. Announcement/repost framing does not apply, and links in replies
-    // are suppressed with no first-reply escape hatch.
+    // A reply earns reach through substance. Links in replies are suppressed
+    // with no first-reply escape hatch.
     if (replyResult.score < 0.40 && topicAuthority < 0.35) {
-      recommendations.push({ priority: 'medium', action: 'Add a specific insight or a genuine question', reason: 'Thin reply — substance or a real question raises P(reply) and dwell' });
+      recommendations.push({ priority: 'medium', action: 'Add a specific insight, number, or concrete detail', reason: 'Thin reply: substance raises P(reply) and dwell' });
     }
     if (hasLink) {
       recommendations.push({ priority: 'high', action: 'Remove the link from the reply', reason: 'Links in replies are down-ranked; reference the source in plain text instead' });
@@ -203,22 +266,24 @@ export function scoreXPost(text, context = {}) {
       recommendations.push({ priority: 'high', action: 'Remove hard-sell or engagement-bait language', reason: 'High P(not_interested) risk' });
     }
   } else {
-    if (replyResult.score < 0.40 && !/\?/.test(t)) {
-      recommendations.push({ priority: 'high', action: 'Add a question', reason: 'Raises P(reply) — high-weight positive signal' });
-    }
-    if (repostResult.score < 0.30) {
-      recommendations.push({ priority: 'medium', action: 'Add shareable framing', reason: 'Tip, announcement, or insight increases P(repost)' });
-    }
     if (negFeedbackRisk > 0.20) {
-      recommendations.push({ priority: 'high', action: 'Remove hard-sell or engagement-bait language', reason: 'High P(not_interested) risk' });
+      recommendations.push({ priority: 'high', action: 'Remove hard-sell or engagement-bait language', reason: 'One report/mute outweighs hundreds of likes' });
+    }
+    if (shareResult.score < 0.30) {
+      recommendations.push({ priority: 'high', action: 'Add something worth sending: a reference, a rare detail, or how it was made', reason: 'Copy-link (20) and DM share (5) are the highest-weighted actions' });
+    }
+    if (replyResult.score < 0.35) {
+      recommendations.push({ priority: 'medium', action: 'Make a specific, answerable claim', reason: 'Substance earns replies (5, +15 from mutuals); a bare question measured below baseline' });
     }
     if (hasLink && context.objective !== 'leads-or-calls') {
-      recommendations.push({ priority: 'medium', action: 'Move link to first reply', reason: 'Reduces linkRisk without losing CTA' });
+      recommendations.push({ priority: 'medium', action: 'Move link to first reply', reason: 'Link posts lose ~44% engagement (measured); keeps the CTA' });
     }
   }
 
   const allReasons = [
     ...replyResult.matched,
+    ...shareResult.matched,
+    ...followResult.matched,
     ...repostResult.matched,
     ...profileClickResult.matched,
     ...dwellResult.matched,
@@ -231,8 +296,10 @@ export function scoreXPost(text, context = {}) {
     postType,
     scores: {
       replyPotential:         replyResult.score,
+      sharePotential:         shareResult.score,
+      followPotential:        followResult.score,
       repostPotential:        repostResult.score,
-      profileClickPotential:  profileClickResult.score,
+      profileClickPotential:  profileClickResult.score, // zero ranking weight; informational
       topicAuthority,
       dwellPotential:         dwellResult.score,
       negativeFeedbackRisk:   negFeedbackRisk,
