@@ -790,6 +790,34 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
         #x-content-card .xce-week-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); align-items: start; }
         #x-content-card .xce-slot-list,
         #x-content-card .xce-inv-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); align-items: start; }
+        /* Phone width pass (≤480px): same structure, less side chrome. The
+           modal already contributes overlay + content-cell gutters, so the card
+           pulls 6px into them, the panel drops its side border/padding, and
+           nested row cards tighten to 6px so text gets the full line. */
+        @media (max-width: 480px) {
+          #x-content-card { margin-left: -6px; margin-right: -6px; width: calc(100% + 12px); max-width: calc(100% + 12px); gap: 8px; }
+          #x-content-card .xce-panel,
+          #x-content-card .xce-inv-section { padding: 8px 0; border-left: 0; border-right: 0; border-radius: 0; background: transparent; backdrop-filter: none; box-shadow: none; }
+          #x-content-card .xce-slot,
+          #x-content-card .xce-week-day,
+          #x-content-card .xce-perf-row,
+          #x-content-card .xce-inv-row,
+          #x-content-card .xce-bk-form,
+          #x-content-card .xce-nas-job { padding: 8px 6px; }
+          #x-content-card .xce-week-slot { padding: 6px; }
+          #x-content-card .xce-engine-count { padding: 6px 8px; }
+          #x-content-card .xce-slot-list,
+          #x-content-card .xce-inv-list,
+          #x-content-card .xce-week-grid,
+          #x-content-card .xce-week-slots,
+          #x-content-card .xce-engine-counts,
+          #x-content-card .xce-bk-layout,
+          #x-content-card .xce-bk-main { gap: 6px; }
+          #x-content-card .xce-head { margin-bottom: 6px; gap: 6px; }
+          #x-content-card .xce-bk-card { padding: 4px 4px 6px; }
+          #x-content-card .xce-bk-grid { gap: 6px; }
+          #x-content-card .xce-bk-drawer { padding-left: 6px; padding-right: 6px; }
+        }
         /* Tabs: one scrollable row on a phone instead of wrapping to two. */
         @media (max-width: 480px) {
           #x-content-card .xce-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
