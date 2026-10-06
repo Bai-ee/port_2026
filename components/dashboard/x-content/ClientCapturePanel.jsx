@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { AlertTriangle, Check, X } from 'lucide-react';
+import { ConfirmButton } from './Feedback';
 
 // ClientCapturePanel — capture a client story, and approve/reject client packages.
 //
@@ -116,9 +117,7 @@ export default function ClientCapturePanel({ packages, loading, error, savingId,
                     </button>
                   ) : null}
                   {state !== 'rejected' && onReject ? (
-                    <button type="button" id={`x-content-client-reject-${p.id}`} className="xce-draft-button xce-danger" disabled={busy} onClick={() => onReject(p.id)}>
-                      <X size={14} /> Reject
-                    </button>
+                    <ConfirmButton id={`x-content-client-reject-${p.id}`} className="xce-draft-button xce-danger" label="Reject" prompt="Reject this?" icon={<X size={14} />} disabled={busy} onConfirm={() => onReject(p.id)} />
                   ) : null}
                 </div>
               </li>

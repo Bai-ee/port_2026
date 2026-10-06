@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
+import { Skeleton, RetryError } from './Feedback.jsx';
 
 import { mergeBuckets, resolveBucket } from '../../../features/x-content-inventory/buckets.js';
 import { itemsInFolder, folderCounts, suggestFolders } from '../../../features/x-content-inventory/folders.js';
@@ -45,6 +46,15 @@ function ago(iso) {
   return `${Math.round(m / 1440)}d ago`;
 }
 
+const BUCKET_STORAGE_KEY = 'xce-last-bucket';
+function readSavedBucket() {
+  try {
+    return (typeof window !== 'undefined' && window.localStorage.getItem(BUCKET_STORAGE_KEY)) || 'all';
+  } catch {
+    return 'all';
+  }
+}
+
 export default function BucketsPanel({ call, packages, loading, error, onReload }) {
   const [buckets, setBuckets] = useState(() => mergeBuckets([]));
   const [folders, setFolders] = useState([]);
@@ -53,7 +63,14 @@ export default function BucketsPanel({ call, packages, loading, error, onReload 
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState('');
 
-  const [bucketId, setBucketId] = useState('all');
+  const [bucketId, setBucketId] = useState(readSavedBucket);
+  // Remember the last bucket per viewer; a bucket that no longer exists falls back to All.
+  useEffect(() => {
+    try { window.localStorage.setItem(BUCKET_STORAGE_KEY, bucketId); } catch { /* storage unavailable */ }
+  }, [bucketId]);
+  useEffect(() => {
+    if (!metaLoading && bucketId !== 'all' && !buckets.some((b) => b.id === bucketId)) setBucketId('all');
+  }, [metaLoading, buckets, bucketId]);
   // One view per bucket: 'all' | 'folder:<id>' | 'q:mine' | 'q:daily' | 'q:dj:<name>'
   const [viewId, setViewId] = useState('all');
   const [query, setQuery] = useState('');
@@ -226,7 +243,7 @@ export default function BucketsPanel({ call, packages, loading, error, onReload 
   return (
     <NasContext.Provider value={nasCtx}>
     <div id="x-content-buckets-panel" className="xce-panel xce-bk">
-      {anyError ? <p className="xce-error" id="x-content-buckets-error">{anyError}</p> : null}
+      {anyError ? <RetryError id="x-content-buckets-error" message={anyError} onRetry={onReload} busy={!!loading} /> : null}
       {actionError && !openItem ? <p className="xce-error" id="x-content-buckets-action-error">{actionError}</p> : null}
       {sync.error ? <p className="xce-error" id="x-content-rendered-sync-error">{sync.error}</p> : null}
 
@@ -237,7 +254,7 @@ export default function BucketsPanel({ call, packages, loading, error, onReload 
       </div>
 
       {loading && !items.length ? (
-        <div className="xce-loading" id="x-content-buckets-loading">Loading library…</div>
+        <Skeleton id="x-content-buckets-loading" rows={8} variant="card" />
       ) : (
         <div id="x-content-buckets-layout" className="xce-bk-layout">
           <BucketRail buckets={buckets} counts={bucketCounts} selectedId={bucketId} onSelect={selectBucket} onUpsert={upsertBuckets} busy={busy} />

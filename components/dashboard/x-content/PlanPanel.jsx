@@ -1,7 +1,8 @@
 'use client';
 
 import React from 'react';
-import { AlertTriangle, CalendarDays, Image as ImageIcon, PenSquare, RefreshCw } from 'lucide-react';
+import { Skeleton, RetryError } from './Feedback.jsx';
+import { CalendarDays, Image as ImageIcon, PenSquare, RefreshCw } from 'lucide-react';
 
 // PlanPanel — one day of the posting plan, rendered.
 //
@@ -124,13 +125,11 @@ export default function PlanPanel({
       </div>
 
       {error ? (
-        <p id="x-content-plan-error" className="xce-error">
-          <AlertTriangle size={13} /> {typeof error === 'string' ? error : (error?.message || 'Could not load the plan.')}
-        </p>
+        <RetryError id="x-content-plan-error" message={typeof error === 'string' ? error : (error?.message || 'Could not load the plan.')} onRetry={onRefresh} busy={!!loading} />
       ) : null}
 
       {loading ? (
-        <div id="x-content-plan-loading" className="xce-loading">Loading the plan…</div>
+        <Skeleton id="x-content-plan-loading" rows={4} variant="row" />
       ) : null}
 
       {!loading && !error && !total ? (

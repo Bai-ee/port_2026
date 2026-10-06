@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { Skeleton, RetryError } from './Feedback.jsx';
 import { RefreshCw } from 'lucide-react';
 
 // PerformancePanel — per-engine results over stored social_posts.performance.
@@ -48,9 +49,11 @@ export default function PerformancePanel({ stats, lastCapturedAt, loading, error
         ) : null}
       </div>
 
-      {error ? <p id="x-content-performance-error" className="xce-error">{error}</p> : null}
+      {error ? <RetryError id="x-content-performance-error" message={error} onRetry={onRefresh} busy={!!loading} /> : null}
 
-      {!entries.length && !loading ? (
+      {!entries.length && loading ? (
+        <Skeleton id="x-content-performance-skeleton" rows={3} variant="row" />
+      ) : !entries.length && !loading ? (
         <div id="x-content-performance-empty" className="xce-empty">
           No posted tweets with captured metrics yet.
           <div className="xce-empty-note">Metrics come from the daily backfill script; nothing here calls X.</div>

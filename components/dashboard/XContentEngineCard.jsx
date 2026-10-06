@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { CalendarDays, CalendarRange, FolderTree, Library, LineChart, Users } from 'lucide-react';
 import { fallbackDraft, validateDraft } from '../../features/x-content-inventory/draft.js';
+import { Toast } from './x-content/Feedback';
 
 // Content Engine — the supply side of the posting plan.
 //
@@ -33,6 +34,20 @@ const PerformancePanel = dynamic(() => import('./x-content/PerformancePanel'), {
 const ClientCapturePanel = dynamic(() => import('./x-content/ClientCapturePanel'), { ssr: false });
 const BucketsPanel = dynamic(() => import('./x-content/BucketsPanel'), { ssr: false });
 
+const TABS = ['plan', 'inventory', 'buckets', 'calendar', 'clients', 'performance'];
+const TAB_STORAGE_KEY = 'xce-last-tab';
+const TOAST_MS = 3200;
+
+// Per-viewer convenience only: any storage failure just means "start on Plan".
+function readSavedTab() {
+  try {
+    const saved = typeof window !== 'undefined' ? window.localStorage.getItem(TAB_STORAGE_KEY) : null;
+    return TABS.includes(saved) ? saved : 'plan';
+  } catch {
+    return 'plan';
+  }
+}
+
 const ENDPOINT = '/api/dashboard/quote-targets';
 // Approve/schedule reuse the EXISTING social-posting route. There is no post-now
 // control anywhere in this card.
@@ -47,7 +62,18 @@ function shiftDate(date, days) {
 }
 
 export default function XContentEngineCard({ getIdToken, activeClientId, clientName }) {
-  const [tab, setTab] = useState('plan');
+  const [tab, setTab] = useState(readSavedTab);
+  const [toast, setToast] = useState(null);
+  const toastTimer = useRef(null);
+  const showToast = useCallback((text, kind = 'ok') => {
+    setToast({ text, kind });
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), TOAST_MS);
+  }, []);
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
+  useEffect(() => {
+    try { window.localStorage.setItem(TAB_STORAGE_KEY, tab); } catch { /* storage unavailable */ }
+  }, [tab]);
   const [posts, setPosts] = useState(5);
 
   const [plan, setPlan] = useState(null);
@@ -162,12 +188,14 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
     try {
       await callSocial({ action: 'approve-draft', postId: slot.id });
       await loadCalendar();
+      showToast('Approved');
     } catch (err) {
       setCalendarError(err.message || 'Could not approve.');
+      showToast(err.message || 'Could not approve.', 'error');
     } finally {
       setCalendarBusyId(null);
     }
-  }, [callSocial, loadCalendar]);
+  }, [callSocial, loadCalendar, showToast]);
 
   // Scheduling an EXISTING approved post goes through the route's `update`
   // (same as the Copywriter card): `schedule` would mint a second post.
@@ -181,12 +209,14 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
       const iso = when.toISOString();
       await callSocial({ action: 'update', postId: slot.id, content: slot.content, scheduledAt: iso });
       await loadCalendar();
+      showToast(`Scheduled for ${when.toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`);
     } catch (err) {
       setCalendarError(err.message || 'Could not schedule.');
+      showToast(err.message || 'Could not schedule.', 'error');
     } finally {
       setCalendarBusyId(null);
     }
-  }, [callSocial, loadCalendar]);
+  }, [callSocial, loadCalendar, showToast]);
 
   const onCaptureClient = useCallback(async (capture) => {
     setSavingId('capture');
@@ -194,14 +224,16 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
     try {
       await call('capture-client-story', { capture });
       await load();
+      showToast('Story captured');
       return true;
     } catch (err) {
       setClientError(err.message || 'Could not capture.');
+      showToast(err.message || 'Could not capture.', 'error');
       return false;
     } finally {
       setSavingId(null);
     }
-  }, [call, load]);
+  }, [call, load, showToast]);
 
   const onDecidePackage = useCallback(async (action, id) => {
     setSavingId(id);
@@ -209,12 +241,14 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
     try {
       await call(action, { id });
       await load();
+      showToast(action === 'reject-package' ? 'Rejected' : 'Approved');
     } catch (err) {
       setClientError(err.message || 'Could not update approval.');
+      showToast(err.message || 'Could not update approval.', 'error');
     } finally {
       setSavingId(null);
     }
-  }, [call, load]);
+  }, [call, load, showToast]);
 
   const onPostsChange = useCallback((next) => {
     setPosts(next);
@@ -227,12 +261,14 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
     try {
       await call('inventory-save', { pkg });
       await load();
+      showToast('Saved');
     } catch (err) {
       setError(err.message || 'Could not save.');
+      showToast(err.message || 'Could not save.', 'error');
     } finally {
       setSavingId(null);
     }
-  }, [call, load]);
+  }, [call, load, showToast]);
 
   const onDelete = useCallback(async (id) => {
     setSavingId(id);
@@ -240,12 +276,14 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
     try {
       await call('inventory-delete', { id });
       await load();
+      showToast('Deleted');
     } catch (err) {
       setError(err.message || 'Could not delete.');
+      showToast(err.message || 'Could not delete.', 'error');
     } finally {
       setSavingId(null);
     }
-  }, [call, load]);
+  }, [call, load, showToast]);
 
   // The draft preview is deterministic and local: it truncates the author's
   // own story rather than paraphrasing it, and runs the same mechanical rules
@@ -385,6 +423,8 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
           onDelete={onDelete}
         />
       )}
+
+      <Toast toast={toast} />
 
       <style jsx global>{`
         /* Mobile first: every rule below is the phone layout. Widening happens
@@ -823,6 +863,50 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
           #x-content-card .xce-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
           #x-content-card .xce-tab { flex: 0 0 auto; }
         }
+        /* Tap targets: 44px minimum on touch screens. */
+        @media (pointer: coarse) {
+          #x-content-card .xce-btn,
+          #x-content-card .xce-btn-primary,
+          #x-content-card .xce-btn-ghost,
+          #x-content-card .xce-btn-danger,
+          #x-content-card .xce-ghost,
+          #x-content-card .xce-draft-button,
+          #x-content-card .xce-refresh,
+          #x-content-card .xce-tab,
+          #x-content-card .xce-tier button,
+          #x-content-card .xce-tier-option,
+          #x-content-card .xce-toggle,
+          #x-content-card .xce-check,
+          #x-content-card .xce-bk-icon,
+          #x-content-card .xce-bk-chip,
+          #x-content-card .xce-bk-folder,
+          #x-content-card .xce-pop-item { min-height: 44px; }
+          #x-content-card .xce-bk-icon { min-width: 44px; }
+          #x-content-card .xce-more-summary { min-height: 40px; }
+        }
+        /* Two-step destructive confirm */
+        #x-content-card .xce-confirm { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 10px; border: 1px solid rgba(159,31,23,0.3); background: rgba(159,31,23,0.05); }
+        #x-content-card .xce-confirm-prompt { font-size: 12px; font-weight: 700; color: #9f1f17; }
+        /* Loading skeletons: hold the layout so nothing jumps on arrival. */
+        #x-content-card .xce-skeleton { display: grid; gap: 8px; }
+        #x-content-card .xce-skeleton-item { display: block; height: 64px; border-radius: 12px; background: linear-gradient(90deg, rgba(42,36,32,0.05) 25%, rgba(42,36,32,0.10) 50%, rgba(42,36,32,0.05) 75%); background-size: 200% 100%; animation: xce-shimmer 1.2s ease-in-out infinite; }
+        #x-content-card .xce-skeleton-card { grid-template-columns: repeat(auto-fill, minmax(min(100%, 140px), 1fr)); }
+        #x-content-card .xce-skeleton-card .xce-skeleton-item { height: auto; aspect-ratio: 1 / 1.2; }
+        #x-content-card .xce-skeleton-tile .xce-skeleton-item { height: 52px; }
+        @keyframes xce-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+        @media (prefers-reduced-motion: reduce) { #x-content-card .xce-skeleton-item { animation: none; } #x-content-card .xce-spin { animation: none; } }
+        /* Error + Retry */
+        #x-content-card .xce-retry { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(159,31,23,0.24); background: rgba(159,31,23,0.05); }
+        #x-content-card .xce-retry-text { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; line-height: 1.4; color: #9f1f17; overflow-wrap: anywhere; }
+        /* Toast: floats at the bottom so it never moves the layout. */
+        #x-content-card .xce-toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 80; max-width: min(92vw, 420px); padding: 10px 14px; border-radius: 12px; font-size: 12.5px; font-weight: 700; line-height: 1.4; color: #fff; box-shadow: 0 10px 28px rgba(0,0,0,0.2); pointer-events: none; }
+        #x-content-card .xce-toast-ok { background: #1f6b44; }
+        #x-content-card .xce-toast-error { background: #9f1f17; }
+        /* NAS setup checklist */
+        #x-content-card .xce-checklist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+        #x-content-card .xce-checklist-item { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.4; color: rgba(42,36,32,0.75); }
+        #x-content-card .xce-checklist-item.is-ok { color: #1f6b44; }
+        #x-content-card .xce-checklist-item.is-todo { color: #8a5a15; }
         /* Collapsed detail disclosure shared by every tab. */
         #x-content-card .xce-more { border-radius: 10px; }
         #x-content-card .xce-more-summary { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 2px; font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(42,36,32,0.5); cursor: pointer; list-style: none; }

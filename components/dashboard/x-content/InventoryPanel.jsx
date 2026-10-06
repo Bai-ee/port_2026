@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Check, Plus, Trash2, X } from 'lucide-react';
+import { ConfirmButton } from './Feedback';
 
 import { PILLARS, SERIES } from '../../../features/x-content-inventory/categories.js';
 import {
@@ -141,7 +142,6 @@ export default function InventoryPanel({ packages, audit, loading, error, saving
   const [draft, setDraft] = useState(EMPTY_DRAFT);
   const [dirty, setDirty] = useState(false);
   const [idTouched, setIdTouched] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
 
   // A row deleted elsewhere must not leave an editor open over nothing.
   useEffect(() => {
@@ -149,7 +149,6 @@ export default function InventoryPanel({ packages, audit, loading, error, saving
     if (!rows.some((p) => p.id === editingId)) {
       setEditingId(null);
       setDirty(false);
-      setConfirmDelete(false);
     }
   }, [rows, editingId]);
 
@@ -158,7 +157,6 @@ export default function InventoryPanel({ packages, audit, loading, error, saving
     setDraft(toDraft(pkg));
     setDirty(false);
     setIdTouched(true);
-    setConfirmDelete(false);
   }, []);
 
   const openNew = useCallback(() => {
@@ -166,30 +164,25 @@ export default function InventoryPanel({ packages, audit, loading, error, saving
     setDraft({ ...EMPTY_DRAFT });
     setDirty(false);
     setIdTouched(false);
-    setConfirmDelete(false);
   }, []);
 
   const closeEditor = useCallback(() => {
     setEditingId(null);
     setDirty(false);
-    setConfirmDelete(false);
   }, []);
 
   const setField = useCallback((name, value) => {
     setDirty(true);
-    setConfirmDelete(false);
     setDraft((d) => ({ ...d, [name]: value }));
   }, []);
 
   const setTitle = useCallback((value) => {
     setDirty(true);
-    setConfirmDelete(false);
     setDraft((d) => (idTouched ? { ...d, title: value } : { ...d, title: value, id: slugify(value) }));
   }, [idTouched]);
 
   const togglePlatform = useCallback((platform) => {
     setDirty(true);
-    setConfirmDelete(false);
     setDraft((d) => {
       const list = Array.isArray(d.platforms) ? d.platforms : [];
       return {
@@ -238,17 +231,11 @@ export default function InventoryPanel({ packages, audit, loading, error, saving
       }
     }
     setDirty(false);
-    setConfirmDelete(false);
     if (wasNew) setEditingId(payload.id);
   }
 
   function handleDelete() {
-    if (!confirmDelete) {
-      setConfirmDelete(true);
-      return;
-    }
     onDelete?.(editingId);
-    setConfirmDelete(false);
   }
 
   const total = rows.length;
@@ -609,15 +596,15 @@ export default function InventoryPanel({ packages, audit, loading, error, saving
                 Cancel
               </button>
               {editingId !== NEW_ID ? (
-                <button
-                  type="button"
+                <ConfirmButton
                   id="x-content-inventory-delete-button"
                   className="xce-btn xce-btn-danger"
-                  onClick={handleDelete}
+                  label="Delete"
+                  prompt="Delete this?"
+                  icon={<Trash2 size={14} />}
+                  onConfirm={handleDelete}
                   disabled={busy}
-                >
-                  <Trash2 size={14} /> {confirmDelete ? 'Confirm delete' : 'Delete'}
-                </button>
+                />
               ) : null}
             </div>
           </form>

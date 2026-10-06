@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronRight, Folder, Image as ImageIcon, Film, X as XIcon, ArrowUp, Loader2 } from 'lucide-react';
+import { ChevronRight, Folder, Image as ImageIcon, Film, X as XIcon, ArrowUp, Loader2, Check, Circle, RefreshCw } from 'lucide-react';
+import { RetryError, Skeleton } from './Feedback.jsx';
 
 // NasPanel — NAS processing: Mac connect status, folder browser, estimate, start, jobs.
 // Status / connect / browse talk to the Mac analyzer DIRECTLY (`${localThumbBase}/nas/*`).
@@ -227,13 +228,30 @@ export default function NasPanel({ call, status, onReload }) {
           </button>
         ) : null}
       </div>
-      {mac && offline ? (
-        <details className="xce-more" id="x-content-nas-help-details">
-          <summary className="xce-more-summary">Details</summary>
-          <div className="xce-more-body" id="x-content-nas-help-details-body">
-            <code id="x-content-nas-analyzer-cmd" className="xce-nas-cmd">npm run archive:analyzer</code>
-          </div>
-        </details>
+      {mac === null ? <Skeleton id="x-content-nas-skeleton" rows={2} variant="tile" /> : null}
+      {mac && !mounted ? (
+        <div id="x-content-nas-setup" className="xce-nas-setup">
+          <ul id="x-content-nas-setup-checklist" className="xce-checklist">
+            <li id="x-content-nas-setup-analyzer" className={`xce-checklist-item ${offline ? 'is-todo' : 'is-ok'}`}>
+              {offline ? <Circle size={13} aria-hidden="true" /> : <Check size={13} aria-hidden="true" />}
+              <span>
+                {offline ? 'Start the analyzer on this Mac: ' : 'Analyzer running on this Mac'}
+                {offline ? <code id="x-content-nas-analyzer-cmd" className="xce-nas-cmd">npm run archive:analyzer</code> : null}
+              </span>
+            </li>
+            <li id="x-content-nas-setup-mount" className={`xce-checklist-item ${mounted ? 'is-ok' : 'is-todo'}`}>
+              <Circle size={13} aria-hidden="true" />
+              <span>{offline ? 'Mount the NAS (Quick connect appears once the analyzer is running)' : 'Mount the NAS: press Quick connect'}</span>
+            </li>
+            <li id="x-content-nas-setup-browser" className="xce-checklist-item is-todo">
+              <Circle size={13} aria-hidden="true" />
+              <span>Use Chrome on this Mac</span>
+            </li>
+          </ul>
+          <button type="button" id="x-content-nas-setup-retry" className="xce-btn-ghost" onClick={refreshMac}>
+            <RefreshCw size={13} /> Retry
+          </button>
+        </div>
       ) : null}
 
       {sources.length > 1 ? (
@@ -265,7 +283,7 @@ export default function NasPanel({ call, status, onReload }) {
         <ul id="x-content-nas-entries" className="xce-nas-list">
           {!mounted ? <li className="xce-nas-empty">{offline ? 'Start the analyzer on the Mac, then connect.' : 'Quick connect to browse the NAS.'}</li>
             : browsing ? <li className="xce-nas-empty">Loading…</li>
-            : browseError ? <li className="xce-nas-empty is-error">{browseError}</li>
+            : browseError ? <li className="xce-nas-empty is-error"><RetryError id="x-content-nas-browse-error" message={browseError} onRetry={() => browse(sourceId, path)} busy={browsing} /></li>
             : !entries.length ? <li className="xce-nas-empty">Nothing here.</li>
             : entries.map((e) => {
               const isDir = e.kind === 'dir';

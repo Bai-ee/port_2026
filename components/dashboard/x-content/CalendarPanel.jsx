@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { AlertTriangle, Check, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
+import { Skeleton, RetryError } from './Feedback.jsx';
+import { Check, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 
 // CalendarPanel — the week grid over social_posts.
 //
@@ -65,11 +66,9 @@ export default function CalendarPanel({
       </div>
 
       {error ? (
-        <p id="x-content-week-error" className="xce-error">
-          <AlertTriangle size={13} /> {typeof error === 'string' ? error : 'Could not load the calendar.'}
-        </p>
+        <RetryError id="x-content-week-error" message={typeof error === 'string' ? error : 'Could not load the calendar.'} onRetry={onRefresh} busy={!!loading} />
       ) : null}
-      {loading ? <div id="x-content-week-loading" className="xce-loading">Loading the week…</div> : null}
+      {loading ? <Skeleton id="x-content-week-loading" rows={4} variant="tile" /> : null}
 
       {!loading && calendar ? (
         <>
