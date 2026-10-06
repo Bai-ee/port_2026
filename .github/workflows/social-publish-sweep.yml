@@ -3,26 +3,47 @@ name: Social Publish Sweep
 # Inert until the owner sets repository variable SOCIAL_PUBLISH_ENABLED=true (after deploy).
 # Do not enable together with the Mac launchd sweep (scripts/social/README.md): two sweepers
 # can race on the same due post.
+#
+# Each run: (1) schedule story-ready Discogs records into their C1 slots, then
+# (2) publish everything that is due (main post + first self-reply).
 on:
   schedule:
     - cron: '*/30 * * * *'
   workflow_dispatch:
 
+concurrency:
+  group: social-publish-sweep
+  cancel-in-progress: false
+
 jobs:
   sweep:
     if: vars.SOCIAL_PUBLISH_ENABLED == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
-      - name: Publish due social posts
+      - name: Schedule story-ready records
         env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          WORKER_TOKEN: ${{ secrets.HITLOOP_ARCHIVE_WORKER_TOKEN }}
         run: |
-          if [ -z "$CRON_SECRET" ]; then
-            echo "Missing CRON_SECRET repository secret." >&2
+          if [ -z "$WORKER_TOKEN" ]; then
+            echo "Missing HITLOOP_ARCHIVE_WORKER_TOKEN repository secret." >&2
             exit 1
           fi
+          curl --fail --show-error --silent \
+            --request POST \
+            --header "Authorization: Bearer ${WORKER_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --data '{}' \
+            "https://hitloop.agency/api/archive/worker/discogs/schedule"
 
+      - name: Publish due social posts
+        env:
+          CRON_SECRET: ${{ secrets.HITLOOP_CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "Missing HITLOOP_CRON_SECRET repository secret." >&2
+            exit 1
+          fi
           curl --fail --show-error --silent \
             --request GET \
             --header "Authorization: Bearer ${CRON_SECRET}" \
