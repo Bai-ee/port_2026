@@ -71,16 +71,26 @@ export default function PerformancePanel({ stats, lastCapturedAt, loading, error
                   <div><dt>Value</dt><dd>{fmt(s.medianValue, 1)}</dd></div>
                   <div><dt>Trend</dt><dd>{trendText(s.trend)}</dd></div>
                 </dl>
-                <p className="xce-perf-meaning">{meaning(label, s, minN)}</p>
+                <details className="xce-more" id={`x-content-performance-engine-${key}-details`}>
+                  <summary className="xce-more-summary">Details</summary>
+                  <div className="xce-more-body">
+                    <p className="xce-perf-meaning">{meaning(label, s, minN)}</p>
+                  </div>
+                </details>
               </li>
             );
           })}
         </ul>
       )}
 
-      <p id="x-content-performance-footnote" className="xce-empty-note">
-        Value = reply/quote x5, repost x1, like x0.5. Daily snapshots cannot see the first-2h velocity that decides reach.
-      </p>
+      <details className="xce-more" id="x-content-performance-footnote-details">
+        <summary className="xce-more-summary">Details</summary>
+        <div className="xce-more-body">
+          <p id="x-content-performance-footnote" className="xce-empty-note">
+            Value = reply/quote x5, repost x1, like x0.5. Daily snapshots cannot see the first-2h velocity that decides reach.
+          </p>
+        </div>
+      </details>
     </div>
   );
 }

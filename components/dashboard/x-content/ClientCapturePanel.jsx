@@ -98,10 +98,17 @@ export default function ClientCapturePanel({ packages, loading, error, savingId,
                 <p className="xce-inv-row-title">{p.title}</p>
                 <div className="xce-inv-row-flags">
                   <span className={`xce-chip ${state === 'approved' ? 'xce-chip-adopted' : state === 'rejected' ? 'xce-chip-error' : 'xce-chip-warn'}`}>approval: {state}</span>
-                  <span className="xce-chip xce-chip-status">{p.rights}</span>
-                  <span className="xce-chip xce-chip-status">{p.status}</span>
                 </div>
-                {p.variants?.x?.suggestedStory ? <p className="xce-reason">Angle: {p.variants.x.suggestedStory}</p> : null}
+                <details className="xce-more" id={`x-content-client-package-${p.id}-details`}>
+                  <summary className="xce-more-summary">Details</summary>
+                  <div className="xce-more-body">
+                    <div className="xce-inv-row-flags">
+                      <span className="xce-chip xce-chip-status">{p.rights}</span>
+                      <span className="xce-chip xce-chip-status">{p.status}</span>
+                    </div>
+                    {p.variants?.x?.suggestedStory ? <p className="xce-reason">Angle: {p.variants.x.suggestedStory}</p> : null}
+                  </div>
+                </details>
                 <div className="xce-slot-actions">
                   {state !== 'approved' && onApprove ? (
                     <button type="button" id={`x-content-client-approve-${p.id}`} className="xce-draft-button" disabled={busy} onClick={() => onApprove(p.id)}>

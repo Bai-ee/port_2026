@@ -106,9 +106,16 @@ function NasDetails({ item, call, onReload }) {
     <div id="x-content-nas-details" className="xce-bk-facets">
       <p className="xce-kicker">NAS file</p>
       {item.summary ? <p id="x-content-nas-summary" className="xce-field-hint">{item.summary}</p> : null}
-      {item.activity ? <p className="xce-field-hint">Activity: {item.activity}</p> : null}
-      {item.peopleCount != null ? <p className="xce-field-hint">People: {item.peopleCount}</p> : null}
-      {nas.relativePath ? <p id="x-content-nas-path" className="xce-bk-source"><span className="xce-kicker">Path</span> <span>{nas.relativePath}</span></p> : null}
+      {item.activity || item.peopleCount != null || nas.relativePath ? (
+        <details className="xce-more" id="x-content-nas-file-details">
+          <summary className="xce-more-summary">Details</summary>
+          <div className="xce-more-body" id="x-content-nas-file-details-body">
+            {item.activity ? <p className="xce-field-hint">Activity: {item.activity}</p> : null}
+            {item.peopleCount != null ? <p className="xce-field-hint">People: {item.peopleCount}</p> : null}
+            {nas.relativePath ? <p id="x-content-nas-path" className="xce-bk-source"><span className="xce-kicker">Path</span> <span>{nas.relativePath}</span></p> : null}
+          </div>
+        </details>
+      ) : null}
       <div id="x-content-nas-stage-row" className="xce-bk-action-row">
         {st.staged ? (
           <span id="x-content-nas-staged" className="xce-chip xce-chip-ok">{item?.staged?.storagePath ? 'Ready to schedule' : 'Staged'}</span>
@@ -181,7 +188,6 @@ export default function ItemDrawer({ call, item, buckets, manualFolders, busy, e
         <header id="x-content-item-drawer-header" className="xce-bk-drawer-head">
           <div>
             <p className="xce-inv-title">{item.title || item.id}</p>
-            <p className="xce-inv-meta">{item.id}</p>
           </div>
           <button type="button" className="xce-bk-icon" aria-label="Close" onClick={onClose}><X size={16} /></button>
         </header>
@@ -191,12 +197,20 @@ export default function ItemDrawer({ call, item, buckets, manualFolders, busy, e
         {isNasItem(item) ? <NasDetails item={item} call={call} onReload={onReload} /> : null}
         {(() => {
           const src = sourceLine(item);
-          return src ? (
-            <p id="x-content-item-source-line" className="xce-bk-source">
-              <span className="xce-kicker">{src.label}</span>{' '}
-              {src.href ? <a href={src.href} target="_blank" rel="noopener noreferrer">{src.text}</a> : <span>{src.text}</span>}
-            </p>
-          ) : null;
+          return (
+            <details className="xce-more" id="x-content-item-provenance-details">
+              <summary className="xce-more-summary">Details</summary>
+              <div className="xce-more-body" id="x-content-item-provenance-details-body">
+                <p id="x-content-item-id-line" className="xce-bk-source"><span className="xce-kicker">ID</span> <span>{item.id}</span></p>
+                {src ? (
+                  <p id="x-content-item-source-line" className="xce-bk-source">
+                    <span className="xce-kicker">{src.label}</span>{' '}
+                    {src.href ? <a href={src.href} target="_blank" rel="noopener noreferrer">{src.text}</a> : <span>{src.text}</span>}
+                  </p>
+                ) : null}
+              </div>
+            </details>
+          );
         })()}
         {(() => {
           const chips = [...(eff.people || []), ...(eff.gear || []), ...(eff.genres || []), ...(eff.venues || []), ...(eff.labels || []), ...(eff.eraYear ? [String(eff.eraYear)] : [])];
@@ -219,6 +233,9 @@ export default function ItemDrawer({ call, item, buckets, manualFolders, busy, e
           {item.facets?.storySuggestion ? <p className="xce-field-hint">Suggested: {item.facets.storySuggestion}</p> : null}
         </div>
 
+        <details className="xce-more" id="x-content-item-drawer-facets-details">
+          <summary className="xce-more-summary">Facets</summary>
+          <div className="xce-more-body" id="x-content-item-drawer-facets-body">
         <div id="x-content-item-drawer-facets" className="xce-bk-facets">
           <p className="xce-kicker">Facets</p>
           {EDITABLE.map((f) => {
@@ -243,6 +260,8 @@ export default function ItemDrawer({ call, item, buckets, manualFolders, busy, e
           </div>
           {(eff.people || []).length ? null : <p className="xce-field-hint">No people recorded yet.</p>}
         </div>
+          </div>
+        </details>
 
         <div id="x-content-item-drawer-draft-panel" className="xce-bk-facets">
           <p className="xce-kicker">Post this {rights ? <span className={`xce-chip ${act.cleared ? 'xce-chip-ok' : rights.cls}`}>{act.cleared ? 'Cleared' : rights.label}</span> : null}</p>

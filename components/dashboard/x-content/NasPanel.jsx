@@ -188,6 +188,26 @@ export default function NasPanel({ call, status, onReload }) {
   const shownJobs = jobs.filter((j) => j.type !== 'estimate').slice(0, 8);
   const rootLabel = (sources.find((x) => x.id === sourceId) || sources[0])?.label || 'Root';
 
+  const renderJob = (j) => {
+          const total = j.progress?.total || 0;
+          const done = j.progress?.done || 0;
+          const pct = total ? Math.min(100, Math.round((done / total) * 100)) : 0;
+          const active = !isTerminal(j.state);
+          return (
+            <div key={j.id} className="xce-nas-job">
+              <div className="xce-nas-job-head">
+                <span className="xce-nas-job-state">{j.state}</span>
+                <span className="xce-bk-count">{done}/{total} · {usd(j.progress?.spentUsd ?? j.spentUsd)}</span>
+                {active ? (
+                  <button type="button" className="xce-bk-icon xce-nas-cancel" aria-label="Cancel job" title="Cancel" disabled={actionBusy} onClick={() => cancel(j.id)}><XIcon size={14} /></button>
+                ) : null}
+              </div>
+              <div className="xce-nas-bar" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${pct}%` }} /></div>
+              {j.error ? <p className="xce-field-hint">{j.error}</p> : null}
+            </div>
+          );
+  };
+
   let dotColor = '#a8a29e';
   let statusText = 'Analyzer offline — start it on the Mac';
   if (mac === null) statusText = 'Checking the Mac analyzer…';
@@ -206,10 +226,15 @@ export default function NasPanel({ call, status, onReload }) {
             {connecting ? <><Loader2 size={14} className="xce-spin" /> Connecting…</> : 'Quick connect'}
           </button>
         ) : null}
-        {mac && offline ? (
-          <code id="x-content-nas-analyzer-cmd" className="xce-nas-cmd">npm run archive:analyzer</code>
-        ) : null}
       </div>
+      {mac && offline ? (
+        <details className="xce-more" id="x-content-nas-help-details">
+          <summary className="xce-more-summary">Details</summary>
+          <div className="xce-more-body" id="x-content-nas-help-details-body">
+            <code id="x-content-nas-analyzer-cmd" className="xce-nas-cmd">npm run archive:analyzer</code>
+          </div>
+        </details>
+      ) : null}
 
       {sources.length > 1 ? (
         <div className="xce-field">
@@ -286,30 +311,26 @@ export default function NasPanel({ call, status, onReload }) {
       <button type="button" id="x-content-nas-start" className="xce-btn-primary xce-nas-start" disabled={!online || !paths.length || actionBusy} onClick={start}>
         {actionBusy ? 'Working…' : 'Start processing'}
       </button>
-      <p id="x-content-nas-organize-note" className="xce-field-hint">Analyzed files are copied into HITLOOP-ARCHIVE/content/&lt;type&gt;/&lt;year&gt;/ on the NAS. Originals are never moved.</p>
+      <details className="xce-more" id="x-content-nas-organize-details">
+        <summary className="xce-more-summary">Details</summary>
+        <div className="xce-more-body">
+          <p id="x-content-nas-organize-note" className="xce-field-hint">Analyzed files are copied into HITLOOP-ARCHIVE/content/&lt;type&gt;/&lt;year&gt;/ on the NAS. Originals are never moved.</p>
+        </div>
+      </details>
       {error ? <p className="xce-error" id="x-content-nas-error">{error}</p> : null}
 
       <div id="x-content-nas-jobs" className="xce-nas-jobs">
         <p className="xce-kicker">Jobs</p>
-        {!shownJobs.length ? <p className="xce-field-hint">No jobs yet.</p> : shownJobs.map((j) => {
-          const total = j.progress?.total || 0;
-          const done = j.progress?.done || 0;
-          const pct = total ? Math.min(100, Math.round((done / total) * 100)) : 0;
-          const active = !isTerminal(j.state);
-          return (
-            <div key={j.id} className="xce-nas-job">
-              <div className="xce-nas-job-head">
-                <span className="xce-nas-job-state">{j.state}</span>
-                <span className="xce-bk-count">{done}/{total} · {usd(j.progress?.spentUsd ?? j.spentUsd)}</span>
-                {active ? (
-                  <button type="button" className="xce-bk-icon xce-nas-cancel" aria-label="Cancel job" title="Cancel" disabled={actionBusy} onClick={() => cancel(j.id)}><XIcon size={14} /></button>
-                ) : null}
-              </div>
-              <div className="xce-nas-bar" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${pct}%` }} /></div>
-              {j.error ? <p className="xce-field-hint">{j.error}</p> : null}
+        {!shownJobs.length ? <p className="xce-field-hint">No jobs yet.</p> : null}
+        {shownJobs.slice(0, 1).map(renderJob)}
+        {shownJobs.length > 1 ? (
+          <details className="xce-more" id="x-content-nas-job-history-details">
+            <summary className="xce-more-summary">Details</summary>
+            <div className="xce-more-body" id="x-content-nas-job-history-body">
+              {shownJobs.slice(1).map(renderJob)}
             </div>
-          );
-        })}
+          </details>
+        ) : null}
       </div>
     </div>
   );

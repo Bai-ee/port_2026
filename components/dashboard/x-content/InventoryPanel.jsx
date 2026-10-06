@@ -370,24 +370,6 @@ export default function InventoryPanel({ packages, audit, loading, error, saving
               />
             </div>
 
-            <div id="x-content-inventory-id-field" className="xce-field xce-field-wide">
-              <label className="xce-field-label" htmlFor="x-content-inventory-field-id">Slug</label>
-              <input
-                id="x-content-inventory-field-id"
-                className={`xce-input${editingId !== NEW_ID ? ' is-locked' : ''}`}
-                type="text"
-                value={draft.id}
-                readOnly={editingId !== NEW_ID}
-                onChange={(e) => { setIdTouched(true); setField('id', slugify(e.target.value)); }}
-                placeholder="stable-slug"
-              />
-              <p className="xce-field-hint">
-                {editingId === NEW_ID
-                  ? 'Set once. Other rows and the ledger point at it.'
-                  : 'Fixed after the first save.'}
-              </p>
-            </div>
-
             <div id="x-content-inventory-story-field" className="xce-field xce-field-wide">
               <label className="xce-field-label" htmlFor="x-content-inventory-field-story">Story</label>
               <textarea
@@ -490,57 +472,6 @@ export default function InventoryPanel({ packages, audit, loading, error, saving
                   {STATUSES.map((value) => <option key={value} value={value}>{value}</option>)}
                 </select>
               </div>
-
-              <div id="x-content-inventory-era-year-field" className="xce-field">
-                <label className="xce-field-label" htmlFor="x-content-inventory-field-era-year">Era year</label>
-                <input
-                  id="x-content-inventory-field-era-year"
-                  className="xce-input"
-                  type="number"
-                  inputMode="numeric"
-                  min="1900"
-                  max="2100"
-                  value={draft.eraYear}
-                  onChange={(e) => setField('eraYear', e.target.value)}
-                  placeholder="1997"
-                />
-              </div>
-
-              <div id="x-content-inventory-event-date-field" className="xce-field">
-                <label className="xce-field-label" htmlFor="x-content-inventory-field-event-date">Event date</label>
-                <input
-                  id="x-content-inventory-field-event-date"
-                  className="xce-input"
-                  type="date"
-                  value={draft.eventDate}
-                  onChange={(e) => setField('eventDate', e.target.value)}
-                />
-                <p className="xce-field-hint">Drives the anniversary trigger.</p>
-              </div>
-
-              <div id="x-content-inventory-cta-field" className="xce-field">
-                <label className="xce-field-label" htmlFor="x-content-inventory-field-cta">CTA</label>
-                <input
-                  id="x-content-inventory-field-cta"
-                  className="xce-input"
-                  type="text"
-                  value={draft.cta}
-                  onChange={(e) => setField('cta', e.target.value)}
-                  placeholder="Where the self-reply sends people"
-                />
-              </div>
-            </div>
-
-            <div id="x-content-inventory-asset-refs-field" className="xce-field xce-field-wide">
-              <label className="xce-field-label" htmlFor="x-content-inventory-field-asset-refs">Asset refs</label>
-              <input
-                id="x-content-inventory-field-asset-refs"
-                className="xce-input"
-                type="text"
-                value={draft.assetRefsText}
-                onChange={(e) => setField('assetRefsText', e.target.value)}
-                placeholder="sha256, path or URL — comma separated"
-              />
             </div>
 
             <div id="x-content-inventory-platforms-field" className="xce-field xce-field-wide">
@@ -564,6 +495,87 @@ export default function InventoryPanel({ packages, audit, loading, error, saving
               </div>
             </div>
 
+            <details
+              className="xce-more"
+              id="x-content-inventory-editor-more-details"
+              open={duplicateId || undefined}
+            >
+              <summary className="xce-more-summary">Details</summary>
+              <div className="xce-more-body">
+              <div id="x-content-inventory-id-field" className="xce-field xce-field-wide">
+                <label className="xce-field-label" htmlFor="x-content-inventory-field-id">Slug</label>
+                <input
+                  id="x-content-inventory-field-id"
+                  className={`xce-input${editingId !== NEW_ID ? ' is-locked' : ''}`}
+                  type="text"
+                  value={draft.id}
+                  readOnly={editingId !== NEW_ID}
+                  onChange={(e) => { setIdTouched(true); setField('id', slugify(e.target.value)); }}
+                  placeholder="stable-slug"
+                />
+                <p className="xce-field-hint">
+                  {editingId === NEW_ID
+                    ? 'Set once. Other rows and the ledger point at it.'
+                    : 'Fixed after the first save.'}
+                </p>
+              </div>
+
+                <div className="xce-form-grid">
+                <div id="x-content-inventory-era-year-field" className="xce-field">
+                  <label className="xce-field-label" htmlFor="x-content-inventory-field-era-year">Era year</label>
+                  <input
+                    id="x-content-inventory-field-era-year"
+                    className="xce-input"
+                    type="number"
+                    inputMode="numeric"
+                    min="1900"
+                    max="2100"
+                    value={draft.eraYear}
+                    onChange={(e) => setField('eraYear', e.target.value)}
+                    placeholder="1997"
+                  />
+                </div>
+
+                <div id="x-content-inventory-event-date-field" className="xce-field">
+                  <label className="xce-field-label" htmlFor="x-content-inventory-field-event-date">Event date</label>
+                  <input
+                    id="x-content-inventory-field-event-date"
+                    className="xce-input"
+                    type="date"
+                    value={draft.eventDate}
+                    onChange={(e) => setField('eventDate', e.target.value)}
+                  />
+                  <p className="xce-field-hint">Drives the anniversary trigger.</p>
+                </div>
+
+                <div id="x-content-inventory-cta-field" className="xce-field">
+                  <label className="xce-field-label" htmlFor="x-content-inventory-field-cta">CTA</label>
+                  <input
+                    id="x-content-inventory-field-cta"
+                    className="xce-input"
+                    type="text"
+                    value={draft.cta}
+                    onChange={(e) => setField('cta', e.target.value)}
+                    placeholder="Where the self-reply sends people"
+                  />
+                </div>
+                </div>
+
+              <div id="x-content-inventory-asset-refs-field" className="xce-field xce-field-wide">
+                <label className="xce-field-label" htmlFor="x-content-inventory-field-asset-refs">Asset refs</label>
+                <input
+                  id="x-content-inventory-field-asset-refs"
+                  className="xce-input"
+                  type="text"
+                  value={draft.assetRefsText}
+                  onChange={(e) => setField('assetRefsText', e.target.value)}
+                  placeholder="sha256, path or URL — comma separated"
+                />
+              </div>
+
+              </div>
+            </details>
+
             {errors.length ? (
               <div id="x-content-inventory-editor-errors" className="xce-feedback xce-feedback-error">
                 <p className="xce-feedback-head">
@@ -578,9 +590,14 @@ export default function InventoryPanel({ packages, audit, loading, error, saving
             {warnings.length ? (
               <div id="x-content-inventory-editor-warnings" className="xce-feedback xce-feedback-warn">
                 <p className="xce-feedback-head">{countLabel(warnings.length, 'note')} — advice, saving still works</p>
-                <ul className="xce-feedback-list">
-                  {warnings.map((text, i) => <li key={i}>{text}</li>)}
-                </ul>
+                <details className="xce-more" id="x-content-inventory-editor-warnings-details">
+                  <summary className="xce-more-summary">Details</summary>
+                  <div className="xce-more-body">
+                    <ul className="xce-feedback-list">
+                      {warnings.map((text, i) => <li key={i}>{text}</li>)}
+                    </ul>
+                  </div>
+                </details>
               </div>
             ) : null}
 

@@ -156,6 +156,11 @@ export default function PlanPanel({
             const busy = draftingId != null && String(draftingId) === String(key);
             const draft = drafts ? drafts[key] : null;
             const check = draft?.check || null;
+            const hasScore = Number.isFinite(Number(slot?.matchScore)) && slot?.matchScore != null;
+            const isInventoryFill = !gap && slot?.source === 'inventory' && !!slot?.packageId;
+            const hasDetails = !!slot?.lane || !!slot?.adopted || hasScore
+              || (!gap && !!slot?.matchReason)
+              || (isInventoryFill && (!!slot?.asset || !!slot?.selfReply || !!slot?.packageId));
             const canDraft = !!onDraft && (!!slot?.packageId || (slot?.source === 'ledger' && !!slot?.story));
 
             return (
@@ -167,18 +172,6 @@ export default function PlanPanel({
                 <div className="xce-slot-head">
                   <span className="xce-slot-time">{slot?.timeCT || '—'}</span>
                   <span className="xce-slot-type">{slot?.type || '—'}</span>
-                  {slot?.lane ? <span className="xce-slot-lane">{slot.lane}</span> : null}
-                  {slot?.adopted ? (
-                    <span
-                      className="xce-chip xce-chip-adopted"
-                      title={slot.adoptReason || 'adopted from the benchmark mix'}
-                    >
-                      adopted slot
-                    </span>
-                  ) : null}
-                  {Number.isFinite(Number(slot?.matchScore)) && slot?.matchScore != null ? (
-                    <span className="xce-slot-score">{Number(slot.matchScore).toFixed(2)}</span>
-                  ) : null}
                 </div>
 
                 <div className="xce-slot-body">
@@ -200,7 +193,6 @@ export default function PlanPanel({
                     {!gap && slot?.source === 'none' ? (
                       <>
                         <p className="xce-gap-label xce-skipped-label">Skipped (engine quota)</p>
-                        {slot?.matchReason ? <p className="xce-reason">{slot.matchReason}</p> : null}
                       </>
                     ) : null}
 
@@ -216,25 +208,46 @@ export default function PlanPanel({
                             <a href={slot.asset} target="_blank" rel="noopener noreferrer">↗ post</a>
                           </p>
                         ) : null}
-                        {slot?.matchReason ? <p className="xce-reason">{slot.matchReason}</p> : null}
                       </>
                     ) : null}
 
-                    {!gap && slot?.source === 'inventory' && slot?.packageId ? (
+                    {isInventoryFill ? (
                       <>
-                        <p className="xce-pkg-line">
-                          <span className="xce-pkg-id">{slot.packageId}</span>
-                          {code ? <span className="xce-chip xce-chip-series">{code}</span> : null}
-                        </p>
                         {slot?.story ? <p className="xce-story">{excerpt(slot.story)}</p> : null}
-                        {slot?.asset ? <p className="xce-asset">{slot.asset}</p> : null}
-                        {slot?.selfReply ? (
-                          <p className="xce-self-reply">
-                            <span className="xce-self-reply-label">Self-reply</span> {excerpt(slot.selfReply, 120)}
-                          </p>
-                        ) : null}
-                        {slot?.matchReason ? <p className="xce-reason">{slot.matchReason}</p> : null}
                       </>
+                    ) : null}
+
+                    {hasDetails ? (
+                      <details className="xce-more" id={`x-content-plan-slot-details-${key}`}>
+                        <summary className="xce-more-summary">Details</summary>
+                        <div className="xce-more-body">
+                          {slot?.lane ? <span className="xce-slot-lane">{slot.lane}</span> : null}
+                          {slot?.adopted ? (
+                            <span
+                              className="xce-chip xce-chip-adopted"
+                              title={slot.adoptReason || 'adopted from the benchmark mix'}
+                            >
+                              adopted slot
+                            </span>
+                          ) : null}
+                          {hasScore ? (
+                            <span className="xce-slot-score">{Number(slot.matchScore).toFixed(2)}</span>
+                          ) : null}
+                          {isInventoryFill ? (
+                            <p className="xce-pkg-line">
+                              <span className="xce-pkg-id">{slot.packageId}</span>
+                              {code ? <span className="xce-chip xce-chip-series">{code}</span> : null}
+                            </p>
+                          ) : null}
+                          {isInventoryFill && slot?.asset ? <p className="xce-asset">{slot.asset}</p> : null}
+                          {isInventoryFill && slot?.selfReply ? (
+                            <p className="xce-self-reply">
+                              <span className="xce-self-reply-label">Self-reply</span> {excerpt(slot.selfReply, 120)}
+                            </p>
+                          ) : null}
+                          {slot?.matchReason && !gap ? <p className="xce-reason">{slot.matchReason}</p> : null}
+                        </div>
+                      </details>
                     ) : null}
                   </div>
                 </div>
@@ -269,7 +282,12 @@ export default function PlanPanel({
                         ? check.violations.join('; ')
                         : 'rules ok'}
                     </p>
-                    <p className="xce-muted">Preview only. Cut from your story, not model-written.</p>
+                    <details className="xce-more" id={`x-content-plan-draft-details-${key}`}>
+                      <summary className="xce-more-summary">Details</summary>
+                      <div className="xce-more-body">
+                        <p className="xce-muted">Preview only. Cut from your story, not model-written.</p>
+                      </div>
+                    </details>
                   </div>
                 ) : null}
               </li>
@@ -279,9 +297,14 @@ export default function PlanPanel({
       ) : null}
 
       {!loading && plan?.audit ? (
-        <p id="x-content-plan-audit-line" className="xce-audit">
-          {plan.audit.valid ?? 0}/{plan.audit.total ?? 0} packages valid
-        </p>
+        <details className="xce-more" id="x-content-plan-audit-details">
+          <summary className="xce-more-summary">Details</summary>
+          <div className="xce-more-body">
+            <p id="x-content-plan-audit-line" className="xce-audit">
+              {plan.audit.valid ?? 0}/{plan.audit.total ?? 0} packages valid
+            </p>
+          </div>
+        </details>
       ) : null}
     </div>
   );

@@ -175,7 +175,10 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
     setCalendarBusyId(slot.id);
     setCalendarError('');
     try {
-      const iso = new Date(localValue).toISOString();
+      const when = new Date(localValue);
+      if (Number.isNaN(when.getTime())) throw new Error('Pick a valid date and time.');
+      if (when.getTime() < Date.now() + 60 * 1000) throw new Error('Pick a time in the future.');
+      const iso = when.toISOString();
       await callSocial({ action: 'update', postId: slot.id, content: slot.content, scheduledAt: iso });
       await loadCalendar();
     } catch (err) {
@@ -775,12 +778,32 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
         }
 
         @media (max-width: 480px) {
-          #x-content-card .xce-tab { padding: 0 6px; font-size: 10px; } }
+          #x-content-card .xce-tab { padding: 0 6px; font-size: 10px; }
         }
-        @media (min-width: 640px) {
-          #x-content-card .xce-engine-counts { grid-template-columns: repeat(4, minmax(0,1fr)); }
-          #x-content-card .xce-week-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+
+        /* ── Layout pass: full width, fluid grids, collapsed details ──── */
+        #x-content-card { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
+        #x-content-card .xce-panel { width: 100%; box-sizing: border-box; min-width: 0; }
+        /* Counts and week days fill whatever width the modal gives them, so
+           there is no breakpoint to get wrong. */
+        #x-content-card .xce-engine-counts { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+        #x-content-card .xce-week-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); align-items: start; }
+        #x-content-card .xce-slot-list,
+        #x-content-card .xce-inv-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); align-items: start; }
+        /* Tabs: one scrollable row on a phone instead of wrapping to two. */
+        @media (max-width: 480px) {
+          #x-content-card .xce-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+          #x-content-card .xce-tab { flex: 0 0 auto; }
         }
+        /* Collapsed detail disclosure shared by every tab. */
+        #x-content-card .xce-more { border-radius: 10px; }
+        #x-content-card .xce-more-summary { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 2px; font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(42,36,32,0.5); cursor: pointer; list-style: none; }
+        #x-content-card .xce-more-summary::-webkit-details-marker { display: none; }
+        #x-content-card .xce-more-summary::before { content: '+'; display: inline-block; width: 10px; text-align: center; }
+        #x-content-card .xce-more[open] > .xce-more-summary::before { content: '\\2212'; }
+        #x-content-card .xce-more-summary:hover { color: #2a2420; }
+        #x-content-card .xce-more-body { display: grid; gap: 6px; padding: 4px 0 2px; min-width: 0; }
+        #x-content-card .xce-week-hint { margin: 0; font-size: 11px; color: rgba(42,36,32,0.5); }
       `}</style>
     </div>
   );

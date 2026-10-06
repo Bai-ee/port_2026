@@ -85,20 +85,23 @@ export default function CalendarPanel({
                 >
                   <span className="xce-engine-name">{ENGINE_LABEL[id]}</span>
                   <span className="xce-engine-num">{e.week}</span>
-                  <span className="xce-engine-limit">{limitText(e)}</span>
+                  <span className="xce-engine-limit" title={limitText(e)}>{limitText(e)}</span>
                 </div>
               );
             })}
           </div>
 
           {flags.length ? (
-            <ul id="x-content-week-flags-list" className="xce-flag-list">
-              {flags.map((f, i) => (
-                <li key={`${f.kind}-${f.date}-${f.engine || ''}-${i}`} className="xce-shortfall">
-                  <strong>{f.kind}</strong>{f.date ? ` ${f.date}` : ''} — {f.message}
-                </li>
-              ))}
-            </ul>
+            <details id="x-content-week-flags-details" className="xce-more">
+              <summary id="x-content-week-flags-summary" className="xce-more-summary">{flags.length} flag{flags.length > 1 ? 's' : ''} this week</summary>
+              <ul id="x-content-week-flags-list" className="xce-flag-list">
+                {flags.map((f, i) => (
+                  <li key={`${f.kind}-${f.date}-${f.engine || ''}-${i}`} className="xce-shortfall">
+                    <strong>{f.kind}</strong>{f.date ? ` ${f.date}` : ''} — {f.message}
+                  </li>
+                ))}
+              </ul>
+            </details>
           ) : (
             <p id="x-content-week-flags-clear" className="xce-audit">No spacing, cap or weekly-minimum flags.</p>
           )}
@@ -122,7 +125,12 @@ export default function CalendarPanel({
                             <span className="xce-chip xce-chip-status">{s.status}</span>
                           </div>
                           <p className="xce-post-text">{s.title || '(no text)'}</p>
-                          {s.packageId ? <p className="xce-asset">{s.packageId}</p> : null}
+                          {s.packageId ? (
+                            <details id={`x-content-week-slot-details-${s.id}`} className="xce-more">
+                              <summary className="xce-more-summary">Details</summary>
+                              <div className="xce-more-body"><p className="xce-asset">{s.packageId}</p></div>
+                            </details>
+                          ) : null}
                           {s.status === 'draft' && onApprove ? (
                             <div className="xce-slot-actions">
                               <button type="button" id={`x-content-week-approve-button-${s.id}`} className="xce-draft-button" disabled={busy} onClick={() => onApprove(s)}>
@@ -165,6 +173,8 @@ export default function CalendarPanel({
                           <>
                             <input
                               type="datetime-local"
+                              aria-label="Schedule time (your local time)"
+                              title="Your local time"
                               id={`x-content-week-schedule-time-${s.id}`}
                               className="xce-input"
                               value={value}
@@ -173,6 +183,7 @@ export default function CalendarPanel({
                             <button type="button" id={`x-content-week-schedule-button-${s.id}`} className="xce-draft-button" disabled={busy || !value} onClick={() => onSchedule(s, value)}>
                               Schedule
                             </button>
+                            <p id={`x-content-week-schedule-hint-${s.id}`} className="xce-week-hint">Your local time</p>
                           </>
                         ) : null}
                       </div>
