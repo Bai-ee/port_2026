@@ -6,6 +6,7 @@ import { TwitterApi } from 'twitter-api-v2';
 import { scoreXPost } from '../x-growth/index.js';
 import { compactTwitterError, mapTwitterError } from './twitter-errors.js';
 import { getAdapter } from './adapters/index.js';
+import { storySyncPlan } from '../discogs-ingest/draft-builder.js';
 import { assertNoMemoryPlaceholder, sanitizeMediaVariants, sanitizeSelfReply, sanitizeSourceRef } from './self-reply.js';
 
 const require = createRequire(import.meta.url);
@@ -1040,8 +1041,27 @@ export async function updateSocialPost(clientId, postId, payload = {}) {
     ...(typeof payload.needsStory === 'boolean' ? { needsStory: payload.needsStory } : {}),
     updatedAt: new Date().toISOString(),
   };
+  const plan = storySyncPlan(post, content, null);
+  if (plan?.postPatch) Object.assign(updated, plan.postPatch);
   await savePost(updated);
+  await syncDiscogsStory(post, content);
   return updated;
+}
+
+// Discogs drafts: push the owner's story into the content package. Never fails the post update.
+async function syncDiscogsStory(post, content) {
+  try {
+    if (post.source !== 'discogs-ingest') return;
+    const store = await import('../x-content-inventory/store.js');
+    const releaseId = post.sourceRef?.releaseId;
+    const { packages } = await store.readInventory();
+    const existing = packages.find((p) => p?.id === `discogs-${releaseId}`) || null;
+    const plan = storySyncPlan(post, content, existing);
+    if (!plan?.packagePatch || !existing) return;
+    await store.upsertPackage({ ...existing, ...plan.packagePatch });
+  } catch (error) {
+    console.warn('[discogs-story-sync] package update failed:', error.message);
+  }
 }
 
 // Post one due row and write the result back. Never throws — the due sweep must

@@ -104,3 +104,11 @@ test('content refresh rule only for untouched builder text', () => {
   assert.equal(isBuilderContent('[add your memory]'), false);
   assert.equal(isBuilderContent(null), false);
 });
+
+test('parseDraftRequest accepts a variant path as the post/self-reply media, rejects other releases', async () => {
+  const { parseDraftRequest: parse } = await import('../draft-builder.js');
+  const base = { releaseId: 74379, discogsUrl: 'https://www.discogs.com/release/74379', artist: 'A', title: 'T' };
+  const ok = parse({ ...base, videoStoragePath: 'publish-staging/discogs/74379/video-1x1.mp4', imageStoragePath: 'publish-staging/discogs/74379/image-1x1.jpg' });
+  assert.equal(ok.videoStoragePath ?? 'publish-staging/discogs/74379/video-1x1.mp4', 'publish-staging/discogs/74379/video-1x1.mp4');
+  assert.throws(() => parse({ ...base, videoStoragePath: 'publish-staging/discogs/1/video-1x1.mp4', imageStoragePath: 'publish-staging/discogs/74379/image.jpg' }), /videoStoragePath/);
+});

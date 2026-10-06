@@ -66,12 +66,14 @@ export async function findExistingDraft(releaseId) {
 
 export async function ingestDiscogsDraft(req) {
   const vPaths = variantPaths(req.variants);
-  const [videoUrl, imageUrl, ...vUrls] = await Promise.all([
-    ensureDownloadUrl(req.videoStoragePath),
-    ensureDownloadUrl(req.imageStoragePath),
-    ...vPaths.map(ensureDownloadUrl),
-  ]);
-  const mediaVariants = buildMediaVariants(req.variants, Object.fromEntries(vPaths.map((p, i) => [p, vUrls[i]])));
+  // One token per object: the post media is usually also a variant, and minting tokens for the
+  // same path in parallel lets the last write win and leaves the other URL with a dead token.
+  const unique = [...new Set([req.videoStoragePath, req.imageStoragePath, ...vPaths])];
+  const urls = await Promise.all(unique.map(ensureDownloadUrl));
+  const urlByPath = Object.fromEntries(unique.map((p, i) => [p, urls[i]]));
+  const videoUrl = urlByPath[req.videoStoragePath];
+  const imageUrl = urlByPath[req.imageStoragePath];
+  const mediaVariants = buildMediaVariants(req.variants, urlByPath);
 
   let post = await findExistingDraft(req.releaseId);
   let created = false;

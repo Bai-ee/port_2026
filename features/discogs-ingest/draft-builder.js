@@ -87,6 +87,48 @@ export function isBuilderContent(content) {
   return lines[0].includes(' – ') && lines.slice(1, -2).every((l) => l.trim() !== '');
 }
 
+/**
+ * Owner story from builder-shaped content: line 1 `Artist – Title`, optional line 2
+ * meta (`Label · Catno · Year`), then the story. Null when the shape is not
+ * recognised, the story is empty, or the placeholder is still present.
+ */
+export function extractStory(content) {
+  if (typeof content !== 'string') return null;
+  if (content.toLowerCase().includes(MEMORY_PLACEHOLDER_LINE)) return null;
+  const lines = content.split('\n');
+  let i = 0;
+  const next = () => { while (i < lines.length && lines[i].trim() === '') i += 1; };
+  next();
+  if (i >= lines.length || !lines[i].includes(' – ')) return null;
+  i += 1;
+  next();
+  // Meta line: present only when it uses the builder's ' · ' separator and is followed by more text.
+  if (i < lines.length && lines[i].includes(' · ')) i += 1;
+  const story = lines.slice(i).join('\n').trim();
+  return story || null;
+}
+
+/**
+ * Decide what a post edit means for the Discogs story. Pure.
+ * Returns null (not a Discogs post / nothing to do) or
+ * { postPatch, packagePatch } where packagePatch is null when the package is untouched.
+ */
+export function storySyncPlan(post, newContent, pkg = null) {
+  const releaseId = post?.sourceRef?.releaseId;
+  if (post?.source !== DISCOGS_SOURCE || !isValidReleaseId(releaseId)) return null;
+  const story = extractStory(newContent);
+  if (!story) {
+    return { postPatch: post.needsStory === true ? null : { needsStory: true }, packagePatch: null };
+  }
+  const packagePatch = { id: packageId(releaseId), story };
+  if (!pkg || pkg.status === 'idea') packagePatch.status = 'drafted';
+  const unchanged = pkg && pkg.story === story && !packagePatch.status;
+  return {
+    postPatch: post.needsStory === false ? null : { needsStory: false },
+    packagePatch: unchanged ? null : packagePatch,
+  };
+}
+
 /** Validate the draft request body. */
 export function parseDraftRequest(body = {}) {
   const b = body || {};
@@ -95,8 +137,10 @@ export function parseDraftRequest(body = {}) {
     if (typeof b[f] !== 'string' || !b[f].trim()) throw fail(`${f} is required.`);
   }
   if (!/^https:\/\/(www\.)?discogs\.com\//i.test(b.discogsUrl.trim())) throw fail('discogsUrl must be an https://discogs.com URL.');
-  if (b.videoStoragePath !== buildStoragePath(b.releaseId, 'video')) throw fail('videoStoragePath does not match releaseId.');
-  if (b.imageStoragePath !== buildStoragePath(b.releaseId, 'image')) throw fail('imageStoragePath does not match releaseId.');
+  // The post/self-reply media may be the legacy single file or one of the variants (the worker sends the X aspect).
+  const allowed = (kind) => [null, '9x16', '1x1'].map((v) => buildStoragePath(b.releaseId, kind, v));
+  if (!allowed('video').includes(b.videoStoragePath)) throw fail('videoStoragePath does not match releaseId.');
+  if (!allowed('image').includes(b.imageStoragePath)) throw fail('imageStoragePath does not match releaseId.');
   const s = (v) => (v == null ? '' : String(v).trim());
   const year = b.year == null || s(b.year) === '' ? null : s(b.year);
   return {
