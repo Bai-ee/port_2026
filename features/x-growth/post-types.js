@@ -21,6 +21,9 @@ export const VALID_TARGET_ACTIONS = [
   'follow_author',
   'favorite',
   'share',
+  'share_via_copy_link',
+  'share_via_dm',
+  'click_dwell',
 ];
 
 export function isValidPostType(type) {
