@@ -24,12 +24,24 @@ const SCOPES = [
 ];
 const COLLECTION = 'calendar_connections';
 const STATE_TTL_MS = 10 * 60 * 1000;
+const DEFAULT_REDIRECT_PATH = '/api/dashboard/calendar/callback';
 
-function oauthClientId() { return process.env.GOOGLE_OAUTH_CLIENT_ID || ''; }
-function oauthClientSecret() { return process.env.GOOGLE_OAUTH_CLIENT_SECRET || ''; }
-function redirectUri() { return process.env.GOOGLE_OAUTH_REDIRECT_URI || ''; }
+function oauthClientId() {
+  return process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GMAIL_CLIENT_ID || '';
+}
+function oauthClientSecret() {
+  return process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GMAIL_CLIENT_SECRET || '';
+}
+function redirectUri() {
+  const explicit = process.env.GOOGLE_OAUTH_REDIRECT_URI || '';
+  if (explicit) return explicit;
+  const base = process.env.NEXT_PUBLIC_SITE_URL || process.env.PUBLIC_APP_URL || process.env.APP_URL || 'https://hitloop.agency';
+  return new URL(DEFAULT_REDIRECT_PATH, String(base).replace(/\/+$/, '')).toString();
+}
 
-/** True only when the OAuth web client env is fully present. */
+/** True when either dedicated Calendar OAuth vars or the existing Gmail OAuth
+ *  web-client vars are present. The Gmail client was the original fallback for
+ *  this feature; Calendar still requests its own read-only scope at consent. */
 function isConfigured() {
   return Boolean(oauthClientId() && oauthClientSecret() && redirectUri());
 }

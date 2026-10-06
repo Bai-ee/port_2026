@@ -3361,6 +3361,15 @@ const StackedSlidesSection = () => {
                             </article>
                           ))}
                         </div>
+                        <div id="testimonials-linkedin-source-row" style={{ display: 'flex', justifyContent: 'flex-end', width: '100%', marginTop: 'clamp(0.75rem, 1.5vw, 1rem)' }}>
+                          <a
+                            id="testimonials-linkedin-source-link"
+                            href={LINKEDIN_RECOMMENDATIONS_URL}
+                            target="_blank"
+                            rel="noopener noreferrer nofollow"
+                            style={testimonialsSourceLinkStyle}
+                          >See all recommendations on LinkedIn →</a>
+                        </div>
                       </div>
                     </section>
                   </div>
@@ -4564,6 +4573,13 @@ const quoteAttributionSepStyle = {
 const quoteAttributionRoleStyle = {
   fontSize: 'clamp(0.75rem, 1vw, 0.85rem)',
   color: 'rgba(42, 36, 32, 0.45)',
+};
+
+const testimonialsSourceLinkStyle = {
+  fontSize: 'clamp(0.75rem, 1vw, 0.85rem)',
+  color: 'rgba(42, 36, 32, 0.55)',
+  textDecoration: 'none',
+  letterSpacing: '-0.01em',
 };
 
 const secondaryQuotesGridStyle = {

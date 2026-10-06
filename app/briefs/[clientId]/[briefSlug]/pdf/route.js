@@ -1,3 +1,4 @@
+import { createRequire } from 'module';
 import {
   contentDispositionFileName,
   fb,
@@ -5,6 +6,9 @@ import {
   titlePdfFileName,
   validId,
 } from '../../../_lib/custom-briefs.js';
+
+const require = createRequire(import.meta.url);
+const { persistBriefPdfArtifact } = require('../../../../../api/_lib/browserless.cjs');
 
 function textResponse(message, status = 404) {
   return new Response(message, {
@@ -47,7 +51,38 @@ export async function GET(_request, context) {
   const resolved = await resolvePublicBrief(clientKey, briefSlug);
   if (!resolved) return textResponse('Brief PDF not found.', 404);
 
-  const buffer = await downloadPdfBuffer(resolved.brief).catch(() => null);
+  let buffer = await downloadPdfBuffer(resolved.brief).catch(() => null);
+
+  // On-demand generation (2026-08-21): auto-published daily briefs (the email
+  // system's publishBriefDoc path) store HTML but never pre-render a PDF, so
+  // this route 404'd for them. First download renders via Browserless and
+  // caches the artifact on the brief doc — every later download serves the
+  // stored file. resolvePublicBrief already gates on `public: true`, so this
+  // never renders a private brief. Two racing first-downloads at worst render
+  // twice and both serve identical content — the second doc write wins,
+  // harmlessly.
+  if (!buffer?.length && resolved.brief.html) {
+    const fileNameForPdf = resolved.brief.pdfFileName ||
+      titlePdfFileName(resolved.brief.title || resolved.brief.briefSlug || resolved.snapshot.id);
+    const pdfResult = await persistBriefPdfArtifact({
+      clientId: resolved.clientId,
+      runId: `public-pdf-${resolved.snapshot.id}-${Date.now()}`,
+      html: resolved.brief.html,
+      fileName: fileNameForPdf,
+      storageClientKey: resolved.brief.publicClientSlug || resolved.clientId,
+      storageBriefKey: resolved.brief.publicBriefSlug || resolved.snapshot.id,
+      pdfMode: 'edge-to-edge',
+    }).catch(() => null);
+    if (pdfResult?.ok && pdfResult.artifactRef) {
+      await resolved.snapshot.ref.set({
+        pdfArtifact: pdfResult.artifactRef,
+        pdfUrl: pdfResult.artifactRef.downloadUrl || '',
+        pdfFileName: pdfResult.artifactRef.fileName || fileNameForPdf,
+      }, { merge: true }).catch(() => { /* cache write is best-effort; the buffer still serves */ });
+      buffer = await downloadPdfBuffer({ pdfArtifact: pdfResult.artifactRef }).catch(() => null);
+    }
+  }
+
   if (!buffer?.length) return textResponse('No PDF has been generated for this brief.', 404);
 
   const fileName = resolved.brief.pdfFileName ||

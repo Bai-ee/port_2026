@@ -305,7 +305,9 @@ function buildAutoPublishRow(ctx) {
     : '';
 
   let action = '';
-  if (ctx.mode === 'approval' && ctx.approvalUrl) {
+  if (ctx.mode === 'approval' && ctx.publishedAt) {
+    action = `<div style="font-family:${DT.fMono};font-size:10px;color:#2f9e6b;">ALREADY POSTED TO ${platformLabel}</div>`;
+  } else if (ctx.mode === 'approval' && ctx.approvalUrl) {
     // Bulletproof-table CTA — no flex, no JS, Outlook-safe.
     const href = escapeHtml(ctx.approvalUrl);
     action = `<table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border-radius:8px;background:${DT.ink};">
