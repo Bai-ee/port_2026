@@ -9,6 +9,7 @@ import {
   getTwitterCredentialStatus,
   postNow,
   processDuePosts,
+  retrySelfReply,
   processDuePostsForAllClients,
   publishApprovedPost,
   readSocialQueue,
@@ -240,6 +241,11 @@ export async function POST(request) {
 
     if (action === 'attach-media') {
       const post = await attachMediaToPost(context.clientId, body.postId, body);
+      return json({ ok: true, post });
+    }
+
+    if (action === 'retry-self-reply') {
+      const post = await retrySelfReply(context.clientId, body.postId);
       return json({ ok: true, post });
     }
 

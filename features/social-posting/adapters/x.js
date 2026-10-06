@@ -30,6 +30,7 @@ async function fetchAndValidateMedia(media) {
     throw Object.assign(new Error(`Attached media is no longer available (HTTP ${res.status}).`), { status: 422, code: 'media-unavailable' });
   }
   if (!mimeType) mimeType = String(res.headers.get('content-type') || '').toLowerCase().split(';')[0];
+  if (mimeType === 'image/jpg') mimeType = 'image/jpeg';
   const buffer = Buffer.from(await res.arrayBuffer());
 
   const isVideo = X_VIDEO_TYPES.has(mimeType);
@@ -50,28 +51,80 @@ async function uploadMedia(client, authMode, file) {
   });
 }
 
-export async function publish({ clientId, text, media }) {
+// Test seam: the X client resolver and media fetcher can be swapped so tests
+// never touch the network or X. Production always uses the defaults.
+const defaultDeps = { getClient: getPlatformClient, fetchMedia: fetchAndValidateMedia };
+let deps = defaultDeps;
+export function __setXAdapterDepsForTest(overrides) {
+  deps = overrides ? { ...defaultDeps, ...overrides } : defaultDeps;
+  return () => { deps = defaultDeps; };
+}
+
+// Upload the media (if any) and create one tweet. `inReplyToTweetId` makes it
+// a reply. Large MP4s: both uploadMedia paths split into 1 MB chunks and wait
+// for X's processing_info to finish before returning the media id.
+async function createTweet({ client, authMode, text, media, inReplyToTweetId }) {
+  let mediaId = null;
+  if (media?.mediaUrl) {
+    const file = await deps.fetchMedia(media);
+    mediaId = await uploadMedia(client, authMode, file);
+  }
+  const payload = { text };
+  if (mediaId) payload.media = { media_ids: [mediaId] };
+  if (inReplyToTweetId) payload.reply = { in_reply_to_tweet_id: String(inReplyToTweetId) };
+  const response = await client.v2.tweet(payload);
+  // Call counts only, no fabricated dollar rate — X spend genuinely isn't
+  // knowable from the API (only developer.x.com has it). This just makes
+  // the write COUNTED on the Operating Cost card, not priced.
+  logUsage({ module: 'social-posting', action: 'x-write', provider: 'x-api', model: 'x-write', calls: 1, costUsd: 0, metadata: { authMode, apiVersion: 'v2', mediaAttached: !!mediaId, isReply: !!inReplyToTweetId } }).catch(() => {});
+  return { twitterId: response?.data?.id || null, response, mediaId };
+}
+
+function rethrowMapped(error) {
+  // Preserve intentionally mapped local/auth errors; map raw X client errors
+  // from credential resolution, media upload, and tweet creation uniformly.
+  if (error?.twitterError || error?.code === 'x-reconnect-required') throw error;
+  throw mapTwitterError(error);
+}
+
+// Post ONLY the self-reply under an existing tweet (used by publish() and by
+// the retry path). Never posts the main tweet.
+export async function publishReply({ clientId, inReplyToTweetId, text, media }) {
   try {
-    const { client, authMode } = await getPlatformClient(clientId, 'x');
-
-    let mediaId = null;
-    if (media?.mediaUrl) {
-      const file = await fetchAndValidateMedia(media);
-      mediaId = await uploadMedia(client, authMode, file);
-    }
-
-    const payload = mediaId ? { text, media: { media_ids: [mediaId] } } : { text };
-    const response = await client.v2.tweet(payload);
-    // Call counts only, no fabricated dollar rate — X spend genuinely isn't
-    // knowable from the API (only developer.x.com has it). This just makes
-    // the write COUNTED on the Operating Cost card, not priced.
-    logUsage({ module: 'social-posting', action: 'x-write', provider: 'x-api', model: 'x-write', calls: 1, costUsd: 0, clientId, metadata: { authMode, apiVersion: 'v2', mediaAttached: !!mediaId } }).catch(() => {});
-    return { twitterId: response?.data?.id || null, response, apiVersion: 'v2', mediaId };
+    if (!inReplyToTweetId) throw Object.assign(new Error('A parent tweet id is required to post a reply.'), { status: 400 });
+    const { client, authMode } = await deps.getClient(clientId, 'x');
+    const out = await createTweet({ client, authMode, text, media, inReplyToTweetId });
+    return { twitterId: out.twitterId, response: out.response, apiVersion: 'v2', mediaId: out.mediaId };
   } catch (error) {
-    // Preserve intentionally mapped local/auth errors; map raw X client errors
-    // from credential resolution, media upload, and tweet creation uniformly.
-    if (error?.twitterError || error?.code === 'x-reconnect-required') throw error;
-    throw mapTwitterError(error);
+    rethrowMapped(error);
+  }
+}
+
+// Publish the main tweet, then (when selfReply is set) the reply under it.
+// A reply failure does NOT throw: the main tweet is already live, so the
+// result carries selfReplyError and the caller records a partial state.
+export async function publish({ clientId, text, media, selfReply = null }) {
+  let main;
+  let client;
+  let authMode;
+  try {
+    ({ client, authMode } = await deps.getClient(clientId, 'x'));
+    main = await createTweet({ client, authMode, text, media });
+  } catch (error) {
+    rethrowMapped(error);
+  }
+  const result = { twitterId: main.twitterId, response: main.response, apiVersion: 'v2', mediaId: main.mediaId };
+  if (!selfReply || (!selfReply.text && !selfReply.mediaUrl)) return result;
+  if (!main.twitterId) {
+    return { ...result, selfReplyTwitterId: null, selfReplyError: 'Main tweet id missing; self-reply not posted.' };
+  }
+  try {
+    const reply = await createTweet({ client, authMode, text: selfReply.text || '', media: selfReply, inReplyToTweetId: main.twitterId });
+    return { ...result, selfReplyTwitterId: reply.twitterId, selfReplyError: null };
+  } catch (error) {
+    let message = error?.message || 'Self-reply failed.';
+    try { rethrowMapped(error); } catch (mapped) { message = mapped?.message || message; }
+    return { ...result, selfReplyTwitterId: null, selfReplyError: message };
   }
 }
 

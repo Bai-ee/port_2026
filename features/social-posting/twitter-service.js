@@ -7,7 +7,7 @@ import { scoreXPost } from '../x-growth/index.js';
 import { compactTwitterError, mapTwitterError } from './twitter-errors.js';
 import { getAdapter } from './adapters/index.js';
 import { storySyncPlan } from '../discogs-ingest/draft-builder.js';
-import { assertNoMemoryPlaceholder, sanitizeMediaVariants, sanitizeSelfReply, sanitizeSourceRef } from './self-reply.js';
+import { assertNoMemoryPlaceholder, hasMemoryPlaceholder, sanitizeMediaVariants, sanitizeSelfReply, sanitizeSourceRef } from './self-reply.js';
 
 const require = createRequire(import.meta.url);
 const fb = require('../../api/_lib/firebase-admin.cjs');
@@ -568,7 +568,7 @@ async function uploadPostMedia(media) {
   return mediaId || null;
 }
 
-export async function postToTwitter(content, media = null, { clientId, platform = 'x' } = {}) {
+export async function postToTwitter(content, media = null, { clientId, platform = 'x', selfReply = null } = {}) {
   const text = normalizePostText(content);
   if (!text) {
     const err = new Error('Post content is required.');
@@ -585,7 +585,12 @@ export async function postToTwitter(content, media = null, { clientId, platform 
   // account, per platform). No clientId keeps today's env-credential path
   // below, unchanged, for any caller that hasn't been made client-aware yet.
   if (clientId) {
-    return getAdapter(platform).publish({ clientId, text, media });
+    return getAdapter(platform).publish({ clientId, text, media, selfReply });
+  }
+  if (selfReply) {
+    const err = new Error('A self-reply needs a clientId (connected X account).');
+    err.status = 400;
+    throw err;
   }
 
   // Upload any paired asset first so we can attach its media_id to the tweet.
@@ -611,6 +616,35 @@ export async function postToTwitter(content, media = null, { clientId, platform 
     }
     throw mapTwitterError(error);
   }
+}
+
+// Persisted self-reply outcome for a stored post. {} when the post has none, so
+// plain posts keep their exact previous shape.
+function selfReplyFields(post, result, now) {
+  if (!post?.selfReply) return {};
+  return {
+    selfReplyTwitterId: result.selfReplyTwitterId || null,
+    selfReplyPostedAt: result.selfReplyTwitterId ? now : null,
+    selfReplyError: result.selfReplyError || null,
+  };
+}
+
+// Publish a stored post. Never re-posts a main tweet that already has a
+// twitterId (reply-only in that case, if a reply is still owed).
+async function publishStoredPost(post, now) {
+  const platform = post.platform || 'x';
+  if (post.twitterId) {
+    const owed = post.selfReply && !post.selfReplyTwitterId;
+    const result = { twitterId: post.twitterId, apiVersion: post.apiVersion || 'v2' };
+    if (!owed) return { ...result, ...selfReplyFields(post, post, now) };
+    try {
+      const reply = await getAdapter(platform).publishReply({ clientId: post.clientId, inReplyToTweetId: post.twitterId, text: post.selfReply.text || '', media: post.selfReply });
+      return { ...result, selfReplyTwitterId: reply.twitterId, selfReplyError: null };
+    } catch (error) {
+      return { ...result, selfReplyTwitterId: null, selfReplyError: error.message || 'Self-reply failed.' };
+    }
+  }
+  return postToTwitter(post.content, postMedia(post), { clientId: post.clientId, platform, selfReply: post.selfReply || null });
 }
 
 // Pull the media descriptor off a stored post (null when text-only).
@@ -688,17 +722,20 @@ export async function createSocialPost(clientId, payload) {
 
 export async function postNow(clientId, payload) {
   assertNoMemoryPlaceholder(normalizePostText(payload.content));
+  assertNoMemoryPlaceholder(payload.selfReply?.text);
   const draft = await createSocialPost(clientId, { ...payload, status: 'posting' });
   try {
-    const result = await postToTwitter(draft.content, postMedia(draft), { clientId: draft.clientId, platform: draft.platform || 'x' });
+    const now = new Date().toISOString();
+    const result = await publishStoredPost(draft, now);
     const updated = {
       ...draft,
       status: 'posted',
       twitterId: result.twitterId,
       apiVersion: result.apiVersion || 'v2',
       fallbackFrom: result.fallbackFrom || null,
-      postedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      postedAt: now,
+      updatedAt: now,
+      ...selfReplyFields(draft, result, now),
     };
     await savePost(updated);
     return updated;
@@ -736,9 +773,11 @@ export async function publishApprovedPost(clientId, postId, { source = 'email' }
     err.code = 'not-pending';
     throw err;
   }
+  assertNoMemoryPlaceholder(post.content);
+  assertNoMemoryPlaceholder(post.selfReply?.text);
   const now = new Date().toISOString();
   try {
-    const result = await postToTwitter(post.content, postMedia(post), { clientId, platform: post.platform || 'x' });
+    const result = await publishStoredPost({ ...post, clientId }, now);
     const updated = {
       ...post,
       status: 'posted',
@@ -749,6 +788,7 @@ export async function publishApprovedPost(clientId, postId, { source = 'email' }
       approvalSource: source,
       error: null,
       updatedAt: now,
+      ...selfReplyFields(post, result, now),
     };
     await savePost(updated);
     return updated;
@@ -825,6 +865,7 @@ export async function rejectSocialPost(clientId, postId) {
 
 export async function schedulePost(clientId, payload) {
   assertNoMemoryPlaceholder(normalizePostText(payload.content));
+  assertNoMemoryPlaceholder(payload.selfReply?.text);
   const scheduledAt = payload.scheduledAt ? new Date(payload.scheduledAt) : null;
   if (!scheduledAt || Number.isNaN(scheduledAt.getTime())) {
     const err = new Error('A valid scheduled time is required.');
@@ -1067,15 +1108,29 @@ async function syncDiscogsStory(post, content) {
 // Post one due row and write the result back. Never throws — the due sweep must
 // keep going past a single failure.
 async function postAndRecord(post) {
+  // Placeholder guard (same rule as post-now/schedule): never publish a draft
+  // that still says "[add your memory]". Park it as a draft with a reason.
+  if (hasMemoryPlaceholder(post.content) || hasMemoryPlaceholder(post.selfReply?.text)) {
+    const updated = {
+      ...post,
+      status: 'draft',
+      error: 'Skipped by due sweep: post still contains "[add your memory]".',
+      updatedAt: new Date().toISOString(),
+    };
+    await savePost(updated);
+    return { ok: false, updated };
+  }
   try {
-    const result = await postToTwitter(post.content, postMedia(post), { clientId: post.clientId, platform: post.platform || 'x' });
+    const now = new Date().toISOString();
+    const result = await publishStoredPost(post, now);
     const updated = {
       ...post,
       status: 'posted',
       twitterId: result.twitterId,
-      postedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      postedAt: post.postedAt || now,
+      updatedAt: now,
       error: null,
+      ...selfReplyFields(post, result, now),
     };
     await savePost(updated);
     return { ok: true, updated };
@@ -1088,6 +1143,37 @@ async function postAndRecord(post) {
     };
     await savePost(updated);
     return { ok: false, updated };
+  }
+}
+
+// Post ONLY the self-reply for a post whose main tweet is already live.
+// Idempotent: a stored selfReplyTwitterId short-circuits with no X call, and the
+// main tweet is never re-posted. Failure keeps status 'posted', records
+// selfReplyError, and rethrows so the caller sees it.
+export async function retrySelfReply(clientId, postId) {
+  const post = await getSocialPost(clientId, postId);
+  if (!post) throw Object.assign(new Error('Post not found.'), { status: 404 });
+  if (!post.selfReply) throw Object.assign(new Error('This post has no self-reply.'), { status: 400 });
+  if (post.status !== 'posted' || !post.twitterId) {
+    throw Object.assign(new Error('The main post is not live yet; publish it before posting the self-reply.'), { status: 409 });
+  }
+  if (post.selfReplyTwitterId) return post;
+  if ((post.platform || 'x') !== 'x') throw Object.assign(new Error('Self-reply is only supported on X.'), { status: 400 });
+  assertNoMemoryPlaceholder(post.selfReply.text);
+  const now = new Date().toISOString();
+  try {
+    const reply = await getAdapter(post.platform || 'x').publishReply({
+      clientId: post.clientId,
+      inReplyToTweetId: post.twitterId,
+      text: post.selfReply.text || '',
+      media: post.selfReply,
+    });
+    const updated = { ...post, selfReplyTwitterId: reply.twitterId, selfReplyPostedAt: now, selfReplyError: null, updatedAt: now };
+    await savePost(updated);
+    return updated;
+  } catch (error) {
+    await savePost({ ...post, selfReplyError: error.message || 'Self-reply failed.', updatedAt: now });
+    throw error;
   }
 }
 
