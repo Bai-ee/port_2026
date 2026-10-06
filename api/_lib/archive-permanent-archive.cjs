@@ -66,6 +66,20 @@ async function resolveCollectionForJob({ collectionJobId }) {
   return { id: slugifyCollectionId(relativePath), title: collectionTitleFromPath(relativePath), relativePath };
 }
 
+// ── kill switch (W-A, docs/plans/ARCHIVE-NAS-STAGING-MASTER-PLAN-2026-09-20.md §3c) ─
+//
+// After the first automatic Arweave batch ran the wallet dry (3 uploads
+// FAILED 402), the owner locked a new rule: NO automatic Arweave upload,
+// ever, until an explicit per-collection approval (built later in W-C).
+// `archive_settings/permanence.autoUpload` is that switch — missing doc or
+// missing field reads as `false` (fail closed), same pattern as the
+// existing `archive_settings/viewer` doc read in deployViewerIfChanged.
+async function readPermanenceSettings() {
+  const snap = await fb.adminDb.collection('archive_settings').doc('permanence').get();
+  const data = snap.exists ? snap.data() : null;
+  return { autoUpload: data?.autoUpload === true };
+}
+
 // ── auto-enqueue on documentation (item 1) ──────────────────────────────
 
 function isJunkPath(p) {
@@ -100,7 +114,22 @@ async function hasActiveUploadCommand(contentAssetId) {
  * observation, >=6 decisions, and at least one non-junk (not `._*`/.DS_Store)
  * source location. Idempotent — a second call for the same asset while a
  * command is QUEUED/CLAIMED/RUNNING/COMPLETE is a no-op.
- * Returns the new commandId, or null if nothing was enqueued.
+ *
+ * Kill switch (W-A): even when every "documented" condition above is met,
+ * this never enqueues unless BOTH (1) `archive_settings/permanence.autoUpload
+ * === true` and (2) this specific asset's `archive_review.state ===
+ * 'ARWEAVE_APPROVED'` — a state only W-C's per-collection approval flow
+ * writes. The flag alone is not enough: it is the global kill switch, while
+ * ARWEAVE_APPROVED is the per-asset owner sign-off it gates access to. Until
+ * W-C ships, no caller ever sets that state, so this function is a
+ * structural no-op regardless of the flag.
+ *
+ * Returns the new commandId on a real enqueue, `null` for the pre-existing
+ * "not documented yet" / "already in flight" no-ops (unchanged, so the only
+ * caller's `Boolean(commandId)` check keeps working), or a structured
+ * `{enqueued:false, skipped:<reason>}` object when blocked by the kill
+ * switch — distinct from the other no-ops because these mean the asset IS
+ * ready and would have enqueued before this workstream.
  */
 async function autoEnqueueArchiveUpload({ workerId, sourceId, reviewId, collectionId, sourcePaths, archiveName, mediaType, sha256, observations, decisions }) {
   const cleanPaths = (sourcePaths || []).filter((p) => !isJunkPath(p));
@@ -110,6 +139,18 @@ async function autoEnqueueArchiveUpload({ workerId, sourceId, reviewId, collecti
   if (!Array.isArray(decisions) || decisions.length < 6) return null;
   if (!workerId || !sourceId || !reviewId || !sha256) return null;
   if (await hasActiveUploadCommand(reviewId)) return null;
+
+  const { autoUpload } = await readPermanenceSettings();
+  if (!autoUpload) {
+    console.info(`[archive-permanent-archive] auto-upload off — skipping UPLOAD_ASSET_ARWEAVE enqueue for asset ${reviewId} (collection ${collectionId || 'unknown'})`);
+    return { enqueued: false, skipped: 'auto-upload-off' };
+  }
+  const reviewSnap = await fb.adminDb.collection('archive_review').doc(String(reviewId)).get();
+  const reviewState = reviewSnap.exists ? reviewSnap.data().state : null;
+  if (reviewState !== 'ARWEAVE_APPROVED') {
+    console.info(`[archive-permanent-archive] asset ${reviewId} (collection ${collectionId || 'unknown'}) not ARWEAVE_APPROVED (state=${reviewState || 'none'}) — skipping enqueue`);
+    return { enqueued: false, skipped: 'not-approved' };
+  }
 
   const relativePath = cleanPaths[0];
   const name = basename(archiveName) || basename(relativePath) || String(reviewId);
@@ -200,6 +241,16 @@ async function enqueueNextRecordVersionIfNeeded({ contentAssetId, workerId }) {
   const upload = uploadsSnap.docs[0]?.data();
   if (!upload) return null; // not archived yet — nothing to version
 
+  // Kill switch (W-A): a new archive-record JSON is itself an Arweave
+  // upload. Block it here too, after the "not archived yet" checks above so
+  // those keep returning bare `null` (an existing behavior a caller may
+  // still be relying on), but before touching the in-flight/dirty debounce.
+  const { autoUpload } = await readPermanenceSettings();
+  if (!autoUpload) {
+    console.info(`[archive-permanent-archive] auto-upload off — skipping archive-record enqueue for asset ${contentAssetId}`);
+    return { enqueued: false, skipped: 'auto-upload-off' };
+  }
+
   const recordRef = fb.adminDb.collection('archive_records').doc(String(contentAssetId));
   const recordSnap = await recordRef.get();
   const existing = recordSnap.exists ? recordSnap.data() : null;
@@ -227,13 +278,25 @@ async function enqueueNextRecordVersionIfNeeded({ contentAssetId, workerId }) {
 // ── manifest rebuild (item 3) ────────────────────────────────────────────
 
 /**
- * Rebuild + enqueue the next manifest version for a collection, unconditionally
- * (the caller — maybeRebuildManifest, or the manual fallback — is responsible
- * for gating). Returns the new commandId, or null when there is nothing
- * archived yet for this collection or no worker is available.
+ * Rebuild + enqueue the next manifest version for a collection. The caller
+ * (maybeRebuildManifest, or the manual fallback) is responsible for the
+ * in-flight/dirty debounce gating; this function itself is responsible for
+ * the kill switch (see top of function). Returns the new commandId, `null`
+ * when there is nothing archived yet for this collection or no worker is
+ * available, or `{enqueued:false, skipped:'auto-upload-off'}` when blocked
+ * by the kill switch.
  */
 async function rebuildManifest(collectionId, workerId) {
   if (!collectionId) return null;
+  // Kill switch (W-A): the manifest JSON is itself an Arweave upload. This is
+  // the single chokepoint both the automatic path (maybeRebuildManifest) and
+  // the manual admin fallback (rebuildManifestManual) enqueue through, so
+  // gating here covers both consistently.
+  const { autoUpload } = await readPermanenceSettings();
+  if (!autoUpload) {
+    console.info(`[archive-permanent-archive] auto-upload off — skipping manifest rebuild for collection ${collectionId}`);
+    return { enqueued: false, skipped: 'auto-upload-off' };
+  }
   const [existingDoc, reviewSnap, uploadsSnap, recordsSnap] = await Promise.all([
     fb.adminDb.collection('archive_collections').doc(String(collectionId)).get(),
     fb.adminDb.collection('archive_review').where('collectionId', '==', String(collectionId)).get(),
@@ -323,9 +386,22 @@ async function maybeRebuildManifest(collectionId, workerId) {
   return rebuildManifest(collectionId, workerId);
 }
 
-/** Admin-triggered fallback (arweave/collection POST {action:'rebuild-manifest'}) — bypasses the in-flight gate. */
+/**
+ * Admin-triggered fallback (arweave/collection POST {action:'rebuild-manifest'})
+ * — bypasses the in-flight gate, but NOT the kill switch. This is a user
+ * click (not an automatic path), so instead of the soft `{enqueued:false,
+ * skipped:...}` shape used elsewhere in this file, it returns a plain
+ * `{ok:false, reason:'auto-upload-off'}` the route hands straight back as
+ * JSON (200, not an error) so the page can render an honest "blocked"
+ * status rather than treating a truthy response as a queued command.
+ */
 async function rebuildManifestManual({ collectionId }) {
   if (!collectionId) throw Object.assign(new Error('collectionId required'), { status: 400 });
+  const { autoUpload } = await readPermanenceSettings();
+  if (!autoUpload) {
+    console.info(`[archive-permanent-archive] auto-upload off — rebuild-manifest (manual) blocked for collection ${collectionId}`);
+    return { ok: false, reason: 'auto-upload-off' };
+  }
   const workerId = await pickWorkerIdForCollection(collectionId);
   if (!workerId) throw Object.assign(new Error('No registered worker available to upload the manifest'), { status: 503 });
   const commandId = await rebuildManifest(collectionId, workerId);
@@ -463,7 +539,19 @@ async function appendReviewCorrection({ id, decisionId, value, actor }) {
 
 // ── viewer deploy (item 4) ───────────────────────────────────────────────
 
+/**
+ * Admin-triggered (arweave/collection POST {action:'deploy-viewer'}) — a
+ * user click, not an automatic path, but the viewer HTML upload is still a
+ * real Arweave spend, so it is gated by the same kill switch. Mirrors
+ * rebuildManifestManual's `{ok:false, reason:...}` shape for the same
+ * reason: the route hands this straight back as 200 JSON.
+ */
 async function deployViewerIfChanged() {
+  const { autoUpload } = await readPermanenceSettings();
+  if (!autoUpload) {
+    console.info('[archive-permanent-archive] auto-upload off — viewer deploy blocked');
+    return { ok: false, reason: 'auto-upload-off' };
+  }
   const filePath = path.resolve(process.cwd(), 'public/archive-viewer/index.html');
   const html = fs.readFileSync(filePath, 'utf8');
   const sha256 = crypto.createHash('sha256').update(html).digest('hex');
@@ -489,13 +577,14 @@ async function deployViewerIfChanged() {
 // ── page summary (item 6, approved/route.js ?summary=1) ─────────────────
 
 async function getPermanentArchiveSummary() {
-  const [collectionsSnap, reviewSnap, uploadsSnap, recordsSnap, commandsSnap, viewerSnap] = await Promise.all([
+  const [collectionsSnap, reviewSnap, uploadsSnap, recordsSnap, commandsSnap, viewerSnap, permanence] = await Promise.all([
     fb.adminDb.collection('archive_collections').get(),
     fb.adminDb.collection('archive_review').get(),
     fb.adminDb.collection('archive_uploads').where('kind', '==', 'original').get(),
     fb.adminDb.collection('archive_records').get(),
     fb.adminDb.collection('archive_commands').get(),
     fb.adminDb.collection('archive_settings').doc('viewer').get(),
+    readPermanenceSettings(),
   ]);
 
   const viewer = viewerSnap.exists ? viewerSnap.data() : null;
@@ -569,12 +658,14 @@ async function getPermanentArchiveSummary() {
   return {
     collections,
     viewer: viewer ? { transactionId: viewer.transactionId || null, arweaveUrl: viewer.arweaveUrl || null, sha256: viewer.sha256 || null } : null,
+    permanence,
   };
 }
 
 module.exports = {
   IN_FLIGHT_STATES,
   UPLOAD_ACTIVE_STATES,
+  readPermanenceSettings,
   isJunkPath,
   guessContentType,
   slugifyCollectionId,

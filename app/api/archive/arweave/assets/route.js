@@ -4,10 +4,16 @@ import { randomUUID } from 'crypto';
 const require=createRequire(import.meta.url);
 const {buildAuthRequestShim,verifyAdminRequest}=require('../../../../../api/_lib/auth.cjs');
 const fb=require('../../../../../api/_lib/firebase-admin.cjs');
+const {readPermanenceSettings}=require('../../../../../api/_lib/archive-permanent-archive.cjs');
 
+// Legacy manual per-asset upload route (superseded; /archive no longer calls it).
+// Kept for compatibility but bound to the same permanence kill switch as the
+// automatic path so no route can enqueue a paid upload while autoUpload is off.
 export async function POST(request){
   try{await verifyAdminRequest(buildAuthRequestShim(request));}
   catch(e){return NextResponse.json({error:e instanceof Error?e.message:'Forbidden.'},{status:403});}
+  const {autoUpload}=await readPermanenceSettings();
+  if(autoUpload!==true)return NextResponse.json({ok:false,reason:'auto-upload-off',error:'Permanent uploads are disabled (archive_settings/permanence.autoUpload).'},{status:409});
   const body=await request.json();
   const {workerId,sourceId,relativePath,contentAssetId,collectionId,archiveName,contentType,expectedSha256,approved}=body||{};
   if(!approved)return NextResponse.json({error:'Explicit archive approval required'},{status:409});

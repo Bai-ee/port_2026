@@ -8,12 +8,37 @@ const token = process.env.HITLOOP_ARCHIVE_WORKER_TOKEN;
 
 function authorized(request) { return token && request.headers.get('authorization') === `Bearer ${token}`; }
 
+// Comma-separated `types`/`excludeTypes` query params for claim
+// partitioning (Phase 1 browse-lane fast path): the browse lane polls with
+// types=LIST_DIRECTORY, the main lane polls with excludeTypes=LIST_DIRECTORY,
+// so the two lanes never claim the same command.
+function parseTypesParam(request, name) {
+  const raw = request.nextUrl.searchParams.get(name);
+  if (!raw) return null;
+  const list = raw.split(',').map(s => s.trim()).filter(Boolean);
+  return list.length ? list : null;
+}
+
 export async function GET(request) {
   if (!authorized(request)) return NextResponse.json({ error: 'Unauthorized' }, { status: token ? 401 : 503 });
   const workerId = request.nextUrl.searchParams.get('workerId');
   if (!workerId) return NextResponse.json({ error: 'workerId required' }, { status: 400 });
-  const snap = await fb.adminDb.collection('archive_commands').where('workerId','==',workerId).where('state','==','QUEUED').limit(10).get();
-  return NextResponse.json({ commands: snap.docs.map(d => ({ id:d.id, ...d.data(), createdAt:d.data().createdAt?.toDate?.().toISOString?.() || null })) }, { headers:{'cache-control':'no-store'} });
+  const types = parseTypesParam(request, 'types');
+  const excludeTypes = parseTypesParam(request, 'excludeTypes');
+  const filteringByType = Boolean(types || excludeTypes);
+
+  // Type filtering is done in memory (not a Firestore `type` filter) so this
+  // stays on the existing two-equality-filter query shape (workerId + state)
+  // and never needs a new composite index. Widen the raw read when filtering
+  // so one lane's excluded/foreign commands can't starve the other lane's
+  // window into the first 10 QUEUED rows.
+  const rawLimit = filteringByType ? 50 : 10;
+  const snap = await fb.adminDb.collection('archive_commands').where('workerId','==',workerId).where('state','==','QUEUED').limit(rawLimit).get();
+  let commands = snap.docs.map(d => ({ id:d.id, ...d.data(), createdAt:d.data().createdAt?.toDate?.().toISOString?.() || null }));
+  if (types) commands = commands.filter(c => types.includes(c.type));
+  if (excludeTypes) commands = commands.filter(c => !excludeTypes.includes(c.type));
+  commands = commands.slice(0, 10);
+  return NextResponse.json({ commands }, { headers:{'cache-control':'no-store'} });
 }
 
 export async function PATCH(request) {

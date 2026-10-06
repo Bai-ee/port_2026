@@ -46,6 +46,14 @@ async function seedWorker(fake, id = 'worker-a', overrides = {}) {
   await fake.adminDb.collection('archive_workers').doc(id).set({ lastHeartbeatAt: new Date().toISOString(), ...overrides });
 }
 
+// Kill switch (W-A): archive_settings/permanence.autoUpload, default false
+// (missing doc/field). Most pre-existing tests below exercise the real
+// enqueue mechanics, so they now seed this true (+ ARWEAVE_APPROVED where
+// autoEnqueueArchiveUpload is involved) to keep behaving exactly as before.
+async function seedPermanence(fake, autoUpload = true) {
+  await fake.adminDb.collection('archive_settings').doc('permanence').set({ autoUpload });
+}
+
 // ── collection identity ──────────────────────────────────────────────────
 
 test('slugifyCollectionId / collectionTitleFromPath', () => {
@@ -84,6 +92,8 @@ test('autoEnqueueArchiveUpload: skips junk-only locations, missing READY evidenc
 
 test('autoEnqueueArchiveUpload: enqueues once documented, is idempotent across re-syncs, and derives a basenamed archiveName', async () => {
   const { fake, mod } = loadModuleWithFakes();
+  await seedPermanence(fake, true);
+  await fake.adminDb.collection('archive_review').doc('asset-1').set({ state: 'ARWEAVE_APPROVED' });
   const params = {
     workerId: 'worker-a', sourceId: 'source-a', reviewId: 'asset-1', collectionId: 'housepit-2008',
     sourcePaths: ['Housepit/2008/._junk', 'Housepit/2008/clip.mp4'], archiveName: 'clip.mp4', mediaType: 'video',
@@ -104,10 +114,84 @@ test('autoEnqueueArchiveUpload: enqueues once documented, is idempotent across r
   assert.equal(all.docs.length, 1, 'exactly one UPLOAD_ASSET_ARWEAVE command exists');
 });
 
+// ── kill switch (W-A) ─────────────────────────────────────────────────────
+
+test('autoEnqueueArchiveUpload: kill switch — flag absent blocks an otherwise-documented asset', async () => {
+  const { fake, mod } = loadModuleWithFakes();
+  const params = {
+    workerId: 'worker-a', sourceId: 'source-a', reviewId: 'asset-1', collectionId: 'housepit-2008',
+    sourcePaths: ['Housepit/2008/clip.mp4'], archiveName: 'clip.mp4', mediaType: 'video',
+    sha256: 'a'.repeat(64), observations: [{ status: 'READY' }], decisions: Array.from({ length: 6 }, (_, i) => ({ id: `d${i}` })),
+  };
+  // No archive_settings/permanence doc at all -> readPermanenceSettings defaults to false.
+  const result = await mod.autoEnqueueArchiveUpload(params);
+  assert.deepEqual(result, { enqueued: false, skipped: 'auto-upload-off' });
+  const commands = (await fake.adminDb.collection('archive_commands').get()).docs;
+  assert.equal(commands.length, 0, 'nothing enqueued while the flag is off');
+});
+
+test('autoEnqueueArchiveUpload: kill switch — flag on but asset not ARWEAVE_APPROVED still blocks enqueue', async () => {
+  const { fake, mod } = loadModuleWithFakes();
+  await seedPermanence(fake, true);
+  await fake.adminDb.collection('archive_review').doc('asset-1').set({ state: 'REVIEW_PENDING' });
+  const params = {
+    workerId: 'worker-a', sourceId: 'source-a', reviewId: 'asset-1', collectionId: 'housepit-2008',
+    sourcePaths: ['Housepit/2008/clip.mp4'], archiveName: 'clip.mp4', mediaType: 'video',
+    sha256: 'a'.repeat(64), observations: [{ status: 'READY' }], decisions: Array.from({ length: 6 }, (_, i) => ({ id: `d${i}` })),
+  };
+  const result = await mod.autoEnqueueArchiveUpload(params);
+  assert.deepEqual(result, { enqueued: false, skipped: 'not-approved' });
+  const commands = (await fake.adminDb.collection('archive_commands').get()).docs;
+  assert.equal(commands.length, 0, 'the flag alone is not enough — ARWEAVE_APPROVED is required too');
+});
+
+test('enqueueNextRecordVersionIfNeeded + maybeRebuildManifest: kill switch blocks both even with a real permanent upload', async () => {
+  const { fake, mod } = loadModuleWithFakes();
+  await seedReview(fake, 'asset-1');
+  await seedUpload(fake, 'asset-1');
+  // No archive_settings/permanence doc -> autoUpload defaults false.
+  const recordResult = await mod.enqueueNextRecordVersionIfNeeded({ contentAssetId: 'asset-1' });
+  assert.deepEqual(recordResult, { enqueued: false, skipped: 'auto-upload-off' });
+
+  const manifestResult = await mod.maybeRebuildManifest('housepit-2008', 'worker-a');
+  assert.deepEqual(manifestResult, { enqueued: false, skipped: 'auto-upload-off' });
+
+  const commands = (await fake.adminDb.collection('archive_commands').get()).docs;
+  assert.equal(commands.length, 0, 'no UPLOAD_JSON command of any kind was enqueued while the flag is off');
+});
+
+test('rebuildManifestManual: kill switch returns {ok:false, reason} instead of throwing or enqueueing', async () => {
+  const { fake, mod } = loadModuleWithFakes();
+  await seedWorker(fake);
+  await seedReview(fake, 'asset-1');
+  await seedUpload(fake, 'asset-1');
+  const result = await mod.rebuildManifestManual({ collectionId: 'housepit-2008' });
+  assert.deepEqual(result, { ok: false, reason: 'auto-upload-off' });
+  const commands = (await fake.adminDb.collection('archive_commands').get()).docs;
+  assert.equal(commands.length, 0);
+});
+
+test('deployViewerIfChanged: kill switch returns {ok:false, reason} without touching disk or a worker lookup', async () => {
+  const { mod } = loadModuleWithFakes();
+  // No registered worker either — proves the flag check runs first.
+  const result = await mod.deployViewerIfChanged();
+  assert.deepEqual(result, { ok: false, reason: 'auto-upload-off' });
+});
+
+test('readPermanenceSettings: defaults false when the doc is missing or the field is absent', async () => {
+  const { fake, mod } = loadModuleWithFakes();
+  assert.deepEqual(await mod.readPermanenceSettings(), { autoUpload: false });
+  await fake.adminDb.collection('archive_settings').doc('permanence').set({});
+  assert.deepEqual(await mod.readPermanenceSettings(), { autoUpload: false });
+  await fake.adminDb.collection('archive_settings').doc('permanence').set({ autoUpload: true });
+  assert.deepEqual(await mod.readPermanenceSettings(), { autoUpload: true });
+});
+
 // ── COMPLETE dispatch: UPLOAD_ASSET_ARWEAVE -> archive_uploads + record v1 ─
 
 test('handleCommandComplete UPLOAD_ASSET_ARWEAVE: writes archive_uploads and enqueues archive-record v1', async () => {
   const { fake, mod } = loadModuleWithFakes();
+  await seedPermanence(fake, true);
   await seedWorker(fake);
   await seedReview(fake, 'asset-1');
 
@@ -138,6 +222,7 @@ test('handleCommandComplete UPLOAD_ASSET_ARWEAVE: writes archive_uploads and enq
 
 test('handleCommandComplete UPLOAD_JSON archive-record: writes archive_records + mirrors archive_review, then rebuilds the manifest when nothing else is in flight', async () => {
   const { fake, mod } = loadModuleWithFakes();
+  await seedPermanence(fake, true);
   await seedWorker(fake);
   await seedReview(fake, 'asset-1');
   await seedUpload(fake, 'asset-1');
@@ -184,6 +269,7 @@ test('maybeRebuildManifest: gated while an UPLOAD_ASSET_ARWEAVE for the collecti
 
 test('appendReviewCorrection: debounces while an archive-record command is in flight, then versions on completion', async () => {
   const { fake, mod } = loadModuleWithFakes();
+  await seedPermanence(fake, true);
   await seedWorker(fake);
   await seedReview(fake, 'asset-1');
   await seedUpload(fake, 'asset-1');
@@ -246,6 +332,7 @@ test('enqueueNextRecordVersionIfNeeded: no-op with no review doc and no permanen
 
 test('deployViewerIfChanged: enqueues once, then skips a re-deploy with the same sha256', async () => {
   const { fake, mod } = loadModuleWithFakes();
+  await seedPermanence(fake, true);
   await assert.rejects(mod.deployViewerIfChanged(), (e) => e.status === 503, 'no registered worker -> 503');
 
   await seedWorker(fake);
@@ -293,4 +380,12 @@ test('getPermanentArchiveSummary: aggregates per collection', async () => {
   assert.equal(c.manifestVersion, 1);
   assert.ok(c.cost);
   assert.ok(c.viewerUrl.includes('tx-manifest-1'));
+  assert.deepEqual(summary.permanence, { autoUpload: false }, 'no archive_settings/permanence doc seeded -> defaults off');
+});
+
+test('getPermanentArchiveSummary: surfaces permanence.autoUpload true once the flag doc is set', async () => {
+  const { fake, mod } = loadModuleWithFakes();
+  await seedPermanence(fake, true);
+  const summary = await mod.getPermanentArchiveSummary();
+  assert.deepEqual(summary.permanence, { autoUpload: true });
 });

@@ -1,13 +1,51 @@
-# Permanent Archive Contract (W7a, 2026-09-20)
+# Permanent Archive Contract (W7a, 2026-09-20; gate added W-A, 2026-09-20 evening)
 
-Owner-locked direction: **no per-asset approval click, no collection form.**
-Once an asset is documented (hashed, TwelveLabs evidence READY, six Jev
-decisions present), the system uploads the original + a per-asset archive
-record JSON to Arweave automatically, rebuilds the collection manifest, and
-the human reviews AFTER as corrections that mint new record versions. There
-is no rights hold: everything uploads. **The Arweave wallet lives only on
-the worker; HITLOOP never uploads bytes itself** — HITLOOP only queues
-`archive_commands` and the worker executes them.
+> **Superseded 2026-09-20 evening:** the paragraph below ("There is no rights
+> hold: everything uploads") described the original W7a direction, before the
+> first automatic Arweave batch ran the wallet dry (3 of 6 uploads FAILED
+> `402`). The owner then locked a new rule, documented in
+> [`docs/plans/ARCHIVE-NAS-STAGING-MASTER-PLAN-2026-09-20.md`](../plans/ARCHIVE-NAS-STAGING-MASTER-PLAN-2026-09-20.md)
+> §3c: **no automatic Arweave upload, ever**, until an explicit per-collection
+> approval. That approval UI is W-C (not yet built — see the master plan).
+> What ships now (W-A) is the kill switch this contract needed first:
+>
+> - `archive_settings/permanence` `{autoUpload: boolean}` — missing doc or
+>   missing field reads as `false` (fail closed). Read/written via
+>   `readPermanenceSettings(db)` in `api/_lib/archive-permanent-archive.cjs`.
+> - Every `archive_commands` enqueue of `UPLOAD_ASSET_ARWEAVE` or
+>   `UPLOAD_JSON` in that file is gated on `autoUpload === true`. When gated,
+>   the automatic paths (`autoEnqueueArchiveUpload`,
+>   `enqueueNextRecordVersionIfNeeded`, `rebuildManifest`/
+>   `maybeRebuildManifest`) return `{enqueued:false, skipped:<reason>}`
+>   instead of enqueueing; the two operator-click actions
+>   (`deployViewerIfChanged`, `rebuildManifestManual`) return
+>   `{ok:false, reason:'auto-upload-off'}` instead of throwing, so `/archive`
+>   can show an honest "blocked" status rather than a fake "queued" one.
+> - `autoEnqueueArchiveUpload` additionally requires this specific asset's
+>   `archive_review.state === 'ARWEAVE_APPROVED'` even when the flag is on —
+>   a state only W-C's per-collection approval flow will ever write. Until
+>   W-C ships, the flag alone can never cause an automatic original upload.
+> - `/archive`'s `#archive-permanent-status-panel` shows a read-only
+>   `AUTO UPLOAD: ON`/`OFF` line (`#archive-permanence-auto-upload-status`)
+>   from `getPermanentArchiveSummary()`'s new `permanence: {autoUpload}`
+>   field. There is no toggle UI yet — flipping the flag is a manual
+>   Firestore write until W-C ships the approval control surface.
+>
+> Everything else below (command shape, schemas, state flow, debounce rules,
+> viewer deploy, the page's read-only aggregate) is unchanged and still
+> accurate — it describes what happens on the far side of the gate above,
+> once an asset is actually approved.
+
+Owner-locked direction (W7a, superseded above): **no per-asset approval
+click, no collection form.** Once an asset is documented (hashed, TwelveLabs
+evidence READY, six Jev decisions present), the system uploads the original +
+a per-asset archive record JSON to Arweave automatically, rebuilds the
+collection manifest, and the human reviews AFTER as corrections that mint new
+record versions. ~~There is no rights hold: everything uploads.~~ **Superseded
+2026-09-20 evening — see the box above; automatic upload now requires the
+`autoUpload` flag AND per-asset `ARWEAVE_APPROVED`.** **The Arweave wallet
+lives only on the worker; HITLOOP never uploads bytes itself** — HITLOOP only
+queues `archive_commands` and the worker executes them.
 
 This supersedes the old click-through flow (`ARWEAVE CHECKPOINT` card:
 per-asset "UPLOAD APPROVED ORIGINALS" button, collection-id text field,

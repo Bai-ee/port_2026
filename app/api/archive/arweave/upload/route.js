@@ -4,12 +4,17 @@ const require=createRequire(import.meta.url);
 const {buildAuthRequestShim,verifyAdminRequest}=require('../../../../../api/_lib/auth.cjs');
 const fb=require('../../../../../api/_lib/firebase-admin.cjs');
 const {uploadArchiveBuffer}=require('../../../../../api/_lib/archive-arweave.cjs');
+const {readPermanenceSettings}=require('../../../../../api/_lib/archive-permanent-archive.cjs');
 
 export const runtime='nodejs';
 
+// Legacy direct-from-HITLOOP manifest upload (superseded by the worker command
+// path). Bound to the permanence kill switch like every other upload surface.
 export async function POST(request){
   try{await verifyAdminRequest(buildAuthRequestShim(request));}
   catch(e){return NextResponse.json({error:e instanceof Error?e.message:'Forbidden.'},{status:403});}
+  const {autoUpload}=await readPermanenceSettings();
+  if(autoUpload!==true)return NextResponse.json({ok:false,reason:'auto-upload-off',error:'Permanent uploads are disabled (archive_settings/permanence.autoUpload).'},{status:409});
   const body=await request.json();
   const {collectionId,manifest,approved}=body||{};
   if(!approved)return NextResponse.json({error:'Explicit archive approval required'},{status:409});

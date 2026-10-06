@@ -5,7 +5,7 @@ const {buildAuthRequestShim,verifyAdminRequest}=require('../../../../../api/_lib
 const fb=require('../../../../../api/_lib/firebase-admin.cjs');
 const {buildCollectionManifest}=require('../../../../../api/_lib/archive-manifest.cjs');
 const {uploadArchiveBuffer}=require('../../../../../api/_lib/archive-arweave.cjs');
-const {deployViewerIfChanged,rebuildManifestManual}=require('../../../../../api/_lib/archive-permanent-archive.cjs');
+const {deployViewerIfChanged,rebuildManifestManual,readPermanenceSettings}=require('../../../../../api/_lib/archive-permanent-archive.cjs');
 export const runtime='nodejs';
 
 export async function POST(request){
@@ -31,6 +31,8 @@ export async function POST(request){
   // without an `action` — kept working for compatibility only. The
   // automatic UPLOAD_JSON collection-manifest command path above
   // (api/_lib/archive-permanent-archive.cjs rebuildManifest) is authoritative.
+  const {autoUpload}=await readPermanenceSettings();
+  if(autoUpload!==true)return NextResponse.json({ok:false,reason:'auto-upload-off',error:'Permanent uploads are disabled (archive_settings/permanence.autoUpload).'},{status:409});
   const {collection,assets,approved}=body;
   if(!approved)return NextResponse.json({error:'Explicit collection approval required'},{status:409});
   if(!Array.isArray(assets)||assets.length===0)return NextResponse.json({error:'Collection must contain approved permanent assets before finalization'},{status:409});
