@@ -1,0 +1,29 @@
+name: Social Publish Sweep
+
+# Inert until the owner sets repository variable SOCIAL_PUBLISH_ENABLED=true (after deploy).
+# Do not enable together with the Mac launchd sweep (scripts/social/README.md): two sweepers
+# can race on the same due post.
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  sweep:
+    if: vars.SOCIAL_PUBLISH_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Publish due social posts
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "Missing CRON_SECRET repository secret." >&2
+            exit 1
+          fi
+
+          curl --fail --show-error --silent \
+            --request GET \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            "https://hitloop.agency/api/social-posting?action=process-due"

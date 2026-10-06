@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Template. Copy to ~/Library/LaunchAgents/com.hitloop.publish-due.plist (see README.md).
+     Adjust the node path (`which node`) and WorkingDirectory if the worktree moves. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.hitloop.publish-due</string>
+  <key>WorkingDirectory</key>
+  <string>/Users/bballi/Documents/Repos/Bballi_Portfolio-discogs</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/node</string>
+    <string>--env-file=.env.local</string>
+    <string>scripts/social/publish-due.mjs</string>
+  </array>
+  <key>StartInterval</key>
+  <integer>900</integer>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>StandardOutPath</key>
+  <string>/Users/bballi/Library/Logs/hitloop-publish-due.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/bballi/Library/Logs/hitloop-publish-due.log</string>
+</dict>
+</plist>
