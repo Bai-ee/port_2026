@@ -6,6 +6,7 @@ import { TwitterApi } from 'twitter-api-v2';
 import { scoreXPost } from '../x-growth/index.js';
 import { compactTwitterError, mapTwitterError } from './twitter-errors.js';
 import { getAdapter } from './adapters/index.js';
+import { assertNoMemoryPlaceholder, sanitizeMediaVariants, sanitizeSelfReply, sanitizeSourceRef } from './self-reply.js';
 
 const require = createRequire(import.meta.url);
 const fb = require('../../api/_lib/firebase-admin.cjs');
@@ -672,6 +673,12 @@ export async function createSocialPost(clientId, payload) {
     mediaStoragePath: media.mediaStoragePath,
     mediaContentType: media.mediaContentType,
     mediaJobId: media.mediaJobId,
+    // Optional first self-reply (text + media), provenance ref and story flag —
+    // persisted only; the publish path does not read them.
+    selfReply: sanitizeSelfReply(payload.selfReply),
+    sourceRef: sanitizeSourceRef(payload.sourceRef),
+    mediaVariants: sanitizeMediaVariants(payload.mediaVariants),
+    needsStory: payload.needsStory === true,
   };
 
   await savePost(post);
@@ -679,6 +686,7 @@ export async function createSocialPost(clientId, payload) {
 }
 
 export async function postNow(clientId, payload) {
+  assertNoMemoryPlaceholder(normalizePostText(payload.content));
   const draft = await createSocialPost(clientId, { ...payload, status: 'posting' });
   try {
     const result = await postToTwitter(draft.content, postMedia(draft), { clientId: draft.clientId, platform: draft.platform || 'x' });
@@ -815,6 +823,7 @@ export async function rejectSocialPost(clientId, postId) {
 }
 
 export async function schedulePost(clientId, payload) {
+  assertNoMemoryPlaceholder(normalizePostText(payload.content));
   const scheduledAt = payload.scheduledAt ? new Date(payload.scheduledAt) : null;
   if (!scheduledAt || Number.isNaN(scheduledAt.getTime())) {
     const err = new Error('A valid scheduled time is required.');
@@ -1017,12 +1026,18 @@ export async function updateSocialPost(clientId, postId, payload = {}) {
     }
   }
 
+  if (status === 'scheduled' || status === 'queued') assertNoMemoryPlaceholder(content);
+
   const updated = {
     ...post,
     content,
     scheduledAt,
     status,
     agents: payload.agents || post.agents || null,
+    ...(Object.prototype.hasOwnProperty.call(payload, 'selfReply') ? { selfReply: sanitizeSelfReply(payload.selfReply) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(payload, 'sourceRef') ? { sourceRef: sanitizeSourceRef(payload.sourceRef) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(payload, 'mediaVariants') ? { mediaVariants: sanitizeMediaVariants(payload.mediaVariants) } : {}),
+    ...(typeof payload.needsStory === 'boolean' ? { needsStory: payload.needsStory } : {}),
     updatedAt: new Date().toISOString(),
   };
   await savePost(updated);

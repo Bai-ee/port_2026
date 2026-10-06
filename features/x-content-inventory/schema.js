@@ -74,7 +74,13 @@ export function validatePackage(pkg = {}) {
   const errors = [];
   const warnings = [];
 
+  // An 'idea' row that already has a title may have an empty story (e.g. an
+  // auto-ingested Discogs record waiting for the owner's memory). Any other
+  // status still requires one, and an untitled archive-inbox draft still reports
+  // both missing fields (see archive-ingest.test.js).
+  const emptyStoryOk = pkg.status === 'idea' && typeof pkg.story === 'string' && isStr(pkg.title);
   for (const f of REQUIRED_FIELDS) {
+    if (f === 'story' && emptyStoryOk) continue;
     if (!isStr(pkg[f])) errors.push(`missing required field: ${f}`);
   }
   if (pkg.series && !SERIES[pkg.series]) errors.push(`unknown series: ${pkg.series}`);
