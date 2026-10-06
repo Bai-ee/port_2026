@@ -97,3 +97,14 @@ Scope: /records page (hero: photo + video + your story -> Discogs entry + finish
 
 Rules: plan first (compact), then one phase at a time, stop for approval. No emoji in any copy. Every edited container gets a stable kebab-case id (repo rule). Mobile-first; no horizontal scroll at 390px. No commits, pushes, deploys or paid API calls without the owner's explicit OK. Never post to X.
 ```
+
+## Sync with Active Content System
+
+Cross-reference: `ACTIVE-CONTENT-SYSTEM-PLAN.md` (ACS), sections 3a, 3e, 4 (Phase 2A), 6.4.
+
+- **Ownership split (ACS 6.4).** This Discogs thread keeps the Mac worker and the ingest (`features/discogs-ingest/**`). ACS owns allocation, scheduling and the publish lock.
+- **Gate 0 is resolved.** The records release merged to main as `349f0a96` and is live on hitloop.agency as `dpl_2j1DFnSBuAatKSimS9CaHzSyj3Tm`.
+- **Scheduler is interim.** The fixed 09:00 CT records scheduler stays until the ACS quota layer routes records.
+- **Publisher stays OFF.** Both the launchd publisher and the GitHub Actions sweep remain disabled until ACS 1D's atomic claim lands.
+- **Records adapter hook (ACS 2A, this half).** Every package the ingest writes now carries the ACS 3a additive fields: `engine:'record'`, `source{kind:'discogs',externalId,url}`, `priority:'evergreen'`, `format:'video'`, `tags`, `related:[]`, `approval{state:'none'}`, and `variants.x` (1x1) / `variants.instagram` (9x16) when variant paths exist. Existing values always win, so human or ACS edits are never overwritten. `social_posts` carry `packageId:'discogs-<releaseId>'` (set by a merge patch after create, because `createSocialPost` drops unknown fields). `scripts/discogs/backfill-acs-fields.mjs [--dry-run]` adds the same fields to existing rows.
+- **Open editorial decision (owner).** Post copy order: recommendation is the memory first, then `Artist – Title`. Today the builder emits `Artist – Title`, meta, then the memory. Not changed; story sync (`extractStory`) depends on the current shape.

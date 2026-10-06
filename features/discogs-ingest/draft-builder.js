@@ -218,6 +218,57 @@ export function packageId(releaseId) {
   return `discogs-${releaseId}`;
 }
 
+/** Lowercase, single-spaced tag text. */
+export function normalizeTag(v) {
+  return String(v ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/** Join key written to social_posts so ACS can write publish results back to the package. */
+export function packageIdPatch(releaseId) {
+  return { packageId: packageId(releaseId) };
+}
+
+/**
+ * Active Content System additive fields (ACS plan 3a). Only fields derivable from the
+ * Discogs request; variants are included only when variant paths exist.
+ */
+export function buildAcsFields(req) {
+  const tags = [...new Set([req.label, req.artist, req.year].map(normalizeTag).filter(Boolean))];
+  const channel = (aspect, kind) => req.variants?.[kind]?.[aspect];
+  const x = { aspect: '1x1', video: channel('1x1', 'video'), image: channel('1x1', 'image') };
+  const ig = { aspect: '9x16', video: channel('9x16', 'video'), image: channel('9x16', 'image') };
+  const hasPaths = (v) => Boolean(v.video || v.image);
+  const variants = {};
+  if (hasPaths(x)) variants.x = x;
+  if (hasPaths(ig)) variants.instagram = ig;
+  return {
+    engine: 'record',
+    source: { kind: 'discogs', externalId: String(req.releaseId), url: req.discogsUrl },
+    priority: 'evergreen',
+    format: 'video',
+    tags,
+    related: [],
+    approval: { state: 'none' },
+    ...(Object.keys(variants).length ? { variants } : {}),
+  };
+}
+
+/** Existing (human/ACS-set) values win; only missing (undefined/null) fields are filled. */
+export function mergeMissing(existing, fields) {
+  const out = {};
+  for (const [k, v] of Object.entries(fields)) {
+    if (existing?.[k] === undefined || existing?.[k] === null) out[k] = v;
+  }
+  return out;
+}
+
+/** Same keys as `fields`, but a stored (non-null) value wins over the derived one. */
+export function preferExisting(existing, fields) {
+  const out = {};
+  for (const [k, v] of Object.entries(fields)) out[k] = existing?.[k] ?? v;
+  return out;
+}
+
 /** ContentPackage row for the X content inventory. `existing` = a stored row, whose human-set story/status win. */
 export function buildContentPackage(req, existing = null) {
   const yearNum = req.year && /^\d{4}$/.test(req.year) ? Number(req.year) : null;
@@ -236,6 +287,7 @@ export function buildContentPackage(req, existing = null) {
     eraYear: yearNum,
     entities: [req.artist, req.label].filter(Boolean),
     assetRefs: [...new Set([req.videoStoragePath, req.imageStoragePath, ...variantPaths(req.variants)])],
+    ...preferExisting(existing, buildAcsFields(req)),
   };
 }
 

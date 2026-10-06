@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { createSocialPost } from '../social-posting/twitter-service.js';
 import { readInventory, upsertPackage } from '../x-content-inventory/store.js';
 import {
-  DISCOGS_SOURCE, buildContentPackage, buildDraftMediaPatch, buildDraftPayload, buildMediaVariants, buildPostText, isBuilderContent, packageId, variantPaths,
+  DISCOGS_SOURCE, buildContentPackage, buildDraftMediaPatch, buildDraftPayload, buildMediaVariants, buildPostText, isBuilderContent, packageId, packageIdPatch, variantPaths,
 } from './draft-builder.js';
 
 const require = createRequire(import.meta.url);
@@ -82,12 +82,18 @@ export async function ingestDiscogsDraft(req) {
       const patch = { ...buildDraftMediaPatch(req, { videoUrl, imageUrl, mediaVariants }), updatedAt: new Date().toISOString() };
       // Refresh text only while it is still the untouched builder output; never overwrite human edits.
       if (isBuilderContent(post.content)) patch.content = buildPostText(req);
+      // ACS join key; createSocialPost's whitelist drops it, so it is set via the merge patch.
+      if (!post.packageId) Object.assign(patch, packageIdPatch(req.releaseId));
       await fb.adminDb.collection('social_posts').doc(post.id).set(patch, { merge: true });
       post = { ...post, ...patch };
     }
   } else {
     post = await createSocialPost(discogsClientId(), buildDraftPayload(req, { videoUrl, imageUrl, mediaVariants }));
     created = true;
+    // createSocialPost drops unknown fields, so stamp the ACS join key with a merge patch.
+    const joinPatch = packageIdPatch(req.releaseId);
+    await fb.adminDb.collection('social_posts').doc(post.id).set(joinPatch, { merge: true });
+    post = { ...post, ...joinPatch };
   }
 
   // Keep any story/status/effort/rights a human already set on an existing row.
