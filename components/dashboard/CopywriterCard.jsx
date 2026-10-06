@@ -379,10 +379,12 @@ export default function CopywriterCard({ getIdToken }) {
         {savedDrafts.length ? savedDrafts.map((post) => {
           const when = formatDate(post.scheduledAt);
           const ps = post.agents?.engagementOptimizer?.xGrowthScore;
+          const needsStory = post.needsStory === true || /\[add your memory\]/i.test(post.content || '');
+          const hasDiscogsMeta = needsStory || post.selfReply || post.mediaUrl || post.mediaVariants;
           return (
+            <React.Fragment key={post.id}>
             <button
               type="button"
-              key={post.id}
               className={`cw-saved-item cw-status-${post.status} ${editingId === post.id ? 'cw-saved-active' : ''}`}
               onClick={() => loadIntoComposer(post)}
             >
@@ -393,12 +395,39 @@ export default function CopywriterCard({ getIdToken }) {
               </div>
               <p>{post.content}</p>
             </button>
+            {hasDiscogsMeta ? (
+              <div id={`cw-discogs-meta-${post.id}`} className="cw-discogs-meta">
+                {needsStory ? <span id={`cw-discogs-needs-story-${post.id}`} className="cw-discogs-needs-story">needs story</span> : null}
+                {post.selfReply ? (
+                  <div id={`cw-discogs-first-reply-${post.id}`} className="cw-discogs-first-reply">
+                    <span className="cw-discogs-first-reply-text">↳ First reply: {post.selfReply.text}</span>
+                    {post.selfReply.mediaUrl ? (
+                      <a className="cw-discogs-image-link" href={post.selfReply.mediaUrl} target="_blank" rel="noreferrer">label image</a>
+                    ) : null}
+                  </div>
+                ) : null}
+                {post.mediaUrl ? (
+                  <a id={`cw-discogs-video-link-${post.id}`} className="cw-discogs-video-link" href={post.mediaUrl} target="_blank" rel="noreferrer">video</a>
+                ) : null}
+                {['video', 'image'].flatMap((kind) => ['1x1', '9x16'].map((variant) => {
+                  const v = post.mediaVariants?.[kind]?.[variant];
+                  return v?.url ? (
+                    <a key={`${kind}-${variant}`} id={`cw-discogs-variant-${kind}-${variant}-${post.id}`} className="cw-discogs-variant-link" href={v.url} target="_blank" rel="noreferrer">{`${kind} ${variant.replace('x', ':')}`}</a>
+                  ) : null;
+                }))}
+              </div>
+            ) : null}
+            </React.Fragment>
           );
         }) : <div className="cw-empty">No saved drafts yet. Write one and hit Save.</div>}
       </section>
 
       <style jsx>{`
         /* Single-column vertical stack — white theme (dashboard modal style guide) */
+        .cw-discogs-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: -4px 4px 4px; font-family: var(--font-mono); font-size: 11px; color: rgba(42,36,32,0.62); }
+        .cw-discogs-needs-story { padding: 1px 8px; border-radius: 999px; background: rgba(159,31,23,0.1); color: #9f1f17; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+        .cw-discogs-first-reply { display: inline-flex; flex-wrap: wrap; gap: 4px 10px; }
+        .cw-discogs-meta a { color: inherit; text-decoration: underline; }
         #copywriter-card { margin-top: 18px; display: grid; gap: 14px; }
         .cw-panel { border: 1px solid rgba(42,36,32,0.12); background: rgba(255,255,255,0.72); border-radius: 16px; padding: 16px; box-shadow: 0 1px 0 rgba(255,255,255,0.7), inset 0 1px 0 rgba(255,255,255,0.4); backdrop-filter: blur(20px); }
         .cw-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
