@@ -11,9 +11,12 @@
 //                        take following words until the next field:
 //   gear:909             single word (use quotes for more: gear:"roland 909"), canonicalized
 //   year:1997  decade:1990s  vibe:night  bucket:record
+//   date:2018-11-15 (exact)  date:2018-11 (month)  date:2018 (year)  date:11-15 (that day, any year)
+//     — printed flyer event dates only (eventDate/eventMonthDay/eventDates); never capturedAt.
+//     Free text like 2018-11-15 also finds them via search tokens.
 
 import { resolveBucket, DEFAULT_BUCKETS, bucketIdFromName } from './buckets.js';
-import { effectiveFacets, buildSearchTokens, canonicalGear, normalizeTerm } from './facets.js';
+import { effectiveFacets, buildSearchTokens, canonicalGear, normalizeTerm, eventPairs } from './facets.js';
 
 export const INDEX_VERSION = 1;
 
@@ -22,7 +25,7 @@ const FIELD_ALIASES = {
   crew: 'crews', crews: 'crews', label: 'labels', labels: 'labels',
   venue: 'venues', venues: 'venues', city: 'cities', cities: 'cities',
   party: 'partyNames', parties: 'partyNames', genre: 'genres', genres: 'genres',
-  gear: 'gear', year: 'year', decade: 'decade', vibe: 'vibe', bucket: 'bucket',
+  gear: 'gear', date: 'date', year: 'year', decade: 'decade', vibe: 'vibe', bucket: 'bucket',
 };
 const MULTI_WORD = new Set(['people', 'crews', 'labels', 'venues', 'cities', 'partyNames', 'genres']);
 const FACET_ARRAYS = ['people', 'crews', 'labels', 'venues', 'cities', 'partyNames', 'gear', 'genres'];
@@ -35,6 +38,8 @@ function searchFacets(item) {
   const ents = (Array.isArray(item.entities) ? item.entities : []).map(normalizeTerm).filter(Boolean);
   const merge = (a = [], b = []) => [...new Set([...a, ...b])];
   f.people = merge(f.people, f.credits);
+  const pairs = eventPairs(f); // validated printed event dates, precomputed for date: filters
+  if (pairs.length) f.eventPairs = pairs; else delete f.eventPairs;
   if (ents.length && !f.people.length) f.people = merge(f.people, ents.slice(0, 1));
   if (ents.length > 1 && !(f.labels || []).length) f.labels = ents.slice(1, 2);
   if (!f.people.length) delete f.people;
@@ -128,12 +133,22 @@ function decadeOf(v) {
   return s;
 }
 
+/** date: filter — YYYY-MM-DD | YYYY-MM | YYYY | MM-DD against printed event pairs. */
+function dateMatches(doc, value) {
+  const pairs = doc.facets.eventPairs || [];
+  if (/^\d{2}-\d{2}$/.test(value)) return pairs.some((p) => p.monthDay === value);
+  if (!/^\d{4}(-\d{2}(-\d{2})?)?$/.test(value)) return false;
+  return pairs.some((p) => p.year != null && `${p.year}-${p.monthDay}`.startsWith(value)
+    && (value.length === 4 || value.length === 7 || value.length === 10));
+}
+
 /** Score a field filter against a doc: 0 = no match, else points. */
 function filterScore(doc, { field, value }) {
   const f = doc.facets;
   switch (field) {
     case 'gear': return (f.gear || []).includes(canonicalGear(value)) ? 100 : 0;
     case 'year': return String(f.eraYear ?? '') === value || String(f.eventDate ?? '').startsWith(value) ? 100 : 0;
+    case 'date': return dateMatches(doc, value) ? 100 : 0;
     case 'decade': return f.decade === decadeOf(value) ? 100 : 0;
     case 'vibe': {
       const v = f.vibe || {};

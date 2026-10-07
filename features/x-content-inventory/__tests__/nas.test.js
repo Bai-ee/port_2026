@@ -245,3 +245,36 @@ test('PATCH hook: STAGE COMPLETE writes assetRefs + staged; other types and bad 
   const p = pkgs(db).get(id);
   assert.deepEqual(p.assetRefs, [path]); assert.equal(p.staged.storagePath, path); assert.equal(p.mediaState, 'still');
 });
+
+test('results: event-date facets are carried through, strictly sanitized, and never derived from capturedAt', async () => {
+  const { db, deps } = setup();
+  const facets = {
+    eventDate: '2018-11-15', eventMonthDay: '11-15', eventYear: 2018, eventYearSource: 'weekday',
+    eventYearCandidates: [2018, 2012, 2018, 'x', 1700], eventDateRaw: '  THURSDAY   11/15 ',
+    eventDates: [
+      { monthDay: '11-15', year: 2018, yearSource: 'weekday', raw: 'THURSDAY 11/15', weekday: 'Thursday' },
+      { monthDay: '13-40', year: 2018 }, { monthDay: '02-29', year: null, yearSource: 'printed' },
+    ],
+  };
+  await ingestNasResults(deps, { sourceId: 's1', items: [item({ capturedAt: '2003-05-05T00:00:00Z', facets })] });
+  const f = pkgs(db).get(nasPackageId(SHA)).facets;
+  assert.equal(f.eventDate, '2018-11-15'); assert.equal(f.eventMonthDay, '11-15'); assert.equal(f.eventYear, 2018);
+  assert.equal(f.eventYearSource, 'weekday'); assert.deepEqual(f.eventYearCandidates, [2012, 2018]);
+  assert.equal(f.eventDateRaw, 'THURSDAY 11/15');
+  assert.deepEqual(f.eventDates.map((d) => [d.monthDay, d.year, d.yearSource]), [['11-15', 2018, 'weekday'], ['02-29', null, null]]);
+});
+
+test('results: invalid event-date facets are dropped; no capturedAt fallback', async () => {
+  const { db, deps } = setup();
+  const facets = { eventDate: '2018-02-30', eventMonthDay: '2-3', eventYear: 'soon', eventYearSource: 'guess', eventYearCandidates: 'no', eventDates: 'no' };
+  await ingestNasResults(deps, { sourceId: 's1', items: [item({ capturedAt: '2003-05-05T00:00:00Z', facets })] });
+  const f = pkgs(db).get(nasPackageId(SHA)).facets;
+  for (const k of ['eventDate', 'eventMonthDay', 'eventYear', 'eventYearSource', 'eventYearCandidates', 'eventDateRaw', 'eventDates']) assert.equal(k in f, false, k);
+});
+
+test('results: ISO date contradicting the month-day is dropped', async () => {
+  const { db, deps } = setup();
+  await ingestNasResults(deps, { sourceId: 's1', items: [item({ facets: { eventDate: '2018-11-15', eventMonthDay: '11-16' } })] });
+  const f = pkgs(db).get(nasPackageId(SHA)).facets;
+  assert.equal(f.eventDate, undefined); assert.equal(f.eventMonthDay, '11-16');
+});

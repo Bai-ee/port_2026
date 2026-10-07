@@ -29,6 +29,88 @@ export const VIBE = {
 
 export const FACET_VERSION = 1;
 
+// ---- Event dates (printed on the flyer) -----------------------------------
+// OWNER RULE: event dates come only from the flyer's printed text. Nothing
+// here ever reads capturedAt, file dates or folder names. All fields are
+// optional; invalid values are dropped, never coerced.
+export const EVENT_YEAR_SOURCES = ['printed', 'weekday'];
+const MAX_EVENT_DATES = 5;
+const MAX_EVENT_CANDIDATES = 10;
+const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]; // Feb 29 is a valid printed date
+const MD_RE = /^(\d{2})-(\d{2})$/;
+const ISO_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+export function validMonthDay(v) {
+  const m = MD_RE.exec(typeof v === 'string' ? v : '');
+  if (!m) return null;
+  const mo = Number(m[1]); const d = Number(m[2]);
+  return mo >= 1 && mo <= 12 && d >= 1 && d <= DAYS_IN_MONTH[mo - 1] ? v : null;
+}
+export function validEventYear(v) {
+  if (v == null || v === '' || typeof v === 'boolean') return null;
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 1900 && n <= 2100 ? n : null;
+}
+export function validIsoDate(v) {
+  const m = ISO_RE.exec(typeof v === 'string' ? v : '');
+  if (!m) return null;
+  const y = validEventYear(m[1]);
+  if (y == null || !validMonthDay(`${m[2]}-${m[3]}`)) return null;
+  const dt = new Date(Date.UTC(y, Number(m[2]) - 1, Number(m[3])));
+  return dt.getUTCMonth() === Number(m[2]) - 1 && dt.getUTCDate() === Number(m[3]) ? v : null; // rejects Feb 29 in non-leap years
+}
+const cleanText = (v, max) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max) : '');
+
+/** Strictly sanitize the event-date facets. Returns only the valid keys. */
+export function sanitizeEventFacets(raw = {}) {
+  const out = {};
+  const eventMonthDay = validMonthDay(raw?.eventMonthDay);
+  const eventDate = validIsoDate(raw?.eventDate);
+  if (eventMonthDay) out.eventMonthDay = eventMonthDay;
+  // An ISO date that contradicts the month-day is dropped; a lone ISO date implies its month-day.
+  if (eventDate && (!eventMonthDay || eventDate.slice(5) === eventMonthDay)) {
+    out.eventDate = eventDate;
+    out.eventMonthDay = eventDate.slice(5);
+  }
+  const eventYear = validEventYear(raw?.eventYear);
+  if (eventYear != null) out.eventYear = eventYear;
+  if (EVENT_YEAR_SOURCES.includes(raw?.eventYearSource)) out.eventYearSource = raw.eventYearSource;
+  if (Array.isArray(raw?.eventYearCandidates)) {
+    const c = [...new Set(raw.eventYearCandidates.map(validEventYear).filter((y) => y != null))].sort((a, b) => a - b);
+    if (c.length) out.eventYearCandidates = c.slice(0, MAX_EVENT_CANDIDATES);
+  }
+  const rawText = cleanText(raw?.eventDateRaw, 120);
+  if (rawText) out.eventDateRaw = rawText;
+  if (Array.isArray(raw?.eventDates)) {
+    const list = [];
+    for (const e of raw.eventDates) {
+      const monthDay = validMonthDay(e?.monthDay);
+      if (!monthDay) continue;
+      const year = validEventYear(e?.year);
+      const weekday = cleanText(e?.weekday, 12);
+      list.push({
+        monthDay, year,
+        yearSource: year != null && EVENT_YEAR_SOURCES.includes(e?.yearSource) ? e.yearSource : null,
+        raw: cleanText(e?.raw, 120),
+        weekday: /^[A-Za-z.]+$/.test(weekday) ? weekday : null,
+      });
+      if (list.length >= MAX_EVENT_DATES) break;
+    }
+    if (list.length) out.eventDates = list;
+  }
+  return out;
+}
+
+/** Every printed event (monthDay + year|null) a facets object carries. Pure. */
+export function eventPairs(f = {}) {
+  const e = sanitizeEventFacets(f);
+  const pairs = [];
+  if (e.eventMonthDay) pairs.push({ monthDay: e.eventMonthDay, year: e.eventYear ?? (e.eventDate ? Number(e.eventDate.slice(0, 4)) : null) });
+  for (const d of e.eventDates || []) pairs.push({ monthDay: d.monthDay, year: d.year });
+  return pairs;
+}
+
+
 /** Canonical gear spellings — the alias table seeds from this. */
 export const GEAR_ALIASES = {
   'tr-909': ['909', 'tr909', 'tr 909', 'roland 909', 'roland tr-909'],
@@ -82,6 +164,9 @@ export function normalizeFacets(raw = {}) {
       if (Object.keys(vibe).length) out.vibe = vibe;
     }
   }
+  // eventDate stays a plain string above (owner-editable); the rest are strictly validated.
+  const { eventDate: _ignored, ...ev } = sanitizeEventFacets(raw);
+  Object.assign(out, ev);
   if (out.eraYear && !out.decade) out.decade = `${Math.floor(out.eraYear / 10) * 10}s`;
   return out;
 }
@@ -95,6 +180,7 @@ export function effectiveFacets(item = {}) {
 export function buildSearchTokens(item = {}) {
   const f = effectiveFacets(item);
   const parts = [item.title, item.story, f.ocrText, f.dateText, f.decade, f.eraYear,
+    ...eventPairs(f).flatMap((p) => [p.monthDay, p.year != null ? `${p.year}-${p.monthDay}` : null]), f.eventDate,
     ...['people', 'credits', 'crews', 'labels', 'catalogNumbers', 'venues', 'cities', 'partyNames', 'gear', 'genres'].flatMap((k) => f[k] || []),
     // Legacy rows (pre-facets) still carry artist/label in `entities` — search them too.
     ...(Array.isArray(item.entities) ? item.entities : []),

@@ -14,7 +14,7 @@
 //   deps.fieldValue              { serverTimestamp() }
 //   deps.now() / deps.sleep(ms) / deps.randomId()
 
-import { normalizeFacets } from './facets.js';
+import { normalizeFacets, sanitizeEventFacets } from './facets.js';
 import { PILLARS } from './categories.js';
 import { needsApproval } from './schema.js';
 
@@ -80,7 +80,10 @@ function itemError(it) {
 }
 
 function machineFields(it, sourceId, nowIso) {
-  const facets = normalizeFacets(it.facets);
+  // Event dates: strict validation (ISO date must agree with month-day; invalid
+  // values dropped). Never derived from capturedAt/file dates/folder names.
+  const { eventDate: _rawEventDate, ...rawFacets } = it.facets;
+  const facets = normalizeFacets({ ...rawFacets, ...sanitizeEventFacets(it.facets) });
   const isVideo = String(it.mediaType || '').toLowerCase() === 'video';
   const num = (v) => (Number.isFinite(Number(v)) && v !== null && v !== '' ? Number(v) : null);
   const nas = {

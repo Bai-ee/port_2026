@@ -3,6 +3,7 @@
 import React, { useContext, useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import { FACET_FIELDS, VIBE, effectiveFacets } from '../../../features/x-content-inventory/facets.js';
+import { describeEventDate } from '../../../features/x-content-inventory/throwback.js';
 import { storyMissing, thumbUrl, isVideoItem, useSignedMedia, isRenderedVideo, rightsBadge } from './ItemGrid.jsx';
 import { NasContext, isNasItem } from './nas-context.js';
 import { getThumbState } from './thumb-capture.js';
@@ -102,10 +103,17 @@ function NasDetails({ item, call, onReload }) {
     } catch (err) { setSt((s) => ({ ...s, busy: false, error: err.message || 'Could not stage.' })); }
   };
   const nas = item.nas || {};
+  const eventDate = describeEventDate(effectiveFacets(item));
   return (
     <div id="x-content-nas-details" className="xce-bk-facets">
       <p className="xce-kicker">NAS file</p>
       {item.summary ? <p id="x-content-nas-summary" className="xce-field-hint">{item.summary}</p> : null}
+      {eventDate ? (
+        <>
+          <p id="x-content-item-event-date-line" className="xce-field-hint">{eventDate.line}</p>
+          {eventDate.printed ? <p id="x-content-item-event-date-printed" className="xce-field-hint">{eventDate.printed}</p> : null}
+        </>
+      ) : null}
       {item.activity || item.peopleCount != null || nas.relativePath ? (
         <details className="xce-more" id="x-content-nas-file-details">
           <summary className="xce-more-summary">Details</summary>

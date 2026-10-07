@@ -75,3 +75,29 @@ test('performance soft check: 10k docs', () => {
   console.log(`perf: ${per.toFixed(2)}ms/query`);
   assert.ok(per < 50, `slow: ${per}ms`);
 });
+
+const dated = buildIndex([
+  { id: 'a', title: 'Thursday party', bucketId: 'nas', facets: { eventDate: '2018-11-15', eventMonthDay: '11-15', eventYear: 2018 } },
+  { id: 'b', title: 'Unknown year', bucketId: 'nas', facets: { eventMonthDay: '11-15', eventYearCandidates: [2012, 2018] } },
+  { id: 'c', title: 'Other month', bucketId: 'nas', facets: { eventDate: '2018-12-01', eventMonthDay: '12-01', eventYear: 2018 } },
+  { id: 'd', title: 'Multi', bucketId: 'nas', facets: { eventDates: [{ monthDay: '11-15', year: 2019, yearSource: 'printed' }, { monthDay: '11-16', year: null }] } },
+  { id: 'e', title: 'No dates', bucketId: 'nas', facets: { eraYear: 1997 }, capturedAt: '2018-11-15' },
+]);
+const ids = (q) => search(dated, q).map((h) => h.id).sort();
+
+test('date: exact / month / year / month-day', () => {
+  assert.deepEqual(ids('date:2018-11-15'), ['a']);
+  assert.deepEqual(ids('date:2018-11'), ['a']);
+  assert.deepEqual(ids('date:2018'), ['a', 'c']);
+  assert.deepEqual(ids('date:2019-11-15'), ['d']);
+  assert.deepEqual(ids('date:11-15'), ['a', 'b', 'd']);
+  assert.deepEqual(ids('date:11-16'), ['d']);
+  assert.deepEqual(ids('date:nov15'), []);
+  assert.deepEqual(ids('date:2012'), []);
+});
+
+test('free text event-date tokens find items; capturedAt is never indexed', () => {
+  assert.deepEqual(ids('2018-11-15'), ['a']);
+  assert.deepEqual(ids('11-15'), ['a', 'b', 'd']);
+  assert.equal(ids('date:11-15 party').join(), 'a');
+});

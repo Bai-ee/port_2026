@@ -6,6 +6,7 @@ import { Skeleton, RetryError } from './Feedback.jsx';
 
 import { mergeBuckets, resolveBucket } from '../../../features/x-content-inventory/buckets.js';
 import { itemsInFolder, folderCounts, suggestFolders } from '../../../features/x-content-inventory/folders.js';
+import { onThisDay, hasEventDate } from '../../../features/x-content-inventory/throwback.js';
 import { buildIndex, search } from '../../../features/x-content-inventory/search-index.js';
 import BucketRail from './BucketRail.jsx';
 import BucketToolbar from './BucketToolbar.jsx';
@@ -71,7 +72,7 @@ export default function BucketsPanel({ call, packages, loading, error, onReload 
   useEffect(() => {
     if (!metaLoading && bucketId !== 'all' && !buckets.some((b) => b.id === bucketId)) setBucketId('all');
   }, [metaLoading, buckets, bucketId]);
-  // One view per bucket: 'all' | 'folder:<id>' | 'q:mine' | 'q:daily' | 'q:dj:<name>'
+  // One view per bucket: 'all' | 'folder:<id>' | 'q:mine' | 'q:daily' | 'q:onthisday' | 'q:dj:<name>'
   const [viewId, setViewId] = useState('all');
   const [query, setQuery] = useState('');
   const [openId, setOpenId] = useState(null);
@@ -176,11 +177,17 @@ export default function BucketsPanel({ call, packages, loading, error, onReload 
   // Folder suggestions shown in the Folders menu exclude DJ names (those are quick views).
   const folderSuggestions = useMemo(() => suggestions.filter((x) => x?.rule?.field !== 'people'), [suggestions]);
 
+  // Local calendar day (printed event dates are wall-calendar dates, not UTC instants).
+  const todayISO = useMemo(() => {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+  }, []);
   const quick = useMemo(() => ({
+    onthisday: (list) => onThisDay(list, todayISO).map((r) => r.item),
     mine: (list) => list.filter((i) => i.rights === 'owned'),
     daily: (list) => list.filter(isAutoDaily),
     dj: (name) => (list) => list.filter((i) => (effectiveFacets(i).people || []).some((p) => String(p).toLowerCase() === name.toLowerCase())),
-  }), []);
+  }), [todayISO]);
 
   // View options for the single select — same control for every bucket.
   const views = useMemo(() => {
@@ -189,6 +196,7 @@ export default function BucketsPanel({ call, packages, loading, error, onReload 
     const q = [];
     if (bucketItems.some((i) => i.rights === 'owned')) q.push({ id: 'q:mine', label: 'Mine', count: quick.mine(bucketItems).length });
     if (bucketItems.some(isAutoDaily)) q.push({ id: 'q:daily', label: 'Daily auto', count: quick.daily(bucketItems).length });
+    if (bucketItems.some(hasEventDate)) q.push({ id: 'q:onthisday', label: 'On this day', count: quick.onthisday(bucketItems).length });
     if (q.length) groups.push({ label: 'Quick views', options: q });
     if (isRendered && djNames.length) groups.push({ label: 'By DJ', options: djNames.map((d) => ({ id: `q:dj:${d.name}`, label: d.name, count: d.count })) });
     return groups;
@@ -207,6 +215,7 @@ export default function BucketsPanel({ call, packages, loading, error, onReload 
     }
     if (viewId === 'q:mine') return quick.mine(bucketItems);
     if (viewId === 'q:daily') return quick.daily(bucketItems);
+    if (viewId === 'q:onthisday') return quick.onthisday(bucketItems);
     if (viewId.startsWith('q:dj:')) return quick.dj(viewId.slice(5))(bucketItems);
     return bucketItems;
   }, [searching, index, query, byId, selectedFolder, viewId, bucketItems, buckets, quick]);
