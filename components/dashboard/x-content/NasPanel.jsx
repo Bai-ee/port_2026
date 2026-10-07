@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronRight, Folder, Image as ImageIcon, Film, X as XIcon, ArrowUp, Loader2, Check, Circle, RefreshCw } from 'lucide-react';
 import { RetryError, Skeleton } from './Feedback.jsx';
+import NasCopyMovePanel from './NasCopyMovePanel.jsx';
 
 // NasPanel — NAS processing: Mac connect status, folder browser, estimate, start, jobs.
 // Status / connect / browse talk to the Mac analyzer DIRECTLY (`${localThumbBase}/nas/*`).
@@ -310,6 +311,10 @@ export default function NasPanel({ call, status, onReload }) {
           ) : 'Nothing selected'}
         </p>
       </div>
+
+      {mounted ? (
+        <NasCopyMovePanel base={base} sources={sources} sourceId={sourceId} path={path} selected={selected} clearSelected={clearSelected} onDone={() => browse(sourceId, path)} />
+      ) : null}
 
       <div id="x-content-nas-controls" className="xce-nas-controls">
         <button type="button" id="x-content-nas-estimate" className="xce-btn-ghost" disabled={!online || !paths.length || actionBusy || (estimateId && !estimate)} onClick={runEstimate}>

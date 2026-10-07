@@ -916,6 +916,19 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
         #x-content-card .xce-more-summary:hover { color: #2a2420; }
         #x-content-card .xce-more-body { display: grid; gap: 6px; padding: 4px 0 2px; min-width: 0; }
         #x-content-card .xce-week-hint { margin: 0; font-size: 11px; color: rgba(42,36,32,0.5); }
+        /* ---- NAS copy/move panel (NasCopyMovePanel.jsx) ---- */
+        #x-content-card .xce-nasops-panel { display: grid; gap: 8px; min-width: 0; padding: 8px 0; }
+        #x-content-card .xce-nasops-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+        #x-content-card .xce-nasops-count { font-size: 12px; font-weight: 600; color: #2a2420; margin-right: auto; }
+        #x-content-card .xce-nasops-picker,
+        #x-content-card .xce-nasops-preview,
+        #x-content-card .xce-nasops-job { display: grid; gap: 8px; min-width: 0; padding: 10px; border: 1px solid rgba(42,36,32,0.12); border-radius: 8px; }
+        #x-content-card .xce-nasops-line { margin: 0; font-size: 12px; color: #2a2420; overflow-wrap: anywhere; }
+        #x-content-card .xce-nasops-buttons { display: flex; flex-direction: column; gap: 8px; }
+        #x-content-card .xce-nasops-dest-list { max-height: 200px; overflow-y: auto; }
+        @media (min-width: 481px) {
+          #x-content-card .xce-nasops-buttons { flex-direction: row; flex-wrap: wrap; align-items: center; }
+        }
       `}</style>
     </div>
   );
