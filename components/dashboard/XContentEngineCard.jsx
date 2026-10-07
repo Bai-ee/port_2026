@@ -918,6 +918,13 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
         #x-content-card .xce-week-hint { margin: 0; font-size: 11px; color: rgba(42,36,32,0.5); }
         /* ---- NAS copy/move panel (NasCopyMovePanel.jsx) ---- */
         #x-content-card .xce-nasops-panel { display: grid; gap: 8px; min-width: 0; padding: 8px 0; }
+        /* Layout fixes: the Copy/Move bar must stay visible while you browse and tick items. */
+        #x-content-card .xce-nasops-panel { position: sticky; bottom: 0; z-index: 6; background: #fbfaf8; border-top: 1px solid rgba(42,36,32,0.12); padding: 10px 0 calc(10px + env(safe-area-inset-bottom, 0px)); box-shadow: 0 -8px 16px -12px rgba(0,0,0,0.18); }
+        #x-content-card .xce-bk-drawer-head .xce-bk-icon { width: 38px; min-width: 38px; flex: 0 0 auto; }
+        #x-content-card .xce-nas-list { height: auto; min-height: 220px; max-height: min(52vh, 520px); }
+        @media (min-width: 481px) {
+          #x-content-card .xce-bk-drawer:has(.xce-nas-panel) { max-width: min(680px, 96vw); }
+        }
         #x-content-card .xce-nasops-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
         #x-content-card .xce-nasops-count { font-size: 12px; font-weight: 600; color: #2a2420; margin-right: auto; }
         #x-content-card .xce-nasops-picker,
