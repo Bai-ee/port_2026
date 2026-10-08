@@ -1,6 +1,6 @@
 # Brain ⇄ Content Library retrieval — parked idea (2026-10-08)
 
-**Status:** PARKED. Nothing here is built. Revisit after the first real Batch-mode run and a first full NAS analysis.
+**Status:** PARKED (now P6 of the broader `LIVING-TIMELINE-ARCHIVE-PLAN.md`; index in `ELEVATION-LIST.md`). Nothing here is built. Revisit after the first real Batch-mode run and a first full NAS analysis.
 **Owner intent:** the Client Brain should be able to *access and draw tone and understanding from* the content library, and the owner should be able to *search all the content from the Brain*. Retrieval, not a second copy.
 
 ## Where the data lives today
