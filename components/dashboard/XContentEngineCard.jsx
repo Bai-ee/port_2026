@@ -924,7 +924,7 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
         #x-content-card .xce-more-summary { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 2px; font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(42,36,32,0.5); cursor: pointer; list-style: none; }
         #x-content-card .xce-more-summary::-webkit-details-marker { display: none; }
         #x-content-card .xce-more-summary::before { content: '+'; display: inline-block; width: 10px; text-align: center; }
-        #x-content-card .xce-more[open] > .xce-more-summary::before { content: '\\2212'; }
+        #x-content-card .xce-more[open] > .xce-more-summary::before { content: '−'; }
         #x-content-card .xce-more-summary:hover { color: #2a2420; }
         #x-content-card .xce-more-body { display: grid; gap: 6px; padding: 4px 0 2px; min-width: 0; }
         #x-content-card .xce-week-hint { margin: 0; font-size: 11px; color: rgba(42,36,32,0.5); }

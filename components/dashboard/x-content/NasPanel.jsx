@@ -190,24 +190,42 @@ export default function NasPanel({ call, status, onReload }) {
   const shownJobs = jobs.filter((j) => j.type !== 'estimate').slice(0, 8);
   const rootLabel = (sources.find((x) => x.id === sourceId) || sources[0])?.label || 'Root';
 
+  const jobLabel = (j) => {
+    const st = String(j.state || '').toUpperCase();
+    if (j.dryRun) return st === 'COMPLETE' || st === 'COMPLETED' ? 'Estimate' : `Estimate · ${st.toLowerCase()}`;
+    if (/^cancel/i.test(String(j.error || '')) || st === 'CANCELLED') return 'Cancelled';
+    if (st === 'COMPLETE' || st === 'COMPLETED') return 'Complete';
+    if (FAILED.has(st)) return 'Failed';
+    if (st === 'QUEUED') return 'Queued';
+    return 'Running';
+  };
   const renderJob = (j) => {
-          const total = j.progress?.total || 0;
-          const done = j.progress?.done || 0;
-          const pct = total ? Math.min(100, Math.round((done / total) * 100)) : 0;
-          const active = !isTerminal(j.state);
-          return (
-            <div key={j.id} className="xce-nas-job">
-              <div className="xce-nas-job-head">
-                <span className="xce-nas-job-state">{j.state}</span>
-                <span className="xce-bk-count">{done}/{total} · {usd(j.progress?.spentUsd ?? j.spentUsd)}</span>
-                {active ? (
-                  <button type="button" className="xce-bk-icon xce-nas-cancel" aria-label="Cancel job" title="Cancel" disabled={actionBusy} onClick={() => cancel(j.id)}><XIcon size={14} /></button>
-                ) : null}
-              </div>
-              <div className="xce-nas-bar" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${pct}%` }} /></div>
-              {j.error ? <p className="xce-field-hint">{j.error}</p> : null}
-            </div>
-          );
+    const label = jobLabel(j);
+    const total = j.final?.total ?? j.progress?.total ?? 0;
+    const done = j.final?.done ?? j.progress?.done ?? 0;
+    const pct = total ? Math.min(100, Math.round((done / total) * 100)) : 0;
+    const active = !isTerminal(j.state);
+    const spent = j.progress?.spentUsd ?? j.spentUsd;
+    const est = j.dryRun ? j.estimate : null;
+    const cancelled = label === 'Cancelled';
+    return (
+      <div key={j.id} className={`xce-nas-job xce-nas-job-${label.split(' ')[0].toLowerCase()}`}>
+        <div className="xce-nas-job-head">
+          <span className="xce-nas-job-state">{label}</span>
+          <span className="xce-bk-count">
+            {est ? `${est.files ?? 0} files · ~${usd(est.estUsd)}` : `${done} of ${total || '?'} · ${usd(spent)}`}
+          </span>
+          {active ? (
+            <button type="button" className="xce-bk-icon xce-nas-cancel" aria-label="Cancel job" title="Cancel" disabled={actionBusy} onClick={() => cancel(j.id)}><XIcon size={14} /></button>
+          ) : null}
+        </div>
+        {!j.dryRun ? <div className="xce-nas-bar" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${pct}%` }} /></div> : null}
+        {j.final && !cancelled ? (
+          <p className="xce-field-hint">{j.final.pushed} analyzed{j.final.cached ? ` · ${j.final.cached} from cache` : ''}{j.final.errorCount ? ` · ${j.final.errorCount} errors` : ' · no errors'}</p>
+        ) : null}
+        {j.error && !cancelled ? <p className="xce-field-hint">{j.error}</p> : null}
+      </div>
+    );
   };
 
   let dotColor = '#a8a29e';

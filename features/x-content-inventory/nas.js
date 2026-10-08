@@ -326,6 +326,10 @@ async function jobs(deps) {
       paths: c.paths || (c.relativePath ? [c.relativePath] : []),
       capUsd: c.capUsd ?? null, dryRun: Boolean(c.dryRun),
       progress: c.result?.progress ?? null, estimate: c.result?.estimate ?? null,
+      // Final tallies (progress is only a snapshot taken every few files).
+      final: c.result && c.result.done != null
+        ? { done: c.result.done, total: c.result.total ?? null, cached: c.result.cached ?? 0, pushed: c.result.pushed ?? 0, errorCount: c.result.errorCount ?? 0 }
+        : null,
       spentUsd: c.result?.spentUsd ?? null, error: c.error || null,
       createdAt: toIso(c.createdAt), updatedAt: toIso(c.updatedAt),
     }))

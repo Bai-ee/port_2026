@@ -189,8 +189,9 @@ test('card: nas-jobs shape, nas-cancel', async () => {
   await db.collection('archive_commands').doc('other').set({ type: 'LIST_DIRECTORY', workerId: 'mac-analyzer' });
   const { jobs } = await handleNasAction(deps, 'nas-jobs', {});
   assert.equal(jobs.length, 1);
-  assert.deepEqual(Object.keys(jobs[0]).sort(), ['capUsd', 'createdAt', 'dryRun', 'error', 'estimate', 'id', 'paths', 'progress', 'spentUsd', 'state', 'type', 'updatedAt']);
+  assert.deepEqual(Object.keys(jobs[0]).sort(), ['capUsd', 'createdAt', 'dryRun', 'error', 'estimate', 'final', 'id', 'paths', 'progress', 'spentUsd', 'state', 'type', 'updatedAt']);
   assert.equal(jobs[0].state, 'RUNNING'); assert.deepEqual(jobs[0].progress, { done: 3, total: 10 }); assert.equal(jobs[0].spentUsd, 0.02);
+  assert.equal(jobs[0].final, null); // only terminal results carry final tallies
   const c = await handleNasAction(deps, 'nas-cancel', { commandId });
   const cc = db.cols.get('archive_commands').get(c.commandId);
   assert.equal(cc.type, 'CANCEL_JOB'); assert.equal(cc.commandId, commandId); assert.equal(cc.workerId, 'mac-analyzer');
