@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronRight, Folder, Image as ImageIcon, Film, X as XIcon, ArrowUp, Loader2, Check, Circle, RefreshCw } from 'lucide-react';
 import { RetryError, Skeleton } from './Feedback.jsx';
 import NasCopyMovePanel from './NasCopyMovePanel.jsx';
+import { NAS_PROMPT_VERSION } from '../../../features/x-content-inventory/nas.js';
 
 // NasPanel — NAS processing: Mac connect status, folder browser, estimate, start, jobs.
 // Status / connect / browse talk to the Mac analyzer DIRECTLY (`${localThumbBase}/nas/*`).
@@ -54,8 +55,10 @@ export default function NasPanel({ call, status, onReload }) {
   const [browseError, setBrowseError] = useState('');
   const [selected, setSelected] = useState(() => new Map()); // relativePath -> 'dir' | 'file'
   const [capUsd, setCapUsd] = useState('5');
-  const [estimateId, setEstimateId] = useState(null);
-  const [estimate, setEstimate] = useState(null);
+  // Live price for the current selection, answered by the Mac analyzer directly (no cloud round trip, no model calls).
+  const [live, setLive] = useState({ status: 'idle', data: null, error: '' });
+  const [liveNonce, setLiveNonce] = useState(0); // bump to re-run the price check (Retry)
+  const estimate = live.status === 'ready' ? live.data : null;
   const [jobs, setJobs] = useState([]);
   const [actionBusy, setActionBusy] = useState(false);
   const [error, setError] = useState('');
@@ -126,12 +129,10 @@ export default function NasPanel({ call, status, onReload }) {
     browse(sourceId, path);
   }, [sourceId, path, mounted, browse]);
 
-  const resetEstimate = () => { setEstimate(null); setEstimateId(null); };
-  const changeSource = (id) => { setSourceId(id); setPath(''); setParent(null); setSelected(new Map()); resetEstimate(); };
+  const changeSource = (id) => { setSourceId(id); setPath(''); setParent(null); setSelected(new Map()); };
   const goTo = (p) => { setPath(p); };
   const toggle = (e) => {
     setSelected((s) => { const n = new Map(s); if (n.has(e.relativePath)) n.delete(e.relativePath); else n.set(e.relativePath, e.kind); return n; });
-    resetEstimate();
   };
   const allHere = entries.length > 0 && entries.every((e) => selected.has(e.relativePath));
   const toggleAll = () => {
@@ -141,9 +142,8 @@ export default function NasPanel({ call, status, onReload }) {
       else entries.forEach((e) => n.set(e.relativePath, e.kind));
       return n;
     });
-    resetEstimate();
   };
-  const clearSelected = () => { setSelected(new Map()); resetEstimate(); };
+  const clearSelected = () => { setSelected(new Map()); };
 
   // ---- jobs poll ----
   const loadJobs = useCallback(async () => {
@@ -163,17 +163,10 @@ export default function NasPanel({ call, status, onReload }) {
   }, [call, onReload]);
   useEffect(() => {
     loadJobs();
-    const t = setInterval(loadJobs, estimateId && !estimate ? 1500 : 3000);
+    const t = setInterval(loadJobs, 3000);
     return () => clearInterval(t);
-  }, [loadJobs, estimateId, estimate]);
+  }, [loadJobs]);
 
-  useEffect(() => {
-    if (!estimateId) return;
-    const j = jobs.find((x) => x.id === estimateId);
-    const est = j?.result?.estimate || j?.estimate;
-    if (est) setEstimate(est);
-    else if (j && FAILED.has(j.state)) { setError(j.error || 'Estimate failed.'); setEstimateId(null); }
-  }, [jobs, estimateId]);
 
   // ---- actions ----
   const paths = [...selected.keys()];
@@ -184,16 +177,33 @@ export default function NasPanel({ call, status, onReload }) {
     setActionBusy(true); setError('');
     try { await fn(); } catch (err) { setError(err.message || 'Action failed.'); } finally { setActionBusy(false); }
   };
-  const runEstimate = () => act(async () => {
-    setEstimate(null);
-    const r = await call('nas-estimate', { sourceId, paths });
-    if (!r || r.ok === false) throw new Error(r?.error || 'Could not estimate.');
-    setEstimateId(r.commandId);
-  });
+  const pathsKey = paths.join('\n');
+  useEffect(() => {
+    if (!pathsKey || !sourceId || !base || !online) { setLive({ status: 'idle', data: null, error: '' }); return undefined; }
+    const ctrl = new AbortController();
+    setLive((l) => ({ status: 'loading', data: l.data, error: '' }));
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch(`${base}/nas/estimate`, {
+          method: 'POST', headers: { 'content-type': 'application/json' }, signal: ctrl.signal,
+          body: JSON.stringify({ sourceId, paths: pathsKey.split('\n'), promptVersion: NAS_PROMPT_VERSION }),
+        });
+        if (r.status === 404 || r.status === 501) { setLive({ status: 'unsupported', data: null, error: '' }); return; }
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok || j.ok === false || !j.estimate) throw new Error(j.error || 'Could not price this selection.');
+        setLive({ status: 'ready', data: j.estimate, error: '' });
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        setLive({ status: 'error', data: null, error: err.message || 'Could not price this selection.' });
+      }
+    }, 350);
+    return () => { clearTimeout(t); ctrl.abort(); };
+  }, [pathsKey, sourceId, base, online, liveNonce]);
+
   const start = () => act(async () => {
     const r = await call('nas-process', { sourceId, paths, capUsd: cap });
     if (!r || r.ok === false) throw new Error(r?.error || 'Could not start processing.');
-    setSelected(new Map()); resetEstimate();
+    setSelected(new Map());
     await loadJobs();
   });
   const cancel = (id) => act(async () => {
@@ -372,9 +382,6 @@ export default function NasPanel({ call, status, onReload }) {
       ) : null}
 
       <div id="x-content-nas-controls" className="xce-nas-controls">
-        <button type="button" id="x-content-nas-estimate" className="xce-btn-ghost" disabled={!online || !paths.length || actionBusy || (estimateId && !estimate)} onClick={runEstimate}>
-          {estimateId && !estimate ? 'Estimating…' : `Estimate${paths.length ? ` (${paths.length})` : ''}`}
-        </button>
         <div className="xce-field xce-nas-cap">
           <label htmlFor="x-content-nas-cap">Cap $ (max 20)</label>
           <input id="x-content-nas-cap" className="xce-input" type="number" inputMode="decimal" min="0" max="20" step="0.5" value={capUsd}
@@ -383,9 +390,13 @@ export default function NasPanel({ call, status, onReload }) {
       </div>
       <div id="x-content-nas-plan" className="xce-nas-plan" aria-live="polite">
         {!paths.length ? (
-          <p className="xce-field-hint">Tick a folder or files above, then press Estimate to see what it will cost. Estimating is free.</p>
+          <p className="xce-field-hint">Tick a folder or files above. The price shows here right away. Looking is free; nothing is analyzed or charged until you press Start.</p>
+        ) : live.status === 'unsupported' ? (
+          <p className="xce-field-hint">Restart the Mac analyzer to see prices here.</p>
+        ) : live.status === 'error' ? (
+          <RetryError id="x-content-nas-plan-error" message={live.error} onRetry={() => setLiveNonce((n) => n + 1)} />
         ) : !estimate ? (
-          <p className="xce-field-hint">Selected: {pathsLabel(paths)}. Press Estimate to see the cost. Nothing is analyzed or charged until you press Start.</p>
+          <p className="xce-field-hint">Counting the files in {pathsLabel(paths)} and pricing them…</p>
         ) : (
           <>
             <p id="x-content-nas-estimate-result" className="xce-nas-plan-main">
@@ -398,11 +409,11 @@ export default function NasPanel({ call, status, onReload }) {
                 ? `Your cap of ${usd(cap)} covers all of it.`
                 : `Your cap of ${usd(cap)} will stop it after about ${num(planWillDo)} of ${num(planBillable)} new files. Raise the cap to analyze everything.`}
             </p>
-            <p className="xce-field-hint">The estimate is a price check only. Nothing has been analyzed or charged yet.</p>
+            <p className="xce-field-hint">{estimate.basis === 'measured' ? `Priced from your real average of ${usd(estimate.perFileUsd)} per file over ${num(estimate.samples)} files.` : 'Priced from the model rate card until enough real files are analyzed.'} Nothing has been analyzed or charged yet.</p>
           </>
         )}
       </div>
-      <button type="button" id="x-content-nas-start" className="xce-btn-primary xce-nas-start" disabled={!online || !paths.length || actionBusy} onClick={start}>
+      <button type="button" id="x-content-nas-start" className="xce-btn-primary xce-nas-start" disabled={!online || !paths.length || actionBusy || live.status === 'loading'} onClick={start}>
         {actionBusy ? 'Working…' : estimate ? `Start: analyze ${num(planWillDo)} files (up to ${usd(cap)})` : `Start processing (up to ${usd(cap)})`}
       </button>
       <details className="xce-more" id="x-content-nas-organize-details">
