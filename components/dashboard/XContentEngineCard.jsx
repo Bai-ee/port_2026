@@ -875,6 +875,17 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
           #x-content-card .xce-bk-drawer:has(.xce-bk-media-preview) .xce-bk-media-preview video,
           #x-content-card .xce-bk-drawer:has(.xce-bk-media-preview) .xce-bk-media-preview img { max-height: calc(100vh - 160px); }
         }
+        /* NAS plain-language status */
+        #x-content-card .xce-nas-plan { display: grid; gap: 4px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(42,36,32,0.12); background: rgba(255,255,255,0.7); }
+        #x-content-card .xce-nas-plan-main { margin: 0; font-size: 13px; line-height: 1.5; color: #2a2420; font-weight: 600; }
+        #x-content-card .xce-nas-plan-cap { margin: 0; font-size: 12.5px; line-height: 1.5; color: #8a5a15; font-weight: 600; }
+        #x-content-card .xce-nas-now { margin: 0; padding: 8px 10px; border-radius: 10px; font-size: 12.5px; font-weight: 600; background: rgba(42,36,32,0.05); color: rgba(42,36,32,0.7); }
+        #x-content-card .xce-nas-now.is-busy { background: rgba(31,107,68,0.1); color: #1f6b44; }
+        #x-content-card .xce-nas-job { border-left-width: 4px; }
+        #x-content-card .xce-nas-job-complete { border-left-color: #1f7a4c; }
+        #x-content-card .xce-nas-job-cancelled, #x-content-card .xce-nas-job-estimate { border-left-color: rgba(42,36,32,0.3); }
+        #x-content-card .xce-nas-job-failed, #x-content-card .xce-nas-job-estimate-failed { border-left-color: #9f1f17; }
+        #x-content-card .xce-nas-job-running, #x-content-card .xce-nas-job-queued, #x-content-card .xce-nas-job-estimate-running { border-left-color: #b7791f; }
         /* Tap targets: 44px minimum on touch screens. */
         @media (pointer: coarse) {
           #x-content-card .xce-btn,

@@ -16,6 +16,22 @@ const DONE = new Set(['COMPLETE']);
 const FAILED = new Set(['FAILED', 'CANCELLED']);
 const isTerminal = (s) => DONE.has(String(s || '').toUpperCase()) || FAILED.has(String(s || '').toUpperCase());
 const usd = (n) => `$${(Number(n) || 0).toFixed(2)}`;
+const num = (n) => (Number(n) || 0).toLocaleString('en-US');
+const lastName = (p) => String(p || '').split('/').filter(Boolean).pop() || 'whole source';
+const pathsLabel = (paths) => {
+  const list = Array.isArray(paths) ? paths : [];
+  if (!list.length) return 'whole source';
+  return list.length === 1 ? lastName(list[0]) : `${lastName(list[0])} + ${list.length - 1} more`;
+};
+const ago = (iso) => {
+  const t = Date.parse(iso || '');
+  if (!t) return '';
+  const m = Math.max(0, Math.round((Date.now() - t) / 60000));
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m} min ago`;
+  if (m < 1440) return `${Math.round(m / 60)} h ago`;
+  return `${Math.round(m / 1440)} d ago`;
+};
 
 const fmtSize = (n) => {
   const v = Number(n) || 0;
@@ -188,45 +204,66 @@ export default function NasPanel({ call, status, onReload }) {
 
   const crumbs = path ? path.split('/').filter(Boolean) : [];
   const shownJobs = jobs.filter((j) => j.type !== 'estimate').slice(0, 8);
+  const activeJob = shownJobs.find((j) => !j.dryRun && !isTerminal(j.state) && String(j.state || '').toUpperCase() !== 'QUEUED') || null;
   const rootLabel = (sources.find((x) => x.id === sourceId) || sources[0])?.label || 'Root';
 
-  const jobLabel = (j) => {
+  const jobKind = (j) => {
     const st = String(j.state || '').toUpperCase();
-    if (j.dryRun) return st === 'COMPLETE' || st === 'COMPLETED' ? 'Estimate' : `Estimate · ${st.toLowerCase()}`;
-    if (/^cancel/i.test(String(j.error || '')) || st === 'CANCELLED') return 'Cancelled';
-    if (st === 'COMPLETE' || st === 'COMPLETED') return 'Complete';
-    if (FAILED.has(st)) return 'Failed';
-    if (st === 'QUEUED') return 'Queued';
-    return 'Running';
+    if (j.dryRun) return st === 'COMPLETE' ? 'estimate' : FAILED.has(st) ? 'estimate-failed' : 'estimate-running';
+    if (/^cancel/i.test(String(j.error || '')) || st === 'CANCELLED') return 'cancelled';
+    if (st === 'COMPLETE') return 'complete';
+    if (FAILED.has(st)) return 'failed';
+    if (st === 'QUEUED') return 'queued';
+    return 'running';
   };
   const renderJob = (j) => {
-    const label = jobLabel(j);
+    const kind = jobKind(j);
+    const where = pathsLabel(j.paths);
     const total = j.final?.total ?? j.progress?.total ?? 0;
     const done = j.final?.done ?? j.progress?.done ?? 0;
     const pct = total ? Math.min(100, Math.round((done / total) * 100)) : 0;
-    const active = !isTerminal(j.state);
-    const spent = j.progress?.spentUsd ?? j.spentUsd;
-    const est = j.dryRun ? j.estimate : null;
-    const cancelled = label === 'Cancelled';
+    const spent = usd(j.progress?.spentUsd ?? j.spentUsd);
+    const est = j.estimate;
+    let title; let detail;
+    if (kind === 'estimate') {
+      title = `Estimate · ${where}`;
+      detail = `Estimate only: nothing was analyzed or charged. ${num(est?.files)} files would cost about ${usd(est?.estUsd)}${est?.cached ? ` (${num(est.cached)} already analyzed, skipped)` : ''}.`;
+    } else if (kind === 'estimate-running') {
+      title = `Estimate · ${where}`; detail = 'Counting files and pricing them. Free.';
+    } else if (kind === 'estimate-failed') {
+      title = `Estimate · ${where}`; detail = j.error || 'The estimate did not finish.';
+    } else if (kind === 'complete') {
+      title = `Analyzed · ${where}`;
+      detail = `${num(done)} of ${num(total)} analyzed · ${spent} spent${j.final?.cached ? ` · ${num(j.final.cached)} reused from before` : ''}${j.final?.errorCount ? ` · ${num(j.final.errorCount)} errors` : ' · no errors'}`;
+    } else if (kind === 'cancelled') {
+      title = `Stopped · ${where}`;
+      detail = total ? `You stopped it after ${num(done)} of ${num(total)} files · ${spent} spent. Files already analyzed were kept.` : 'You stopped it before any file was analyzed · nothing spent.';
+    } else if (kind === 'failed') {
+      title = `Failed · ${where}`; detail = `${num(done)} of ${num(total)} done · ${spent} spent. ${j.error || ''}`.trim();
+    } else if (kind === 'queued') {
+      title = `Waiting · ${where}`; detail = 'Sent. Waiting for the Mac analyzer to pick it up. If this stays here, the analyzer is not running.';
+    } else {
+      title = `Analyzing · ${where}`; detail = `${num(done)} of ${total ? num(total) : '?'} files · ${spent} spent so far`;
+    }
+    const running = kind === 'running';
     return (
-      <div key={j.id} className={`xce-nas-job xce-nas-job-${label.split(' ')[0].toLowerCase()}`}>
+      <div key={j.id} className={`xce-nas-job xce-nas-job-${kind}`}>
         <div className="xce-nas-job-head">
-          <span className="xce-nas-job-state">{label}</span>
-          <span className="xce-bk-count">
-            {est ? `${est.files ?? 0} files · ~${usd(est.estUsd)}` : `${done} of ${total || '?'} · ${usd(spent)}`}
-          </span>
-          {active ? (
-            <button type="button" className="xce-bk-icon xce-nas-cancel" aria-label="Cancel job" title="Cancel" disabled={actionBusy} onClick={() => cancel(j.id)}><XIcon size={14} /></button>
+          <span className="xce-nas-job-state">{title}</span>
+          <span className="xce-bk-count">{ago(j.createdAt)}</span>
+          {!isTerminal(j.state) ? (
+            <button type="button" className="xce-bk-icon xce-nas-cancel" aria-label="Stop this job" title="Stop" disabled={actionBusy} onClick={() => cancel(j.id)}><XIcon size={14} /></button>
           ) : null}
         </div>
-        {!j.dryRun ? <div className="xce-nas-bar" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${pct}%` }} /></div> : null}
-        {j.final && !cancelled ? (
-          <p className="xce-field-hint">{j.final.pushed} analyzed{j.final.cached ? ` · ${j.final.cached} from cache` : ''}{j.final.errorCount ? ` · ${j.final.errorCount} errors` : ' · no errors'}</p>
-        ) : null}
-        {j.error && !cancelled ? <p className="xce-field-hint">{j.error}</p> : null}
+        {running ? <div className="xce-nas-bar" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${pct}%` }} /></div> : null}
+        <p className="xce-field-hint">{detail}</p>
       </div>
     );
   };
+
+  const planBillable = estimate ? Math.max(0, (estimate.files || 0) - (estimate.cached || 0)) : 0;
+  const planPerFile = planBillable ? (Number(estimate?.estUsd) || 0) / planBillable : 0;
+  const planWillDo = !estimate ? 0 : planPerFile > 0 ? Math.min(planBillable, Math.floor(cap / planPerFile)) : planBillable;
 
   let dotColor = '#a8a29e';
   let statusText = 'Analyzer offline — start it on the Mac';
@@ -344,13 +381,29 @@ export default function NasPanel({ call, status, onReload }) {
             onChange={(e) => setCapUsd(e.target.value)} />
         </div>
       </div>
-      {estimate ? (
-        <p id="x-content-nas-estimate-result" className="xce-nas-estimate">
-          {estimate.files} files · {estimate.images} images · {estimate.videos} videos · {estimate.cached} cached · est {usd(estimate.estUsd)}
-        </p>
-      ) : null}
+      <div id="x-content-nas-plan" className="xce-nas-plan" aria-live="polite">
+        {!paths.length ? (
+          <p className="xce-field-hint">Tick a folder or files above, then press Estimate to see what it will cost. Estimating is free.</p>
+        ) : !estimate ? (
+          <p className="xce-field-hint">Selected: {pathsLabel(paths)}. Press Estimate to see the cost. Nothing is analyzed or charged until you press Start.</p>
+        ) : (
+          <>
+            <p id="x-content-nas-estimate-result" className="xce-nas-plan-main">
+              {num(estimate.files)} files in {pathsLabel(paths)} ({num(estimate.images)} images, {num(estimate.videos)} videos).
+              {estimate.cached ? ` ${num(estimate.cached)} already analyzed, so they are skipped and free.` : ' None are analyzed yet.'}
+              {' '}{num(Math.max(0, estimate.files - estimate.cached))} new files would cost about {usd(estimate.estUsd)}.
+            </p>
+            <p id="x-content-nas-plan-cap" className="xce-nas-plan-cap">
+              {planWillDo >= planBillable
+                ? `Your cap of ${usd(cap)} covers all of it.`
+                : `Your cap of ${usd(cap)} will stop it after about ${num(planWillDo)} of ${num(planBillable)} new files. Raise the cap to analyze everything.`}
+            </p>
+            <p className="xce-field-hint">The estimate is a price check only. Nothing has been analyzed or charged yet.</p>
+          </>
+        )}
+      </div>
       <button type="button" id="x-content-nas-start" className="xce-btn-primary xce-nas-start" disabled={!online || !paths.length || actionBusy} onClick={start}>
-        {actionBusy ? 'Working…' : 'Start processing'}
+        {actionBusy ? 'Working…' : estimate ? `Start: analyze ${num(planWillDo)} files (up to ${usd(cap)})` : `Start processing (up to ${usd(cap)})`}
       </button>
       <details className="xce-more" id="x-content-nas-organize-details">
         <summary className="xce-more-summary">Details</summary>
@@ -362,13 +415,18 @@ export default function NasPanel({ call, status, onReload }) {
 
       <div id="x-content-nas-jobs" className="xce-nas-jobs">
         <p className="xce-kicker">Jobs</p>
+        <p id="x-content-nas-now" className={`xce-nas-now${activeJob ? ' is-busy' : ''}`}>
+          {activeJob
+            ? `Working now: ${pathsLabel(activeJob.paths)} · ${num(activeJob.progress?.done || 0)} of ${activeJob.progress?.total ? num(activeJob.progress.total) : '?'} files · ${usd(activeJob.progress?.spentUsd ?? activeJob.spentUsd)} spent so far.`
+            : 'Nothing is running right now.'}
+        </p>
         {!shownJobs.length ? <p className="xce-field-hint">No jobs yet.</p> : null}
-        {shownJobs.slice(0, 1).map(renderJob)}
-        {shownJobs.length > 1 ? (
+        {shownJobs.slice(0, 3).map(renderJob)}
+        {shownJobs.length > 3 ? (
           <details className="xce-more" id="x-content-nas-job-history-details">
-            <summary className="xce-more-summary">Details</summary>
+            <summary className="xce-more-summary">Older jobs ({shownJobs.length - 3})</summary>
             <div className="xce-more-body" id="x-content-nas-job-history-body">
-              {shownJobs.slice(1).map(renderJob)}
+              {shownJobs.slice(3).map(renderJob)}
             </div>
           </details>
         ) : null}
