@@ -29,6 +29,8 @@ import { syncRenderedVideos } from '../../../../features/rendered-videos/sync.js
 import { resolveMediaUrlsBatch, MEDIA_URLS_MAX_IDS, MEDIA_KINDS, tokenUrlFor } from '../../../../features/x-content-inventory/thumbs.js';
 import { setRights, saveThumb, createDraftFromItem } from '../../../../features/x-content-inventory/item-actions.js';
 import { NAS_ACTIONS, handleNasAction } from '../../../../features/x-content-inventory/nas.js';
+import { TIMELINE_ACTIONS, handleTimelineAction } from '../../../../features/social-archive/actions.js';
+import * as timelineStore from '../../../../features/social-archive/timeline-store.js';
 // Same static-import reasoning as bundledCalendar above. These are the two
 // ingested corpora the planner needs as ROWS — x_corpora stores summarized stat
 // blocks, which summarizeCorpus cannot be fed, so the committed JSON is the
@@ -267,6 +269,7 @@ async function handleDismiss(clientId, body) {
 
 const SUPPORTED_ACTIONS = [
   ...NAS_ACTIONS,
+  ...TIMELINE_ACTIONS,
   'engine-performance',
   'draft-quote',
   'dismiss',
@@ -757,6 +760,7 @@ export async function POST(request) {
     if (action === 'set-rights') return json(await handleSetRights(body));
     if (action === 'create-draft-from-item') return json(await handleCreateDraftFromItem(context, body));
     if (NAS_ACTIONS.includes(action)) return json(await handleNasAction(nasDeps(), action, body, decoded));
+    if (TIMELINE_ACTIONS.includes(action)) return json(await handleTimelineAction({ db: fb.adminDb, clientId: context.clientId, store: timelineStore }, action, body));
     return json({ error: `Unknown action: ${action}`, supportedActions: SUPPORTED_ACTIONS }, 400);
   } catch (err) {
     if (err?.status) {

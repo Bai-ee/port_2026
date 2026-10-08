@@ -14,6 +14,9 @@
 //   date:2018-11-15 (exact)  date:2018-11 (month)  date:2018 (year)  date:11-15 (that day, any year)
 //     — printed flyer event dates only (eventDate/eventMonthDay/eventDates); never capturedAt.
 //     Free text like 2018-11-15 also finds them via search tokens.
+//   day:2018-11-15       everything dated that day: timeline-linked `dates[]` (posted/event/taken),
+//     the linked post's day, facets.eventDate and printed event dates. Free text also
+//     searches the linked post caption (`post.text`).
 
 import { resolveBucket, DEFAULT_BUCKETS, bucketIdFromName } from './buckets.js';
 import { effectiveFacets, buildSearchTokens, canonicalGear, normalizeTerm, eventPairs } from './facets.js';
@@ -25,7 +28,7 @@ const FIELD_ALIASES = {
   crew: 'crews', crews: 'crews', label: 'labels', labels: 'labels',
   venue: 'venues', venues: 'venues', city: 'cities', cities: 'cities',
   party: 'partyNames', parties: 'partyNames', genre: 'genres', genres: 'genres',
-  gear: 'gear', date: 'date', year: 'year', decade: 'decade', vibe: 'vibe', bucket: 'bucket',
+  gear: 'gear', date: 'date', day: 'day', year: 'year', decade: 'decade', vibe: 'vibe', bucket: 'bucket',
 };
 const MULTI_WORD = new Set(['people', 'crews', 'labels', 'venues', 'cities', 'partyNames', 'genres']);
 const FACET_ARRAYS = ['people', 'crews', 'labels', 'venues', 'cities', 'partyNames', 'gear', 'genres'];
@@ -40,6 +43,12 @@ function searchFacets(item) {
   f.people = merge(f.people, f.credits);
   const pairs = eventPairs(f); // validated printed event dates, precomputed for date: filters
   if (pairs.length) f.eventPairs = pairs; else delete f.eventPairs;
+  const days = new Set();
+  for (const d of Array.isArray(item.dates) ? item.dates : []) {
+    if (d && ['posted', 'event', 'taken'].includes(d.kind) && /^\d{4}-\d{2}-\d{2}$/.test(d.date || '')) days.add(d.date);
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(item.post?.day || '')) days.add(item.post.day);
+  if (days.size) f.days = [...days].sort(); else delete f.days;
   if (ents.length && !f.people.length) f.people = merge(f.people, ents.slice(0, 1));
   if (ents.length > 1 && !(f.labels || []).length) f.labels = ents.slice(1, 2);
   if (!f.people.length) delete f.people;
@@ -142,6 +151,15 @@ function dateMatches(doc, value) {
     && (value.length === 4 || value.length === 7 || value.length === 10));
 }
 
+/** day: filter — exact YYYY-MM-DD against linked dates, post day, eventDate, printed event dates. */
+function dayMatches(doc, value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const f = doc.facets;
+  return (f.days || []).includes(value)
+    || String(f.eventDate ?? '').slice(0, 10) === value
+    || (f.eventPairs || []).some((p) => p.year != null && `${p.year}-${p.monthDay}` === value);
+}
+
 /** Score a field filter against a doc: 0 = no match, else points. */
 function filterScore(doc, { field, value }) {
   const f = doc.facets;
@@ -149,6 +167,7 @@ function filterScore(doc, { field, value }) {
     case 'gear': return (f.gear || []).includes(canonicalGear(value)) ? 100 : 0;
     case 'year': return String(f.eraYear ?? '') === value || String(f.eventDate ?? '').startsWith(value) ? 100 : 0;
     case 'date': return dateMatches(doc, value) ? 100 : 0;
+    case 'day': return dayMatches(doc, value) ? 100 : 0;
     case 'decade': return f.decade === decadeOf(value) ? 100 : 0;
     case 'vibe': {
       const v = f.vibe || {};

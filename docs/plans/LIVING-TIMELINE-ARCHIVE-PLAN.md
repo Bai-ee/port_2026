@@ -1,6 +1,6 @@
 # Living Timeline Archive — plan (2026-10-08)
 
-**Status:** PLAN ONLY. Nothing here is built except what is marked **BUILT**. Stop for owner approval after every phase. No pushes, deploys or paid calls without an explicit OK.
+**Status (updated 2026-10-08):** P1 (Facebook adapter + day index + matcher + store + CLI + Timeline tab + `day:` search) and the X/Instagram adapters and voice/Brain hook (P2, P3, P6-core) are BUILT and tested; the Facebook Housepit CHI export is imported (1,381 entries, 1,061/1,064 media matched). See `docs/source-of-truth/SOCIAL-ARCHIVE-TIMELINE.md` for what exists. Still plan-only: P4 (EXIF/video dates), P5 polish, P7, Brain Content-library tab, other accounts. Stop for owner approval after every phase. No pushes, deploys or paid calls without an explicit OK.
 **Elevation list entry:** see `ELEVATION-LIST.md` (#3).
 **Related:** `BRAIN-CONTENT-RETRIEVAL-PARKED-IDEA.md` (Brain reads the library), `CONTENT-ENGINE-V2-MASTER-PLAN.md` (buckets, search), `assetManager/docs/archive/ANALYZER.md` (analysis, batch, event dates).
 

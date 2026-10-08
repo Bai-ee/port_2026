@@ -302,7 +302,8 @@ export default function BucketsPanel({ call, packages, loading, error, onReload 
 
       {openItem ? (
         <ItemDrawer item={openItem} buckets={buckets} manualFolders={manualFolders} busy={busy} error={actionError} call={call}
-          onClose={() => { setOpenId(null); setActionError(''); }} onSave={saveItem} onMove={moveItem} onAddToFolder={addToFolder} onReload={onReload} />
+          onClose={() => { setOpenId(null); setActionError(''); }} onSave={saveItem} onMove={moveItem} onAddToFolder={addToFolder} onReload={onReload}
+          onSearchDay={(day) => { setQuery(`day:${day}`); setOpenId(null); setActionError(''); }} />
       ) : null}
 
       {sourceOpen ? (

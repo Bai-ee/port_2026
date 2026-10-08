@@ -259,8 +259,8 @@ export default function NasPanel({ call, status, onReload }) {
       const phase = j.progress?.phase;
       title = `${j.batch ? 'Batch' : 'Analyzing'} · ${where}`;
       detail = j.batch
-        ? (phase === 'preparing' ? 'Preparing the images and sending them to Anthropic…'
-          : phase === 'saving' ? `Results are in. Saving ${num(done)} of ${total ? num(total) : '?'} files…`
+        ? (phase === 'preparing' ? `Reading the files on the NAS before sending: ${num(done)} of ${total ? num(total) : '?'}${j.progress?.current ? ` · ${lastName(j.progress.current)}` : ''}. Big folders take a few minutes. Nothing is charged yet.`
+          : phase === 'saving' ? `Results are in from Anthropic. Saving to your library: ${num(done)} of ${total ? num(total) : '?'} files${j.progress?.current ? ` · ${lastName(j.progress.current)}` : ''}. Each file also gets a thumbnail and a copy on the NAS, so this part is the slow one.`
           : `Sent to Anthropic's batch queue. ${num(done)} of ${total ? num(total) : '?'} files finished there. This is normal: batches take minutes to hours, the price is half, and you can close this page.`)
         : `${num(done)} of ${total ? num(total) : '?'} files · ${spent} spent so far`;
     }

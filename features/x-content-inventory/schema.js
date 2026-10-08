@@ -111,6 +111,51 @@ export function isApproved(pkg) {
   return pkg?.approval?.state === 'approved';
 }
 
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const POST_DATE_KINDS = ['posted', 'event', 'taken'];
+const clip = (v, n) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, n) : '');
+
+/**
+ * Timeline link fields written by the social-archive linker (`post`, `postIds`,
+ * `dates`). Trims and drops malformed entries; returns the SAME object when the
+ * package carries none of them, so packages without a timeline link are untouched.
+ */
+export function sanitizePostFields(pkg) {
+  if (!pkg || typeof pkg !== 'object' || (pkg.post === undefined && pkg.postIds === undefined && pkg.dates === undefined)) return pkg;
+  const out = { ...pkg };
+  if (out.post !== undefined) {
+    const p = out.post;
+    const platform = isObj(p) ? clip(p.platform, 20) : '';
+    const entryId = isObj(p) ? clip(p.entryId, 120) : '';
+    if (!platform || !entryId) delete out.post;
+    else {
+      const postedAt = isIso(p.postedAt) ? new Date(p.postedAt).toISOString() : undefined;
+      const day = DAY_RE.test(p.day || '') ? p.day : (postedAt ? postedAt.slice(0, 10) : undefined);
+      const post = { platform, entryId, account: clip(p.account, 80), text: clip(p.text, 300) };
+      if (postedAt) post.postedAt = postedAt;
+      if (day) post.day = day;
+      if (clip(p.album, 160)) post.album = clip(p.album, 160);
+      out.post = post;
+    }
+  }
+  if (out.postIds !== undefined) {
+    const ids = Array.isArray(out.postIds) ? out.postIds.map((x) => clip(x, 120)).filter(Boolean) : [];
+    out.postIds = [...new Set(ids)].slice(0, 20);
+  }
+  if (out.dates !== undefined) {
+    const seen = new Set();
+    const list = [];
+    for (const d of Array.isArray(out.dates) ? out.dates : []) {
+      if (!isObj(d) || !POST_DATE_KINDS.includes(d.kind) || !DAY_RE.test(d.date || '')) continue;
+      const row = { kind: d.kind, date: d.date, source: clip(d.source, 60), platform: clip(d.platform, 20) };
+      const key = `${row.kind}|${row.date}|${row.source}|${row.platform}`;
+      if (!seen.has(key)) { seen.add(key); list.push(row); }
+    }
+    out.dates = list.slice(0, 40);
+  }
+  return out;
+}
+
 /** Validate the optional fields; pushes onto `errors`. Absent (undefined) = skip. */
 function validateOptionalFields(pkg, errors) {
   if (pkg.engine !== undefined && !ENGINE_IDS.includes(pkg.engine)) errors.push(`bad engine: ${pkg.engine}`);
@@ -154,6 +199,9 @@ function validateOptionalFields(pkg, errors) {
   if (pkg.humanEdits !== undefined && !isObj(pkg.humanEdits)) errors.push('bad humanEdits: must be an object');
   if (pkg.facetVersion !== undefined && !Number.isInteger(pkg.facetVersion)) errors.push('bad facetVersion: must be an integer');
   if (pkg.searchTokens !== undefined && !isStrArray(pkg.searchTokens)) errors.push('bad searchTokens: must be an array of strings');
+  if (pkg.post !== undefined && !(isObj(pkg.post) && isStr(pkg.post.platform) && isStr(pkg.post.entryId))) errors.push('bad post: needs platform and entryId');
+  if (pkg.postIds !== undefined && !isStrArray(pkg.postIds)) errors.push('bad postIds: must be an array of strings');
+  if (pkg.dates !== undefined && !(Array.isArray(pkg.dates) && pkg.dates.every((d) => isObj(d) && POST_DATE_KINDS.includes(d.kind) && DAY_RE.test(d.date || '')))) errors.push('bad dates: [{kind, date: YYYY-MM-DD}]');
   if (pkg.metrics !== undefined && !isObj(pkg.metrics)) errors.push('bad metrics: must be an object');
   if (pkg.signals !== undefined && !isObj(pkg.signals)) errors.push('bad signals: must be an object');
 }

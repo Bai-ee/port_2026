@@ -4,7 +4,7 @@ Each entry is a candidate, not a commitment. Revisit when its trigger fires. New
 
 | # | Idea | Status | Doc | Trigger to revisit |
 |---|---|---|---|---|
-| 3 | **Living timeline archive** — FB / X / Instagram archives + raw files in one dated, day-searchable timeline that informs tone per platform | Planned (P0–P7), not started | [`LIVING-TIMELINE-ARCHIVE-PLAN.md`](LIVING-TIMELINE-ARCHIVE-PLAN.md) | Current NAS batch run saved and verified; owner approves P0 |
+| 3 | **Living timeline archive** — FB / X / Instagram archives + raw files in one dated, day-searchable timeline that informs tone per platform | **Partly built** (P1 + adapters + Brain hook shipped locally; see SSOT `docs/source-of-truth/SOCIAL-ARCHIVE-TIMELINE.md`) | [`LIVING-TIMELINE-ARCHIVE-PLAN.md`](LIVING-TIMELINE-ARCHIVE-PLAN.md) | Current NAS batch run saved and verified; owner approves P0 |
 | 2 | **Brain ⇄ content retrieval** — Client Brain searches and draws tone from the catalog (read-only) | Parked | [`BRAIN-CONTENT-RETRIEVAL-PARKED-IDEA.md`](BRAIN-CONTENT-RETRIEVAL-PARKED-IDEA.md) | Becomes P6 of #3 |
 | 1 | **Face recognition** — local face grouping + owner names each group; names from the Facebook export first | Parked (discussed, not built) | Section "Related parked item" in the Brain retrieval doc | After #3 P1; needs owner approval to install a library |
 

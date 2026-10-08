@@ -36,7 +36,7 @@
 // credentials at all.
 
 import { createRequire } from 'node:module';
-import { validatePackage } from './schema.js';
+import { validatePackage, sanitizePostFields } from './schema.js';
 import { mergeInventory } from './archive-ingest.js';
 import { resolveEngine, isEngine } from './engines.js';
 import { buildSearchTokens, FACET_VERSION } from './facets.js';
@@ -354,7 +354,7 @@ export async function upsertPackage(pkg, opts = {}) {
   const existing = snap.exists ? (snap.data() || {}) : null;
   const created = !existing && !(seeded && seedIds.has(id));
 
-  const base = stripUndefined({ ...pkg, id, updatedAt: Date.now() });
+  const base = sanitizePostFields(stripUndefined({ ...pkg, id, updatedAt: Date.now() }));
   const verdict = validatePackage(base);
   if (!verdict.ok) {
     throw Object.assign(new Error(verdict.errors.join('; ')), { status: 400, errors: verdict.errors });
