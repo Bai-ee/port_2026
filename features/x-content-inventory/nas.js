@@ -267,6 +267,8 @@ async function analyzeCommand(deps, body, { dryRun, decoded }) {
     model: str(body?.model) || NAS_DEFAULT_MODEL,
     promptVersion: str(body?.promptVersion) || NAS_PROMPT_VERSION,
     dryRun, requestedBy: decoded?.email || null,
+    // Anthropic Message Batches: half price, results arrive minutes to hours later.
+    ...(body?.batch === true ? { batch: true } : {}),
   });
   return { ok: true, commandId };
 }
@@ -324,7 +326,7 @@ async function jobs(deps) {
     .map((c) => ({
       id: c.id, type: c.type, state: c.state,
       paths: c.paths || (c.relativePath ? [c.relativePath] : []),
-      capUsd: c.capUsd ?? null, dryRun: Boolean(c.dryRun),
+      capUsd: c.capUsd ?? null, dryRun: Boolean(c.dryRun), batch: c.batch === true,
       progress: c.result?.progress ?? null, estimate: c.result?.estimate ?? null,
       // Final tallies (progress is only a snapshot taken every few files).
       final: c.result && c.result.done != null

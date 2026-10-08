@@ -177,6 +177,11 @@ test('card: estimate/process queue ANALYZE_FACETS; offline + validation refusals
   assert.equal(c2.dryRun, false); assert.equal(c2.capUsd, 3); assert.ok(c2.model); assert.ok(c2.promptVersion);
   assert.equal(db.cols.get('archive_commands').get((await handleNasAction(deps, 'nas-process', { sourceId: 'nas1', paths: ['x'] })).commandId).capUsd, 5);
   await assert.rejects(() => handleNasAction(deps, 'nas-process', { sourceId: 'nas1', paths: ['x'], capUsd: 21 }), { status: 400 });
+  // Batch mode is opt-in: only an explicit boolean true is stored.
+  const cmds = db.cols.get('archive_commands');
+  assert.equal(cmds.get((await handleNasAction(deps, 'nas-process', { sourceId: 'nas1', paths: ['x'], batch: true })).commandId).batch, true);
+  assert.equal(cmds.get((await handleNasAction(deps, 'nas-process', { sourceId: 'nas1', paths: ['x'], batch: 'yes' })).commandId).batch, undefined);
+  assert.equal(cmds.get((await handleNasAction(deps, 'nas-process', { sourceId: 'nas1', paths: ['x'] })).commandId).batch, undefined);
   await assert.rejects(() => handleNasAction(deps, 'nas-process', { sourceId: 'nas1', paths: ['../x'] }), { status: 400 });
   await assert.rejects(() => handleNasAction(deps, 'nas-process', { sourceId: 'nas1', paths: [] }), { status: 400 });
 });
@@ -189,7 +194,7 @@ test('card: nas-jobs shape, nas-cancel', async () => {
   await db.collection('archive_commands').doc('other').set({ type: 'LIST_DIRECTORY', workerId: 'mac-analyzer' });
   const { jobs } = await handleNasAction(deps, 'nas-jobs', {});
   assert.equal(jobs.length, 1);
-  assert.deepEqual(Object.keys(jobs[0]).sort(), ['capUsd', 'createdAt', 'dryRun', 'error', 'estimate', 'final', 'id', 'paths', 'progress', 'spentUsd', 'state', 'type', 'updatedAt']);
+  assert.deepEqual(Object.keys(jobs[0]).sort(), ['batch', 'capUsd', 'createdAt', 'dryRun', 'error', 'estimate', 'final', 'id', 'paths', 'progress', 'spentUsd', 'state', 'type', 'updatedAt']);
   assert.equal(jobs[0].state, 'RUNNING'); assert.deepEqual(jobs[0].progress, { done: 3, total: 10 }); assert.equal(jobs[0].spentUsd, 0.02);
   assert.equal(jobs[0].final, null); // only terminal results carry final tallies
   const c = await handleNasAction(deps, 'nas-cancel', { commandId });

@@ -55,6 +55,9 @@ export default function NasPanel({ call, status, onReload }) {
   const [browseError, setBrowseError] = useState('');
   const [selected, setSelected] = useState(() => new Map()); // relativePath -> 'dir' | 'file'
   const [capUsd, setCapUsd] = useState('5');
+  // Batch mode: half price, results arrive minutes to hours later. Remembered per viewer; off by default.
+  const [batch, setBatch] = useState(() => { try { return window.localStorage.getItem('xce-nas-batch') === '1'; } catch { return false; } });
+  const changeBatch = (on) => { setBatch(on); try { window.localStorage.setItem('xce-nas-batch', on ? '1' : '0'); } catch { /* storage unavailable */ } };
   // Live price for the current selection, answered by the Mac analyzer directly (no cloud round trip, no model calls).
   const [live, setLive] = useState({ status: 'idle', data: null, error: '' });
   const [liveNonce, setLiveNonce] = useState(0); // bump to re-run the price check (Retry)
@@ -186,7 +189,7 @@ export default function NasPanel({ call, status, onReload }) {
       try {
         const r = await fetch(`${base}/nas/estimate`, {
           method: 'POST', headers: { 'content-type': 'application/json' }, signal: ctrl.signal,
-          body: JSON.stringify({ sourceId, paths: pathsKey.split('\n'), promptVersion: NAS_PROMPT_VERSION }),
+          body: JSON.stringify({ sourceId, paths: pathsKey.split('\n'), promptVersion: NAS_PROMPT_VERSION, batch }),
         });
         if (r.status === 404 || r.status === 501) { setLive({ status: 'unsupported', data: null, error: '' }); return; }
         const j = await r.json().catch(() => ({}));
@@ -198,10 +201,10 @@ export default function NasPanel({ call, status, onReload }) {
       }
     }, 350);
     return () => { clearTimeout(t); ctrl.abort(); };
-  }, [pathsKey, sourceId, base, online, liveNonce]);
+  }, [pathsKey, sourceId, base, online, liveNonce, batch]);
 
   const start = () => act(async () => {
-    const r = await call('nas-process', { sourceId, paths, capUsd: cap });
+    const r = await call('nas-process', { sourceId, paths, capUsd: cap, batch });
     if (!r || r.ok === false) throw new Error(r?.error || 'Could not start processing.');
     setSelected(new Map());
     await loadJobs();
@@ -253,7 +256,13 @@ export default function NasPanel({ call, status, onReload }) {
     } else if (kind === 'queued') {
       title = `Waiting · ${where}`; detail = 'Sent. Waiting for the Mac analyzer to pick it up. If this stays here, the analyzer is not running.';
     } else {
-      title = `Analyzing · ${where}`; detail = `${num(done)} of ${total ? num(total) : '?'} files · ${spent} spent so far`;
+      const phase = j.progress?.phase;
+      title = `${j.batch ? 'Batch' : 'Analyzing'} · ${where}`;
+      detail = j.batch
+        ? (phase === 'preparing' ? 'Preparing the images and sending them to Anthropic…'
+          : phase === 'saving' ? `Results are in. Saving ${num(done)} of ${total ? num(total) : '?'} files…`
+          : `Sent to Anthropic's batch queue. ${num(done)} of ${total ? num(total) : '?'} files finished there. This is normal: batches take minutes to hours, the price is half, and you can close this page.`)
+        : `${num(done)} of ${total ? num(total) : '?'} files · ${spent} spent so far`;
     }
     const running = kind === 'running';
     return (
@@ -388,6 +397,10 @@ export default function NasPanel({ call, status, onReload }) {
             onChange={(e) => setCapUsd(e.target.value)} />
         </div>
       </div>
+      <label id="x-content-nas-batch-toggle" className={`xce-toggle${batch ? ' is-on' : ''}`} htmlFor="x-content-nas-batch">
+        <input id="x-content-nas-batch" type="checkbox" checked={batch} onChange={(e) => changeBatch(e.target.checked)} />
+        Batch mode: half price, results in minutes to hours
+      </label>
       <div id="x-content-nas-plan" className="xce-nas-plan" aria-live="polite">
         {!paths.length ? (
           <p className="xce-field-hint">Tick a folder or files above. The price shows here right away. Looking is free; nothing is analyzed or charged until you press Start.</p>
@@ -402,7 +415,7 @@ export default function NasPanel({ call, status, onReload }) {
             <p id="x-content-nas-estimate-result" className="xce-nas-plan-main">
               {num(estimate.files)} files in {pathsLabel(paths)} ({num(estimate.images)} images, {num(estimate.videos)} videos).
               {estimate.cached ? ` ${num(estimate.cached)} already analyzed, so they are skipped and free.` : ' None are analyzed yet.'}
-              {' '}{num(Math.max(0, estimate.files - estimate.cached))} new files would cost about {usd(estimate.estUsd)}.
+              {' '}{num(Math.max(0, estimate.files - estimate.cached))} new files would cost about {usd(estimate.estUsd)}{estimate.batch ? ' in batch mode (half price)' : ''}.
             </p>
             <p id="x-content-nas-plan-cap" className="xce-nas-plan-cap">
               {planWillDo >= planBillable
@@ -414,7 +427,7 @@ export default function NasPanel({ call, status, onReload }) {
         )}
       </div>
       <button type="button" id="x-content-nas-start" className="xce-btn-primary xce-nas-start" disabled={!online || !paths.length || actionBusy || live.status === 'loading'} onClick={start}>
-        {actionBusy ? 'Working…' : estimate ? `Start: analyze ${num(planWillDo)} files (up to ${usd(cap)})` : `Start processing (up to ${usd(cap)})`}
+        {actionBusy ? 'Working…' : estimate ? `Start${batch ? ' batch' : ''}: analyze ${num(planWillDo)} files (up to ${usd(cap)})${batch ? ', results later' : ''}` : `Start processing (up to ${usd(cap)})`}
       </button>
       <details className="xce-more" id="x-content-nas-organize-details">
         <summary className="xce-more-summary">Details</summary>
