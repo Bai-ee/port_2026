@@ -923,7 +923,8 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
         #x-content-card .xce-bk-drawer-head .xce-bk-icon { width: 38px; min-width: 38px; flex: 0 0 auto; }
         #x-content-card .xce-nas-list { height: auto; min-height: 220px; max-height: min(52vh, 520px); }
         @media (min-width: 481px) {
-          #x-content-card .xce-bk-drawer:has(.xce-nas-panel) { max-width: min(680px, 96vw); }
+          /* NAS source drawer: full width of the card, covering the bucket rail. */
+          #x-content-card .xce-bk-drawer:has(.xce-nas-panel) { max-width: 100%; width: 100%; box-shadow: none; padding-left: 16px; padding-right: 16px; }
         }
         #x-content-card .xce-nasops-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
         #x-content-card .xce-nasops-count { font-size: 12px; font-weight: 600; color: #2a2420; margin-right: auto; }
