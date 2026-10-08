@@ -863,6 +863,18 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
           #x-content-card .xce-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
           #x-content-card .xce-tab { flex: 0 0 auto; }
         }
+        /* Item drawer: full card width; thumbnail left (sticky), every field right. */
+        @media (min-width: 481px) {
+          #x-content-card .xce-bk-drawer:has(.xce-bk-media-preview) { max-width: 100%; width: 100%; box-shadow: none; padding-left: 16px; padding-right: 16px; }
+        }
+        @media (min-width: 900px) {
+          #x-content-card .xce-bk-drawer:has(.xce-bk-media-preview) { grid-template-columns: minmax(300px, 38%) minmax(0, 1fr); column-gap: 20px; }
+          #x-content-card .xce-bk-drawer:has(.xce-bk-media-preview) > * { grid-column: 2; }
+          #x-content-card .xce-bk-drawer:has(.xce-bk-media-preview) > .xce-bk-drawer-head { grid-column: 1 / -1; }
+          #x-content-card .xce-bk-drawer:has(.xce-bk-media-preview) > .xce-bk-media-preview { grid-column: 1; grid-row: 2 / span 40; position: sticky; top: 0; align-self: start; }
+          #x-content-card .xce-bk-drawer:has(.xce-bk-media-preview) .xce-bk-media-preview video,
+          #x-content-card .xce-bk-drawer:has(.xce-bk-media-preview) .xce-bk-media-preview img { max-height: calc(100vh - 160px); }
+        }
         /* Tap targets: 44px minimum on touch screens. */
         @media (pointer: coarse) {
           #x-content-card .xce-btn,

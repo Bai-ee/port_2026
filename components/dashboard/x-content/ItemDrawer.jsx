@@ -115,7 +115,7 @@ function NasDetails({ item, call, onReload }) {
         </>
       ) : null}
       {item.activity || item.peopleCount != null || nas.relativePath ? (
-        <details className="xce-more" id="x-content-nas-file-details">
+        <details open className="xce-more" id="x-content-nas-file-details">
           <summary className="xce-more-summary">Details</summary>
           <div className="xce-more-body" id="x-content-nas-file-details-body">
             {item.activity ? <p className="xce-field-hint">Activity: {item.activity}</p> : null}
@@ -206,7 +206,7 @@ export default function ItemDrawer({ call, item, buckets, manualFolders, busy, e
         {(() => {
           const src = sourceLine(item);
           return (
-            <details className="xce-more" id="x-content-item-provenance-details">
+            <details open className="xce-more" id="x-content-item-provenance-details">
               <summary className="xce-more-summary">Details</summary>
               <div className="xce-more-body" id="x-content-item-provenance-details-body">
                 <p id="x-content-item-id-line" className="xce-bk-source"><span className="xce-kicker">ID</span> <span>{item.id}</span></p>
@@ -241,7 +241,7 @@ export default function ItemDrawer({ call, item, buckets, manualFolders, busy, e
           {item.facets?.storySuggestion ? <p className="xce-field-hint">Suggested: {item.facets.storySuggestion}</p> : null}
         </div>
 
-        <details className="xce-more" id="x-content-item-drawer-facets-details">
+        <details open className="xce-more" id="x-content-item-drawer-facets-details">
           <summary className="xce-more-summary">Facets</summary>
           <div className="xce-more-body" id="x-content-item-drawer-facets-body">
         <div id="x-content-item-drawer-facets" className="xce-bk-facets">
