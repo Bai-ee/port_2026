@@ -878,7 +878,7 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
                               <div id={`x-strategy-plan-history-detail-${h.version}`} style={{ ...S.stack, gap: 8, marginTop: 6, padding: 10, borderRadius: XCE_RADII.md, background: XCE_COLORS.surfaceMuted }}>
                                 {!isCurrent ? (
                                   <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                                    <button type="button" id={`x-strategy-plan-revert-${h.version}`} className="xce-btn xce-btn-ghost" disabled={planBusy} onClick={() => revertPlan(h.version)}>
+                                    <button type="button" id={`x-strategy-plan-revert-${h.version}`} className="xce-btn xce-btn-ghost" disabled={planBusy} onClick={() => { setUndoVersion(0); revertPlan(h.version); }}>
                                       <RotateCcw size={15} /> Restore v{h.version}
                                     </button>
                                   </div>

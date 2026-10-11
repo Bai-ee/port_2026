@@ -25,3 +25,10 @@
 - Visual: 8 tabs x 400 zero console errors, no page-level horizontal overflow (card scrollWidth 358 vs 350 = bottom-nav full-bleed margin, internal only). Shots: docs/plans/content-engine-ui-shots/U3/.
 - Orchestrator addition: clientName prop passed to StrategyPanel (header chip).
 - Follow-ups from review go into U4: dead seriesLabel, stale PlanPanel comment, orphaned CSS, stale undoNote.
+
+## U4 (integration + QA)
+- Reviewer cleanups applied: dead seriesLabel removed, stale PlanPanel comment fixed, History Restore clears stale undo note.
+- Not done (harmless): orphaned xce-* CSS (slot-list, engine-count, week-grid, perf-row, dl-controls) still shares multi-selector lines in XContentEngineCard.jsx; InventoryPanel overrides xce-inv-* in its own prefixed global block.
+- npm test: 4522 tests, 4520 pass / 2 fail (vendor-api-lib only).
+- Visual: 8 tabs at 1280, 700, 400 — zero console errors, no page-level horizontal overflow. Shots (5.3MB, >3MB cap so NOT committed): /private/tmp/claude-501/ce-ui-scratch/U4-shots/
+- Behaviour smoke: tab switching + render of all tabs verified live; write/model/schedule paths deliberately not exercised (stubbed). Code-level review: no handler/payload changes.

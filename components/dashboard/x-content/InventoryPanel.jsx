@@ -95,10 +95,6 @@ function pillarShort(key) {
   return label.split('—')[0].trim();
 }
 
-function seriesLabel(key) {
-  return SERIES[key]?.label || '';
-}
-
 function toDraft(pkg) {
   if (!pkg) return { ...EMPTY_DRAFT };
   return {

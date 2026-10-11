@@ -17,8 +17,9 @@ import { XCE_COLORS, XCE_RADII, XCE_TYPE } from './xce-tokens';
 //
 // STYLING: inline style props built from the ui/* primitives + xce-tokens (the
 // Today restyle, mock 06). Only the header controls (tier picker, refresh) and
-// the draft read-out still use the card's shared `xce-*` classes. No
-// `<style jsx>` here: scoped styled-jsx skips markup from helpers/mapped arrays.
+// the draft read-out still use the card's shared `xce-*` classes. One
+// `<style jsx global>` block (selectors prefixed `#x-content-card`) covers the
+// gaps accordion header; no scoped `<style jsx>` (it skips helper/mapped markup).
 //
 // The thumbnails are deliberately CSS-only placeholders: the archive is not
 // populated yet, so a tile showing the series code is an honest stand-in
