@@ -411,35 +411,40 @@ export function selectForSlots({
       usedPackages.push(r.packageId);
       take(slot, ownedSuggestion({ slot, ids, pkg: r.package, brain, strategy, ownSummary }), r.matchReason || r.basis);
     } else if (slot.type === 'reply') {
-      // Library-vocabulary fit applies to replies only; each pooled narrative also needs an unused owned item.
+      // Replies need a live, on-brand narrative, not an owned item: noContent narratives
+      // (brand-fit passed, nothing owned matched) join the pool as package-less candidates.
+      const open = (x) => !usedPosts.includes(x.n.anchor.id);
       const pool = brandFitApplies('reply')
-        ? ranking.scored.filter((x) => !usedPosts.includes(x.n.anchor.id) && x.candidates.some((c) => !usedPackages.includes(c.pkg.id) && c.m.tier === x.best.m.tier))
+        ? [...ranking.scored.filter(open), ...ranking.noContent.filter(open).map((x) => ({ ...x, candidates: [] }))]
         : [];
       const r = fillReplySlot({ slot, narratives: pool.map((x) => x.n), now });
-      if (r.gap) { gapFor(slot, narratives.length && !pool.length ? 'no on-brand conversation with an unused owned item' : r.gap.reason); continue; }
+      if (r.gap) { gapFor(slot, narratives.length && !pool.length ? 'no on-brand conversation to reply to' : r.gap.reason); continue; }
       const x = pool.find((y) => y.n.id === r.narrative.id);
-      const pick = x.candidates.find((c) => !usedPackages.includes(c.pkg.id) && c.m.tier === x.best.m.tier);
+      // Optional note only: an unused owned item that matches. Never required.
+      const pick = x.candidates.find((c) => !usedPackages.includes(c.pkg.id) && c.m.tier === x.best.m.tier) || null;
       usedPosts.push(r.anchor.id);
-      usedPackages.push(pick.pkg.id);
-      const basis = contentBasis(pick.pkg);
+      if (pick) usedPackages.push(pick.pkg.id);
+      const basis = pick ? contentBasis(pick.pkg) : null;
       const evidence = performanceEvidence({ narrative: x.n, type: 'reply', ownSummary });
       take(slot, {
-        id: suggestionIdFor({ ...ids, slotType: slot.type, opportunityId: x.n.anchor.id, packageId: pick.pkg.id }),
+        id: suggestionIdFor({ ...ids, slotType: slot.type, opportunityId: x.n.anchor.id, packageId: pick?.pkg.id ?? null }),
         type: 'reply',
-        rank: Number(x.rank.toFixed(3)),
+        rank: x.rank == null ? null : Number(x.rank.toFixed(3)),
         conversation: conversationSnapshot(x.n),
         opportunity: { id: x.n.anchor.id, url: x.n.anchor.url, author: x.n.anchor.author, text: x.n.anchor.text },
-        package: packageSnapshot(pick.pkg, basis),
+        package: pick ? packageSnapshot(pick.pkg, basis) : null,
         why: {
           now: `${x.n.momentum.reasons.join(', ') || 'active'}; ${x.n.momentum.engagement} engagements across ${x.n.momentum.posts} post(s); ${r.matchReason}`,
           brand: `${x.fit.phrases.length ? `names ${x.fit.phrases.slice(0, 4).join(', ')} from your library` : `shares distinctive library terms ${x.fit.terms.slice(0, 5).map((t) => `"${t}"`).join(', ')}`}; guard lane: ${x.fit.lane} (${x.fit.laneConfidence})`,
           brain: brainLine(brain),
           strategy: strategyLine(strategy),
-          content: `"${pick.pkg.title}" — ${pick.m.tier === 'specific' ? `named in the conversation (${pick.m.phrases.join(', ')})` : `genre-level match only (${pick.m.phrases.join(', ')}) — the conversation does not name this item`}; grounded in ${basis.kind === 'story' ? 'your own story' : `verifiable facts (${basis.facts.map((f) => f.provenance).filter((v, i, a) => a.indexOf(v) === i).join('; ')})`}`,
+          content: pick
+            ? `optional: "${pick.pkg.title}" — ${pick.m.tier === 'specific' ? `named in the conversation (${pick.m.phrases.join(', ')})` : `genre-level match only (${pick.m.phrases.join(', ')}) — the conversation does not name this item`}; grounded in ${basis.kind === 'story' ? 'your own story' : `verifiable facts (${basis.facts.map((f) => f.provenance).filter((v, i, a) => a.indexOf(v) === i).join('; ')})`}`
+            : 'none required — conversation reply',
           history: evidence,
         },
-        scores: { momentum: x.n.momentum.score, brandFit: x.fit.score, contentFit: Number(x.contentScore.toFixed(3)), history: evidence.score ?? 0 },
-        match: { tier: pick.m.tier, terms: pick.m.terms, phrases: pick.m.phrases, score: pick.m.score },
+        scores: { momentum: x.n.momentum.score, brandFit: x.fit.score, contentFit: pick ? Number(x.contentScore.toFixed(3)) : null, history: evidence.score ?? 0 },
+        match: pick ? { tier: pick.m.tier, terms: pick.m.terms, phrases: pick.m.phrases, score: pick.m.score } : { terms: [], score: null },
       }, r.matchReason);
     } else if (slot.type === 'self-quote') {
       const r = fillSelfQuoteSlot({ slot, ownPosts, ownHandle, now });
