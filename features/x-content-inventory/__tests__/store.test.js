@@ -232,3 +232,20 @@ test('create past the guard is refused with 409', async () => {
   await assert.rejects(() => upsertPackage(row({ id: 'y' }), { db, returnPackages: false }), { status: 409 });
   await upsertPackage(row({ id: 'x', title: 'edit ok' }), { db, returnPackages: false });
 });
+
+test('timeline link fields (post/postIds/dates) round-trip through upsert + read, trimmed', async () => {
+  const db = makeDb();
+  const post = { platform: 'facebook', account: 'Housepit', entryId: 'e1', postedAt: '2012-05-04T10:00:00Z', text: 'hello '.repeat(100), album: 'Roof' };
+  const dates = [{ kind: 'posted', date: '2012-05-04', source: 'facebook-posts-html', platform: 'facebook' }];
+  await upsertPackage(row({ id: 'linked-1', post, postIds: ['e1'], dates }), { db, returnPackages: false });
+  const back = (await readInventory({ db })).packages.find((p) => p.id === 'linked-1');
+  assert.equal(back.post.text.length, 300);
+  assert.equal(back.post.day, '2012-05-04');
+  assert.deepEqual(back.postIds, ['e1']);
+  assert.deepEqual(back.dates, dates);
+  assert.ok(back.searchTokens.includes('hello'));
+  // a package without the fields is stored exactly as before
+  await upsertPackage(row({ id: 'plain-1' }), { db, returnPackages: false });
+  const plain = stored(db).get('plain-1');
+  assert.equal('post' in plain || 'postIds' in plain || 'dates' in plain, false);
+});

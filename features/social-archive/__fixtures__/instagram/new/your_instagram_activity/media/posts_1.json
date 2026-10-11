@@ -1,0 +1,10 @@
+[
+  { "media": [ { "uri": "media/posts/201809/solo.jpg", "creation_timestamp": 1536000000, "title": "CafÃ© morning â\u0080\u0099s best ð\u009f\u0098\u0080",
+      "media_metadata": { "photo_metadata": { "exif_data": [ { "date_time_original": "2018:08-30 09:15:00" }, { "date_time_original": "2018:08:30 09:15:00" } ] } } } ] },
+  { "title": "Carousel caption",
+    "creation_timestamp": 1536100000,
+    "media": [ { "uri": "media/posts/201809/c1.jpg", "creation_timestamp": 1536100001, "title": "" }, { "uri": "media/posts/201809/c2.mp4", "creation_timestamp": 1536100002 } ] },
+  { "media": [ { "uri": "media/posts/201809/solo.jpg", "creation_timestamp": 1536000000, "title": "dupe" } ] },
+  { "media": [ { "uri": "media/posts/201809/nots.jpg" } ] },
+  { "media": [ ] }
+]

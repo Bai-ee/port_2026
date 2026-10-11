@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { CalendarDays, CalendarRange, ChevronDown, Ellipsis, FolderTree, Library, LineChart, MessagesSquare, Users } from 'lucide-react';
+import { CalendarDays, CalendarRange, ChevronDown, Ellipsis, FolderTree, History, Library, LineChart, MessagesSquare, Users } from 'lucide-react';
 import BottomNav from './x-content/ui/BottomNav';
 import SegmentedControl from './x-content/ui/SegmentedControl';
 import { fallbackDraft, validateDraft } from '../../features/x-content-inventory/draft.js';
@@ -36,9 +36,10 @@ const PerformancePanel = dynamic(() => import('./x-content/PerformancePanel'), {
 const ClientCapturePanel = dynamic(() => import('./x-content/ClientCapturePanel'), { ssr: false });
 const BucketsPanel = dynamic(() => import('./x-content/BucketsPanel'), { ssr: false });
 const DailySuggestionsPanel = dynamic(() => import('./x-content/DailySuggestionsPanel'), { ssr: false });
+const TimelinePanel = dynamic(() => import('./x-content/TimelinePanel'), { ssr: false });
 const StrategyPanel = dynamic(() => import('./x-content/StrategyPanel'), { ssr: false });
 
-const TABS = ['strategy', 'plan', 'today', 'inventory', 'buckets', 'calendar', 'clients', 'performance'];
+const TABS = ['strategy', 'plan', 'today', 'inventory', 'buckets', 'calendar', 'clients', 'performance', 'timeline'];
 const TAB_STORAGE_KEY = 'xce-last-tab';
 
 // Labels only: ids are the unchanged TABS ids (inventory -> "Content", performance -> "Results").
@@ -53,11 +54,13 @@ const PRIMARY_TABS = [
 const MORE_TABS = [
   { id: 'clients', label: 'Clients', Icon: Users },
   { id: 'performance', label: 'Results', Icon: LineChart },
+  { id: 'timeline', label: 'Timeline', Icon: History },
 ];
 const MOBILE_MORE_TABS = [
   { id: 'buckets', label: 'Buckets', Icon: FolderTree },
   { id: 'clients', label: 'Clients', Icon: Users },
   { id: 'performance', label: 'Results', Icon: LineChart },
+  { id: 'timeline', label: 'Timeline', Icon: History },
 ];
 const TOAST_MS = 3200;
 
@@ -433,6 +436,8 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
         />
       ) : tab === 'today' ? (
         <DailySuggestionsPanel call={call} showToast={showToast} />
+      ) : tab === 'timeline' ? (
+        <TimelinePanel call={call} />
       ) : tab === 'buckets' ? (
         <BucketsPanel call={call} packages={packages} loading={loading} error={error} onReload={() => load()} />
       ) : tab === 'calendar' ? (
@@ -1118,6 +1123,40 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
         }
         @media (min-width: 481px) {
           #x-content-card .xce-more-sheet { display: none !important; }
+        }
+        /* ---- Timeline tab (TimelinePanel.jsx) + ItemDrawer posted copy ---- */
+        #x-content-card .xce-timeline-search { display: grid; grid-template-columns: 1fr; gap: 8px; min-width: 0; }
+        #x-content-card .xce-timeline-section { display: grid; gap: 8px; min-width: 0; margin-top: 10px; }
+        #x-content-card .xce-timeline-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+        #x-content-card .xce-timeline-window { font-family: var(--font-mono); font-size: 10.5px; color: rgba(42,36,32,0.5); }
+        #x-content-card .xce-timeline-days,
+        #x-content-card .xce-timeline-entries,
+        #x-content-card .xce-timeline-archives { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; min-width: 0; }
+        #x-content-card .xce-timeline-day-button { display: grid; gap: 4px; width: 100%; min-width: 0; padding: 10px; text-align: left; border: 1px solid rgba(42,36,32,0.12); border-radius: 10px; background: rgba(255,255,255,0.6); color: #2a2420; cursor: pointer; }
+        #x-content-card .xce-timeline-day-button:hover { border-color: rgba(42,36,32,0.35); }
+        #x-content-card .xce-timeline-day-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+        #x-content-card .xce-timeline-day-date { font-family: var(--font-mono); font-size: 12px; font-weight: 700; }
+        #x-content-card .xce-timeline-day-total { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: #2a2420; color: #fff; }
+        #x-content-card .xce-timeline-day-platforms { display: inline-flex; gap: 8px; margin-left: auto; }
+        #x-content-card .xce-timeline-day-kinds { font-size: 11px; color: rgba(42,36,32,0.55); }
+        #x-content-card .xce-timeline-snippet { font-size: 12px; line-height: 1.35; color: rgba(42,36,32,0.8); overflow-wrap: anywhere; }
+        #x-content-card .xce-timeline-pdot { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; }
+        #x-content-card .xce-timeline-pdot-mark { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        #x-content-card .xce-timeline-day-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        #x-content-card .xce-timeline-entry { display: grid; gap: 4px; min-width: 0; padding: 8px 10px; border: 1px solid rgba(42,36,32,0.12); border-radius: 10px; background: #fff; }
+        #x-content-card .xce-timeline-entry-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 11px; color: rgba(42,36,32,0.6); }
+        #x-content-card .xce-timeline-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 18px; padding: 0 5px; border-radius: 5px; font-size: 10px; font-weight: 700; color: #fff; }
+        #x-content-card .xce-timeline-kind { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.05em; font-size: 10px; }
+        #x-content-card .xce-timeline-text { margin: 0; font-size: 12.5px; line-height: 1.4; color: #2a2420; overflow-wrap: anywhere; }
+        #x-content-card .xce-timeline-thumbs { display: flex; gap: 6px; }
+        #x-content-card .xce-timeline-thumb { width: 56px; height: 56px; object-fit: cover; border-radius: 6px; background: rgba(42,36,32,0.06); }
+        #x-content-card .xce-timeline-archive { display: grid; gap: 2px; font-size: 12px; }
+        #x-content-card .xce-timeline-archive-title { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
+        #x-content-card .xce-timeline-archive-line { color: rgba(42,36,32,0.6); }
+        #x-content-card .xce-timeline-posted-copy { display: grid; gap: 6px; min-width: 0; padding: 10px; border: 1px solid rgba(42,36,32,0.12); border-radius: 10px; background: rgba(255,255,255,0.6); }
+        #x-content-card .xce-timeline-posted-text { margin: 0; font-size: 13px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+        @media (min-width: 481px) {
+          #x-content-card .xce-timeline-search { grid-template-columns: 150px 1fr 150px auto; align-items: center; }
         }
       `}</style>
     </div>

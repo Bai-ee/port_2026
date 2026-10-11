@@ -42,6 +42,33 @@ export function sourceLine(item) {
   return null;
 }
 
+const PLATFORM_LABEL = { facebook: 'Facebook', x: 'X', instagram: 'Instagram' };
+
+// The caption this item was originally posted with (timeline archive link).
+// Renders nothing for items without a linked post.
+function PostedCopy({ item, onSearchDay }) {
+  const post = item?.post;
+  if (!post || typeof post !== 'object') return null;
+  const platform = PLATFORM_LABEL[post.platform] || post.platform;
+  const day = post.day || (post.postedAt ? String(post.postedAt).slice(0, 10) : '');
+  return (
+    <div id="x-content-item-posted-copy" className="xce-timeline-posted-copy">
+      <p id="x-content-item-posted-copy-heading" className="xce-kicker">Posted copy</p>
+      <p id="x-content-item-posted-copy-meta" className="xce-bk-source">
+        <span>{platform}{post.account ? ` · ${post.account}` : ''}</span>
+        {day ? <span> · {day}</span> : null}
+        {post.album ? <span> · Album: {post.album}</span> : null}
+      </p>
+      {post.text ? <p id="x-content-item-posted-copy-text" className="xce-timeline-posted-text">{post.text}</p> : null}
+      {day && onSearchDay ? (
+        <button type="button" id="x-content-item-posted-copy-day-button" className="xce-btn-ghost" onClick={() => onSearchDay(day)}>
+          More from that day
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function MediaPreview({ item, call }) {
   const rendered = isRenderedVideo(item);
   const signed = useSignedMedia(call, item, !rendered);
@@ -136,7 +163,7 @@ function NasDetails({ item, call, onReload }) {
   );
 }
 
-export default function ItemDrawer({ call, item, buckets, manualFolders, busy, error, onClose, onSave, onMove, onAddToFolder, onReload }) {
+export default function ItemDrawer({ call, item, buckets, manualFolders, busy, error, onClose, onSave, onMove, onAddToFolder, onReload, onSearchDay }) {
   const [draft, setDraft] = useState({});
   const [act, setAct] = useState({ busy: false, error: '', postId: null, cleared: false });
   const [vibe, setVibe] = useState({});
@@ -203,6 +230,7 @@ export default function ItemDrawer({ call, item, buckets, manualFolders, busy, e
 
         {isNasItem(item) ? <NasPreview item={item} /> : <MediaPreview item={item} call={call} />}
         {isNasItem(item) ? <NasDetails item={item} call={call} onReload={onReload} /> : null}
+        <PostedCopy item={item} onSearchDay={onSearchDay} />
         {(() => {
           const src = sourceLine(item);
           return (

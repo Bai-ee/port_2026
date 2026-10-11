@@ -101,3 +101,20 @@ test('free text event-date tokens find items; capturedAt is never indexed', () =
   assert.deepEqual(ids('11-15'), ['a', 'b', 'd']);
   assert.equal(ids('date:11-15 party').join(), 'a');
 });
+
+test('day: matches timeline dates, post day, eventDate; free text searches post caption', () => {
+  const rows = [
+    { id: 'p1', title: 'Photo A', bucketId: 'nas', post: { platform: 'facebook', entryId: 'e1', day: '2012-05-04', text: 'Rooftop sunset session' }, dates: [{ kind: 'posted', date: '2012-05-04', source: 'facebook-posts-html', platform: 'facebook' }] },
+    { id: 'p2', title: 'Flyer B', bucketId: 'nas', dates: [{ kind: 'event', date: '2012-05-05', source: 'x', platform: 'x' }] },
+    { id: 'p3', title: 'Flyer C', bucketId: 'nas', facets: { eventDate: '2012-05-04' } },
+    { id: 'p4', title: 'Other', bucketId: 'nas', dates: [{ kind: 'created', date: '2012-05-04', source: 'x', platform: 'x' }] },
+    { id: 'p5', title: 'Plain', bucketId: 'nas' },
+  ];
+  const ix = buildIndex(rows);
+  assert.deepEqual(search(ix, 'day:2012-05-04').map((h) => h.id).sort(), ['p1', 'p3']);
+  assert.deepEqual(search(ix, 'day:2012-05-05').map((h) => h.id), ['p2']);
+  assert.deepEqual(search(ix, 'day:2012-05').map((h) => h.id), []);
+  assert.deepEqual(search(ix, 'rooftop sunset').map((h) => h.id), ['p1']);
+  assert.deepEqual(parseQuery('day:2012-05-04'), { words: [], filters: [{ field: 'day', value: '2012-05-04' }] });
+  assert.deepEqual(JSON.parse(JSON.stringify(ix)), ix);
+});

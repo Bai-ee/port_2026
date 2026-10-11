@@ -1491,7 +1491,7 @@ async function markClientBrainStatus(clientId, status) {
 //   maxChars:       length cap (default 2500).
 //   requireApproved: default true — only approved brains feed downstream copy
 //                   (approval precedence). Pass false to consume drafts.
-async function loadClientBrainContext(clientId, { useFor = null, maxChars = 2500, requireApproved = true } = {}) {
+async function loadClientBrainContextBase(clientId, { useFor = null, maxChars = 2500, requireApproved = true } = {}) {
   if (!clientId) return '';
   const snap = await clientBrainRef(clientId).get();
   if (!snap.exists) return '';
@@ -1502,6 +1502,29 @@ async function loadClientBrainContext(clientId, { useFor = null, maxChars = 2500
     return scoped ? capText(scoped, maxChars) : '';
   }
   return compact(data.aiContextPack?.shortContext || data.aiContextPack?.longContext || '', maxChars);
+}
+
+//   platform/topic: optional. When either is a non-empty string, a compact
+//                   "PLATFORM VOICE" block from the social-archive timeline is
+//                   appended (never into a context the Brain refused to give).
+//                   Any timeline error is swallowed. Neither => unchanged.
+async function loadClientBrainContext(clientId, opts = {}) {
+  const base = await loadClientBrainContextBase(clientId, opts || {});
+  const platform = typeof opts?.platform === 'string' ? opts.platform.trim() : '';
+  const topic = typeof opts?.topic === 'string' ? opts.topic.trim() : '';
+  if (!platform && !topic) return base;
+  if (!base && opts.requireApproved !== false) return base;
+  try {
+    const maxChars = opts.maxChars ?? 2500;
+    const sep = base ? 2 : 0;
+    const budget = Math.min(1800, maxChars - base.length - sep);
+    if (budget <= 0) return base;
+    const { timelineContext } = await import('../social-archive/voice.js');
+    const block = await timelineContext({ db: fb.adminDb, clientId, platform, topic, maxChars: budget });
+    return block ? (base ? `${base}\n\n${block}` : block) : base;
+  } catch {
+    return base;
+  }
 }
 
 async function loadClientBrainDecisions(clientId, { cardId = null, requireApproved = true } = {}) {
