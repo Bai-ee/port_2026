@@ -31,7 +31,7 @@ import { Toast } from './x-content/Feedback';
 
 const PlanPanel = dynamic(() => import('./x-content/PlanPanel'), { ssr: false });
 const InventoryPanel = dynamic(() => import('./x-content/InventoryPanel'), { ssr: false });
-const CalendarPanel = dynamic(() => import('./x-content/CalendarPanel'), { ssr: false });
+const MonthCalendarPanel = dynamic(() => import('./x-content/MonthCalendarPanel'), { ssr: false });
 const PerformancePanel = dynamic(() => import('./x-content/PerformancePanel'), { ssr: false });
 const ClientCapturePanel = dynamic(() => import('./x-content/ClientCapturePanel'), { ssr: false });
 const BucketsPanel = dynamic(() => import('./x-content/BucketsPanel'), { ssr: false });
@@ -83,8 +83,9 @@ function todayCT() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' }).format(new Date());
 }
 
-function shiftDate(date, days) {
-  return new Date(Date.parse(`${date}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+function shiftMonth(month, delta) {
+  const [y, m] = month.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1 + delta, 1)).toISOString().slice(0, 7);
 }
 
 export default function XContentEngineCard({ getIdToken, activeClientId, clientName }) {
@@ -135,7 +136,7 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
   const [draftingId, setDraftingId] = useState(null);
   const [drafts, setDrafts] = useState({});
 
-  const [weekStart, setWeekStart] = useState(todayCT);
+  const [calMonth, setCalMonth] = useState(() => todayCT().slice(0, 7));
   const [calendar, setCalendar] = useState(null);
   const [calendarLoading, setCalendarLoading] = useState(false);
   const [calendarError, setCalendarError] = useState('');
@@ -201,18 +202,18 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
     return data;
   }, [getIdToken]);
 
-  const loadCalendar = useCallback(async (start = weekStart) => {
+  const loadCalendar = useCallback(async (month = calMonth) => {
     setCalendarLoading(true);
     setCalendarError('');
     try {
-      const res = await call('week-calendar', { start });
+      const res = await call('month-calendar', { month });
       setCalendar(res?.calendar || null);
     } catch (err) {
       setCalendarError(err.message || 'Could not load the calendar.');
     } finally {
       setCalendarLoading(false);
     }
-  }, [call, weekStart]);
+  }, [call, calMonth]);
 
   const loadPerformance = useCallback(async () => {
     setPerfLoading(true);
@@ -226,47 +227,59 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
     }
   }, [call]);
 
-  const onShiftWeek = useCallback((days) => {
-    const next = shiftDate(weekStart, days);
-    setWeekStart(next);
+  const onShiftMonth = useCallback((delta) => {
+    const next = shiftMonth(calMonth, delta);
+    setCalMonth(next);
     loadCalendar(next);
-  }, [weekStart, loadCalendar]);
+  }, [calMonth, loadCalendar]);
 
-  const onCalendarApprove = useCallback(async (slot) => {
-    setCalendarBusyId(slot.id);
-    setCalendarError('');
+  const onCalendarToday = useCallback(() => {
+    const now = todayCT().slice(0, 7);
+    setCalMonth(now);
+    loadCalendar(now);
+  }, [loadCalendar]);
+
+  // Every calendar action: one social-posting call, reload the month, toast.
+  // Returns true on success so the sheet can advance to the next post.
+  const runCalendarAction = useCallback(async (post, body, okText) => {
+    setCalendarBusyId(post.id);
     try {
-      await callSocial({ action: 'approve-draft', postId: slot.id });
+      await callSocial({ postId: post.id, ...body });
       await loadCalendar();
-      showToast('Approved');
+      showToast(okText);
+      return true;
     } catch (err) {
-      setCalendarError(err.message || 'Could not approve.');
-      showToast(err.message || 'Could not approve.', 'error');
+      showToast(err.message || 'Could not update the post.', 'error');
+      return false;
     } finally {
       setCalendarBusyId(null);
     }
   }, [callSocial, loadCalendar, showToast]);
 
-  // Scheduling an EXISTING approved post goes through the route's `update`
-  // (same as the Copywriter card): `schedule` would mint a second post.
-  const onCalendarSchedule = useCallback(async (slot, localValue) => {
-    setCalendarBusyId(slot.id);
-    setCalendarError('');
-    try {
-      const when = new Date(localValue);
-      if (Number.isNaN(when.getTime())) throw new Error('Pick a valid date and time.');
-      if (when.getTime() < Date.now() + 60 * 1000) throw new Error('Pick a time in the future.');
-      const iso = when.toISOString();
-      await callSocial({ action: 'update', postId: slot.id, content: slot.content, scheduledAt: iso });
-      await loadCalendar();
-      showToast(`Scheduled for ${when.toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`);
-    } catch (err) {
-      setCalendarError(err.message || 'Could not schedule.');
-      showToast(err.message || 'Could not schedule.', 'error');
-    } finally {
-      setCalendarBusyId(null);
-    }
-  }, [callSocial, loadCalendar, showToast]);
+  // Approve = approved + scheduled at the shown CT time (the go-live step: the sweeper publishes scheduled
+  // posts). One server call, no half state. Clearance / reply / collision / expiry rules apply server-side.
+  const onCalendarApprove = useCallback((post, { content, scheduledAt }) => {
+    if (!scheduledAt) { showToast('Set a publish time first.', 'error'); return Promise.resolve(false); }
+    const when = new Date(scheduledAt).toLocaleString('en-US', { timeZone: 'America/Chicago', weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    return runCalendarAction(post, { action: 'approve-and-schedule', content, scheduledAt }, `Scheduled for ${when} CT`);
+  }, [runCalendarAction, showToast]);
+
+  const onCalendarReject = useCallback((post) => runCalendarAction(post, { action: 'reject-draft' }, 'Rejected'), [runCalendarAction]);
+
+  // `update` edits in place (never mints a second post). scheduledAt is only sent when the reviewer changed it.
+  const onCalendarSave = useCallback((post, { content, scheduledAt }) => (
+    runCalendarAction(post, { action: 'update', content, ...(scheduledAt ? { scheduledAt } : {}) }, 'Saved')
+  ), [runCalendarAction]);
+
+  const onCalendarUnschedule = useCallback((post) => (
+    runCalendarAction(post, { action: 'update', content: post.content, scheduledAt: '' }, 'Unscheduled')
+  ), [runCalendarAction]);
+
+  // Live score in the sheet: deterministic scoreXPost, no LLM, no cost.
+  const onCalendarScore = useCallback(async (content) => {
+    const res = await callSocial({ action: 'score', content });
+    return res?.score || null;
+  }, [callSocial]);
 
   const onCaptureClient = useCallback(async (capture) => {
     setSavingId('capture');
@@ -441,15 +454,19 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
       ) : tab === 'buckets' ? (
         <BucketsPanel call={call} packages={packages} loading={loading} error={error} onReload={() => load()} />
       ) : tab === 'calendar' ? (
-        <CalendarPanel
+        <MonthCalendarPanel
           calendar={calendar}
           loading={calendarLoading}
           error={calendarError}
           busyId={calendarBusyId}
           onRefresh={() => loadCalendar()}
-          onShift={onShiftWeek}
+          onShiftMonth={onShiftMonth}
+          onToday={onCalendarToday}
           onApprove={onCalendarApprove}
-          onSchedule={onCalendarSchedule}
+          onReject={onCalendarReject}
+          onSave={onCalendarSave}
+          onUnschedule={onCalendarUnschedule}
+          onScore={onCalendarScore}
         />
       ) : tab === 'performance' ? (
         <PerformancePanel
@@ -747,6 +764,177 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
         #x-content-card .xce-skipped-label { color: rgba(31,29,27,0.55); }
         #x-content-card .xce-textarea-short { min-height: 64px; }
         #x-content-card .xce-week-slot .xce-input { max-width: 100%; }
+
+        /* ── Month calendar (MonthCalendarPanel + PostSheet) ─────────────
+           Status is weight, never a colour strip: scheduled = solid outline +
+           filled dot, pending = grey dashed + hollow dot, posted = muted +
+           check, failed = the only red. Grid lines are neutral structure. */
+        #x-content-card .xce-mc { display: grid; gap: 14px; }
+        #x-content-card .xce-mc-header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
+        #x-content-card .xce-mc-title-block { display: grid; gap: 6px; min-width: 0; }
+        #x-content-card .xce-mc-title { margin: 0; font-size: 28px; line-height: 1; font-weight: 500; letter-spacing: -0.02em; color: #2a2420; }
+        #x-content-card .xce-mc-summary { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 12px; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(42,36,32,0.5); }
+        #x-content-card .xce-mc-summary strong { color: #2a2420; font-weight: 700; }
+        #x-content-card .xce-mc-summary-failed,
+        #x-content-card .xce-mc-summary-failed strong { color: #9f1f17; }
+        #x-content-card .xce-mc-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+        #x-content-card .xce-mc-nav { display: inline-flex; align-items: center; gap: 2px; }
+        #x-content-card .xce-mc-icon-btn { width: 34px; height: 34px; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 1px solid transparent; border-radius: 8px; background: transparent; color: #2a2420; cursor: pointer; transition: background 120ms ease-out, border-color 120ms ease-out; }
+        #x-content-card .xce-mc-icon-btn:hover:not(:disabled) { border-color: rgba(42,36,32,0.16); background: rgba(255,255,255,0.85); }
+        #x-content-card .xce-mc-icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+        #x-content-card .xce-mc-text-btn,
+        #x-content-card .xce-mc-seg { font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; }
+        #x-content-card .xce-mc-text-btn { min-height: 34px; padding: 0 12px; border: 1px solid rgba(42,36,32,0.16); border-radius: 999px; background: rgba(255,255,255,0.7); color: #2a2420; }
+        #x-content-card .xce-mc-text-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        #x-content-card .xce-mc-filter-on { background: #2a2420; border-color: #2a2420; color: #fff; }
+        #x-content-card .xce-mc-segmented { display: inline-flex; padding: 2px; border: 1px solid rgba(42,36,32,0.14); border-radius: 999px; background: rgba(255,255,255,0.6); }
+        #x-content-card .xce-mc-seg { min-height: 30px; padding: 0 12px; border: 0; border-radius: 999px; background: transparent; color: rgba(42,36,32,0.55); }
+        #x-content-card .xce-mc-seg-active { background: #2a2420; color: #fff; }
+        #x-content-card .xce-mc-review { min-height: 34px; border-radius: 999px; }
+        #x-content-card .xce-mc button:focus-visible,
+        #x-content-card .xce-mc-sheet button:focus-visible { outline: 2px solid rgba(42,36,32,0.55); outline-offset: 2px; }
+
+        #x-content-card .xce-mc-grid { display: grid; border-top: 1px solid rgba(42,36,32,0.12); border-bottom: 1px solid rgba(42,36,32,0.08); transition: opacity 120ms ease-out; }
+        #x-content-card .xce-mc-grid-loading { opacity: 0.5; }
+        #x-content-card .xce-mc-weekdays,
+        #x-content-card .xce-mc-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+        #x-content-card .xce-mc-weekday { padding: 8px 6px 6px; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(42,36,32,0.45); }
+        #x-content-card .xce-mc-weekday-short { display: none; }
+        #x-content-card .xce-mc-week { border-top: 1px solid rgba(42,36,32,0.08); }
+        #x-content-card .xce-mc-day { position: relative; min-width: 0; min-height: 112px; padding: 6px 4px; border-left: 1px solid rgba(42,36,32,0.08); display: flex; flex-direction: column; gap: 4px; cursor: pointer; outline: none; transition: background 120ms ease-out; }
+        #x-content-card .xce-mc-week > .xce-mc-day:first-child { border-left: 0; }
+        #x-content-card .xce-mc-day:hover { background: rgba(42,36,32,0.025); }
+        #x-content-card .xce-mc-day:focus-visible { box-shadow: inset 0 0 0 2px rgba(42,36,32,0.5); }
+        #x-content-card .xce-mc-day-selected { background: rgba(42,36,32,0.045); }
+        #x-content-card .xce-mc-date { align-self: flex-start; min-width: 24px; height: 24px; padding: 0 6px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: #2a2420; }
+        #x-content-card .xce-mc-day-past .xce-mc-date { color: rgba(42,36,32,0.42); }
+        #x-content-card .xce-mc-day-out .xce-mc-date { color: rgba(42,36,32,0.22); }
+        #x-content-card .xce-mc-day-today .xce-mc-date { background: #2a2420; color: #fff; }
+        #x-content-card .xce-mc-flag { position: absolute; top: 9px; right: 6px; font-family: var(--font-mono); font-size: 10px; font-weight: 700; color: #8a5a15; }
+        #x-content-card .xce-mc-chips { display: grid; gap: 3px; min-width: 0; }
+        #x-content-card .xce-mc-chip { display: flex; align-items: center; gap: 5px; width: 100%; min-width: 0; min-height: 22px; padding: 0 6px; border: 1px solid rgba(42,36,32,0.5); border-radius: 6px; background: #fff; color: #2a2420; font-size: 11px; text-align: left; cursor: pointer; transition: border-color 120ms ease-out; }
+        #x-content-card .xce-mc-chip:hover { border-color: #2a2420; }
+        #x-content-card .xce-mc-chip-time { flex: 0 0 auto; font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; }
+        #x-content-card .xce-mc-chip-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        #x-content-card .xce-mc-chip.xce-mc-state-pending { border-style: dashed; border-color: rgba(42,36,32,0.3); background: transparent; color: rgba(42,36,32,0.5); }
+        #x-content-card .xce-mc-chip.xce-mc-state-pending:hover { border-color: rgba(42,36,32,0.6); }
+        #x-content-card .xce-mc-chip.xce-mc-state-posted { border-color: transparent; background: rgba(42,36,32,0.05); color: rgba(42,36,32,0.6); }
+        #x-content-card .xce-mc-chip.xce-mc-state-failed { border-color: rgba(159,31,23,0.5); color: #9f1f17; }
+        #x-content-card .xce-mc-more { padding: 0 6px; font-family: var(--font-mono); font-size: 10px; color: rgba(42,36,32,0.5); }
+        #x-content-card .xce-mc-dots { display: none; }
+        #x-content-card .xce-mc-dot { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: #2a2420; color: #2a2420; }
+        #x-content-card .xce-mc-dot-pending { background: transparent; box-shadow: inset 0 0 0 1.5px rgba(42,36,32,0.4); }
+        #x-content-card .xce-mc-dot-posted { width: 10px; height: 10px; background: rgba(42,36,32,0.14); }
+        #x-content-card .xce-mc-dot-failed { background: #9f1f17; }
+
+        #x-content-card .xce-mc-dayview,
+        #x-content-card .xce-mc-agenda-day { display: grid; gap: 6px; }
+        #x-content-card .xce-mc-agenda { display: grid; gap: 20px; }
+        #x-content-card .xce-mc-kicker { margin: 0; font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(42,36,32,0.55); }
+        #x-content-card .xce-mc-agenda-today > .xce-mc-kicker { color: #2a2420; }
+        #x-content-card .xce-mc-rows { list-style: none; margin: 0; padding: 0; display: grid; }
+        #x-content-card .xce-mc-row { display: flex; align-items: center; gap: 4px; min-width: 0; border-top: 1px solid rgba(42,36,32,0.08); }
+        #x-content-card .xce-mc-row:first-child { border-top: 0; }
+        #x-content-card .xce-mc-row-main { flex: 1 1 auto; min-width: 0; display: grid; grid-template-columns: 46px 10px minmax(0, 1fr); align-items: center; gap: 10px; min-height: 52px; padding: 8px 4px; border: 0; border-radius: 8px; background: transparent; color: #2a2420; text-align: left; cursor: pointer; transition: background 120ms ease-out; }
+        #x-content-card .xce-mc-row-main:hover { background: rgba(42,36,32,0.035); }
+        #x-content-card .xce-mc-row-time { font-family: var(--font-mono); font-size: 12px; font-weight: 700; }
+        #x-content-card .xce-mc-row-body { display: grid; gap: 2px; min-width: 0; }
+        #x-content-card .xce-mc-row-title { font-size: 13px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+        #x-content-card .xce-mc-row-meta { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: rgba(42,36,32,0.5); }
+        #x-content-card .xce-mc-row.xce-mc-state-pending .xce-mc-row-time,
+        #x-content-card .xce-mc-row.xce-mc-state-pending .xce-mc-row-title { color: rgba(42,36,32,0.5); }
+        #x-content-card .xce-mc-row.xce-mc-state-posted .xce-mc-row-title { color: rgba(42,36,32,0.6); }
+        #x-content-card .xce-mc-row.xce-mc-state-failed .xce-mc-row-meta { color: #9f1f17; }
+        #x-content-card .xce-mc-row-actions { display: inline-flex; gap: 2px; flex: 0 0 auto; }
+        #x-content-card .xce-mc-empty { margin: 0; padding: 14px 0; font-size: 12.5px; color: rgba(42,36,32,0.5); }
+        #x-content-card .xce-mc-flags { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 11.5px; color: #8a5a15; }
+        #x-content-card .xce-mc-unplaced { padding-top: 10px; border-top: 1px solid rgba(42,36,32,0.1); }
+        #x-content-card .xce-mc-unplaced > summary { cursor: pointer; list-style: none; min-height: 28px; display: flex; align-items: center; }
+        #x-content-card .xce-mc-unplaced > summary::-webkit-details-marker { display: none; }
+
+        /* Phone: dots in the grid, the selected day's list carries the content. */
+        @media (max-width: 639px) {
+          #x-content-card .xce-mc-title { font-size: 22px; }
+          #x-content-card .xce-mc-controls { width: 100%; }
+          #x-content-card .xce-mc-review { margin-left: auto; }
+          #x-content-card .xce-mc-weekday { padding: 6px 0; text-align: center; }
+          #x-content-card .xce-mc-weekday-long { display: none; }
+          #x-content-card .xce-mc-weekday-short { display: inline; }
+          #x-content-card .xce-mc-day { min-height: 54px; padding: 4px 0; align-items: center; gap: 4px; border-left: 0; }
+          #x-content-card .xce-mc-date { align-self: center; min-width: 28px; height: 28px; }
+          #x-content-card .xce-mc-day-selected { background: transparent; }
+          #x-content-card .xce-mc-day-selected .xce-mc-date { box-shadow: inset 0 0 0 1.5px #2a2420; }
+          #x-content-card .xce-mc-day-today.xce-mc-day-selected .xce-mc-date { box-shadow: none; }
+          #x-content-card .xce-mc-flag { top: 2px; right: 2px; }
+          #x-content-card .xce-mc-chips { display: none; }
+          #x-content-card .xce-mc-dots { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 3px; min-height: 10px; }
+          #x-content-card .xce-mc-dots-more { font-family: var(--font-mono); font-size: 9px; line-height: 1; color: rgba(42,36,32,0.5); }
+          #x-content-card .xce-mc-row-main { min-height: 56px; }
+          #x-content-card .xce-mc-icon-btn { width: 44px; height: 44px; }
+          #x-content-card .xce-mc-text-btn { min-height: 40px; }
+        }
+        /* Tablet: time-only chips so a 7-column row still reads. */
+        @media (min-width: 640px) and (max-width: 1023px) {
+          #x-content-card .xce-mc-day { min-height: 92px; }
+          #x-content-card .xce-mc-chip-text { display: none; }
+        }
+        @media (min-width: 1024px) {
+          #x-content-card .xce-mc-day { min-height: 124px; padding: 6px; }
+        }
+
+        /* PostSheet: full-screen on phones, right sheet from 481px. */
+        #x-content-card .xce-mc-sheet-backdrop { position: fixed; inset: 0; z-index: 70; display: flex; justify-content: flex-end; background: rgba(42,36,32,0.32); animation: xce-mc-fade 140ms ease-out; }
+        #x-content-card .xce-mc-sheet { width: 100%; height: 100%; display: flex; flex-direction: column; background: #fbfaf8; outline: none; animation: xce-mc-rise 180ms cubic-bezier(0.2, 0, 0, 1); }
+        #x-content-card .xce-mc-sheet-head { display: flex; align-items: center; gap: 6px; padding: 8px var(--mobile-gutter, 8px); border-bottom: 1px solid rgba(42,36,32,0.1); }
+        #x-content-card .xce-mc-sheet-state { margin-right: auto; display: inline-flex; align-items: center; gap: 8px; min-width: 0; font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #2a2420; }
+        #x-content-card .xce-mc-sheet-state.xce-mc-state-pending { color: rgba(42,36,32,0.55); }
+        #x-content-card .xce-mc-sheet-state.xce-mc-state-failed { color: #9f1f17; }
+        #x-content-card .xce-mc-sheet-queue { display: inline-flex; align-items: center; }
+        #x-content-card .xce-mc-sheet-queue-pos { min-width: 44px; text-align: center; font-family: var(--font-mono); font-size: 11px; color: rgba(42,36,32,0.55); }
+        #x-content-card .xce-mc-sheet-body { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 18px var(--mobile-gutter, 8px) 24px; display: grid; gap: 18px; align-content: start; }
+        #x-content-card .xce-mc-sheet-when { margin: 0; font-size: 22px; line-height: 1.15; font-weight: 500; letter-spacing: -0.01em; color: #2a2420; }
+        #x-content-card .xce-mc-sheet-media { border-radius: 10px; overflow: hidden; background: #141210; }
+        #x-content-card .xce-mc-sheet-media video,
+        #x-content-card .xce-mc-sheet-media img { display: block; width: 100%; max-height: 360px; object-fit: contain; }
+        #x-content-card .xce-mc-field { display: grid; gap: 6px; min-width: 0; }
+        #x-content-card .xce-mc-sheet-body > * { min-width: 0; }
+        #x-content-card .xce-mc-sheet textarea,
+        #x-content-card .xce-mc-sheet input { box-sizing: border-box; width: 100%; max-width: 100%; min-width: 0; }
+        #x-content-card .xce-mc-sheet-text { min-height: 168px; font-size: 15px; line-height: 1.5; }
+        #x-content-card .xce-mc-sheet-meta-line { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-family: var(--font-mono); font-size: 10.5px; color: rgba(42,36,32,0.55); }
+        #x-content-card .xce-mc-over { margin: 0; font-size: 12px; font-weight: 700; color: #9f1f17; }
+        #x-content-card .xce-mc-sheet-meta-line .xce-mc-over { font-size: inherit; }
+        #x-content-card .xce-mc-when-row { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 8px; }
+        #x-content-card .xce-mc-notice { margin: 0; font-size: 12.5px; line-height: 1.5; color: #8a5a15; }
+        #x-content-card .xce-mc-facts { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; }
+        #x-content-card .xce-mc-facts dt { padding-top: 1px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(42,36,32,0.45); }
+        #x-content-card .xce-mc-facts dd { margin: 0; font-family: var(--font-mono); font-size: 11.5px; color: #2a2420; overflow-wrap: anywhere; }
+        #x-content-card .xce-mc-facts a { color: inherit; }
+        #x-content-card .xce-mc-sheet-foot { display: grid; gap: 8px; padding: 12px var(--mobile-gutter, 8px) calc(12px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid rgba(42,36,32,0.1); background: #fbfaf8; }
+        #x-content-card .xce-mc-sheet-consequence { margin: 0; font-size: 12px; line-height: 1.4; color: rgba(42,36,32,0.65); }
+        #x-content-card .xce-mc-sheet-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+        #x-content-card .xce-mc-sheet-buttons .xce-btn-primary { margin-left: auto; }
+        #x-content-card .xce-mc-sheet-keys { display: none; margin: 0; font-family: var(--font-mono); font-size: 10px; color: rgba(42,36,32,0.4); }
+        @media (max-width: 480px) {
+          #x-content-card .xce-mc-sheet-buttons > button { flex: 1 1 0; min-height: 44px; }
+          #x-content-card .xce-mc-sheet-buttons .xce-btn-primary { order: -1; flex-basis: 100%; margin-left: 0; }
+        }
+        @media (min-width: 481px) {
+          #x-content-card .xce-mc-sheet { max-width: 480px; border-left: 1px solid rgba(42,36,32,0.14); animation-name: xce-mc-slide; }
+          #x-content-card .xce-mc-sheet-head { padding: 10px 16px; }
+          #x-content-card .xce-mc-sheet-body { padding: 22px 20px 28px; }
+          #x-content-card .xce-mc-sheet-foot { padding: 14px 20px; }
+        }
+        @media (min-width: 1024px) and (pointer: fine) {
+          #x-content-card .xce-mc-sheet-keys { display: block; }
+        }
+        @keyframes xce-mc-fade { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes xce-mc-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+        @keyframes xce-mc-slide { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
+        @media (prefers-reduced-motion: reduce) {
+          #x-content-card .xce-mc-sheet,
+          #x-content-card .xce-mc-sheet-backdrop { animation: none; }
+        }
 
         /* ── Results (performance) ────────────────────────────────────── */
         #x-content-card .xce-perf-list { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 8px; }

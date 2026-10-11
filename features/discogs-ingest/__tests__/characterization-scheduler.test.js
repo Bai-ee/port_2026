@@ -112,18 +112,30 @@ test('horizonDays config shortens the search', () => {
   assert.equal(plan({ posts, config: { horizonDays: 1 } }).scheduled.length, 2);
 });
 
-test('CURRENT (known gap): a package already pending as a scheduled copy under a DIFFERENT source is ignored - the draft is scheduled anyway', () => {
+test('PHASE 3: a package already pending as a scheduled copy under a DIFFERENT source blocks the draft (skipped with a reason)', () => {
   const pending = { id: 'engine-copy', source: 'content-engine', engine: 'record', packageId: 'discogs-1', status: 'scheduled', scheduledAt: '2026-10-08T14:00:00Z' };
   const r = plan({ posts: [pending, ready('a1')] });
-  assert.equal(r.scheduled.length, 1);
-  assert.equal(r.scheduled[0].postId, 'a1');
+  assert.equal(r.scheduled.length, 0);
+  assert.equal(r.skipped[0].postId, 'a1');
+  assert.match(r.skipped[0].reasons[0], /already has an open copy/);
 });
 
-test('CURRENT (known gap): two drafts for the SAME package are both scheduled (no package-collision check)', () => {
+test('PHASE 3: a pending copy that is awaiting_approval / queued / posting also blocks; approved/draft/posted copies do not', () => {
+  for (const status of ['awaiting_approval', 'queued', 'posting']) {
+    const pending = { id: 'x', source: 'content-engine', packageId: 'discogs-1', status };
+    assert.equal(plan({ posts: [pending, ready('a1')] }).scheduled.length, 0, status);
+  }
+  const other = { id: 'x', source: 'content-engine', packageId: 'discogs-1', status: 'draft' };
+  assert.equal(plan({ posts: [other, ready('a1')] }).scheduled.length, 1);
+});
+
+test('PHASE 3: two drafts for the SAME package in one run schedule only ONE (the older); the other is skipped', () => {
   const a = ready('a1', '1', { packageId: 'discogs-1' });
   const b = ready('b1', '2', { packageId: 'discogs-1' });
   const r = plan({ posts: [a, b] });
-  assert.deepEqual(r.scheduled.map((s) => s.postId), ['a1', 'b1']);
+  assert.deepEqual(r.scheduled.map((s) => s.postId), ['a1']);
+  assert.deepEqual(r.skipped.map((s) => s.postId), ['b1']);
+  assert.match(r.skipped[0].reasons[0], /already has an open copy \(a1/);
 });
 
 test('CURRENT (known gap): the same package already posted by a non-record-engine row carries no cooldown without entities', () => {

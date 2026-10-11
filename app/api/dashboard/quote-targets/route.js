@@ -16,6 +16,8 @@ import { buildDayPlan as buildContentDayPlan } from '../../../../features/x-cont
 import { validateInventory } from '../../../../features/x-content-inventory/schema.js';
 import { readInventory, upsertPackage, deletePackage, getPackage } from '../../../../features/x-content-inventory/store.js';
 import { buildClientPackage, applyApproval } from '../../../../features/x-content-inventory/client-capture.js';
+import { recentPostsFromQueue } from '../../../../features/x-content-inventory/allocate-slot.js';
+import { buildMonthCalendar, ctDate } from '../../../../features/x-content-inventory/month-calendar.js';
 import { buildWeekCalendar } from '../../../../features/x-content-inventory/week-calendar.js';
 import { joinPerformance, engineStats } from '../../../../features/x-content-inventory/performance.js';
 import { mergeEngineConfig } from '../../../../features/x-content-inventory/engine-quota.js';
@@ -292,6 +294,7 @@ const SUPPORTED_ACTIONS = [
   'inventory-save',
   'inventory-delete',
   'week-calendar',
+  'month-calendar',
   'capture-client-story',
   'approve-package',
   'reject-package',
@@ -389,6 +392,26 @@ async function handleWeekCalendar(context, body) {
   const config = resolveCalendarEngineConfig({ planDoc, legacyOverrides: overrides });
   const posts = await readSocialQueue(context.clientId);
   return { ok: true, calendar: buildWeekCalendar({ posts, start, config }) };
+}
+
+/**
+ * Month calendar over social_posts, with undated drafts PROPOSED onto days (display only, nothing is written).
+ * Read-only like the week view: Approve / Reject / edit go through the social-posting route.
+ */
+async function handleMonthCalendar(context, body) {
+  const raw = typeof body?.month === 'string' ? body.month.trim() : '';
+  const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(raw) ? raw : ctDate(Date.now()).slice(0, 7);
+  let overrides = null;
+  try {
+    const snap = await fb.adminDb.collection('content_system_config').doc('x').get();
+    overrides = snap.exists ? snap.data() : null;
+  } catch {
+    // Config is advisory; defaults keep the calendar usable.
+  }
+  const planDoc = await createFirestorePlanStore(fb.adminDb).get(context.clientId).catch(() => null);
+  const config = resolveCalendarEngineConfig({ planDoc, legacyOverrides: overrides });
+  const posts = await readSocialQueue(context.clientId);
+  return { ok: true, calendar: buildMonthCalendar({ posts, month, now: Date.now(), config }) };
 }
 
 /**
@@ -611,6 +634,8 @@ async function readContentContext(clientId, { packageIds = dailyLoopDemoSet.ids,
   return loadContentContext({
     db: fb.adminDb,
     buildDayPlan: buildContentDayPlan,
+    // Pending/scheduled copies count toward today's engine quota, not just posted ones.
+    readRecentPosts: async (id) => recentPostsFromQueue(await readSocialQueue(id)),
     // One plan everywhere: the Strategy plan doc sets the loop's cadence, engine targets, floors and caps.
     readPlanDoc: (id) => createFirestorePlanStore(fb.adminDb).get(id),
     loadBrainContext: (id) => loadClientBrainContext(id, { useFor: 'socialPosts', requireApproved: true }),
@@ -762,6 +787,9 @@ export async function POST(request) {
     }
     if (action === 'week-calendar') {
       return json(await handleWeekCalendar(context, body));
+    }
+    if (action === 'month-calendar') {
+      return json(await handleMonthCalendar(context, body));
     }
     if (action === 'engine-performance') {
       return json(await handleEnginePerformance(context, body));

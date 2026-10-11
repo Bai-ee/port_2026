@@ -42,6 +42,9 @@ export function findPackageCollision(rows, { packageId, selfId = null }) {
   return (rows || []).find((r) => r && r.id !== selfId && r.packageId === packageId && PENDING_STATUSES.includes(r.status)) || null;
 }
 
+/** ISO string or epoch ms -> ms (NaN when unreadable). */
+export const toMs = (v) => (typeof v === 'number' ? v : Date.parse(v || ''));
+
 const sameJson = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
 /** Did an edit change what would be published? Text, first self-reply, media, or reply target. */
@@ -67,8 +70,8 @@ export function deliveryBlock(post, { pkg = null, now = Date.now() } = {}) {
   const clearance = packageClearance(pkg);
   if (!clearance.ok) return clearance;
   const expires = post.expiresAt || pkg?.expiresAt;
-  if (expires && Number.isFinite(Date.parse(expires)) && Date.parse(expires) <= now) {
-    return { ok: false, code: 'opportunity-expired', reason: `The window for this post closed at ${new Date(expires).toISOString()}.` };
+  if (expires && Number.isFinite(toMs(expires)) && toMs(expires) <= now) {
+    return { ok: false, code: 'opportunity-expired', reason: `The window for this post closed at ${new Date(toMs(expires)).toISOString()}.` };
   }
   return null;
 }

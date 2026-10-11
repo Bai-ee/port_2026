@@ -26,6 +26,8 @@ function corpusRange(rows) {
  *   buildDayPlan (plan-day.js, injected) + both corpora => the result carries `strategyInputs`,
  *   which switches the run onto the slot-filling spine; otherwise the old selector runs.
  *   readPlanDoc (x_strategy_plans/{clientId}) => strategyInputs.planInputs, which run.js applies; absent or null => old behaviour.
+ *   readRecentPosts (optional) => planInput.recentPosts (engine-quota shape; see allocate-slot.js recentPostsFromQueue), so
+ *   posted/scheduled history reaches the quota layer. Absent => no `recentPosts` key at all (old behaviour).
  * opts: { clientId, packageIds?: string[], corpora: { own, benchmark, ownSource, benchmarkSource, ownHandle?, benchmarkHandle? }, now }
  */
 export async function loadDailyLoopInputs(deps, { clientId, packageIds = null, corpora = {}, now = Date.now() }) {
@@ -96,6 +98,8 @@ export async function loadDailyLoopInputs(deps, { clientId, packageIds = null, c
   }
 
   const planDoc = deps.readPlanDoc ? await deps.readPlanDoc(clientId) : null;
+  // A queue read failure must not break the whole context load: fall back to today's behaviour (no recentPosts).
+  const recentPosts = deps.readRecentPosts ? await Promise.resolve(deps.readRecentPosts(clientId)).catch(() => null) : null;
 
   return {
     scan: state.marketingBrief?.quoteTargets || null,
@@ -107,7 +111,7 @@ export async function loadDailyLoopInputs(deps, { clientId, packageIds = null, c
     ownSummary,
     benchmark,
     strategyInputs: deps.buildDayPlan && own
-      ? { buildDayPlan: deps.buildDayPlan, planInput: { corpusRows: own, benchmarkRows: bench, packages }, ownPosts: own, ownHandle, ...(planDoc ? { planInputs: resolvePlanInputs(planDoc) } : {}) }
+      ? { buildDayPlan: deps.buildDayPlan, planInput: { corpusRows: own, benchmarkRows: bench, packages, ...(Array.isArray(recentPosts) ? { recentPosts } : {}) }, ownPosts: own, ownHandle, ...(planDoc ? { planInputs: resolvePlanInputs(planDoc) } : {}) }
       : null,
   };
 }

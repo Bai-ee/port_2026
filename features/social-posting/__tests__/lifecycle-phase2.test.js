@@ -293,3 +293,77 @@ test('getPackage sanity: fixtures used above are real store rows', async () => {
   await upsertPackage(PKG('pkg-z'), { returnPackages: false });
   assert.equal((await getPackage('pkg-z')).id, 'pkg-z');
 });
+
+// --- Phase 3: approve-and-schedule / reject / expiry at schedule time -------
+
+test('approveAndSchedule: one call approves and schedules the SAME post id; edit applied; reviewer recorded', async () => {
+  const p = await v2('Calendar draft.');
+  const out = await svc.approveAndSchedule('c1', p.id, { scheduledAt: FUTURE(), content: 'Calendar draft, edited.', reviewedBy: 'owner@example.com' });
+  assert.equal(out.id, p.id);
+  assert.equal(out.status, 'scheduled');
+  assert.equal(out.content, 'Calendar draft, edited.');
+  assert.equal(out.reviewedBy, 'owner@example.com');
+  assert.equal((await svc.readSocialQueue('c1')).length, 1);
+});
+
+test('approveAndSchedule: past/missing time is 400; wrong client is 404; nothing changes', async () => {
+  const p = await v2('Stays draft.');
+  await assert.rejects(svc.approveAndSchedule('c1', p.id, { scheduledAt: new Date(Date.now() + 1000).toISOString() }), { status: 400, code: 'past-time' });
+  await assert.rejects(svc.approveAndSchedule('c1', p.id, {}), { status: 400 });
+  await assert.rejects(svc.approveAndSchedule('c2', p.id, { scheduledAt: FUTURE() }), { status: 404 });
+  assert.equal(raw(p.id).status, 'draft');
+});
+
+test('approveAndSchedule: a refused schedule (clearance revoked) rolls the approval back to draft', async () => {
+  await upsertPackage(PKG('pkg-rb', { approval: { state: 'rejected' } }), { returnPackages: false });
+  const p = await v2('Blocked.', { packageId: 'pkg-rb' });
+  await assert.rejects(svc.approveAndSchedule('c1', p.id, { scheduledAt: FUTURE() }), { code: 'clearance-revoked' });
+  assert.equal(raw(p.id).status, 'draft');
+  assert.ok(!raw(p.id).reviewedAt);
+});
+
+test('approveAndSchedule: reply draft is refused (no threading) and stays a draft', async () => {
+  const p = await v2('A reply.', { replyTo: REPLY });
+  await assert.rejects(svc.approveAndSchedule('c1', p.id, { scheduledAt: FUTURE() }), { code: 'reply-threading-unsupported' });
+  assert.equal(raw(p.id).status, 'draft');
+});
+
+test('rejectDraft: draft -> rejected (idempotent); scheduled/posted rows are refused; wrong client 404', async () => {
+  const d = await v2('Reject me.');
+  assert.equal((await svc.rejectDraft('c1', d.id, { reviewedBy: 'o' })).status, 'rejected');
+  assert.equal((await svc.rejectDraft('c1', d.id)).status, 'rejected');
+  const s = await svc.createSocialPost('c1', { content: 'Live soon.', status: 'scheduled', scheduledAt: FUTURE() });
+  await assert.rejects(svc.rejectDraft('c1', s.id), { status: 409, code: 'not-draft' });
+  await assert.rejects(svc.rejectDraft('c2', d.id), { status: 404 });
+});
+
+test('timely window (v2): expired package refuses scheduling; a slot after the window is refused; inside the window is fine', async () => {
+  await upsertPackage(PKG('pkg-gone', { expiresAt: new Date(Date.now() - 60_000).toISOString() }), { returnPackages: false });
+  const gone = await v2('Too late.', { packageId: 'pkg-gone' });
+  await svc.approveDraft('c1', gone.id);
+  await assert.rejects(svc.updateSocialPost('c1', gone.id, { scheduledAt: FUTURE(1) }), { code: 'opportunity-expired' });
+  await upsertPackage(PKG('pkg-soon', { expiresAt: FUTURE(2) }), { returnPackages: false });
+  const soon = await v2('Windowed.', { packageId: 'pkg-soon' });
+  await svc.approveDraft('c1', soon.id);
+  await assert.rejects(svc.updateSocialPost('c1', soon.id, { scheduledAt: FUTURE(5) }), { code: 'opportunity-expired' });
+  assert.equal((await svc.updateSocialPost('c1', soon.id, { scheduledAt: FUTURE(1) })).status, 'scheduled');
+});
+
+test('timely window is v2-only: a legacy Schedule Posts flow with an expired package still schedules (compat)', async () => {
+  await upsertPackage(PKG('pkg-old', { expiresAt: new Date(Date.now() - 60_000).toISOString() }), { returnPackages: false });
+  const row = await svc.schedulePost('c1', { content: 'Legacy flow.', packageId: 'pkg-old', scheduledAt: FUTURE(1) });
+  assert.equal(row.status, 'scheduled');
+});
+
+test('rejectDraft also rejects an unscheduled approved row (the sheet offers Reject on approved items)', async () => {
+  const p = await v2('Approved, unscheduled.');
+  await svc.approveDraft('c1', p.id);
+  assert.equal((await svc.rejectDraft('c1', p.id)).status, 'rejected');
+});
+
+test('approveAndSchedule: any failure restores the row exactly (edited text does not survive a refused approval)', async () => {
+  const p = await v2('Original [add your memory] text.');
+  await assert.rejects(svc.approveAndSchedule('c1', p.id, { scheduledAt: FUTURE(), content: 'Edited but still [add your memory].' }));
+  assert.equal(raw(p.id).content, 'Original [add your memory] text.');
+  assert.equal(raw(p.id).status, 'draft');
+});

@@ -9,7 +9,7 @@ import { compactTwitterError, mapTwitterError } from './twitter-errors.js';
 import { getAdapter } from './adapters/index.js';
 import { storySyncPlan } from '../discogs-ingest/draft-builder.js';
 import { needsApproval } from '../x-content-inventory/schema.js';
-import { LIFECYCLE_VERSION, OPEN_STATUSES, APPROVAL_VOID_STATUSES, isV2, packageClearance, replyBlock, findPackageCollision, isMaterialEdit, deliveryBlock } from './lifecycle.js';
+import { toMs, LIFECYCLE_VERSION, OPEN_STATUSES, APPROVAL_VOID_STATUSES, isV2, packageClearance, replyBlock, findPackageCollision, isMaterialEdit, deliveryBlock } from './lifecycle.js';
 import { assertNoMemoryPlaceholder, hasMemoryPlaceholder, sanitizeMediaVariants, sanitizeSelfReply, sanitizeSourceRef } from './self-reply.js';
 
 const require = createRequire(import.meta.url);
@@ -821,13 +821,26 @@ async function loadPackageForRules(packageId) {
   return getPackage(packageId);
 }
 
+// A timely window must still be open now, and the slot must fall inside it.
+function assertWindowOpen(expiresAt, scheduledAt) {
+  const end = toMs(expiresAt);
+  if (!Number.isFinite(end)) return;
+  const slot = toMs(scheduledAt);
+  if (end <= Date.now() || (Number.isFinite(slot) && slot > end)) {
+    throw Object.assign(new Error(`The window for this post closed at ${new Date(end).toISOString()}. Pick an earlier time or drop it.`), { status: 409, code: 'opportunity-expired' });
+  }
+}
+
 // KNOWN LIMIT: the collision check below is read-then-write, so two truly concurrent schedules of the same
 // package can both pass. Sequential producers (the supported case) are blocked; a transaction/slot doc is future work.
 // New scheduling action only: a reply must not become a standalone original, cleared material only,
 // and one package cannot sit in the queue twice. Runs AFTER the approval gate (assertSchedulable).
-async function assertSchedulingRules(post, { clientId, selfId = null }) {
+async function assertSchedulingRules(post, { clientId, selfId = null, scheduledAt = null }) {
   const reply = replyBlock(post);
   if (!reply.ok) throw Object.assign(new Error(reply.reason), { status: 409, code: reply.code });
+  // Timely-window rule is v2-only (legacy flows keep scheduling as before); delivery re-checks it for v2 rows.
+  const windowRule = isV2(post);
+  if (windowRule) assertWindowOpen(post.expiresAt, scheduledAt);
   if (!post.packageId) return;
   let pkg;
   try {
@@ -837,6 +850,7 @@ async function assertSchedulingRules(post, { clientId, selfId = null }) {
   }
   const clearance = packageClearance(pkg);
   if (!clearance.ok) throw Object.assign(new Error(clearance.reason), { status: 409, code: clearance.code });
+  if (windowRule) assertWindowOpen(pkg?.expiresAt, scheduledAt);
   const snap = await postsCol().where('clientId', '==', clientId).where('packageId', '==', post.packageId).get();
   const dupe = findPackageCollision(snap.docs.map((d) => d.data()), { packageId: post.packageId, selfId });
   if (dupe) {
@@ -1153,6 +1167,49 @@ export async function approveDraft(clientId, postId, { reviewedBy = null } = {})
   return updated;
 }
 
+// draft -> rejected (the calendar's "disapprove"). Only an unpublished draft/needs_review row can be
+// rejected here, never a scheduled/posted row, so a live tweet can't be hidden. The doc is kept.
+export async function rejectDraft(clientId, postId, { reviewedBy = null } = {}) {
+  const post = await getSocialPost(clientId, postId);
+  if (!post) throw Object.assign(new Error('Post not found.'), { status: 404 });
+  if (post.status === 'rejected') return post;
+  const rejectable = post.status === 'draft' || post.status === 'needs_review' || (post.status === 'approved' && !post.scheduledAt);
+  if (!rejectable) {
+    throw Object.assign(new Error(`Only an unscheduled draft can be rejected (this post is ${post.status}).`), { status: 409, code: 'not-draft' });
+  }
+  const now = new Date().toISOString();
+  const updated = { ...post, status: 'rejected', rejectedAt: now, reviewedBy: reviewedBy ? String(reviewedBy).slice(0, 200) : null, updatedAt: now };
+  await savePost(updated);
+  return updated;
+}
+
+// The calendar's Approve: (optional text edit) -> approved -> scheduled at the time the reviewer saw, in one call.
+// Goes through approveDraft + updateSocialPost, so clearance, reply, collision, expiry and the story gate all apply.
+// If scheduling is refused after approval, a draft is returned to draft. A scheduled post is published by the sweeper:
+// this IS the go-live decision, so it is only ever called from an explicit operator click.
+export async function approveAndSchedule(clientId, postId, { scheduledAt, content, reviewedBy = null } = {}) {
+  const when = scheduledAt ? new Date(scheduledAt) : null;
+  if (!when || Number.isNaN(when.getTime())) {
+    throw Object.assign(new Error('A valid scheduled time is required.'), { status: 400 });
+  }
+  if (when.getTime() < Date.now() + 60_000) {
+    throw Object.assign(new Error('Pick a time at least a minute in the future.'), { status: 400, code: 'past-time' });
+  }
+  const original = await getSocialPost(clientId, postId);
+  if (!original) throw Object.assign(new Error('Post not found.'), { status: 404 });
+  try {
+    if (typeof content === 'string' && normalizePostText(content) !== original.content) {
+      await updateSocialPost(clientId, postId, { content });
+    }
+    const approved = await approveDraft(clientId, postId, { reviewedBy });
+    return await updateSocialPost(clientId, postId, { content: approved.content, scheduledAt: when.toISOString() });
+  } catch (err) {
+    // Nothing the reviewer saw should half-apply: restore the row exactly as it was (text, approval, schedule).
+    await savePost(original);
+    throw err;
+  }
+}
+
 export async function schedulePost(clientId, payload) {
   assertNoMemoryPlaceholder(normalizePostText(payload.content));
   assertNoMemoryPlaceholder(payload.selfReply?.text);
@@ -1163,7 +1220,7 @@ export async function schedulePost(clientId, payload) {
     throw err;
   }
   await assertSchedulable({ ...payload, status: 'draft' });
-  await assertSchedulingRules({ ...payload, status: 'draft' }, { clientId });
+  await assertSchedulingRules({ ...payload, status: 'draft' }, { clientId, scheduledAt: scheduledAt.toISOString() });
   return createSocialPost(clientId, {
     ...payload,
     status: scheduledAt.getTime() <= Date.now() ? 'queued' : 'scheduled',
@@ -1396,7 +1453,7 @@ export async function updateSocialPost(clientId, postId, payload = {}) {
       await assertSchedulingRules({
         ...post,
         packageId: hasOwn(payload, 'packageId') ? cleanStr(payload.packageId, 160) : post.packageId,
-      }, { clientId, selfId: post.id });
+      }, { clientId, selfId: post.id, scheduledAt: scheduledAt });
       status = dt.getTime() <= Date.now() ? 'queued' : 'scheduled';
     }
   }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 import {
+  approveAndSchedule,
   approveDraft,
   attachMediaToPost,
   createSocialPost,
@@ -14,6 +15,7 @@ import {
   processDuePostsForAllClients,
   publishApprovedPost,
   readSocialQueue,
+  rejectDraft,
   rejectSocialPost,
   runPostingAgents,
   schedulePost,
@@ -252,6 +254,22 @@ export async function POST(request) {
     // draft -> approved (stamps reviewedAt/reviewedBy). Does not schedule or publish.
     if (action === 'approve-draft') {
       const post = await approveDraft(context.clientId, body.postId, { reviewedBy: decoded?.email || decoded?.uid || null });
+      return json({ ok: true, post });
+    }
+
+    // Calendar Approve: draft -> approved -> scheduled at the shown time, in one call (explicit operator click only).
+    if (action === 'approve-and-schedule') {
+      const post = await approveAndSchedule(context.clientId, body.postId, {
+        scheduledAt: body.scheduledAt,
+        content: typeof body.content === 'string' ? body.content : undefined,
+        reviewedBy: decoded?.email || decoded?.uid || null,
+      });
+      return json({ ok: true, post });
+    }
+
+    // Calendar Reject: draft -> rejected. Never touches scheduled/posted rows.
+    if (action === 'reject-draft') {
+      const post = await rejectDraft(context.clientId, body.postId, { reviewedBy: decoded?.email || decoded?.uid || null });
       return json({ ok: true, post });
     }
 

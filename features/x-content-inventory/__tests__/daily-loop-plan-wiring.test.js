@@ -109,3 +109,39 @@ test('a cap that drops slots shows up in run.gaps as slot-dropped:<letter>:cap; 
   const plain = await gen(createMemoryRunStore(), planDoc({ authoredPerDay: 6 }));
   assert.equal(plain.run.gaps.filter((g) => g.code.startsWith('slot-dropped')).length, 0);
 });
+
+// readRecentPosts (optional dep) -> strategyInputs.planInput.recentPosts -> buildDayPlan -> engine quota.
+test('loadDailyLoopInputs: readRecentPosts is optional; absent => no recentPosts key (identical planInput)', async () => {
+  const base = { db: fakeDb(), buildDayPlan };
+  const opts = { clientId: OWNER, corpora: { own: OWN.slice(0, 80), benchmark: BENCH.slice(0, 80) }, now: NOW };
+  const absent = await loadDailyLoopInputs(base, opts);
+  assert.equal('recentPosts' in absent.strategyInputs.planInput, false);
+  const asked = [];
+  const rows = [{ engine: 'identity', postedAt: NOW - 60_000 }];
+  const present = await loadDailyLoopInputs({ ...base, readRecentPosts: async (id) => { asked.push(id); return rows; } }, opts);
+  assert.deepEqual(asked, [OWNER]);
+  assert.deepEqual(present.strategyInputs.planInput.recentPosts, rows);
+});
+
+test('recentPosts from 3 scheduled posts today change the engine counts through the run spine; absent dep is byte-identical', async () => {
+  const { recentPostsFromQueue } = await import('../allocate-slot.js');
+  const date = new Date(NOW).toISOString().slice(0, 10);
+  const queue = [0, 1, 2].map((i) => ({ id: `s${i}`, engine: 'identity', status: 'scheduled', scheduledAt: `${date}T${14 + i * 2}:30:00Z` }));
+  const seen = [];
+  const spy = (input) => { seen.push(input); return buildDayPlan(input); };
+  const run = (recent) => runDailyLoop({ now: () => NOW, store: createMemoryRunStore(), readInputs: async () => ({
+    ...FX, strategyInputs: { buildDayPlan: spy, planInput: { corpusRows: OWN, benchmarkRows: BENCH, packages: FX.packages, ...(recent ? { recentPosts: recent } : {}) }, ownPosts: OWN, ownHandle: 'bai_ee' },
+  }) }, { clientId: OWNER, inputSource: 'fixture' });
+  const base = await run(null);
+  const again = await run(null);
+  assert.equal(JSON.stringify(base.run), JSON.stringify(again.run));
+  const rp = recentPostsFromQueue(queue, { now: NOW });
+  const withQ = await run(rp);
+  assert.equal(seen.at(-1).recentPosts.length, 3);
+  assert.ok(withQ.run);
+  const direct = (recentPosts) => buildDayPlan({ date, now: NOW, packages: FX.packages, corpusRows: OWN, benchmarkRows: BENCH, handle: 'bai_ee', ...(recentPosts ? { recentPosts } : {}) });
+  const engines = (plan) => plan.slots.map((x) => x.engine);
+  assert.notDeepEqual(engines(direct(rp)), engines(direct(null)), 'scheduled rows use up engine quota / spacing');
+  assert.ok(engines(direct(rp)).filter(Boolean).length < engines(direct(null)).filter(Boolean).length);
+  assert.equal(JSON.stringify(direct([])), JSON.stringify(direct(null)));
+});
