@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 import { randomUUID } from 'crypto';
-import { createSocialPost, readSocialQueue } from '../../../../features/social-posting/twitter-service.js';
+import { createSocialPost, readSocialQueue, createDraftPostOnce } from '../../../../features/social-posting/twitter-service.js';
 import { buildDayPlan } from '../../../../features/x-quote-targets/day-plan.js';
 // Static import so Next bundles the calendar — docs/audits/ is NOT in
 // .vercelignore, but a runtime fs read of a repo path is fragile on serverless.
@@ -29,6 +29,11 @@ import { syncRenderedVideos } from '../../../../features/rendered-videos/sync.js
 import { resolveMediaUrlsBatch, MEDIA_URLS_MAX_IDS, MEDIA_KINDS, tokenUrlFor } from '../../../../features/x-content-inventory/thumbs.js';
 import { setRights, saveThumb, createDraftFromItem } from '../../../../features/x-content-inventory/item-actions.js';
 import { NAS_ACTIONS, handleNasAction } from '../../../../features/x-content-inventory/nas.js';
+import { runDailyLoop, assertOwnerClient, localDateOf, LOOP_VERSION } from '../../../../features/x-content-inventory/daily-loop.js';
+import {
+  createFirestoreRunStore, loadDailyLoopInputs, saveSuggestionDraft, dismissSuggestion, createModelDrafter,
+} from '../../../../features/x-content-inventory/daily-run-store.js';
+import dailyLoopDemoSet from '../../../../features/x-content-inventory/daily-loop-demo-set.json' with { type: 'json' };
 // Same static-import reasoning as bundledCalendar above. These are the two
 // ingested corpora the planner needs as ROWS — x_corpora stores summarized stat
 // blocks, which summarizeCorpus cannot be fed, so the committed JSON is the
@@ -265,6 +270,11 @@ async function handleDismiss(clientId, body) {
   return { ok: true, dismissed };
 }
 
+// Daily Content Loop (docs/plans/DAILY-CONTENT-LOOP-MASTER-PLAN.md). Owner
+// account only; reads saved inputs, writes the run store, and — on Save Draft
+// only — one unscheduled social_posts draft. Never schedules or posts.
+const DAILY_RUN_ACTIONS = ['daily-run-latest', 'daily-run-generate', 'daily-run-save-draft', 'daily-run-dismiss'];
+
 const SUPPORTED_ACTIONS = [
   ...NAS_ACTIONS,
   'engine-performance',
@@ -293,6 +303,7 @@ const SUPPORTED_ACTIONS = [
   'save-thumb',
   'set-rights',
   'create-draft-from-item',
+  ...DAILY_RUN_ACTIONS,
 ];
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -656,6 +667,61 @@ async function handleCreateDraftFromItem(context, body) {
   }, { clientId: context.clientId, id: String(body?.id || '').trim() });
 }
 
+async function latestDailyRun(store, clientId) {
+  return store.latest({ clientId, localDate: localDateOf(Date.now()), channel: 'x', version: LOOP_VERSION });
+}
+
+async function handleDailyRun(context, action, body) {
+  assertOwnerClient(context.clientId);
+  const store = createFirestoreRunStore(fb.adminDb);
+  if (action === 'daily-run-latest') return { ok: true, run: await latestDailyRun(store, context.clientId) };
+
+  if (action === 'daily-run-generate') {
+    let draft;
+    if (body?.draftWithModel === true) {
+      const { createAnthropicClient } = require('../../../../features/not-the-rug-brief/anthropic-client.js');
+      const { logAnthropicCall } = require('../../../../api/_lib/usage-logger.cjs');
+      draft = createModelDrafter({ anthropic: createAnthropicClient(), logAnthropicCall, clientId: context.clientId });
+    }
+    const { loadClientBrainContext } = require('../../../../features/client-brain/store.cjs');
+    const res = await runDailyLoop({
+      now: () => Date.now(),
+      store,
+      draft,
+      readInputs: () => loadDailyLoopInputs({
+        db: fb.adminDb,
+        loadBrainContext: (id) => loadClientBrainContext(id, { useFor: 'socialPosts', requireApproved: true }).catch(() => ''),
+      }, {
+        clientId: context.clientId,
+        // POC: the verified demo set unless the caller asks for the whole library.
+        packageIds: body?.library === 'full' ? null : dailyLoopDemoSet.ids,
+        corpora: { own: ownCorpusRows, benchmark: benchmarkCorpusRows, ownSource: 'docs/audits/bai-ee-x-corpus.json', benchmarkSource: 'docs/audits/seb-design-x-corpus.json' },
+      }),
+    }, { clientId: context.clientId, force: body?.force === true });
+    return { ok: true, skipped: !!res.skipped, reason: res.reason || null, run: res.run || await latestDailyRun(store, context.clientId) };
+  }
+
+  const run = await latestDailyRun(store, context.clientId);
+  if (!run) throw Object.assign(new Error('No daily run to review yet — generate one first.'), { status: 404 });
+  const key = { clientId: run.clientId, localDate: run.localDate, channel: run.channel, version: run.version };
+  const suggestionId = String(body?.suggestionId || '').trim();
+  if (!suggestionId) throw Object.assign(new Error('suggestionId is required.'), { status: 400 });
+
+  if (action === 'daily-run-dismiss') {
+    await dismissSuggestion({ store }, { key, suggestionId });
+  } else {
+    const text = typeof body?.text === 'string' ? body.text : undefined;
+    try {
+      const saved = await saveSuggestionDraft({ store, getPackage, createDraftPostOnce }, { key, suggestionId, text });
+      return { ok: true, ...saved, run: await store.read(key) };
+    } catch (err) {
+      if (err.checks) return { ok: false, error: err.message, checks: err.checks, status: err.status };
+      throw err;
+    }
+  }
+  return { ok: true, run: await store.read(key) };
+}
+
 /** Accept either {bucket:{...}} or the fields flat beside action/clientId. */
 function stripEnvelope(body = {}) {
   const { action: _a, clientId: _c, ...rest } = body;
@@ -757,6 +823,10 @@ export async function POST(request) {
     if (action === 'set-rights') return json(await handleSetRights(body));
     if (action === 'create-draft-from-item') return json(await handleCreateDraftFromItem(context, body));
     if (NAS_ACTIONS.includes(action)) return json(await handleNasAction(nasDeps(), action, body, decoded));
+    if (DAILY_RUN_ACTIONS.includes(action)) {
+      const result = await handleDailyRun(context, action, body);
+      return json(result, result.ok === false ? (result.status || 422) : 200);
+    }
     return json({ error: `Unknown action: ${action}`, supportedActions: SUPPORTED_ACTIONS }, 400);
   } catch (err) {
     if (err?.status) {

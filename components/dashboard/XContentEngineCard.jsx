@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { CalendarDays, CalendarRange, FolderTree, Library, LineChart, Users } from 'lucide-react';
+import { CalendarDays, CalendarRange, FolderTree, Library, LineChart, MessagesSquare, Users } from 'lucide-react';
 import { fallbackDraft, validateDraft } from '../../features/x-content-inventory/draft.js';
 import { Toast } from './x-content/Feedback';
 
@@ -33,8 +33,9 @@ const CalendarPanel = dynamic(() => import('./x-content/CalendarPanel'), { ssr: 
 const PerformancePanel = dynamic(() => import('./x-content/PerformancePanel'), { ssr: false });
 const ClientCapturePanel = dynamic(() => import('./x-content/ClientCapturePanel'), { ssr: false });
 const BucketsPanel = dynamic(() => import('./x-content/BucketsPanel'), { ssr: false });
+const DailySuggestionsPanel = dynamic(() => import('./x-content/DailySuggestionsPanel'), { ssr: false });
 
-const TABS = ['plan', 'inventory', 'buckets', 'calendar', 'clients', 'performance'];
+const TABS = ['plan', 'today', 'inventory', 'buckets', 'calendar', 'clients', 'performance'];
 const TAB_STORAGE_KEY = 'xce-last-tab';
 const TOAST_MS = 3200;
 
@@ -317,6 +318,16 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
         </button>
         <button
           type="button"
+          id="x-content-tab-today"
+          className={`xce-tab${tab === 'today' ? ' xce-tab-active' : ''}`}
+          onClick={() => setTab('today')}
+          role="tab"
+          aria-selected={tab === 'today'}
+        >
+          <MessagesSquare size={13} /> Today
+        </button>
+        <button
+          type="button"
           id="x-content-tab-inventory"
           className={`xce-tab${tab === 'inventory' ? ' xce-tab-active' : ''}`}
           onClick={() => setTab('inventory')}
@@ -381,6 +392,8 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
           draftingId={draftingId}
           drafts={drafts}
         />
+      ) : tab === 'today' ? (
+        <DailySuggestionsPanel call={call} showToast={showToast} />
       ) : tab === 'buckets' ? (
         <BucketsPanel call={call} packages={packages} loading={loading} error={error} onReload={() => load()} />
       ) : tab === 'calendar' ? (
@@ -959,6 +972,50 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
         #x-content-card .xce-nasops-dest-list { max-height: 200px; overflow-y: auto; }
         @media (min-width: 481px) {
           #x-content-card .xce-nasops-buttons { flex-direction: row; flex-wrap: wrap; align-items: center; }
+        }
+
+        /* ---- Daily suggestions (DailySuggestionsPanel.jsx) ---- */
+        #x-content-card .xce-tabs { flex-wrap: wrap; }
+        #x-content-card .xce-dl-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+        #x-content-card .xce-dl-model { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; color: rgba(42,36,32,0.6); }
+        #x-content-card .xce-sub code, #x-content-card .xce-dl-gaps code { font-size: 10.5px; overflow-wrap: anywhere; }
+        #x-content-card .xce-dl-inputs { display: grid; gap: 4px; margin: 10px 0; }
+        #x-content-card .xce-dl-input { display: grid; grid-template-columns: 1fr; gap: 2px; padding: 6px 8px; border-radius: 8px; border: 1px solid rgba(42,36,32,0.08); font-family: var(--font-mono); font-size: 11px; color: #2a2420; overflow-wrap: anywhere; }
+        #x-content-card .xce-dl-input > span:first-child { font-weight: 700; }
+        #x-content-card .xce-dl-input-missing, #x-content-card .xce-dl-input-excluded, #x-content-card .xce-dl-input-draft { background: rgba(196,128,20,0.08); border-color: rgba(196,128,20,0.3); }
+        #x-content-card .xce-dl-list { display: grid; gap: 12px; }
+        #x-content-card .xce-dl-card { display: grid; gap: 10px; min-width: 0; padding: 12px; border-radius: 12px; border: 1px solid rgba(42,36,32,0.12); background: rgba(255,255,255,0.8); }
+        #x-content-card .xce-dl-blocked { border-color: rgba(159,31,23,0.35); }
+        #x-content-card .xce-dl-card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+        #x-content-card .xce-dl-type { padding: 2px 8px; border-radius: 999px; background: #2a2420; color: #fff; font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+        #x-content-card .xce-dl-tier { padding: 2px 8px; border-radius: 999px; background: rgba(196,128,20,0.12); color: #7a4e08; font-size: 10.5px; font-weight: 700; }
+        #x-content-card .xce-dl-slot { margin-left: auto; font-family: var(--font-mono); font-size: 10.5px; color: rgba(42,36,32,0.5); }
+        #x-content-card .xce-dl-convo { display: grid; gap: 6px; }
+        #x-content-card .xce-dl-post { display: grid; gap: 2px; padding: 8px; border-radius: 8px; background: rgba(42,36,32,0.04); color: #2a2420; text-decoration: none; min-width: 0; }
+        #x-content-card .xce-dl-post-meta { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-mono); font-size: 10.5px; color: rgba(42,36,32,0.55); }
+        #x-content-card .xce-dl-post-text { font-size: 12.5px; line-height: 1.4; overflow-wrap: anywhere; }
+        #x-content-card .xce-dl-why { display: grid; grid-template-columns: 1fr; gap: 2px 10px; margin: 0; font-size: 12px; line-height: 1.4; }
+        #x-content-card .xce-dl-why dt { font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(42,36,32,0.5); margin-top: 4px; }
+        #x-content-card .xce-dl-why dd { margin: 0; color: #2a2420; overflow-wrap: anywhere; }
+        #x-content-card .xce-dl-content { font-size: 12px; color: #2a2420; overflow-wrap: anywhere; }
+        #x-content-card .xce-dl-content ul { margin: 4px 0 0; padding-left: 16px; }
+        #x-content-card .xce-dl-content em { color: rgba(42,36,32,0.5); font-style: normal; }
+        #x-content-card .xce-dl-draft-label { font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(42,36,32,0.55); }
+        #x-content-card .xce-dl-draft-label span { font-weight: 400; text-transform: none; letter-spacing: 0; }
+        #x-content-card .xce-dl-textarea { width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(42,36,32,0.18); font-size: 14px; line-height: 1.4; resize: vertical; }
+        #x-content-card .xce-dl-checks { display: flex; flex-wrap: wrap; gap: 4px 12px; font-family: var(--font-mono); font-size: 10.5px; color: rgba(42,36,32,0.6); }
+        #x-content-card .xce-dl-ok { color: #1f6b3a; font-weight: 700; }
+        #x-content-card .xce-dl-bad { color: #9f1f17; font-weight: 700; }
+        #x-content-card .xce-dl-muted { color: rgba(42,36,32,0.5); font-size: 12px; }
+        #x-content-card .xce-dl-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        #x-content-card .xce-dl-actions .xce-btn-primary, #x-content-card .xce-dl-actions .xce-btn-ghost { flex: 1 1 auto; }
+        #x-content-card .xce-dl-gaps { margin-top: 12px; display: grid; gap: 6px; }
+        #x-content-card .xce-dl-gaps ul { margin: 0; padding-left: 16px; font-size: 12px; line-height: 1.45; color: #2a2420; overflow-wrap: anywhere; }
+        @media (min-width: 481px) {
+          #x-content-card .xce-dl-input { grid-template-columns: 170px 150px 1fr; }
+          #x-content-card .xce-dl-why { grid-template-columns: 110px 1fr; }
+          #x-content-card .xce-dl-why dt { margin-top: 0; }
+          #x-content-card .xce-dl-actions .xce-btn-primary, #x-content-card .xce-dl-actions .xce-btn-ghost { flex: 0 0 auto; }
         }
       `}</style>
     </div>

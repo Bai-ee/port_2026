@@ -753,6 +753,37 @@ function cleanStr(value, max) {
 }
 
 export async function createSocialPost(clientId, payload) {
+  const post = buildSocialPostRecord(clientId, payload, makeId());
+  await savePost(post);
+  return post;
+}
+
+/**
+ * Draft-only, create-once. The same `postId` always yields exactly one row: a
+ * second call (double-click, retry, concurrent request) returns the existing
+ * row instead of writing a duplicate. Used by the Daily Content Loop's Save
+ * Draft. Never schedules — status is forced to 'draft', scheduledAt to null.
+ */
+export async function createDraftPostOnce(clientId, postId, payload) {
+  if (!/^social_[A-Za-z0-9_-]{6,120}$/.test(String(postId || ''))) {
+    const err = new Error('createDraftPostOnce needs a stable social_* id.');
+    err.status = 400;
+    throw err;
+  }
+  const post = buildSocialPostRecord(clientId, { ...payload, status: 'draft', scheduledAt: null }, postId);
+  const ref = postsCol().doc(postId);
+  try {
+    await ref.create(post);
+    return { post, existing: false };
+  } catch (err) {
+    // 6 = ALREADY_EXISTS: someone else won the race; hand back their row.
+    if (err?.code !== 6 && !/already exists/i.test(String(err?.message || ''))) throw err;
+    const snap = await ref.get();
+    return { post: snap.data(), existing: true };
+  }
+}
+
+function buildSocialPostRecord(clientId, payload, id) {
   const now = new Date().toISOString();
   const content = normalizePostText(payload.content);
   if (!content) {
@@ -768,8 +799,8 @@ export async function createSocialPost(clientId, payload) {
 
   const status = payload.status || 'draft';
   const media = extractMedia(payload);
-  const post = {
-    id: makeId(),
+  return {
+    id,
     clientId,
     platform: payload.platform || 'x',
     content,
@@ -818,9 +849,6 @@ export async function createSocialPost(clientId, payload) {
     needsApproval: payload.needsApproval === true,
     attempts: 0,
   };
-
-  await savePost(post);
-  return post;
 }
 
 export async function postNow(clientId, payload) {
