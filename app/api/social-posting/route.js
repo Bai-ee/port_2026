@@ -16,6 +16,7 @@ import {
   publishApprovedPost,
   getSocialPost,
   readSocialQueue,
+  reconcilePost,
   rejectDraft,
   rejectSocialPost,
   runPostingAgents,
@@ -39,8 +40,8 @@ const { requirePilotOwner } = require('../../../api/_lib/pilot-access.cjs');
 
 // The due-sweep cron used to live at /api/social-posting/process-due, a thin
 // wrapper that only called processDuePostsForAllClients. It was folded in here
-// because Vercel Hobby caps a deployment at 12 function groups and the route
-// earned none of its own. Vercel crons issue GET with a bearer CRON_SECRET, so
+// (written when the project was on Vercel Hobby's 12-function cap; the project is now on Pro and this cron
+// runs every 15 minutes, but the route stays folded so nothing else changes). Vercel crons issue GET with a bearer CRON_SECRET, so
 // the sweep hangs off GET ahead of the user-session path below.
 //
 // Fails closed in production: no CRON_SECRET configured means no cron access.
@@ -66,6 +67,16 @@ function makeReqShim(request) {
 async function gatePilotRow(context, decoded, postId) {
   const row = postId ? await getSocialPost(context.clientId, postId) : null;
   if (row && Number(row.lifecycleVersion) >= 2) requirePilotOwner(context, decoded);
+}
+
+// Explicit, audited plan override: only reachable on owner-gated actions, only with a written reason. The service
+// stamps {by, at, reason} on the post; the UI shows it.
+function planOverrideFrom(body, decoded) {
+  const o = body?.planOverride;
+  if (!o || o.confirm !== true) return null;
+  const reason = String(o.reason || '').trim();
+  if (!reason) throw Object.assign(new Error('An override needs a written reason.'), { status: 400, code: 'override-reason-required' });
+  return { by: decoded?.email || decoded?.uid || null, reason };
 }
 
 function json(body, status = 200) {
@@ -248,7 +259,7 @@ export async function POST(request) {
 
     if (action === 'schedule') {
       const agents = body.agents || runPostingAgents(body.content, agentContext).agents;
-      const post = await schedulePost(context.clientId, { ...body, agents });
+      const post = await schedulePost(context.clientId, { ...body, agents }, { by: decoded?.email || decoded?.uid || null });
       return json({ ok: true, post });
     }
 
@@ -257,14 +268,20 @@ export async function POST(request) {
     if (action === 'update') {
       await gatePilotRow(context, decoded, body.postId);
       const agents = body.agents || runPostingAgents(body.content, agentContext).agents;
-      const post = await updateSocialPost(context.clientId, body.postId, { ...body, agents });
+      // The override is never read from the generic payload: only an owner-gated v2 row may carry one.
+      const row = body.planOverride ? await getSocialPost(context.clientId, body.postId) : null;
+      const overrideAllowed = row && Number(row.lifecycleVersion) >= 2;
+      const post = await updateSocialPost(context.clientId, body.postId, { ...body, agents, planOverride: undefined }, {
+        expectedRevision: body.expectedRevision,
+        planOverride: overrideAllowed ? planOverrideFrom(body, decoded) : null,
+      });
       return json({ ok: true, post });
     }
 
     // draft -> approved (stamps reviewedAt/reviewedBy). Does not schedule or publish.
     if (action === 'approve-draft') {
       requirePilotOwner(context, decoded);
-      const post = await approveDraft(context.clientId, body.postId, { reviewedBy: decoded?.email || decoded?.uid || null });
+      const post = await approveDraft(context.clientId, body.postId, { reviewedBy: decoded?.email || decoded?.uid || null, expectedRevision: body.expectedRevision });
       return json({ ok: true, post });
     }
 
@@ -275,6 +292,8 @@ export async function POST(request) {
         scheduledAt: body.scheduledAt,
         content: typeof body.content === 'string' ? body.content : undefined,
         reviewedBy: decoded?.email || decoded?.uid || null,
+        expectedRevision: body.expectedRevision,
+        planOverride: planOverrideFrom(body, decoded),
       });
       return json({ ok: true, post });
     }
@@ -282,7 +301,14 @@ export async function POST(request) {
     // Calendar Reject: draft -> rejected. Never touches scheduled/posted rows.
     if (action === 'reject-draft') {
       requirePilotOwner(context, decoded);
-      const post = await rejectDraft(context.clientId, body.postId, { reviewedBy: decoded?.email || decoded?.uid || null });
+      const post = await rejectDraft(context.clientId, body.postId, { reviewedBy: decoded?.email || decoded?.uid || null, expectedRevision: body.expectedRevision });
+      return json({ ok: true, post });
+    }
+
+    // Reconcile a held / ambiguous post against what X actually shows (owner only; nothing is sent to X).
+    if (action === 'reconcile-post') {
+      requirePilotOwner(context, decoded);
+      const post = await reconcilePost(context.clientId, body.postId, { outcome: body.outcome, platformId: body.platformId, by: decoded?.email || decoded?.uid || null });
       return json({ ok: true, post });
     }
 

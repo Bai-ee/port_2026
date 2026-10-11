@@ -430,7 +430,7 @@ const excerptOf = (t, n = 160) => String(t ?? '').replace(/\s+/g, ' ').trim().sl
 const postStatusRow = (p) => ({
   id: p.id, status: p.status, scheduledAt: p.scheduledAt || null, postedAt: p.postedAt || null,
   reviewedAt: p.reviewedAt || null, content: p.content, packageId: p.packageId || null,
-  errorClass: p.errorClass || null, error: p.error || null, replyTo: !!p.replyTo,
+  errorClass: p.errorClass || null, error: p.error || null, replyTo: !!p.replyTo, revision: p.revision || 0,
   lifecycleVersion: p.lifecycleVersion || null,
   provenance: { runId: p.runId || null, suggestionId: p.suggestionId || null, strategyVersion: p.strategyVersion ?? null, sourceRef: p.sourceRef || null },
 });
@@ -750,10 +750,17 @@ async function handleDailyRun(context, action, body) {
       store,
       draft,
       // The shared content context (same loader the strategy chat reads); `raw` is the runner's legacy input shape.
-      readInputs: async () => (await readContentContext(context.clientId, {
-        // POC: the verified demo set unless the caller asks for the whole library.
-        packageIds: body?.library === 'full' ? null : dailyLoopDemoSet.ids,
-      })).raw,
+      readInputs: async () => {
+        const ctx = await readContentContext(context.clientId, {
+          // POC: the verified demo set unless the caller asks for the whole library.
+          packageIds: body?.library === 'full' ? null : dailyLoopDemoSet.ids,
+        });
+        // Degraded mode: never generate against a queue we could not read (it could conflict with scheduled posts).
+        if (ctx.raw.recentPostsError) {
+          throw Object.assign(new Error('The posting queue could not be read, so recommendations are paused (they could conflict with scheduled posts). Try again in a minute.'), { status: 503 });
+        }
+        return ctx.raw;
+      },
     }, { clientId: context.clientId, force: body?.force === true, inputSource: 'live' });
     return { ok: true, skipped: !!res.skipped, reason: res.reason || null, run: res.run || await latestDailyRun(store, context.clientId) };
   }

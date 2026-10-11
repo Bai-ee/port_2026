@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
-import { ctDate, ctTime, ctWallToMs } from '../../../features/x-content-inventory/month-calendar.js';
-import { ENGINE_TAG, StateDot, dayHeading } from './calendar-bits.jsx';
+import { classifyResult, ctDate, ctTime, ctWallToMs } from '../../../features/x-content-inventory/month-calendar.js';
+import { ENGINE_TAG, STATE_LABEL, StateDot, dayHeading } from './calendar-bits.jsx';
 
 // PostSheet — review + edit one calendar post. Right-side sheet ≥481px,
 // full-screen on phones. Presentational: every action goes back to the card.
@@ -11,12 +11,24 @@ import { ENGINE_TAG, StateDot, dayHeading } from './calendar-bits.jsx';
 // Times are edited as America/Chicago wall time (the account's posting
 // timezone), never the browser's local zone, so what you type is what posts.
 //
-// Keyboard (desktop, focus not in a field): J/K next/prev in the review queue,
-// A approve, X reject, Esc close. ⌘/Ctrl+Enter runs the primary action anywhere.
+// Keyboard: Tab is trapped inside the sheet, focus moves in on open and back
+// to the opener on close. J/K (focus not in a field) step through the review
+// queue. Esc closes; with unsaved edits the first Esc asks, the second discards.
+// There is deliberately NO single-key or chord approve/reject: publishing
+// actions need a click on a visible button.
+//
+// Stale-card safety: approve/save/reject/unschedule/reconcile all pass
+// `expectedRevision` (the row's revision) in their options object. A handler
+// that resolves `false` (or {ok:false,errorClass:'revision-conflict'}) keeps the
+// sheet open with the user's edit and offers Reload (onRefresh). A handler that
+// resolves {ok:false, errorClass:'plan-*'} reveals the owner-override fields.
 
 const MAX_CHARS = 280;
 const SCORE_DEBOUNCE_MS = 400;
-const STATE_LABEL = { pending: 'Pending approval', approved: 'Approved · not scheduled', scheduled: 'Scheduled', posted: 'Posted', failed: 'Failed' };
+const CONSEQUENCE = 'Schedules this exact copy; it posts when the publish run picks it up.';
+const CONFLICT_TEXT = 'This post changed while you were editing. Reload to see the latest, then re-apply your edit.';
+const DISCARD_TEXT = 'Discard unsaved changes? Esc again to discard';
+const FOCUSABLE = 'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),video[controls],[tabindex]:not([tabindex="-1"])';
 
 function initialWhen(post) {
   const iso = post.scheduledAt || post.proposedAt || post.postedAt || null;
@@ -31,19 +43,37 @@ function whenToIso({ date, time }) {
   return new Date(ctWallToMs(date, h * 60 + m)).toISOString();
 }
 
-export default function PostSheet({ post, busy, queue, onNavigate, onClose, onApprove, onReject, onSave, onUnschedule, onScore }) {
+export default function PostSheet({ post, busy, queue, onNavigate, onClose, onApprove, onReject, onSave, onUnschedule, onScore, onReconcile, onRefresh }) {
   const [content, setContent] = useState(post.content || '');
   const [when, setWhen] = useState(() => initialWhen(post));
   const [score, setScore] = useState(null);
+  const [conflict, setConflict] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [planBlock, setPlanBlock] = useState(null);
+  const [override, setOverride] = useState(false);
+  const [overrideReason, setOverrideReason] = useState('');
+  const [platformId, setPlatformId] = useState('');
   const sheetRef = useRef(null);
+  const openerRef = useRef(typeof document !== 'undefined' ? document.activeElement : null);
 
   // Reset the editor whenever a different post (or a refreshed copy) arrives.
   useEffect(() => {
     setContent(post.content || '');
     setWhen(initialWhen(post));
-  }, [post.id, post.content, post.scheduledAt, post.proposedAt]); // eslint-disable-line react-hooks/exhaustive-deps
+    setConflict(false);
+    setConfirmDiscard(false);
+    setPlanBlock(null);
+    setOverride(false);
+    setOverrideReason('');
+    setPlatformId('');
+  }, [post.id, post.content, post.scheduledAt, post.proposedAt, post.revision]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Focus in on open; restore to the opener on close.
   useEffect(() => { sheetRef.current?.focus(); }, [post.id]);
+  useEffect(() => () => {
+    const el = openerRef.current;
+    if (el && el.isConnected && typeof el.focus === 'function') el.focus();
+  }, []);
 
   // Live score: free, deterministic (scoreXPost), debounced.
   useEffect(() => {
@@ -55,8 +85,10 @@ export default function PostSheet({ post, busy, queue, onNavigate, onClose, onAp
     return () => { live = false; clearTimeout(t); };
   }, [content, onScore]);
 
-  const locked = post.state === 'posted' || post.state === 'failed' || post.status === 'posting';
-  const reviewable = post.state === 'pending' || post.state === 'approved';
+  const held = post.state === 'held';
+  const locked = post.state === 'posted' || post.state === 'failed' || post.status === 'posting' || held;
+  const reviewable = post.state === 'pending' || post.state === 'approved' || post.state === 'awaiting';
+  const canReject = reviewable || held;
   const canApprove = reviewable && !post.needsStory && post.status !== 'needs_review';
   const iso = whenToIso(when);
   const isFuture = iso ? Date.parse(iso) > Date.now() + 60_000 : false;
@@ -64,54 +96,96 @@ export default function PostSheet({ post, busy, queue, onNavigate, onClose, onAp
   const empty = !content.trim();
   const contentDirty = content !== (post.content || '');
   const timeDirty = (() => { const w = initialWhen(post); return w.date !== when.date || w.time !== when.time; })();
+  const dirty = !locked && (contentDirty || timeDirty);
+  const expectedRevision = post.revision ?? null;
 
   const idx = queue.indexOf(post.id);
-  const prevId = idx > 0 ? queue[idx - 1] : null;
-  const nextId = idx !== -1 && idx < queue.length - 1 ? queue[idx + 1] : null;
+  const prevId = !dirty && idx > 0 ? queue[idx - 1] : null;
+  const nextId = !dirty && idx !== -1 && idx < queue.length - 1 ? queue[idx + 1] : null;
 
   const whenLabel = iso ? `${dayHeading(ctDate(Date.parse(iso)))} · ${when.time} CT` : 'No time set';
-  const approveBlocked = busy || !canApprove || over || empty || !isFuture;
+  const overrideMissing = override && !overrideReason.trim();
+  const approveBlocked = busy || !canApprove || over || empty || !isFuture || overrideMissing;
 
-  const actions = useMemo(() => ({
-    approve: () => { if (!approveBlocked) onApprove(post, { content, scheduledAt: iso }); },
-    reject: () => { if (!busy && reviewable) onReject(post); },
+  // Run a card handler; route its result into conflict / plan-override UI.
+  const run = async (fn) => {
+    setConflict(false);
+    let res;
+    try { res = await fn(); } catch { return; }
+    const c = classifyResult(res);
+    if (c.kind === 'conflict') setConflict(true);
+    else if (c.kind === 'plan') setPlanBlock({ code: c.code, message: c.message });
+  };
+
+  const requestClose = () => {
+    if (dirty && !confirmDiscard) { setConfirmDiscard(true); return; }
+    onClose();
+  };
+
+  const actions = {
+    approve: () => {
+      if (approveBlocked) return;
+      const opts = { content, scheduledAt: iso, expectedRevision };
+      if (override) opts.planOverride = { confirm: true, reason: overrideReason.trim() };
+      run(() => onApprove(post, opts));
+    },
+    reject: () => { if (!busy && canReject) run(() => onReject(post, { expectedRevision })); },
     save: () => {
       if (busy || over || empty) return;
-      const extra = { content };
+      const extra = { content, expectedRevision };
       if (post.state === 'scheduled' && timeDirty) {
         if (!isFuture) return;
         extra.scheduledAt = iso;
       }
-      onSave(post, extra);
+      run(() => onSave(post, extra));
     },
-  }), [approveBlocked, busy, reviewable, over, empty, timeDirty, isFuture, iso, content, post, onApprove, onReject, onSave]);
+    unschedule: () => { if (!busy) run(() => onUnschedule(post, { expectedRevision })); },
+    reconcile: (outcome) => {
+      if (busy || !onReconcile) return;
+      run(() => onReconcile(post, { outcome, platformId: outcome === 'posted' ? (platformId.trim() || null) : null, expectedRevision }));
+    },
+  };
+
+  // Latest-handler ref so the window listener never goes stale or re-binds per keystroke.
+  const latest = useRef({});
+  latest.current = { requestClose, nextId, prevId, onNavigate };
 
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === 'Escape') { e.preventDefault(); onClose(); return; }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-        e.preventDefault();
-        if (reviewable) actions.approve(); else if (!locked) actions.save();
+      const cur = latest.current;
+      if (e.key === 'Escape') { e.preventDefault(); cur.requestClose(); return; }
+      if (e.key === 'Tab') {
+        const root = sheetRef.current;
+        if (!root) return;
+        const nodes = Array.from(root.querySelectorAll(FOCUSABLE));
+        if (!nodes.length) { e.preventDefault(); root.focus(); return; }
+        const first = nodes[0];
+        const last = nodes[nodes.length - 1];
+        const active = document.activeElement;
+        if (!root.contains(active) || active === root) { e.preventDefault(); (e.shiftKey ? last : first).focus(); }
+        else if (e.shiftKey && active === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus(); }
         return;
       }
       const tag = (e.target?.tagName || '').toLowerCase();
       if (['input', 'textarea', 'select'].includes(tag) || e.metaKey || e.ctrlKey || e.altKey) return;
       const k = e.key.toLowerCase();
-      if (k === 'j' && nextId) { e.preventDefault(); onNavigate(nextId); }
-      else if (k === 'k' && prevId) { e.preventDefault(); onNavigate(prevId); }
-      else if (k === 'a' && reviewable) { e.preventDefault(); actions.approve(); }
-      else if (k === 'x' && reviewable) { e.preventDefault(); actions.reject(); }
+      if (k === 'j' && cur.nextId) { e.preventDefault(); cur.onNavigate(cur.nextId); }
+      else if (k === 'k' && cur.prevId) { e.preventDefault(); cur.onNavigate(cur.prevId); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [actions, reviewable, locked, nextId, prevId, onClose, onNavigate]);
+  }, []);
+
+  // Editing clears the discard prompt (the user is clearly not discarding).
+  const edit = (fn) => (e) => { setConfirmDiscard(false); fn(e); };
 
   const pct = score && Number.isFinite(score.xGrowthScore) ? Math.round(score.xGrowthScore * 100) : null;
   const warning = score?.warnings?.[0]?.message || null;
   const video = post.mediaType === 'video' || /\.(mp4|mov|webm)(\?|$)/i.test(post.mediaUrl || '');
 
   return (
-    <div id="x-content-post-sheet-backdrop" className="xce-mc-sheet-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div id="x-content-post-sheet-backdrop" className="xce-mc-sheet-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) requestClose(); }}>
       <section
         id="x-content-post-sheet"
         ref={sheetRef}
@@ -134,7 +208,7 @@ export default function PostSheet({ post, busy, queue, onNavigate, onClose, onAp
               <button type="button" className="xce-mc-icon-btn" disabled={!nextId} onClick={() => onNavigate(nextId)} aria-label="Next to review (J)"><ChevronRight size={16} /></button>
             </span>
           ) : null}
-          <button type="button" id="x-content-post-sheet-close" className="xce-mc-icon-btn" onClick={onClose} aria-label="Close (Esc)"><X size={16} /></button>
+          <button type="button" id="x-content-post-sheet-close" className="xce-mc-icon-btn" onClick={requestClose} aria-label="Close (Esc)"><X size={16} /></button>
         </header>
 
         <div id="x-content-post-sheet-body" className="xce-mc-sheet-body">
@@ -155,7 +229,7 @@ export default function PostSheet({ post, busy, queue, onNavigate, onClose, onAp
               className="xce-textarea xce-mc-sheet-text"
               value={content}
               readOnly={locked}
-              onChange={(e) => setContent(e.target.value)}
+              onChange={edit((e) => setContent(e.target.value))}
               rows={7}
             />
             <p id="x-content-post-sheet-text-meta" className="xce-mc-sheet-meta-line">
@@ -169,16 +243,28 @@ export default function PostSheet({ post, busy, queue, onNavigate, onClose, onAp
             <div id="x-content-post-sheet-when-field" className="xce-mc-field">
               <span className="xce-mc-kicker">Publish time · CT</span>
               <div id="x-content-post-sheet-when-row" className="xce-mc-when-row">
-                <input id="x-content-post-sheet-date" type="date" className="xce-input" value={when.date} aria-label="Date (Central Time)" onChange={(e) => setWhen((w) => ({ ...w, date: e.target.value }))} />
-                <input id="x-content-post-sheet-time" type="time" step={300} className="xce-input" value={when.time} aria-label="Time (Central Time)" onChange={(e) => setWhen((w) => ({ ...w, time: e.target.value }))} />
+                <input id="x-content-post-sheet-date" type="date" className="xce-input" value={when.date} aria-label="Date (Central Time)" onChange={edit((e) => setWhen((w) => ({ ...w, date: e.target.value })))} />
+                <input id="x-content-post-sheet-time" type="time" step={300} className="xce-input" value={when.time} aria-label="Time (Central Time)" onChange={edit((e) => setWhen((w) => ({ ...w, time: e.target.value })))} />
               </div>
               {iso && !isFuture ? <p className="xce-mc-over">Pick a time in the future.</p> : null}
             </div>
           ) : null}
 
           {post.needsStory ? <p id="x-content-post-sheet-needs-story" className="xce-mc-notice">This draft still needs its story before it can be approved. Write it in the item drawer.</p> : null}
-          {post.status === 'needs_review' ? <p id="x-content-post-sheet-needs-review" className="xce-mc-notice">Flagged for review by the guard. It can be rejected here; approving needs it back in draft.</p> : null}
-          {post.state === 'failed' && post.error ? <p id="x-content-post-sheet-error" className="xce-mc-over">{post.error}</p> : null}
+          {post.state === 'awaiting' ? <p id="x-content-post-sheet-awaiting-note" className="xce-mc-notice">Awaiting your approval. Nothing posts until you approve it.</p> : null}
+          {held ? (
+            <div id="x-content-post-sheet-held-panel" className="xce-mc-notice xce-mc-held">
+              <p id="x-content-post-sheet-held-reason" className="xce-mc-held-reason">Held for review: {post.heldReason || 'Held for review.'}</p>
+              <p id="x-content-post-sheet-held-next" className="xce-mc-held-next">{post.heldNext || 'Review it, then reject it or reconcile it.'}</p>
+              {post.error ? <p id="x-content-post-sheet-held-detail" className="xce-mc-held-detail">{post.error}</p> : null}
+            </div>
+          ) : null}
+          {post.state === 'failed' ? (
+            <div id="x-content-post-sheet-failed-panel" className="xce-mc-failed">
+              <p id="x-content-post-sheet-error" className="xce-mc-over">{post.error || 'Publishing failed.'}</p>
+              <p id="x-content-post-sheet-failed-note" className="xce-mc-held-next">Failed posts are not retried automatically.</p>
+            </div>
+          ) : null}
 
           <dl id="x-content-post-sheet-facts" className="xce-mc-facts">
             {post.engine ? <><dt>Engine</dt><dd>{ENGINE_TAG[post.engine]}</dd></> : null}
@@ -188,30 +274,73 @@ export default function PostSheet({ post, busy, queue, onNavigate, onClose, onAp
           </dl>
         </div>
 
+        {conflict ? (
+          <div id="x-content-post-sheet-conflict" className="xce-mc-conflict" role="alert">
+            <p id="x-content-post-sheet-conflict-text" className="xce-mc-conflict-text">{CONFLICT_TEXT}</p>
+            {onRefresh ? <button type="button" id="x-content-post-sheet-reload" className="xce-btn-ghost" onClick={() => onRefresh()}>Reload</button> : null}
+          </div>
+        ) : null}
+
+        {planBlock ? (
+          <div id="x-content-post-sheet-plan-override" className="xce-mc-override">
+            <p id="x-content-post-sheet-plan-override-text" className="xce-mc-over">{planBlock.message || `The plan blocks this post (${planBlock.code}).`}</p>
+            <label htmlFor="x-content-post-sheet-override-check" className="xce-mc-override-check">
+              <input id="x-content-post-sheet-override-check" type="checkbox" checked={override} onChange={(e) => setOverride(e.target.checked)} />
+              Override plan <span className="xce-mc-override-note">Owner override — recorded on the post</span>
+            </label>
+            {override ? (
+              <input id="x-content-post-sheet-override-reason" type="text" className="xce-input" value={overrideReason} placeholder="Reason (required)" aria-label="Override reason (required)" onChange={(e) => setOverrideReason(e.target.value)} />
+            ) : null}
+          </div>
+        ) : null}
+
+        {confirmDiscard ? <p id="x-content-post-sheet-discard-confirm" className="xce-mc-discard" role="alert">{DISCARD_TEXT}</p> : null}
+
+        {held ? (
+          <footer id="x-content-post-sheet-held-actions" className="xce-mc-sheet-foot">
+            {onReconcile ? (
+              <div id="x-content-post-sheet-reconcile-row" className="xce-mc-reconcile">
+                <label htmlFor="x-content-post-sheet-platform-id" className="xce-mc-kicker">X post ID (if it is live)</label>
+                <input id="x-content-post-sheet-platform-id" type="text" className="xce-input" value={platformId} placeholder="optional" onChange={(e) => setPlatformId(e.target.value)} />
+              </div>
+            ) : null}
+            <div className="xce-mc-sheet-buttons">
+              <button type="button" id="x-content-post-sheet-reject" className="xce-btn-ghost" disabled={busy} onClick={actions.reject}>Reject</button>
+              {onReconcile ? (
+                <>
+                  <button type="button" id="x-content-post-sheet-reconcile-not-posted" className="xce-btn-ghost" disabled={busy} onClick={() => actions.reconcile('not_posted')}>Mark not posted</button>
+                  <button type="button" id="x-content-post-sheet-reconcile-posted" className="xce-btn-primary" disabled={busy} onClick={() => actions.reconcile('posted')}>{busy ? 'Working…' : 'Mark posted'}</button>
+                </>
+              ) : null}
+            </div>
+            <p className="xce-mc-sheet-keys">J/K next · Esc close</p>
+          </footer>
+        ) : null}
+
         {!locked ? (
           <footer id="x-content-post-sheet-actions" className="xce-mc-sheet-foot">
             {reviewable ? (
               <>
-                <p id="x-content-post-sheet-consequence" className="xce-mc-sheet-consequence">
-                  {canApprove ? (iso ? `Approving publishes to X at ${whenLabel}.` : 'Set a publish time to approve.') : 'Cannot be approved yet.'}
-                </p>
                 <div className="xce-mc-sheet-buttons">
                   <button type="button" id="x-content-post-sheet-reject" className="xce-btn-ghost" disabled={busy} onClick={actions.reject}>Reject</button>
                   {contentDirty ? <button type="button" id="x-content-post-sheet-save" className="xce-btn-ghost" disabled={busy || over || empty} onClick={actions.save}>Save edit</button> : null}
-                  <button type="button" id="x-content-post-sheet-approve" className="xce-btn-primary" disabled={approveBlocked} onClick={actions.approve}>
+                  <button type="button" id="x-content-post-sheet-approve" className="xce-btn-primary" disabled={approveBlocked} onClick={actions.approve} aria-describedby="x-content-post-sheet-consequence">
                     {busy ? 'Working…' : 'Approve & schedule'}
                   </button>
                 </div>
+                <p id="x-content-post-sheet-consequence" className="xce-mc-sheet-consequence">
+                  {!canApprove ? 'Cannot be approved yet.' : !iso ? 'Set a publish time to approve.' : CONSEQUENCE}
+                </p>
               </>
             ) : (
               <div className="xce-mc-sheet-buttons">
-                <button type="button" id="x-content-post-sheet-unschedule" className="xce-btn-ghost" disabled={busy} onClick={() => onUnschedule(post)}>Unschedule</button>
+                <button type="button" id="x-content-post-sheet-unschedule" className="xce-btn-ghost" disabled={busy} onClick={actions.unschedule}>Unschedule</button>
                 <button type="button" id="x-content-post-sheet-save-scheduled" className="xce-btn-primary" disabled={busy || over || empty || (!contentDirty && !timeDirty) || (timeDirty && !isFuture)} onClick={actions.save}>
                   {busy ? 'Working…' : 'Save changes'}
                 </button>
               </div>
             )}
-            <p className="xce-mc-sheet-keys" aria-hidden="true">{reviewable ? 'J/K next · A approve · X reject · ' : ''}⌘↵ {reviewable ? 'approve' : 'save'} · Esc close</p>
+            <p id="x-content-post-sheet-keys" className="xce-mc-sheet-keys">{reviewable ? 'J/K next · ' : ''}Esc close</p>
           </footer>
         ) : null}
       </section>

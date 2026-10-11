@@ -30,12 +30,13 @@ export function excerpt(text, max = 110) {
 }
 
 /** Shown on the grid. `failed` is shown (it needs attention) but never counted. */
-export const DISPLAY_STATUSES = [...COUNTED_STATUSES, 'failed'];
+export const DISPLAY_STATUSES = [...new Set([...COUNTED_STATUSES, 'awaiting_approval', 'needs_review', 'failed'])];
 
 /** status -> the one visual state the card renders. */
 export const STATE_BY_STATUS = {
   draft: 'pending',
-  needs_review: 'pending',
+  awaiting_approval: 'awaiting',
+  needs_review: 'held',
   approved: 'approved',
   scheduled: 'scheduled',
   queued: 'scheduled',
@@ -43,6 +44,52 @@ export const STATE_BY_STATUS = {
   posted: 'posted',
   failed: 'failed',
 };
+
+/** Local copy of twitter-service AMBIGUOUS_CLASSES (that module is server-only). */
+const AMBIGUOUS_CLASSES = new Set(['server-error-ambiguous', 'network-ambiguous', 'unknown']);
+
+const HELD_BY_CLASS = {
+  'reply-threading-unsupported': ['Replies cannot be scheduled yet.', 'Post it manually on X or reject it.'],
+  'approval-stale': ['Edited after approval.', 'Approve again.'],
+  'clearance-revoked': ['The content is no longer cleared.', 'Reject it, or re-clear the source and approve again.'],
+  'clearance-unverifiable': ['Clearance could not be verified at delivery time.', 'Check the source, then reject it or approve again.'],
+  'opportunity-expired': ['The timing window closed.', 'Reject it, or replace it with a fresh recommendation.'],
+  'package-already-pending': ['Another post from this package is already pending.', 'Wait for it to finish, or reject this one.'],
+  'plan-spacing': ['It would break the plan spacing rule.', 'Pick another time, or approve with an owner override.'],
+  'plan-day-cap': ['It would exceed the plan limit for that day.', 'Pick another day, or approve with an owner override.'],
+  'plan-engine-cap': ['It would exceed the plan limit for that engine.', 'Pick another day, or approve with an owner override.'],
+  'revision-conflict': ['It changed while another action was running.', 'Reload to see the latest version.'],
+  'needs-review-reconcile': ['The publish outcome is unknown.', 'Check X, then mark it Posted or Not posted.'],
+};
+
+/**
+ * Plain-words explanation for a held (needs_review) row.
+ * @returns {{ reason: string, next: string, ambiguous: boolean }}
+ */
+export function reasonText(errorClass) {
+  const key = errorClass == null ? '' : String(errorClass);
+  if (AMBIGUOUS_CLASSES.has(key)) {
+    return { reason: 'The publish outcome is unknown.', next: 'May already be live on X: check, then mark Posted or Not posted.', ambiguous: true };
+  }
+  if (key === 'needs-review-reconcile') {
+    return { reason: HELD_BY_CLASS[key][0], next: HELD_BY_CLASS[key][1], ambiguous: true };
+  }
+  const hit = HELD_BY_CLASS[key];
+  if (hit) return { reason: hit[0], next: hit[1], ambiguous: false };
+  return { reason: 'Held for review.', next: 'Review it, then reject it or reconcile it.', ambiguous: false };
+}
+
+/** Handler result -> 'ok' | 'conflict' | 'plan' | 'error'. false = server conflict; {ok:false, errorClass} = typed rejection. */
+export function classifyResult(res) {
+  if (res === false) return { kind: 'conflict' };
+  if (res && typeof res === 'object' && res.ok === false) {
+    const code = String(res.errorClass || res.code || '');
+    if (code === 'revision-conflict') return { kind: 'conflict' };
+    if (code.startsWith('plan-')) return { kind: 'plan', code, message: res.error || res.message || null };
+    return { kind: 'error', code, message: res.error || res.message || null };
+  }
+  return { kind: 'ok' };
+}
 
 /** Proposal window in CT wall time, and the minimum lead before a proposed slot. */
 export const PROPOSAL_WINDOW = { startMin: 9 * 60, endMin: 21 * 60, stepMin: 30, leadMin: 30 };
@@ -92,6 +139,7 @@ function slotMs(post) {
 }
 
 function toRow(p) {
+  const held = p.status === 'needs_review' ? reasonText(p.errorClass) : null;
   return {
     id: p.id ?? null,
     status: p.status,
@@ -108,7 +156,13 @@ function toRow(p) {
     mediaType: p.mediaType ?? null,
     posterUrl: p.posterUrl ?? null,
     twitterId: p.twitterId ?? null,
-    error: p.status === 'failed' ? (p.error ?? null) : null,
+    error: p.status === 'failed' || p.status === 'needs_review' ? (p.error ?? null) : null,
+    errorClass: p.status === 'failed' || p.status === 'needs_review' ? (p.errorClass ?? null) : null,
+    heldReason: held ? held.reason : null,
+    heldNext: held ? held.next : null,
+    heldAmbiguous: held ? held.ambiguous : false,
+    revision: Number.isFinite(p.revision) ? p.revision : (p.revision ?? null),
+    expiresAt: p.expiresAt ?? null,
     proposed: false,
   };
 }
@@ -141,7 +195,7 @@ export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_EN
     const ms = slotMs(p);
     const row = toRow(p);
     if (ms == null) {
-      if (p.status === 'draft' || p.status === 'needs_review' || p.status === 'approved') {
+      if (p.status === 'draft' || p.status === 'needs_review' || p.status === 'approved' || p.status === 'awaiting_approval') {
         undated.push({ row, createdAt: Date.parse(p.createdAt) || 0 });
       }
       continue;
@@ -160,7 +214,10 @@ export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_EN
 
   for (const row of queue) {
     if (row.needsStory) { unplaced.push({ ...row, reason: 'needs-story' }); continue; }
+    if (row.status === 'needs_review') { unplaced.push({ ...row, reason: 'held' }); continue; }
+    const expiresMs = row.expiresAt ? Date.parse(row.expiresAt) : NaN;
     let placed = false;
+    let closed = false;
     for (let date = today; date <= gridEnd && !placed; date = addDays(date, 1)) {
       const slots = occupying(date);
       if (slots.length >= target) continue;
@@ -169,19 +226,21 @@ export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_EN
       for (let m = PROPOSAL_WINDOW.startMin; m <= PROPOSAL_WINDOW.endMin; m += PROPOSAL_WINDOW.stepMin) {
         const ms = ctWallToMs(date, m);
         if (ms < now + PROPOSAL_WINDOW.leadMin * 60_000) continue;
+        if (Number.isFinite(expiresMs) && ms > expiresMs) { closed = true; break; }
         if (slots.some((s) => Math.abs(s.ms - ms) < spacingMs)) continue;
         if (!byDate.has(date)) byDate.set(date, []);
         byDate.get(date).push({ ...row, ms, time: ctTime(ms), proposed: true, proposedAt: new Date(ms).toISOString() });
         placed = true;
         break;
       }
+      if (closed) break; // every later slot is later still
     }
     // A past month has no open days to propose into; say so rather than "full".
-    if (!placed) unplaced.push({ ...row, reason: gridEnd < today ? 'out-of-range' : 'no-slot' });
+    if (!placed) unplaced.push({ ...row, reason: closed ? 'window-closed' : gridEnd < today ? 'out-of-range' : 'no-slot' });
   }
 
   // ── Grid ─────────────────────────────────────────────────────────────────
-  const emptyCounts = () => ({ pending: 0, approved: 0, scheduled: 0, posted: 0, failed: 0 });
+  const emptyCounts = () => ({ pending: 0, awaiting: 0, held: 0, approved: 0, scheduled: 0, posted: 0, failed: 0 });
   const totals = { ...emptyCounts(), proposed: 0 };
   const reviewQueue = [];
 
@@ -194,7 +253,7 @@ export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_EN
       if (inMonth) {
         totals[r.state] += 1;
         if (r.proposed) totals.proposed += 1;
-        if (r.state === 'pending') reviewQueue.push(r.id);
+        if (r.state === 'pending' || r.state === 'awaiting' || r.state === 'held') reviewQueue.push(r.id);
       }
     }
     const live = rows.filter((r) => r.state !== 'failed' && !r.proposed);

@@ -5,14 +5,15 @@ import { createPortal } from 'react-dom';
 import { Check, ChevronLeft, ChevronRight, RefreshCw, X } from 'lucide-react';
 import { Skeleton, RetryError } from './Feedback.jsx';
 import PostSheet from './PostSheet.jsx';
-import { ENGINE_TAG, StateDot, dayHeading } from './calendar-bits.jsx';
+import { classifyResult } from '../../../features/x-content-inventory/month-calendar.js';
+import { ENGINE_TAG, STATE_LABEL, StateDot, dayHeading } from './calendar-bits.jsx';
 
 // MonthCalendarPanel — the Content Engine's month-to-month calendar over
 // social_posts.
 //
 // PURE PRESENTATION. `calendar` is the output of features/x-content-inventory/
 // month-calendar.js (days, states, proposals, review queue); this file
-// re-derives nothing. Approve / Reject / Save / Unschedule hand the work back
+// re-derives nothing. Approve / Reject / Save / Unschedule / Reconcile hand the work back
 // to the card, which calls the social-posting route. No post-now control.
 //
 // Status is carried by weight, not colour: scheduled = solid outline + filled
@@ -26,7 +27,14 @@ import { ENGINE_TAG, StateDot, dayHeading } from './calendar-bits.jsx';
 // STYLING: classNames only (`xce-mc-`); the parent card owns the single
 // `<style jsx global>` block, prefixed `#x-content-card`.
 
-const STATE_LABEL = { pending: 'Pending', approved: 'Approved', scheduled: 'Scheduled', posted: 'Posted', failed: 'Failed' };
+const UNPLACED_REASON = {
+  'needs-story': 'Needs its story',
+  'out-of-range': 'Open a current month to place it',
+  'window-closed': 'Its timing window closes before the next open slot',
+  held: 'Held for review',
+  'no-slot': 'No open slot this month',
+};
+const NEEDS_ATTENTION = ['pending', 'awaiting', 'held'];
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const VIEW_KEY = 'xce-cal-view';
 const CHIP_MAX = 3;
@@ -43,7 +51,8 @@ function readView() {
 }
 
 function PostRow({ post, busy, onOpen, onApprove, onReject }) {
-  const pending = post.state === 'pending' && !post.needsStory;
+  const pending = (post.state === 'pending' || post.state === 'awaiting') && !post.needsStory;
+  const rejectOnly = post.state === 'held';
   return (
     <li id={`x-content-month-row-${post.id}`} className={`xce-mc-row xce-mc-state-${post.state}`}>
       <button type="button" className="xce-mc-row-main" onClick={() => onOpen(post.id)}>
@@ -57,11 +66,17 @@ function PostRow({ post, busy, onOpen, onApprove, onReject }) {
             {post.engine ? ` · ${ENGINE_TAG[post.engine]}` : ''}
             {post.needsStory ? ' · needs story' : ''}
           </span>
+          {post.state === 'held' ? (
+            <span id={`x-content-month-row-held-${post.id}`} className="xce-mc-row-note">{post.heldReason} {post.heldNext}</span>
+          ) : null}
+          {post.state === 'failed' ? (
+            <span id={`x-content-month-row-failed-${post.id}`} className="xce-mc-row-note xce-mc-row-note-failed">{post.error ? `${post.error} · ` : ''}Not retried automatically.</span>
+          ) : null}
         </span>
       </button>
-      {pending && onApprove ? (
+      {(pending && onApprove) || (rejectOnly && onReject) ? (
         <span className="xce-mc-row-actions">
-          <button
+          {pending ? <button
             type="button"
             id={`x-content-month-row-approve-${post.id}`}
             className="xce-mc-icon-btn"
@@ -71,7 +86,7 @@ function PostRow({ post, busy, onOpen, onApprove, onReject }) {
             onClick={() => onApprove(post)}
           >
             <Check size={15} />
-          </button>
+          </button> : null}
           <button
             type="button"
             id={`x-content-month-row-reject-${post.id}`}
@@ -79,7 +94,7 @@ function PostRow({ post, busy, onOpen, onApprove, onReject }) {
             disabled={busy}
             title="Reject"
             aria-label="Reject"
-            onClick={() => onReject(post)}
+            onClick={() => onReject(post, { expectedRevision: post.revision ?? null })}
           >
             <X size={15} />
           </button>
@@ -102,6 +117,7 @@ export default function MonthCalendarPanel({
   onSave,
   onUnschedule,
   onScore,
+  onReconcile,
 }) {
   const [view, setView] = useState('month');
   const [pendingOnly, setPendingOnly] = useState(false);
@@ -133,7 +149,7 @@ export default function MonthCalendarPanel({
     return map;
   }, [days, unplaced]);
 
-  const visible = (posts) => (pendingOnly ? posts.filter((p) => p.state === 'pending') : posts);
+  const visible = (posts) => (pendingOnly ? posts.filter((p) => NEEDS_ATTENTION.includes(p.state)) : posts);
   const selectedDay = days.find((d) => d.date === selected) || null;
   const openPost = openId ? byId.get(openId) || null : null;
 
@@ -145,10 +161,12 @@ export default function MonthCalendarPanel({
   };
   const decide = async (fn, post, extra) => {
     const next = nextAfter(post.id);
-    const ok = await fn(post, extra);
-    if (ok && openId) setOpenId(next && next !== post.id ? next : null);
+    const res = await fn(post, extra);
+    // Only a clean result advances; conflicts / plan rejections keep the sheet (and the user's edit) open.
+    if (res && classifyResult(res).kind === 'ok' && openId) setOpenId(next && next !== post.id ? next : null);
+    return res;
   };
-  const quickApprove = (post) => onApprove(post, { content: post.content, scheduledAt: post.proposedAt || post.scheduledAt });
+  const quickApprove = (post) => onApprove(post, { content: post.content, scheduledAt: post.proposedAt || post.scheduledAt, expectedRevision: post.revision ?? null });
 
   const agendaDays = days.filter((d) => d.inMonth && visible(d.posts).length);
 
@@ -159,6 +177,8 @@ export default function MonthCalendarPanel({
           <h3 id="x-content-month-title" className="xce-mc-title">{calendar ? monthTitle(calendar.month) : '—'}</h3>
           <p id="x-content-month-summary" className="xce-mc-summary">
             <span><strong>{totals.pending ?? 0}</strong> pending</span>
+            {totals.awaiting ? <span><strong>{totals.awaiting}</strong> awaiting approval</span> : null}
+            {totals.held ? <span className="xce-mc-summary-held"><strong>{totals.held}</strong> held for review</span> : null}
             <span><strong>{totals.scheduled ?? 0}</strong> scheduled</span>
             <span><strong>{totals.posted ?? 0}</strong> posted</span>
             {totals.failed ? <span className="xce-mc-summary-failed"><strong>{totals.failed}</strong> failed</span> : null}
@@ -316,7 +336,7 @@ export default function MonthCalendarPanel({
                   <span className="xce-mc-row-body">
                     <span className="xce-mc-row-title">{p.title || '(no text)'}</span>
                     <span className="xce-mc-row-meta">
-                      {p.reason === 'needs-story' ? 'Needs its story' : p.reason === 'out-of-range' ? 'Open a current month to place it' : 'No open slot this month'}
+                      {UNPLACED_REASON[p.reason] || UNPLACED_REASON['no-slot']}
                       {p.engine ? ` · ${ENGINE_TAG[p.engine]}` : ''}
                     </span>
                   </span>
@@ -338,10 +358,12 @@ export default function MonthCalendarPanel({
           onNavigate={setOpenId}
           onClose={() => setOpenId(null)}
           onApprove={(post, extra) => decide(onApprove, post, extra)}
-          onReject={(post) => decide(onReject, post)}
+          onReject={(post, extra) => decide(onReject, post, extra)}
           onSave={onSave}
           onUnschedule={onUnschedule}
           onScore={onScore}
+          onReconcile={onReconcile ? (post, extra) => decide(onReconcile, post, extra) : undefined}
+          onRefresh={onRefresh}
         />,
         document.getElementById('x-content-card'),
       ) : null}

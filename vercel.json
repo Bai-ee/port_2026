@@ -29,7 +29,7 @@
     },
     {
       "path": "/api/social-posting?action=process-due",
-      "schedule": "40 13 * * *"
+      "schedule": "*/15 * * * *"
     }
   ]
 }

@@ -108,6 +108,15 @@ export function describeContentInputs({ raw, planDoc, planInputs, brainError = n
     ],
   }));
 
+  // Posting queue (what is already scheduled/posted): without it recommendations can conflict with the schedule.
+  if (raw.queueChecked) {
+    out.push(entry('queue', 'Posting queue', {
+      source: 'social_posts',
+      usable: !raw.recentPostsError,
+      caveats: [raw.recentPostsError && `The queue could not be read (${raw.recentPostsError}): recommendations are paused until it can.`],
+    }));
+  }
+
   // Inventory
   out.push(entry('inventory', 'Content inventory', {
     source: 'x_content_packages',

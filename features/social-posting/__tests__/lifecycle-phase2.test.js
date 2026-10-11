@@ -170,8 +170,9 @@ test('legacy due row still publishes (delivery recheck is v2-only)', async () =>
 
 const REPLY = { author: 'someone', url: 'https://x.com/someone/status/1', text: 'their post', source: 'reply-targets' };
 
-test('reply without threading support cannot be scheduled (new action) via schedulePost or updateSocialPost', async () => {
-  await assert.rejects(svc.schedulePost('c1', { content: 'Reply text.', replyTo: REPLY, scheduledAt: FUTURE() }), { code: 'reply-threading-unsupported' });
+test('PILOT: reply scheduling is blocked for NEW (v2) posts only; legacy reply rows schedule as before', async () => {
+  const legacy = await svc.schedulePost('c1', { content: 'Legacy reply text.', replyTo: REPLY, scheduledAt: FUTURE() });
+  assert.equal(legacy.status, 'scheduled');
   const p = await v2('Reply draft.', { replyTo: REPLY });
   await svc.approveDraft('c1', p.id);
   await assert.rejects(svc.updateSocialPost('c1', p.id, { scheduledAt: FUTURE() }), { code: 'reply-threading-unsupported' });

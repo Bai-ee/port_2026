@@ -7,8 +7,8 @@ import { RefreshCw } from 'lucide-react';
 // age, and a direct fix. Data = the shared server context (`content-context` action); nothing is computed here
 // except the label. Honest about what the app cannot see: it has NO heartbeat from the local refresh/scan worker.
 
-const ORDER = ['brain', 'plan', 'corpora', 'scan'];
-const LABEL = { brain: 'Brain', plan: 'Strategy plan', corpora: 'Account data', scan: 'Scan' };
+const ORDER = ['brain', 'plan', 'corpora', 'scan', 'queue'];
+const LABEL = { brain: 'Brain', plan: 'Strategy plan', corpora: 'Account data', scan: 'Scan', queue: 'Posting queue' };
 
 function fix(input, { onOpenStrategy }) {
   if (input.usable && !input.caveats.some((c) => /stale|No saved plan|failed to load/i.test(c))) return null;
@@ -16,6 +16,7 @@ function fix(input, { onOpenStrategy }) {
     case 'brain': return { text: 'Approve the Client Brain in the Client Brain card (Brain tab), then regenerate. Until then drafts use a plain, unapproved voice.' };
     case 'plan': return { text: 'Save a plan in Strategy so cadence, floors and caps are explicit.', action: onOpenStrategy, actionLabel: 'Open Strategy' };
     case 'corpora': return { text: 'Refresh the handles in Strategy (needs the local refresh worker).', action: onOpenStrategy, actionLabel: 'Open Strategy' };
+    case 'queue': return { text: 'Reload in a minute. Recommendations stay paused so they cannot conflict with scheduled posts.' };
     case 'scan': return { text: 'Run the local quote scan on the Mac that holds the browser cookies (see Setup). The app cannot start it.' };
     default: return null;
   }

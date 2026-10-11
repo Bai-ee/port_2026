@@ -98,8 +98,12 @@ export async function loadDailyLoopInputs(deps, { clientId, packageIds = null, c
   }
 
   const planDoc = deps.readPlanDoc ? await deps.readPlanDoc(clientId) : null;
-  // A queue read failure must not break the whole context load: fall back to today's behaviour (no recentPosts).
-  const recentPosts = deps.readRecentPosts ? await Promise.resolve(deps.readRecentPosts(clientId)).catch(() => null) : null;
+  // A queue read failure must not break the whole context load, but it is NOT silent: `recentPostsError` makes the
+  // caller degrade explicitly (recommendations paused) instead of planning against a queue it could not see.
+  let recentPostsError = null;
+  const recentPosts = deps.readRecentPosts
+    ? await Promise.resolve(deps.readRecentPosts(clientId)).catch((err) => { recentPostsError = err?.message || 'unreadable'; return null; })
+    : null;
 
   return {
     scan: state.marketingBrief?.quoteTargets || null,
@@ -107,6 +111,8 @@ export async function loadDailyLoopInputs(deps, { clientId, packageIds = null, c
     packages,
     libraryNote: packageIds?.length ? `verified demo set (${packages.length} of ${packageIds.length} found)` : 'full library',
     brain,
+    queueChecked: Boolean(deps.readRecentPosts),
+    recentPostsError,
     strategyPlan,
     ownSummary,
     benchmark,

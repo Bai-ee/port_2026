@@ -7,6 +7,17 @@ import { Check } from 'lucide-react';
 
 export const ENGINE_TAG = { record: 'REC', ue: 'UE', client: 'CLIENT', identity: 'ID' };
 
+/** state -> short label, shared by the grid rows and the sheet header. */
+export const STATE_LABEL = {
+  pending: 'Pending approval',
+  awaiting: 'Awaiting approval',
+  held: 'Held for review',
+  approved: 'Approved · not scheduled',
+  scheduled: 'Scheduled',
+  posted: 'Posted',
+  failed: 'Failed',
+};
+
 /** "Sat, Oct 10" for a YYYY-MM-DD (CT) date key. */
 export const dayHeading = (date) => new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' });
 

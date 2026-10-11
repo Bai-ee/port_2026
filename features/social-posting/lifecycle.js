@@ -5,6 +5,8 @@
 // material edit, clearance/reply/expiry recheck at delivery). Schedule-time guards (reply, clearance,
 // package collision) apply to every row because they only refuse a NEW scheduling action.
 
+import { createHash } from 'node:crypto';
+
 export const LIFECYCLE_VERSION = 2;
 
 /** Statuses in which a row still represents live intent to post (or an unresolved delivery). */
@@ -12,6 +14,11 @@ export const OPEN_STATUSES = Object.freeze(['draft', 'approved', 'awaiting_appro
 /** Statuses that occupy the queue: another copy of the same package must not be scheduled alongside. */
 // needs_review is excluded: it is parked (never claimable), so it must not wedge the package forever.
 export const PENDING_STATUSES = Object.freeze(['awaiting_approval', 'scheduled', 'queued', 'posting']);
+
+export const RETRY_MAX_ATTEMPTS = 3;
+/** Pending = queued for delivery, including a failed row that the next sweep will retry (429 / pre-send network). */
+export const isPendingRow = (r) => Boolean(r) && (PENDING_STATUSES.includes(r.status)
+  || (r.status === 'failed' && r.retryable === true && (Number(r.attempts) || 0) < RETRY_MAX_ATTEMPTS));
 
 export const isV2 = (post) => Number(post?.lifecycleVersion) >= LIFECYCLE_VERSION;
 
@@ -39,11 +46,22 @@ export function replyBlock(post) {
 /** Another open copy of the same package (never the row itself) blocks scheduling a second one. */
 export function findPackageCollision(rows, { packageId, selfId = null }) {
   if (!packageId) return null;
-  return (rows || []).find((r) => r && r.id !== selfId && r.packageId === packageId && PENDING_STATUSES.includes(r.status)) || null;
+  return (rows || []).find((r) => r && r.id !== selfId && r.packageId === packageId && isPendingRow(r)) || null;
 }
 
 /** ISO string or epoch ms -> ms (NaN when unreadable). */
 export const toMs = (v) => (typeof v === 'number' ? v : Date.parse(v || ''));
+
+/** Hash of exactly what would be published: approval binds to this. */
+const stable = (v) => (Array.isArray(v) ? `[${v.map(stable).join(',')}]`
+  : v && typeof v === 'object' ? `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${stable(v[k])}`).join(',')}}`
+    : JSON.stringify(v ?? null));
+
+export function contentHash(post) {
+  return createHash('sha1').update(stable([
+    post?.content ?? '', post?.selfReply ?? null, post?.mediaUrl ?? null, post?.mediaVariants ?? null, post?.replyTo ?? null,
+  ])).digest('hex').slice(0, 16);
+}
 
 const sameJson = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
@@ -67,6 +85,10 @@ export function deliveryBlock(post, { pkg = null, now = Date.now() } = {}) {
   if (!isV2(post)) return null;
   const reply = replyBlock(post);
   if (!reply.ok) return reply;
+  // Approval binds the exact copy/media/reply target: anything changed since approval must be re-approved.
+  if (post.approvedHash && post.approvedHash !== contentHash(post)) {
+    return { ok: false, code: 'approval-stale', reason: 'The post changed after it was approved; approve it again.' };
+  }
   const clearance = packageClearance(pkg);
   if (!clearance.ok) return clearance;
   const expires = post.expiresAt || pkg?.expiresAt;

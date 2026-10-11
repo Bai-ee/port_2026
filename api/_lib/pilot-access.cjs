@@ -61,4 +61,14 @@ function requirePilotOwnerUid(decoded, env = process.env) {
   return { uid };
 }
 
-module.exports = { requirePilotOwner, requirePilotOwnerUid, OWNER_CLIENT_ID };
+/** Is this client a pilot client (plan enforcement at scheduling applies)? Dev defaults to the owner client. */
+function isPilotClient(clientId, env = process.env) {
+  if (!clientId) return false;
+  const clients = list(env.PILOT_CLIENT_IDS);
+  if (clients.length) return clients.includes(clientId);
+  // List unset: the owner client is still a pilot client (in production too), so a mis-set env can never
+  // silently drop plan enforcement; requirePilotOwner separately fails closed (503) in production.
+  return clientId === OWNER_CLIENT_ID;
+}
+
+module.exports = { requirePilotOwner, requirePilotOwnerUid, isPilotClient, OWNER_CLIENT_ID };

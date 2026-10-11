@@ -197,7 +197,7 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
       body: JSON.stringify(body),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.error || `${body.action} failed.`);
+    if (!res.ok) throw Object.assign(new Error(data?.error || `${body.action} failed.`), { code: data?.code || null });
     return data;
   }, [getIdToken]);
 
@@ -245,6 +245,8 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
 
   // Every calendar action: one social-posting call, reload the month, toast.
   // Returns true on success so the sheet can advance to the next post.
+  // Resolves true on success. On failure resolves { ok:false, errorClass, error } so the sheet can keep the user's
+  // work and explain it (revision conflict => reload, plan-* => optional recorded override); anything else => false.
   const runCalendarAction = useCallback(async (post, body, okText) => {
     setCalendarBusyId(post.id);
     try {
@@ -253,6 +255,8 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
       showToast(okText);
       return true;
     } catch (err) {
+      const code = err.code || '';
+      if (code === 'revision-conflict' || code.startsWith('plan-')) return { ok: false, errorClass: code, error: err.message };
       showToast(err.message || 'Could not update the post.', 'error');
       return false;
     } finally {
@@ -260,23 +264,29 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
     }
   }, [callSocial, loadCalendar, showToast]);
 
-  // Approve = approved + scheduled at the shown CT time (the go-live step: the sweeper publishes scheduled
-  // posts). One server call, no half state. Clearance / reply / collision / expiry rules apply server-side.
-  const onCalendarApprove = useCallback((post, { content, scheduledAt }) => {
+  // Approve = approved + scheduled at the shown CT time (the go-live step: the publish run posts scheduled posts).
+  // One atomic server call; clearance / reply / collision / plan / expiry rules apply server-side; the revision the
+  // reviewer saw is sent so a post edited meanwhile is refused instead of overwritten.
+  const onCalendarApprove = useCallback((post, { content, scheduledAt, expectedRevision, planOverride }) => {
     if (!scheduledAt) { showToast('Set a publish time first.', 'error'); return Promise.resolve(false); }
     const when = new Date(scheduledAt).toLocaleString('en-US', { timeZone: 'America/Chicago', weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-    return runCalendarAction(post, { action: 'approve-and-schedule', content, scheduledAt }, `Scheduled for ${when} CT`);
+    return runCalendarAction(post, { action: 'approve-and-schedule', content, scheduledAt, expectedRevision, ...(planOverride ? { planOverride } : {}) }, `Scheduled for ${when} CT`);
   }, [runCalendarAction, showToast]);
 
-  const onCalendarReject = useCallback((post) => runCalendarAction(post, { action: 'reject-draft' }, 'Rejected'), [runCalendarAction]);
+  const onCalendarReject = useCallback((post, opts = {}) => runCalendarAction(post, { action: 'reject-draft', expectedRevision: opts.expectedRevision }, 'Rejected'), [runCalendarAction]);
 
   // `update` edits in place (never mints a second post). scheduledAt is only sent when the reviewer changed it.
-  const onCalendarSave = useCallback((post, { content, scheduledAt }) => (
-    runCalendarAction(post, { action: 'update', content, ...(scheduledAt ? { scheduledAt } : {}) }, 'Saved')
+  const onCalendarSave = useCallback((post, { content, scheduledAt, expectedRevision }) => (
+    runCalendarAction(post, { action: 'update', content, expectedRevision, ...(scheduledAt ? { scheduledAt } : {}) }, 'Saved')
   ), [runCalendarAction]);
 
-  const onCalendarUnschedule = useCallback((post) => (
-    runCalendarAction(post, { action: 'update', content: post.content, scheduledAt: '' }, 'Unscheduled')
+  const onCalendarUnschedule = useCallback((post, opts = {}) => (
+    runCalendarAction(post, { action: 'update', content: post.content, scheduledAt: '', expectedRevision: opts.expectedRevision }, 'Unscheduled')
+  ), [runCalendarAction]);
+
+  // Held / ambiguous post: record what X actually shows. Sends nothing to X.
+  const onCalendarReconcile = useCallback((post, { outcome, platformId }) => (
+    runCalendarAction(post, { action: 'reconcile-post', outcome, platformId }, outcome === 'posted' ? 'Marked as posted' : 'Marked as not posted (back to draft)')
   ), [runCalendarAction]);
 
   // Live score in the sheet: deterministic scoreXPost, no LLM, no cost.
@@ -474,6 +484,7 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
           onReject={onCalendarReject}
           onSave={onCalendarSave}
           onUnschedule={onCalendarUnschedule}
+          onReconcile={onCalendarReconcile}
           onScore={onCalendarScore}
         />
       ) : tab === 'performance' ? (
@@ -826,13 +837,19 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
         #x-content-card .xce-mc-chip-time { flex: 0 0 auto; font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; }
         #x-content-card .xce-mc-chip-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         #x-content-card .xce-mc-chip.xce-mc-state-pending { border-style: dashed; border-color: rgba(42,36,32,0.3); background: transparent; color: rgba(42,36,32,0.5); }
+        #x-content-card .xce-mc-chip.xce-mc-state-awaiting { border-style: dashed; border-color: rgba(42,36,32,0.3); background: transparent; color: rgba(42,36,32,0.5); }
+        #x-content-card .xce-mc-chip.xce-mc-state-held { border-style: dashed; border-color: rgba(42,36,32,0.3); background: transparent; color: rgba(42,36,32,0.5); }
         #x-content-card .xce-mc-chip.xce-mc-state-pending:hover { border-color: rgba(42,36,32,0.6); }
+        #x-content-card .xce-mc-chip.xce-mc-state-awaiting:hover { border-color: rgba(42,36,32,0.6); }
+        #x-content-card .xce-mc-chip.xce-mc-state-held:hover { border-color: rgba(42,36,32,0.6); }
         #x-content-card .xce-mc-chip.xce-mc-state-posted { border-color: transparent; background: rgba(42,36,32,0.05); color: rgba(42,36,32,0.6); }
         #x-content-card .xce-mc-chip.xce-mc-state-failed { border-color: rgba(159,31,23,0.5); color: #9f1f17; }
         #x-content-card .xce-mc-more { padding: 0 6px; font-family: var(--font-mono); font-size: 10px; color: rgba(42,36,32,0.5); }
         #x-content-card .xce-mc-dots { display: none; }
         #x-content-card .xce-mc-dot { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: #2a2420; color: #2a2420; }
         #x-content-card .xce-mc-dot-pending { background: transparent; box-shadow: inset 0 0 0 1.5px rgba(42,36,32,0.4); }
+        #x-content-card .xce-mc-dot-awaiting { background: transparent; box-shadow: inset 0 0 0 1.5px rgba(42,36,32,0.4); }
+        #x-content-card .xce-mc-dot-held { background: transparent; box-shadow: inset 0 0 0 1.5px rgba(42,36,32,0.4); }
         #x-content-card .xce-mc-dot-posted { width: 10px; height: 10px; background: rgba(42,36,32,0.14); }
         #x-content-card .xce-mc-dot-failed { background: #9f1f17; }
 
@@ -852,6 +869,8 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
         #x-content-card .xce-mc-row-meta { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: rgba(42,36,32,0.5); }
         #x-content-card .xce-mc-row.xce-mc-state-pending .xce-mc-row-time,
         #x-content-card .xce-mc-row.xce-mc-state-pending .xce-mc-row-title { color: rgba(42,36,32,0.5); }
+        #x-content-card .xce-mc-row.xce-mc-state-awaiting .xce-mc-row-title { color: rgba(42,36,32,0.5); }
+        #x-content-card .xce-mc-row.xce-mc-state-held .xce-mc-row-title { color: rgba(42,36,32,0.5); }
         #x-content-card .xce-mc-row.xce-mc-state-posted .xce-mc-row-title { color: rgba(42,36,32,0.6); }
         #x-content-card .xce-mc-row.xce-mc-state-failed .xce-mc-row-meta { color: #9f1f17; }
         #x-content-card .xce-mc-row-actions { display: inline-flex; gap: 2px; flex: 0 0 auto; }
@@ -897,6 +916,8 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
         #x-content-card .xce-mc-sheet-head { display: flex; align-items: center; gap: 6px; padding: 8px var(--mobile-gutter, 8px); border-bottom: 1px solid rgba(42,36,32,0.1); }
         #x-content-card .xce-mc-sheet-state { margin-right: auto; display: inline-flex; align-items: center; gap: 8px; min-width: 0; font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #2a2420; }
         #x-content-card .xce-mc-sheet-state.xce-mc-state-pending { color: rgba(42,36,32,0.55); }
+        #x-content-card .xce-mc-sheet-state.xce-mc-state-awaiting { color: rgba(42,36,32,0.55); }
+        #x-content-card .xce-mc-sheet-state.xce-mc-state-held { color: rgba(42,36,32,0.55); }
         #x-content-card .xce-mc-sheet-state.xce-mc-state-failed { color: #9f1f17; }
         #x-content-card .xce-mc-sheet-queue { display: inline-flex; align-items: center; }
         #x-content-card .xce-mc-sheet-queue-pos { min-width: 44px; text-align: center; font-family: var(--font-mono); font-size: 11px; color: rgba(42,36,32,0.55); }
@@ -944,6 +965,25 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
           #x-content-card .xce-mc-sheet,
           #x-content-card .xce-mc-sheet-backdrop { animation: none; }
         }
+
+        /* ---- Pilot calendar states: awaiting / held, row notes, conflict + override + reconcile (PostSheet / MonthCalendarPanel) ---- */
+        #x-content-card .xce-mc-summary-held { color: #7a4e08; font-weight: 700; }
+        #x-content-card .xce-mc-chip.xce-mc-state-held, #x-content-card .xce-mc-sheet-state.xce-mc-state-held { border-color: rgba(196,128,20,0.6); color: #7a4e08; }
+        #x-content-card .xce-mc-dot-held { box-shadow: inset 0 0 0 1.5px rgba(196,128,20,0.9); }
+        #x-content-card .xce-mc-row-note { display: block; margin-top: 2px; font-size: 11.5px; line-height: 1.4; color: rgba(42,36,32,0.6); overflow-wrap: anywhere; }
+        #x-content-card .xce-mc-row-note-failed { color: #9f1f17; }
+        #x-content-card .xce-mc-held { margin: 0; padding: 8px 10px; border-left: 3px solid rgba(196,128,20,0.8); background: rgba(196,128,20,0.07); }
+        #x-content-card .xce-mc-held-reason { margin: 0; font-weight: 700; font-size: 12.5px; }
+        #x-content-card .xce-mc-held-next { margin: 2px 0 0; font-size: 12px; color: rgba(42,36,32,0.7); }
+        #x-content-card .xce-mc-held-detail { margin: 4px 0 0; font-family: var(--font-mono); font-size: 11px; color: rgba(42,36,32,0.55); overflow-wrap: anywhere; }
+        #x-content-card .xce-mc-failed { padding: 8px 10px; border-left: 3px solid #9f1f17; font-size: 12.5px; overflow-wrap: anywhere; }
+        #x-content-card .xce-mc-conflict { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid rgba(196,128,20,0.5); border-radius: 8px; background: rgba(196,128,20,0.07); }
+        #x-content-card .xce-mc-conflict-text { flex: 1 1 200px; font-size: 12.5px; min-width: 0; }
+        #x-content-card .xce-mc-override { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid rgba(31,29,27,0.12); }
+        #x-content-card .xce-mc-override-check { display: flex; align-items: center; gap: 8px; font-size: 12.5px; min-height: 32px; }
+        #x-content-card .xce-mc-override-note { font-size: 11.5px; color: rgba(42,36,32,0.6); }
+        #x-content-card .xce-mc-discard { padding: 8px 10px; background: rgba(196,128,20,0.12); font-size: 12.5px; font-weight: 700; border-radius: 8px; }
+        #x-content-card .xce-mc-reconcile { display: flex; flex-direction: column; gap: 8px; padding-bottom: 8px; }
 
         /* ── Results (performance) ────────────────────────────────────── */
         #x-content-card .xce-perf-list { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 8px; }

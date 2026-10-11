@@ -94,7 +94,7 @@ function SavedPostFlow({ s, call, callSocial, showToast, onOpenQueue }) {
   const approve = async () => {
     setWorking(true); setErr('');
     try {
-      await callSocial({ action: 'approve-and-schedule', postId, scheduledAt: new Date(when).toISOString() });
+      await callSocial({ action: 'approve-and-schedule', postId, scheduledAt: new Date(when).toISOString(), expectedRevision: post?.revision });
       showToast?.('Approved and scheduled. It posts when the publish run picks it up.');
       await refresh();
     } catch (e) { setErr(e.message || 'Could not schedule.'); showToast?.(e.message || 'Could not schedule.', 'error'); } finally { setWorking(false); }

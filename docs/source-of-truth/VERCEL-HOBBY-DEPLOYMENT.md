@@ -1,5 +1,8 @@
 # Vercel Hobby deployment strategy
 
+> **Now on Vercel Pro (2026-10-11 owner decision).** The Hobby 12-function packaging cap and the daily-only cron limit no longer apply to this project. Consequences recorded in the owner-pilot work: `process-due` runs every 15 minutes (`vercel.json`), `STALE_DUE_MS` is 2h, and the GitHub `social-publish-sweep.yml` stays disabled as the documented fallback (exactly ONE publisher active). The rest of this document is kept as the as-built history of the Hobby constraints; do not add novel `maxDuration` tiers, change `.vercelignore` or other crons without checking it. Takes effect on deploy only.
+
+
 **Status:** as-built and production-verified  
 **Last verified:** 2026-07-26  
 **Fix commit:** `a4f5b12e`  

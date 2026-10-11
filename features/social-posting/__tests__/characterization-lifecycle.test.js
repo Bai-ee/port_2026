@@ -266,9 +266,9 @@ test('a retryable (429) failure is retried on the next sweep and posts when X re
   assert.equal(raw(p.id).attempts, 2);
 });
 
-test('a row more than 26h late becomes expired and is never published (boundary: 25h still posts)', async () => {
-  const old = await due('Too old.', { scheduledAt: new Date(Date.now() - 27 * 3600 * 1000).toISOString() });
-  const edge = await due('Late but ok.', { scheduledAt: new Date(Date.now() - 25 * 3600 * 1000).toISOString() });
+test('PILOT (Vercel Pro, 15-min cron): a row more than 2h late becomes expired and is never published (boundary: 1h50m still posts)', async () => {
+  const old = await due('Too old.', { scheduledAt: new Date(Date.now() - 3 * 3600 * 1000).toISOString() });
+  const edge = await due('Late but ok.', { scheduledAt: new Date(Date.now() - 110 * 60 * 1000).toISOString() });
   await svc.processDuePostsForAllClients();
   assert.equal(raw(old.id).status, 'expired');
   assert.equal(raw(edge.id).status, 'posted');
