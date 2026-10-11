@@ -31,9 +31,11 @@ import { fileURLToPath } from 'node:url';
 import {
   runDailyLoop, assertOwnerClient, discoveryQueries, packageEligibility, localDateOf, LOOP_VERSION, MAX_SUGGESTIONS,
 } from '../../features/x-content-inventory/daily-loop.js';
+import { buildDayPlan } from '../../features/x-content-inventory/plan-day.js';
 import {
   createMemoryRunStore, createFirestoreRunStore, loadDailyLoopInputs, saveSuggestionDraft, editSuggestion, dismissSuggestion, createModelDrafter,
 } from '../../features/x-content-inventory/daily-run-store.js';
+import { slotLabel, strategySourceLine, slotStatuses, VOICE_LINE } from '../../features/x-content-inventory/daily-loop/present.js';
 
 const require = createRequire(import.meta.url);
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
@@ -111,9 +113,10 @@ function report(run, label) {
       const tp = (h.topics || []).map((x) => `${x.topic} n=${x.n} lift=${x.lift ?? '—'}${x.weak ? ' (weak)' : ''}`).join('; ') || 'no topic match';
       L.push(`     history:      ${t}; ${tp}${h.note ? ` — ${h.note}` : ''} [${h.range?.from?.slice(0, 10)} → ${h.range?.to?.slice(0, 10)}]`);
     } else L.push(`     history:      ${h?.note || 'missing'}`);
-    L.push(`     draft (${s.draft.source}):`, `        ${s.draft.text}`);
+    L.push(`     draft (${s.draft.source}):`, `        ${s.draft.text || '(empty: write this one yourself)'}`);
     L.push(`     checks:       ${s.checks.blocked ? `BLOCKED — ${s.checks.violations.join('; ')}` : 'pass'} · guard lane ${s.checks.guard.lane}${s.checks.guard.hardBlock ? ' HARD BLOCK' : ''} · ${s.checks.chars} chars${s.checks.score ? ` · score ${Number(s.checks.score.value).toFixed(3)} (advisory, ${s.checks.score.profile})` : ' · score n/a (quote: borrowed reach not modelled)'}`);
-    L.push(`     proposed slot: ${s.proposedSlot.localTime} ${s.proposedSlot.timezone} — ${s.proposedSlot.note}`);
+    if (s.slot) L.push(`     slot:         ${slotLabel(s.slot)}`);
+    L.push(`     proposed slot: ${s.proposedSlot && s.proposedSlot.localTime !== 'anytime' ? `${s.proposedSlot.localTime} ${s.proposedSlot.timezone} — ${s.proposedSlot.note}` : 'anytime today — suggestion only, not scheduled'}`);
   });
   L.push('', 'GAPS');
   for (const g of run.gaps) L.push(`  - [${g.code}] ${g.message}`);
@@ -126,7 +129,10 @@ function report(run, label) {
 async function replay() {
   const fx = readJson(args.replay);
   const store = createMemoryRunStore();
-  const res = await runDailyLoop({ now: () => Date.parse(fx.now), store, readInputs: async () => fx }, { clientId: fx.clientId, max: args.max, inputSource: 'fixture' });
+  // The fixture runs on the strategy spine too: same plan builder, the committed corpora, the fixture's own library.
+  const own = readJson(OWN_CORPUS);
+  const strategyInputs = { buildDayPlan, planInput: { corpusRows: own, benchmarkRows: readJson(BENCH_CORPUS), packages: fx.packages }, ownPosts: own, ownHandle: 'bai_ee' };
+  const res = await runDailyLoop({ now: () => Date.parse(fx.now), store, readInputs: async () => ({ ...fx, strategyInputs }) }, { clientId: fx.clientId, max: args.max, inputSource: 'fixture' });
   const out = args.out || path.join(os.tmpdir(), `daily-run-replay-${res.run.localDate}.json`);
   writeFileSync(out, JSON.stringify(res.run, null, 2));
   process.stdout.write(report(res.run, 'FIXTURE REPLAY — not real data'));
@@ -193,7 +199,7 @@ async function execute() {
     now: () => Date.now(),
     store,
     draft: args.model ? modelDrafter(args.client) : undefined,
-    readInputs: () => loadDailyLoopInputs({ db: fb.adminDb, loadBrainContext: loadBrainContextFn() }, {
+    readInputs: () => loadDailyLoopInputs({ db: fb.adminDb, loadBrainContext: loadBrainContextFn(), buildDayPlan }, {
       clientId: args.client,
       packageIds: packageIdsForRun(),
       corpora: { own: readJson(OWN_CORPUS), benchmark: readJson(BENCH_CORPUS), ownSource: OWN_CORPUS, benchmarkSource: BENCH_CORPUS },
@@ -216,7 +222,19 @@ async function show() {
   const fb = firebase();
   const run = await createFirestoreRunStore(fb.adminDb).latest(runKey());
   if (!run) { console.log('No run in the last 7 days.'); return; }
-  process.stdout.write(args.json ? JSON.stringify(run, null, 2) : report(run, 'REAL DATA — saved run'));
+  if (args.json) { process.stdout.write(JSON.stringify(run, null, 2)); return; }
+  process.stdout.write(report(run, 'REAL DATA — saved run') + showStrategy(run));
+}
+
+// Strategy source, slots (filled or gap) and gap reasons; old v2 runs have none of it.
+function showStrategy(run) {
+  const L = ['STRATEGY'];
+  const line = strategySourceLine(run.strategySource);
+  L.push(`  source: ${line || 'none (run predates the strategy spine)'}`, `  ${VOICE_LINE}`);
+  for (const x of slotStatuses(run)) L.push(`  ${x.letter}  ${(x.timeCT || 'anytime').padEnd(8)} ${x.type.padEnd(18)} ${(x.pillar || '-').padEnd(3)} ${x.filled ? 'filled' : `GAP — ${x.reason}`}`);
+  const slotGaps = (run.gaps || []).filter((g) => g.slot);
+  if (slotGaps.length) { L.push('  slot gaps:'); for (const g of slotGaps) L.push(`    - [${g.code}] ${g.slot.fillReason || g.message}`); }
+  return L.join('\n') + '\n';
 }
 
 async function review() {

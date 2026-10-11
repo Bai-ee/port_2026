@@ -690,6 +690,7 @@ async function handleDailyRun(context, action, body) {
       draft,
       readInputs: () => loadDailyLoopInputs({
         db: fb.adminDb,
+        buildDayPlan: buildContentDayPlan,
         loadBrainContext: (id) => loadClientBrainContext(id, { useFor: 'socialPosts', requireApproved: true }).catch(() => ''),
       }, {
         clientId: context.clientId,

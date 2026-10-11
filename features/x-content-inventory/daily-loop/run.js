@@ -7,7 +7,8 @@ import { LOOP_VERSION, CHANNEL, DEFAULT_TIMEZONE, MAX_SUGGESTIONS, assertOwnerCl
 import { stableHash, localDateOf } from './time-ids.js';
 import { conversationPostsFrom } from './conversations.js';
 import { deriveStrategy } from './evidence.js';
-import { selectSuggestions } from './select.js';
+import { selectSuggestions, selectForSlots } from './select.js';
+import { planSlots } from './slots.js';
 import { buildContributionPrompt, fallbackCopy, checkSuggestionText } from './copy.js';
 
 const REVIEWED = new Set(['edited', 'saved', 'dismissed']);
@@ -20,6 +21,22 @@ function strategyRow(src) {
   if (!src) return { input: 'strategy slots', status: 'missing', asOf: null, age: null, detail: 'no slot plan for this run' };
   const letters = (src.slotLetters || []).join(', ');
   return { input: 'strategy slots', status: 'loaded', asOf: src.date || null, age: null, detail: `${src.mixSource || 'unknown mix'}, tier ${src.tier ?? '?'}, ${src.authoredPerDay ?? '?'} authored/day — slots ${letters || 'none'}` };
+}
+
+/**
+ * Today's strategy slots, when the run input carries the strategy inputs
+ * ({ buildDayPlan, planInput } or an already computed { plan }). null = old path.
+ * The plan is built with the injected `now` so a run is deterministic.
+ */
+function spineOf(inputs, packages, { localDate, now, timezone }) {
+  const s = inputs.strategyInputs;
+  if (!s || (!s.buildDayPlan && !s.plan)) return null;
+  const built = planSlots({
+    buildDayPlan: s.buildDayPlan || (() => s.plan),
+    input: { packages, ...(s.planInput || {}), date: localDate, now },
+    timezone,
+  });
+  return { ...built, ownPosts: s.ownPosts || s.planInput?.corpusRows || [], ownHandle: s.ownHandle || s.planInput?.handle || 'bai_ee' };
 }
 
 /** Freshness of every input, shown first in every run. */
@@ -68,7 +85,9 @@ export async function runDailyLoop(deps, opts = {}) {
 
   const inputs = await deps.readInputs();
   const packages = Array.isArray(inputs.packages) ? inputs.packages : [];
-  const fingerprint = inputFingerprint({ ...inputs, packages, max });
+  const spine = spineOf(inputs, packages, { localDate, now, timezone });
+  const strategySource = spine ? spine.strategySource : inputs.strategySource || null;
+  const fingerprint = inputFingerprint({ ...inputs, packages, strategySource, max });
   const key = { clientId, localDate, channel: CHANNEL, version: LOOP_VERSION };
 
   // Prior doc: lets a no-model regenerate keep model drafts and lets reviewed cards skip the model.
@@ -80,11 +99,23 @@ export async function runDailyLoop(deps, opts = {}) {
 
   const strategy = deriveStrategy({ benchmark: inputs.benchmark, strategyPlan: inputs.strategyPlan, localDate, max });
   const brain = inputs.brain || {};
-  const selection = selectSuggestions({
-    clientId, localDate, timezone, now, max, strategy, brain, packages,
-    conversationPosts: conversationPostsFrom(inputs),
-    ownSummary: inputs.ownSummary || null,
-  });
+  const conversationPosts = conversationPostsFrom(inputs);
+  const selection = spine
+    ? selectForSlots({
+      clientId, localDate, timezone, now, max, strategy, brain, packages, conversationPosts,
+      slots: spine.slots,
+      matchedSlots: spine.plan.slots,
+      // Quote slots draw on the watchlist scan only, carrying the scan's own score.
+      candidates: conversationPosts.filter((p) => p.source === 'watchlist')
+        .map((p) => ({ ...p, score: (inputs.scan?.candidates || []).find((c) => String(c.id) === p.id)?.score })),
+      ownSummary: inputs.ownSummary || null,
+      ownPosts: spine.ownPosts,
+      ownHandle: spine.ownHandle,
+    })
+    : selectSuggestions({
+      clientId, localDate, timezone, now, max, strategy, brain, packages, conversationPosts,
+      ownSummary: inputs.ownSummary || null,
+    });
 
   const gaps = [...selection.gaps];
   if (brain.status !== 'approved') {
@@ -101,9 +132,9 @@ export async function runDailyLoop(deps, opts = {}) {
     copySource: 'fallback', // set after drafting
     // Legacy field kept one version for old readers; derived, not authoritative.
     mode: deps.draft ? 'execute' : 'replay',
-    strategySource: inputs.strategySource || null,
+    strategySource,
     inputFingerprint: fingerprint,
-    inputs: describeInputs(inputs, now),
+    inputs: describeInputs({ ...inputs, strategySource }, now),
     scanGeneratedAt: inputs.scan?.generatedAt || null,
     searchGeneratedAt: inputs.search?.generatedAt || null,
     brainVersion: brain.status === 'approved' ? (brain.version ?? null) : null,

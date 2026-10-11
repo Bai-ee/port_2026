@@ -21,7 +21,9 @@ function corpusRange(rows) {
  * Read-only. `corpora` are the committed own/benchmark corpus rows (the CLI
  * reads them from docs/audits, the route bundles them).
  *
- * deps: { db, loadBrainContext(clientId) -> string }
+ * deps: { db, loadBrainContext(clientId) -> string, buildDayPlan? }
+ *   buildDayPlan (plan-day.js, injected) + both corpora => the result carries `strategyInputs`,
+ *   which switches the run onto the slot-filling spine; otherwise the old selector runs.
  * opts: { clientId, packageIds?: string[], corpora: { own, benchmark, ownSource, benchmarkSource }, now }
  */
 export async function loadDailyLoopInputs(deps, { clientId, packageIds = null, corpora = {}, now = Date.now() }) {
@@ -98,5 +100,8 @@ export async function loadDailyLoopInputs(deps, { clientId, packageIds = null, c
     strategyPlan,
     ownSummary,
     benchmark,
+    strategyInputs: deps.buildDayPlan && own
+      ? { buildDayPlan: deps.buildDayPlan, planInput: { corpusRows: own, benchmarkRows: bench, packages }, ownPosts: own, ownHandle: 'bai_ee' }
+      : null,
   };
 }
