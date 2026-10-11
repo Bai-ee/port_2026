@@ -14,6 +14,7 @@ export const STATE_LABEL = {
   held: 'Held for review',
   approved: 'Approved · not scheduled',
   scheduled: 'Scheduled',
+  manual: 'Posting manually',
   posted: 'Posted',
   failed: 'Failed',
 };

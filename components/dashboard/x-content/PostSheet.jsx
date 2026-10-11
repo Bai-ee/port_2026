@@ -271,6 +271,7 @@ export default function PostSheet({ post, busy, queue, onNavigate, onClose, onAp
           <dl id="x-content-post-sheet-facts" className="xce-mc-facts">
             {post.engine ? <><dt>Engine</dt><dd>{ENGINE_TAG[post.engine]}</dd></> : null}
             {post.packageId ? <><dt>Package</dt><dd>{post.packageId}</dd></> : null}
+            {!post.twitterId && post.selfReported ? <><dt>On X</dt><dd>Posted manually (self-reported){post.permalink ? <> · <a href={post.permalink} target="_blank" rel="noopener noreferrer">link</a></> : null}</dd></> : null}
             {post.twitterId ? <><dt>On X</dt><dd><a href={`https://x.com/i/web/status/${post.twitterId}`} target="_blank" rel="noopener noreferrer">View post</a></dd></> : null}
             <dt>ID</dt><dd>{post.id}</dd>
           </dl>

@@ -44,7 +44,7 @@ export default function ResultsPostList({ id, title, rows, emptyText, kind, tota
               <li key={r.id} id={`results-post-${r.id}`} className="xce-results-row">
                 <div className="xce-results-row-head">
                   <span className="xce-results-time">{fmtTime(when)}</span>
-                  <Badge tone={STATUS_TONE[r.status] || 'grey'}>{r.heldReason ? 'held' : r.status}</Badge>
+                  <Badge tone={STATUS_TONE[r.status] || 'grey'}>{r.heldReason ? 'held' : r.selfReported ? 'posted · you reported' : r.status === 'manual' ? 'posting manually' : r.status}</Badge>
                   {r.engine ? <span className="xce-results-engine">{r.engine}</span> : null}
                 </div>
                 <p className="xce-results-excerpt">{r.content || '(no text)'}</p>
@@ -62,6 +62,7 @@ export default function ResultsPostList({ id, title, rows, emptyText, kind, tota
                   ) : null
                 ) : null}
                 {kind === 'posted' ? <p className="xce-results-note">{r.metricsNote}</p> : null}
+                {r.selfReported ? <p className="xce-results-note">Self-reported, not verified by X{r.permalink ? <> · <a href={r.permalink} target="_blank" rel="noopener noreferrer">link</a></> : null}</p> : null}
                 {r.heldReason ? <p className="xce-results-failure">Held for review: {r.heldReason}</p> : null}
                 {r.failure ? (
                   <p className="xce-results-failure">

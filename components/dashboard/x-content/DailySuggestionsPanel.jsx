@@ -60,6 +60,7 @@ const STATUS_LINE = {
   posted: 'Posted',
   failed: 'Failed to post',
   needs_review: 'Held for review',
+  manual: 'Posting manually (HITLOOP will not publish it)',
   rejected: 'Rejected',
   expired: 'Expired',
 };

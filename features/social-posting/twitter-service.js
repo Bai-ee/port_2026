@@ -10,7 +10,7 @@ import { getAdapter } from './adapters/index.js';
 import { storySyncPlan } from '../discogs-ingest/draft-builder.js';
 import { needsApproval } from '../x-content-inventory/schema.js';
 import { reserveInTx, releaseReservations } from './reservations.js';
-import { toMs, contentHash, LIFECYCLE_VERSION, OPEN_STATUSES, APPROVAL_VOID_STATUSES, isV2, packageClearance, replyBlock, findPackageCollision, isMaterialEdit, deliveryBlock } from './lifecycle.js';
+import { toMs, contentHash, LIFECYCLE_VERSION, OPEN_STATUSES, MANUAL_CLAIMABLE_STATUSES, APPROVAL_VOID_STATUSES, isV2, packageClearance, replyBlock, findPackageCollision, isMaterialEdit, deliveryBlock } from './lifecycle.js';
 import { assertNoMemoryPlaceholder, hasMemoryPlaceholder, sanitizeMediaVariants, sanitizeSelfReply, sanitizeSourceRef } from './self-reply.js';
 
 const require = createRequire(import.meta.url);
@@ -1201,7 +1201,7 @@ async function planConfigFor(clientId) {
   }
 }
 
-const slotted = (p) => p && (p.status === 'scheduled' || p.status === 'queued') && p.scheduledAt;
+const slotted = (p) => p && (p.status === 'scheduled' || p.status === 'queued' || p.status === 'manual') && p.scheduledAt;
 
 /**
  * @param snapshot  the row as read before computing `updated` (null = create a new row)
@@ -1412,6 +1412,9 @@ export async function attachMediaToPost(clientId, postId, payload) {
   if (isV2(post) && (post.status === 'posted' || post.status === 'posting')) {
     throw Object.assign(new Error('This post has already been published; media can no longer be changed.'), { status: 409 });
   }
+  if (post.status === 'manual') {
+    throw Object.assign(new Error('This post is being posted manually; release it before changing its media.'), { status: 409, code: 'manual-claimed' });
+  }
   const updated = {
     ...post,
     ...media,
@@ -1550,6 +1553,10 @@ async function prepareUpdate(clientId, post, payload = {}) {
     const err = new Error('This post has already been published and can no longer be edited.');
     err.status = 409;
     throw err;
+  }
+  // The owner is posting this one by hand: the copy they were handed is the copy. Release the claim to edit it.
+  if (post.status === 'manual') {
+    throw Object.assign(new Error('This post is being posted manually. Release it back to HITLOOP before editing.'), { status: 409, code: 'manual-claimed' });
   }
   // A held row may already be live on X: it needs an explicit reconcile before it can be edited back into the queue.
   if (post.status === 'needs_review' && payload.scheduledAt) {
@@ -1774,15 +1781,179 @@ export async function reconcilePost(clientId, postId, { outcome, platformId = nu
   throw Object.assign(new Error("outcome must be 'posted' or 'not-posted'."), { status: 400, code: 'bad-outcome' });
 }
 
+// ---- Manual delivery (owner posts it themselves; Telegram "Post myself" / "I've posted it") -------------------
+// `manual` is a real lifecycle status, not a flag: the sweeper only claims scheduled/queued/failed rows, so moving a
+// row to `manual` inside the same revision-checked transaction the sweeper's claim races against is what makes
+// manual and automatic delivery mutually exclusive. A row that already reached `posting` can't be taken over.
+// Self-reported completion never sets `twitterId`: that field means "HITLOOP published it and X returned this id".
+
+const PERMALINK_RE = /^https:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/([A-Za-z0-9_]{1,15})\/status\/(\d{5,25})(?:[/?#].*)?$/;
+
+/** Accepts an x.com / twitter.com status URL only; anything else is dropped (never stored as a link). */
+export function parsePermalink(value) {
+  const url = String(value || '').trim();
+  const m = PERMALINK_RE.exec(url);
+  return m ? { permalink: `https://x.com/${m[1]}/status/${m[2]}`, platformId: m[2] } : { permalink: null, platformId: null };
+}
+
+function manualRefusal(post) {
+  if (post.status === 'posting') return Object.assign(new Error('HITLOOP has already started publishing this post — it can no longer be taken over. Check its status in a minute.'), { status: 409, code: 'auto-delivery-started' });
+  if (post.status === 'posted') return Object.assign(new Error('This post is already posted.'), { status: 409, code: 'already-posted' });
+  if (post.status === 'needs_review') return Object.assign(new Error('This post was held for review and may already be live on X. Reconcile it in HITLOOP first.'), { status: 409, code: 'needs-review-reconcile' });
+  if (post.status === 'rejected') return Object.assign(new Error('This post was rejected.'), { status: 409, code: 'rejected' });
+  // Outcome unknown: X may already have it, so a hand post could duplicate it. Reconcile first.
+  if (post.status === 'failed' && AMBIGUOUS_CLASSES.has(post.errorClass)) return Object.assign(new Error('This post failed with an unknown outcome and may already be live on X. Reconcile it in HITLOOP first.'), { status: 409, code: 'needs-review-reconcile' });
+  if (post.status === 'failed' && !isRetryableFailure(post)) return null; // terminal failure: the owner may still post it by hand
+  if (!MANUAL_CLAIMABLE_STATUSES.includes(post.status)) return Object.assign(new Error(`This post can't be taken over (it is ${post.status}).`), { status: 409, code: 'not-claimable' });
+  return null;
+}
+
+function manualClaimRow(post, by, now) {
+  // Only a live slot (scheduled/queued) is kept: the plan already accepted it. Any other target time is display-only.
+  const keepsSlot = post.status === 'scheduled' || post.status === 'queued';
+  return {
+    ...post,
+    status: 'manual',
+    deliveryMode: 'manual',
+    manualClaimedAt: now,
+    manualClaimedBy: by ? String(by).slice(0, 200) : null,
+    manualFromStatus: post.status,
+    manualTargetAt: post.scheduledAt || null,
+    scheduledAt: keepsSlot ? post.scheduledAt : null,
+    error: null,
+    retryable: false,
+    updatedAt: now,
+  };
+}
+
+async function commitManual(clientId, snapshot, updated) {
+  try {
+    return await commitPostTransition(clientId, snapshot, updated);
+  } catch (error) {
+    if (error.code !== 'revision-conflict') throw error;
+    // Lost a race. If the sweeper claimed it, say so plainly; anything else is an ordinary stale-card conflict.
+    const cur = await getSocialPost(clientId, snapshot.id);
+    const refusal = cur ? manualRefusal(cur) : null;
+    if (refusal) throw refusal;
+    throw error;
+  }
+}
+
+export async function claimManualDelivery(clientId, postId, { by = null, expectedRevision = null } = {}) {
+  const post = await getSocialPost(clientId, postId);
+  if (!post) throw Object.assign(new Error('Post not found.'), { status: 404 });
+  if (post.status === 'manual') return post; // repeated tap: same result
+  const refusal = manualRefusal(post);
+  if (refusal) throw refusal;
+  if (expectedRevision != null && (post.revision || 0) !== Number(expectedRevision)) throw conflict();
+  const saved = await commitManual(clientId, post, manualClaimRow(post, by, new Date().toISOString()));
+  // A failed/expired row may still hold a ledger slot it never released; free it (best-effort, like the sweeps).
+  if (post.status === 'failed' || post.status === 'expired') await releaseHeldSlot(post);
+  return saved;
+}
+
+export async function recordManualPosted(clientId, postId, { by = null, permalink = null, expectedRevision = null } = {}) {
+  const post = await getSocialPost(clientId, postId);
+  if (!post) throw Object.assign(new Error('Post not found.'), { status: 404 });
+  if (post.status === 'posted' && post.deliveryMode === 'manual') return post; // repeated tap
+  if (post.status !== 'manual') {
+    const refusal = manualRefusal(post);
+    if (refusal) throw refusal;
+  }
+  if (expectedRevision != null && (post.revision || 0) !== Number(expectedRevision)) throw conflict();
+  const now = new Date().toISOString();
+  const base = post.status === 'manual' ? post : manualClaimRow(post, by, now);
+  const link = parsePermalink(permalink);
+  const updated = {
+    ...base,
+    status: 'posted',
+    deliveryMode: 'manual',
+    deliveryVerified: false,
+    postedAt: now,
+    reportedPostedAt: now,
+    reportedBy: by ? String(by).slice(0, 200) : null,
+    permalink: link.permalink,
+    reportedPlatformId: link.platformId,
+    twitterId: null,
+    error: null,
+    retryable: false,
+    updatedAt: now,
+  };
+  const saved = await commitManual(clientId, post, updated);
+  await recordPackagePosted(saved, now);
+  return saved;
+}
+
+export async function releaseManualClaim(clientId, postId, { by = null, expectedRevision = null } = {}) {
+  const post = await getSocialPost(clientId, postId);
+  if (!post) throw Object.assign(new Error('Post not found.'), { status: 404 });
+  if (post.status !== 'manual') throw Object.assign(new Error(`Only a post you are posting manually can be released (this post is ${post.status}).`), { status: 409, code: 'not-manual' });
+  if (expectedRevision != null && (post.revision || 0) !== Number(expectedRevision)) throw conflict();
+  const now = new Date().toISOString();
+  const stillApproved = Boolean(post.approvedHash) && post.approvedHash === contentHash(post);
+  const updated = {
+    ...post,
+    status: stillApproved ? 'approved' : 'draft',
+    deliveryMode: null,
+    scheduledAt: null,
+    reviewedAt: stillApproved ? post.reviewedAt || null : null,
+    reviewedBy: stillApproved ? post.reviewedBy || null : null,
+    approvedHash: stillApproved ? post.approvedHash : null,
+    manualReleasedAt: now,
+    manualReleasedBy: by ? String(by).slice(0, 200) : null,
+    updatedAt: now,
+  };
+  return commitPostTransition(clientId, post, updated);
+}
+
+/**
+ * Explicit "Approve & post now" on an EXISTING row: the same approval gate, scheduling rules (reply / clearance /
+ * window / package / plan) and reservation as approve-and-schedule, with the slot set to now; then the same atomic
+ * claim + delivery recheck + publisher the sweeper uses. If the sweeper wins the claim first, it publishes instead.
+ */
+export async function approveAndPostNow(clientId, postId, { reviewedBy = null, expectedRevision = null } = {}) {
+  const snapshot = await getSocialPost(clientId, postId);
+  if (!snapshot) throw Object.assign(new Error('Post not found.'), { status: 404 });
+  if (snapshot.status === 'posted') return { ok: true, outcome: 'already-posted', post: snapshot };
+  if (snapshot.status === 'posting') return { ok: false, outcome: 'already-claimed', post: snapshot };
+  if (expectedRevision != null && (snapshot.revision || 0) !== Number(expectedRevision)) throw conflict();
+  const approvedSlot = (snapshot.status === 'scheduled' || snapshot.status === 'queued') && snapshot.reviewedAt;
+  if (!['draft', 'approved'].includes(snapshot.status) && !approvedSlot) {
+    throw Object.assign(new Error(`This post can't be posted now (it is ${snapshot.status}).`), { status: 409, code: 'not-postable' });
+  }
+  const working = snapshot.status === 'draft' ? approveInMemory(snapshot, reviewedBy) : snapshot;
+  const { updated } = await prepareUpdate(clientId, working, { content: working.content, scheduledAt: new Date().toISOString() });
+  const saved = await commitPostTransition(clientId, snapshot, { ...updated, approvalSource: 'post-now' });
+  const result = await postAndRecord(saved);
+  if (result.skipped) return { ok: false, outcome: 'already-claimed', post: (await getSocialPost(clientId, postId)) || saved };
+  const outcome = result.ok ? 'posted' : result.updated?.status === 'needs_review' ? 'held' : 'failed';
+  return { ok: result.ok, outcome, post: result.updated };
+}
+
 // Write a published post back onto its content package (post.packageId join):
 // lastPostedAt, postCount+1, lastTwitterId, status 'posted'. Best-effort — a
 // package failure must never turn a live tweet into a failed post. Idempotent per
 // tweet (skips when the package already carries this twitterId).
 async function recordPackagePosted(post, now) {
-  if (!post?.packageId || !post.twitterId) return;
+  if (!post?.packageId) return;
+  const manual = post.deliveryMode === 'manual' && !post.twitterId;
+  if (!post.twitterId && !manual) return;
   try {
     const store = await import('../x-content-inventory/store.js');
     const pkg = await store.getPackage(post.packageId);
+    if (manual) {
+      // Self-reported: count the use so the package isn't recycled, but never write it as a verified tweet id.
+      if (!pkg || pkg.lastManualPostId === post.id) return;
+      await store.upsertPackage({
+        ...pkg,
+        status: 'posted',
+        lastPostedAt: now,
+        postCount: (Number(pkg.postCount) || 0) + 1,
+        lastManualPostId: post.id,
+        lastPostedSelfReported: true,
+      }, { returnPackages: false });
+      return;
+    }
     if (!pkg || pkg.lastTwitterId === post.twitterId) return;
     await store.upsertPackage({
       ...pkg,

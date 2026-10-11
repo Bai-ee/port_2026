@@ -41,6 +41,7 @@ export const STATE_BY_STATUS = {
   scheduled: 'scheduled',
   queued: 'scheduled',
   posting: 'scheduled',
+  manual: 'manual',
   posted: 'posted',
   failed: 'failed',
 };
@@ -156,6 +157,9 @@ function toRow(p) {
     mediaType: p.mediaType ?? null,
     posterUrl: p.posterUrl ?? null,
     twitterId: p.twitterId ?? null,
+    deliveryMode: p.deliveryMode ?? null,
+    selfReported: p.status === 'posted' && p.deliveryMode === 'manual' && !p.twitterId,
+    permalink: p.permalink ?? null,
     error: p.status === 'failed' || p.status === 'needs_review' ? (p.error ?? null) : null,
     errorClass: p.status === 'failed' || p.status === 'needs_review' ? (p.errorClass ?? null) : null,
     heldReason: held ? held.reason : null,
@@ -189,12 +193,15 @@ export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_EN
   // month must see the days between today and that month too.
   const byDate = new Map();
   const undated = [];
+  const manualUndated = [];
   for (const p of Array.isArray(posts) ? posts : []) {
     if (!p || !DISPLAY_STATUSES.includes(p.status)) continue;
     if (p.replyTo) continue; // replies sit outside the authored cap
     const ms = slotMs(p);
     const row = toRow(p);
     if (ms == null) {
+      // A manual takeover with no live slot: the owner is posting it, so it is never re-proposed into a slot.
+      if (p.status === 'manual') { manualUndated.push({ ...row, reason: 'manual' }); continue; }
       if (p.status === 'draft' || p.status === 'needs_review' || p.status === 'approved' || p.status === 'awaiting_approval') {
         undated.push({ row, createdAt: Date.parse(p.createdAt) || 0 });
       }
@@ -207,7 +214,7 @@ export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_EN
 
   // ── Proposals ────────────────────────────────────────────────────────────
   const occupying = (date) => (byDate.get(date) || []).filter((r) => r.state !== 'failed');
-  const unplaced = [];
+  const unplaced = [...manualUndated];
   const queue = undated
     .sort((a, b) => a.createdAt - b.createdAt || String(a.row.id).localeCompare(String(b.row.id)))
     .map((u) => u.row);
@@ -240,7 +247,7 @@ export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_EN
   }
 
   // ── Grid ─────────────────────────────────────────────────────────────────
-  const emptyCounts = () => ({ pending: 0, awaiting: 0, held: 0, approved: 0, scheduled: 0, posted: 0, failed: 0 });
+  const emptyCounts = () => ({ pending: 0, awaiting: 0, held: 0, approved: 0, scheduled: 0, manual: 0, posted: 0, failed: 0 });
   const totals = { ...emptyCounts(), proposed: 0 };
   const reviewQueue = [];
 

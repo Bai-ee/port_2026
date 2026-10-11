@@ -10,10 +10,14 @@ import { createHash } from 'node:crypto';
 export const LIFECYCLE_VERSION = 2;
 
 /** Statuses in which a row still represents live intent to post (or an unresolved delivery). */
-export const OPEN_STATUSES = Object.freeze(['draft', 'approved', 'awaiting_approval', 'scheduled', 'queued', 'posting', 'needs_review']);
+export const OPEN_STATUSES = Object.freeze(['draft', 'approved', 'awaiting_approval', 'scheduled', 'queued', 'posting', 'needs_review', 'manual']);
 /** Statuses that occupy the queue: another copy of the same package must not be scheduled alongside. */
 // needs_review is excluded: it is parked (never claimable), so it must not wedge the package forever.
-export const PENDING_STATUSES = Object.freeze(['awaiting_approval', 'scheduled', 'queued', 'posting']);
+// manual = the owner took delivery over (Telegram "Post myself"): never claimed by the sweeper, but it still holds
+// its package and slot so the same material can't be scheduled again while the owner is posting it.
+export const PENDING_STATUSES = Object.freeze(['awaiting_approval', 'scheduled', 'queued', 'posting', 'manual']);
+/** Statuses from which the owner may take delivery over manually (atomic claim; the sweeper never claims `manual`). */
+export const MANUAL_CLAIMABLE_STATUSES = Object.freeze(['draft', 'approved', 'awaiting_approval', 'scheduled', 'queued', 'expired', 'failed']);
 
 export const RETRY_MAX_ATTEMPTS = 3;
 /** Pending = queued for delivery, including a failed row that the next sweep will retry (429 / pre-send network). */

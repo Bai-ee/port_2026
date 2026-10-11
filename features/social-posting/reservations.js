@@ -37,7 +37,8 @@ export const packageResId = (clientId, packageId) => `${clientId}__${String(pack
 const isReplyRow = (p) => Boolean(p?.replyTo) || p?.kind === 'reply';
 const engineOf = (p) => (p?.engine === 'record' || p?.source === 'discogs-ingest' ? 'record' : p?.engine || 'untagged');
 const slotOf = (p) => ({ ms: Date.parse(p.scheduledAt), engine: engineOf(p) });
-const hasSlot = (p) => p && (p.status === 'scheduled' || p.status === 'queued') && Number.isFinite(Date.parse(p.scheduledAt || ''));
+// A manual (owner-posting) row keeps the slot it was handed over at, so the plan still counts it.
+const hasSlot = (p) => p && (p.status === 'scheduled' || p.status === 'queued' || p.status === 'manual') && Number.isFinite(Date.parse(p.scheduledAt || ''));
 
 function err(code, message, extra = {}) {
   return Object.assign(new Error(message), { status: 409, code, ...extra });
@@ -121,7 +122,7 @@ export async function reserveInTx(db, tx, { clientId, previous, next, config, tz
     const to = new Date(nextMs + 40 * 3_600_000).toISOString();
     const qs = await tx.get(db.collection('social_posts').where('scheduledAt', '>=', from).where('scheduledAt', '<=', to));
     queueSlots = qs.docs.map((d) => d.data())
-      .filter((r) => r.clientId === clientId && r.id !== next.id && ['scheduled', 'queued', 'posting', 'posted'].includes(r.status) && !isReplyRow(r))
+      .filter((r) => r.clientId === clientId && r.id !== next.id && ['scheduled', 'queued', 'posting', 'posted', 'manual'].includes(r.status) && !isReplyRow(r))
       .map((r) => ({ postId: r.id, ...slotOf(r) }))
       .filter((r) => Number.isFinite(r.ms));
   }
@@ -130,7 +131,9 @@ export async function reserveInTx(db, tx, { clientId, previous, next, config, tz
   if (wantsSlot && heldBy) {
     throw err('package-already-pending', `This package is already ${heldBy.status} as another post (${heldBy.id}). Schedule that one or remove it first.`, { existingPostId: heldBy.id });
   }
-  if (wantsSlot && enforcePlan && !override && !isReplyRow(next)) {
+  // Keeping the exact slot it already holds (e.g. scheduled -> manual takeover) is not a new scheduling decision.
+  const sameSlot = hadSlot && wantsSlot && previous.scheduledAt === next.scheduledAt;
+  if (wantsSlot && enforcePlan && !override && !sameSlot && !isReplyRow(next)) {
     const merge = (list) => { const seen = new Set(); return list.filter((x) => (seen.has(x.postId) ? false : (seen.add(x.postId), true))); };
     const around = merge([...[shiftDay(nextDay, -1), nextDay, shiftDay(nextDay, 1)].flatMap((d) => slotsFromDoc(reads[d].doc)), ...queueSlots]).filter((s) => s.postId !== next.id);
     const daySlots = around.filter((x) => dayKeyOf(x.ms, tz) === nextDay);

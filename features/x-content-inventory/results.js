@@ -10,7 +10,7 @@ import { joinPerformance, MIN_N } from './performance.js';
 export const LIST_CAP = 50;
 const EXCERPT_MAX = 140;
 const ERROR_MAX = 200;
-const PENDING_STATUSES = ['approved', 'awaiting_approval', 'scheduled', 'queued', 'posting'];
+const PENDING_STATUSES = ['approved', 'awaiting_approval', 'scheduled', 'queued', 'posting', 'manual'];
 const FAILED_STATUSES = ['failed', 'expired'];
 
 function toMs(v) {
@@ -37,6 +37,10 @@ function baseRow(post, pkgById) {
     scheduledAt: iso(post.scheduledAt),
     postedAt: iso(post.postedAt),
     twitterId: post.twitterId ?? null,
+    // Self-reported manual completion is labelled as such; it is never shown as a verified X delivery.
+    deliveryMode: post.deliveryMode ?? null,
+    selfReported: post.status === 'posted' && post.deliveryMode === 'manual' && !post.twitterId,
+    permalink: post.permalink ?? null,
     packageId: post.packageId ?? null,
     packageTitle: pkg ? (pkg.title ?? pkg.name ?? null) : null,
     origin: {

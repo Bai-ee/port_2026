@@ -13,7 +13,7 @@ export const CALENDAR_TZ = 'America/Chicago';
 export const WEEK_DAYS = 7;
 
 /** Statuses that occupy a slot on the calendar. failed/expired never published. */
-export const COUNTED_STATUSES = ['draft', 'approved', 'scheduled', 'queued', 'posting', 'posted', 'needs_review'];
+export const COUNTED_STATUSES = ['draft', 'approved', 'scheduled', 'queued', 'posting', 'posted', 'needs_review', 'manual'];
 
 const DAY_MS = 86_400_000;
 const dateFmt = new Intl.DateTimeFormat('en-CA', { timeZone: CALENDAR_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });

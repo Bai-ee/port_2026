@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { CalendarDays, CalendarRange, ChevronDown, Ellipsis, FolderTree, History, Library, LineChart, MessagesSquare, Users } from 'lucide-react';
+import { CalendarDays, CalendarRange, ChevronDown, Ellipsis, FolderTree, History, Library, LineChart, MessagesSquare, Send, Users } from 'lucide-react';
 import BottomNav from './x-content/ui/BottomNav';
 import SegmentedControl from './x-content/ui/SegmentedControl';
 import { fallbackDraft, validateDraft } from '../../features/x-content-inventory/draft.js';
@@ -39,8 +39,9 @@ const DailySuggestionsPanel = dynamic(() => import('./x-content/DailySuggestions
 const TimelinePanel = dynamic(() => import('./x-content/TimelinePanel'), { ssr: false });
 const InputStatusStrip = dynamic(() => import('./x-content/InputStatusStrip'), { ssr: false });
 const StrategyPanel = dynamic(() => import('./x-content/StrategyPanel'), { ssr: false });
+const TelegramPanel = dynamic(() => import('./x-content/TelegramPanel'), { ssr: false });
 
-const TABS = ['strategy', 'plan', 'today', 'inventory', 'buckets', 'calendar', 'clients', 'performance', 'timeline'];
+const TABS = ['strategy', 'plan', 'today', 'inventory', 'buckets', 'calendar', 'clients', 'performance', 'timeline', 'telegram'];
 const TAB_STORAGE_KEY = 'xce-last-tab';
 
 // Content Management navigation: Today, Library, Queue & Calendar, Strategy. Labels only: ids are the unchanged TABS ids
@@ -56,6 +57,7 @@ const MORE_TABS = [
   { id: 'timeline', label: 'Timeline', Icon: History },
   { id: 'clients', label: 'Clients', Icon: Users },
   { id: 'performance', label: 'Results', Icon: LineChart },
+  { id: 'telegram', label: 'Telegram', Icon: Send },
 ];
 const TOAST_MS = 3200;
 
@@ -469,6 +471,8 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
         <DailySuggestionsPanel call={call} callSocial={callSocial} showToast={showToast} onOpenQueue={() => pickTab('calendar')} onSelect={setSelectedItem} />
       ) : tab === 'timeline' ? (
         <TimelinePanel call={call} />
+      ) : tab === 'telegram' ? (
+        <TelegramPanel getIdToken={getIdToken} activeClientId={activeClientId} />
       ) : tab === 'buckets' ? (
         <BucketsPanel call={call} packages={packages} loading={loading} error={error} onReload={() => load()} />
       ) : tab === 'calendar' ? (
@@ -849,6 +853,7 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
         #x-content-card .xce-mc-dot { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: #2a2420; color: #2a2420; }
         #x-content-card .xce-mc-dot-pending { background: transparent; box-shadow: inset 0 0 0 1.5px rgba(42,36,32,0.4); }
         #x-content-card .xce-mc-dot-awaiting { background: transparent; box-shadow: inset 0 0 0 1.5px rgba(42,36,32,0.4); }
+        #x-content-card .xce-mc-dot-manual { background: transparent; box-shadow: inset 0 0 0 1.5px #2a2420; }
         #x-content-card .xce-mc-dot-held { background: transparent; box-shadow: inset 0 0 0 1.5px rgba(42,36,32,0.4); }
         #x-content-card .xce-mc-dot-posted { width: 10px; height: 10px; background: rgba(42,36,32,0.14); }
         #x-content-card .xce-mc-dot-failed { background: #9f1f17; }

@@ -30,6 +30,10 @@
     {
       "path": "/api/social-posting?action=process-due",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/worker/telegram-dispatch",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

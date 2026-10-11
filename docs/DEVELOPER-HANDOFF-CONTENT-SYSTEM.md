@@ -182,3 +182,6 @@ Do each on **phone (<=480px)** and **desktop**. Path: Dashboard -> Social Media 
 **Fail = stop and report:** any real X post, a draft that schedules without your tap, a second duplicate draft, a card that cannot be closed, or Content Management reachable from a non-owner account (should 503/redirect).
 
 Cleanup afterwards: confirm all `[CM test]` rows are `rejected`; leftover empty `x_schedule_ledger` docs are harmless.
+
+## Telegram command center (2026-10-11, branch feat/telegram-command-center)
+Telegram is a second interface to the same posts: briefing, calendar, timed handoff cards, manual delivery and uploads. It adds the shared `manual` post status ("Posting manually"; the sweeper never claims it) plus `recordManualPosted` (self-reported, `deliveryVerified:false`, no `twitterId`), `releaseManualClaim` and `approveAndPostNow` in `twitter-service.js`. As-built, security model, activation steps: [`docs/source-of-truth/TELEGRAM-COMMAND-CENTER.md`](source-of-truth/TELEGRAM-COMMAND-CENTER.md).
