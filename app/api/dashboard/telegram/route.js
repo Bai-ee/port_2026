@@ -21,7 +21,8 @@ function json(body, status = 200) {
 
 async function requireOwner(request) {
   const auth = request.headers.get('authorization');
-  const decoded = await verifyRequestUser({ headers: { authorization: auth, Authorization: auth } });
+  const decoded = await verifyRequestUser({ headers: { authorization: auth, Authorization: auth } })
+    .catch((error) => { throw Object.assign(error, { status: 401 }); });
   if (!(await isAdminEmail(decoded?.email))) throw Object.assign(new Error('Admin access required.'), { status: 403 });
   const context = await getEffectiveClientContext({ uid: decoded.uid, email: decoded.email, request });
   if (!context.clientId) throw Object.assign(new Error('No client workspace was found.'), { status: 404 });
