@@ -23,7 +23,7 @@ const nowIso = (now) => new Date(typeof now === 'function' ? now() : (now ?? Dat
 
 export async function ingestArchive({
   db, clientId, platform, account, archiveName, reader, archiveRootRel,
-  adapter, packages, dryRun = true, now,
+  adapter, packages, dryRun = true, now, mediaOnly = false,
 }) {
   const mod = adapter || (ADAPTERS[platform] ? await ADAPTERS[platform]() : null);
   if (!mod) throw new Error(`No adapter for platform "${platform}"`);
@@ -37,6 +37,8 @@ export async function ingestArchive({
     const { entry, error } = sanitizeEntry(raw, { archiveName, adapterVersion: ADAPTER_VERSION });
     if (error) { bump(error); continue; }
     if (seen.has(entry.id)) { bump('duplicate-id'); continue; }
+    // mediaOnly: keep only posts that carry a photo/video (counted as 'no-media' in the report).
+    if (mediaOnly && !entry.media.length) { bump('no-media'); continue; }
     seen.add(entry.id); entries.push(entry);
   }
 

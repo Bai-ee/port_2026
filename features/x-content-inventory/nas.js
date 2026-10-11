@@ -39,12 +39,12 @@ const UPLOAD_EXT = {
 };
 const IMAGE_EXT = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'tif', 'tiff']);
 const VIDEO_EXT = new Set(['mp4', 'mov', 'm4v', 'avi', 'mkv', 'webm', 'mpg', 'mpeg']);
-const bad = (m, status = 400) => Object.assign(new Error(m), { status });
-const str = (v) => (typeof v === 'string' ? v.trim() : '');
+export const bad = (m, status = 400) => Object.assign(new Error(m), { status });
+export const str = (v) => (typeof v === 'string' ? v.trim() : '');
 
 export const nasPackageId = (sha256) => `nas-${String(sha256).slice(0, 16)}`;
 
-function toMs(v) {
+export function toMs(v) {
   if (v == null) return null;
   if (typeof v === 'number') return v;
   if (typeof v.toMillis === 'function') return v.toMillis();
@@ -52,7 +52,7 @@ function toMs(v) {
   const p = Date.parse(v);
   return Number.isFinite(p) ? p : null;
 }
-const toIso = (v) => { const ms = toMs(v); return ms == null ? null : new Date(ms).toISOString(); };
+export const toIso = (v) => { const ms = toMs(v); return ms == null ? null : new Date(ms).toISOString(); };
 
 function cleanRelPath(p) {
   const s = String(p ?? '').trim();
@@ -204,7 +204,7 @@ export async function applyStageComplete(deps, { command, result }) {
 
 // ------------------------------------------------------------ card actions --
 
-async function findAnalyzer(db) {
+export async function findAnalyzer(db) {
   const snap = await db.collection('archive_workers').get();
   let best = null;
   for (const d of snap.docs) {
@@ -216,9 +216,9 @@ async function findAnalyzer(db) {
   return best;
 }
 
-const isOnline = (a, nowMs) => Boolean(a && a.ms != null && nowMs - a.ms < ONLINE_WINDOW_MS);
+export const isOnline = (a, nowMs) => Boolean(a && a.ms != null && nowMs - a.ms < ONLINE_WINDOW_MS);
 
-async function baseSources(db, analyzerId) {
+export async function baseSources(db, analyzerId) {
   const baseId = analyzerId.slice(0, -ANALYZER_SUFFIX.length);
   const snap = await db.collection('archive_workers').doc(baseId).collection('sources').get();
   return {
@@ -230,7 +230,7 @@ async function baseSources(db, analyzerId) {
   };
 }
 
-async function queueCommand(deps, fields) {
+export async function queueCommand(deps, fields) {
   const id = deps.randomId();
   await deps.db.collection('archive_commands').doc(id).set({
     id, state: 'QUEUED', ...fields,

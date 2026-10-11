@@ -4,7 +4,7 @@
 //
 // Usage: node scripts/social-archive/ingest.mjs --platform facebook --account "Housepit CHI" \
 //   --dir "/Volumes/Public/Bryan/Facebook Downloads/facebook-HousepitCHI" \
-//   --archive-root-rel "Facebook Downloads/facebook-HousepitCHI" [--archive-name <n>] [--client <id>] [--write]
+//   --archive-root-rel "Facebook Downloads/facebook-HousepitCHI" [--archive-name <n>] [--client <id>] [--media-only] [--write]
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +18,7 @@ const arg = (name, fallback) => {
   return i > -1 ? process.argv[i + 1] : fallback;
 };
 const write = process.argv.includes('--write');
+const mediaOnly = process.argv.includes('--media-only');
 
 const platform = arg('--platform');
 const account = arg('--account');
@@ -35,7 +36,7 @@ const clientId = arg('--client', process.env.DISCOGS_X_CLIENT_ID || 'bryan-balli
 
 const report = await ingestArchive({
   db: fb.adminDb, clientId, platform, account, archiveName, archiveRootRel,
-  reader: readerFromDir(dir), dryRun: !write,
+  reader: readerFromDir(dir), dryRun: !write, mediaOnly,
 });
 
 const lines = [

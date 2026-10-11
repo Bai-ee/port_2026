@@ -1432,6 +1432,40 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
         @media (min-width: 481px) {
           #x-content-card .xce-timeline-search { grid-template-columns: 150px 1fr 150px auto; align-items: center; }
         }
+        /* ---- Discogs panel (x-content/DiscogsPanel.jsx) ---- */
+        #x-content-card .xce-discogs-panel { gap: 14px; }
+        #x-content-card .xce-discogs-folder { display: grid; gap: 8px; min-width: 0; }
+        #x-content-card .xce-discogs-folder-line { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 12px; font-weight: 600; color: #2a2420; overflow-wrap: anywhere; }
+        #x-content-card .xce-discogs-folder-line svg { flex: 0 0 auto; }
+        #x-content-card .xce-discogs-folder .xce-btn-ghost { justify-self: start; }
+        #x-content-card .xce-discogs-job-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+        #x-content-card .xce-discogs-results { display: grid; gap: 8px; min-width: 0; }
+        #x-content-card .xce-discogs-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+        #x-content-card .xce-discogs-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 10px; border-radius: 999px; border: 1px solid rgba(42,36,32,0.14); background: rgba(255,255,255,0.7); font: inherit; font-size: 12px; font-weight: 600; color: rgba(42,36,32,0.75); cursor: pointer; }
+        #x-content-card .xce-discogs-chip.is-on { background: #2a2420; border-color: #2a2420; color: #fff; }
+        #x-content-card .xce-discogs-chip-count { font-family: var(--font-mono); font-size: 10.5px; opacity: 0.75; }
+        #x-content-card .xce-discogs-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+        #x-content-card .xce-discogs-row { display: grid; gap: 8px; min-width: 0; padding: 10px; border: 1px solid rgba(42,36,32,0.12); border-left-width: 4px; border-radius: 10px; background: rgba(255,255,255,0.6); }
+        #x-content-card .xce-discogs-row.is-ready { border-left-color: #1f7a4c; }
+        #x-content-card .xce-discogs-row.is-review { border-left-color: #b7791f; }
+        #x-content-card .xce-discogs-row.is-added, #x-content-card .xce-discogs-row.is-adding { border-left-color: #1f6b44; }
+        #x-content-card .xce-discogs-row.is-unreadable { border-left-color: #9f1f17; }
+        #x-content-card .xce-discogs-row.is-owned, #x-content-card .xce-discogs-row.is-skipped { border-left-color: rgba(42,36,32,0.3); }
+        #x-content-card .xce-discogs-row-main { display: flex; align-items: flex-start; gap: 10px; min-width: 0; flex-wrap: wrap; }
+        #x-content-card .xce-discogs-row-main > input[type="checkbox"] { flex: 0 0 auto; margin-top: 3px; width: 18px; height: 18px; }
+        #x-content-card .xce-discogs-row-text { flex: 1 1 180px; min-width: 0; display: grid; gap: 2px; }
+        #x-content-card .xce-discogs-row-title { margin: 0; font-size: 13px; font-weight: 700; color: #2a2420; overflow-wrap: anywhere; }
+        #x-content-card .xce-discogs-row-text a, #x-content-card .xce-discogs-cand-text a { color: #2a2420; font-weight: 600; text-decoration: underline; overflow-wrap: anywhere; }
+        #x-content-card .xce-discogs-row-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+        #x-content-card .xce-discogs-cands { display: grid; gap: 8px; min-width: 0; padding-top: 8px; border-top: 1px dashed rgba(42,36,32,0.14); }
+        #x-content-card .xce-discogs-cand { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; min-width: 0; }
+        #x-content-card .xce-discogs-cand-text { display: grid; gap: 2px; flex: 1 1 180px; min-width: 0; font-size: 12px; }
+        #x-content-card .xce-discogs-manual { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        #x-content-card .xce-discogs-manual .xce-input { flex: 1 1 160px; width: auto; }
+        #x-content-card .xce-discogs-apply { position: sticky; bottom: 0; z-index: 6; display: grid; gap: 8px; padding: 10px 0 calc(10px + env(safe-area-inset-bottom, 0px)); background: #fbfaf8; border-top: 1px solid rgba(42,36,32,0.12); box-shadow: 0 -8px 16px -12px rgba(0,0,0,0.18); }
+        #x-content-card .xce-discogs-apply .xce-toggle { justify-self: start; }
+        #x-content-card .xce-discogs-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+        #x-content-card .xce-discogs-confirm-text { flex: 1 0 100%; margin: 0; font-size: 12.5px; font-weight: 600; color: #2a2420; }
       `}</style>
     </div>
   );

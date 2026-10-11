@@ -41,6 +41,7 @@ import { loadLoopCorpora } from '../../../../features/x-strategy/loop-corpora.js
 import { resolveXGrowthProfile } from '../../../../features/x-benchmark/profile.js';
 // Committed corpora: bundled here as the fallback for the rows store (getCorpusStore) and the legacy evaluate rows.
 // The daily loop reads them through loadLoopCorpora (rows store first); the plan doc reaches it via `readPlanDoc`.
+import { DISCOGS_ACTIONS, handleDiscogsAction } from '../../../../features/discogs-ingest/actions.js';
 import { TIMELINE_ACTIONS, handleTimelineAction } from '../../../../features/social-archive/actions.js';
 import * as timelineStore from '../../../../features/social-archive/timeline-store.js';
 import ownCorpusRows from '../../../../docs/audits/bai-ee-x-corpus.json' with { type: 'json' };
@@ -288,6 +289,7 @@ const DAILY_RUN_ACTIONS = ['daily-run-latest', 'daily-run-generate', 'daily-run-
 const SUPPORTED_ACTIONS = [
   ...STRATEGY_ROUTE_ACTIONS,
   ...NAS_ACTIONS,
+  ...DISCOGS_ACTIONS,
   ...TIMELINE_ACTIONS,
   'engine-performance',
   'draft-quote',
@@ -897,6 +899,7 @@ export async function POST(request) {
       const result = await handleDailyRun(context, action, body);
       return json(result, result.ok === false ? (result.status || 422) : 200);
     }
+    if (DISCOGS_ACTIONS.includes(action)) return json(await handleDiscogsAction(nasDeps(), action, body, decoded));
     if (TIMELINE_ACTIONS.includes(action)) return json(await handleTimelineAction({ db: fb.adminDb, clientId: context.clientId, store: timelineStore }, action, body));
     return json({ error: `Unknown action: ${action}`, supportedActions: SUPPORTED_ACTIONS }, 400);
   } catch (err) {
