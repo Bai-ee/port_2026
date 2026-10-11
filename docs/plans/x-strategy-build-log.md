@@ -67,3 +67,16 @@ Gate: full suite 4522 tests (see below), 2 known fails. New: features/x-strategy
 Labels (shown verbatim in the inputs panel): `rows store, pulled YYYY-MM-DD` | `committed file <path>` | `committed file <path> (seeded in rows store)` | `... (rows store unavailable)` | `no stored rows`. Handles come from the xGrowth profile with the bai_ee / seb__design default; own/benchmark handle now flow through inputs.js (was hardcoded bai_ee) into the self-quote slot's own handle.
 Fingerprint: labels are NOT in inputFingerprint; it hashes benchmark.asOf, so fresher rows regenerate a run once; mergePreserved keeps edited/saved/dismissed/posted suggestions.
 Review (fresh reviewer): contract — hardcoded 'bai_ee' in inputs.js → fixed; nits fixed: seeded-doc label, stale comments, unused param, CLI all-or-nothing fallback → per-handle; added tests (one handle throws, pulledAt null, profile read fails → default pair). Left: route-level wiring only tested via the helper with a memory store.
+
+## T7 part 2 — loop proof (live, :3003, model copy OFF)
+Write authorized for this check: x_content_daily_runs/bryan-balli-WUoltG84__2026-10-11__x__v3 (created by the first Generate, regenerated once). 0 model calls in both runs ("0 model call(s)").
+Prior plan = v10 (4/day, quote-react floor 1).
+| Step | Plan | strategy source (inputs panel) | Slots | Suggestions | Gaps |
+|---|---|---|---|---|---|
+| A — plan set to 3/day via Strategy tab (UI), Generate | v11, 3/day, floor quote-react 1 | `gap-report · 2026-10-11 · tier 1 · 3 authored/day` | A 08:00 original-showcase · B 10:00 original-text · C 13:00 quote-react · R anytime reply | C quote-react (pending) | slot-unfilled A, B, R (inventory shortfall, not a bug) |
+| B — plan restored to prior version via History (new v12 = v10's values), Regenerate | v12, 4/day | `… · 4 authored/day` | A 08:00 original-showcase · B 10:00 original-text · C 13:00 self-quote · D 15:00 quote-react · R anytime reply | D quote-react, C self-quote (pending) | slot-unfilled A, B, R |
+Run doc strategySource: A → planSource plan-doc, planVersion 11, authoredPerDay 3, postsRequested 3; B → planVersion 12, authoredPerDay 4, postsRequested 4. ≥1 quote-react in both (floor). 3 authored slots in A, 4 in B.
+Inputs panel (verbatim): `own-account history | loaded | 262 posts, 2026-07-07 → 2026-10-09 (rows store, pulled 2026-10-11 (re-tagged with the shared taxonomy))` and `benchmark report | computed from rows store, pulled 2026-10-11 vs rows store, pulled 2026-10-11 (no saved report exists)` — the daily loop now runs on the stored rows (the refresh from T6), not the committed JSON.
+Not exercised (not authorized): Save handles / benchmarks-change (client_configs write) — the owner tests this by hand once with @bai_ee + @seb__design.
+State left behind: plan doc at v12 (4/day, floor 1 — equal to defaults); today's v3 run doc exists with 2 pending suggestions (nothing saved/scheduled/posted).
+Merge note for the UI orchestrator: merge feat/daily-content-loop at the commit that contains this entry (T7 part 1 = 8b0af1b0).
