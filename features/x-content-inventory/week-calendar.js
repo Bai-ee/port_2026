@@ -19,8 +19,8 @@ const DAY_MS = 86_400_000;
 const dateFmt = new Intl.DateTimeFormat('en-CA', { timeZone: CALENDAR_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
 const timeFmt = new Intl.DateTimeFormat('en-GB', { timeZone: CALENDAR_TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 
-const ctDate = (ms) => dateFmt.format(new Date(ms));
-const ctTime = (ms) => timeFmt.format(new Date(ms));
+export const ctDate = (ms) => dateFmt.format(new Date(ms));
+export const ctTime = (ms) => timeFmt.format(new Date(ms));
 
 /** The 7 date keys starting at `start` (YYYY-MM-DD). Noon-UTC stepping keeps DST safe. */
 export function weekDates(start) {
@@ -29,7 +29,7 @@ export function weekDates(start) {
   return Array.from({ length: WEEK_DAYS }, (_, i) => new Date(base + i * DAY_MS).toISOString().slice(0, 10));
 }
 
-function excerpt(text, max = 110) {
+export function excerpt(text, max = 110) {
   const flat = String(text ?? '').replace(/\s+/g, ' ').trim();
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 }

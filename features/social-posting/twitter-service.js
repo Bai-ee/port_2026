@@ -1018,6 +1018,56 @@ export async function approveDraft(clientId, postId, { reviewedBy = null } = {})
   return updated;
 }
 
+// draft -> rejected (the calendar's "disapprove"). Only an unpublished draft
+// can be rejected here — never a scheduled/posted row, so a live tweet can't be
+// hidden. Rejected rows drop off the calendar; the doc is kept, not deleted.
+export async function rejectDraft(clientId, postId, { reviewedBy = null } = {}) {
+  const post = await getSocialPost(clientId, postId);
+  if (!post) throw Object.assign(new Error('Post not found.'), { status: 404 });
+  if (post.status === 'rejected') return post;
+  if (post.status !== 'draft' && post.status !== 'needs_review') {
+    throw Object.assign(new Error(`Only a draft can be rejected (this post is ${post.status}).`), { status: 409, code: 'not-draft' });
+  }
+  const now = new Date().toISOString();
+  const updated = {
+    ...post,
+    status: 'rejected',
+    rejectedAt: now,
+    reviewedBy: reviewedBy ? String(reviewedBy).slice(0, 200) : null,
+    updatedAt: now,
+  };
+  await savePost(updated);
+  return updated;
+}
+
+// The calendar's Approve: (optional text edit) -> approved -> scheduled at the
+// time the reviewer saw. One server call so the reviewer never lands in a
+// half state; if scheduling fails after approval, the approval is rolled back.
+// A scheduled post is published by the sweeper — this IS the go-live decision.
+export async function approveAndSchedule(clientId, postId, { scheduledAt, content, reviewedBy = null } = {}) {
+  const when = scheduledAt ? new Date(scheduledAt) : null;
+  if (!when || Number.isNaN(when.getTime())) {
+    throw Object.assign(new Error('A valid scheduled time is required.'), { status: 400 });
+  }
+  if (when.getTime() < Date.now() + 60_000) {
+    throw Object.assign(new Error('Pick a time at least a minute in the future.'), { status: 400, code: 'past-time' });
+  }
+  const original = await getSocialPost(clientId, postId);
+  if (!original) throw Object.assign(new Error('Post not found.'), { status: 404 });
+  if (typeof content === 'string' && normalizePostText(content) !== original.content) {
+    await updateSocialPost(clientId, postId, { content });
+  }
+  const approved = await approveDraft(clientId, postId, { reviewedBy });
+  try {
+    return await updateSocialPost(clientId, postId, { content: approved.content, scheduledAt: when.toISOString() });
+  } catch (err) {
+    if (original.status === 'draft') {
+      await savePost({ ...approved, status: 'draft', reviewedAt: null, reviewedBy: null, updatedAt: new Date().toISOString() });
+    }
+    throw err;
+  }
+}
+
 export async function schedulePost(clientId, payload) {
   assertNoMemoryPlaceholder(normalizePostText(payload.content));
   assertNoMemoryPlaceholder(payload.selfReply?.text);
