@@ -34,6 +34,7 @@ import { createStrategyHandlersFromDb, STRATEGY_ROUTE_ACTIONS } from '../../../.
 import { createContentPlanHandlers } from '../../../../features/x-strategy/content-plan.js';
 import { createFirestoreCorpusStore } from '../../../../features/x-strategy/corpus-store.js';
 import { createFirestorePlanStore } from '../../../../features/x-strategy/plan-store.js';
+import { loadContentContext, summarizeContentContext, resolveCalendarEngineConfig } from '../../../../features/content-context/load-content-context.js';
 import { loadLoopCorpora } from '../../../../features/x-strategy/loop-corpora.js';
 import { resolveXGrowthProfile } from '../../../../features/x-benchmark/profile.js';
 // Committed corpora: bundled here as the fallback for the rows store (getCorpusStore) and the legacy evaluate rows.
@@ -383,7 +384,9 @@ async function handleWeekCalendar(context, body) {
   } catch {
     // Config is advisory; defaults keep the calendar usable.
   }
-  const config = mergeEngineConfig(overrides);
+  // The saved plan's engine targets win when a plan doc exists; otherwise the legacy global override applies.
+  const planDoc = await createFirestorePlanStore(fb.adminDb).get(context.clientId).catch(() => null);
+  const config = resolveCalendarEngineConfig({ planDoc, legacyOverrides: overrides });
   const posts = await readSocialQueue(context.clientId);
   return { ok: true, calendar: buildWeekCalendar({ posts, start, config }) };
 }
@@ -599,6 +602,23 @@ async function latestDailyRun(store, clientId) {
   return store.latest({ clientId, localDate: localDateOf(Date.now()), channel: 'x', version: LOOP_VERSION });
 }
 
+/** One loader for the runner and the chat: same plan read, same Brain gating, same freshness rules. */
+async function readContentContext(clientId, { packageIds = dailyLoopDemoSet.ids, now = Date.now() } = {}) {
+  const { loadClientBrainContext } = require('../../../../features/client-brain/store.cjs');
+  const loopCorpora = await loadLoopCorpora({
+    corpusStore: getCorpusStore(),
+    profileHandles: resolveXGrowthProfile({ config: await readXGrowthConfigFor(clientId).catch(() => null) }),
+    loadCommitted: committedCorpusRows,
+  });
+  return loadContentContext({
+    db: fb.adminDb,
+    buildDayPlan: buildContentDayPlan,
+    // One plan everywhere: the Strategy plan doc sets the loop's cadence, engine targets, floors and caps.
+    readPlanDoc: (id) => createFirestorePlanStore(fb.adminDb).get(id),
+    loadBrainContext: (id) => loadClientBrainContext(id, { useFor: 'socialPosts', requireApproved: true }),
+  }, { clientId, now, packageIds, corpora: loopCorpora });
+}
+
 async function handleDailyRun(context, action, body) {
   assertOwnerClient(context.clientId);
   const store = createFirestoreRunStore(fb.adminDb);
@@ -611,29 +631,15 @@ async function handleDailyRun(context, action, body) {
       const { logAnthropicCall } = require('../../../../api/_lib/usage-logger.cjs');
       draft = createModelDrafter({ anthropic: createAnthropicClient(), logAnthropicCall, clientId: context.clientId });
     }
-    const { loadClientBrainContext } = require('../../../../features/client-brain/store.cjs');
-    // Stored rows (x_corpora) with the committed JSON as fallback; a throwing store never fails the run.
-    const loopCorpora = await loadLoopCorpora({
-      corpusStore: getCorpusStore(),
-      profileHandles: resolveXGrowthProfile({ config: await readXGrowthConfigFor(context.clientId).catch(() => null) }),
-      loadCommitted: committedCorpusRows,
-    });
     const res = await runDailyLoop({
       now: () => Date.now(),
       store,
       draft,
-      readInputs: () => loadDailyLoopInputs({
-        db: fb.adminDb,
-        buildDayPlan: buildContentDayPlan,
-        // One plan everywhere: the Strategy plan doc sets the loop's cadence, engine targets, floors and caps.
-        readPlanDoc: (id) => createFirestorePlanStore(fb.adminDb).get(id),
-        loadBrainContext: (id) => loadClientBrainContext(id, { useFor: 'socialPosts', requireApproved: true }).catch(() => ''),
-      }, {
-        clientId: context.clientId,
+      // The shared content context (same loader the strategy chat reads); `raw` is the runner's legacy input shape.
+      readInputs: async () => (await readContentContext(context.clientId, {
         // POC: the verified demo set unless the caller asks for the whole library.
         packageIds: body?.library === 'full' ? null : dailyLoopDemoSet.ids,
-        corpora: loopCorpora,
-      }),
+      })).raw,
     }, { clientId: context.clientId, force: body?.force === true, inputSource: 'live' });
     return { ok: true, skipped: !!res.skipped, reason: res.reason || null, run: res.run || await latestDailyRun(store, context.clientId) };
   }
@@ -702,6 +708,7 @@ function getStrategyHandlers() {
       runDailyAction: (context, action, body) => handleDailyRun(context, action, body),
       runUpdateItemFacets: (context, body) => handleUpdateItemFacets(context, body),
       readTodayRun: (clientId) => latestDailyRun(createFirestoreRunStore(fb.adminDb), clientId),
+      readContentContext: async (clientId) => summarizeContentContext(await readContentContext(clientId)),
     });
   }
   return strategyHandlers;

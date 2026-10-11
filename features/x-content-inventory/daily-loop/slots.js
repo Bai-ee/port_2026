@@ -190,7 +190,7 @@ export function slotsFromPlan(plan, {
  * hard quote-react floor and no caps. `planMeta` ({planSource, planVersion}) is recorded on strategySource ONLY
  * when given, so a run with no plan doc keeps its exact old strategySource.
  *
- * @returns {{slots:object[], gaps:object[], strategySource:object, plan:object}}  `gaps` = slots a cap dropped (empty without caps)
+ * @returns {{slots:object[], gaps:object[], strategySource:object, plan:object}}  `gaps` = slots a cap dropped, plus a `plan-clamped` note when the plan asks for more than the runner ceiling
  */
 export function planSlots({
   buildDayPlan, input, timezone = DEFAULT_TIMEZONE, typeFloors = DEFAULT_TYPE_FLOORS, typeCaps = {}, planMeta = null,
@@ -200,6 +200,10 @@ export function planSlots({
   const posts = Number.isFinite(asked) && asked >= 1 ? Math.min(asked, TIER_1_MAX_POSTS) : undefined;
   const plan = buildDayPlan({ ...input, posts });
   const gaps = [];
+  // The runner's tier-1 ceiling is not the plan's: say so instead of silently cutting.
+  if (Number.isFinite(asked) && asked > TIER_1_MAX_POSTS) {
+    gaps.push({ code: 'plan-clamped', message: `The Strategy plan asks for ${asked} posts/day; the daily runner plans at most ${TIER_1_MAX_POSTS}.` });
+  }
   const onDrop = (slot, type, cap) => gaps.push({
     code: `slot-dropped:${slot.letter}:cap`,
     message: `Slot ${slot.letter} (${type}, ${slot.timeCT || 'no time'}) was dropped: ${type} is capped at ${cap}/day by the Strategy plan and no other type had room.`,

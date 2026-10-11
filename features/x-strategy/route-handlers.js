@@ -134,7 +134,7 @@ export function createStrategyHandlers({
   readPackages = async () => [], evaluate = defaultEvaluate, clock = Date.now,
   resolveProfile = resolveXGrowthProfile, buildPreviewPlan = buildContentDayPlan,
   chatStore = null, agentLoopFactory = null, callModel = null, logUsage = null,
-  runDailyAction = null, runUpdateItemFacets = null, readTodayRun = null, saveXGrowthProfile = null,
+  runDailyAction = null, runUpdateItemFacets = null, readTodayRun = null, readContentContext = null, saveXGrowthProfile = null,
   env = {}, // explicit on purpose: only createStrategyHandlersFromDb passes process.env, so a bare handler can never reach a real model
 } = {}) {
   if (!corpusStore || !planStore || !refreshService || typeof readXGrowthConfig !== 'function') {
@@ -324,6 +324,7 @@ export function createStrategyHandlers({
         return [profile.ownHandle, ...(profile.benchmarkHandles || [])].map((h) => safeHandle(h)).filter(Boolean);
       },
       getPlan: async () => ((await planStore.get(clientId)) ?? { version: 0, plan: DEFAULT_PLAN, history: [], isDefault: true }),
+      getContext: async () => (readContentContext ? readContentContext(clientId) : { error: 'Content context is not available.' }),
       getTodayRun: async () => summarizeTodayRun(readTodayRun ? await readTodayRun(clientId) : null),
       searchInventory: async ({ query, limit } = {}) => {
         const max = Math.min(Math.max(1, Number(limit) || 10), 20);
@@ -591,7 +592,7 @@ export function createXGrowthProfileSaver(db) {
  * @param {{readPackages?:Function, env?:object, loadCommitted?:(handle:string)=>object[]|null}} [extras]
  */
 export function createStrategyHandlersFromDb(db, {
-  readPackages, env = process.env, runDailyAction, runUpdateItemFacets, readTodayRun,
+  readPackages, env = process.env, runDailyAction, runUpdateItemFacets, readTodayRun, readContentContext,
   saveXGrowthProfile = createXGrowthProfileSaver(db), chatStore = createFirestoreChatStore(db, { env }),
   agentLoopFactory, callModel, logUsage, loadCommitted,
 } = {}) {
@@ -605,7 +606,7 @@ export function createStrategyHandlersFromDb(db, {
   });
   return createStrategyHandlers({
     corpusStore, planStore, refreshService, readPackages,
-    chatStore, agentLoopFactory, callModel, logUsage, runDailyAction, runUpdateItemFacets, readTodayRun, saveXGrowthProfile, env,
+    chatStore, agentLoopFactory, callModel, logUsage, runDailyAction, runUpdateItemFacets, readTodayRun, readContentContext, saveXGrowthProfile, env,
     readXGrowthConfig: async (clientId) => {
       const snap = await db.collection('client_configs').doc(clientId).get();
       return snap.exists ? snap.data()?.marketingBriefConfig?.xGrowth ?? null : null;

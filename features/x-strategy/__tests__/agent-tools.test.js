@@ -28,10 +28,10 @@ test('prompt stays compact and embeds only a capped plan summary, not the evalua
   assert.match(summarizePlan(null), /No saved plan/);
 });
 
-test('one propose tool per proposal kind, plus the five read tools, all with object schemas', () => {
+test('one propose tool per proposal kind, plus the six read tools, all with object schemas', () => {
   assert.deepEqual(Object.keys(PROPOSE_TOOL_BY_KIND).sort(), [...PROPOSAL_KINDS].sort());
-  assert.deepEqual(READ_TOOL_NAMES, ['get_evaluation', 'get_plan', 'get_today_run', 'search_inventory', 'top_posts']);
-  assert.equal(TOOL_SCHEMAS.length, 13);
+  assert.deepEqual(READ_TOOL_NAMES, ['get_evaluation', 'get_plan', 'get_context', 'get_today_run', 'search_inventory', 'top_posts']);
+  assert.equal(TOOL_SCHEMAS.length, 14);
   for (const t of TOOL_SCHEMAS) {
     assert.equal(t.input_schema.type, 'object');
     assert.ok(t.description);

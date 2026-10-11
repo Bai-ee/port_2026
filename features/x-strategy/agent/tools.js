@@ -89,6 +89,11 @@ export const READ_TOOLS = Object.freeze([
     input_schema: { type: 'object', properties: {} },
   },
   {
+    name: 'get_context',
+    description: 'The shared content context the daily runner uses: executable plan version, Client Brain approval, campaign, scan, corpora and inventory — each with source, as-of time, usable flag and caveats, plus a versions hash.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
     name: 'get_today_run',
     description: "Today's daily-run suggestions: id, slot, type, status, text.",
     input_schema: { type: 'object', properties: {} },
@@ -166,6 +171,7 @@ export async function runReadTool(name, input, toolDeps) {
   switch (name) {
     case 'get_evaluation': return need('getEvaluation')();
     case 'get_plan': return { plan: await need('getPlan')() };
+    case 'get_context': return need('getContext')();
     case 'get_today_run': return need('getTodayRun')();
     case 'search_inventory': {
       const query = String(input?.query ?? '').trim();
