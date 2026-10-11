@@ -55,6 +55,7 @@ export const dynamic = 'force-dynamic';
 const require = createRequire(import.meta.url);
 const { verifyRequestUser, isAdminEmail } = require('../../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../../api/_lib/client-provisioning.cjs');
+const { requirePilotOwner } = require('../../../../api/_lib/pilot-access.cjs');
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
 
 // Quote Targets — draft/dismiss surface over X accounts worth quote-tweeting.
@@ -108,6 +109,9 @@ async function requireAdminContext(request) {
     err.status = 404;
     throw err;
   }
+  // Owner pilot boundary: the whole route is Content Management (global package store, NAS, strategy chat,
+  // calendar). Allowlisted uid + client only; the client id is the server-resolved one (never body/model).
+  requirePilotOwner(context, decoded);
   return { decoded, context };
 }
 

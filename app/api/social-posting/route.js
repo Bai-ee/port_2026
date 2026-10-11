@@ -14,6 +14,7 @@ import {
   retrySelfReply,
   processDuePostsForAllClients,
   publishApprovedPost,
+  getSocialPost,
   readSocialQueue,
   rejectDraft,
   rejectSocialPost,
@@ -34,6 +35,7 @@ const { verifyRequestUser } = require('../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../api/_lib/client-provisioning.cjs');
 const { revokeApprovalsForClient, revokeApprovalsForPost } = require('../../../api/_lib/social-approval.cjs');
 const { getHeaderValue, safeSecretEquals } = require('../../../api/_lib/auth.cjs');
+const { requirePilotOwner } = require('../../../api/_lib/pilot-access.cjs');
 
 // The due-sweep cron used to live at /api/social-posting/process-due, a thin
 // wrapper that only called processDuePostsForAllClients. It was folded in here
@@ -57,6 +59,13 @@ function makeReqShim(request) {
       Authorization: request.headers.get('authorization'),
     },
   };
+}
+
+// Content Management boundary: lifecycle-v2 rows (the pilot's) are owner-only; legacy rows keep serving every
+// client's Copywriter / Schedule Posts. The client id is the server-resolved one, never the body's.
+async function gatePilotRow(context, decoded, postId) {
+  const row = postId ? await getSocialPost(context.clientId, postId) : null;
+  if (row && Number(row.lifecycleVersion) >= 2) requirePilotOwner(context, decoded);
 }
 
 function json(body, status = 200) {
@@ -246,6 +255,7 @@ export async function POST(request) {
     // Edit a saved draft/scheduled post in place (Copywriter notepad). Re-scores
     // via the same agents pass so the updated doc carries a fresh xGrowthScore.
     if (action === 'update') {
+      await gatePilotRow(context, decoded, body.postId);
       const agents = body.agents || runPostingAgents(body.content, agentContext).agents;
       const post = await updateSocialPost(context.clientId, body.postId, { ...body, agents });
       return json({ ok: true, post });
@@ -253,12 +263,14 @@ export async function POST(request) {
 
     // draft -> approved (stamps reviewedAt/reviewedBy). Does not schedule or publish.
     if (action === 'approve-draft') {
+      requirePilotOwner(context, decoded);
       const post = await approveDraft(context.clientId, body.postId, { reviewedBy: decoded?.email || decoded?.uid || null });
       return json({ ok: true, post });
     }
 
     // Calendar Approve: draft -> approved -> scheduled at the shown time, in one call (explicit operator click only).
     if (action === 'approve-and-schedule') {
+      requirePilotOwner(context, decoded);
       const post = await approveAndSchedule(context.clientId, body.postId, {
         scheduledAt: body.scheduledAt,
         content: typeof body.content === 'string' ? body.content : undefined,
@@ -269,16 +281,19 @@ export async function POST(request) {
 
     // Calendar Reject: draft -> rejected. Never touches scheduled/posted rows.
     if (action === 'reject-draft') {
+      requirePilotOwner(context, decoded);
       const post = await rejectDraft(context.clientId, body.postId, { reviewedBy: decoded?.email || decoded?.uid || null });
       return json({ ok: true, post });
     }
 
     if (action === 'attach-media') {
+      await gatePilotRow(context, decoded, body.postId);
       const post = await attachMediaToPost(context.clientId, body.postId, body);
       return json({ ok: true, post });
     }
 
     if (action === 'retry-self-reply') {
+      await gatePilotRow(context, decoded, body.postId);
       const post = await retrySelfReply(context.clientId, body.postId);
       return json({ ok: true, post });
     }
@@ -292,6 +307,7 @@ export async function POST(request) {
     // an 'awaiting_approval' post directly, or revoke every pending link for
     // this client (e.g. before switching a platform back to 'off').
     if (action === 'approve-post') {
+      await gatePilotRow(context, decoded, body.postId);
       const post = await publishApprovedPost(context.clientId, body.postId, { source: 'dashboard' });
       // Retire any still-pending email token for this post — the publish above
       // already happened, so a later click on that link must not double-post.
@@ -302,6 +318,7 @@ export async function POST(request) {
     }
 
     if (action === 'reject-post') {
+      await gatePilotRow(context, decoded, body.postId);
       const post = await rejectSocialPost(context.clientId, body.postId);
       await revokeApprovalsForPost(body.postId).catch((err) => {
         console.error('[social-posting] revokeApprovalsForPost failed after reject-post', body.postId, err?.message);

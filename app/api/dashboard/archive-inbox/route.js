@@ -9,6 +9,7 @@ export const dynamic = 'force-dynamic';
 
 const require = createRequire(import.meta.url);
 const { verifyRequestUser, isAdminEmail } = require('../../../../api/_lib/auth.cjs');
+const { requirePilotOwnerUid } = require('../../../../api/_lib/pilot-access.cjs');
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
 
 // Archive inbox — the seam between the Archive POC and the posting engine.
@@ -47,6 +48,8 @@ async function requireAdmin(request) {
     err.status = 403;
     throw err;
   }
+  // Writes the global x_content_packages store: owner-pilot boundary (uid allowlist; no client context here).
+  requirePilotOwnerUid(decoded);
   return decoded;
 }
 
