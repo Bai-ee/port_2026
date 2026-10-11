@@ -98,7 +98,7 @@ export const PROPOSAL_KIND_ACTIONS = Object.freeze({
   'refresh-handles': 'strategy-refresh',
 });
 
-export const PROPOSAL_STATUSES = Object.freeze(['pending', 'confirmed', 'rejected', 'failed']);
+export const PROPOSAL_STATUSES = Object.freeze(['pending', 'deciding', 'confirmed', 'rejected', 'failed']);
 
 /** Evaluation caveat codes + thresholds (§5 Evaluation view model). */
 export const EVALUATION_CAVEAT = Object.freeze({
@@ -118,6 +118,7 @@ export const ROUTE_ACTIONS = Object.freeze([
   'strategy-chat-send',
   'strategy-chat-history',
   'strategy-proposal-decide',
+  'strategy-profile-save',
 ]);
 
 export const STRATEGY_COLLECTIONS = Object.freeze({

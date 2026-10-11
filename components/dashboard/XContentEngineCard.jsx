@@ -34,8 +34,9 @@ const PerformancePanel = dynamic(() => import('./x-content/PerformancePanel'), {
 const ClientCapturePanel = dynamic(() => import('./x-content/ClientCapturePanel'), { ssr: false });
 const BucketsPanel = dynamic(() => import('./x-content/BucketsPanel'), { ssr: false });
 const DailySuggestionsPanel = dynamic(() => import('./x-content/DailySuggestionsPanel'), { ssr: false });
+const StrategyPanel = dynamic(() => import('./x-content/StrategyPanel'), { ssr: false });
 
-const TABS = ['plan', 'today', 'inventory', 'buckets', 'calendar', 'clients', 'performance'];
+const TABS = ['strategy', 'plan', 'today', 'inventory', 'buckets', 'calendar', 'clients', 'performance'];
 const TAB_STORAGE_KEY = 'xce-last-tab';
 const TOAST_MS = 3200;
 
@@ -108,7 +109,7 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
       body: JSON.stringify({ action, ...body }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.error || `${action} failed.`);
+    if (!res.ok) throw Object.assign(new Error(data?.error || `${action} failed.`), { status: res.status, data });
     return data;
   }, [getIdToken]);
 
@@ -308,6 +309,16 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
       <div id="x-content-tabs" className="xce-tabs" role="tablist">
         <button
           type="button"
+          id="x-content-tab-strategy"
+          className={`xce-tab${tab === 'strategy' ? ' xce-tab-active' : ''}`}
+          onClick={() => setTab('strategy')}
+          role="tab"
+          aria-selected={tab === 'strategy'}
+        >
+          <LineChart size={13} /> Strategy
+        </button>
+        <button
+          type="button"
           id="x-content-tab-plan"
           className={`xce-tab${tab === 'plan' ? ' xce-tab-active' : ''}`}
           onClick={() => setTab('plan')}
@@ -380,7 +391,9 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
 
       {clientName ? <p id="x-content-client-line" className="xce-client">{clientName}</p> : null}
 
-      {tab === 'plan' ? (
+      {tab === 'strategy' ? (
+        <StrategyPanel clientId={activeClientId} call={call} onPlanChanged={() => load()} />
+      ) : tab === 'plan' ? (
         <PlanPanel
           plan={plan}
           loading={loading}

@@ -764,6 +764,9 @@ function getStrategyHandlers() {
   if (!strategyHandlers) {
     strategyHandlers = createStrategyHandlersFromDb(fb.adminDb, {
       readPackages: async () => (await readInventory()).packages,
+      runDailyAction: (context, action, body) => handleDailyRun(context, action, body),
+      runUpdateItemFacets: (context, body) => handleUpdateItemFacets(context, body),
+      readTodayRun: (clientId) => latestDailyRun(createFirestoreRunStore(fb.adminDb), clientId),
     });
   }
   return strategyHandlers;

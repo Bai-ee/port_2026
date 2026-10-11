@@ -49,9 +49,9 @@ test('proposal kinds, statuses, actions, collections', () => {
   assert.equal(C.PROPOSAL_KINDS.length, 8);
   assert.equal(new Set(C.PROPOSAL_KINDS).size, 8);
   assert.deepEqual(Object.keys(C.PROPOSAL_KIND_ACTIONS).sort(), [...C.PROPOSAL_KINDS].sort());
-  assert.deepEqual([...C.PROPOSAL_STATUSES], ['pending', 'confirmed', 'rejected', 'failed']);
-  assert.equal(C.ROUTE_ACTIONS.length, 9);
-  assert.equal(new Set(C.ROUTE_ACTIONS).size, 9);
+  assert.deepEqual([...C.PROPOSAL_STATUSES], ['pending', 'deciding', 'confirmed', 'rejected', 'failed']);
+  assert.equal(C.ROUTE_ACTIONS.length, 10);
+  assert.equal(new Set(C.ROUTE_ACTIONS).size, 10);
   for (const a of C.ROUTE_ACTIONS) assert.match(a, /^strategy-/);
   assert.equal(C.PROPOSAL_KIND_ACTIONS['plan-change'], 'strategy-plan-apply');
   assert.equal(C.PROPOSAL_KIND_ACTIONS['refresh-handles'], 'strategy-refresh');
