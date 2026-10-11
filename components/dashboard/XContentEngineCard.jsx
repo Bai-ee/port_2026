@@ -2,7 +2,9 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { CalendarDays, CalendarRange, FolderTree, Library, LineChart, MessagesSquare, Users } from 'lucide-react';
+import { CalendarDays, CalendarRange, ChevronDown, Ellipsis, FolderTree, Library, LineChart, MessagesSquare, Users } from 'lucide-react';
+import BottomNav from './x-content/ui/BottomNav';
+import SegmentedControl from './x-content/ui/SegmentedControl';
 import { fallbackDraft, validateDraft } from '../../features/x-content-inventory/draft.js';
 import { Toast } from './x-content/Feedback';
 
@@ -38,6 +40,25 @@ const StrategyPanel = dynamic(() => import('./x-content/StrategyPanel'), { ssr: 
 
 const TABS = ['strategy', 'plan', 'today', 'inventory', 'buckets', 'calendar', 'clients', 'performance'];
 const TAB_STORAGE_KEY = 'xce-last-tab';
+
+// Labels only: ids are the unchanged TABS ids (inventory -> "Content", performance -> "Results").
+const PRIMARY_TABS = [
+  { id: 'strategy', label: 'Strategy', Icon: LineChart },
+  { id: 'plan', label: 'Plan', Icon: CalendarDays },
+  { id: 'today', label: 'Today', Icon: MessagesSquare },
+  { id: 'inventory', label: 'Content', Icon: Library },
+  { id: 'buckets', label: 'Buckets', Icon: FolderTree },
+  { id: 'calendar', label: 'Calendar', Icon: CalendarRange },
+];
+const MORE_TABS = [
+  { id: 'clients', label: 'Clients', Icon: Users },
+  { id: 'performance', label: 'Results', Icon: LineChart },
+];
+const MOBILE_MORE_TABS = [
+  { id: 'buckets', label: 'Buckets', Icon: FolderTree },
+  { id: 'clients', label: 'Clients', Icon: Users },
+  { id: 'performance', label: 'Results', Icon: LineChart },
+];
 const TOAST_MS = 3200;
 
 // Per-viewer convenience only: any storage failure just means "start on Plan".
@@ -76,6 +97,27 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
   useEffect(() => {
     try { window.localStorage.setItem(TAB_STORAGE_KEY, tab); } catch { /* storage unavailable */ }
   }, [tab]);
+  // Shell-only UI state: which More menu is open. No data flow.
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef(null);
+  const moreMobileRef = useRef(null);
+  const pickTab = useCallback((id) => { setTab(id); setMoreOpen(false); }, []);
+  const onMobileNav = useCallback((v) => {
+    if (v === 'more') { setMoreOpen((o) => !o); return; }
+    if (v === 'today') { setTab((t) => (t === 'plan' || t === 'today' ? t : 'plan')); setMoreOpen(false); return; }
+    pickTab(v);
+  }, [pickTab]);
+  useEffect(() => {
+    if (!moreOpen) return undefined;
+    const onDown = (e) => {
+      const inside = (moreRef.current && moreRef.current.contains(e.target)) || (moreMobileRef.current && moreMobileRef.current.contains(e.target));
+      if (!inside) setMoreOpen(false);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') setMoreOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [moreOpen]);
   const [posts, setPosts] = useState(5);
 
   const [plan, setPlan] = useState(null);
@@ -309,90 +351,67 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
 
   return (
     <div id="x-content-card">
+      {clientName ? (
+        <header id="x-content-header" className="xce-header">
+          <p id="x-content-client-line" className="xce-client">{clientName}</p>
+        </header>
+      ) : null}
+
+      {/* Desktop + tablet (>=481px): tab row. Owns the canonical x-content-tab-<id> ids at every width. */}
       <div id="x-content-tabs" className="xce-tabs" role="tablist">
-        <button
-          type="button"
-          id="x-content-tab-strategy"
-          className={`xce-tab${tab === 'strategy' ? ' xce-tab-active' : ''}`}
-          onClick={() => setTab('strategy')}
-          role="tab"
-          aria-selected={tab === 'strategy'}
-        >
-          <LineChart size={13} /> Strategy
-        </button>
-        <button
-          type="button"
-          id="x-content-tab-plan"
-          className={`xce-tab${tab === 'plan' ? ' xce-tab-active' : ''}`}
-          onClick={() => setTab('plan')}
-          role="tab"
-          aria-selected={tab === 'plan'}
-        >
-          <CalendarDays size={13} /> Plan
-        </button>
-        <button
-          type="button"
-          id="x-content-tab-today"
-          className={`xce-tab${tab === 'today' ? ' xce-tab-active' : ''}`}
-          onClick={() => setTab('today')}
-          role="tab"
-          aria-selected={tab === 'today'}
-        >
-          <MessagesSquare size={13} /> Today
-        </button>
-        <button
-          type="button"
-          id="x-content-tab-inventory"
-          className={`xce-tab${tab === 'inventory' ? ' xce-tab-active' : ''}`}
-          onClick={() => setTab('inventory')}
-          role="tab"
-          aria-selected={tab === 'inventory'}
-        >
-          <Library size={13} /> Content{packages.length ? ` (${packages.length})` : ''}
-        </button>
-        <button
-          type="button"
-          id="x-content-tab-buckets"
-          className={`xce-tab${tab === 'buckets' ? ' xce-tab-active' : ''}`}
-          onClick={() => setTab('buckets')}
-          role="tab"
-          aria-selected={tab === 'buckets'}
-        >
-          <FolderTree size={13} /> Buckets
-        </button>
-        <button
-          type="button"
-          id="x-content-tab-calendar"
-          className={`xce-tab${tab === 'calendar' ? ' xce-tab-active' : ''}`}
-          onClick={() => setTab('calendar')}
-          role="tab"
-          aria-selected={tab === 'calendar'}
-        >
-          <CalendarRange size={13} /> Calendar
-        </button>
-        <button
-          type="button"
-          id="x-content-tab-clients"
-          className={`xce-tab${tab === 'clients' ? ' xce-tab-active' : ''}`}
-          onClick={() => setTab('clients')}
-          role="tab"
-          aria-selected={tab === 'clients'}
-        >
-          <Users size={13} /> Clients
-        </button>
-        <button
-          type="button"
-          id="x-content-tab-performance"
-          className={`xce-tab${tab === 'performance' ? ' xce-tab-active' : ''}`}
-          onClick={() => setTab('performance')}
-          role="tab"
-          aria-selected={tab === 'performance'}
-        >
-          <LineChart size={13} /> Results
-        </button>
+        {PRIMARY_TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            id={`x-content-tab-${t.id}`}
+            className={`xce-tab${tab === t.id ? ' xce-tab-active' : ''}`}
+            onClick={() => pickTab(t.id)}
+            role="tab"
+            aria-selected={tab === t.id}
+          >
+            <t.Icon size={13} /> {t.label}{t.id === 'inventory' && packages.length ? ` (${packages.length})` : ''}
+          </button>
+        ))}
+        <div id="x-content-more-menu-shell" className="xce-more-shell" ref={moreRef}>
+          <button
+            type="button"
+            id="x-content-more-trigger"
+            className={`xce-tab xce-more-trigger${MORE_TABS.some((t) => t.id === tab) ? ' xce-tab-active' : ''}`}
+            aria-haspopup="menu"
+            aria-expanded={moreOpen}
+            onClick={() => setMoreOpen((o) => !o)}
+          >
+            More <ChevronDown size={13} />
+          </button>
+          <div id="x-content-more-menu" className={`xce-more-menu${moreOpen ? ' is-open' : ''}`} role="menu">
+            {MORE_TABS.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                id={`x-content-tab-${t.id}`}
+                role="menuitem"
+                className={`xce-more-item${tab === t.id ? ' xce-more-item-active' : ''}`}
+                onClick={() => pickTab(t.id)}
+              >
+                <t.Icon size={13} /> {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
-      {clientName ? <p id="x-content-client-line" className="xce-client">{clientName}</p> : null}
+      {/* Phone (<=480px): Today = Plan | Discover over the existing plan/today bodies. */}
+      {tab === 'plan' || tab === 'today' ? (
+        <div id="x-content-today-segmented-shell" className="xce-mobile-only">
+          <SegmentedControl
+            id="x-content-today-segmented"
+            ariaLabel="Today view"
+            value={tab}
+            onChange={pickTab}
+            options={[{ value: 'plan', label: 'Plan' }, { value: 'today', label: 'Discover' }]}
+          />
+        </div>
+      ) : null}
 
       {tab === 'strategy' ? (
         <StrategyPanel clientId={activeClientId} call={call} onPlanChanged={() => load()} />
@@ -457,6 +476,36 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
       )}
 
       <Toast toast={toast} />
+
+      {/* Phone (<=480px): sticky bottom nav. In flow after the panels, so it never covers content. */}
+      <div id="x-content-mobile-bottom-nav-shell" className="xce-bottom-shell" ref={moreMobileRef}>
+        <div id="x-content-mobile-more-sheet" className={`xce-more-sheet${moreOpen ? ' is-open' : ''}`} role="menu">
+          {MOBILE_MORE_TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              id={`x-content-mobile-more-${t.id}`}
+              role="menuitem"
+              className={`xce-more-item${tab === t.id ? ' xce-more-item-active' : ''}`}
+              onClick={() => pickTab(t.id)}
+            >
+              <t.Icon size={14} /> {t.label}
+            </button>
+          ))}
+        </div>
+        <BottomNav
+          id="x-content-mobile-bottom-nav"
+          value={moreOpen || MOBILE_MORE_TABS.some((t) => t.id === tab) ? 'more' : tab === 'plan' || tab === 'today' ? 'today' : tab}
+          onChange={onMobileNav}
+          items={[
+            { value: 'strategy', label: 'Chat', icon: <MessagesSquare size={18} /> },
+            { value: 'today', label: 'Today', icon: <CalendarDays size={18} /> },
+            { value: 'inventory', label: 'Content', icon: <Library size={18} /> },
+            { value: 'calendar', label: 'Calendar', icon: <CalendarRange size={18} /> },
+            { value: 'more', label: 'More', icon: <Ellipsis size={18} /> },
+          ]}
+        />
+      </div>
 
       <style jsx global>{`
         /* Mobile first: every rule below is the phone layout. Widening happens
@@ -1039,6 +1088,35 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
           #x-content-card .xce-dl-why { grid-template-columns: 110px 1fr; }
           #x-content-card .xce-dl-why dt { margin-top: 0; }
           #x-content-card .xce-dl-actions .xce-btn-primary, #x-content-card .xce-dl-actions .xce-btn-ghost { flex: 0 0 auto; }
+        }
+
+        /* ── Shell (U2): header, tab row + More, phone bottom nav ─────── */
+        #x-content-card .xce-header { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        #x-content-card .xce-mobile-only,
+        #x-content-card .xce-bottom-shell { display: none; }
+        #x-content-card .xce-more-shell { position: relative; flex: 0 0 auto; display: inline-flex; }
+        #x-content-card .xce-more-trigger { flex: 0 0 auto; }
+        #x-content-card .xce-more-menu { display: none; position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; min-width: 160px; padding: 6px; gap: 2px; flex-direction: column; border-radius: 12px; border: 1px solid rgba(31,29,27,0.12); background: #fff; box-shadow: 0 8px 24px rgba(31,29,27,0.12); }
+        #x-content-card .xce-more-menu.is-open { display: flex; }
+        #x-content-card .xce-more-item { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(31,29,27,0.7); cursor: pointer; text-align: left; }
+        #x-content-card .xce-more-item:hover { background: rgba(31,29,27,0.05); }
+        #x-content-card .xce-more-item-active { background: #1f1d1b; color: #fff; }
+        #x-content-card .xce-more-item-active:hover { background: #1f1d1b; }
+        @media (max-width: 480px) {
+          #x-content-card .xce-tabs { display: none; }
+          #x-content-card .xce-header { padding-bottom: 8px; }
+          #x-content-card .xce-header::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: 2px; background: linear-gradient(90deg, #22c7e8 0%, #8a5cf0 55%, #e23fb8 100%); }
+          #x-content-card .xce-client { font-size: 12px; font-weight: 700; color: #1f1d1b; }
+          #x-content-card .xce-mobile-only { display: block; }
+          #x-content-card .xce-bottom-shell { display: block; position: sticky; bottom: 0; z-index: 10; margin: 0 calc(-1 * var(--mobile-gutter, 8px)); background: #fff; border-top: 1px solid rgba(31,29,27,0.1); }
+          /* Sticky needs the modal's scrollport to be the nearest scroll container: neutralise the two intermediate overflow clips (clip still clips, but is not a scroll container). */
+          #x-content-modal-panel:has(#x-content-card) { overflow: clip; }
+          .tile-detail-tab-content:has(#x-content-card) { overflow: visible; }
+          #x-content-card .xce-more-sheet { display: none; position: absolute; left: 8px; right: 8px; bottom: calc(100% + 8px); flex-direction: column; gap: 2px; padding: 6px; border-radius: 12px; border: 1px solid rgba(31,29,27,0.12); background: #fff; box-shadow: 0 8px 24px rgba(31,29,27,0.14); }
+          #x-content-card .xce-more-sheet.is-open { display: flex; }
+        }
+        @media (min-width: 481px) {
+          #x-content-card .xce-more-sheet { display: none !important; }
         }
       `}</style>
     </div>
