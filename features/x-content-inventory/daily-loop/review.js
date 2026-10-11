@@ -1,4 +1,4 @@
-// Review actions on a stored suggestion: compose queue content, Save Draft
+// Review actions on a stored suggestion: compose queue content, Edit, Save Draft
 // (create-once, unscheduled), and Dismiss.
 // Decides what may enter the queue; never schedules, publishes, or generates suggestions.
 // Builds on run-store and the copy/eligibility checks.
@@ -31,15 +31,22 @@ export function composeQueueContent(suggestion, text) {
  * Re-checks the (possibly edited) text and the package's eligibility first;
  * a blocked suggestion never reaches the queue.
  *
- * deps: { store, getPackage(id), createDraftPostOnce(clientId, postId, payload), now() }
+ * deps: { store, getPackage(id), createDraftPostOnce(clientId, postId, payload), now(),
+ *         postExists?(id) }  — postExists lets a deleted queue row be saved again.
  */
 export async function saveSuggestionDraft(deps, { key, suggestionId, text }) {
   const run = await deps.store.read(key);
-  const s = findSuggestion(run, suggestionId);
-  if (s.socialPostId) return { ok: true, postId: s.socialPostId, existing: true };
+  let s = findSuggestion(run, suggestionId);
+  if (s.socialPostId) {
+    // Saved earlier, but the operator may have deleted the queue row since.
+    if (!deps.postExists || (await deps.postExists(s.socialPostId))) return { ok: true, postId: s.socialPostId, existing: true };
+    const at = new Date(deps.now ? deps.now() : Date.now()).toISOString();
+    const restored = s.savedText || s.edit?.text || s.draft?.text || '';
+    s = await deps.store.updateSuggestion(key, s.id, () => ({ socialPostId: null, reviewState: 'edited', edit: { text: restored, at, checks: checkSuggestionText(restored, s) } }));
+  }
   if (s.reviewState === 'dismissed') throw bad('Suggestion was dismissed.', 409);
 
-  const finalText = typeof text === 'string' ? text : s.draft?.text || '';
+  const finalText = typeof text === 'string' ? text : s.edit?.text || s.draft?.text || '';
   const checks = checkSuggestionText(finalText, s);
   if (checks.blocked) throw bad(`Blocked by checks: ${checks.violations.join('; ') || 'content guard hard block'} — edit the text and try again.`, 422, { checks });
 
@@ -80,6 +87,22 @@ export async function saveSuggestionDraft(deps, { key, suggestionId, text }) {
     checks,
   }));
   return { ok: true, postId: post?.id || postId, existing };
+}
+
+/**
+ * Store the reviewer's working copy. The text is re-checked now, so the card can
+ * show a block before Save; empty text drops the edit and returns to pending.
+ * Refuses suggestions that are already saved or dismissed (409).
+ */
+export async function editSuggestion(deps, { key, suggestionId, text }) {
+  const body = String(text ?? '').trim();
+  return deps.store.updateSuggestion(key, suggestionId, (s) => {
+    if (s.socialPostId || s.reviewState === 'saved') throw bad('Already saved as a draft — delete it from the queue to edit again.', 409);
+    if (s.reviewState === 'dismissed') throw bad('Suggestion was dismissed.', 409);
+    if (!body) return { edit: null, reviewState: 'pending' };
+    const at = new Date(deps.now ? deps.now() : Date.now()).toISOString();
+    return { edit: { text: body, at, checks: checkSuggestionText(body, s) }, reviewState: 'edited' };
+  });
 }
 
 export async function dismissSuggestion(deps, { key, suggestionId }) {

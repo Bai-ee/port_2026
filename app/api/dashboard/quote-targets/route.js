@@ -31,7 +31,7 @@ import { setRights, saveThumb, createDraftFromItem } from '../../../../features/
 import { NAS_ACTIONS, handleNasAction } from '../../../../features/x-content-inventory/nas.js';
 import { runDailyLoop, assertOwnerClient, localDateOf, LOOP_VERSION } from '../../../../features/x-content-inventory/daily-loop.js';
 import {
-  createFirestoreRunStore, loadDailyLoopInputs, saveSuggestionDraft, dismissSuggestion, createModelDrafter,
+  createFirestoreRunStore, loadDailyLoopInputs, saveSuggestionDraft, editSuggestion, dismissSuggestion, createModelDrafter,
 } from '../../../../features/x-content-inventory/daily-run-store.js';
 import dailyLoopDemoSet from '../../../../features/x-content-inventory/daily-loop-demo-set.json' with { type: 'json' };
 // Same static-import reasoning as bundledCalendar above. These are the two
@@ -273,7 +273,7 @@ async function handleDismiss(clientId, body) {
 // Daily Content Loop (docs/plans/DAILY-CONTENT-LOOP-MASTER-PLAN.md). Owner
 // account only; reads saved inputs, writes the run store, and — on Save Draft
 // only — one unscheduled social_posts draft. Never schedules or posts.
-const DAILY_RUN_ACTIONS = ['daily-run-latest', 'daily-run-generate', 'daily-run-save-draft', 'daily-run-dismiss'];
+const DAILY_RUN_ACTIONS = ['daily-run-latest', 'daily-run-generate', 'daily-run-edit', 'daily-run-save-draft', 'daily-run-dismiss'];
 
 const SUPPORTED_ACTIONS = [
   ...NAS_ACTIONS,
@@ -697,7 +697,7 @@ async function handleDailyRun(context, action, body) {
         packageIds: body?.library === 'full' ? null : dailyLoopDemoSet.ids,
         corpora: { own: ownCorpusRows, benchmark: benchmarkCorpusRows, ownSource: 'docs/audits/bai-ee-x-corpus.json', benchmarkSource: 'docs/audits/seb-design-x-corpus.json' },
       }),
-    }, { clientId: context.clientId, force: body?.force === true });
+    }, { clientId: context.clientId, force: body?.force === true, inputSource: 'live' });
     return { ok: true, skipped: !!res.skipped, reason: res.reason || null, run: res.run || await latestDailyRun(store, context.clientId) };
   }
 
@@ -709,10 +709,15 @@ async function handleDailyRun(context, action, body) {
 
   if (action === 'daily-run-dismiss') {
     await dismissSuggestion({ store }, { key, suggestionId });
+  } else if (action === 'daily-run-edit') {
+    // Empty text clears the edit; saved/dismissed suggestions are refused (409) by editSuggestion.
+    const suggestion = await editSuggestion({ store }, { key, suggestionId, text: typeof body?.text === 'string' ? body.text : '' });
+    return { ok: true, suggestion, run: await store.read(key) };
   } else {
     const text = typeof body?.text === 'string' ? body.text : undefined;
+    const postExists = async (id) => (await fb.adminDb.collection('social_posts').doc(String(id)).get()).exists;
     try {
-      const saved = await saveSuggestionDraft({ store, getPackage, createDraftPostOnce }, { key, suggestionId, text });
+      const saved = await saveSuggestionDraft({ store, getPackage, createDraftPostOnce, postExists }, { key, suggestionId, text });
       return { ok: true, ...saved, run: await store.read(key) };
     } catch (err) {
       if (err.checks) return { ok: false, error: err.message, checks: err.checks, status: err.status };

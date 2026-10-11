@@ -14,6 +14,6 @@
 // `createMemoryRunStore()` for replay and tests.
 
 export { RUNS_COLLECTION, CLAIM_LEASE_MS, runDocId, claimDecision, mergePreserved, createMemoryRunStore, createFirestoreRunStore } from './daily-loop/run-store.js';
-export { composeQueueContent, saveSuggestionDraft, dismissSuggestion } from './daily-loop/review.js';
+export { composeQueueContent, saveSuggestionDraft, editSuggestion, dismissSuggestion } from './daily-loop/review.js';
 export { loadDailyLoopInputs } from './daily-loop/inputs.js';
 export { DRAFT_MODEL, createModelDrafter } from './daily-loop/drafter.js';

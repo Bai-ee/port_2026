@@ -94,6 +94,9 @@ export function brandFit(narrative, profile) {
   const heldGenre = phrases.some((p) => p.kind === 'genre' && (p.items || 0) >= 3);
   const qualifies = anchored || heldGenre || (phrases.length > 0 && terms.length >= 2) || terms.length >= 3;
   const blockedLane = lane.lane === 'casino' || lane.lane === 'politics';
+  // Image-only posts (just a t.co link) have nothing to judge; say so instead
+  // of the misleading "only broad words".
+  const noText = tokenize(narrative.text).length === 0 && !phrases.length;
   const score = blockedLane || !qualifies ? 0 : Math.min(1, (phraseWeight + 0.5 * tokenWeight) / 6);
   return {
     score: Number(score.toFixed(3)),
@@ -103,6 +106,6 @@ export function brandFit(narrative, profile) {
     laneConfidence: lane.confidence,
     blockedLane,
     anchored,
-    reason: blockedLane ? `${lane.lane} lane` : !qualifies ? (phrases.length ? `only ambiguous phrases (${phrases.map((p) => p.phrase).join(', ')})` : 'no library phrase, only broad words') : null,
+    reason: blockedLane ? `${lane.lane} lane` : noText ? 'no text to assess' : !qualifies ? (phrases.length ? `only ambiguous phrases (${phrases.map((p) => p.phrase).join(', ')})` : 'no library phrase, only broad words') : null,
   };
 }

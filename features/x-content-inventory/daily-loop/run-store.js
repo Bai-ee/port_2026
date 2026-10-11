@@ -3,9 +3,11 @@
 // Decides whether a caller may run and what survives a regeneration; never drafts or reviews.
 // Leaf module (the review actions build on it).
 
+import { MAX_SUGGESTIONS } from './config.js';
+
 export const RUNS_COLLECTION = 'x_content_daily_runs';
 export const CLAIM_LEASE_MS = 5 * 60 * 1000;
-const REVIEWED = new Set(['saved', 'dismissed']);
+const REVIEWED = new Set(['edited', 'saved', 'dismissed']);
 const LATEST_LOOKBACK_DAYS = 7;
 
 export const bad = (message, status = 400, extra = {}) => Object.assign(new Error(message), { status, ...extra });
@@ -23,11 +25,20 @@ export function claimDecision(prev, { fingerprint, force = false, now, leaseMs =
   return { claimed: true };
 }
 
-/** Reviewed work survives a regeneration; fresh pending suggestions replace old pending ones. */
+const pairKey = (s) => `${s.opportunity?.id || ''}|${s.package?.id || ''}`;
+
+/**
+ * Reviewed work (edited/saved/dismissed) survives a regeneration, first in the list.
+ * Fresh pending suggestions fill only the slots left under MAX_SUGGESTIONS (dismissed
+ * ones don't occupy a slot) and never re-suggest a pair dismissed today.
+ */
 export function mergePreserved(prev, next) {
   const kept = (prev?.suggestions || []).filter((s) => REVIEWED.has(s.reviewState) || s.socialPostId);
   const keptIds = new Set(kept.map((s) => s.id));
-  return { ...next, suggestions: [...kept, ...(next.suggestions || []).filter((s) => !keptIds.has(s.id))] };
+  const dismissedPairs = new Set(kept.filter((s) => s.reviewState === 'dismissed').map(pairKey));
+  const room = Math.max(0, MAX_SUGGESTIONS - kept.filter((s) => s.reviewState !== 'dismissed').length);
+  const fresh = (next.suggestions || []).filter((s) => !keptIds.has(s.id) && !dismissedPairs.has(pairKey(s))).slice(0, room);
+  return { ...next, suggestions: [...kept, ...fresh] };
 }
 
 // --- stores ----------------------------------------------------------------

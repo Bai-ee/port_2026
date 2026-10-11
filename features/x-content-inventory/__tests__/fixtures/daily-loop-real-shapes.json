@@ -1,0 +1,1662 @@
+{
+ "_note": "Real saved shapes, read-only copy 2026-10-10: dashboard_state/bryan-balli-WUoltG84.marketingBrief.{conversationSearch,quoteTargets} (trimmed) + x_content_packages docs (demo set + five NAS items). No secrets. Texts shortened.",
+ "now": "2026-10-10T23:30:00.000Z",
+ "scan": {
+  "generatedAt": "2026-10-10T13:24:55.735Z",
+  "candidates": [
+   {
+    "id": "2108788059135500717",
+    "url": "https://x.com/applefiles_/status/2108788059135500717",
+    "author": "applefiles_",
+    "text": "Hey @grok, remove the worst Pro https://t.co/5wOuFRxgGi",
+    "createdAt": "Sat Oct 10 05:13:47 +0000 2026",
+    "ageHours": 8.2,
+    "likes": 1580,
+    "reposts": 32,
+    "replies": 56,
+    "hasMedia": true,
+    "vein": "retro-analog-preinternet",
+    "score": 0.8845,
+    "reasons": [
+     "climbing fast (204/h)",
+     "image",
+     "retro-analog-preinternet"
+    ]
+   },
+   {
+    "id": "2108748099476693494",
+    "url": "https://x.com/SciFiArchives/status/2108748099476693494",
+    "author": "SciFiArchives",
+    "text": "Star Wars poster from Japan. https://t.co/Pv7UTYk0is",
+    "createdAt": "Sat Oct 10 02:35:00 +0000 2026",
+    "ageHours": 10.8,
+    "likes": 1600,
+    "reposts": 173,
+    "replies": 0,
+    "hasMedia": true,
+    "vein": "retro-analog-preinternet",
+    "score": 0.8059,
+    "reasons": [
+     "climbing fast (164/h)",
+     "image",
+     "retro-analog-preinternet"
+    ]
+   },
+   {
+    "id": "2108745834477089129",
+    "url": "https://x.com/interiorsuckerr/status/2108745834477089129",
+    "author": "interiorsuckerr",
+    "text": "https://t.co/4GJew5eSva",
+    "createdAt": "Sat Oct 10 02:26:00 +0000 2026",
+    "ageHours": 11,
+    "likes": 700,
+    "reposts": 36,
+    "replies": 1,
+    "hasMedia": true,
+    "vein": "retro-analog-preinternet",
+    "score": 0.5914,
+    "reasons": [
+     "moving (67/h)",
+     "image",
+     "retro-analog-preinternet"
+    ]
+   },
+   {
+    "id": "2108704474223026669",
+    "url": "https://x.com/rare_jpg/status/2108704474223026669",
+    "author": "rare_jpg",
+    "text": "https://t.co/xeRgP5JI1p",
+    "createdAt": "Fri Oct 09 23:41:39 +0000 2026",
+    "ageHours": 13.7,
+    "likes": 637,
+    "reposts": 36,
+    "replies": 2,
+    "hasMedia": true,
+    "vein": "japanese-asian-design",
+    "score": 0.5659,
+    "reasons": [
+     "moving (49/h)",
+     "image",
+     "japanese-asian-design"
+    ]
+   },
+   {
+    "id": "2107944838478107024",
+    "url": "https://x.com/DesignReviewed/status/2107944838478107024",
+    "author": "DesignReviewed",
+    "text": "70 Japanese Lottery Tickets from 1956 – 1985 https://t.co/9Xys7NP2nQ https://t.co/D4AnTBqbsj",
+    "createdAt": "Wed Oct 07 21:23:07 +0000 2026",
+    "ageHours": 64,
+    "likes": 157,
+    "reposts": 16,
+    "replies": 1,
+    "hasMedia": true,
+    "vein": "retro-analog-preinternet",
+    "score": 0.3587,
+    "reasons": [
+     "image",
+     "retro-analog-preinternet"
+    ]
+   }
+  ]
+ },
+ "search": {
+  "generatedAt": "2026-10-10T23:01:35.060Z",
+  "posts": [
+   {
+    "id": "2108961354300211370",
+    "query": "\"deep house\" min_faves:20 -filter:replies since:2026-10-07",
+    "author": {
+     "username": "markmute_"
+    },
+    "text": "Nothing hits harder than Listening to deep house music in a free way in Joburg with your gents in your wheep 😭",
+    "createdAt": "Sat Oct 10 16:42:24 +0000 2026",
+    "likeCount": 46,
+    "retweetCount": 8,
+    "replyCount": 3,
+    "media": []
+   },
+   {
+    "id": "2108611416924020956",
+    "query": "\"deep house\" min_faves:20 -filter:replies since:2026-10-07",
+    "author": {
+     "username": "albancercay"
+    },
+    "text": "Bazı haberlerle geldim🤟 Uzun süredir bir şeylerle uğraşıyorum ve burada bir şeyler gevelemiştim. Kesinleşmediği için tam olarak olup bitenleri yazmak istememiştim ama an itibariyle kesinleştiği için mutluluğumu buraya d",
+    "createdAt": "Fri Oct 09 17:31:52 +0000 2026",
+    "likeCount": 74,
+    "retweetCount": 2,
+    "replyCount": 25,
+    "media": []
+   },
+   {
+    "id": "2108600230857871834",
+    "query": "\"deep house\" min_faves:20 -filter:replies since:2026-10-07",
+    "author": {
+     "username": "Lush_Beauty1"
+    },
+    "text": "Deep house music is so soothing 🫶🏾🥹❤️",
+    "createdAt": "Fri Oct 09 16:47:25 +0000 2026",
+    "likeCount": 37,
+    "retweetCount": 7,
+    "replyCount": 5,
+    "media": []
+   },
+   {
+    "id": "2107946674996076701",
+    "query": "\"deep house\" min_faves:20 -filter:replies since:2026-10-07",
+    "author": {
+     "username": "wkh0le"
+    },
+    "text": "got booked to play a club on thursday and yet again afro/deep house only under 128 bpm gotta love it",
+    "createdAt": "Wed Oct 07 21:30:25 +0000 2026",
+    "likeCount": 43,
+    "retweetCount": 0,
+    "replyCount": 4,
+    "media": []
+   },
+   {
+    "id": "2107935717481746666",
+    "query": "\"deep house\" min_faves:20 -filter:replies since:2026-10-07",
+    "author": {
+     "username": "funkentechno"
+    },
+    "text": "Ron Trent pushing deep house into full-blown fusion / 80s ecm jazz territory? Yes please. https://t.co/job56VPPLp",
+    "createdAt": "Wed Oct 07 20:46:53 +0000 2026",
+    "likeCount": 57,
+    "retweetCount": 1,
+    "replyCount": 0,
+    "media": [
+     {
+      "type": "photo"
+     }
+    ]
+   },
+   {
+    "id": "2107863664933949503",
+    "query": "\"deep house\" min_faves:20 -filter:replies since:2026-10-07",
+    "author": {
+     "username": "1001TLtv"
+    },
+    "text": "Jamie Jones spinning Miguel Campbell’s deep house classic ‘Something Special’ during his Voyager show in London ❤️🌴 https://t.co/dbwXGBuqy9",
+    "createdAt": "Wed Oct 07 16:00:34 +0000 2026",
+    "likeCount": 64,
+    "retweetCount": 7,
+    "replyCount": 1,
+    "media": [
+     {
+      "type": "photo"
+     }
+    ]
+   },
+   {
+    "id": "2108753124676542696",
+    "query": "\"3-play\" min_faves:20 -filter:replies since:2026-10-07",
+    "author": {
+     "username": "Applebanami1273"
+    },
+    "text": "🐓˚₊‧꒰აDAY 3:PLAY FIGHT ໒꒱‧₊📷 \"You need a friendly hand,AND I NEED ACTION🗣🔥\"- ok no pendejada Alfin viernes y dibujo sin ganas(se me ocurrió mientras dormía lol👀💔) Tags:#Elisyumetober2026 #yumeship #ocxcanon #foghor",
+    "createdAt": "Sat Oct 10 02:54:58 +0000 2026",
+    "likeCount": 132,
+    "retweetCount": 16,
+    "replyCount": 2,
+    "media": [
+     {
+      "type": "photo"
+     }
+    ]
+   },
+   {
+    "id": "2108518059652911333",
+    "query": "\"big beat\" min_faves:20 -filter:replies since:2026-10-07",
+    "author": {
+     "username": "JunjiIkehata"
+    },
+    "text": "10月20日 &amp; 21日 京都 磔磔 20日 『Big beat at 磔磔』 花田裕之@RRG__Official 池畑潤二@JunjiIkehata 細海魚@s_h_official 隅倉弘至@smithkura 21日 1部「MeroDrums」 池畑潤二(Dr) 細海魚(Key) 2部『Drum Hands-on』 @kyoto_takutaku にて チケット販売中 https://t.co/YS6EIYg7PH",
+    "createdAt": "Fri Oct 09 11:20:54 +0000 2026",
+    "likeCount": 162,
+    "retweetCount": 32,
+    "replyCount": 0,
+    "media": [
+     {
+      "type": "photo"
+     }
+    ]
+   },
+   {
+    "id": "2108188533995299218",
+    "query": "\"black vinyl\" min_faves:20 -filter:replies since:2026-10-07",
+    "author": {
+     "username": "mynameisobelpg"
+    },
+    "text": "Björk Orkestral – with the Hamrahlíð Choir will be released on November 27, 2026, in a range of formats: limited-edition black vinyl, CD, Blu-ray, and DVD. The album is already available to pre-order from select online r",
+    "createdAt": "Thu Oct 08 13:31:29 +0000 2026",
+    "likeCount": 162,
+    "retweetCount": 12,
+    "replyCount": 5,
+    "media": [
+     {
+      "type": "photo"
+     }
+    ]
+   },
+   {
+    "id": "2108335738559598680",
+    "query": "\"blue boy\" min_faves:20 -filter:replies since:2026-10-07",
+    "author": {
+     "username": "CookieKlance"
+    },
+    "text": "Ah shit here we go again… another expressive blue boy I’ll fall in love with. 😔💙",
+    "createdAt": "Thu Oct 08 23:16:25 +0000 2026",
+    "likeCount": 438,
+    "retweetCount": 18,
+    "replyCount": 3,
+    "media": []
+   }
+  ]
+ },
+ "packages": [
+  {
+   "id": "discogs-10207",
+   "series": "C1",
+   "pillar": "found-this",
+   "title": "Glenn Underground, Cei-Bei – House Music Will Never Die",
+   "story": "",
+   "mediaState": "video",
+   "effort": "10-min",
+   "rights": "owned",
+   "status": "idea",
+   "platforms": [
+    "x"
+   ],
+   "approval": {
+    "state": "none"
+   },
+   "priority": "evergreen",
+   "source": {
+    "kind": "discogs",
+    "url": "https://www.discogs.com/release/10207-G-U-Cei-Bei-House-Music-Will-Never-Die"
+   },
+   "facets": {
+    "vibe": {
+     "kind": "record"
+    },
+    "decade": "1990s",
+    "credits": [
+     "mark richardson",
+     "curtis harman",
+     "stevie israel",
+     "cvo",
+     "mark grant"
+    ],
+    "genres": [
+     "electronic",
+     "house",
+     "deep house",
+     "garage house"
+    ],
+    "catalogNumbers": [
+     "caj 261"
+    ],
+    "people": [
+     "glenn underground",
+     "cei-bei"
+    ],
+    "eraYear": 1996,
+    "labels": [
+     "cajual records"
+    ]
+   },
+   "tags": [
+    "cajual records",
+    "glenn underground, cei-bei",
+    "1996"
+   ],
+   "entities": [
+    "Glenn Underground, Cei-Bei",
+    "Cajual Records"
+   ],
+   "assetRefs": [
+    "publish-staging/discogs/10207/video-1x1.mp4",
+    "publish-staging/discogs/10207/image-1x1.jpg"
+   ],
+   "thumbRef": "content-thumbs/bryan-balli-WUoltG84/discogs-10207.jpg",
+   "engine": "record"
+  },
+  {
+   "id": "discogs-1247",
+   "series": "C1",
+   "pillar": "found-this",
+   "title": "Blue Boy – Scattered Emotions EP",
+   "story": "",
+   "mediaState": "video",
+   "effort": "10-min",
+   "rights": "owned",
+   "status": "idea",
+   "platforms": [
+    "x"
+   ],
+   "approval": {
+    "state": "none"
+   },
+   "priority": "evergreen",
+   "source": {
+    "kind": "discogs",
+    "url": "https://www.discogs.com/release/1247-Blue-Boy-Scattered-Emotions-EP"
+   },
+   "facets": {
+    "vibe": {
+     "kind": "record"
+    },
+    "decade": "1990s",
+    "credits": [
+     "julian dem"
+    ],
+    "genres": [
+     "electronic",
+     "house",
+     "deep house",
+     "techno",
+     "big beat",
+     "hip hop"
+    ],
+    "catalogNumbers": [
+     "gdr•004"
+    ],
+    "people": [
+     "blue boy"
+    ],
+    "eraYear": 1996,
+    "labels": [
+     "guidance recordings"
+    ]
+   },
+   "tags": [
+    "guidance recordings",
+    "blue boy",
+    "1996"
+   ],
+   "entities": [
+    "Blue Boy",
+    "Guidance Recordings"
+   ],
+   "assetRefs": [
+    "publish-staging/discogs/1247/video-1x1.mp4",
+    "publish-staging/discogs/1247/image-1x1.jpg"
+   ],
+   "thumbRef": "content-thumbs/bryan-balli-WUoltG84/discogs-1247.jpg",
+   "engine": "record"
+  },
+  {
+   "id": "discogs-12839082",
+   "series": "C1",
+   "pillar": "found-this",
+   "title": "Black Traxx – Volume III",
+   "story": "",
+   "mediaState": "video",
+   "effort": "10-min",
+   "rights": "owned",
+   "status": "idea",
+   "platforms": [
+    "x"
+   ],
+   "approval": {
+    "state": "none"
+   },
+   "priority": "evergreen",
+   "source": {
+    "kind": "discogs",
+    "url": "https://www.discogs.com/release/12839082-Black-Traxx-Volume-III"
+   },
+   "facets": {
+    "vibe": {
+     "kind": "record"
+    },
+    "decade": "1990s",
+    "credits": [
+     "four on the floor productions"
+    ],
+    "genres": [
+     "electronic",
+     "house",
+     "tribal house",
+     "deep house"
+    ],
+    "catalogNumbers": [
+     "ncl-005"
+    ],
+    "people": [
+     "black traxx"
+    ],
+    "eraYear": 1992,
+    "labels": [
+     "night club records"
+    ]
+   },
+   "tags": [
+    "night club records",
+    "black traxx",
+    "1992"
+   ],
+   "entities": [
+    "Black Traxx",
+    "Night Club Records"
+   ],
+   "assetRefs": [
+    "publish-staging/discogs/12839082/video-1x1.mp4",
+    "publish-staging/discogs/12839082/image-1x1.jpg"
+   ],
+   "thumbRef": "content-thumbs/bryan-balli-WUoltG84/discogs-12839082.jpg",
+   "engine": "record"
+  },
+  {
+   "id": "discogs-151581",
+   "series": "C1",
+   "pillar": "found-this",
+   "title": "Braxton Holmes, Dewey B., Weezie Jefferson – The Adventures Of A Full Figured Woman E.P.",
+   "story": "",
+   "mediaState": "video",
+   "effort": "10-min",
+   "rights": "owned",
+   "status": "idea",
+   "platforms": [
+    "x"
+   ],
+   "approval": {
+    "state": "none"
+   },
+   "priority": "evergreen",
+   "source": {
+    "kind": "discogs",
+    "url": "https://www.discogs.com/release/151581-Braxton-Holmes-Dewey-B-Present-Weezie-Jefferson-The-Adventures-Of-A-Full-Figured-Woman-EP"
+   },
+   "facets": {
+    "vibe": {
+     "kind": "record"
+    },
+    "decade": "1990s",
+    "credits": [
+     "tim dennen"
+    ],
+    "genres": [
+     "electronic",
+     "house",
+     "deep house"
+    ],
+    "catalogNumbers": [
+     "bvr 12006"
+    ],
+    "people": [
+     "braxton holmes",
+     "dewey b.",
+     "weezie jefferson"
+    ],
+    "eraYear": 1997,
+    "labels": [
+     "black vinyl records"
+    ]
+   },
+   "tags": [
+    "black vinyl records",
+    "braxton holmes, dewey b., weezie jefferson",
+    "1997"
+   ],
+   "entities": [
+    "Braxton Holmes, Dewey B., Weezie Jefferson",
+    "Black Vinyl Records"
+   ],
+   "assetRefs": [
+    "publish-staging/discogs/151581/video-1x1.mp4",
+    "publish-staging/discogs/151581/image-1x1.jpg"
+   ],
+   "thumbRef": "content-thumbs/bryan-balli-WUoltG84/discogs-151581.jpg",
+   "engine": "record"
+  },
+  {
+   "id": "discogs-15399",
+   "series": "C1",
+   "pillar": "found-this",
+   "title": "DJ Sneak – Recycled Loops",
+   "story": "",
+   "mediaState": "video",
+   "effort": "10-min",
+   "rights": "owned",
+   "status": "idea",
+   "platforms": [
+    "x"
+   ],
+   "approval": {
+    "state": "none"
+   },
+   "priority": "evergreen",
+   "source": {
+    "kind": "discogs",
+    "url": "https://www.discogs.com/release/15399-DJ-Sneak-Recycled-Loops"
+   },
+   "facets": {
+    "vibe": {
+     "kind": "record"
+    },
+    "decade": "1990s",
+    "credits": [
+     "tau"
+    ],
+    "genres": [
+     "electronic",
+     "house",
+     "disco"
+    ],
+    "catalogNumbers": [
+     "av09"
+    ],
+    "people": [
+     "dj sneak"
+    ],
+    "eraYear": 1995,
+    "labels": [
+     "av8 records"
+    ]
+   },
+   "tags": [
+    "av8 records",
+    "dj sneak",
+    "1995"
+   ],
+   "entities": [
+    "DJ Sneak",
+    "AV8 Records"
+   ],
+   "assetRefs": [
+    "publish-staging/discogs/15399/video-1x1.mp4",
+    "publish-staging/discogs/15399/image-1x1.jpg"
+   ],
+   "thumbRef": "content-thumbs/bryan-balli-WUoltG84/discogs-15399.jpg",
+   "engine": "record"
+  },
+  {
+   "id": "discogs-1580157",
+   "series": "C1",
+   "pillar": "found-this",
+   "title": "Ricky Bradshaw – The Jump? Skip! EP.",
+   "story": "",
+   "mediaState": "video",
+   "effort": "10-min",
+   "rights": "owned",
+   "status": "idea",
+   "platforms": [
+    "x"
+   ],
+   "approval": {
+    "state": "none"
+   },
+   "priority": "evergreen",
+   "source": {
+    "kind": "discogs",
+    "url": "https://www.discogs.com/release/1580157-Ricky-Bradshaw-The-Jump-Skip-EP"
+   },
+   "facets": {
+    "vibe": {
+     "kind": "record"
+    },
+    "decade": "1990s",
+    "genres": [
+     "electronic",
+     "house",
+     "disco"
+    ],
+    "catalogNumbers": [
+     "mdr9616-1"
+    ],
+    "people": [
+     "ricky bradshaw"
+    ],
+    "eraYear": 1999,
+    "labels": [
+     "moody recordings"
+    ]
+   },
+   "tags": [
+    "moody recordings",
+    "ricky bradshaw",
+    "1999"
+   ],
+   "entities": [
+    "Ricky Bradshaw",
+    "Moody Recordings"
+   ],
+   "assetRefs": [
+    "publish-staging/discogs/1580157/video-1x1.mp4",
+    "publish-staging/discogs/1580157/image-1x1.jpg"
+   ],
+   "thumbRef": "content-thumbs/bryan-balli-WUoltG84/discogs-1580157.jpg",
+   "engine": "record"
+  },
+  {
+   "id": "discogs-16103",
+   "series": "C1",
+   "pillar": "found-this",
+   "title": "Johnny Fiasco – Deep State E.P.",
+   "story": "",
+   "mediaState": "video",
+   "effort": "10-min",
+   "rights": "owned",
+   "status": "idea",
+   "platforms": [
+    "x"
+   ],
+   "approval": {
+    "state": "none"
+   },
+   "priority": "evergreen",
+   "source": {
+    "kind": "discogs",
+    "url": "https://www.discogs.com/release/16103-Johnny-Fiasco-Deep-State-EP"
+   },
+   "facets": {
+    "vibe": {
+     "kind": "record"
+    },
+    "decade": "1990s",
+    "credits": [
+     "peter primiani",
+     "tyrone solomon"
+    ],
+    "genres": [
+     "electronic",
+     "house",
+     "deep house"
+    ],
+    "catalogNumbers": [
+     "et-007"
+    ],
+    "people": [
+     "johnny fiasco"
+    ],
+    "eraYear": 1995,
+    "labels": [
+     "83 west records"
+    ]
+   },
+   "tags": [
+    "83 west records",
+    "johnny fiasco",
+    "1995"
+   ],
+   "entities": [
+    "Johnny Fiasco",
+    "83 West Records"
+   ],
+   "assetRefs": [
+    "publish-staging/discogs/16103/video-1x1.mp4",
+    "publish-staging/discogs/16103/image-1x1.jpg"
+   ],
+   "thumbRef": "content-thumbs/bryan-balli-WUoltG84/discogs-16103.jpg",
+   "engine": "record"
+  },
+  {
+   "id": "discogs-24191",
+   "series": "C1",
+   "pillar": "found-this",
+   "title": "Roger Sanchez, Twilight – I Want Your Love",
+   "story": "",
+   "mediaState": "video",
+   "effort": "10-min",
+   "rights": "owned",
+   "status": "idea",
+   "platforms": [
+    "x"
+   ],
+   "approval": {
+    "state": "none"
+   },
+   "priority": "evergreen",
+   "source": {
+    "kind": "discogs",
+    "url": "https://www.discogs.com/release/24191-Roger-Sanchez-Presents-Twilight-7-I-Want-Your-Love"
+   },
+   "facets": {
+    "vibe": {
+     "kind": "record"
+    },
+    "decade": "1990s",
+    "credits": [
+     "tha crew",
+     "scars",
+     "senoria",
+     "doug deangelis",
+     "bernard edwards & nile rodgers",
+     "soul grabber",
+     "paul jacobs",
+     "ian pooley"
+    ],
+    "genres": [
+     "electronic",
+     "house"
+    ],
+    "catalogNumbers": [
+     "nar 014"
+    ],
+    "people": [
+     "roger sanchez",
+     "twilight"
+    ],
+    "eraYear": 1998,
+    "labels": [
+     "narcotic"
+    ]
+   },
+   "tags": [
+    "narcotic",
+    "roger sanchez, twilight",
+    "1998"
+   ],
+   "entities": [
+    "Roger Sanchez, Twilight",
+    "Narcotic"
+   ],
+   "assetRefs": [
+    "publish-staging/discogs/24191/video-1x1.mp4",
+    "publish-staging/discogs/24191/image-1x1.jpg"
+   ],
+   "thumbRef": "content-thumbs/bryan-balli-WUoltG84/discogs-24191.jpg",
+   "engine": "record"
+  },
+  {
+   "id": "discogs-2525744",
+   "series": "C1",
+   "pillar": "found-this",
+   "title": "Furious George – 3",
+   "story": "",
+   "mediaState": "video",
+   "effort": "10-min",
+   "rights": "owned",
+   "status": "idea",
+   "platforms": [
+    "x"
+   ],
+   "approval": {
+    "state": "none"
+   },
+   "priority": "evergreen",
+   "source": {
+    "kind": "discogs",
+    "url": "https://www.discogs.com/release/2525744-Furious-George-3"
+   },
+   "facets": {
+    "vibe": {
+     "kind": "record"
+    },
+    "decade": "1990s",
+    "people": [
+     "furious george"
+    ],
+    "eraYear": 1997,
+    "labels": [
+     "henry street music"
+    ],
+    "genres": [
+     "electronic",
+     "house"
+    ],
+    "catalogNumbers": [
+     "hs 536"
+    ]
+   },
+   "tags": [
+    "henry street music",
+    "furious george",
+    "1997"
+   ],
+   "entities": [
+    "Furious George",
+    "Henry Street Music"
+   ],
+   "assetRefs": [
+    "publish-staging/discogs/2525744/video-1x1.mp4",
+    "publish-staging/discogs/2525744/image-1x1.jpg"
+   ],
+   "thumbRef": "content-thumbs/bryan-balli-WUoltG84/discogs-2525744.jpg",
+   "engine": "record"
+  },
+  {
+   "id": "discogs-30820134",
+   "series": "C1",
+   "pillar": "found-this",
+   "title": "Kojak – Hold Me",
+   "story": "",
+   "mediaState": "video",
+   "effort": "10-min",
+   "rights": "owned",
+   "status": "idea",
+   "platforms": [
+    "x"
+   ],
+   "approval": {
+    "state": "none"
+   },
+   "priority": "evergreen",
+   "source": {
+    "kind": "discogs",
+    "url": "https://www.discogs.com/release/30820134-Kojak-Hold-Me"
+   },
+   "facets": {
+    "vibe": {
+     "kind": "record"
+    },
+    "decade": "1990s",
+    "people": [
+     "kojak"
+    ],
+    "eraYear": 1998,
+    "labels": [
+     "pro-zak trax"
+    ],
+    "credits": [
+     "seven dub",
+     "jordi grau"
+    ],
+    "genres": [
+     "electronic",
+     "house",
+     "dub"
+    ],
+    "catalogNumbers": [
+     "19805"
+    ]
+   },
+   "tags": [
+    "pro-zak trax",
+    "kojak",
+    "1998"
+   ],
+   "entities": [
+    "Kojak",
+    "Pro-Zak Trax"
+   ],
+   "assetRefs": [
+    "publish-staging/discogs/30820134/video-1x1.mp4",
+    "publish-staging/discogs/30820134/image-1x1.jpg"
+   ],
+   "thumbRef": "content-thumbs/bryan-balli-WUoltG84/discogs-30820134.jpg",
+   "engine": "record"
+  },
+  {
+   "id": "discogs-3679686",
+   "series": "C1",
+   "pillar": "found-this",
+   "title": "DJ Jacq – Ghetto Survival",
+   "story": "",
+   "mediaState": "video",
+   "effort": "10-min",
+   "rights": "owned",
+   "status": "idea",
+   "platforms": [
+    "x"
+   ],
+   "approval": {
+    "state": "none"
+   },
+   "priority": "evergreen",
+   "source": {
+    "kind": "discogs",
+    "url": "https://www.discogs.com/release/3679686-DJ-Jacq-Ghetto-Survival"
+   },
+   "facets": {
+    "vibe": {
+     "kind": "record"
+    },
+    "people": [
+     "dj jacq"
+    ],
+    "labels": [
+     "real estate records"
+    ],
+    "genres": [
+     "electronic",
+     "house"
+    ],
+    "catalogNumbers": [
+     "rer-003"
+    ]
+   },
+   "tags": [
+    "real estate records",
+    "dj jacq"
+   ],
+   "entities": [
+    "DJ Jacq",
+    "Real Estate Records"
+   ],
+   "assetRefs": [
+    "publish-staging/discogs/3679686/video-1x1.mp4",
+    "publish-staging/discogs/3679686/image-1x1.jpg"
+   ],
+   "thumbRef": "content-thumbs/bryan-balli-WUoltG84/discogs-3679686.jpg",
+   "engine": "record"
+  },
+  {
+   "id": "discogs-4393",
+   "series": "C1",
+   "pillar": "found-this",
+   "title": "Mateo & Matos – Night Moods",
+   "story": "",
+   "mediaState": "video",
+   "effort": "10-min",
+   "rights": "owned",
+   "status": "idea",
+   "platforms": [
+    "x"
+   ],
+   "approval": {
+    "state": "none"
+   },
+   "priority": "evergreen",
+   "source": {
+    "kind": "discogs",
+    "url": "https://www.discogs.com/release/4393-Mateo-Matos-Night-Moods"
+   },
+   "facets": {
+    "vibe": {
+     "kind": "record"
+    },
+    "decade": "1990s",
+    "people": [
+     "mateo & matos"
+    ],
+    "eraYear": 1998,
+    "labels": [
+     "large records"
+    ],
+    "credits": [
+     "jason jasberto batog",
+     "jeff craven",
+     "rick essig",
+     "eddie matos",
+     "john mateo"
+    ],
+    "genres": [
+     "electronic",
+     "deep house",
+     "downtempo"
+    ],
+    "catalogNumbers": [
+     "lar-032"
+    ]
+   },
+   "tags": [
+    "large records",
+    "mateo & matos",
+    "1998"
+   ],
+   "entities": [
+    "Mateo & Matos",
+    "Large Records"
+   ],
+   "assetRefs": [
+    "publish-staging/discogs/4393/video-1x1.mp4",
+    "publish-staging/discogs/4393/image-1x1.jpg"
+   ],
+   "thumbRef": "content-thumbs/bryan-balli-WUoltG84/discogs-4393.jpg",
+   "engine": "record"
+  },
+  {
+   "id": "discogs-461456",
+   "series": "C1",
+   "pillar": "found-this",
+   "title": "Just 4 Groovers, Freddy Turner – I Got Jazz In My Soul",
+   "story": "",
+   "mediaState": "video",
+   "effort": "10-min",
+   "rights": "owned",
+   "status": "idea",
+   "platforms": [
+    "x"
+   ],
+   "approval": {
+    "state": "none"
+   },
+   "priority": "evergreen",
+   "source": {
+    "kind": "discogs",
+    "url": "https://www.discogs.com/release/461456-Just-4-Groovers-Featuring-Frederick-Turner-I-Got-Jazz-In-My-Soul"
+   },
+   "facets": {
+    "vibe": {
+     "kind": "record"
+    },
+    "decade": "1990s",
+    "eraYear": 1994,
+    "labels": [
+     "kool groove records"
+    ],
+    "credits": [
+     "warren rosenstein",
+     "kevin disimone",
+     "rick essig",
+     "reynald deschamps",
+     "charles sanders"
+    ],
+    "genres": [
+     "electronic",
+     "house",
+     "jazzdance",
+     "deep house"
+    ],
+    "catalogNumbers": [
+     "kg 0103"
+    ],
+    "people": [
+     "just 4 groovers",
+     "freddy turner"
+    ]
+   },
+   "tags": [
+    "kool groove records",
+    "just 4 groovers, freddy turner",
+    "1994"
+   ],
+   "entities": [
+    "Just 4 Groovers, Freddy Turner",
+    "Kool Groove Records"
+   ],
+   "assetRefs": [
+    "publish-staging/discogs/461456/video-1x1.mp4",
+    "publish-staging/discogs/461456/image-1x1.jpg"
+   ],
+   "thumbRef": "content-thumbs/bryan-balli-WUoltG84/discogs-461456.jpg",
+   "engine": "record"
+  },
+  {
+   "id": "discogs-5660",
+   "series": "C1",
+   "pillar": "found-this",
+   "title": "DJ Q – Porn King EP",
+   "story": "",
+   "mediaState": "video",
+   "effort": "10-min",
+   "rights": "owned",
+   "status": "idea",
+   "platforms": [
+    "x"
+   ],
+   "approval": {
+    "state": "none"
+   },
+   "priority": "evergreen",
+   "source": {
+    "kind": "discogs",
+    "url": "https://www.discogs.com/release/5660-DJQ-Porn-King-EP"
+   },
+   "facets": {
+    "vibe": {
+     "kind": "record"
+    },
+    "decade": "1990s",
+    "people": [
+     "dj q"
+    ],
+    "eraYear": 1997,
+    "labels": [
+     "glasgow underground"
+    ],
+    "credits": [
+     "paul flynn",
+     "kevin mckay",
+     "kenny inglis"
+    ],
+    "genres": [
+     "electronic",
+     "deep house"
+    ],
+    "catalogNumbers": [
+     "gu10"
+    ]
+   },
+   "tags": [
+    "glasgow underground",
+    "dj q",
+    "1997"
+   ],
+   "entities": [
+    "DJ Q",
+    "Glasgow Underground"
+   ],
+   "assetRefs": [
+    "publish-staging/discogs/5660/video-1x1.mp4",
+    "publish-staging/discogs/5660/image-1x1.jpg"
+   ],
+   "thumbRef": "content-thumbs/bryan-balli-WUoltG84/discogs-5660.jpg",
+   "engine": "record"
+  },
+  {
+   "id": "discogs-7351",
+   "series": "C1",
+   "pillar": "found-this",
+   "title": "DJ Sneak – Moon Doggy E.P.",
+   "story": "",
+   "mediaState": "video",
+   "effort": "10-min",
+   "rights": "owned",
+   "status": "idea",
+   "platforms": [
+    "x"
+   ],
+   "approval": {
+    "state": "none"
+   },
+   "priority": "evergreen",
+   "source": {
+    "kind": "discogs",
+    "url": "https://www.discogs.com/release/7351-DJ-Sneak-Moon-Doggy-EP"
+   },
+   "facets": {
+    "vibe": {
+     "kind": "record"
+    },
+    "decade": "1990s",
+    "people": [
+     "dj sneak"
+    ],
+    "eraYear": 1994,
+    "labels": [
+     "cajual records"
+    ],
+    "credits": [
+     "mark richardson"
+    ],
+    "genres": [
+     "electronic",
+     "house",
+     "disco"
+    ],
+    "catalogNumbers": [
+     "caj 220-1"
+    ]
+   },
+   "tags": [
+    "cajual records",
+    "dj sneak",
+    "1994"
+   ],
+   "entities": [
+    "DJ Sneak",
+    "Cajual Records"
+   ],
+   "assetRefs": [
+    "publish-staging/discogs/7351/video-1x1.mp4",
+    "publish-staging/discogs/7351/image-1x1.jpg"
+   ],
+   "thumbRef": "content-thumbs/bryan-balli-WUoltG84/discogs-7351.jpg",
+   "engine": "record"
+  },
+  {
+   "id": "discogs-74379",
+   "series": "C1",
+   "pillar": "found-this",
+   "title": "Lith De Lanka – Fairy Tale",
+   "story": "",
+   "mediaState": "video",
+   "effort": "10-min",
+   "rights": "owned",
+   "status": "idea",
+   "platforms": [
+    "x"
+   ],
+   "approval": {
+    "state": "none"
+   },
+   "priority": "evergreen",
+   "source": {
+    "kind": "discogs",
+    "url": "https://www.discogs.com/release/74379-Lith-De-Lanka-Fairy-Tale"
+   },
+   "facets": {
+    "vibe": {
+     "kind": "record"
+    },
+    "decade": "2000s",
+    "people": [
+     "lith de lanka"
+    ],
+    "eraYear": 2001,
+    "labels": [
+     "deep touch records"
+    ],
+    "credits": [
+     "charles lester",
+     "a.n.d.",
+     "patrick levy"
+    ],
+    "genres": [
+     "electronic",
+     "house",
+     "deep house"
+    ],
+    "catalogNumbers": [
+     "dt- 117"
+    ]
+   },
+   "tags": [
+    "deep touch records",
+    "lith de lanka",
+    "2001"
+   ],
+   "entities": [
+    "Lith De Lanka",
+    "Deep Touch Records"
+   ],
+   "assetRefs": [
+    "publish-staging/discogs/74379/video-1x1.mp4",
+    "publish-staging/discogs/74379/image-1x1.jpg"
+   ],
+   "thumbRef": "content-thumbs/bryan-balli-WUoltG84/discogs-74379.jpg",
+   "engine": "record"
+  },
+  {
+   "id": "discogs-92069",
+   "series": "C1",
+   "pillar": "found-this",
+   "title": "3-Play – The Cream Of The Krop EP",
+   "story": "",
+   "mediaState": "video",
+   "effort": "10-min",
+   "rights": "owned",
+   "status": "idea",
+   "platforms": [
+    "x"
+   ],
+   "approval": {
+    "state": "none"
+   },
+   "priority": "evergreen",
+   "source": {
+    "kind": "discogs",
+    "url": "https://www.discogs.com/release/92069-3-Play-The-Cream-Of-The-Krop-EP"
+   },
+   "facets": {
+    "vibe": {
+     "kind": "record"
+    },
+    "decade": "1990s",
+    "people": [
+     "3-play"
+    ],
+    "eraYear": 1996,
+    "labels": [
+     "in the air records"
+    ],
+    "credits": [
+     "adrian hibbert",
+     "dan technique",
+     "jeremy sylvester"
+    ],
+    "genres": [
+     "electronic",
+     "breakbeat",
+     "house"
+    ],
+    "catalogNumbers": [
+     "in 003"
+    ]
+   },
+   "tags": [
+    "in the air records",
+    "3-play",
+    "1996"
+   ],
+   "entities": [
+    "3-Play",
+    "In The Air Records"
+   ],
+   "assetRefs": [
+    "publish-staging/discogs/92069/video-1x1.mp4",
+    "publish-staging/discogs/92069/image-1x1.jpg"
+   ],
+   "thumbRef": "content-thumbs/bryan-balli-WUoltG84/discogs-92069.jpg",
+   "engine": "record"
+  },
+  {
+   "id": "rv-026f3ae6-7573-4a5c-92db-7c6785b5b13b",
+   "series": "C4",
+   "pillar": "made-this",
+   "title": "BAI-EE – Love Manifesto V-Day Mix",
+   "story": "[add your memory]",
+   "mediaState": "video",
+   "effort": "ready",
+   "rights": "owned",
+   "status": "idea",
+   "platforms": [
+    "x"
+   ],
+   "approval": {
+    "state": "none"
+   },
+   "expiresAt": null,
+   "priority": "evergreen",
+   "source": {
+    "kind": "rendered-video"
+   },
+   "facets": {
+    "vibe": {
+     "kind": "video"
+    },
+    "decade": "2020s",
+    "genres": [
+     "acid"
+    ],
+    "people": [
+     "bai-ee"
+    ],
+    "eraYear": 2023
+   },
+   "tags": [
+    "origin-unknown",
+    "rendered-video"
+   ],
+   "entities": [
+    "BAI-EE"
+   ],
+   "assetRefs": [
+    "ev:videos/BAI_EE_video_1781811378662.mp4"
+   ],
+   "thumbRef": "content-thumbs/bryan-balli-WUoltG84/rv-026f3ae6-7573-4a5c-92db-7c6785b5b13b.jpg",
+   "engine": "ue"
+  },
+  {
+   "id": "rv-06f0e5cc-1a8e-409d-8726-934d3ab83c00",
+   "series": "C4",
+   "pillar": "made-this",
+   "title": "BAI-EE – Fathers Day Jazz Mix",
+   "story": "[add your memory]",
+   "mediaState": "video",
+   "effort": "ready",
+   "rights": "owned",
+   "status": "idea",
+   "platforms": [
+    "x"
+   ],
+   "approval": {
+    "state": "none"
+   },
+   "expiresAt": null,
+   "priority": "evergreen",
+   "source": {
+    "kind": "rendered-video"
+   },
+   "facets": {
+    "vibe": {
+     "kind": "video"
+    },
+    "decade": "2020s",
+    "genres": [
+     "acid"
+    ],
+    "people": [
+     "bai-ee"
+    ],
+    "eraYear": 2024
+   },
+   "tags": [
+    "origin-unknown",
+    "rendered-video"
+   ],
+   "entities": [
+    "BAI-EE"
+   ],
+   "assetRefs": [
+    "ev:videos/BAI_EE_video_1765774755986.mp4"
+   ],
+   "thumbRef": "content-thumbs/bryan-balli-WUoltG84/rv-06f0e5cc-1a8e-409d-8726-934d3ab83c00.jpg",
+   "engine": "ue"
+  },
+  {
+   "id": "rv-0801d5f5-c7b2-4964-b0b7-d3b21f2e4b11",
+   "series": "C4",
+   "pillar": "made-this",
+   "title": "BAI-EE – Live in Hawaii (Asylum)",
+   "story": "[add your memory]",
+   "mediaState": "video",
+   "effort": "ready",
+   "rights": "owned",
+   "status": "idea",
+   "platforms": [
+    "x"
+   ],
+   "approval": {
+    "state": "none"
+   },
+   "expiresAt": null,
+   "priority": "evergreen",
+   "source": {
+    "kind": "rendered-video"
+   },
+   "facets": {
+    "vibe": {
+     "kind": "video"
+    },
+    "decade": "2010s",
+    "genres": [
+     "acid"
+    ],
+    "people": [
+     "bai-ee"
+    ],
+    "eraYear": 2018
+   },
+   "tags": [
+    "deliberate",
+    "rendered-video"
+   ],
+   "entities": [
+    "BAI-EE"
+   ],
+   "assetRefs": [
+    "ev:videos/BAI_EE_video_1783193511982.mp4"
+   ],
+   "thumbRef": "content-thumbs/bryan-balli-WUoltG84/rv-0801d5f5-c7b2-4964-b0b7-d3b21f2e4b11.jpg",
+   "engine": "ue"
+  },
+  {
+   "id": "nas-007be700c625d64e",
+   "series": "C5",
+   "pillar": "was-there",
+   "title": "Portrait of a person in dark moody lighting, wearing glasses and winter hat.",
+   "story": "[add your memory]",
+   "mediaState": "still",
+   "effort": "ready",
+   "rights": "owned",
+   "status": "idea",
+   "platforms": [
+    "x"
+   ],
+   "source": {
+    "kind": "nas-archive"
+   },
+   "facets": {
+    "vibe": {
+     "mood": [
+      "moody",
+      "introspective",
+      "contemplative",
+      "atmospheric"
+     ],
+     "light": "dark",
+     "kind": "portrait",
+     "time": "night"
+    },
+    "crews": [
+     "housepit chi"
+    ]
+   },
+   "assetRefs": [],
+   "engine": "record"
+  },
+  {
+   "id": "nas-05b332d72c9e34c8",
+   "series": "C3",
+   "pillar": "was-there",
+   "title": "SUPER BOWL BEATDOWN · FEB 4TH 2007",
+   "story": "[add your memory]",
+   "mediaState": "still",
+   "effort": "ready",
+   "rights": "owned",
+   "status": "idea",
+   "platforms": [
+    "x"
+   ],
+   "source": {
+    "kind": "nas-archive"
+   },
+   "facets": {
+    "dateText": "FEB 4TH 2007",
+    "vibe": {
+     "mood": [
+      "energetic",
+      "festive",
+      "underground",
+      "bold"
+     ],
+     "light": "dark",
+     "kind": "flyer",
+     "time": "night"
+    },
+    "decade": "2000s",
+    "eventMonthDay": "02-04",
+    "eventDateRaw": "FEB 4TH 2007",
+    "eventDates": [
+     {
+      "monthDay": "02-04",
+      "year": 2007,
+      "yearSource": "printed",
+      "raw": "FEB 4TH 2007",
+      "weekday": null
+     }
+    ],
+    "people": [
+     "boo williams",
+     "paul johnson",
+     "glenn underground",
+     "gene hunt",
+     "barbe knex",
+     "peter rabbit"
+    ],
+    "eraYear": 2007,
+    "eventYear": 2007,
+    "genres": [
+     "house",
+     "techno",
+     "jazz"
+    ],
+    "partyNames": [
+     "super bowl beatdown"
+    ],
+    "crews": [
+     "strictly jazz unit",
+     "true family unit"
+    ],
+    "ocrText": "SUPER BOWL BEATDOWN w/ strictly jazz unit BOO WILLIAMS PAUL JOHNSON GLENN UNDERGROUND GENE HUNT along with BARBE KNEX PETER RABBIT FEB 4TH 2007 PROJECTION FREE ",
+    "eventYearSource": "printed",
+    "eventDate": "2007-02-04"
+   },
+   "assetRefs": [],
+   "engine": "record"
+  },
+  {
+   "id": "nas-176179f0e9db7607",
+   "series": "C5",
+   "pillar": "was-there",
+   "title": "Screenshot of SMS text messages showing a political fundraising campaign message and user…",
+   "story": "[add your memory]",
+   "mediaState": "still",
+   "effort": "ready",
+   "rights": "owned",
+   "status": "idea",
+   "platforms": [
+    "x"
+   ],
+   "source": {
+    "kind": "nas-archive"
+   },
+   "facets": {
+    "vibe": {
+     "mood": [
+      "political",
+      "promotional",
+      "satirical"
+     ],
+     "light": "light",
+     "kind": "screenshot",
+     "time": "day"
+    },
+    "decade": "2020s",
+    "ocrText": "11:21 880-22 President Trump is now the presumptive nominee! He wants you on his team as a 2020 Founding Member. Contributions DOUBLED for 1 HOUR. Donate NOW: b",
+    "eraYear": 2020
+   },
+   "assetRefs": [],
+   "engine": "record"
+  },
+  {
+   "id": "nas-b152328f17d602c2",
+   "series": "C5",
+   "pillar": "was-there",
+   "title": "Packaged Extra Thick Shokupan (Japanese-style bread) displayed on a retail shelf.",
+   "story": "[add your memory]",
+   "mediaState": "still",
+   "effort": "ready",
+   "rights": "owned",
+   "status": "idea",
+   "platforms": [
+    "x"
+   ],
+   "source": {
+    "kind": "nas-archive"
+   },
+   "facets": {
+    "vibe": {
+     "mood": [
+      "food",
+      "packaged",
+      "casual"
+     ],
+     "light": "light",
+     "kind": "other",
+     "time": "day"
+    },
+    "ocrText": "Extra Thick Shokupan"
+   },
+   "assetRefs": [],
+   "engine": "record"
+  },
+  {
+   "id": "nas-7132666eb6e82f53",
+   "series": "C5",
+   "pillar": "was-there",
+   "title": "Screenshot of a text message exchange discussing Star Wars and a memorable movie scene, w…",
+   "story": "[add your memory]",
+   "mediaState": "still",
+   "effort": "ready",
+   "rights": "owned",
+   "status": "idea",
+   "platforms": [
+    "x"
+   ],
+   "source": {
+    "kind": "nas-archive"
+   },
+   "facets": {
+    "vibe": {
+     "mood": [
+      "casual",
+      "humorous",
+      "nostalgic"
+     ],
+     "light": "light",
+     "kind": "screenshot"
+    },
+    "ocrText": "Same to u. Star wars rocked. Glad you dug it. The scene where Luke drinks the alien titty milk and then stares at the camera with green alien titty milk all up "
+   },
+   "assetRefs": [],
+   "engine": "record"
+  }
+ ]
+}

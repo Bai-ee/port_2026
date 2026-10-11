@@ -224,7 +224,15 @@ export function selectSuggestions({
     suggestions,
     gaps,
     brandProfile: { sources: profile.sources, topPhrases: [...profile.phrases.entries()].sort((a, b) => b[1].items - a[1].items || b[1].weight - a[1].weight).slice(0, 15).map(([p]) => p) },
-    shortlist: scored.slice(0, 6).map((r) => ({ id: r.n.id, label: r.n.label, anchor: r.n.anchor.url, rank: Number(r.rank.toFixed(3)), brandFit: r.fit.score, content: r.best.pkg.id })),
+    shortlist: [
+      ...scored.slice(0, 6).map((r) => ({ id: r.n.id, label: r.n.label, anchor: r.n.anchor.url, rank: Number(r.rank.toFixed(3)), brandFit: r.fit.score, content: r.best.pkg.id })),
+      // Skipped conversations stay visible with the reason, so a rejected viral
+      // post is a shown decision, not a silent drop. `skipped` marks them.
+      ...[...offBrand.map((x) => ({ ...x, skipped: 'off-brand', reason: x.fit.reason || 'weak overlap' })),
+        ...noContent.map((x) => ({ ...x, skipped: 'no-content', reason: 'on-brand, but no owned item to ground it' }))]
+        .sort((a, b) => b.n.momentum.score - a.n.momentum.score).slice(0, 6)
+        .map((x) => ({ id: x.n.id, label: x.n.label.length ? x.n.label : ['image only'], anchor: x.n.anchor.url, rank: 0, brandFit: x.fit.score, content: null, skipped: x.skipped, reason: x.reason })),
+    ],
     stats: {
       packages: packages.length,
       eligible: eligible.length,

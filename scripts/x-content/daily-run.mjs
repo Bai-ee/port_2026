@@ -13,10 +13,14 @@
 // Usage:
 //   node scripts/x-content/daily-run.mjs --replay features/x-content-inventory/__tests__/fixtures/daily-loop-replay.json
 //   node scripts/x-content/daily-run.mjs --client <id> --discover [--write]      # bird search, local only
-//   node scripts/x-content/daily-run.mjs --client <id> --execute [--set <ids.json>] [--force] [--draft-with-model]
+//   node scripts/x-content/daily-run.mjs --client <id> --execute [--library full|demo] [--set <ids.json>] [--force] [--draft-with-model]
 //   node scripts/x-content/daily-run.mjs --client <id> --show
+//   node scripts/x-content/daily-run.mjs --client <id> --edit <suggestionId> --text "working copy"   # empty text clears the edit
 //   node scripts/x-content/daily-run.mjs --client <id> --save <suggestionId> [--text "edited copy"]
 //   node scripts/x-content/daily-run.mjs --client <id> --dismiss <suggestionId>
+//
+// --library: `demo` (default, same as the dashboard route) reads only the verified
+// demo set; `full` reads every inventory item. `--set <ids.json>` overrides both.
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -28,7 +32,7 @@ import {
   runDailyLoop, assertOwnerClient, discoveryQueries, packageEligibility, localDateOf, LOOP_VERSION, MAX_SUGGESTIONS,
 } from '../../features/x-content-inventory/daily-loop.js';
 import {
-  createMemoryRunStore, createFirestoreRunStore, loadDailyLoopInputs, saveSuggestionDraft, dismissSuggestion, createModelDrafter,
+  createMemoryRunStore, createFirestoreRunStore, loadDailyLoopInputs, saveSuggestionDraft, editSuggestion, dismissSuggestion, createModelDrafter,
 } from '../../features/x-content-inventory/daily-run-store.js';
 
 const require = createRequire(import.meta.url);
@@ -45,6 +49,8 @@ function parseArgs(argv) {
     else if (a === '--replay') out.replay = next();
     else if (a === '--out') out.out = next();
     else if (a === '--set') out.set = next();
+    else if (a === '--library') out.library = next();
+    else if (a === '--edit') out.edit = next();
     else if (a === '--max') out.max = Number(next()) || MAX_SUGGESTIONS;
     else if (a === '--save') out.save = next();
     else if (a === '--dismiss') out.dismiss = next();
@@ -63,6 +69,14 @@ function parseArgs(argv) {
 
 const args = parseArgs(process.argv.slice(2));
 const readJson = (p) => JSON.parse(readFileSync(path.resolve(REPO, p), 'utf8'));
+const DEMO_SET = 'features/x-content-inventory/daily-loop-demo-set.json';
+
+// Which library items the loop reads: --set file, else the whole library for
+// `--library full`, else the verified demo set (the route's default).
+function packageIdsForRun() {
+  if (args.set) return readJson(args.set).ids;
+  return args.library === 'full' ? null : readJson(DEMO_SET).ids;
+}
 
 function firebase() {
   require(path.join(REPO, 'features/not-the-rug-brief/load-env'));
@@ -73,13 +87,14 @@ function firebase() {
 
 function report(run, label) {
   const L = [];
-  L.push('', `DAILY CONTENT LOOP — ${run.clientId} — ${run.localDate} (${run.timezone})  [${label}]`, '');
+  L.push('', `DAILY CONTENT LOOP — ${run.clientId} — ${run.localDate} (${run.timezone})  [${label}]`);
+  L.push(`  inputs: ${run.inputSource || 'unknown'} · copy: ${run.copySource || 'unknown'}`, '');
   L.push('INPUTS');
   for (const i of run.inputs || []) L.push(`  ${i.input.padEnd(22)} ${String(i.status).padEnd(9)} ${i.age ? i.age.padEnd(9) : ''.padEnd(9)} ${i.detail || ''}`);
   L.push('', `BRAND PROFILE  top phrases: ${(run.brandProfile?.topPhrases || []).join(', ')}`);
   L.push(`  sources: ${Object.entries(run.brandProfile?.sources || {}).map(([k, v]) => `${k}=${v}`).join(' · ')}`);
   L.push('', `CONVERSATIONS  ${run.stats.conversationPosts} posts → ${run.stats.narratives} narratives → ${run.stats.onBrandWithContent} on-brand with owned content (${run.stats.offBrand} off-brand, ${run.stats.withoutContent} without content)`);
-  for (const s of run.shortlist || []) L.push(`  ${s.rank.toFixed(3)}  [${s.label.join(' ')}]  fit ${s.brandFit}  → ${s.content}  ${s.anchor}`);
+  for (const s of run.shortlist || []) L.push(`  ${s.rank.toFixed(3)}  [${s.label.join(' ')}]  fit ${s.brandFit}  → ${s.skipped ? `skipped: ${s.reason}` : s.content}  ${s.anchor}`);
   L.push('', `LIBRARY  ${run.stats.eligible}/${run.stats.packages} eligible (story ${run.stats.eligibleByBasis.story}, facts ${run.stats.eligibleByBasis.facts})`);
   L.push('', `SUGGESTIONS (${run.suggestions.length})`);
   run.suggestions.forEach((s, n) => {
@@ -111,7 +126,7 @@ function report(run, label) {
 async function replay() {
   const fx = readJson(args.replay);
   const store = createMemoryRunStore();
-  const res = await runDailyLoop({ now: () => Date.parse(fx.now), store, readInputs: async () => fx }, { clientId: fx.clientId, max: args.max });
+  const res = await runDailyLoop({ now: () => Date.parse(fx.now), store, readInputs: async () => fx }, { clientId: fx.clientId, max: args.max, inputSource: 'fixture' });
   const out = args.out || path.join(os.tmpdir(), `daily-run-replay-${res.run.localDate}.json`);
   writeFileSync(out, JSON.stringify(res.run, null, 2));
   process.stdout.write(report(res.run, 'FIXTURE REPLAY — not real data'));
@@ -128,7 +143,7 @@ async function discover() {
   const BIRD = resolveBird();
   if (!BIRD) throw new Error('bird not found — see scripts/x-content/scan-quote-targets.mjs for install.');
   const fb = firebase();
-  const inputs = await loadDailyLoopInputs({ db: fb.adminDb }, { clientId: args.client, packageIds: args.set ? readJson(args.set).ids : null });
+  const inputs = await loadDailyLoopInputs({ db: fb.adminDb }, { clientId: args.client, packageIds: packageIdsForRun() });
   const eligible = inputs.packages.filter((p) => packageEligibility(p).ok);
   const sinceDate = new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10);
   const queries = discoveryQueries(eligible, { limit: args.queries || 6, sinceDate });
@@ -180,7 +195,7 @@ async function execute() {
     draft: args.model ? modelDrafter(args.client) : undefined,
     readInputs: () => loadDailyLoopInputs({ db: fb.adminDb, loadBrainContext: loadBrainContextFn() }, {
       clientId: args.client,
-      packageIds: args.set ? readJson(args.set).ids : null,
+      packageIds: packageIdsForRun(),
       corpora: { own: readJson(OWN_CORPUS), benchmark: readJson(BENCH_CORPUS), ownSource: OWN_CORPUS, benchmarkSource: BENCH_CORPUS },
     }),
   }, { clientId: args.client, max: args.max, force: args.force });
@@ -211,6 +226,12 @@ async function review() {
   const latest = await store.latest(runKey());
   if (!latest) throw new Error('No run to review.');
   const key = { clientId: latest.clientId, localDate: latest.localDate, channel: latest.channel, version: latest.version };
+  if (args.edit) {
+    if (args.text === undefined) throw new Error('--edit needs --text "..." (use --text "" to clear the edit).');
+    const edited = await editSuggestion({ store }, { key, suggestionId: args.edit, text: args.text });
+    console.log(`${edited.reviewState}: ${args.edit}${edited.edit?.checks?.blocked ? ` — BLOCKED, cannot be saved: ${edited.edit.checks.violations.join('; ')}` : ''}`);
+    return;
+  }
   if (args.dismiss) {
     await dismissSuggestion({ store }, { key, suggestionId: args.dismiss });
     console.log(`dismissed ${args.dismiss}`);
@@ -233,9 +254,9 @@ try {
   else if (args.discover) await discover();
   else if (args.execute) await execute();
   else if (args.show) await show();
-  else if (args.save || args.dismiss) await review();
+  else if (args.save || args.dismiss || args.edit) await review();
   else {
-    console.error('Pick a mode: --replay <fixture> | --discover | --execute | --show | --save <id> | --dismiss <id>. See the header.');
+    console.error('Pick a mode: --replay <fixture> | --discover | --execute | --show | --edit <id> | --save <id> | --dismiss <id>. See the header.');
     process.exitCode = 1;
   }
 } catch (err) {

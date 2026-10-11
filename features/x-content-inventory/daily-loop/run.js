@@ -43,7 +43,7 @@ export function inputFingerprint({ scan, search, packages, brain, strategyPlan, 
 /**
  * Run the loop once.
  * deps: readInputs(), draft({system,prompt}) optional, store {claim, complete, fail}, now()
- * opts: { clientId, max, timezone, force, localDate }
+ * opts: { clientId, max, timezone, force, localDate, inputSource: 'fixture' for replay files }
  */
 export async function runDailyLoop(deps, opts = {}) {
   const clientId = opts.clientId;
@@ -80,6 +80,9 @@ export async function runDailyLoop(deps, opts = {}) {
   const run = {
     clientId, localDate, timezone, channel: CHANNEL, version: LOOP_VERSION,
     status: 'running',
+    inputSource: opts.inputSource === 'fixture' ? 'fixture' : 'live',
+    copySource: 'fallback', // set after drafting
+    // Legacy field kept one version for old readers; derived, not authoritative.
     mode: deps.draft ? 'execute' : 'replay',
     inputFingerprint: fingerprint,
     inputs: describeInputs(inputs, now),
@@ -97,16 +100,18 @@ export async function runDailyLoop(deps, opts = {}) {
     generatedAt: new Date(now).toISOString(),
   };
 
+  const modelFlags = [];
   try {
     for (const s of selection.suggestions) {
       const built = buildContributionPrompt({ suggestion: s, voice });
       let text = fallbackCopy(s);
       let source = 'fallback (item text, cut to fit)';
+      let fromModel = false;
       if (deps.draft && built.ok) {
         try {
           const res = await deps.draft(built, { suggestionId: s.id });
           run.usage.modelCalls += 1;
-          if (res?.post) { text = res.post; source = res.model || 'model'; }
+          if (res?.post) { text = res.post; source = res.model || 'model'; fromModel = true; }
         } catch (err) {
           run.usage.failures += 1;
           source = `fallback — model call failed: ${String(err?.message || err).slice(0, 120)}`;
@@ -114,8 +119,10 @@ export async function runDailyLoop(deps, opts = {}) {
       } else if (!built.ok) {
         source = `fallback — ${built.reason}`;
       }
-      run.suggestions.push({ ...s, draft: { text, selfReply: '', source }, checks: checkSuggestionText(text, s), reviewState: 'pending', socialPostId: null });
+      modelFlags.push(fromModel);
+      run.suggestions.push({ ...s, draft: { text, selfReply: '', source }, checks: checkSuggestionText(text, s), edit: null, reviewState: 'pending', socialPostId: null });
     }
+    run.copySource = modelFlags.length && modelFlags.every(Boolean) ? 'model' : modelFlags.some(Boolean) ? 'mixed' : 'fallback';
     run.status = 'complete';
     return { skipped: false, run: await deps.store.complete(run) };
   } catch (err) {
