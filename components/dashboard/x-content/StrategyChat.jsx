@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  proposalKindLabel, proposalPayloadPreview, proposalStatusText, chatErrorText, costFooterText,
+  proposalKindLabel, proposalPayloadPreview, proposalStatusText, chatErrorText, costFooterText, plainChatText,
 } from '../../../features/x-strategy/ui-model.js';
 
 // StrategyChat - the agent chat in the Strategy tab's right column.
@@ -252,7 +252,7 @@ export default function StrategyChat({ clientId, call, onPlanChanged, onRefreshe
           const ids = (m.proposalIds || []).filter((pid) => proposals[pid]);
           return (
             <div key={n} id={`x-strategy-chat-message-${n}`} data-role={m.role} style={{ display: 'grid', minWidth: 0 }}>
-              <div id={`x-strategy-chat-message-text-${n}`} style={m.role === 'user' ? S.userBubble : S.botBubble}>{m.text}</div>
+              <div id={`x-strategy-chat-message-text-${n}`} style={m.role === 'user' ? S.userBubble : S.botBubble}>{plainChatText(m.text)}</div>
               {ids.length ? (
                 <div id={`x-strategy-chat-message-proposals-${n}`} style={S.cardsCol}>
                   {ids.map((pid) => (

@@ -34,9 +34,10 @@ import { createStrategyHandlersFromDb, STRATEGY_ROUTE_ACTIONS } from '../../../.
 import { createContentPlanHandlers } from '../../../../features/x-strategy/content-plan.js';
 import { createFirestoreCorpusStore } from '../../../../features/x-strategy/corpus-store.js';
 import { createFirestorePlanStore } from '../../../../features/x-strategy/plan-store.js';
-// The DAILY LOOP still reads the two committed corpora directly (its slot spine is owner-only and hard-wired to
-// @bai_ee, see inputs.js). The plan doc reaches it through `readPlanDoc` below; moving its rows onto the rows store is
-// a separate decision because it changes the history evidence the loop shows.
+import { loadLoopCorpora } from '../../../../features/x-strategy/loop-corpora.js';
+import { resolveXGrowthProfile } from '../../../../features/x-benchmark/profile.js';
+// Committed corpora: bundled here as the fallback for the rows store (getCorpusStore) and the legacy evaluate rows.
+// The daily loop reads them through loadLoopCorpora (rows store first); the plan doc reaches it via `readPlanDoc`.
 import ownCorpusRows from '../../../../docs/audits/bai-ee-x-corpus.json' with { type: 'json' };
 import benchmarkCorpusRows from '../../../../docs/audits/seb-design-x-corpus.json' with { type: 'json' };
 import dailyLoopDemoSet from '../../../../features/x-content-inventory/daily-loop-demo-set.json' with { type: 'json' };
@@ -317,16 +318,22 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // These static JSON imports ARE bundled, so the store is given them as its committed-JSON fallback instead.
 const COMMITTED_CORPORA = { bai_ee: ownCorpusRows, seb__design: benchmarkCorpusRows };
 const committedCorpusRows = (handle) => (Object.hasOwn(COMMITTED_CORPORA, handle) ? COMMITTED_CORPORA[handle] : null);
+let corpusStoreSingleton = null;
+function getCorpusStore() {
+  if (!corpusStoreSingleton) corpusStoreSingleton = createFirestoreCorpusStore(fb.adminDb, { loadCommitted: committedCorpusRows });
+  return corpusStoreSingleton;
+}
+const readXGrowthConfigFor = async (clientId) => {
+  const snap = await fb.adminDb.collection('client_configs').doc(clientId).get();
+  return snap.exists ? snap.data()?.marketingBriefConfig?.xGrowth ?? null : null;
+};
 let contentPlanHandlers = null;
 function getContentPlanHandlers() {
   if (!contentPlanHandlers) {
     contentPlanHandlers = createContentPlanHandlers({
-      corpusStore: createFirestoreCorpusStore(fb.adminDb, { loadCommitted: committedCorpusRows }),
+      corpusStore: getCorpusStore(),
       planStore: createFirestorePlanStore(fb.adminDb),
-      readXGrowthConfig: async (clientId) => {
-        const snap = await fb.adminDb.collection('client_configs').doc(clientId).get();
-        return snap.exists ? snap.data()?.marketingBriefConfig?.xGrowth ?? null : null;
-      },
+      readXGrowthConfig: readXGrowthConfigFor,
       readInventory,
       readCorpus,
       readCorpora,
@@ -602,6 +609,12 @@ async function handleDailyRun(context, action, body) {
       draft = createModelDrafter({ anthropic: createAnthropicClient(), logAnthropicCall, clientId: context.clientId });
     }
     const { loadClientBrainContext } = require('../../../../features/client-brain/store.cjs');
+    // Stored rows (x_corpora) with the committed JSON as fallback; a throwing store never fails the run.
+    const loopCorpora = await loadLoopCorpora({
+      corpusStore: getCorpusStore(),
+      profileHandles: resolveXGrowthProfile({ config: await readXGrowthConfigFor(context.clientId).catch(() => null) }),
+      loadCommitted: committedCorpusRows,
+    });
     const res = await runDailyLoop({
       now: () => Date.now(),
       store,
@@ -616,7 +629,7 @@ async function handleDailyRun(context, action, body) {
         clientId: context.clientId,
         // POC: the verified demo set unless the caller asks for the whole library.
         packageIds: body?.library === 'full' ? null : dailyLoopDemoSet.ids,
-        corpora: { own: ownCorpusRows, benchmark: benchmarkCorpusRows, ownSource: 'docs/audits/bai-ee-x-corpus.json', benchmarkSource: 'docs/audits/seb-design-x-corpus.json' },
+        corpora: loopCorpora,
       }),
     }, { clientId: context.clientId, force: body?.force === true, inputSource: 'live' });
     return { ok: true, skipped: !!res.skipped, reason: res.reason || null, run: res.run || await latestDailyRun(store, context.clientId) };

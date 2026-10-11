@@ -19,14 +19,14 @@ function corpusRange(rows) {
 
 /**
  * Load every input the loop reads, from the stores that already hold them.
- * Read-only. `corpora` are the committed own/benchmark corpus rows (the CLI
- * reads them from docs/audits, the route bundles them).
+ * Read-only. `corpora` is the loadLoopCorpora result (stored rows with committed-JSON
+ * fallback): rows + source labels + ownHandle/benchmarkHandle. Handles default to bai_ee / seb__design when absent (replay).
  *
  * deps: { db, loadBrainContext(clientId) -> string, buildDayPlan?, readPlanDoc?(clientId) -> Strategy plan doc|null }
  *   buildDayPlan (plan-day.js, injected) + both corpora => the result carries `strategyInputs`,
  *   which switches the run onto the slot-filling spine; otherwise the old selector runs.
  *   readPlanDoc (x_strategy_plans/{clientId}) => strategyInputs.planInputs, which run.js applies; absent or null => old behaviour.
- * opts: { clientId, packageIds?: string[], corpora: { own, benchmark, ownSource, benchmarkSource }, now }
+ * opts: { clientId, packageIds?: string[], corpora: { own, benchmark, ownSource, benchmarkSource, ownHandle?, benchmarkHandle? }, now }
  */
 export async function loadDailyLoopInputs(deps, { clientId, packageIds = null, corpora = {}, now = Date.now() }) {
   const { db } = deps;
@@ -73,6 +73,8 @@ export async function loadDailyLoopInputs(deps, { clientId, packageIds = null, c
     }
   }
 
+  const ownHandle = corpora.ownHandle || 'bai_ee';
+  const benchmarkHandle = corpora.benchmarkHandle || 'seb__design';
   const own = Array.isArray(corpora.own) ? corpora.own : null;
   const bench = Array.isArray(corpora.benchmark) ? corpora.benchmark : null;
   let ownSummary = null;
@@ -81,11 +83,11 @@ export async function loadDailyLoopInputs(deps, { clientId, packageIds = null, c
     // Re-tag with the shared taxonomy so topic evidence uses the same labels
     // the loop puts on conversations (the committed rows carry a per-account tagger's labels).
     const retagged = own.map((r) => ({ ...r, topics: tagTopics(r.text, { quotedText: r.quotedText }) }));
-    const s = summarizeCorpus(retagged, { handle: 'bai_ee' });
+    const s = summarizeCorpus(retagged, { handle: ownHandle });
     ownSummary = { posts: own.length, range: corpusRange(own), source: `${corpora.ownSource || 'own corpus'} (re-tagged with the shared taxonomy)`, byType: s.byType, byTopic: s.byTopic };
   }
   if (own && bench) {
-    const report = compareToBenchmark({ own: summarizeCorpus(own, { handle: 'bai_ee' }), benchmark: summarizeCorpus(bench, { handle: 'seb__design' }) });
+    const report = compareToBenchmark({ own: summarizeCorpus(own, { handle: ownHandle }), benchmark: summarizeCorpus(bench, { handle: benchmarkHandle }) });
     benchmark = {
       ...report,
       asOf: [corpusRange(own).to, corpusRange(bench).to].sort()[0]?.slice(0, 10) || null,
@@ -105,7 +107,7 @@ export async function loadDailyLoopInputs(deps, { clientId, packageIds = null, c
     ownSummary,
     benchmark,
     strategyInputs: deps.buildDayPlan && own
-      ? { buildDayPlan: deps.buildDayPlan, planInput: { corpusRows: own, benchmarkRows: bench, packages }, ownPosts: own, ownHandle: 'bai_ee', ...(planDoc ? { planInputs: resolvePlanInputs(planDoc) } : {}) }
+      ? { buildDayPlan: deps.buildDayPlan, planInput: { corpusRows: own, benchmarkRows: bench, packages }, ownPosts: own, ownHandle, ...(planDoc ? { planInputs: resolvePlanInputs(planDoc) } : {}) }
       : null,
   };
 }
