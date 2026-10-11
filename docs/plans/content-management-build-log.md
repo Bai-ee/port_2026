@@ -59,3 +59,16 @@ Worktree `~/Documents/Repos/Bballi_Portfolio-content-mgmt`, branch `feat/content
 - Route readers added to the existing quote-targets route: `readQueueSummary`, `readPost`, `readOpportunities`, `readResults` (null metrics stay null).
 - Review (fresh Sonnet): no blockers. Fixed: rejected/failed/posted wrongly labelled approved/scheduled; datetime-local zone confusion (label + CT preview); selected-text injection framing; alias cleanup. Accepted limits: PostSheet no focus trap; reviewer note that `approve-and-schedule` skips spacing/cap (it does run clearance/reply/collision/window via `updateSocialPost`); spacing/cap are enforced only by automated schedulers + advisory flags.
 - Verification: full suite 4870 (only the 2 known failures); SSR smoke render of MonthCalendarPanel + InputStatusStrip with fixtures OK; JSX compiles. **Live walkthrough at 1280/400px NOT VERIFIED** — needs the owner to sign in at http://localhost:3005 (login wall; agents may not enter credentials).
+
+## Phase 5 — results + operational clarity
+- New `features/x-content-inventory/results.js` `buildPostResults` (pure): Posted / Waiting / Needs attention (failed, expired, held `needs_review` with reason) separate from engagement; metrics `null` ⇒ "not measured yet", real 0 stays 0; provenance (plan version, run, package title); caveats (stored captures only, refresh does not backfill, likes-based, not causal, sample size). Route action `post-results` (client-scoped queue; package titles by the post's own `packageId`). `PerformancePanel` shows it under the engine table (`postResults` prop; hidden when absent). Review fixes: held rows sort first so the 50-row cap can't hide them; header counts match the lists ("showing X of Y"); "daily backfill" wording corrected (backfill is manual).
+- Input status strip gained a collapsed Setup & help block (scan install, refresh worker, publishing).
+- Runbook + owner table: `docs/source-of-truth/CONTENT-MANAGEMENT.md`; pointers added to `X-GROWTH-SYSTEM.md` and `X-STRATEGY-TAB.md`. Reviewer-corrected: Mac launchd publish sweep is retired, sweep secrets named, local-ingest env, `--install` dry-run note.
+- "Video handoff" requirement: SKIPPED — no such file exists.
+
+## Phase 6 — acceptance
+- `features/content-context/__tests__/acceptance.test.js`: ACCEPT 0–8 over fixtures with the fake Firestore and the mock X client (the mock publisher is the only publisher reachable; ACCEPT 0 asserts tweets only grow via the test's own sweep). All 9 pass.
+- Findings from writing them (not bugs): a *reply* suggestion can be saved but not scheduled (reply-threading-unsupported) — UI shows a message and disables the button; `saveSuggestionDraft` ignores new text once saved (later edits go through `updateSocialPost`); the suggestion carries brand fit as `why.brand` / `scores.brandFit` (nullable for slot suggestions).
+
+## Totals
+- Model spend: **0 calls / $0**. Firestore writes: **none** (no `[CM test]` rows were created; nothing for the owner to delete). X API / ScrapeCreators calls: none. No push, deploy, workflow/cron/launchd change, `client_configs` write or Brain approval.

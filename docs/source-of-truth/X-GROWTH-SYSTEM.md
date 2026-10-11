@@ -1,5 +1,8 @@
 # X growth system — SSOT
 
+> **Content Management (2026-10-11):** plan ownership, the shared input context, the single post lifecycle, scheduling and results now follow [`CONTENT-MANAGEMENT.md`](CONTENT-MANAGEMENT.md). Where this doc disagrees about who decides cadence, who creates/approves/schedules a post, or what chat may do, that doc wins.
+
+
 How the X work fits together: what measures the account, what decides a post, and what publishes it.
 
 Built 2026-09-10. The account is **@bai_ee** (`bryan-balli-WUoltG84`). The goal is creative enquiries into HITLOOP.

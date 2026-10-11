@@ -1,0 +1,53 @@
+# Content Management (X) — as built
+
+Status: implemented and locally tested on `feat/content-management` (2026-10-11). **Not production-activated.** Live UI walkthrough, deploy and every external dependency below are still owner actions. Plan: [`docs/plans/CONTENT-MANAGEMENT-NORMALIZATION-MASTER-PLAN.md`](../plans/CONTENT-MANAGEMENT-NORMALIZATION-MASTER-PLAN.md). Audit: [`content-management-audit.md`](../plans/content-management-audit.md). Build log: [`content-management-build-log.md`](../plans/content-management-build-log.md).
+
+One workspace (the **Content Engine** card) takes content from find → select → draft → review → approve → schedule → track. Scanners, NAS/archive, Brain, Strategy Builder and the publisher stay as services behind it.
+
+## 1. Who owns what
+
+| Concern | Owner (after) | Others |
+|---|---|---|
+| Voice, identity, claims | Approved Client Brain | read via `loadClientBrainContext`; unapproved ⇒ not used, labelled |
+| Campaign intent | Strategy Builder (`dashboard_state.strategyBuilder.lastPlan`) | constraints only; contradicting the saved plan ⇒ visible caveat, plan wins |
+| Executable X plan (cadence, floors, caps, engine targets) | `x_strategy_plans` via `resolvePlanInputs` | runner, chat, calendar read it; no plan ⇒ legacy defaults |
+| Content assets | `x_content_packages` (+ buckets) | **global, not client-scoped** (flagged `scope:'global'`) |
+| Raw scan signals | `dashboard_state.marketingBrief.quoteTargets` | read-only here |
+| Recommendation (not a post) | `x_content_daily_runs` | regeneration never touches a saved post |
+| Saved post / edits / approval / schedule | `social_posts` via `twitter-service.js` | every producer goes through it |
+| Delivery | existing publisher (`claimDuePost`, `process-due`) | unchanged for legacy rows |
+| Results | stored `social_posts.performance` joined to package/run/plan | |
+
+## 2. Shared input context
+`features/content-context/load-content-context.js` — `loadContentContext(deps, {clientId, now})` wraps the runner's `loadDailyLoopInputs` (shape unchanged as `.raw`), reads the plan doc once, and returns `inputs[]` (`{id, source, asOf, usable, caveats, version, scope}`) plus `versions.hash`. Used by the daily runner, chat tool `get_context`, and the dashboard status strip (`content-context` action). Thresholds: scan stale > 48 h, corpus stale > 7 d. A Brain load that throws is a caveat (`usable:false`), never a silent empty string.
+
+## 3. Post lifecycle (`social_posts`)
+`draft → approved → scheduled/queued → posting → posted`; also `awaiting_approval`, `failed`, `needs_review`, `expired`, `rejected`. Save Draft ≠ approval ≠ scheduling.
+- **Producers**: `ensureDraftPost(clientId, {idempotencyKey,…})` is the shared entry (key → one post id; a terminal row rolls the key to the next generation). Wired: daily-loop save (`createDraftPostOnce`, v2), `createDraftFromItem` (key `item:<pkg>`, reuses any open row, client-scoped), Discogs ingest lookup (client-scoped). Copywriter, Schedule Posts, digest, quote drafts, bookmarks still use `createSocialPost` (legacy rows).
+- **`lifecycleVersion: 2`** (opt-in, set by the shared producers): any material edit (text/self-reply/media/reply target) of approved/scheduled/queued voids approval and the schedule; scheduling requires prior approval; delivery rechecks clearance, reply guard and expiry and **parks the row as `needs_review` without calling X**. Legacy rows publish exactly as before.
+- **Schedule-time guards (all rows)**: reply rows cannot be scheduled (threading unsupported); package clearance revoked (`rights:never-public` or `approval.state:rejected`); the same package can't be scheduled twice per client (`package-already-pending`); v2 only: timely `expiresAt` window.
+- **Failure**: `postNow`/`publishApprovedPost` failures are stored `retryable:false` + `errorClass`; nothing re-sends them.
+- **Calendar actions**: `approve-and-schedule` (edit → approveDraft → schedule; any failure restores the row exactly) and `reject-draft` on `/api/social-posting`; explicit operator clicks only.
+- **Clearance vs approval**: package clearance = "may this material be used" (package store); post approval = "may this exact copy go out" (`reviewedAt`/status). Both are checked.
+
+## 4. Scheduling
+`features/x-content-inventory/allocate-slot.js` (pure): occupied slots, spacing, per-day/engine caps, package collision, expiry; shared helpers used by the records scheduler (`discogs-ingest/scheduler.js`, which now skips a package already pending). `recentPostsFromQueue` puts scheduled/queued/approved/posted rows on engine-quota's axis (CT wall clock as UTC epoch) so today's plan counts them. Calendar engine config = saved plan's `engineTargets` when a plan doc exists, else legacy `content_system_config/x`.
+**Known limit:** the collision check is read-then-write; two truly concurrent schedulers can still race. Manual schedules are not spacing/cap-enforced (advisory flags only). Strategy Builder `push` still schedules items directly.
+
+## 5. Workspace
+Tabs: **Today** (Plan | Recommendations) · **Library** · **Queue & Calendar** (month grid + agenda, post sheet) · **Strategy** (+ chat) · More: Buckets, Timeline, Clients, Results. Input status strip on Today/Queue: Brain, plan, account data, scan; refresh worker is always "status unknown" (no heartbeat exists). Daily flow in Recommendations: inspect → edit → Save draft → status + time picker → **Approve & schedule** → Open in Queue & Calendar. `CalendarPanel.jsx` and the `week-calendar` action are now unused (remove after the live walkthrough).
+
+## 6. Chat
+Read tools: `get_evaluation, get_plan, get_context, get_today_run, search_inventory, top_posts, get_queue, get_post, get_opportunities, get_results`. Propose tools unchanged (8; confirm-before-write via `strategy-proposal-decide`). No tool schedules, approves or publishes; the prompt says so. `selected:{kind,id}` is resolved server-side for the request's own client and labelled RECOMMENDATION / SAVED POST / APPROVED-SCHEDULED POST; quoted item text is marked as data. Model `claude-sonnet-4-6`, `logAnthropicCall` (`x-strategy-chat`), daily turn cap `X_STRATEGY_DAILY_TURN_CAP` (60).
+
+## 7. Results
+`features/x-content-inventory/results.js` `buildPostResults` (all-time, unlike the 30-day engine table; drafts and rejected posts are not listed; held `needs_review` rows sort first so the 50-row cap never hides them; `{posted, pending, failed, counts, caveats, lastCapturedAt}`; rows carry provenance and `metrics: null | {...}`; route action `post-results`; shown in the Results tab under the engine table): Posted / Waiting / Needs attention separate from engagement; metrics `null` ⇒ "not measured yet" (never 0); provenance (plan version, run, package) shown; caveats: stored captures only, a refresh does not backfill views, lift is likes-based and not causal. Views backfill is manual: `scripts/x-content/backfill-performance.mjs`.
+
+## 8. Runbook (what must exist for this to work end to end)
+- **Env (server/Vercel):** Firebase admin, `ANTHROPIC_API_KEY` (chat enhance/draft only), `CRON_SECRET` for `/api/worker/*` (never curl worker routes locally: CRON_SECRET is unset in dev and they actually run), X app credentials for publishing. No new env was added by this work.
+- **Authenticated routes:** `/api/dashboard/quote-targets` (admin) and `/api/social-posting` (session). New actions only; no new route files, no `vercel.json` change.
+- **Local worker (Mac, needs `bird` + browser cookies):** quote scan `scripts/x-content/install-scan-schedule.sh install <clientId>` (launchd 06:30; not installed by this work); strategy refresh `X_STRATEGY_BIRD_COOKIE_SOURCE=chrome node scripts/x-content/strategy-refresh-worker.mjs --once`. The app has no worker heartbeat: a refresh request stays "queued" until a worker drains it (or the server drains it in-process when `X_STRATEGY_LOCAL_INGEST=1` and `bird` is present). `install-daily-loop` is a dry run unless `--install` is passed.
+- **Publishing:** scheduled posts publish via `process-due` — Vercel cron `40 13 * * *` (once daily, 26 h staleness guard) and, only if the owner sets repo variable `SOCIAL_PUBLISH_ENABLED=true`, `.github/workflows/social-publish-sweep.yml` (`*/30`). The sweep also schedules story-ready Discogs records first, needs the GitHub secrets `HITLOOP_CRON_SECRET` and `HITLOOP_ARCHIVE_WORKER_TOKEN`, and calls `https://hitloop.agency`. The Mac launchd publish sweep (`scripts/social/`) is retired: do not install it (`scripts/social/README.md` still shows stale secret/scheduler wording). Publishing takes an atomic claim, so overlap is safe but wasteful. Nothing was enabled or disabled here.
+- **Assets:** NAS/EditVideos media must be reachable for posts with media; not exercised.
+- **Model usage:** only chat turns and optional `--draft-with-model`/Enhance spend; daily-loop Generate defaults to no model. Generate in the UI is manual; the scheduled daily path is the launchd `install-daily-loop` job (not installed here).
+- **Manual vs scheduled:** Generate/Regenerate = manual and spends nothing without the model box ticked; scheduled posting = the sweeps above.

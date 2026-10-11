@@ -89,6 +89,10 @@ export default function InputStatusStrip({ call, clientKey, onOpenStrategy }) {
           <p className="xce-is-caveat">The app has no heartbeat from the local refresh/scan worker. A refresh you request shows “queued” until the worker finishes it; if it stays queued, the worker is not running.</p>
         </li>
       </ul>
+      <details id="x-content-input-status-setup" className="xce-is-setup">
+        <summary className="xce-is-muted">Setup &amp; help (local worker, publishing)</summary>
+        <p className="xce-is-caveat">Quote scan (daily, needs this Mac&apos;s browser cookies): <code>scripts/x-content/install-scan-schedule.sh install &lt;clientId&gt;</code>. Strategy refresh: <code>node scripts/x-content/strategy-refresh-worker.mjs --once</code>. Scheduled posts publish through the daily cron and, only if enabled, the GitHub publish sweep. Full runbook: docs/source-of-truth/CONTENT-MANAGEMENT.md.</p>
+      </details>
     </details>
   );
 }

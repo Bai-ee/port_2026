@@ -1,5 +1,8 @@
 # X Strategy tab — SSOT (as built)
 
+> **Content Management (2026-10-11):** plan ownership, the shared input context, the single post lifecycle, scheduling and results now follow [`CONTENT-MANAGEMENT.md`](CONTENT-MANAGEMENT.md). Where this doc disagrees about who decides cadence, who creates/approves/schedules a post, or what chat may do, that doc wins.
+
+
 Built 2026-10-11 on `feat/daily-content-loop` (uncommitted at time of writing). Build record: [`docs/plans/x-strategy-build-log.md`](../plans/x-strategy-build-log.md). Original plan (historical): [`docs/plans/X-STRATEGY-TAB-MASTER-PLAN.md`](../plans/X-STRATEGY-TAB-MASTER-PLAN.md). T0 spikes: [`docs/plans/x-strategy-t0-spikes.md`](../plans/x-strategy-t0-spikes.md). Parent system: [`X-GROWTH-SYSTEM.md`](X-GROWTH-SYSTEM.md).
 
 ## 1. What it is

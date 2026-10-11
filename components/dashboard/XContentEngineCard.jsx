@@ -142,6 +142,7 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
   const [clientError, setClientError] = useState('');
   const [perf, setPerf] = useState(null);
   const [perfLoading, setPerfLoading] = useState(false);
+  const [postResults, setPostResults] = useState(null);
   const [perfError, setPerfError] = useState('');
 
   const call = useCallback(async (action, body = {}) => {
@@ -217,7 +218,12 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
     setPerfLoading(true);
     setPerfError('');
     try {
-      setPerf(await call('engine-performance', { windowDays: 30 }));
+      const [stats, results] = await Promise.all([
+        call('engine-performance', { windowDays: 30 }),
+        call('post-results').catch(() => null), // the engine table still renders if the posts list fails
+      ]);
+      setPerf(stats);
+      setPostResults(results?.results || null);
     } catch (err) {
       setPerfError(err.message || 'Could not load performance.');
     } finally {
@@ -472,6 +478,7 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
         />
       ) : tab === 'performance' ? (
         <PerformancePanel
+          postResults={postResults}
           stats={perf?.stats}
           lastCapturedAt={perf?.lastCapturedAt}
           loading={perfLoading}
@@ -1303,6 +1310,25 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
         #x-content-card .xce-dl-saved-flow { display: grid; gap: 8px; width: 100%; min-width: 0; }
         #x-content-card .xce-dl-status { font-family: var(--font-mono); font-size: 11.5px; color: #1f1d1b; overflow-wrap: anywhere; }
         #x-content-card .xce-today-segment { display: block; }
+
+        /* ---- Results posts section (PerformancePanel.jsx / ResultsPostList.jsx) ---- */
+        #x-content-card .xce-results-posts { display: grid; gap: 14px; min-width: 0; }
+        #x-content-card .xce-results-section-title { margin: 0; font-size: 16px; font-weight: 700; }
+        #x-content-card .xce-results-counts { font-family: var(--font-mono); font-size: 12px; opacity: 0.6; }
+        #x-content-card .xce-results-group { display: grid; gap: 8px; min-width: 0; }
+        #x-content-card .xce-results-group-title { margin: 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+        #x-content-card .xce-results-group-count { font-family: var(--font-mono); opacity: 0.5; font-weight: 400; }
+        #x-content-card .xce-results-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+        #x-content-card .xce-results-row { display: grid; gap: 6px; padding: 10px 12px; min-width: 0; border: 1px solid rgba(31,29,27,0.12); border-radius: 10px; background: rgba(31,29,27,0.02); }
+        #x-content-card .xce-results-row-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+        #x-content-card .xce-results-time, #x-content-card .xce-results-engine { font-family: var(--font-mono); font-size: 11.5px; opacity: 0.6; }
+        #x-content-card .xce-results-excerpt { margin: 0; font-size: 13.5px; line-height: 1.45; overflow-wrap: anywhere; }
+        #x-content-card .xce-results-origin, #x-content-card .xce-results-note { margin: 0; font-family: var(--font-mono); font-size: 11.5px; opacity: 0.6; overflow-wrap: anywhere; }
+        #x-content-card .xce-results-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 0; }
+        #x-content-card .xce-results-metrics dt { font-size: 10.5px; opacity: 0.5; text-transform: uppercase; }
+        #x-content-card .xce-results-metrics dd { margin: 0; font-size: 13px; font-weight: 600; }
+        #x-content-card .xce-results-failure { margin: 0; font-size: 12.5px; color: #9f1f17; overflow-wrap: anywhere; }
+        #x-content-card .xce-results-caveats { margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.5; opacity: 0.7; overflow-wrap: anywhere; }
 
         /* ── Shell (U2): header, tab row + More, phone bottom nav ─────── */
         #x-content-card .xce-header { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 8px; }

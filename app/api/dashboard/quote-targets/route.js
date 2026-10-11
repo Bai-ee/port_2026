@@ -17,6 +17,7 @@ import { validateInventory } from '../../../../features/x-content-inventory/sche
 import { readInventory, upsertPackage, deletePackage, getPackage } from '../../../../features/x-content-inventory/store.js';
 import { buildClientPackage, applyApproval } from '../../../../features/x-content-inventory/client-capture.js';
 import { ageHoursOf, DEFAULT_WINDOW_HOURS } from '../../../../features/x-quote-targets/rank.js';
+import { buildPostResults } from '../../../../features/x-content-inventory/results.js';
 import { recentPostsFromQueue } from '../../../../features/x-content-inventory/allocate-slot.js';
 import { buildMonthCalendar, ctDate } from '../../../../features/x-content-inventory/month-calendar.js';
 import { buildWeekCalendar } from '../../../../features/x-content-inventory/week-calendar.js';
@@ -298,6 +299,7 @@ const SUPPORTED_ACTIONS = [
   'month-calendar',
   'content-context',
   'post-status',
+  'post-results',
   'capture-client-story',
   'approve-package',
   'reject-package',
@@ -428,6 +430,12 @@ const postStatusRow = (p) => ({
   lifecycleVersion: p.lifecycleVersion || null,
   provenance: { runId: p.runId || null, suggestionId: p.suggestionId || null, strategyVersion: p.strategyVersion ?? null, sourceRef: p.sourceRef || null },
 });
+
+/** Post-level results for THIS client: posted / waiting / needs attention, joined to package, run and plan version. Read-only. */
+async function handlePostResults(context) {
+  const [posts, inventory] = await Promise.all([readSocialQueue(context.clientId), readInventory().catch(() => ({ packages: [] }))]);
+  return { ok: true, results: buildPostResults({ posts, packages: inventory?.packages || [], now: Date.now() }) };
+}
 
 /** Status of specific posts of THIS client (a foreign or missing id is simply absent). */
 async function handlePostStatus(context, body) {
@@ -875,6 +883,7 @@ export async function POST(request) {
       return json({ ok: true, context: summarizeContentContext(await readContentContext(context.clientId)) });
     }
     if (action === 'post-status') return json(await handlePostStatus(context, body));
+    if (action === 'post-results') return json(await handlePostResults(context));
     if (action === 'month-calendar') {
       return json(await handleMonthCalendar(context, body));
     }

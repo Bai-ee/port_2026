@@ -7,6 +7,7 @@ import Card from './ui/Card.jsx';
 import Badge from './ui/Badge.jsx';
 import IconButton from './ui/IconButton.jsx';
 import Accordion from './ui/Accordion.jsx';
+import ResultsPostList from './ResultsPostList.jsx';
 import { XCE_COLORS, XCE_RADII, XCE_TYPE } from './xce-tokens';
 
 // PerformancePanel — per-engine results over stored social_posts.performance.
@@ -27,7 +28,7 @@ function trendText(t) {
 }
 
 function meaning(label, s, minN) {
-  if (s.measured === 0) return `${label}: nothing captured yet. Run the daily backfill.`;
+  if (s.measured === 0) return `${label}: nothing captured yet. Views are captured only when the owner runs the backfill script.`;
   if (s.insufficient) return `${label}: ${s.measured} measured of ${minN} needed. Too early to compare, so it is not ranked.`;
   const bits = [`${label} ranks #${s.rank} on value score (median ${fmt(s.medianValue, 1)})`];
   if (s.trend.state === 'up' || s.trend.state === 'down') bits.push(`views ${s.trend.state === 'up' ? 'up' : 'down'} ${Math.abs(s.trend.pct)}% vs the prior window`);
@@ -35,7 +36,7 @@ function meaning(label, s, minN) {
   return `${bits.join('; ')}.`;
 }
 
-export default function PerformancePanel({ stats, lastCapturedAt, loading, error, onRefresh }) {
+export default function PerformancePanel({ stats, lastCapturedAt, loading, error, onRefresh, postResults }) {
   const entries = stats?.engines ? Object.entries(stats.engines) : [];
   const minN = stats?.minN ?? 5;
   const measured = stats ? Math.max(0, (stats.total || 0) - (stats.unmeasured || 0)) : 0;
@@ -75,7 +76,7 @@ export default function PerformancePanel({ stats, lastCapturedAt, loading, error
           </span>
           <strong style={{ fontSize: 15, color: XCE_COLORS.ink }}>No results yet.</strong>
           <span style={{ fontSize: 13, lineHeight: 1.5, color: XCE_COLORS.inkMuted }}>No posted tweets with captured metrics yet.</span>
-          <span className="xce-empty-note">Metrics come from the daily backfill script; nothing here calls X.</span>
+          <span className="xce-empty-note">Metrics are stored captures from the manual backfill script; nothing here calls X and a refresh does not backfill them.</span>
         </div>
       ) : null}
 
@@ -118,6 +119,22 @@ export default function PerformancePanel({ stats, lastCapturedAt, loading, error
           </p>
         </Accordion>
       </Card>
+      {postResults ? (
+        <section id="results-posts-section" className="xce-results-posts" aria-labelledby="results-posts-title">
+          <h3 id="results-posts-title" className="xce-results-section-title">Posts</h3>
+          <span id="results-posts-counts" className="xce-results-counts">
+            All time: {postResults.counts.posted} posted · {postResults.counts.pending - postResults.counts.needsReview} waiting · {postResults.counts.failed + postResults.counts.needsReview} need attention
+            {postResults.counts.unmeasured ? ` · ${postResults.counts.unmeasured} not measured yet` : ''}
+          </span>
+          <ResultsPostList id="results-posted-list" kind="posted" title="Posted" total={postResults.counts.posted} rows={postResults.posted} emptyText="Nothing posted yet." />
+          <ResultsPostList id="results-waiting-list" kind="waiting" title="Waiting" total={postResults.counts.pending - postResults.counts.needsReview} rows={postResults.pending.filter((r) => !r.heldReason)} emptyText="Nothing waiting." />
+          <ResultsPostList id="results-attention-list" kind="attention" title="Needs attention" total={postResults.counts.failed + postResults.counts.needsReview} rows={[...postResults.failed, ...postResults.pending.filter((r) => r.heldReason)]} emptyText="Nothing needs attention." />
+          <ul id="results-posts-caveats" className="xce-results-caveats">
+            {postResults.caveats.map((c) => <li key={c}>{c}</li>)}
+            {postResults.lastCapturedAt ? <li>Latest capture: {new Date(postResults.lastCapturedAt).toLocaleDateString()}.</li> : null}
+          </ul>
+        </section>
+      ) : null}
     </div>
   );
 }
