@@ -62,15 +62,23 @@ export function buildQuoteReactPrompt({ post, slot } = {}) {
   };
 }
 
-const QUOTE_REACT_LINES = ['clean work.', 'good eye on this.', 'the detail does it.', 'this is well made.', 'more of this.', 'this one lands.'];
+const QUOTE_REACT_LINES = ['clean work.', 'good eye on this.', 'the detail does it.', 'this is well made.', 'more of this.', 'this one lands.', 'nicely done.', 'quietly great.'];
 
 /** Deterministic no-model reaction: generic, claim-free, never derived from the
- * post text (so it cannot echo it); the post only picks which line, stably. */
-export function quoteReactFallback({ post, slot } = {}) {
+ * post text (so it cannot echo it); the post only picks which line, stably.
+ * `usedLines` (Set or array) holds lines already used this run: the pick walks on to
+ * the next free one, and returns '' (reviewer writes their own) when none is left,
+ * so a run never repeats a line. */
+export function quoteReactFallback({ post, slot, usedLines } = {}) {
   const seed = String(post?.id || post?.text || slot?.letter || '');
   let h = 0;
   for (let i = 0; i < seed.length; i += 1) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-  return QUOTE_REACT_LINES[h % QUOTE_REACT_LINES.length];
+  const taken = new Set([...(usedLines || [])].map((l) => String(l).trim().toLowerCase()));
+  for (let i = 0; i < QUOTE_REACT_LINES.length; i += 1) {
+    const line = QUOTE_REACT_LINES[(h + i) % QUOTE_REACT_LINES.length];
+    if (!taken.has(line)) return line;
+  }
+  return '';
 }
 
 function quoteReactPost(suggestion) {
@@ -126,9 +134,11 @@ export function buildContributionPrompt({ suggestion, voice = '' } = {}) {
 
 /** Deterministic copy for replay and failed model calls: the item's own
  * words or its verifiable ID line, cut to fit — never paraphrased. */
-export function fallbackCopy(suggestion) {
-  if (isQuoteReact(suggestion)) return quoteReactFallback({ post: quoteReactPost(suggestion), slot: suggestion.slot });
+export function fallbackCopy(suggestion, { usedLines } = {}) {
+  if (isQuoteReact(suggestion)) return quoteReactFallback({ post: quoteReactPost(suggestion), slot: suggestion.slot, usedLines });
   const pkg = suggestion.package || {};
+  // A slot with no owned item (self-quote) has nothing to quote from; the reviewer writes it.
+  if (!pkg.title && !pkg.story) return '';
   const max = MAX_LEN[suggestion.type] || MAX_LEN.original;
   let base;
   if (pkg.basis === 'story') base = pkg.story.split(/(?<=[.!?])\s/)[0] || pkg.story;

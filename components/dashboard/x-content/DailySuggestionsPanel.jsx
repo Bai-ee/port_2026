@@ -78,13 +78,22 @@ function SuggestionCard({ s, text, thumbUrl, onText, onCommit, onSave, onDismiss
 
       <div id={`daily-suggestion-content-${s.id}`} className="xce-dl-content">
         {thumbUrl ? <img id={`daily-suggestion-thumb-${s.id}`} src={thumbUrl} alt="" loading="lazy" style={{ display: 'block', maxWidth: 120, maxHeight: 120, marginBottom: 6, borderRadius: 8, objectFit: 'cover' }} /> : null}
-        <strong>{s.package.title}</strong>
-        <ul>
-          {s.package.basis === 'story' ? <li>your own story on file</li> : null}
-          {(s.package.facts || []).slice(0, 5).map((f) => (
-            <li key={`${f.label}-${f.value}`}>{f.label}: {f.label === 'source' ? <a href={f.value} target="_blank" rel="noreferrer">{f.value}</a> : f.value} <em>({f.provenance})</em></li>
-          ))}
-        </ul>
+        {s.package ? (
+          <>
+            <strong>{s.package.title}</strong>
+            <ul>
+              {s.package.basis === 'story' ? <li>your own story on file</li> : null}
+              {(s.package.facts || []).slice(0, 5).map((f) => (
+                <li key={`${f.label}-${f.value}`}>{f.label}: {f.label === 'source' ? <a href={f.value} target="_blank" rel="noreferrer">{f.value}</a> : f.value} <em>({f.provenance})</em></li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <>
+            <strong>no owned item: reaction slot</strong>
+            {s.related ? <p id={`daily-suggestion-related-${s.id}`}>related: {s.related.title || s.related.id}</p> : null}
+          </>
+        )}
       </div>
 
       <span className="xce-dl-draft-label">

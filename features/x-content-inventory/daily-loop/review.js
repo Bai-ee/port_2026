@@ -50,17 +50,21 @@ export async function saveSuggestionDraft(deps, { key, suggestionId, text }) {
   const checks = checkSuggestionText(finalText, s);
   if (checks.blocked) throw bad(`Blocked by checks: ${checks.violations.join('; ') || 'content guard hard block'} — edit the text and try again.`, 422, { checks });
 
-  const pkg = await deps.getPackage(s.package?.id);
-  const eligibility = pkg ? packageEligibility(pkg, { now: deps.now ? deps.now() : Date.now() }) : { ok: false, reason: 'missing' };
-  if (!eligibility.ok) throw bad(`Content item is no longer eligible (${eligibility.reason}).`, 409);
+  // A reaction slot (quote-react) owns no library item, so there is nothing to re-check.
+  const packageId = s.package?.id ?? null;
+  const pkg = packageId ? await deps.getPackage(packageId) : null;
+  if (packageId) {
+    const eligibility = pkg ? packageEligibility(pkg, { now: deps.now ? deps.now() : Date.now() }) : { ok: false, reason: 'missing' };
+    if (!eligibility.ok) throw bad(`Content item is no longer eligible (${eligibility.reason}).`, 409);
+  }
 
   const postId = socialPostIdFor(s.id);
   const { post, existing } = await deps.createDraftPostOnce(key.clientId, postId, {
     content: composeQueueContent(s, finalText),
     platform: 'x',
     source: 'daily-loop',
-    packageId: s.package.id,
-    engine: pkg.engine || null,
+    packageId,
+    engine: pkg?.engine || null,
     selfReply: s.draft?.selfReply ? { text: s.draft.selfReply } : null,
     // A reply carries its target the same way Reply Targets drafts do; the
     // operator posts it into the thread.

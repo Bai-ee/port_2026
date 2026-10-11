@@ -119,6 +119,7 @@ export async function runDailyLoop(deps, opts = {}) {
   };
 
   const modelFlags = [];
+  const usedLines = new Set(); // fallback reactions already used, so a run never repeats one
   try {
     for (const s of selection.suggestions) {
       const before = priorById.get(s.id);
@@ -132,7 +133,8 @@ export async function runDailyLoop(deps, opts = {}) {
         continue;
       }
       const built = buildContributionPrompt({ suggestion: s, voice });
-      let text = fallbackCopy(s);
+      let text = fallbackCopy(s, { usedLines });
+      usedLines.add(text);
       let source = 'fallback (item text, cut to fit)';
       let fromModel = false;
       if (deps.draft && built.ok) {

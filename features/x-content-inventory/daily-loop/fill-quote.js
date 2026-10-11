@@ -1,12 +1,13 @@
 // Quote slot filler: picks a live watchlist/scan post for a quote-react or
 // quote-commentary slot (P1 curation). Fit is vein + content-guard lane, never
 // owned-library vocabulary; owned packages only ever add an optional "related" note.
-// Pure; candidates and clock are injected. Depends on text.js, x-content-guard
+// Pure; candidates and clock are injected. Depends on text.js, veins.js, x-content-guard
 // and day-plan's tolerance constant only.
 
 import { classifyLane, guardXPost } from '../../x-content-guard/index.js';
 import { VEIN_SCORE_TOLERANCE } from '../../x-quote-targets/day-plan.js';
 import { packageTerms, tokenize, WEAK_TERMS } from './text.js';
+import { veinsForLane } from './veins.js';
 
 /** Measured on 216 real quote-reacts (median target age 17.8h): the quote window is 36h, not the 6h reply window. */
 export const QUOTE_WINDOW_HOURS = 36;
@@ -92,11 +93,12 @@ export function fillQuoteSlot({ slot, candidates, now, usedIds = [], related = [
   // Mirrors day-plan pickCandidateForSlot: a vein match close to the top beats a higher-scoring off-vein post.
   const sorted = [...eligible].sort(byStrength);
   const top = sorted[0];
-  const veinMatch = slot.lane ? sorted.find((c) => c.vein === slot.lane) : null;
+  const preferred = veinsForLane(slot.lane);
+  const veinMatch = preferred.length ? sorted.find((c) => preferred.includes(c.vein)) : null;
   const preferVein = veinMatch && veinMatch !== top && scoreOf(top) - scoreOf(veinMatch) <= VEIN_SCORE_TOLERANCE;
   const post = preferVein ? veinMatch : top;
 
-  const reason = preferVein ? `vein match ${slot.lane}`
+  const reason = preferVein ? `vein ${post.vein} preferred by ${slot.lane} lane`
     : post.vein ? `top score on vein ${post.vein}`
       : `top score; no vein, ${post.lane} lane`;
   const note = relatedPackage(post, Array.isArray(related) ? related : []);
