@@ -96,3 +96,9 @@ S1 foundation → S2 (a–d in parallel) → S3 select.js + integration → S4 U
 
 - Engine gives 1 quote-react/day vs the strategy doc's 2 (Tier 1). Revisit after a week of runs. (Add to `ELEVATION-LIST.md` — not present in this worktree.)
 
+## 12. Acceptance log
+
+- **Item 5 (owner judges ≥1 quote-react usable), dry run 2026-10-10:**
+  - @applefiles_ "Hey @grok, remove the worst Pro" — **FAIL** (AI-bot joke, text-only). Cause: vein is assigned per account. Fixed by the media + bot gates (S4a).
+  - @SciFiArchives "Star Wars poster from Japan." (image, 1.6k likes) — **selection PASS**; fallback copy "nicely done." **FAIL** (generic). Real model copy to be judged in S5.
+

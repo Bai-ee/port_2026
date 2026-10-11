@@ -76,6 +76,14 @@ scripts/x-content/install-scan-schedule.sh install-daily-loop <id> [--install]  
 4. **SUGGESTIONS** — per suggestion: type, review state, the conversation posts, then the why-lines (now, brand, brain, strategy, content, history), draft + source, checks (blocked/pass, guard lane, advisory score), proposed slot (display only).
 5. **GAPS** — every reason something was not suggested. An empty result with clear gaps is a correct result.
 
+## Strategy spine (slots)
+
+Each run carries `strategySource` (`mixSource`, `date`, `tier`, `authoredPerDay`, `slotLetters`) and per-suggestion `slot` (`letter`, `timeCT`, `type`, `lane`, `pillar`, `fillReason`). Slots that could not be filled become `slot-unfilled:<letter>` gaps with the reason. Strategy is Seb rules from `docs/plans/X-STRATEGY-SEB-MODEL.md`; the Brain is not used for voice.
+
+- Dashboard: cards show `D · 15:00 CT · quote-react · P1`; the reply slot reads "anytime today"; an empty self-quote draft reads "write this one yourself" and cannot be saved empty. The inputs panel leads with the strategy source + slot list; slot gaps list first under Gaps.
+- CLI: `--show` appends a STRATEGY block (source, each slot filled/GAP with reason). Old runs without `strategySource`/`slot` print "none" and render as before.
+- Shared formatting lives in `daily-loop/present.js`.
+
 ## Reset or re-run a day
 
 - Unchanged input fingerprint → the run is skipped. `--execute --force` regenerates anyway.

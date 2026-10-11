@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ExternalLink, RefreshCw, Save, X } from 'lucide-react';
 import { Skeleton, RetryError } from './Feedback.jsx';
+import { slotLabel, timingLine, strategySourceLine, slotStatuses, VOICE_LINE } from '../../../features/x-content-inventory/daily-loop/present.js';
 
 // DailySuggestionsPanel — which X conversations to join today, with what owned
 // content (Daily Content Loop POC, docs/plans/DAILY-CONTENT-LOOP-MASTER-PLAN.md).
@@ -49,13 +50,15 @@ function SuggestionCard({ s, text, thumbUrl, onText, onCommit, onSave, onDismiss
   const stored = s.edit?.text ?? s.draft.text;
   const dirty = text !== stored;
   const checks = s.edit?.checks || s.checks;
+  const empty = !text.trim();
   const max = s.type === 'quote' ? 90 : s.type === 'reply' ? 200 : 280;
   return (
     <article id={`daily-suggestion-card-${s.id}`} data-suggestion-id={s.id} className={`xce-dl-card${checks.blocked ? ' xce-dl-blocked' : ''}`}>
       <header id={`daily-suggestion-header-row-${s.id}`} className="xce-dl-card-head">
         <span className={`xce-dl-type xce-dl-type-${s.type}`}>{TYPE_LABEL[s.type] || s.type}</span>
         {s.match?.tier === 'genre' ? <span className="xce-dl-tier">genre-level match</span> : null}
-        <span className="xce-dl-slot">proposed {s.proposedSlot.localTime} CT · suggestion only, not scheduled</span>
+        {slotLabel(s.slot) ? <span id={`daily-suggestion-slot-label-${s.id}`} className="xce-dl-slot-label" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: '#2a2420' }}>{slotLabel(s.slot)}</span> : null}
+        <span className="xce-dl-slot">{timingLine(s)}</span>
       </header>
 
       {s.conversation ? (
@@ -102,6 +105,7 @@ function SuggestionCard({ s, text, thumbUrl, onText, onCommit, onSave, onDismiss
       <textarea
         id={`daily-suggestion-edit-textarea-${s.id}`}
         aria-label="Draft text"
+        placeholder={empty ? 'write this one yourself' : undefined}
         className="xce-dl-textarea"
         value={text}
         onChange={(e) => onText(e.target.value)}
@@ -111,6 +115,7 @@ function SuggestionCard({ s, text, thumbUrl, onText, onCommit, onSave, onDismiss
       />
       <div id={`daily-suggestion-checks-row-${s.id}`} className="xce-dl-checks">
         <span className={text.length > max ? 'xce-dl-bad' : ''}>{text.length}/{max}</span>
+        {empty ? <span id={`daily-suggestion-write-yourself-${s.id}`} className="xce-dl-muted">write this one yourself</span> : null}
         {dirty ? <span>click outside the box to re-check before saving</span> : (
           <>
             <span className={checks.blocked ? 'xce-dl-bad' : 'xce-dl-ok'}>{checks.blocked ? 'blocked' : 'checks pass'}</span>
@@ -135,7 +140,7 @@ function SuggestionCard({ s, text, thumbUrl, onText, onCommit, onSave, onDismiss
           <span className="xce-dl-muted">Dismissed</span>
         ) : (
           <>
-            <button type="button" className="xce-btn-primary" disabled={busy || dirty || checks.blocked} onClick={onSave}>
+            <button type="button" className="xce-btn-primary" disabled={busy || dirty || empty || checks.blocked} onClick={onSave}>
               <Save size={13} /> {busy ? 'Working…' : 'Save draft'}
             </button>
             <button type="button" className="xce-btn-ghost" disabled={busy} onClick={onDismiss}>
@@ -148,10 +153,36 @@ function SuggestionCard({ s, text, thumbUrl, onText, onCommit, onSave, onDismiss
   );
 }
 
-function InputsPanel({ inputs }) {
+// Stack the three-column input rows below 640px (the parent's 481px breakpoint
+// squeezed the detail column to ~60px at 500px). Scoped by id, so it only
+// touches this panel.
+const INPUTS_STACK_CSS = '@media (max-width: 640px) { #x-content-card #daily-run-inputs-panel .xce-dl-input { grid-template-columns: 1fr; } }';
+
+function StrategySource({ run }) {
+  const src = run.strategySource;
+  const line = strategySourceLine(src);
+  const slots = slotStatuses(run);
+  return (
+    <div id="daily-run-strategy-source" className="xce-dl-input">
+      <span>strategy source</span>
+      <span>{line || 'no slot plan for this run'}</span>
+      <span>
+        {src && slots.length ? slots.map((x) => `${x.letter} ${x.timeCT || 'anytime'} ${x.type}`).join(' · ') : null}
+        {src && slots.length ? <br /> : null}
+        {VOICE_LINE}
+      </span>
+    </div>
+  );
+}
+
+function InputsPanel({ run }) {
+  // run.js already emits a 'strategy slots' row; the dedicated block above replaces it.
+  const rows = (run.inputs || []).filter((i) => !(run.strategySource && i.input === 'strategy slots'));
   return (
     <div id="daily-run-inputs-panel" className="xce-dl-inputs">
-      {(inputs || []).map((i) => (
+      <style>{INPUTS_STACK_CSS}</style>
+      <StrategySource run={run} />
+      {rows.map((i) => (
         <div key={i.input} className={`xce-dl-input xce-dl-input-${String(i.status).replace(/\s+/g, '-')}`}>
           <span>{i.input}</span>
           <span>{STATUS_WORDS[i.status] || i.status}{i.age ? ` · ${i.age}` : ''}</span>
@@ -164,11 +195,18 @@ function InputsPanel({ inputs }) {
 
 function GapsList({ gaps }) {
   const [open, setOpen] = useState(false);
-  const shown = open ? gaps : gaps.slice(0, COLLAPSED_GAPS);
+  const ordered = [...gaps.filter((g) => g.slot), ...gaps.filter((g) => !g.slot)];
+  const shown = open ? ordered : ordered.slice(0, COLLAPSED_GAPS);
   return (
     <div id="daily-run-gaps-list" className="xce-dl-gaps">
       <span className="xce-kicker">Gaps and missing inputs</span>
-      <ul>{shown.map((g) => <li key={g.code}><code>{g.code}</code> {g.message}</li>)}</ul>
+      <ul>
+        {shown.map((g) => (
+          <li key={g.code}>
+            {g.slot ? <><strong>Slot {g.slot.letter}</strong> ({[g.slot.timeCT ? `${g.slot.timeCT} CT` : 'anytime', g.slot.type, g.slot.pillar].filter(Boolean).join(' · ')}) unfilled: {g.slot.fillReason || g.message}</> : <><code>{g.code}</code> {g.message}</>}
+          </li>
+        ))}
+      </ul>
       {gaps.length > COLLAPSED_GAPS ? (
         <button type="button" style={TOGGLE} onClick={() => setOpen((o) => !o)}>{open ? 'show fewer' : `show all ${gaps.length}`}</button>
       ) : null}
@@ -291,7 +329,7 @@ export default function DailySuggestionsPanel({ call, showToast }) {
 
       {run ? (
         <>
-          <InputsPanel inputs={run.inputs} />
+          <InputsPanel run={run} />
           <GapsList gaps={run.gaps || []} />
 
           <div id="daily-suggestions-list" className="xce-dl-list">
