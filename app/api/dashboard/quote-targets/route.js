@@ -7,15 +7,12 @@ import { buildDayPlan } from '../../../../features/x-quote-targets/day-plan.js';
 // .vercelignore, but a runtime fs read of a repo path is fragile on serverless.
 import bundledCalendar from '../../../../docs/audits/x-calendar-15day.json' with { type: 'json' };
 import { guardXPost } from '../../../../features/x-content-guard/index.js';
-import { compareToBenchmark, resolveXGrowthProfile, resolveTier } from '../../../../features/x-benchmark/index.js';
-import { buildCalendar } from '../../../../features/x-benchmark/build-calendar.js';
 import { readCorpus, readCorpora, saveGapReport } from '../../../../features/x-benchmark/store.js';
 // Aliased: features/x-quote-targets/day-plan.js already owns the name
 // `buildDayPlan` in this file, and the two build entirely different things —
 // that one merges a calendar day with scanned quote candidates, this one plans
 // a day of authored posts out of the content inventory.
 import { buildDayPlan as buildContentDayPlan } from '../../../../features/x-content-inventory/plan-day.js';
-import { projectDayPlan } from '../../../../features/x-content-inventory/day-plan-projection.js';
 import { validateInventory } from '../../../../features/x-content-inventory/schema.js';
 import { readInventory, upsertPackage, deletePackage, getPackage } from '../../../../features/x-content-inventory/store.js';
 import { buildClientPackage, applyApproval } from '../../../../features/x-content-inventory/client-capture.js';
@@ -34,13 +31,15 @@ import {
   createFirestoreRunStore, loadDailyLoopInputs, saveSuggestionDraft, editSuggestion, dismissSuggestion, createModelDrafter,
 } from '../../../../features/x-content-inventory/daily-run-store.js';
 import { createStrategyHandlersFromDb, STRATEGY_ROUTE_ACTIONS } from '../../../../features/x-strategy/route-handlers.js';
-import dailyLoopDemoSet from '../../../../features/x-content-inventory/daily-loop-demo-set.json' with { type: 'json' };
-// Same static-import reasoning as bundledCalendar above. These are the two
-// ingested corpora the planner needs as ROWS — x_corpora stores summarized stat
-// blocks, which summarizeCorpus cannot be fed, so the committed JSON is the
-// only source of rows a serverless request can reach.
+import { createContentPlanHandlers } from '../../../../features/x-strategy/content-plan.js';
+import { createFirestoreCorpusStore } from '../../../../features/x-strategy/corpus-store.js';
+import { createFirestorePlanStore } from '../../../../features/x-strategy/plan-store.js';
+// The DAILY LOOP still reads the two committed corpora directly (its slot spine is owner-only and hard-wired to
+// @bai_ee, see inputs.js). The plan doc reaches it through `readPlanDoc` below; moving its rows onto the rows store is
+// a separate decision because it changes the history evidence the loop shows.
 import ownCorpusRows from '../../../../docs/audits/bai-ee-x-corpus.json' with { type: 'json' };
 import benchmarkCorpusRows from '../../../../docs/audits/seb-design-x-corpus.json' with { type: 'json' };
+import dailyLoopDemoSet from '../../../../features/x-content-inventory/daily-loop-demo-set.json' with { type: 'json' };
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -309,51 +308,36 @@ const SUPPORTED_ACTIONS = [
 ];
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-/** Slot count per day. The upper bound is not a guess: tier 2 in
- * build-calendar.js tops out well below it, and a caller asking for 50 slots is
- * asking the planner to invent content that does not exist. */
-const MAX_PLAN_POSTS = 12;
-
-/**
- * Plan one day of authored posts from the content inventory.
- *
- * Free and offline in the same sense as refresh-analysis: two committed corpora,
- * the client's saved inventory, and pure functions over both. No X API, no
- * ScrapeCreators, no LLM — drafting the actual copy is a separate, explicit step.
- *
- * ⚠️ The corpora are @bai_ee's, so the mix this returns is benchmarked against
- * @bai_ee's history regardless of which client is loaded. Per-client planning
- * needs per-client corpus ROWS, which nothing stores yet.
- */
-async function handleContentPlan(context, body) {
-  const requestedPosts = Number(body?.posts);
-  const posts = Number.isFinite(requestedPosts) && requestedPosts >= 1
-    ? Math.min(Math.floor(requestedPosts), MAX_PLAN_POSTS)
-    : 5;
-  const date = typeof body?.date === 'string' && DATE_RE.test(body.date.trim())
-    ? body.date.trim()
-    : new Date().toISOString().slice(0, 10);
-
-  const { packages, seeded } = await readInventory();
-
-  const plan = buildContentDayPlan({
-    corpusRows: ownCorpusRows,
-    benchmarkRows: benchmarkCorpusRows,
-    packages,
-    date,
-    posts,
-  });
-
-  // `seeded` travels with the plan so the card can say the gaps come from the
-  // example rows, not from an inventory someone actually curated.
-  //
-  // `summary` is the narrowed view (day-plan-projection.js): it names each
-  // slot's state once and counts each route into a slot separately, because
-  // `plan.filled` counts inventory matches only — a day carrying a re-surfaced
-  // winner and two scan slots would otherwise read as one-fifth built. Additive;
-  // the panel keeps reading `plan`.
-  return { ok: true, plan, seeded, summary: projectDayPlan(plan, { posts }).summary };
+// `content-plan` and `refresh-analysis` live in features/x-strategy/content-plan.js: they read the client's Strategy
+// plan doc (x_strategy_plans) and corpus ROWS (x_corpora rows, committed-JSON fallback) so the Plan tab, the
+// Strategy tab and the daily loop share one plan. Built lazily on first use (no Firestore at import).
+// With NO plan doc they run the pre-T5 logic over `legacyRows` (the two static imports above) - see content-plan.js.
+//
+// Vercel: the corpus store's own default loader reads docs/audits via runtime fs, which the tracer may not bundle.
+// These static JSON imports ARE bundled, so the store is given them as its committed-JSON fallback instead.
+const COMMITTED_CORPORA = { bai_ee: ownCorpusRows, seb__design: benchmarkCorpusRows };
+const committedCorpusRows = (handle) => (Object.hasOwn(COMMITTED_CORPORA, handle) ? COMMITTED_CORPORA[handle] : null);
+let contentPlanHandlers = null;
+function getContentPlanHandlers() {
+  if (!contentPlanHandlers) {
+    contentPlanHandlers = createContentPlanHandlers({
+      corpusStore: createFirestoreCorpusStore(fb.adminDb, { loadCommitted: committedCorpusRows }),
+      planStore: createFirestorePlanStore(fb.adminDb),
+      readXGrowthConfig: async (clientId) => {
+        const snap = await fb.adminDb.collection('client_configs').doc(clientId).get();
+        return snap.exists ? snap.data()?.marketingBriefConfig?.xGrowth ?? null : null;
+      },
+      readInventory,
+      readCorpus,
+      readCorpora,
+      legacyRows: { own: ownCorpusRows, benchmark: benchmarkCorpusRows },
+      saveGapReport,
+    });
+  }
+  return contentPlanHandlers;
 }
+
+const handleContentPlan = (context, body) => getContentPlanHandlers().contentPlan(context, body);
 
 async function handleInventoryList(context) {
   const { packages, updatedAt, seeded } = await readInventory();
@@ -439,75 +423,7 @@ async function handleDecidePackage(decoded, body, state) {
   return { ok: true, pkg };
 }
 
-/**
- * Recompute the client's gap report and calendar from already-ingested corpora.
- *
- * Free and offline: it reads stat blocks that scripts/x-content/ingest-corpus.mjs
- * already stored and runs two pure functions over them. No X API, no
- * ScrapeCreators, no LLM — the ingest that costs something is the separate,
- * local, human-run step.
- */
-async function handleRefreshAnalysis(context) {
-  const snap = await fb.adminDb.collection('client_configs').doc(context.clientId).get();
-  const profile = resolveXGrowthProfile({
-    config: snap.exists ? snap.data()?.marketingBriefConfig?.xGrowth : null,
-  });
-
-  if (!profile.ready) {
-    const err = new Error(`X growth profile is incomplete — missing: ${profile.missing.join(', ')}.`);
-    err.status = 400;
-    throw err;
-  }
-
-  const ownCorpus = await readCorpus(profile.ownHandle);
-  if (!ownCorpus?.stats) {
-    const err = new Error(`No ingested corpus for @${profile.ownHandle}. Run: node scripts/x-content/ingest-corpus.mjs --handle ${profile.ownHandle} --write`);
-    err.status = 409;
-    throw err;
-  }
-
-  const benchmarks = await readCorpora(profile.benchmarkHandles);
-  if (!benchmarks.length) {
-    const err = new Error(`No ingested corpus for any benchmark account (${profile.benchmarkHandles.join(', ')}).`);
-    err.status = 409;
-    throw err;
-  }
-
-  // One report per benchmark. They are kept separate rather than averaged:
-  // two benchmark accounts can disagree, and an average of two strategies is
-  // usually neither. The first is the primary and drives the calendar.
-  const reports = benchmarks
-    .map((b) => compareToBenchmark({ own: ownCorpus.stats, benchmark: b.stats }))
-    .filter((r) => Array.isArray(r.gaps));
-  const primary = reports[0];
-
-  const tier = resolveTier({
-    tierOverride: profile.tierOverride,
-    currentAuthoredPerDay: ownCorpus.stats?.cadence?.authoredPerActiveDay,
-  });
-  const calendar = buildCalendar({
-    report: primary,
-    ownStats: ownCorpus.stats,
-    tier,
-    profile,
-    days: 15,
-    startDate: new Date().toISOString().slice(0, 10),
-  });
-
-  const report = {
-    ...primary,
-    tier,
-    // Secondary benchmarks are reported but never merged into the primary.
-    alternates: reports.slice(1).map((r) => ({ benchmarkHandle: r.benchmarkHandle, gaps: r.gaps, projection: r.projection })),
-    corpora: {
-      own: { handle: ownCorpus.handle, ...(ownCorpus.meta ?? {}) },
-      benchmarks: benchmarks.map((b) => ({ handle: b.handle, ...(b.meta ?? {}) })),
-    },
-  };
-
-  await saveGapReport(context.clientId, { report, calendar });
-  return { ok: true, report, calendar, tier };
-}
+const handleRefreshAnalysis = (context) => getContentPlanHandlers().refreshAnalysis(context);
 
 // ---- Content Engine v2: buckets / folders / item facets (admin-only route) ----
 
@@ -693,6 +609,8 @@ async function handleDailyRun(context, action, body) {
       readInputs: () => loadDailyLoopInputs({
         db: fb.adminDb,
         buildDayPlan: buildContentDayPlan,
+        // One plan everywhere: the Strategy plan doc sets the loop's cadence, engine targets, floors and caps.
+        readPlanDoc: (id) => createFirestorePlanStore(fb.adminDb).get(id),
         loadBrainContext: (id) => loadClientBrainContext(id, { useFor: 'socialPosts', requireApproved: true }).catch(() => ''),
       }, {
         clientId: context.clientId,
@@ -763,6 +681,7 @@ let strategyHandlers = null;
 function getStrategyHandlers() {
   if (!strategyHandlers) {
     strategyHandlers = createStrategyHandlersFromDb(fb.adminDb, {
+      loadCommitted: committedCorpusRows,
       readPackages: async () => (await readInventory()).packages,
       runDailyAction: (context, action, body) => handleDailyRun(context, action, body),
       runUpdateItemFacets: (context, body) => handleUpdateItemFacets(context, body),

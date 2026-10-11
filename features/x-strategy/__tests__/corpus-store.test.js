@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import {
   createMemoryCorpusStore, createFirestoreCorpusStore, CorpusStoreError, normalizeHandle, defaultLoadCommitted,
 } from '../corpus-store.js';
@@ -173,5 +175,29 @@ test('firestore errors propagate as typed CorpusStoreError', async () => {
     const s = createFirestoreCorpusStore(fakeDb({ failOn }), { loadCommitted: () => null });
     const op = failOn === 'col' ? () => s.readRows('h') : () => s.writeMergedRows('h', rows(2), {});
     await assert.rejects(op, (e) => e instanceof CorpusStoreError && e.code === 'firestore' && e.cause instanceof Error);
+  }
+});
+
+test('a store built with an injected loadCommitted never touches fs (Vercel: static-import loader)', async () => {
+  const realRead = fs.readFileSync;
+  const reads = [];
+  fs.readFileSync = (...a) => { reads.push(String(a[0])); return realRead(...a); };
+  syncBuiltinESMExports(); // corpus-store holds a named import of readFileSync
+  try {
+    const injected = rows(3);
+    const calls = [];
+    const s = createFirestoreCorpusStore(fakeDb(), { loadCommitted: (h) => { calls.push(h); return h === 'bai_ee' ? injected : null; } });
+    const hit = await s.readRows('bai_ee');
+    assert.equal(hit.source, 'committed-json');
+    assert.deepEqual(hit.rows, injected);
+    assert.equal((await s.readRows('seb__design')).source, 'none');
+    assert.deepEqual(calls, ['bai_ee', 'seb__design']);
+    assert.deepEqual(reads, [], 'no fs read happened');
+    // sanity: the default loader DOES read the repo file, so the spy would have caught it
+    defaultLoadCommitted('bai_ee');
+    assert.equal(reads.length, 1);
+  } finally {
+    fs.readFileSync = realRead;
+    syncBuiltinESMExports();
   }
 });

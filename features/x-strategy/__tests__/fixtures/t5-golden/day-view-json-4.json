@@ -1,0 +1,1576 @@
+{
+  "date": "2026-10-11",
+  "audit": {
+    "total": 3,
+    "valid": 3,
+    "bySeries": {
+      "C6": 1,
+      "C1": 1,
+      "C3": 1
+    },
+    "results": [
+      {
+        "id": "holopaper-cloth-grab",
+        "ok": true,
+        "errors": [],
+        "warnings": [
+          "C6 fills showcase slots and needs video; this row is \"needs-capture\" — route it through a render step or repoint it at a text slot"
+        ]
+      },
+      {
+        "id": "EXAMPLE-record-skeleton",
+        "ok": true,
+        "errors": [],
+        "warnings": [
+          "C1 fills showcase slots and needs video; this row is \"needs-capture\" — route it through a render step or repoint it at a text slot"
+        ]
+      },
+      {
+        "id": "EXAMPLE-flyer-skeleton",
+        "ok": true,
+        "errors": [],
+        "warnings": [
+          "C3 is anniversary-triggered but eventDate is not a parseable date — it will never fire on its own"
+        ]
+      }
+    ]
+  },
+  "ownStats": {
+    "handle": "bai_ee",
+    "posts": 262,
+    "authoredPosts": 95,
+    "retweets": 167,
+    "dropped": 0,
+    "authoredShare": 36.26,
+    "strangerEligibleShare": 33.59,
+    "base": {
+      "avgLikes": 2.24,
+      "pooledER": 1.81,
+      "medianViews": 66,
+      "viewsCoverage": 0.8842,
+      "liftBasis": "avgLikes"
+    },
+    "cadence": {
+      "activeDays": 71,
+      "firstDate": "2026-07-07",
+      "lastDate": "2026-10-09",
+      "postsPerActiveDay": 3.69,
+      "authoredPerActiveDay": 1.34,
+      "occupiedHours": 201,
+      "occupiedHoursPerDay": 2.83,
+      "postsPerOccupiedHour": 1.3,
+      "busiestHour": 5,
+      "shareInMultiHour": 40.46
+    },
+    "byType": {
+      "quote-commentary": {
+        "n": 15,
+        "avgLikes": 1.4,
+        "pooledER": 1.9,
+        "lift": 0.6244,
+        "liftER": 1.0493,
+        "share": 15.79
+      },
+      "quote-react": {
+        "n": 31,
+        "avgLikes": 1.74,
+        "pooledER": 2.07,
+        "lift": 0.7769,
+        "liftER": 1.1421,
+        "share": 32.63
+      },
+      "original-showcase": {
+        "n": 31,
+        "avgLikes": 3.65,
+        "pooledER": 1.65,
+        "lift": 1.6258,
+        "liftER": 0.914,
+        "share": 32.63
+      },
+      "reply": {
+        "n": 7,
+        "avgLikes": 1.86,
+        "pooledER": 3.13,
+        "lift": 0.8283,
+        "liftER": 1.7318,
+        "share": 7.37
+      },
+      "original-text": {
+        "n": 10,
+        "avgLikes": 0.4,
+        "pooledER": 1.13,
+        "lift": 0.1784,
+        "liftER": 0.6221,
+        "share": 10.53
+      },
+      "self-quote": {
+        "n": 1,
+        "avgLikes": 8,
+        "pooledER": 4.21,
+        "lift": 3.5681,
+        "liftER": 2.3261,
+        "share": 1.05
+      }
+    },
+    "byMedia": {
+      "video": {
+        "n": 27,
+        "avgLikes": 4.56,
+        "pooledER": 1.76,
+        "lift": 2.0318,
+        "liftER": 0.9716,
+        "share": 28.42
+      },
+      "image": {
+        "n": 13,
+        "avgLikes": 1.23,
+        "pooledER": 1.65,
+        "lift": 0.5489,
+        "liftER": 0.9103,
+        "share": 13.68
+      },
+      "gif": {
+        "n": 1,
+        "avgLikes": 1,
+        "pooledER": 2.27,
+        "lift": 0.446,
+        "liftER": 1.2556,
+        "share": 1.05
+      },
+      "none": {
+        "n": 54,
+        "avgLikes": 1.35,
+        "pooledER": 1.96,
+        "lift": 0.6029,
+        "liftER": 1.0807,
+        "share": 56.84
+      }
+    },
+    "mediaWithinType": {
+      "quote-commentary": {
+        "video": {
+          "n": 1,
+          "avgLikes": 1,
+          "liftWithinType": 0.7143
+        },
+        "image": {
+          "n": 2,
+          "avgLikes": 1,
+          "liftWithinType": 0.7143
+        },
+        "none": {
+          "n": 12,
+          "avgLikes": 1.5,
+          "liftWithinType": 1.0714
+        }
+      },
+      "quote-react": {
+        "video": {
+          "n": 1,
+          "avgLikes": 4,
+          "liftWithinType": 2.2963
+        },
+        "image": {
+          "n": 1,
+          "avgLikes": 0,
+          "liftWithinType": 0
+        },
+        "none": {
+          "n": 29,
+          "avgLikes": 1.72,
+          "liftWithinType": 0.9898
+        }
+      },
+      "original-showcase": {
+        "video": {
+          "n": 22,
+          "avgLikes": 4.68,
+          "liftWithinType": 1.2844
+        },
+        "image": {
+          "n": 8,
+          "avgLikes": 1.13,
+          "liftWithinType": 0.3086
+        },
+        "gif": {
+          "n": 1,
+          "avgLikes": 1,
+          "liftWithinType": 0.2743
+        }
+      },
+      "reply": {
+        "video": {
+          "n": 2,
+          "avgLikes": 3.5,
+          "liftWithinType": 1.8846
+        },
+        "image": {
+          "n": 2,
+          "avgLikes": 2.5,
+          "liftWithinType": 1.3462
+        },
+        "none": {
+          "n": 3,
+          "avgLikes": 0.33,
+          "liftWithinType": 0.1795
+        }
+      },
+      "original-text": {
+        "none": {
+          "n": 10,
+          "avgLikes": 0.4,
+          "liftWithinType": 1
+        }
+      },
+      "self-quote": {
+        "video": {
+          "n": 1,
+          "avgLikes": 8,
+          "liftWithinType": 1
+        }
+      }
+    },
+    "byTopic": {
+      "web3-crypto": {
+        "n": 1,
+        "avgLikes": 1,
+        "pooledER": null,
+        "lift": 0.446,
+        "liftER": null,
+        "share": 1.05
+      },
+      "ai-tooling": {
+        "n": 17,
+        "avgLikes": 1.18,
+        "pooledER": 2.17,
+        "lift": 0.5247,
+        "liftER": 1.201,
+        "share": 17.89
+      },
+      "music-audio": {
+        "n": 2,
+        "avgLikes": 0.5,
+        "pooledER": null,
+        "lift": 0.223,
+        "liftER": null,
+        "share": 2.11
+      },
+      "untagged-riff": {
+        "n": 29,
+        "avgLikes": 1.9,
+        "pooledER": 2.38,
+        "lift": 0.8459,
+        "liftER": 1.3172,
+        "share": 30.53
+      },
+      "motion-animation-web": {
+        "n": 1,
+        "avgLikes": 1,
+        "pooledER": null,
+        "lift": 0.446,
+        "liftER": null,
+        "share": 1.05
+      },
+      "own-work-process": {
+        "n": 1,
+        "avgLikes": 0,
+        "pooledER": null,
+        "lift": 0,
+        "liftER": null,
+        "share": 1.05
+      },
+      "web3-gaming": {
+        "n": 10,
+        "avgLikes": 7.7,
+        "pooledER": 1.36,
+        "lift": 3.4343,
+        "liftER": 0.7523,
+        "share": 10.53
+      },
+      "music-archive-dj": {
+        "n": 22,
+        "avgLikes": 2.23,
+        "pooledER": 2.51,
+        "lift": 0.9934,
+        "liftER": 1.3848,
+        "share": 23.16
+      },
+      "platform-complaint": {
+        "n": 8,
+        "avgLikes": 0.88,
+        "pooledER": 1.39,
+        "lift": 0.3903,
+        "liftER": 0.7661,
+        "share": 8.42
+      },
+      "personal-life": {
+        "n": 6,
+        "avgLikes": 2.83,
+        "pooledER": 4.21,
+        "lift": 1.2637,
+        "liftER": 2.325,
+        "share": 6.32
+      },
+      "design-engineering": {
+        "n": 14,
+        "avgLikes": 1.71,
+        "pooledER": 2.5,
+        "lift": 0.7646,
+        "liftER": 1.3786,
+        "share": 14.74
+      },
+      "craft-opinion": {
+        "n": 6,
+        "avgLikes": 4.67,
+        "pooledER": 0.79,
+        "lift": 2.0814,
+        "liftER": 0.4377,
+        "share": 6.32
+      },
+      "client-work-status": {
+        "n": 11,
+        "avgLikes": 2.09,
+        "pooledER": 2.43,
+        "lift": 0.9326,
+        "liftER": 1.3422,
+        "share": 11.58
+      },
+      "web3-design-work": {
+        "n": 14,
+        "avgLikes": 5.43,
+        "pooledER": 1.35,
+        "lift": 2.4212,
+        "liftER": 0.7483,
+        "share": 14.74
+      },
+      "decentralized-infra": {
+        "n": 5,
+        "avgLikes": 2,
+        "pooledER": 3.16,
+        "lift": 0.892,
+        "liftER": 1.7446,
+        "share": 5.26
+      },
+      "crypto-speculation": {
+        "n": 4,
+        "avgLikes": 8,
+        "pooledER": 2.14,
+        "lift": 3.5681,
+        "liftER": 1.1836,
+        "share": 4.21
+      },
+      "us-politics": {
+        "n": 3,
+        "avgLikes": 0,
+        "pooledER": 0,
+        "lift": 0,
+        "liftER": 0,
+        "share": 3.16
+      }
+    },
+    "byHour": [
+      {
+        "hour": 0,
+        "n": 0,
+        "avgLikes": null,
+        "pooledER": null,
+        "lift": 0,
+        "liftER": null
+      },
+      {
+        "hour": 1,
+        "n": 0,
+        "avgLikes": null,
+        "pooledER": null,
+        "lift": 0,
+        "liftER": null
+      },
+      {
+        "hour": 2,
+        "n": 0,
+        "avgLikes": null,
+        "pooledER": null,
+        "lift": 0,
+        "liftER": null
+      },
+      {
+        "hour": 3,
+        "n": 1,
+        "avgLikes": 0,
+        "pooledER": 0,
+        "lift": 0,
+        "liftER": 0
+      },
+      {
+        "hour": 4,
+        "n": 0,
+        "avgLikes": null,
+        "pooledER": null,
+        "lift": 0,
+        "liftER": null
+      },
+      {
+        "hour": 5,
+        "n": 0,
+        "avgLikes": null,
+        "pooledER": null,
+        "lift": 0,
+        "liftER": null
+      },
+      {
+        "hour": 6,
+        "n": 0,
+        "avgLikes": null,
+        "pooledER": null,
+        "lift": 0,
+        "liftER": null
+      },
+      {
+        "hour": 7,
+        "n": 1,
+        "avgLikes": 4,
+        "pooledER": 2.88,
+        "lift": 1.784,
+        "liftER": 1.5898
+      },
+      {
+        "hour": 8,
+        "n": 5,
+        "avgLikes": 7.2,
+        "pooledER": 0.91,
+        "lift": 3.2113,
+        "liftER": 0.5011
+      },
+      {
+        "hour": 9,
+        "n": 10,
+        "avgLikes": 1.5,
+        "pooledER": 2.34,
+        "lift": 0.669,
+        "liftER": 1.2923
+      },
+      {
+        "hour": 10,
+        "n": 10,
+        "avgLikes": 1.5,
+        "pooledER": 2.55,
+        "lift": 0.669,
+        "liftER": 1.4098
+      },
+      {
+        "hour": 11,
+        "n": 5,
+        "avgLikes": 1.6,
+        "pooledER": 3.48,
+        "lift": 0.7136,
+        "liftER": 1.924
+      },
+      {
+        "hour": 12,
+        "n": 9,
+        "avgLikes": 2.89,
+        "pooledER": 2.8,
+        "lift": 1.2885,
+        "liftER": 1.5469
+      },
+      {
+        "hour": 13,
+        "n": 9,
+        "avgLikes": 4.78,
+        "pooledER": 2.2,
+        "lift": 2.1309,
+        "liftER": 1.2169
+      },
+      {
+        "hour": 14,
+        "n": 3,
+        "avgLikes": 0.67,
+        "pooledER": 1.92,
+        "lift": 0.2973,
+        "liftER": 1.0624
+      },
+      {
+        "hour": 15,
+        "n": 5,
+        "avgLikes": 1.6,
+        "pooledER": 2.38,
+        "lift": 0.7136,
+        "liftER": 1.3154
+      },
+      {
+        "hour": 16,
+        "n": 4,
+        "avgLikes": 0.5,
+        "pooledER": 0.66,
+        "lift": 0.223,
+        "liftER": 0.3659
+      },
+      {
+        "hour": 17,
+        "n": 5,
+        "avgLikes": 0.6,
+        "pooledER": 1.15,
+        "lift": 0.2676,
+        "liftER": 0.635
+      },
+      {
+        "hour": 18,
+        "n": 7,
+        "avgLikes": 1.29,
+        "pooledER": 1.37,
+        "lift": 0.5734,
+        "liftER": 0.7547
+      },
+      {
+        "hour": 19,
+        "n": 6,
+        "avgLikes": 1,
+        "pooledER": 2.39,
+        "lift": 0.446,
+        "liftER": 1.3206
+      },
+      {
+        "hour": 20,
+        "n": 4,
+        "avgLikes": 1,
+        "pooledER": 2.76,
+        "lift": 0.446,
+        "liftER": 1.5261
+      },
+      {
+        "hour": 21,
+        "n": 4,
+        "avgLikes": 3.75,
+        "pooledER": 3.23,
+        "lift": 1.6725,
+        "liftER": 1.7855
+      },
+      {
+        "hour": 22,
+        "n": 5,
+        "avgLikes": 2.8,
+        "pooledER": 3.15,
+        "lift": 1.2488,
+        "liftER": 1.7392
+      },
+      {
+        "hour": 23,
+        "n": 2,
+        "avgLikes": 1.5,
+        "pooledER": 3.23,
+        "lift": 0.669,
+        "liftER": 1.7821
+      }
+    ],
+    "lengthByType": {
+      "quote-commentary": {
+        "n": 15,
+        "median": 162,
+        "topQuartile": {
+          "n": 4,
+          "p10": 95,
+          "median": 113,
+          "p90": 155
+        }
+      },
+      "quote-react": {
+        "n": 31,
+        "median": 23,
+        "topQuartile": {
+          "n": 8,
+          "p10": 10,
+          "median": 40,
+          "p90": 70
+        }
+      },
+      "original-showcase": {
+        "n": 31,
+        "median": 133,
+        "topQuartile": {
+          "n": 8,
+          "p10": 53,
+          "median": 215,
+          "p90": 381
+        }
+      },
+      "reply": {
+        "n": 7,
+        "median": 257,
+        "topQuartile": {
+          "n": 2,
+          "p10": 257,
+          "median": 257,
+          "p90": 259
+        }
+      },
+      "original-text": {
+        "n": 10,
+        "median": 124,
+        "topQuartile": {
+          "n": 3,
+          "p10": 50,
+          "median": 124,
+          "p90": 131
+        }
+      },
+      "self-quote": {
+        "n": 1,
+        "median": 68,
+        "topQuartile": {
+          "n": 1,
+          "p10": 68,
+          "median": 68,
+          "p90": 68
+        }
+      }
+    }
+  },
+  "benchStats": {
+    "handle": "benchmark",
+    "posts": 984,
+    "authoredPosts": 739,
+    "retweets": 245,
+    "dropped": 0,
+    "authoredShare": 75.1,
+    "strangerEligibleShare": 69.11,
+    "base": {
+      "avgLikes": 36.86,
+      "pooledER": 1.93,
+      "medianViews": 2168,
+      "viewsCoverage": 0.203,
+      "liftBasis": "avgLikes"
+    },
+    "cadence": {
+      "activeDays": 97,
+      "firstDate": "2026-07-07",
+      "lastDate": "2026-10-11",
+      "postsPerActiveDay": 10.14,
+      "authoredPerActiveDay": 7.62,
+      "occupiedHours": 539,
+      "occupiedHoursPerDay": 5.56,
+      "postsPerOccupiedHour": 1.83,
+      "busiestHour": 11,
+      "shareInMultiHour": 68.39
+    },
+    "byType": {
+      "quote-react": {
+        "n": 199,
+        "avgLikes": 45.36,
+        "pooledER": 1.63,
+        "lift": 1.2306,
+        "liftER": 0.8458,
+        "share": 26.93
+      },
+      "quote-commentary": {
+        "n": 64,
+        "avgLikes": 35.11,
+        "pooledER": 1.55,
+        "lift": 0.9526,
+        "liftER": 0.8051,
+        "share": 8.66
+      },
+      "original-text": {
+        "n": 203,
+        "avgLikes": 22.41,
+        "pooledER": 2.5,
+        "lift": 0.608,
+        "liftER": 1.2975,
+        "share": 27.47
+      },
+      "self-quote": {
+        "n": 28,
+        "avgLikes": 57.5,
+        "pooledER": 2.34,
+        "lift": 1.5601,
+        "liftER": 1.2155,
+        "share": 3.79
+      },
+      "original-showcase": {
+        "n": 186,
+        "avgLikes": 52.25,
+        "pooledER": 2.3,
+        "lift": 1.4176,
+        "liftER": 1.1943,
+        "share": 25.17
+      },
+      "reply": {
+        "n": 59,
+        "avgLikes": 1.47,
+        "pooledER": 1.4,
+        "lift": 0.04,
+        "liftER": 0.7261,
+        "share": 7.98
+      }
+    },
+    "byMedia": {
+      "video": {
+        "n": 77,
+        "avgLikes": 88.25,
+        "pooledER": 2.22,
+        "lift": 2.3943,
+        "liftER": 1.1541,
+        "share": 10.42
+      },
+      "image": {
+        "n": 136,
+        "avgLikes": 33.39,
+        "pooledER": 2.63,
+        "lift": 0.9059,
+        "liftER": 1.3637,
+        "share": 18.4
+      },
+      "gif": {
+        "n": 9,
+        "avgLikes": 10.89,
+        "pooledER": 1.9,
+        "lift": 0.2954,
+        "liftER": 0.9889,
+        "share": 1.22
+      },
+      "none": {
+        "n": 517,
+        "avgLikes": 30.57,
+        "pooledER": 1.71,
+        "lift": 0.8293,
+        "liftER": 0.8869,
+        "share": 69.96
+      }
+    },
+    "mediaWithinType": {
+      "quote-react": {
+        "video": {
+          "n": 3,
+          "avgLikes": 58,
+          "liftWithinType": 1.2788
+        },
+        "image": {
+          "n": 2,
+          "avgLikes": 28,
+          "liftWithinType": 0.6173
+        },
+        "none": {
+          "n": 194,
+          "avgLikes": 45.34,
+          "liftWithinType": 0.9996
+        }
+      },
+      "quote-commentary": {
+        "image": {
+          "n": 1,
+          "avgLikes": 224,
+          "liftWithinType": 6.3801
+        },
+        "none": {
+          "n": 63,
+          "avgLikes": 32.11,
+          "liftWithinType": 0.9146
+        }
+      },
+      "original-text": {
+        "none": {
+          "n": 203,
+          "avgLikes": 22.41,
+          "liftWithinType": 1
+        }
+      },
+      "self-quote": {
+        "video": {
+          "n": 12,
+          "avgLikes": 57.5,
+          "liftWithinType": 1
+        },
+        "image": {
+          "n": 12,
+          "avgLikes": 47,
+          "liftWithinType": 0.8174
+        },
+        "none": {
+          "n": 4,
+          "avgLikes": 89,
+          "liftWithinType": 1.5478
+        }
+      },
+      "original-showcase": {
+        "video": {
+          "n": 61,
+          "avgLikes": 97.18,
+          "liftWithinType": 1.86
+        },
+        "image": {
+          "n": 116,
+          "avgLikes": 31.83,
+          "liftWithinType": 0.6092
+        },
+        "gif": {
+          "n": 9,
+          "avgLikes": 10.89,
+          "liftWithinType": 0.2084
+        }
+      },
+      "reply": {
+        "video": {
+          "n": 1,
+          "avgLikes": 3,
+          "liftWithinType": 2.0345
+        },
+        "image": {
+          "n": 5,
+          "avgLikes": 1,
+          "liftWithinType": 0.6782
+        },
+        "none": {
+          "n": 53,
+          "avgLikes": 1.49,
+          "liftWithinType": 1.0108
+        }
+      }
+    },
+    "byTopic": {
+      "motion-animation-web": {
+        "n": 75,
+        "avgLikes": 77.48,
+        "pooledER": 2.21,
+        "lift": 2.1022,
+        "liftER": 1.145,
+        "share": 10.15
+      },
+      "client-work-credit": {
+        "n": 44,
+        "avgLikes": 51.23,
+        "pooledER": 2,
+        "lift": 1.3899,
+        "liftER": 1.0383,
+        "share": 5.95
+      },
+      "tools-software": {
+        "n": 8,
+        "avgLikes": 37.5,
+        "pooledER": null,
+        "lift": 1.0175,
+        "liftER": null,
+        "share": 1.08
+      },
+      "untagged-riff": {
+        "n": 383,
+        "avgLikes": 21.55,
+        "pooledER": 2.08,
+        "lift": 0.5847,
+        "liftER": 1.0806,
+        "share": 51.83
+      },
+      "editorial-typography": {
+        "n": 53,
+        "avgLikes": 47.17,
+        "pooledER": 1.64,
+        "lift": 1.2798,
+        "liftER": 0.8523,
+        "share": 7.17
+      },
+      "brand-identity": {
+        "n": 43,
+        "avgLikes": 31.23,
+        "pooledER": null,
+        "lift": 0.8474,
+        "liftER": null,
+        "share": 5.82
+      },
+      "own-work-process": {
+        "n": 39,
+        "avgLikes": 57.15,
+        "pooledER": 1.79,
+        "lift": 1.5507,
+        "liftER": 0.9303,
+        "share": 5.28
+      },
+      "ui-product-design": {
+        "n": 10,
+        "avgLikes": 66.1,
+        "pooledER": null,
+        "lift": 1.7934,
+        "liftER": null,
+        "share": 1.35
+      },
+      "3d-spatial": {
+        "n": 2,
+        "avgLikes": 7,
+        "pooledER": null,
+        "lift": 0.1899,
+        "liftER": null,
+        "share": 0.27
+      },
+      "ai-tooling": {
+        "n": 12,
+        "avgLikes": 35.58,
+        "pooledER": null,
+        "lift": 0.9655,
+        "liftER": null,
+        "share": 1.62
+      },
+      "craft-advice": {
+        "n": 12,
+        "avgLikes": 40.17,
+        "pooledER": 3.09,
+        "lift": 1.0898,
+        "liftER": 1.6027,
+        "share": 1.62
+      },
+      "platform-meta": {
+        "n": 42,
+        "avgLikes": 29.45,
+        "pooledER": 0.85,
+        "lift": 0.7991,
+        "liftER": 0.4431,
+        "share": 5.68
+      },
+      "web3-crypto": {
+        "n": 1,
+        "avgLikes": 17,
+        "pooledER": null,
+        "lift": 0.4612,
+        "liftER": null,
+        "share": 0.14
+      },
+      "freelance-business": {
+        "n": 73,
+        "avgLikes": 36.78,
+        "pooledER": 1.84,
+        "lift": 0.9979,
+        "liftER": 0.9566,
+        "share": 9.88
+      },
+      "retro-analog-preinternet": {
+        "n": 23,
+        "avgLikes": 78.04,
+        "pooledER": 1.76,
+        "lift": 2.1175,
+        "liftER": 0.9141,
+        "share": 3.11
+      },
+      "music-audio": {
+        "n": 2,
+        "avgLikes": 15.5,
+        "pooledER": null,
+        "lift": 0.4205,
+        "liftER": null,
+        "share": 0.27
+      },
+      "audience-question": {
+        "n": 16,
+        "avgLikes": 13.81,
+        "pooledER": 1.74,
+        "lift": 0.3748,
+        "liftER": 0.904,
+        "share": 2.17
+      },
+      "anti-ai-slop": {
+        "n": 19,
+        "avgLikes": 45.79,
+        "pooledER": 2.15,
+        "lift": 1.2424,
+        "liftER": 1.1155,
+        "share": 2.57
+      },
+      "industry-hot-take": {
+        "n": 13,
+        "avgLikes": 30.62,
+        "pooledER": 2.73,
+        "lift": 0.8307,
+        "liftER": 1.4172,
+        "share": 1.76
+      },
+      "japanese-asian-design": {
+        "n": 20,
+        "avgLikes": 218.4,
+        "pooledER": 2.21,
+        "lift": 5.9257,
+        "liftER": 1.146,
+        "share": 2.71
+      },
+      "tools": {
+        "n": 37,
+        "avgLikes": 46.19,
+        "pooledER": 1.62,
+        "lift": 1.2532,
+        "liftER": 0.8402,
+        "share": 5.01
+      },
+      "personal-vulnerability": {
+        "n": 7,
+        "avgLikes": 49.29,
+        "pooledER": 1.47,
+        "lift": 1.3372,
+        "liftER": 0.7636,
+        "share": 0.95
+      },
+      "growth-milestone": {
+        "n": 9,
+        "avgLikes": 32.44,
+        "pooledER": 1.22,
+        "lift": 0.8803,
+        "liftER": 0.631,
+        "share": 1.22
+      }
+    },
+    "byHour": [
+      {
+        "hour": 0,
+        "n": 12,
+        "avgLikes": 21.83,
+        "pooledER": 2.36,
+        "lift": 0.5924,
+        "liftER": 1.2268
+      },
+      {
+        "hour": 1,
+        "n": 0,
+        "avgLikes": null,
+        "pooledER": null,
+        "lift": 0,
+        "liftER": null
+      },
+      {
+        "hour": 2,
+        "n": 0,
+        "avgLikes": null,
+        "pooledER": null,
+        "lift": 0,
+        "liftER": null
+      },
+      {
+        "hour": 3,
+        "n": 0,
+        "avgLikes": null,
+        "pooledER": null,
+        "lift": 0,
+        "liftER": null
+      },
+      {
+        "hour": 4,
+        "n": 1,
+        "avgLikes": 17,
+        "pooledER": null,
+        "lift": 0.4612,
+        "liftER": null
+      },
+      {
+        "hour": 5,
+        "n": 2,
+        "avgLikes": 11.5,
+        "pooledER": null,
+        "lift": 0.312,
+        "liftER": null
+      },
+      {
+        "hour": 6,
+        "n": 8,
+        "avgLikes": 37.38,
+        "pooledER": 1.14,
+        "lift": 1.0141,
+        "liftER": 0.5914
+      },
+      {
+        "hour": 7,
+        "n": 16,
+        "avgLikes": 15.94,
+        "pooledER": null,
+        "lift": 0.4324,
+        "liftER": null
+      },
+      {
+        "hour": 8,
+        "n": 19,
+        "avgLikes": 28.95,
+        "pooledER": 3.82,
+        "lift": 0.7854,
+        "liftER": 1.9811
+      },
+      {
+        "hour": 9,
+        "n": 29,
+        "avgLikes": 48.45,
+        "pooledER": 1.82,
+        "lift": 1.3145,
+        "liftER": 0.9459
+      },
+      {
+        "hour": 10,
+        "n": 56,
+        "avgLikes": 52.32,
+        "pooledER": 2.56,
+        "lift": 1.4196,
+        "liftER": 1.3306
+      },
+      {
+        "hour": 11,
+        "n": 43,
+        "avgLikes": 51,
+        "pooledER": 1.55,
+        "lift": 1.3837,
+        "liftER": 0.8066
+      },
+      {
+        "hour": 12,
+        "n": 40,
+        "avgLikes": 25.35,
+        "pooledER": 1.91,
+        "lift": 0.6878,
+        "liftER": 0.9925
+      },
+      {
+        "hour": 13,
+        "n": 62,
+        "avgLikes": 57.73,
+        "pooledER": 2.13,
+        "lift": 1.5662,
+        "liftER": 1.1038
+      },
+      {
+        "hour": 14,
+        "n": 63,
+        "avgLikes": 35.37,
+        "pooledER": 2.32,
+        "lift": 0.9595,
+        "liftER": 1.2069
+      },
+      {
+        "hour": 15,
+        "n": 47,
+        "avgLikes": 21.32,
+        "pooledER": 2.29,
+        "lift": 0.5784,
+        "liftER": 1.1913
+      },
+      {
+        "hour": 16,
+        "n": 34,
+        "avgLikes": 61.18,
+        "pooledER": 1.25,
+        "lift": 1.6599,
+        "liftER": 0.6513
+      },
+      {
+        "hour": 17,
+        "n": 57,
+        "avgLikes": 53.35,
+        "pooledER": 2.08,
+        "lift": 1.4475,
+        "liftER": 1.081
+      },
+      {
+        "hour": 18,
+        "n": 50,
+        "avgLikes": 24.02,
+        "pooledER": 1.88,
+        "lift": 0.6517,
+        "liftER": 0.9737
+      },
+      {
+        "hour": 19,
+        "n": 40,
+        "avgLikes": 18.9,
+        "pooledER": 1.85,
+        "lift": 0.5128,
+        "liftER": 0.9627
+      },
+      {
+        "hour": 20,
+        "n": 50,
+        "avgLikes": 31.96,
+        "pooledER": 1.85,
+        "lift": 0.8671,
+        "liftER": 0.9603
+      },
+      {
+        "hour": 21,
+        "n": 50,
+        "avgLikes": 21.82,
+        "pooledER": 2.68,
+        "lift": 0.592,
+        "liftER": 1.3929
+      },
+      {
+        "hour": 22,
+        "n": 28,
+        "avgLikes": 47.82,
+        "pooledER": 1.82,
+        "lift": 1.2975,
+        "liftER": 0.943
+      },
+      {
+        "hour": 23,
+        "n": 32,
+        "avgLikes": 11.69,
+        "pooledER": 1.22,
+        "lift": 0.3171,
+        "liftER": 0.6336
+      }
+    ],
+    "lengthByType": {
+      "quote-react": {
+        "n": 199,
+        "median": 37,
+        "topQuartile": {
+          "n": 50,
+          "p10": 15,
+          "median": 46,
+          "p90": 68
+        }
+      },
+      "quote-commentary": {
+        "n": 64,
+        "median": 170,
+        "topQuartile": {
+          "n": 16,
+          "p10": 104,
+          "median": 148,
+          "p90": 1021
+        }
+      },
+      "original-text": {
+        "n": 203,
+        "median": 161,
+        "topQuartile": {
+          "n": 51,
+          "p10": 97,
+          "median": 254,
+          "p90": 918
+        }
+      },
+      "self-quote": {
+        "n": 28,
+        "median": 90,
+        "topQuartile": {
+          "n": 7,
+          "p10": 39,
+          "median": 76,
+          "p90": 729
+        }
+      },
+      "original-showcase": {
+        "n": 186,
+        "median": 90,
+        "topQuartile": {
+          "n": 47,
+          "p10": 48,
+          "median": 90,
+          "p90": 189
+        }
+      },
+      "reply": {
+        "n": 59,
+        "median": 120,
+        "topQuartile": {
+          "n": 15,
+          "p10": 70,
+          "median": 144,
+          "p90": 387
+        }
+      }
+    }
+  },
+  "report": {
+    "ownHandle": "bai_ee",
+    "benchmarkHandle": "benchmark",
+    "warnings": [
+      "Own view coverage is 88% — engagement-rate figures in this block are a biased subsample; all lifts use likes.",
+      "Benchmark view coverage is 20% — its engagement-rate figures are a biased subsample; all lifts use likes.",
+      "Hour-of-day figures are each account's own local clock and are not aligned across accounts — only the shape (hours occupied, posts per hour) is compared.",
+      "Topic comparison suppressed: the two corpora share 6 of 23 topic labels (26%). Topic labels come from a per-account tagger, so a benchmark topic showing 0% of your output would describe the tagger, not the account."
+    ],
+    "gaps": [
+      {
+        "id": "volume",
+        "dimension": "cadence",
+        "unit": "perDay",
+        "headline": "Publishes 5.69× more authored posts per active day",
+        "own": 1.34,
+        "benchmark": 7.62,
+        "delta": 6.28,
+        "impact": 4.6866,
+        "confidence": "high",
+        "evidence": {
+          "ownActiveDays": 71,
+          "benchmarkActiveDays": 97
+        }
+      },
+      {
+        "id": "authored-share",
+        "dimension": "composition",
+        "unit": "perDay",
+        "headline": "75.1% of the benchmark's output is authored against 36.26% — reallocating existing slots alone is 2.07× your authored output, at today's posting frequency",
+        "own": 36.26,
+        "benchmark": 75.1,
+        "delta": 38.84,
+        "impact": 1.0681,
+        "confidence": "high",
+        "evidence": {
+          "ownRetweets": 167,
+          "benchmarkRetweets": 245,
+          "ownStrangerEligibleShare": 33.59,
+          "benchmarkStrangerEligibleShare": 69.11
+        }
+      },
+      {
+        "id": "type-mix:quote-commentary",
+        "dimension": "type-mix",
+        "unit": "perPost",
+        "direction": "decrease",
+        "headline": "Over-posts quote-commentary — 15.79% against 8.66%, and yours earns only 0.6244× your own average",
+        "own": 15.79,
+        "benchmark": 8.66,
+        "delta": -7.13,
+        "lift": 0.6244,
+        "liftSource": "own",
+        "impact": 0.0229,
+        "confidence": "medium",
+        "evidence": {
+          "ownN": 15,
+          "benchmarkN": 64,
+          "liftFromN": 15,
+          "ownAvgLikes": 1.4,
+          "ownPooledER": 1.9
+        }
+      },
+      {
+        "id": "hour-density",
+        "dimension": "cadence",
+        "unit": "shape",
+        "headline": "Benchmark is denser per occupied hour (1.83 vs 1.3) — spacing is not the lever, volume is",
+        "own": 1.3,
+        "benchmark": 1.83,
+        "delta": 0.53,
+        "impact": 0,
+        "confidence": "high",
+        "evidence": {
+          "ownOccupiedHoursPerDay": 2.83,
+          "benchmarkOccupiedHoursPerDay": 5.56,
+          "ownBusiestHour": 5,
+          "benchmarkBusiestHour": 11
+        }
+      },
+      {
+        "id": "type-mix:original-showcase",
+        "dimension": "type-mix",
+        "unit": "perPost",
+        "direction": "hold",
+        "headline": "You post more original-showcase than the benchmark (32.63% against 25.17%) and it is one of your stronger types at 1.6258× — keep it",
+        "own": 32.63,
+        "benchmark": 25.17,
+        "delta": -7.46,
+        "lift": 1.6258,
+        "liftSource": "own",
+        "impact": 0,
+        "confidence": "high",
+        "evidence": {
+          "ownN": 31,
+          "benchmarkN": 186,
+          "liftFromN": 31,
+          "ownAvgLikes": 3.65,
+          "ownPooledER": 1.65
+        }
+      },
+      {
+        "id": "type-mix:original-text",
+        "dimension": "type-mix",
+        "unit": "perPost",
+        "direction": "investigate",
+        "headline": "Benchmark leans on original-text (27.47% against your 10.53%) but yours earns 0.1784× your average — an execution question, not a mix one",
+        "own": 10.53,
+        "benchmark": 27.47,
+        "delta": 16.94,
+        "lift": 0.1784,
+        "liftSource": "own",
+        "impact": 0,
+        "confidence": "medium",
+        "evidence": {
+          "ownN": 10,
+          "benchmarkN": 203,
+          "liftFromN": 10,
+          "ownAvgLikes": 0.4,
+          "ownPooledER": 1.13
+        }
+      }
+    ],
+    "projection": {
+      "mixMultiplier": 1.04,
+      "targetMix": {
+        "original-showcase": 37.43,
+        "quote-react": 30.89,
+        "original-text": 12.08,
+        "quote-commentary": 9.93,
+        "reply": 8.45,
+        "self-quote": 1.2
+      },
+      "volumeRatio": 5.69,
+      "combined": 5.89,
+      "caveat": "combined = mixMultiplier × volumeRatio assumes per-post performance holds as volume rises. It usually does not: more posts per day compete for the same followers and the marginal post tends to earn less. Treat it as a ceiling, not a forecast.",
+      "liftBasis": "avgLikes"
+    }
+  },
+  "engineConfig": {
+    "authored": {
+      "targetPerDay": 4,
+      "capPerDay": 6,
+      "minSpacingMin": 120
+    },
+    "engines": {
+      "identity": {
+        "minPerDay": 1,
+        "maxPerDay": 2,
+        "targetPerDay": 1,
+        "evergreenRecycleDays": 90
+      },
+      "record": {
+        "minPerDay": 0,
+        "maxPerDay": 2,
+        "targetPerDay": 1,
+        "maxSharePct": 40,
+        "entityCooldownDays": 30,
+        "evergreenRecycleDays": 180
+      },
+      "ue": {
+        "maxPerDay": 1,
+        "weeklyMin": 3,
+        "weeklyMax": 4,
+        "evergreenRecycleDays": 90
+      },
+      "client": {
+        "maxPerDay": 1,
+        "weeklyMin": 3,
+        "weeklyMax": null,
+        "evergreenRecycleDays": 90
+      }
+    }
+  },
+  "engineAllocation": {
+    "counts": {
+      "record": 1,
+      "ue": 0,
+      "client": 1,
+      "identity": 2
+    },
+    "weekly": {
+      "record": 1,
+      "ue": 0,
+      "client": 1,
+      "identity": 2
+    },
+    "warnings": [
+      "ue: 0/3 this week (weekly min not yet met)",
+      "client: 1/3 this week (weekly min not yet met)"
+    ]
+  },
+  "slots": [
+    {
+      "slot": "A",
+      "timeCT": "08:00",
+      "type": "original-showcase",
+      "lane": "music",
+      "brief": "something you made — video out-reaches image inside this type",
+      "copy": null,
+      "asset": null,
+      "selfReply": null,
+      "dynamic": false,
+      "guard": {
+        "hardBlock": false,
+        "lane": null,
+        "reviewRequired": true
+      },
+      "engine": "client",
+      "engineReason": "behind weekly min (0/3)",
+      "hoursFromNow": 0,
+      "source": "inventory",
+      "matchReason": "no eligible package"
+    },
+    {
+      "slot": "B",
+      "timeCT": "10:00",
+      "type": "original-text",
+      "lane": "craft",
+      "brief": "one idea, stated. no link",
+      "copy": null,
+      "asset": null,
+      "selfReply": null,
+      "dynamic": false,
+      "guard": {
+        "hardBlock": false,
+        "lane": null,
+        "reviewRequired": true
+      },
+      "engine": "record",
+      "engineReason": "best fit among record",
+      "calendarTimeCT": "08:30",
+      "spacingShifted": true,
+      "hoursFromNow": 0,
+      "source": "inventory",
+      "matchReason": "no eligible package"
+    },
+    {
+      "slot": "C",
+      "timeCT": "13:00",
+      "type": "self-quote",
+      "lane": "work",
+      "brief": "something you made — video out-reaches image inside this type",
+      "copy": null,
+      "asset": "https://x.com/bai_ee/status/2087894928726610403",
+      "selfReply": null,
+      "dynamic": false,
+      "guard": {
+        "hardBlock": false,
+        "lane": null,
+        "reviewRequired": true
+      },
+      "adopted": true,
+      "adoptedFrom": "original-showcase",
+      "adoptReason": "benchmark runs self-quote at 3.79% share but 1.5601× lift (n=28); you run it at 1.05%",
+      "engine": "identity",
+      "engineReason": "self-quote slot is filled from the scan/ledger, so it is identity",
+      "hoursFromNow": 3,
+      "source": "ledger",
+      "story": "Clones are going live at @crittersquest today! \n\nSome great threads are floating around, but the Marketplace is what I want to talk about, and the opportunity to explore a darker theme inside the CQ ecosystem.\n\nIt’s the most fun I've had building UI at CQ.🧵 https://t.co/wMvSpAX7gG",
+      "matchScore": 5093.23,
+      "matchReason": "4712 views vs p80 threshold of 114 · 59d old · video"
+    },
+    {
+      "slot": "D",
+      "timeCT": "15:00",
+      "type": "quote-react",
+      "lane": "meta",
+      "brief": "a post climbing right now in this lane — react in one line, no question mark",
+      "copy": null,
+      "asset": null,
+      "selfReply": null,
+      "dynamic": true,
+      "guard": {
+        "hardBlock": false,
+        "lane": null,
+        "reviewRequired": true
+      },
+      "engine": "identity",
+      "engineReason": "quote-react slot is filled from the scan/ledger, so it is identity",
+      "calendarTimeCT": "13:30",
+      "spacingShifted": true,
+      "hoursFromNow": 5,
+      "source": "scan",
+      "matchReason": "dynamic slot — filled by the daily scan"
+    }
+  ],
+  "filled": 0,
+  "unfilled": 2,
+  "gaps": [
+    {
+      "slot": "A",
+      "type": "original-showcase",
+      "lane": "music",
+      "engine": "client",
+      "need": "a VIDEO package (client engine) from: C6 Design/Dev Artifacts"
+    },
+    {
+      "slot": "B",
+      "type": "original-text",
+      "lane": "craft",
+      "engine": "record",
+      "need": "a package (record engine) from: C3 Event Archive"
+    }
+  ]
+}

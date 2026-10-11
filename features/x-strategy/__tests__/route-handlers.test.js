@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createStrategyHandlers, STRATEGY_ROUTE_ACTIONS, localDate } from '../route-handlers.js';
+import { createStrategyHandlers, createStrategyHandlersFromDb, STRATEGY_ROUTE_ACTIONS, localDate } from '../route-handlers.js';
 import { createMemoryCorpusStore } from '../corpus-store.js';
 import { createMemoryPlanStore } from '../plan-store.js';
 import { createRefreshService, createMemoryRefreshQueue } from '../refresh.js';
@@ -524,4 +524,20 @@ test('createXGrowthProfileSaver: merges into marketingBriefConfig.xGrowth withou
   assert.equal(out2.ownHandle, 'old');
   const out3 = await save('new-client', { ownHandle: 'me', benchmarkHandles: [] });
   assert.deepEqual([out3.enabled, out3.mode, out3.ownHandle], [false, 'approval', 'me']);
+});
+
+test('createStrategyHandlersFromDb passes loadCommitted to its corpus store (no fs for committed corpora)', async () => {
+  const emptyDoc = { get: async () => ({ exists: false, data: () => undefined }), collection: () => emptyCol };
+  const emptyCol = { doc: () => emptyDoc, get: async () => ({ forEach: () => {} }) };
+  const db = { collection: () => emptyCol };
+  const seen = [];
+  const h = createStrategyHandlersFromDb(db, {
+    env: {}, readPackages: async () => [],
+    loadCommitted: (handle) => { seen.push(handle); return handle === 'bai_ee' ? rowsFor(4) : null; },
+  });
+  const r = await h.handle('strategy-get', { clientId: 'c1' }, CTX, AUTH);
+  assert.ok(seen.includes('bai_ee'), 'injected loader was consulted for the default own handle');
+  const own = r.rowsMeta.find((m) => m.handle === 'bai_ee');
+  assert.equal(own.source, 'committed-json');
+  assert.equal(own.rowsMeta.rowCount, 4);
 });

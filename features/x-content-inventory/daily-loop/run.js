@@ -20,7 +20,8 @@ const isModelDraft = (d) => !!d?.source && !String(d.source).startsWith('fallbac
 function strategyRow(src) {
   if (!src) return { input: 'strategy slots', status: 'missing', asOf: null, age: null, detail: 'no slot plan for this run' };
   const letters = (src.slotLetters || []).join(', ');
-  return { input: 'strategy slots', status: 'loaded', asOf: src.date || null, age: null, detail: `${src.mixSource || 'unknown mix'}, tier ${src.tier ?? '?'}, ${src.authoredPerDay ?? '?'} authored/day — slots ${letters || 'none'}` };
+  const plan = src.planSource === 'plan-doc' ? `Strategy plan v${src.planVersion ?? '?'}, ` : '';
+  return { input: 'strategy slots', status: 'loaded', asOf: src.date || null, age: null, detail: `${plan}${src.mixSource || 'unknown mix'}, tier ${src.tier ?? '?'}, ${src.authoredPerDay ?? '?'} authored/day — slots ${letters || 'none'}` };
 }
 
 /**
@@ -31,10 +32,18 @@ function strategyRow(src) {
 function spineOf(inputs, packages, { localDate, now, timezone }) {
   const s = inputs.strategyInputs;
   if (!s || (!s.buildDayPlan && !s.plan)) return null;
+  // A Strategy plan doc (features/x-strategy/plan-inputs.js resolvePlanInputs) sets the cadence, engine targets,
+  // floors and caps. Absent (or source 'default') => exactly the old call: nothing below changes.
+  const pi = s.planInputs?.source === 'plan-doc' ? s.planInputs : null;
   const built = planSlots({
     buildDayPlan: s.buildDayPlan || (() => s.plan),
-    input: { packages, ...(s.planInput || {}), date: localDate, now },
+    input: {
+      packages, ...(s.planInput || {}),
+      ...(pi ? { posts: pi.posts, ...(pi.engineConfig ? { engineConfig: pi.engineConfig } : {}) } : {}),
+      date: localDate, now,
+    },
     timezone,
+    ...(pi ? { typeFloors: pi.typeFloors, typeCaps: pi.typeCaps, planMeta: { planSource: pi.source, planVersion: pi.planVersion } } : {}),
   });
   return { ...built, ownPosts: s.ownPosts || s.planInput?.corpusRows || [], ownHandle: s.ownHandle || s.planInput?.handle || 'bai_ee' };
 }
@@ -64,7 +73,9 @@ export function inputFingerprint({ scan, search, packages, brain, strategyPlan, 
     strategyPlan?.excluded ? 'excluded' : (strategyPlan?.generatedAt || 'no-plan'),
     benchmark?.asOf || (benchmark ? 'computed' : 'no-benchmark'),
     // A changed slot plan must regenerate.
-    strategySource ? stableHash(JSON.stringify([strategySource.date, strategySource.tier, strategySource.authoredPerDay, strategySource.mixSource, strategySource.slotLetters])) : 'no-slots',
+    // planSource/planVersion join the hash only when a Strategy plan doc was used, so a run with no plan doc keeps its old fingerprint.
+    strategySource ? stableHash(JSON.stringify([strategySource.date, strategySource.tier, strategySource.authoredPerDay, strategySource.mixSource, strategySource.slotLetters,
+      ...(strategySource.planSource ? [strategySource.planSource, strategySource.planVersion] : [])])) : 'no-slots',
     max,
     LOOP_VERSION,
   ].join('|'));
@@ -117,7 +128,7 @@ export async function runDailyLoop(deps, opts = {}) {
       ownSummary: inputs.ownSummary || null,
     });
 
-  const gaps = [...selection.gaps];
+  const gaps = [...selection.gaps, ...(spine?.gaps || [])];
   if (brain.status !== 'approved') {
     gaps.push({ code: 'brain-not-approved', message: `Client Brain is ${brain.status || 'missing'} — drafts use a plain voice, not the Brain.${brain.note ? ` ${brain.note}` : ''}` });
   }

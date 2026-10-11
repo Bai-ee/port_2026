@@ -5,6 +5,7 @@
 import { summarizeCorpus, compareToBenchmark } from '../../x-benchmark/index.js';
 import { tagTopics } from '../../x-benchmark/taxonomy.js';
 import { localDateOf } from './time-ids.js';
+import { resolvePlanInputs } from '../../x-strategy/plan-inputs.js';
 
 // --- inputs ----------------------------------------------------------------
 
@@ -21,9 +22,10 @@ function corpusRange(rows) {
  * Read-only. `corpora` are the committed own/benchmark corpus rows (the CLI
  * reads them from docs/audits, the route bundles them).
  *
- * deps: { db, loadBrainContext(clientId) -> string, buildDayPlan? }
+ * deps: { db, loadBrainContext(clientId) -> string, buildDayPlan?, readPlanDoc?(clientId) -> Strategy plan doc|null }
  *   buildDayPlan (plan-day.js, injected) + both corpora => the result carries `strategyInputs`,
  *   which switches the run onto the slot-filling spine; otherwise the old selector runs.
+ *   readPlanDoc (x_strategy_plans/{clientId}) => strategyInputs.planInputs, which run.js applies; absent or null => old behaviour.
  * opts: { clientId, packageIds?: string[], corpora: { own, benchmark, ownSource, benchmarkSource }, now }
  */
 export async function loadDailyLoopInputs(deps, { clientId, packageIds = null, corpora = {}, now = Date.now() }) {
@@ -91,6 +93,8 @@ export async function loadDailyLoopInputs(deps, { clientId, packageIds = null, c
     };
   }
 
+  const planDoc = deps.readPlanDoc ? await deps.readPlanDoc(clientId) : null;
+
   return {
     scan: state.marketingBrief?.quoteTargets || null,
     search: state.marketingBrief?.conversationSearch || null,
@@ -101,7 +105,7 @@ export async function loadDailyLoopInputs(deps, { clientId, packageIds = null, c
     ownSummary,
     benchmark,
     strategyInputs: deps.buildDayPlan && own
-      ? { buildDayPlan: deps.buildDayPlan, planInput: { corpusRows: own, benchmarkRows: bench, packages }, ownPosts: own, ownHandle: 'bai_ee' }
+      ? { buildDayPlan: deps.buildDayPlan, planInput: { corpusRows: own, benchmarkRows: bench, packages }, ownPosts: own, ownHandle: 'bai_ee', ...(planDoc ? { planInputs: resolvePlanInputs(planDoc) } : {}) }
       : null,
   };
 }

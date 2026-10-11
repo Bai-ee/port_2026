@@ -79,6 +79,8 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
   const [posts, setPosts] = useState(5);
 
   const [plan, setPlan] = useState(null);
+  // Which plan decided the cadence: a Strategy plan doc ('plan-doc') or the picker's own request ('default').
+  const [planMeta, setPlanMeta] = useState({ source: 'default', version: null });
   const [packages, setPackages] = useState([]);
   const [audit, setAudit] = useState(null);
 
@@ -122,6 +124,7 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
         call('inventory-list'),
       ]);
       setPlan(planRes?.plan || null);
+      setPlanMeta({ source: planRes?.planSource || 'default', version: planRes?.planVersion ?? null });
       setPackages(Array.isArray(invRes?.packages) ? invRes.packages : []);
       setAudit(invRes?.audit || null);
     } catch (err) {
@@ -400,6 +403,9 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
           error={error}
           posts={posts}
           onPostsChange={onPostsChange}
+          planSource={planMeta.source}
+          planVersion={planMeta.version}
+          onOpenStrategy={() => setTab('strategy')}
           onRefresh={() => load()}
           onDraft={onDraft}
           draftingId={draftingId}
@@ -486,6 +492,8 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
         #x-content-card .xce-tier-selector { display: inline-flex; flex: 1 1 100%; border: 1px solid rgba(42,36,32,0.12); border-radius: 999px; padding: 2px; background: rgba(255,255,255,0.6); }
         #x-content-card .xce-tier-option { flex: 1 1 0; min-height: 36px; padding: 0 12px; border: 0; border-radius: 999px; background: transparent; font-size: 11.5px; font-weight: 700; color: rgba(42,36,32,0.6); cursor: pointer; }
         #x-content-card .xce-tier-option-active { background: #2a2420; color: #fff; }
+        #x-content-card .xce-plan-readout { display: flex; flex: 1 1 100%; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; border: 1px solid rgba(42,36,32,0.12); border-radius: 12px; padding: 6px 10px; background: rgba(255,255,255,0.6); font-size: 11.5px; font-weight: 700; color: rgba(42,36,32,0.75); }
+        #x-content-card .xce-plan-readout button { min-height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid #2a2420; background: #2a2420; color: #fff; font-size: 11.5px; font-weight: 700; cursor: pointer; }
         #x-content-card .xce-tier-option:disabled { opacity: 0.48; cursor: not-allowed; }
         #x-content-card .xce-refresh { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border: 1px solid rgba(42,36,32,0.12); border-radius: 999px; background: rgba(255,255,255,0.6); font-size: 11px; font-weight: 700; color: #2a2420; cursor: pointer; }
         #x-content-card .xce-refresh:disabled { opacity: 0.48; cursor: not-allowed; }

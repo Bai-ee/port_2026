@@ -1,0 +1,668 @@
+{
+  "clientId": "bryan-balli-WUoltG84",
+  "localDate": "2026-10-10",
+  "timezone": "America/Chicago",
+  "channel": "x",
+  "version": 3,
+  "status": "complete",
+  "inputSource": "fixture",
+  "copySource": "fallback",
+  "mode": "replay",
+  "strategySource": {
+    "date": "2026-10-10",
+    "tier": 1,
+    "authoredPerDay": 4,
+    "mixSource": "gap-report",
+    "slotLetters": [
+      "D",
+      "A",
+      "B",
+      "R",
+      "C"
+    ]
+  },
+  "inputFingerprint": "b81682dc",
+  "inputs": [
+    {
+      "input": "watchlist scan",
+      "status": "loaded",
+      "asOf": "2026-10-10T13:24:55.735Z",
+      "age": "3h old",
+      "detail": "1 candidates"
+    },
+    {
+      "input": "brand-topic search",
+      "status": "loaded",
+      "asOf": "2026-10-10T15:30:00.000Z",
+      "age": "1h old",
+      "detail": "2 queries, 4 posts"
+    },
+    {
+      "input": "content library",
+      "status": "loaded",
+      "asOf": null,
+      "age": null,
+      "detail": "5 items"
+    },
+    {
+      "input": "Client Brain",
+      "status": "draft",
+      "asOf": null,
+      "age": null,
+      "detail": "Seb rules §7 + content guard — Brain not used"
+    },
+    {
+      "input": "Strategy Builder plan",
+      "status": "excluded",
+      "asOf": "2026-09-08T17:54:21.257Z",
+      "age": null,
+      "detail": "not used for X — stale (covers 2026-09-09 → 2026-10-08) and off-brand (built from VTC and Not The Rug sources)"
+    },
+    {
+      "input": "strategy slots",
+      "status": "loaded",
+      "asOf": "2026-10-10",
+      "age": null,
+      "detail": "gap-report, tier 1, 4 authored/day — slots D, A, B, R, C"
+    },
+    {
+      "input": "own-account history",
+      "status": "loaded",
+      "asOf": "2026-09-10T14:29:12.000Z",
+      "age": null,
+      "detail": "246 posts, 2026-07-07 → 2026-09-10 (docs/audits/bai-ee-x-corpus.json)"
+    },
+    {
+      "input": "benchmark report",
+      "status": "loaded",
+      "asOf": "2026-09-10",
+      "age": null,
+      "detail": "computed from docs/audits/bai-ee-x-corpus.json vs seb-design-x-corpus.json"
+    }
+  ],
+  "scanGeneratedAt": "2026-10-10T13:24:55.735Z",
+  "searchGeneratedAt": "2026-10-10T15:30:00.000Z",
+  "brainVersion": null,
+  "brainStatus": "draft",
+  "strategy": {
+    "decisions": {
+      "maxQuotes": 1,
+      "includeShowcase": true
+    },
+    "notes": [
+      "benchmark: long quote captions under-perform for this account — at most one quote, kept to a short reaction",
+      "benchmark: original-showcase earns 1.6092× this account's average"
+    ],
+    "plan": {
+      "active": false,
+      "terms": [],
+      "generatedAt": "2026-09-08T17:54:21.257Z",
+      "from": "2026-09-09",
+      "to": "2026-09-09"
+    }
+  },
+  "brandProfile": {
+    "sources": {
+      "library": "3 eligible item(s), 14 distinctive phrases",
+      "pillars": "features/x-content-inventory/categories.js PILLARS",
+      "brain": "not used (Brain is draft)"
+    },
+    "topPhrases": [
+      "glenn underground",
+      "cei bei",
+      "house music will never die",
+      "cajual",
+      "cajual records",
+      "bai ee",
+      "fathers day jazz",
+      "cloth grabbed and released",
+      "real verlet rebound",
+      "hitloop",
+      "holo paper",
+      "deep house",
+      "garage house",
+      "chicago"
+    ]
+  },
+  "shortlist": [
+    {
+      "id": "n_08ffdb49",
+      "label": [
+        "chicago",
+        "house",
+        "record",
+        "cajual"
+      ],
+      "anchor": "https://x.com/AnthonyTeasdale/status/9102",
+      "rank": 0.877,
+      "brandFit": 1,
+      "content": "discogs-10207"
+    },
+    {
+      "id": "n_29e3f38a",
+      "label": [
+        "white",
+        "house",
+        "press",
+        "briefing"
+      ],
+      "anchor": "https://x.com/newsdesk/status/9103",
+      "rank": 0,
+      "brandFit": 0,
+      "content": null,
+      "skipped": "off-brand",
+      "reason": "politics lane"
+    },
+    {
+      "id": "n_ab4c8d5f",
+      "label": [
+        "star",
+        "wars",
+        "poster",
+        "japan"
+      ],
+      "anchor": "https://x.com/SciFiArchives/status/9001",
+      "rank": 0,
+      "brandFit": 0,
+      "content": null,
+      "skipped": "off-brand",
+      "reason": "no library phrase, only broad words"
+    },
+    {
+      "id": "n_27e3f064",
+      "label": [
+        "adamski",
+        "hacienda",
+        "1989",
+        "pure"
+      ],
+      "anchor": "https://x.com/madchester_mdcr/status/9101",
+      "rank": 0,
+      "brandFit": 0,
+      "content": null,
+      "skipped": "off-brand",
+      "reason": "no library phrase, only broad words"
+    }
+  ],
+  "stats": {
+    "packages": 5,
+    "eligible": 3,
+    "eligibleByBasis": {
+      "story": 1,
+      "facts": 2
+    },
+    "ineligible": {
+      "no-grounding": 1,
+      "rights": 1
+    },
+    "conversationPosts": 5,
+    "narratives": 4,
+    "onBrandWithContent": 1,
+    "offBrand": 3,
+    "withoutContent": 0,
+    "quoteRejected": {
+      "D": {
+        "used": 0,
+        "stale": 0,
+        "unknownAge": 0,
+        "blocked": 0,
+        "offVein": 0,
+        "noMedia": 0,
+        "addressesBot": 0
+      }
+    }
+  },
+  "suggestions": [
+    {
+      "id": "dl_20261010_c0cf260d",
+      "type": "quote",
+      "rank": 0.61,
+      "conversation": null,
+      "opportunity": {
+        "id": "9001",
+        "url": "https://x.com/SciFiArchives/status/9001",
+        "author": "SciFiArchives",
+        "text": "Star Wars poster from Japan."
+      },
+      "package": null,
+      "why": {
+        "now": "13.4h old, 1050 engagements; quote window 36h",
+        "brand": "top score on vein retro-analog-preinternet; guard lane: unknown",
+        "brain": "Client Brain is draft — not used",
+        "strategy": "no current strategy plan — benchmark type evidence only",
+        "content": "none required — reaction slot",
+        "history": {
+          "available": true,
+          "range": {
+            "from": "2026-07-07T20:57:18.000Z",
+            "to": "2026-09-10T14:29:12.000Z"
+          },
+          "topics": [
+            {
+              "topic": "japanese-asian-design",
+              "n": 0,
+              "lift": null,
+              "weak": true
+            },
+            {
+              "topic": "editorial-typography",
+              "n": 0,
+              "lift": null,
+              "weak": true
+            }
+          ],
+          "type": {
+            "key": "quote-react",
+            "n": 26,
+            "lift": 0.7804,
+            "weak": false
+          },
+          "score": 0,
+          "note": "Topic evidence is thin (n < 10) — treat as untested, not as a finding."
+        }
+      },
+      "scores": {
+        "momentum": null,
+        "brandFit": null,
+        "contentFit": null,
+        "history": 0
+      },
+      "match": {
+        "terms": [],
+        "score": null
+      },
+      "slot": {
+        "letter": "D",
+        "timeCT": "15:00",
+        "startsAt": "2026-10-10T20:00:00.000Z",
+        "type": "quote-react",
+        "lane": "meta",
+        "pillar": "P1",
+        "fillReason": "top score on vein retro-analog-preinternet"
+      },
+      "proposedSlot": {
+        "localDate": "2026-10-10",
+        "localTime": "15:00",
+        "timezone": "America/Chicago",
+        "iso": "2026-10-10T20:00:00.000Z",
+        "note": "suggestion only — not scheduled"
+      },
+      "draft": {
+        "text": "the detail on this is really well made.",
+        "selfReply": "",
+        "source": "fallback (item text, cut to fit)"
+      },
+      "checks": {
+        "blocked": false,
+        "violations": [],
+        "warnings": [],
+        "guard": {
+          "hardBlock": false,
+          "lane": "unknown",
+          "readyToPublish": false,
+          "flags": [],
+          "note": "Clean, but the lane is unclear — needs a judgement pass."
+        },
+        "score": null,
+        "chars": 39
+      },
+      "edit": null,
+      "reviewState": "pending",
+      "socialPostId": null
+    },
+    {
+      "id": "dl_20261010_cdeba060",
+      "type": "reply",
+      "rank": 0.877,
+      "conversation": {
+        "id": "n_08ffdb49",
+        "label": [
+          "chicago",
+          "house",
+          "record",
+          "cajual"
+        ],
+        "momentum": {
+          "score": 0.933,
+          "velocity": 54.9,
+          "ageHours": 3.5,
+          "engagement": 293,
+          "posts": 2,
+          "reasons": [
+            "moving (55/h)"
+          ]
+        },
+        "sources": [
+          "search:\"house\" min_faves:20 -filter:replies",
+          "search:\"cajual\" min_faves:20 -filter:replies"
+        ],
+        "posts": [
+          {
+            "id": "9102",
+            "url": "https://x.com/AnthonyTeasdale/status/9102",
+            "author": "AnthonyTeasdale",
+            "text": "Which Chicago house record from 1996 still sounds like the future? Cajual and Relief releases for me.",
+            "createdAt": "2026-10-10T12:30:00.000Z",
+            "ageHours": 3.5,
+            "likes": 167,
+            "reposts": 11,
+            "replies": 14,
+            "source": "search:\"house\" min_faves:20 -filter:replies"
+          },
+          {
+            "id": "9104",
+            "url": "https://x.com/deephouseorg/status/9104",
+            "author": "deephouseorg",
+            "text": "Cajual Records catalogue is a masterclass in Chicago house. Glenn Underground forever.",
+            "createdAt": "2026-10-10T07:00:00.000Z",
+            "ageHours": 9,
+            "likes": 88,
+            "reposts": 9,
+            "replies": 4,
+            "source": "search:\"cajual\" min_faves:20 -filter:replies"
+          }
+        ]
+      },
+      "opportunity": {
+        "id": "9102",
+        "url": "https://x.com/AnthonyTeasdale/status/9102",
+        "author": "AnthonyTeasdale",
+        "text": "Which Chicago house record from 1996 still sounds like the future? Cajual and Relief releases for me."
+      },
+      "package": {
+        "id": "discogs-10207",
+        "title": "Glenn Underground, Cei-Bei – House Music Will Never Die",
+        "series": "C1",
+        "pillar": "found-this",
+        "sourceKind": "discogs",
+        "sourceUrl": "https://www.discogs.com/release/10207-G-U-Cei-Bei-House-Music-Will-Never-Die",
+        "mediaState": "video",
+        "rights": "owned",
+        "basis": "facts",
+        "story": "",
+        "facts": [
+          {
+            "label": "release",
+            "value": "Glenn Underground, Cei-Bei – House Music Will Never Die",
+            "provenance": "Discogs"
+          },
+          {
+            "label": "year",
+            "value": "1996",
+            "provenance": "Discogs"
+          },
+          {
+            "label": "label",
+            "value": "cajual records",
+            "provenance": "Discogs"
+          },
+          {
+            "label": "catalog",
+            "value": "caj 261",
+            "provenance": "Discogs"
+          },
+          {
+            "label": "genres",
+            "value": "electronic, house, deep house, garage house",
+            "provenance": "Discogs"
+          },
+          {
+            "label": "credits",
+            "value": "mark richardson, curtis harman",
+            "provenance": "Discogs"
+          },
+          {
+            "label": "source",
+            "value": "https://www.discogs.com/release/10207-G-U-Cei-Bei-House-Music-Will-Never-Die",
+            "provenance": "Discogs"
+          }
+        ],
+        "assetRefs": [
+          "ev:discogs/10207.mp4"
+        ],
+        "thumbRef": null,
+        "engine": null
+      },
+      "why": {
+        "now": "moving (55/h); 293 engagements across 2 post(s); anchor is 3.5h old, inside the 6h reply window",
+        "brand": "names glenn underground (artist), cajual (label), cajual records (label), chicago (city, supporting) from your library; guard lane: music (low)",
+        "brain": "Client Brain is draft — not used",
+        "strategy": "no current strategy plan — benchmark type evidence only",
+        "content": "optional: \"Glenn Underground, Cei-Bei – House Music Will Never Die\" — named in the conversation (glenn underground, cajual, cajual records, chicago); grounded in verifiable facts (Discogs)",
+        "history": {
+          "available": true,
+          "range": {
+            "from": "2026-07-07T20:57:18.000Z",
+            "to": "2026-09-10T14:29:12.000Z"
+          },
+          "topics": [],
+          "type": {
+            "key": "reply",
+            "n": 4,
+            "lift": 1.0145,
+            "weak": true
+          },
+          "score": 0,
+          "note": "Conversation does not map to any topic in the shared taxonomy — no topic evidence."
+        }
+      },
+      "scores": {
+        "momentum": 0.933,
+        "brandFit": 1,
+        "contentFit": 1,
+        "history": 0
+      },
+      "match": {
+        "tier": "specific",
+        "terms": [
+          "cajual",
+          "chicago",
+          "glenn",
+          "underground"
+        ],
+        "phrases": [
+          "glenn underground",
+          "cajual",
+          "cajual records",
+          "chicago"
+        ],
+        "score": 17.5
+      },
+      "slot": {
+        "letter": "R",
+        "timeCT": null,
+        "startsAt": null,
+        "type": "reply",
+        "lane": null,
+        "pillar": null,
+        "fillReason": "anchor is 3.5h old, inside the 6h reply window"
+      },
+      "proposedSlot": {
+        "localDate": "2026-10-10",
+        "localTime": "anytime",
+        "timezone": "America/Chicago",
+        "iso": null,
+        "note": "suggestion only — not scheduled"
+      },
+      "draft": {
+        "text": "Glenn Underground, Cei-Bei – House Music Will Never Die (1996)",
+        "selfReply": "",
+        "source": "fallback (item text, cut to fit)"
+      },
+      "checks": {
+        "blocked": false,
+        "violations": [],
+        "warnings": [],
+        "guard": {
+          "hardBlock": false,
+          "lane": "music",
+          "readyToPublish": false,
+          "flags": [],
+          "note": "Clean, but the lane is unclear — needs a judgement pass."
+        },
+        "score": {
+          "value": 0.28400000000000003,
+          "profile": "x-2026-10-03",
+          "advisory": true
+        },
+        "chars": 62
+      },
+      "edit": null,
+      "reviewState": "pending",
+      "socialPostId": null
+    },
+    {
+      "id": "dl_20261010_33c3ce8a",
+      "type": "quote",
+      "rank": null,
+      "conversation": null,
+      "opportunity": {
+        "id": "2087894928726610403",
+        "url": "https://x.com/bai_ee/status/2087894928726610403",
+        "author": "bai_ee",
+        "text": "Clones are going live at @crittersquest today! \n\nSome great threads are floating around, but the Marketplace is what I want to talk about, and the opportunity to explore a darker theme inside the CQ ecosystem.\n\nIt’s the most fun I've had building UI at CQ.🧵 https://t.co/wMvSpAX7gG"
+      },
+      "package": null,
+      "why": {
+        "now": "own post from 58 days ago, past the resurrection cooldown",
+        "brand": "your own past winner",
+        "brain": "Client Brain is draft — not used",
+        "strategy": "no current strategy plan — benchmark type evidence only",
+        "content": "none required — self-quote of your own post",
+        "history": {
+          "available": true,
+          "range": {
+            "from": "2026-07-07T20:57:18.000Z",
+            "to": "2026-09-10T14:29:12.000Z"
+          },
+          "topics": [
+            {
+              "topic": "ui-product-design",
+              "n": 0,
+              "lift": null,
+              "weak": true
+            }
+          ],
+          "type": {
+            "key": "quote-react",
+            "n": 26,
+            "lift": 0.7804,
+            "weak": false
+          },
+          "score": 0,
+          "note": "Topic evidence is thin (n < 10) — treat as untested, not as a finding."
+        }
+      },
+      "scores": {
+        "momentum": null,
+        "brandFit": null,
+        "contentFit": null,
+        "history": 0
+      },
+      "match": {
+        "terms": [],
+        "score": 5087.04
+      },
+      "slot": {
+        "letter": "C",
+        "timeCT": "13:00",
+        "startsAt": "2026-10-10T18:00:00.000Z",
+        "type": "self-quote",
+        "lane": "work",
+        "pillar": null,
+        "fillReason": "4712 views vs p80 threshold of 114 · 58d old · video"
+      },
+      "proposedSlot": {
+        "localDate": "2026-10-10",
+        "localTime": "13:00",
+        "timezone": "America/Chicago",
+        "iso": "2026-10-10T18:00:00.000Z",
+        "note": "suggestion only — not scheduled"
+      },
+      "draft": {
+        "text": "",
+        "selfReply": "",
+        "source": "fallback — nothing verifiable to ground a contribution"
+      },
+      "checks": {
+        "blocked": true,
+        "violations": [
+          "empty"
+        ],
+        "warnings": [],
+        "guard": {
+          "hardBlock": false,
+          "lane": "work",
+          "readyToPublish": true,
+          "flags": [],
+          "note": "Clear. Lane: work."
+        },
+        "score": null,
+        "chars": 0
+      },
+      "edit": null,
+      "reviewState": "pending",
+      "socialPostId": null
+    }
+  ],
+  "gaps": [
+    {
+      "code": "strategy-excluded",
+      "message": "Strategy Builder plan excluded: stale (covers 2026-09-09 → 2026-10-08) and off-brand (built from VTC and Not The Rug sources)"
+    },
+    {
+      "code": "ineligible-no-grounding",
+      "count": 1,
+      "message": "1 item(s) skipped: no story and no verifiable facts — an asset with nothing to say."
+    },
+    {
+      "code": "ineligible-rights",
+      "count": 1,
+      "message": "1 item(s) skipped: rights not owned or cleared."
+    },
+    {
+      "code": "slot-unfilled:A",
+      "message": "Slot A (original-showcase) not filled: no eligible package.",
+      "slot": {
+        "letter": "A",
+        "timeCT": "08:00",
+        "startsAt": "2026-10-10T13:00:00.000Z",
+        "type": "original-showcase",
+        "lane": "music",
+        "pillar": "P6",
+        "fillReason": "no eligible package"
+      }
+    },
+    {
+      "code": "slot-unfilled:B",
+      "message": "Slot B (original-text) not filled: no story/facts for this slot.",
+      "slot": {
+        "letter": "B",
+        "timeCT": "10:00",
+        "startsAt": "2026-10-10T15:00:00.000Z",
+        "type": "original-text",
+        "lane": "craft",
+        "pillar": "P4",
+        "fillReason": "no story/facts for this slot"
+      }
+    },
+    {
+      "code": "off-brand-conversations",
+      "count": 3,
+      "message": "3 active conversation(s) skipped as off-brand or out of lane (e.g. @SciFiArchives — no library phrase, only broad words; @madchester_mdcr — no library phrase, only broad words; @newsdesk — politics lane)."
+    },
+    {
+      "code": "brain-not-approved",
+      "message": "Client Brain is draft — drafts use a plain voice, not the Brain. Draft compiled from a CLIENT_BRAIN.md for a different product (Claire Calls)."
+    },
+    {
+      "code": "feedback-loop-manual",
+      "message": "Performance feedback is not automated: history comes from saved corpora, not from today’s results."
+    }
+  ],
+  "usage": {
+    "modelCalls": 0,
+    "failures": 0
+  },
+  "generatedAt": "2026-10-10T16:00:00.000Z"
+}

@@ -1,0 +1,82 @@
+
+DAILY CONTENT LOOP — bryan-balli-WUoltG84 — 2026-10-10 (America/Chicago)  [FIXTURE REPLAY — not real data]
+  inputs: fixture · copy: fallback
+
+INPUTS
+  watchlist scan         loaded    3h old    1 candidates
+  brand-topic search     loaded    1h old    2 queries, 4 posts
+  content library        loaded              5 items
+  Client Brain           draft               Seb rules §7 + content guard — Brain not used
+  Strategy Builder plan  excluded            not used for X — stale (covers 2026-09-09 → 2026-10-08) and off-brand (built from VTC and Not The Rug sources)
+  strategy slots         loaded              gap-report, tier 1, 4 authored/day — slots D, A, B, R, C
+  own-account history    loaded              246 posts, 2026-07-07 → 2026-09-10 (docs/audits/bai-ee-x-corpus.json)
+  benchmark report       loaded              computed from docs/audits/bai-ee-x-corpus.json vs seb-design-x-corpus.json
+
+BRAND PROFILE  top phrases: glenn underground, cei bei, house music will never die, cajual, cajual records, bai ee, fathers day jazz, cloth grabbed and released, real verlet rebound, hitloop, holo paper, deep house, garage house, chicago
+  sources: library=3 eligible item(s), 14 distinctive phrases · pillars=features/x-content-inventory/categories.js PILLARS · brain=not used (Brain is draft)
+
+CONVERSATIONS  5 posts → 4 narratives → 1 on-brand with owned content (3 off-brand, 0 without content)
+  0.877  [chicago house record cajual]  fit 1  → discogs-10207  https://x.com/AnthonyTeasdale/status/9102
+  0.000  [white house press briefing]  fit 0  → skipped: politics lane  https://x.com/newsdesk/status/9103
+  0.000  [star wars poster japan]  fit 0  → skipped: no library phrase, only broad words  https://x.com/SciFiArchives/status/9001
+  0.000  [adamski hacienda 1989 pure]  fit 0  → skipped: no library phrase, only broad words  https://x.com/madchester_mdcr/status/9101
+
+LIBRARY  3/5 eligible (story 1, facts 2)
+
+SUGGESTIONS (3)
+
+  1. QUOTE  dl_20261010_c0cf260d  [pending]
+     why now:      13.4h old, 1050 engagements; quote window 36h
+     why brand:    top score on vein retro-analog-preinternet; guard lane: unknown
+     brain:        Client Brain is draft — not used
+     strategy:     no current strategy plan — benchmark type evidence only
+     content:      none required — reaction slot
+     history:      quote-react n=26 lift=0.7804; japanese-asian-design n=0 lift=— (weak); editorial-typography n=0 lift=— (weak) — Topic evidence is thin (n < 10) — treat as untested, not as a finding. [2026-07-07 → 2026-09-10]
+     draft (fallback (item text, cut to fit)):
+        the detail on this is really well made.
+     checks:       pass · guard lane unknown · 39 chars · score n/a (quote: borrowed reach not modelled)
+     slot:         D · 15:00 CT · quote-react · P1
+     proposed slot: 15:00 America/Chicago — suggestion only — not scheduled
+
+  2. REPLY  dl_20261010_cdeba060  [pending]
+     conversation: @AnthonyTeasdale (3.5h, 167♥) https://x.com/AnthonyTeasdale/status/9102
+        "Which Chicago house record from 1996 still sounds like the future? Cajual and Relief releases for me."
+     conversation: @deephouseorg (9h, 88♥) https://x.com/deephouseorg/status/9104
+        "Cajual Records catalogue is a masterclass in Chicago house. Glenn Underground forever."
+     why now:      moving (55/h); 293 engagements across 2 post(s); anchor is 3.5h old, inside the 6h reply window
+     why brand:    names glenn underground (artist), cajual (label), cajual records (label), chicago (city, supporting) from your library; guard lane: music (low)
+     brain:        Client Brain is draft — not used
+     strategy:     no current strategy plan — benchmark type evidence only
+     content:      optional: "Glenn Underground, Cei-Bei – House Music Will Never Die" — named in the conversation (glenn underground, cajual, cajual records, chicago); grounded in verifiable facts (Discogs)
+     history:      reply n=4 lift=1.0145 (weak); no topic match — Conversation does not map to any topic in the shared taxonomy — no topic evidence. [2026-07-07 → 2026-09-10]
+     draft (fallback (item text, cut to fit)):
+        Glenn Underground, Cei-Bei – House Music Will Never Die (1996)
+     checks:       pass · guard lane music · 62 chars · score 0.284 (advisory, x-2026-10-03)
+     slot:         R · anytime today · reply
+     proposed slot: anytime today — suggestion only, not scheduled
+
+  3. QUOTE  dl_20261010_33c3ce8a  [pending]
+     why now:      own post from 58 days ago, past the resurrection cooldown
+     why brand:    your own past winner
+     brain:        Client Brain is draft — not used
+     strategy:     no current strategy plan — benchmark type evidence only
+     content:      none required — self-quote of your own post
+     history:      quote-react n=26 lift=0.7804; ui-product-design n=0 lift=— (weak) — Topic evidence is thin (n < 10) — treat as untested, not as a finding. [2026-07-07 → 2026-09-10]
+     draft (fallback — nothing verifiable to ground a contribution):
+        (empty: write this one yourself)
+     checks:       BLOCKED — empty · guard lane work · 0 chars · score n/a (quote: borrowed reach not modelled)
+     slot:         C · 13:00 CT · self-quote
+     proposed slot: 13:00 America/Chicago — suggestion only — not scheduled
+
+GAPS
+  - [strategy-excluded] Strategy Builder plan excluded: stale (covers 2026-09-09 → 2026-10-08) and off-brand (built from VTC and Not The Rug sources)
+  - [ineligible-no-grounding] 1 item(s) skipped: no story and no verifiable facts — an asset with nothing to say.
+  - [ineligible-rights] 1 item(s) skipped: rights not owned or cleared.
+  - [slot-unfilled:A] Slot A (original-showcase) not filled: no eligible package.
+  - [slot-unfilled:B] Slot B (original-text) not filled: no story/facts for this slot.
+  - [off-brand-conversations] 3 active conversation(s) skipped as off-brand or out of lane (e.g. @SciFiArchives — no library phrase, only broad words; @madchester_mdcr — no library phrase, only broad words; @newsdesk — politics lane).
+  - [brain-not-approved] Client Brain is draft — drafts use a plain voice, not the Brain. Draft compiled from a CLIENT_BRAIN.md for a different product (Claire Calls).
+  - [feedback-loop-manual] Performance feedback is not automated: history comes from saved corpora, not from today’s results.
+
+usage: 0 model call(s), 0 failure(s). Nothing was scheduled or posted.
+replay output: features/x-strategy/__tests__/fixtures/t5-golden/daily-replay-run.json

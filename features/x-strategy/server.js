@@ -7,3 +7,4 @@ export * from './route-handlers.js';
 export * from './agent/index.js';
 export * from './agent/proposals.js';
 export * from './agent/chat-store.js';
+export * from './content-plan.js';

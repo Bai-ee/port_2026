@@ -65,6 +65,9 @@ export default function PlanPanel({
   posts,
   onPostsChange,
   onRefresh,
+  planSource,
+  planVersion,
+  onOpenStrategy,
   onDraft,
   draftingId,
   drafts,
@@ -87,26 +90,40 @@ export default function PlanPanel({
         </span>
         <span className="xce-head-count">{filled}/{total} slots</span>
 
-        <div
-          id="x-content-plan-tier-selector"
-          className="xce-tier-selector"
-          role="group"
-          aria-label="Posts per day"
-        >
-          {TIERS.map((tier) => (
-            <button
-              key={tier.posts}
-              type="button"
-              id={`x-content-plan-tier-${tier.posts}`}
-              className={`xce-tier-option${Number(posts) === tier.posts ? ' xce-tier-option-active' : ''}`}
-              aria-pressed={Number(posts) === tier.posts}
-              disabled={!onPostsChange || loading}
-              onClick={() => onPostsChange && onPostsChange(tier.posts)}
-            >
-              {tier.posts} · {tier.label}
-            </button>
-          ))}
-        </div>
+        {planSource === 'plan-doc' ? (
+          // A Strategy plan doc decides the cadence: the picker is a read-out, the change happens in the Strategy tab.
+          <div id="x-content-plan-cadence-readout" className="xce-plan-readout">
+            <span id="x-content-plan-cadence-text">
+              {total}/day from Strategy plan v{planVersion ?? '?'} — change it in the Strategy tab
+            </span>
+            {onOpenStrategy ? (
+              <button type="button" id="x-content-plan-open-strategy-button" onClick={onOpenStrategy}>
+                Open Strategy
+              </button>
+            ) : null}
+          </div>
+        ) : (
+          <div
+            id="x-content-plan-tier-selector"
+            className="xce-tier-selector"
+            role="group"
+            aria-label="Posts per day"
+          >
+            {TIERS.map((tier) => (
+              <button
+                key={tier.posts}
+                type="button"
+                id={`x-content-plan-tier-${tier.posts}`}
+                className={`xce-tier-option${Number(posts) === tier.posts ? ' xce-tier-option-active' : ''}`}
+                aria-pressed={Number(posts) === tier.posts}
+                disabled={!onPostsChange || loading}
+                onClick={() => onPostsChange && onPostsChange(tier.posts)}
+              >
+                {tier.posts} · {tier.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {onRefresh ? (
           <button

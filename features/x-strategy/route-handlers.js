@@ -18,7 +18,7 @@ import { createRefreshService, createFirestoreRefreshQueue } from './refresh.js'
 import { resolveXGrowthProfile } from '../x-benchmark/profile.js';
 import { buildDayPlan as buildContentDayPlan } from '../x-content-inventory/plan-day.js';
 import { projectDayPlan } from '../x-content-inventory/day-plan-projection.js';
-import { mergeEngineConfig } from '../x-content-inventory/engine-quota.js';
+import { resolvePlanInputs } from './plan-inputs.js';
 import { normalizeXGrowthProfile } from '../x-benchmark/profile.js';
 import { createFirestoreChatStore, ChatCapError, ChatStoreError, THREAD_ID_RE } from './agent/chat-store.js';
 import {
@@ -46,6 +46,26 @@ const HISTORY_MESSAGES_TO_MODEL = 60;
 const DAY_MS = 86400000;
 const DEFAULT_PROFILE = Object.freeze({ ownHandle: 'bai_ee', benchmarkHandles: Object.freeze(['seb__design']), timezone: 'America/Chicago' });
 const REQUEST_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+/**
+ * Until a client saves an xGrowth profile, the tab runs on the engine's existing hard-wired pair
+ * (@bai_ee vs @seb__design, Chicago) so it works without a client_configs write. `defaulted` names
+ * the fields filled in, so the UI can say so instead of passing them off as saved settings.
+ * Shared with content-plan.js so the Plan tab and the Strategy tab resolve the same handles.
+ * @param {object} p  resolveXGrowthProfile() output
+ */
+export function withDefaultPair(p) {
+  const defaulted = [];
+  const fill = (field, value, fallback) => {
+    if (value && (!Array.isArray(value) || value.length)) return value;
+    defaulted.push(field);
+    return fallback;
+  };
+  const ownHandle = fill('ownHandle', p.ownHandle, DEFAULT_PROFILE.ownHandle);
+  const benchmarkHandles = fill('benchmarkHandles', p.benchmarkHandles, DEFAULT_PROFILE.benchmarkHandles);
+  const timezone = fill('timezone', p.timezone, DEFAULT_PROFILE.timezone);
+  return { ownHandle, benchmarkHandles, timezone, lanes: p.lanes || [], defaulted };
+}
 
 /** Daily-run doc -> the compact shape the agent's get_today_run tool and suggestion-id checks expect. */
 export function summarizeTodayRun(run) {
@@ -129,28 +149,10 @@ export function createStrategyHandlers({
     return { clientId: id };
   }
 
-  // Until a client saves an xGrowth profile, the tab runs on the engine's existing hard-wired pair
-  // (@bai_ee vs @seb__design, Chicago) so it works without a client_configs write. `defaulted` names
-  // the fields filled in, so the UI can say so instead of passing them off as saved settings.
+  // Default-pair fallback + `defaulted` live in withDefaultPair (shared with content-plan.js).
   async function loadProfile(clientId) {
     const config = await readXGrowthConfig(clientId);
-    const p = resolveProfile({ config });
-    const defaulted = [];
-    const fill = (field, value, fallback) => {
-      if (value && (!Array.isArray(value) || value.length)) return value;
-      defaulted.push(field);
-      return fallback;
-    };
-    const ownHandle = fill('ownHandle', p.ownHandle, DEFAULT_PROFILE.ownHandle);
-    const benchmarkHandles = fill('benchmarkHandles', p.benchmarkHandles, DEFAULT_PROFILE.benchmarkHandles);
-    const timezone = fill('timezone', p.timezone, DEFAULT_PROFILE.timezone);
-    return {
-      ownHandle,
-      benchmarkHandles,
-      timezone,
-      lanes: p.lanes || [],
-      defaulted,
-    };
+    return withDefaultPair(resolveProfile({ config }));
   }
 
   const safeHandle = (h) => { try { return normalizeHandle(h); } catch { return null; } };
@@ -182,8 +184,9 @@ export function createStrategyHandlers({
       };
       // No plan -> untouched buildDayPlan defaults. With a plan: its cadence (+ non-empty engine overrides).
       if (plan) {
-        input.posts = plan.authoredPerDay;
-        if (plan.engineTargets && Object.keys(plan.engineTargets).length) input.engineConfig = mergeEngineConfig(plan.engineTargets);
+        const resolved = resolvePlanInputs(planDoc);
+        input.posts = resolved.posts;
+        if (resolved.engineConfig) input.engineConfig = resolved.engineConfig;
       }
       const dayPlan = buildPreviewPlan(input);
       const posts = input.posts ?? dayPlan?.posts ?? undefined;
@@ -585,14 +588,15 @@ export function createXGrowthProfileSaver(db) {
  * Production wiring over firebase-admin Firestore. The refresh service gets the real bird detection and
  * enabled = env X_STRATEGY_LOCAL_INGEST==='1'.
  * @param {object} db  firebase-admin Firestore
- * @param {{readPackages?:Function, env?:object}} [extras]
+ * @param {{readPackages?:Function, env?:object, loadCommitted?:(handle:string)=>object[]|null}} [extras]
  */
 export function createStrategyHandlersFromDb(db, {
   readPackages, env = process.env, runDailyAction, runUpdateItemFacets, readTodayRun,
   saveXGrowthProfile = createXGrowthProfileSaver(db), chatStore = createFirestoreChatStore(db, { env }),
-  agentLoopFactory, callModel, logUsage,
+  agentLoopFactory, callModel, logUsage, loadCommitted,
 } = {}) {
-  const corpusStore = createFirestoreCorpusStore(db);
+  // `loadCommitted` (handle -> rows|null) lets a serverless host supply the committed corpora from static imports.
+  const corpusStore = createFirestoreCorpusStore(db, loadCommitted ? { loadCommitted } : {});
   const planStore = createFirestorePlanStore(db);
   const refreshService = createRefreshService({
     store: corpusStore,

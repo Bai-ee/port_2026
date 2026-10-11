@@ -32,6 +32,7 @@ import {
   runDailyLoop, assertOwnerClient, discoveryQueries, packageEligibility, localDateOf, LOOP_VERSION, MAX_SUGGESTIONS,
 } from '../../features/x-content-inventory/daily-loop.js';
 import { buildDayPlan } from '../../features/x-content-inventory/plan-day.js';
+import { createFirestorePlanStore } from '../../features/x-strategy/plan-store.js';
 import {
   createMemoryRunStore, createFirestoreRunStore, loadDailyLoopInputs, saveSuggestionDraft, editSuggestion, dismissSuggestion, createModelDrafter,
 } from '../../features/x-content-inventory/daily-run-store.js';
@@ -199,7 +200,8 @@ async function execute() {
     now: () => Date.now(),
     store,
     draft: args.model ? modelDrafter(args.client) : undefined,
-    readInputs: () => loadDailyLoopInputs({ db: fb.adminDb, loadBrainContext: loadBrainContextFn(), buildDayPlan }, {
+    // readPlanDoc: the Strategy plan doc (x_strategy_plans) sets cadence/targets/floors/caps; no doc => unchanged behaviour.
+    readInputs: () => loadDailyLoopInputs({ db: fb.adminDb, loadBrainContext: loadBrainContextFn(), buildDayPlan, readPlanDoc: (id) => createFirestorePlanStore(fb.adminDb).get(id) }, {
       clientId: args.client,
       packageIds: packageIdsForRun(),
       corpora: { own: readJson(OWN_CORPUS), benchmark: readJson(BENCH_CORPUS), ownSource: OWN_CORPUS, benchmarkSource: BENCH_CORPUS },
