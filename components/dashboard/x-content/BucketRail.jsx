@@ -85,8 +85,8 @@ export default function BucketRail({ buckets, counts, selectedId, onSelect, onUp
   return (
     <aside id="x-content-bucket-rail" className="xce-bk-rail" aria-label="Buckets">
       <ul id="x-content-bucket-list" className="xce-bk-list">
-        <li className="xce-bk-item">
-          <span className="xce-bk-row">
+        <li className="xce-bk-item" id="x-content-bucket-item-all">
+          <span className="xce-bk-row" id="x-content-bucket-row-all">
             <button type="button" id="x-content-bucket-all" className={`xce-bk-chip${selectedId === 'all' ? ' is-active' : ''}`} onClick={() => onSelect('all')}>
               <span className="xce-bk-name">All buckets</span>
               <span className="xce-bk-count">{counts.all ?? 0}</span>
@@ -97,7 +97,7 @@ export default function BucketRail({ buckets, counts, selectedId, onSelect, onUp
         {buckets.map((b, idx) => (
           <li key={b.id} className={`xce-bk-item${b.active === false ? ' is-inactive' : ''}`} id={`x-content-bucket-item-${b.id}`}>
             {renamingId === b.id ? (
-              <span className="xce-bk-rename">
+              <span className="xce-bk-rename" id={`x-content-bucket-rename-row-${b.id}`}>
                 <input className="xce-input" aria-label="Bucket name" value={renameValue} autoFocus maxLength={60}
                   onChange={(e) => setRenameValue(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') commitRename(b); if (e.key === 'Escape') setRenamingId(null); }} />
@@ -105,8 +105,8 @@ export default function BucketRail({ buckets, counts, selectedId, onSelect, onUp
                 <button type="button" className="xce-bk-icon" aria-label="Cancel rename" onClick={() => setRenamingId(null)}><X size={13} /></button>
               </span>
             ) : (
-              <span className="xce-bk-row">
-                <button type="button" className={`xce-bk-chip${selectedId === b.id ? ' is-active' : ''}`} onClick={() => onSelect(b.id)}
+              <span className="xce-bk-row" id={`x-content-bucket-row-${b.id}`}>
+                <button type="button" id={`x-content-bucket-chip-${b.id}`} className={`xce-bk-chip${selectedId === b.id ? ' is-active' : ''}`} onClick={() => onSelect(b.id)}
                   title={`${b.name} · ${b.active === false ? 'inactive · ' : ''}${shareSummary(b.share)}`}>
                   <span className="xce-bk-dot" style={{ background: b.color || '#475569' }} />
                   <span className="xce-bk-name">{b.name}</span>

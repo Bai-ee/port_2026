@@ -414,7 +414,7 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
       ) : null}
 
       {tab === 'strategy' ? (
-        <StrategyPanel clientId={activeClientId} call={call} onPlanChanged={() => load()} />
+        <StrategyPanel clientId={activeClientId} clientName={clientName} call={call} onPlanChanged={() => load()} />
       ) : tab === 'plan' ? (
         <PlanPanel
           plan={plan}

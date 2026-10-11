@@ -1,7 +1,11 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { ExternalLink, RefreshCw, Save, X } from 'lucide-react';
+import { ExternalLink, RefreshCw, Save, Search, Settings, BookOpen, X } from 'lucide-react';
+import Accordion from './ui/Accordion.jsx';
+import Badge from './ui/Badge.jsx';
+import Card from './ui/Card.jsx';
+import { XCE_COLORS, XCE_RADII, XCE_SHADOWS } from './xce-tokens';
 import { Skeleton, RetryError } from './Feedback.jsx';
 import { slotLabel, timingLine, strategySourceLine, slotStatuses, VOICE_LINE } from '../../../features/x-content-inventory/daily-loop/present.js';
 
@@ -13,8 +17,9 @@ import { slotLabel, timingLine, strategySourceLine, slotStatuses, VOICE_LINE } f
 // `scripts/x-content/daily-run.mjs --discover`. Save Draft writes ONE
 // unscheduled social_posts draft per suggestion; nothing here schedules or posts.
 //
-// STYLING: classNames only (`xce-dl-`); the parent card owns the single
-// `<style jsx global>` block, prefixed `#x-content-card`.
+// STYLING: the Discover chrome (empty state, options, how-it-works) is inline
+// style + ui/* primitives; suggestion-card internals keep the card's `xce-dl-`
+// classes (parent owns that `<style jsx global>` block, prefixed `#x-content-card`).
 
 const TYPE_LABEL = { reply: 'Reply', quote: 'Quote', original: 'Original post' };
 const WHY_ROWS = [
@@ -53,7 +58,7 @@ function SuggestionCard({ s, text, thumbUrl, onText, onCommit, onSave, onDismiss
   const empty = !text.trim();
   const max = s.type === 'quote' ? 90 : s.type === 'reply' ? 200 : 280;
   return (
-    <article id={`daily-suggestion-card-${s.id}`} data-suggestion-id={s.id} className={`xce-dl-card${checks.blocked ? ' xce-dl-blocked' : ''}`}>
+    <article id={`daily-suggestion-card-${s.id}`} data-suggestion-id={s.id} className={`xce-dl-card${checks.blocked ? ' xce-dl-blocked' : ''}`} style={{ background: XCE_COLORS.surface, border: `1px solid ${checks.blocked ? XCE_COLORS.redBorder : XCE_COLORS.border}`, borderRadius: XCE_RADII.lg, boxShadow: XCE_SHADOWS.card, minWidth: 0 }}>
       <header id={`daily-suggestion-header-row-${s.id}`} className="xce-dl-card-head">
         <span className={`xce-dl-type xce-dl-type-${s.type}`}>{TYPE_LABEL[s.type] || s.type}</span>
         {s.match?.tier === 'genre' ? <span className="xce-dl-tier">genre-level match</span> : null}
@@ -306,30 +311,46 @@ export default function DailySuggestionsPanel({ call, showToast }) {
   const dismissedCount = (run?.suggestions || []).filter((s) => s.reviewState === 'dismissed').length;
   const visible = (run?.suggestions || []).filter((s) => showDismissed || s.reviewState !== 'dismissed');
 
+  const BTN_SOLID = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 44, padding: '0 20px', border: `1px solid ${XCE_COLORS.ink}`, borderRadius: XCE_RADII.md, background: XCE_COLORS.ink, color: XCE_COLORS.onInk, fontSize: 14, fontWeight: 600, cursor: 'pointer' };
+  const BTN_OUTLINE = { ...BTN_SOLID, border: `1px solid ${XCE_COLORS.borderStrong}`, background: XCE_COLORS.surface, color: XCE_COLORS.ink };
+  const NOTE = { margin: 0, fontSize: 13, lineHeight: 1.45, color: XCE_COLORS.inkSoft, overflowWrap: 'anywhere' };
+
   return (
-    <section id="daily-suggestions-panel" className="xce-panel">
-      <div id="daily-suggestions-header" className="xce-head">
-        <span className="xce-kicker">Conversations to join{run ? ` · ${run.localDate}` : ''}</span>
-        <div id="daily-run-generate-controls" className="xce-dl-controls">
-          <label className="xce-dl-model">
-            <input type="checkbox" checked={withModel} onChange={(e) => setWithModel(e.target.checked)} disabled={!!busy} />
-            Use model copy (paid, ≤3 calls)
-          </label>
-          <button type="button" className="xce-refresh" disabled={!!busy} onClick={() => generate(false)}>
-            <RefreshCw size={12} /> {run ? 'Refresh' : 'Generate'}
-          </button>
-          {run ? <button type="button" className="xce-refresh" disabled={!!busy} onClick={() => generate(true)}>Regenerate</button> : null}
-        </div>
-      </div>
-      <p id="daily-run-intro-note" className="xce-sub">Reads saved inputs only. X search runs locally: <code>node scripts/x-content/daily-run.mjs --client &lt;id&gt; --discover --write</code>. Nothing is scheduled or posted.</p>
+    <section id="daily-suggestions-panel" className="xce-panel" style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
+      <h3 id="x-today-discover-heading" style={{ margin: 0, fontSize: 17, fontWeight: 700, color: XCE_COLORS.ink }}>
+        Conversations to join{run ? <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, fontWeight: 500, color: XCE_COLORS.inkSoft }}> · {run.localDate}</span> : null}
+      </h3>
 
       {loading ? <Skeleton id="daily-suggestions-loading" rows={3} /> : null}
       {error ? <RetryError id="daily-suggestions-error" message={error} onRetry={load} busy={loading} /> : null}
-      {!loading && !error && !run ? <div className="xce-empty">No run today yet. Generate one to see conversations worth joining.</div> : null}
+
+      {!loading && !error && !run ? (
+        <div id="x-today-discover-empty-state" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '28px 16px', textAlign: 'center', border: `1px dashed ${XCE_COLORS.borderStrong}`, borderRadius: XCE_RADII.lg }}>
+          <span aria-hidden="true" style={{ width: 56, height: 56, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: XCE_RADII.pill, background: XCE_COLORS.surfaceMuted, color: XCE_COLORS.ink, marginBottom: 6 }}>
+            <Search size={24} />
+          </span>
+          <p style={{ margin: 0, fontSize: 17, fontWeight: 700, color: XCE_COLORS.ink }}>No suggestions yet.</p>
+          <p style={NOTE}>Generate from saved inputs. No run today yet.</p>
+          <button type="button" id="x-today-generate-button" style={{ ...BTN_SOLID, marginTop: 8, opacity: busy ? 0.6 : 1 }} disabled={!!busy} onClick={() => generate(false)}>
+            {busy === 'generate' ? 'Generating…' : 'Generate suggestions'}
+          </button>
+        </div>
+      ) : null}
 
       {run ? (
         <>
-          <InputsPanel run={run} />
+          <div id="daily-run-generate-controls" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <button type="button" id="x-today-refresh-button" style={BTN_OUTLINE} disabled={!!busy} onClick={() => generate(false)}>
+              <RefreshCw size={14} /> Refresh
+            </button>
+            <button type="button" id="x-today-regenerate-button" style={BTN_OUTLINE} disabled={!!busy} onClick={() => generate(true)}>Regenerate</button>
+          </div>
+
+          <Card id="x-today-inputs-card" padding="0 14px">
+            <Accordion id="x-today-inputs-accordion" title="Saved inputs">
+              <InputsPanel run={run} />
+            </Accordion>
+          </Card>
           <GapsList gaps={run.gaps || []} />
 
           <div id="daily-suggestions-list" className="xce-dl-list">
@@ -357,6 +378,28 @@ export default function DailySuggestionsPanel({ call, showToast }) {
           <p id="daily-run-stats-line" className="xce-sub">{run.stats.conversationPosts} posts → {run.stats.narratives} conversations → {run.stats.onBrandWithContent} on-brand with owned content · library {run.stats.eligible}/{run.stats.packages} eligible · {run.usage.modelCalls} model call(s) · inputs: {run.inputSource || run.mode}</p>
         </>
       ) : null}
+
+      <Card id="x-today-options-card" padding="0 14px">
+        <Accordion
+          id="x-today-options-accordion"
+          title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}><Settings size={16} /> Generation options</span>}
+          right={<Badge tone="blue">Paid</Badge>}
+        >
+          <label id="x-today-model-copy-toggle" className="xce-dl-model" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: XCE_COLORS.ink, minHeight: 32 }}>
+            <input type="checkbox" checked={withModel} onChange={(e) => setWithModel(e.target.checked)} disabled={!!busy} style={{ marginTop: 3 }} />
+            <span>Use model copy (paid, ≤3 calls)</span>
+          </label>
+        </Accordion>
+      </Card>
+
+      <Card id="x-today-how-it-works-card" padding="0 14px">
+        <Accordion
+          id="x-today-how-it-works-accordion"
+          title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}><BookOpen size={16} /> How it works</span>}
+        >
+          <p id="daily-run-intro-note" style={NOTE}>Reads saved inputs only. X search runs locally: <code>node scripts/x-content/daily-run.mjs --client &lt;id&gt; --discover --write</code>. Nothing is scheduled or posted.</p>
+        </Accordion>
+      </Card>
     </section>
   );
 }

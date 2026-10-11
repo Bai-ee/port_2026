@@ -18,3 +18,10 @@
 - Coherence: XContentEngineCard.jsx kept the U2 shell and the Strategy tab (TABS has 'strategy' first; `<StrategyPanel … onPlanChanged>`; plan tab `onOpenStrategy={() => setTab('strategy')}`; phone nav has Chat → 'strategy').
 - npm test after merge: 4522 tests, 4520 pass, 2 fail (vendor-api-lib only) — equals the daily-content-loop branch's final count.
 - Constraint carried into U3a: the inputs-panel source labels (`rows store, pulled <date>` / `committed file <path>` / `… (rows store unavailable)` / `no stored rows`, rendered from inputs.js via DailySuggestionsPanel's #daily-run-inputs-panel) must stay visible — restyle them, don't drop them.
+
+## U3 (Strategy / Today / Content / Calendar+Results+Clients, parallel)
+- npm test (merged tree incl. T6/T7): 4522 tests, 4520 pass / 2 fail (vendor-api-lib only).
+- Fresh reviewer vs master plan §0 + audit: PASS. No new call actions/payloads; nothing writes/spends newly; no Omit items built; prompt chips fill-only; Undo = existing strategy-plan-revert(version-1), Restore vN unchanged.
+- Visual: 8 tabs x 400 zero console errors, no page-level horizontal overflow (card scrollWidth 358 vs 350 = bottom-nav full-bleed margin, internal only). Shots: docs/plans/content-engine-ui-shots/U3/.
+- Orchestrator addition: clientName prop passed to StrategyPanel (header chip).
+- Follow-ups from review go into U4: dead seriesLabel, stale PlanPanel comment, orphaned CSS, stale undoNote.

@@ -195,7 +195,7 @@ export default function ItemDrawer({ call, item, buckets, manualFolders, busy, e
       <section id="x-content-item-drawer" className="xce-bk-drawer" role="dialog" aria-label="Item details">
         <header id="x-content-item-drawer-header" className="xce-bk-drawer-head">
           <div>
-            <p className="xce-inv-title">{item.title || item.id}</p>
+            <p id="x-content-item-drawer-title" className="xce-inv-title">{item.title || item.id}</p>
           </div>
           <button type="button" className="xce-bk-icon" aria-label="Close" onClick={onClose}><X size={16} /></button>
         </header>

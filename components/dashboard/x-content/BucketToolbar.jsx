@@ -30,7 +30,7 @@ export default function BucketToolbar({
         ))}
       </select>
       <span className="xce-bk-toolbar-count" id="x-content-bucket-result-count">{resultLabel}</span>
-      <span className="xce-bk-toolbar-icons">
+      <span id="x-content-bucket-toolbar-icons" className="xce-bk-toolbar-icons">
         <Popover id="x-content-folder-menu" title="Folders" icon={<FolderPlus size={14} />}>
           {(close) => (adding ? (
             <NewFolderForm bucketId={bucketId} busy={busy} onCancel={() => setAdding(false)}
