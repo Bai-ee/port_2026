@@ -1,6 +1,8 @@
 # Content Management (X) — as built
 
-Status: implemented and locally tested on `feat/content-management` (2026-10-11). **Not production-activated.** Live UI walkthrough, deploy and every external dependency below are still owner actions. Plan: [`docs/plans/CONTENT-MANAGEMENT-NORMALIZATION-MASTER-PLAN.md`](../plans/CONTENT-MANAGEMENT-NORMALIZATION-MASTER-PLAN.md). Audit: [`content-management-audit.md`](../plans/content-management-audit.md). Build log: [`content-management-build-log.md`](../plans/content-management-build-log.md).
+Status: shipped to `main` in the content-system release (2026-10-11) with the owner-pilot hardening ([`CONTENT-PILOT-OPERATIONS.md`](CONTENT-PILOT-OPERATIONS.md)). Live posting batches, the GitHub sweep and the local worker remain owner actions. Plan: [`docs/plans/CONTENT-MANAGEMENT-NORMALIZATION-MASTER-PLAN.md`](../plans/CONTENT-MANAGEMENT-NORMALIZATION-MASTER-PLAN.md). Audit: [`content-management-audit.md`](../plans/content-management-audit.md). Build log: [`content-management-build-log.md`](../plans/content-management-build-log.md).
+
+Developer handoff for the release PR: [`docs/DEVELOPER-HANDOFF-CONTENT-SYSTEM.md`](../DEVELOPER-HANDOFF-CONTENT-SYSTEM.md).
 
 One workspace (the **Content Engine** card) takes content from find → select → draft → review → approve → schedule → track. Scanners, NAS/archive, Brain, Strategy Builder and the publisher stay as services behind it.
 

@@ -19,7 +19,7 @@ Status: **launch candidate, not deployed.** Everything below was verified locall
 | Local Mac worker | a signed-in browser for `bird` cookies, `X_STRATEGY_BIRD_COOKIE_SOURCE` (default `chrome`), Firebase admin credentials | For scan + strategy refresh only |
 
 ## 2. Publishing: exactly ONE publisher
-- **Active (after deploy): the Vercel cron** `GET /api/social-posting?action=process-due`, **every 15 minutes** (`vercel.json`). The owner stated the project is on Vercel Pro; that cannot be verified from code and **a `*/15` cron fails a Hobby deploy**, so confirm the plan in Vercel before deploying (the repo's older docs still describe Hobby). `STALE_DUE_MS` is **2 hours**: a due post more than 2h late is marked `expired`, never posted.
+- **Active (after deploy): the Vercel cron** `GET /api/social-posting?action=process-due`, **every 15 minutes** (`vercel.json`). The project is on Vercel Pro (owner-confirmed 2026-10-11; a `*/15` cron would fail a Hobby deploy). `STALE_DUE_MS` is **2 hours**: a due post more than 2h late is marked `expired`, never posted.
 - **Fallback, documented and OFF:** `.github/workflows/social-publish-sweep.yml` (`*/30`; also schedules Discogs records). It is inert unless the repo variable `SOCIAL_PUBLISH_ENABLED=true`. **Do not enable it alongside the cron**; publishing takes an atomic claim so overlap is safe but wasteful and confuses the log. Verify the variable is unset in GitHub before launch (cannot be read from code).
 - The Mac launchd publish sweep (`scripts/social/`) is retired: do not install it.
 - Other crons (digest/render/reconcile) are unchanged and daily.

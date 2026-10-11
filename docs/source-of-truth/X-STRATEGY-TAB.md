@@ -64,7 +64,7 @@ Rules (all enforced in code, tested):
 
 ## 4. Route actions
 
-All on `POST /api/dashboard/quote-targets` (Vercel Hobby: no new route files). Auth: `requireAdminContext` at the top of `POST` (admin only; non-admin never reaches the handlers). Every action except `strategy-refresh-status` also requires `body.clientId` equal to the admin-selected client (`context.clientId`): missing or contains `/` -> 400, mismatch -> 403. Failures are `{ok:false, status, error, ...}`; the route returns that HTTP status. Unexpected throws (5xx) propagate.
+All on `POST /api/dashboard/quote-targets` (folded onto the existing route; written under Vercel Hobby, still the convention on Pro). Auth: `requireAdminContext` at the top of `POST` (admin only; non-admin never reaches the handlers). Every action except `strategy-refresh-status` also requires `body.clientId` equal to the admin-selected client (`context.clientId`): missing or contains `/` -> 400, mismatch -> 403. Failures are `{ok:false, status, error, ...}`; the route returns that HTTP status. Unexpected throws (5xx) propagate.
 
 | Action | Request | Success response | Errors |
 |---|---|---|---|
@@ -160,7 +160,7 @@ The UI polls `strategy-refresh-status`. Measured 2026-10-11: bai_ee 1 round + se
 - **`planSlots` clamps to 7/day** (`TIER_1_MAX_POSTS`). Plans of 8-16 still validate and show 7 in the daily loop (recorded as `postsRequested`).
 - `plan.tier` is derived (`tierForAuthoredPerDay`, the tier the cadence sits in; 4/day = tier 1), not `resolveTier` (the next step up). Floors/caps keys must be real calendar slot types; `reply` and `retweet` are rejected.
 - The merge keeps existing `views` and non-metric fields (metrics-only merge); never replace rows wholesale.
-- Do not add a route file or edit `vercel.json`/`.vercelignore` for this feature (Hobby function cap; see `VERCEL-HOBBY-DEPLOYMENT.md`).
+- Prefer the existing route over new route files for this feature; the project is now on Vercel Pro (see `VERCEL-HOBBY-DEPLOYMENT.md` banner).
 - A confirmed `benchmarks-change` writes `client_configs`; `normalizeXGrowthProfile` drops fields it does not know, so any new profile field must be added there first.
 
 ## 10. Known limitations (master plan section 9 items)

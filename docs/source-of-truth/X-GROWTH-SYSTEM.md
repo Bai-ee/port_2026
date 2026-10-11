@@ -212,9 +212,8 @@ One-off, backward-looking. Free except view backfill. Full runbook: [`scripts/x-
 ### ⚠️ Auto-posting has two independent blockers
 
 1. **The spend gate.** Writes to @bai_ee are irreversible, credit-metered, and **invisible to the Operating Cost card**. X-API-write trigger points: `twitter-service.js:565,599,608` and `adapters/x.js:45,47,64`.
-2. **The cron cannot run this calendar.** `vercel.json:22-25` is **`40 13 * * *` — once daily** (Vercel Hobby limit). An 8-posts-a-day schedule is unschedulable on current infrastructure. Options: Vercel Pro, an external trigger (GitHub Actions / Cloud Run, patterns already in this repo), or batching.
+2. **Resolved 2026-10-11:** the project moved to Vercel Pro and `process-due` now runs **every 15 minutes** (`vercel.json`) with a **2h** staleness guard, so a multi-post day is schedulable. See [`CONTENT-PILOT-OPERATIONS.md`](CONTENT-PILOT-OPERATIONS.md).
 
-⚠️ **CLAUDE.md documents this cron as `*/30 * * * *` with a 12h staleness guard. That is wrong** — it is daily, with a **26h** guard (`twitter-service.js:270`).
 
 ---
 
