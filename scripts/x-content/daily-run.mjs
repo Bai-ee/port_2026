@@ -33,6 +33,9 @@ import {
 } from '../../features/x-content-inventory/daily-loop.js';
 import { buildDayPlan } from '../../features/x-content-inventory/plan-day.js';
 import { createFirestorePlanStore } from '../../features/x-strategy/plan-store.js';
+import { createFirestoreCorpusStore } from '../../features/x-strategy/corpus-store.js';
+import { loadLoopCorpora, safeProfileHandles } from '../../features/x-strategy/loop-corpora.js';
+import { resolveXGrowthProfile } from '../../features/x-benchmark/profile.js';
 import {
   createMemoryRunStore, createFirestoreRunStore, loadDailyLoopInputs, saveSuggestionDraft, editSuggestion, dismissSuggestion, createModelDrafter,
 } from '../../features/x-content-inventory/daily-run-store.js';
@@ -192,9 +195,20 @@ function loadBrainContextFn() {
   return (clientId) => loadClientBrainContext(clientId, { useFor: 'socialPosts', requireApproved: true }).catch(() => '');
 }
 
+// Live corpora: stored rows (x_corpora) with the committed JSON as fallback. --replay never uses this (deterministic).
+async function liveCorpora(db) {
+  const readConfig = async () => {
+    const snap = await db.collection('client_configs').doc(args.client).get();
+    return snap.exists ? snap.data()?.marketingBriefConfig?.xGrowth ?? null : null;
+  };
+  // A failed profile read uses the default pair (rows store still used); a failing store read falls back per handle.
+  return loadLoopCorpora({ corpusStore: createFirestoreCorpusStore(db), profileHandles: await safeProfileHandles(readConfig, resolveXGrowthProfile) });
+}
+
 async function execute() {
   assertOwnerClient(args.client);
   const fb = firebase();
+  const corpora = await liveCorpora(fb.adminDb);
   const store = createFirestoreRunStore(fb.adminDb);
   const res = await runDailyLoop({
     now: () => Date.now(),
@@ -204,7 +218,7 @@ async function execute() {
     readInputs: () => loadDailyLoopInputs({ db: fb.adminDb, loadBrainContext: loadBrainContextFn(), buildDayPlan, readPlanDoc: (id) => createFirestorePlanStore(fb.adminDb).get(id) }, {
       clientId: args.client,
       packageIds: packageIdsForRun(),
-      corpora: { own: readJson(OWN_CORPUS), benchmark: readJson(BENCH_CORPUS), ownSource: OWN_CORPUS, benchmarkSource: BENCH_CORPUS },
+      corpora,
     }),
   }, { clientId: args.client, max: args.max, force: args.force });
   if (res.skipped) {
