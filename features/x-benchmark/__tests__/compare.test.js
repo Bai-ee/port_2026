@@ -44,17 +44,18 @@ const blockOf = (handle, spec, extra = {}) => summarizeCorpus(
 
 test('volume is the top-ranked gap on the real pair', () => {
   // The session's conclusion, now computed rather than argued: the model
-  // account publishes ~6.6x more authored posts per active day.
+  // account publishes ~5.7x more posts per active day (refreshed corpora:
+  // seb 984 rows, bai_ee 262 rows; was ~6.6x on the 782/246 snapshot).
   assert.equal(report.gaps[0].id, 'volume');
   assert.equal(report.gaps[0].unit, 'perDay');
-  assert.ok(report.projection.volumeRatio > 6 && report.projection.volumeRatio < 7);
+  assert.ok(report.projection.volumeRatio > 5.5 && report.projection.volumeRatio < 6);
 });
 
 test('reallocating retweet slots is reported as the cheap half of the volume gap', () => {
   const g = gap('authored-share');
   assert.equal(g.unit, 'perDay');
-  // 34% authored against 77% — at the same posting frequency that alone is
-  // ~2.25x the authored output.
+  // 36% authored against 75% — at the same posting frequency that alone is
+  // ~2.07x the authored output (refreshed 984/262-row corpora).
   assert.ok(g.impact > 1 && g.impact < 1.5, `unexpected impact ${g.impact}`);
   assert.ok(g.impact < report.gaps[0].impact, 'must not outrank the full volume gap');
 });
@@ -83,10 +84,19 @@ test('the mix projection only counts moves the comparison supports', () => {
 });
 
 test('topic gaps are suppressed when the two taggers share no vocabulary', () => {
-  // The real corpora share 1 topic label out of 16. Reporting "japanese-asian-
-  // design is 0% of your output" would describe the tagger, not the account.
+  // The real corpora share 6 topic labels out of 23 (26%, under the 30% floor;
+  // it was 1 of 16 on the first snapshot). Reporting "japanese-asian-design is
+  // 0% of your output" would describe the tagger, not the account.
   assert.equal(report.gaps.filter((g) => g.dimension === 'topic').length, 0);
   assert.ok(report.warnings.some((w) => w.includes('Topic comparison suppressed')));
+});
+
+test('topic gaps are suppressed for fully disjoint synthetic vocabularies', () => {
+  const own = blockOf('own', { 'original-text': { n: 20, likes: 10, topics: ['craft'] } });
+  const bench = blockOf('bench', { 'original-showcase': { n: 20, likes: 90, topics: ['motion'] } });
+  const r = compareToBenchmark({ own, benchmark: bench });
+  assert.equal(r.gaps.filter((g) => g.dimension === 'topic').length, 0);
+  assert.ok(r.warnings.some((w) => w.includes('Topic comparison suppressed')));
 });
 
 test('topic gaps survive when the vocabularies do overlap', () => {
@@ -163,7 +173,7 @@ test('clock hours are never compared across accounts', () => {
 });
 
 test('a biased view sample is called out rather than silently used', () => {
-  assert.ok(report.warnings.some((w) => w.includes('Benchmark view coverage is 25%')));
+  assert.ok(report.warnings.some((w) => w.includes('Benchmark view coverage is 20%')));
   assert.equal(report.projection.liftBasis, 'avgLikes');
 });
 

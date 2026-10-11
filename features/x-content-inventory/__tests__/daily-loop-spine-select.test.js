@@ -11,6 +11,7 @@ import { VEIN_MAP, veinsForLane, pillarForVein } from '../daily-loop/veins.js';
 import { fillQuoteSlot } from '../daily-loop/fill-quote.js';
 import { conversationPostsFrom, normalizeConversationPost } from '../daily-loop/conversations.js';
 import { fallbackCopy, quoteReactFallback, checkSuggestionText } from '../daily-loop/copy.js';
+import { FLOOR_REASON } from '../daily-loop/slots.js';
 import { saveSuggestionDraft, editSuggestion } from '../daily-loop/review.js';
 import { createMemoryRunStore } from '../daily-run-store.js';
 import { OWNER_CLIENT_IDS } from '../daily-loop/config.js';
@@ -149,7 +150,7 @@ async function quoteReactRun() {
 
 test('editing and saving a quote-react suggestion with package:null works', async () => {
   const { s, key, deps, rows } = await quoteReactRun();
-  const edited = await editSuggestion(deps, { key, suggestionId: s.id, text: 'the detail does it.' });
+  const edited = await editSuggestion(deps, { key, suggestionId: s.id, text: 'the detail does it, every single part.' });
   assert.equal(edited.reviewState, 'edited');
   assert.equal(edited.edit.checks.blocked, false);
   const saved = await saveSuggestionDraft(deps, { key, suggestionId: s.id });
@@ -157,7 +158,7 @@ test('editing and saving a quote-react suggestion with package:null works', asyn
   const row = rows.get(saved.postId);
   assert.equal(row.packageId, null);
   assert.equal(row.engine, null);
-  assert.match(row.content, /^the detail does it\.\n\nhttps:\/\/x\.com\//);
+  assert.match(row.content, /^the detail does it, every single part\.\n\nhttps:\/\/x\.com\//);
 });
 
 // --- fallback never repeats within a run ---
@@ -183,4 +184,41 @@ test('the orchestrator output passes the copy checks with its fallback line', ()
   const r = selectForSlots({ ...base, slots: [slot('A', 'quote-react', { pillar: 'P1' })] });
   const s = r.suggestions[0];
   assert.equal(checkSuggestionText(fallbackCopy(s), s).blocked, false);
+});
+
+// --- quote-commentary slot + quote-react floor reason ---
+
+test('quote-commentary fills with the quote rules (media, bot gate, window) and carries no package', () => {
+  const r = selectForSlots({ ...base, slots: [slot('E', 'quote-commentary', { pillar: 'P1' })] });
+  assert.equal(r.suggestions.length, 1);
+  const sg = r.suggestions[0];
+  assert.equal(sg.slot.type, 'quote-commentary');
+  assert.equal(sg.package, null);
+  assert.match(sg.why.content, /commentary slot, no owned facts/);
+  const text = fallbackCopy(sg);
+  assert.ok(text.length >= 60);
+  assert.equal(checkSuggestionText(text, sg).blocked, false);
+  assert.ok(!(r.stats.quoteRejected.E.noMedia === 0 && r.stats.quoteRejected.E.addressesBot === 0), 'gates ran');
+});
+
+test('quote-commentary with no candidate is a visible gap, not a fill', () => {
+  const r = selectForSlots({ ...base, candidates: [], conversationPosts: [], slots: [slot('E', 'quote-commentary', { pillar: 'P1' })] });
+  assert.equal(r.suggestions.length, 0);
+  const g = r.gaps.find((x) => x.code === 'slot-unfilled:E');
+  assert.ok(g);
+  assert.match(g.message, /no candidates/);
+});
+
+test('quote-commentary shares used posts with quote-react and respects cap 3 in order', () => {
+  const r = selectForSlots({ ...base, slots: [slot('A', 'quote-react'), slot('B', 'quote-commentary'), slot('C', 'quote-commentary'), slot('D', 'quote-commentary')] });
+  assert.ok(r.suggestions.length <= 3);
+  const ids = r.suggestions.map((x) => x.opportunity.id);
+  assert.equal(new Set(ids).size, ids.length);
+});
+
+test('a floor-added quote-react slot shows the floor reason as its fill reason', () => {
+  const r = selectForSlots({ ...base, slots: [slot('A', 'quote-react', { floor: true, fillReason: FLOOR_REASON })] });
+  assert.equal(r.suggestions[0].slot.fillReason, FLOOR_REASON);
+  const plain = selectForSlots({ ...base, slots: [slot('A', 'quote-react')] });
+  assert.notEqual(plain.suggestions[0].slot.fillReason, FLOOR_REASON);
 });

@@ -25,14 +25,14 @@ const row = (over = {}) => ({
   ...over,
 });
 
-test('reproduces the hand-derived list: 31 accounts covering 80%', () => {
-  // The original list was read off this corpus by hand and cut at "31 accounts
-  // cover 80% of quote-derived likes". The rule, run as code, lands in the
-  // same place — which is the evidence that it WAS a rule and not taste.
-  assert.equal(derived.accounts.length, 31);
+test('reproduces the rule on the refreshed corpus: 41 accounts covering 80%', () => {
+  // The original list was read off the 782-row corpus by hand and cut at "31
+  // accounts cover 80% of quote-derived likes". On the refreshed 984-row
+  // corpus the same rule needs 41 accounts (332 candidates) to reach 80%.
+  assert.equal(derived.accounts.length, 41);
   assert.ok(derived.meta.coverageAchieved >= COVERAGE_TARGET);
   assert.ok(derived.meta.coverageAchieved < 0.82, 'must cut just past the target, not well beyond it');
-  assert.equal(derived.meta.candidatesConsidered, 266);
+  assert.equal(derived.meta.candidatesConsidered, 332);
 });
 
 test('the top targets match the ones the research identified', () => {
@@ -42,10 +42,10 @@ test('the top targets match the ones the research identified', () => {
   assert.deepEqual(top, ['rare_jpg', 'interiorsuckerr']);
 });
 
-test('almost every derived account is on the hand-written list', () => {
+test('most derived accounts are on the hand-written list', () => {
   const hand = new Set(WATCHLIST.map((w) => w.handle.toLowerCase()));
   const overlap = derived.accounts.filter((a) => hand.has(a.handle.toLowerCase()));
-  assert.ok(overlap.length >= 29, `expected ~30 of 31 to match, got ${overlap.length}`);
+  assert.ok(overlap.length >= 30, `expected >=30 of 41 to match, got ${overlap.length}`);
 });
 
 test('the account being analyzed is never its own quote target', () => {

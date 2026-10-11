@@ -324,7 +324,7 @@ function quoteSuggestion({ r, slot, ids, brain, strategy, ownSummary }) {
       brand: `${r.fit.reason}; guard lane: ${r.fit.lane}`,
       brain: brainLine(brain),
       strategy: strategyLine(strategy),
-      content: 'none required — reaction slot',
+      content: slot.type === 'quote-commentary' ? 'none required — commentary slot, no owned facts' : 'none required — reaction slot',
       history: evidence,
     },
     scores: { momentum: null, brandFit: null, contentFit: null, history: evidence.score ?? 0 },
@@ -395,7 +395,8 @@ export function selectForSlots({
       rejected[slot.letter] = r.rejected;
       if (r.gap) { gapFor(slot, r.gap.reason); continue; }
       usedPosts.push(r.post.id);
-      take(slot, quoteSuggestion({ r, slot, ids, brain, strategy, ownSummary }), r.fit.reason);
+      // A floor-added/kept slot says why it exists; that replaces the fit reason, which stays in why.brand.
+      take(slot, quoteSuggestion({ r, slot, ids, brain, strategy, ownSummary }), slot.floor ? slot.fillReason : r.fit.reason);
     } else if (slot.type === 'original-showcase') {
       const matched = matchedByLetter.get(slot.letter);
       const pkg0 = matched?.packageId ? packages.find((p) => p.id === matched.packageId) : null;

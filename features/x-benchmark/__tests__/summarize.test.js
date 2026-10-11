@@ -32,29 +32,30 @@ const post = (over = {}) => ({
 });
 
 test('reproduces the measured cadence of both real accounts', () => {
-  assert.equal(seb.cadence.postsPerActiveDay, 11.85);
-  assert.equal(seb.cadence.postsPerOccupiedHour, 1.96);
-  assert.equal(baiee.cadence.postsPerOccupiedHour, 1.31);
+  assert.equal(seb.cadence.postsPerActiveDay, 10.14);
+  assert.equal(seb.cadence.postsPerOccupiedHour, 1.83);
+  assert.equal(baiee.cadence.postsPerOccupiedHour, 1.3);
   // The finding that killed the "spread your posts out" advice: the model
-  // account is denser per occupied hour, and 73% of its posts share an hour.
+  // account is denser per occupied hour, and 68% of its posts share an hour.
   assert.ok(seb.cadence.postsPerOccupiedHour > baiee.cadence.postsPerOccupiedHour);
-  assert.equal(seb.cadence.shareInMultiHour, 73.27);
+  assert.equal(seb.cadence.shareInMultiHour, 68.39);
   assert.equal(seb.cadence.busiestHour, 11);
 });
 
 test('reproduces the measured composition split', () => {
-  assert.equal(seb.authoredShare, 77.11);
-  assert.equal(baiee.authoredShare, 34.15);
-  assert.equal(seb.byType['self-quote'].avgLikes, 60.8);
-  assert.equal(seb.byType['quote-react'].n, 183);
+  assert.equal(seb.authoredShare, 75.1);
+  assert.equal(baiee.authoredShare, 36.26);
+  assert.equal(seb.byType['self-quote'].avgLikes, 57.5);
+  assert.equal(seb.byType['quote-react'].n, 199);
 });
 
 test('video out-performs image inside the same post type', () => {
-  // 3.4x, measured within original-showcase so the post type cannot be
-  // credited to the medium.
+  // 3.05x (61 video vs 116 image posts; 3.4x on the earlier 782-row corpus),
+  // measured within original-showcase so the post type cannot be credited to
+  // the medium.
   const showcase = seb.mediaWithinType['original-showcase'];
   const ratio = showcase.video.avgLikes / showcase.image.avgLikes;
-  assert.ok(ratio > 3.3 && ratio < 3.5, `expected ~3.4x, got ${ratio}`);
+  assert.ok(ratio > 3.0 && ratio < 3.1, `expected ~3.05x, got ${ratio}`);
 });
 
 test('the strongest type by lift is the account\'s own, not the benchmark\'s', () => {
@@ -118,7 +119,7 @@ test('view coverage is reported so a biased sample can be caught', () => {
   // seb's views were backfilled for the top-liked posts plus controls. That
   // makes his ER figures unusable for comparison and is why lift uses likes.
   assert.ok(seb.base.viewsCoverage < 0.3, 'seb view coverage is a known partial sample');
-  assert.equal(baiee.base.viewsCoverage, 1);
+  assert.equal(baiee.base.viewsCoverage, 0.8842);
   assert.equal(seb.base.liftBasis, 'avgLikes');
 });
 
