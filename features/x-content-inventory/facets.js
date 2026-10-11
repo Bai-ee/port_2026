@@ -179,7 +179,7 @@ export function effectiveFacets(item = {}) {
 /** Lowercase search tokens from title, story and every facet value. */
 export function buildSearchTokens(item = {}) {
   const f = effectiveFacets(item);
-  const parts = [item.title, item.story, f.ocrText, f.dateText, f.decade, f.eraYear,
+  const parts = [item.title, item.story, item.post?.text, item.post?.album, f.ocrText, f.dateText, f.decade, f.eraYear,
     ...eventPairs(f).flatMap((p) => [p.monthDay, p.year != null ? `${p.year}-${p.monthDay}` : null]), f.eventDate,
     ...['people', 'credits', 'crews', 'labels', 'catalogNumbers', 'venues', 'cities', 'partyNames', 'gear', 'genres'].flatMap((k) => f[k] || []),
     // Legacy rows (pre-facets) still carry artist/label in `entities` — search them too.

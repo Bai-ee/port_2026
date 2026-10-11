@@ -1,0 +1,33 @@
+
+POSTING PLAN — 2026-10-11  ·  8 authored posts + 10 replies
+  inventory: 3 packages (3 valid) · filled 0/8 slots
+
+  ENGINES (today planned+posted · this week · config)
+    record     1 today ·  1 wk · day 0–2, ≤40% share
+    ue         1 today ·  1 wk · day 0–1, week 3–4
+    client     1 today ·  1 wk · day 0–1, week 3–∞
+    identity   2 today ·  2 wk · day 1–2
+    ⚠️ ue: 1/3 this week (weekly min not yet met)
+    ⚠️ client: 1/3 this week (weekly min not yet met)
+
+  08:00  A  original-showcase  music  [client  ] ⚠️ GAP
+      need: a VIDEO package (client engine) from: C6 Design/Dev Artifacts
+  10:00 (was 08:30)  B  quote-react        craft  [identity] ← daily scan (quote target found at 06:30)
+  12:00  C  original-showcase  work   [ue      ] ⚠️ GAP
+      need: a VIDEO package (ue engine) from: C4 Own Productions, C5 Hardware / Process
+  14:00 (was 12:30)  D  original-text      meta   [record  ] ⚠️ GAP
+      need: a package (record engine) from: C3 Event Archive
+  16:00 (was 13:00)  E  self-quote         music  [identity] ← your own post, re-surfaced  [adopted slot]
+      adopted: benchmark runs self-quote at 3.79% share but 1.5601× lift (n=28); you run it at 1.05%
+      Clones are going live at @crittersquest today!   Some great threads are floating around, but the Mar
+      https://x.com/bai_ee/status/2087894928726610403   why: 4712 views vs p80 threshold of 114 · 59d old · video
+  13:30  F  quote-commentary   craft  [—       ] — skipped: identity is at its max of 2/day
+  21:00  G  quote-react        work   [—       ] — skipped: over the daily cap of 6
+  21:30  H  reply              meta   [—       ] — skipped: over the daily cap of 6
+
+3 unfilled slots. That number is the inventory shortfall, not a scheduling bug —
+add packages in the series named above, or lower --posts until the inventory can carry the day.
+
+Series available: C1=Record of the Day · C2=Label Vault · C3=Event Archive · C4=Own Productions · C5=Hardware / Process · C6=Design/Dev Artifacts · C7=Takes with Receipts · C8=Quote-react · C9=Self-quote Resurrection
+Copy: run `node scripts/x-content/draft-day.mjs` to draft it.
+

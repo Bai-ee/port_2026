@@ -3,13 +3,17 @@
 import React, { useState } from 'react';
 import { AlertTriangle, Check, X } from 'lucide-react';
 import { ConfirmButton } from './Feedback';
+import Card from './ui/Card.jsx';
+import Badge from './ui/Badge.jsx';
+import SectionLabel from './ui/SectionLabel.jsx';
+import { XCE_COLORS, XCE_TYPE } from './xce-tokens';
 
 // ClientCapturePanel — capture a client story, and approve/reject client packages.
 //
 // PURE PRESENTATION. Persistence is handed back through `onCapture`,
 // `onApprove`, `onReject`. Nothing here writes copy: the story field is the
 // author's own memory; left blank it stays "[add your memory]" server-side.
-// STYLING: classNames only (`xce-`); the parent card owns the CSS.
+// STYLING: ui/* primitives (Card/Badge/SectionLabel) + the card's existing `xce-` form classes.
 
 const EMPTY = { client: '', project: '', problem: '', decision: '', rejectedIdea: '', result: '', assetRefsText: '', story: '', owned: false };
 
@@ -53,15 +57,17 @@ export default function ClientCapturePanel({ packages, loading, error, savingId,
 
   return (
     <div id="x-content-client-capture-panel" className="xce-panel">
-      <div id="x-content-client-capture-header" className="xce-head">
-        <span className="xce-kicker">Client stories</span>
-        <span className="xce-head-count">{rows.length} packages</span>
+      <div id="x-content-client-capture-header" style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 12 }}>
+        <h3 id="x-clients-title" style={{ margin: 0, fontSize: 20, fontWeight: 700, color: XCE_COLORS.ink }}>Clients</h3>
+        <span id="x-clients-package-count" style={{ fontFamily: XCE_TYPE.mono, fontSize: 12, color: XCE_COLORS.inkMuted }}>{rows.length} packages</span>
       </div>
 
       {error ? (
         <p id="x-content-client-error" className="xce-error"><AlertTriangle size={13} /> {typeof error === 'string' ? error : 'Something failed.'}</p>
       ) : null}
 
+      <Card id="x-clients-capture-card" style={{ marginBottom: 14 }}>
+      <SectionLabel id="x-clients-capture-label" style={{ marginBottom: 10 }}>Client stories</SectionLabel>
       <form id="x-content-client-capture-form" className="xce-form" onSubmit={submit}>
         <div id="x-content-client-capture-fields" className="xce-form-grid">
           {FIELDS.map(([key, label, kind]) => (
@@ -85,9 +91,10 @@ export default function ClientCapturePanel({ packages, loading, error, savingId,
           </button>
         </div>
       </form>
+      </Card>
 
       <div id="x-content-client-list-section" className="xce-inv-section">
-        <p className="xce-inv-kicker">Client packages</p>
+        <SectionLabel id="x-clients-packages-label">Client packages</SectionLabel>
         {loading ? <div className="xce-loading">Loading…</div> : null}
         {!loading && !rows.length ? <div className="xce-empty">No client packages yet. Capture one above.</div> : null}
         <ul id="x-content-client-package-list" className="xce-inv-list">
@@ -95,10 +102,11 @@ export default function ClientCapturePanel({ packages, loading, error, savingId,
             const state = approvalOf(p);
             const busy = savingId === p.id;
             return (
-              <li key={p.id} id={`x-content-client-package-${p.id}`} className="xce-week-slot">
-                <p className="xce-inv-row-title">{p.title}</p>
-                <div className="xce-inv-row-flags">
-                  <span className={`xce-chip ${state === 'approved' ? 'xce-chip-adopted' : state === 'rejected' ? 'xce-chip-error' : 'xce-chip-warn'}`}>approval: {state}</span>
+              <li key={p.id} id={`x-content-client-package-${p.id}`}>
+                <Card padding={12} style={{ display: 'grid', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                  <p className="xce-inv-row-title" style={{ margin: 0, minWidth: 0, fontWeight: 600 }}>{p.title}</p>
+                  <Badge tone={state === 'approved' ? 'green' : state === 'rejected' ? 'red' : 'amber'}>approval: {state}</Badge>
                 </div>
                 <details className="xce-more" id={`x-content-client-package-${p.id}-details`}>
                   <summary className="xce-more-summary">Details</summary>
@@ -120,6 +128,7 @@ export default function ClientCapturePanel({ packages, loading, error, savingId,
                     <ConfirmButton id={`x-content-client-reject-${p.id}`} className="xce-draft-button xce-danger" label="Reject" prompt="Reject this?" icon={<X size={14} />} disabled={busy} onConfirm={() => onReject(p.id)} />
                   ) : null}
                 </div>
+                </Card>
               </li>
             );
           })}

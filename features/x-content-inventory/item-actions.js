@@ -6,7 +6,9 @@ import { thumbPathFor, validateThumbDataUrl, makeThumbJpeg, uploadThumb } from '
 
 export const HUMAN_RIGHTS = ['owned', 'cleared', 'never-public'];
 const PLACEHOLDER_STORY = '[add your memory]';
-const REUSABLE_DRAFT = new Set(['draft', 'scheduled']);
+// Reuse rule: ANY open (not yet posted/failed/dismissed) row for the package is the item's draft.
+// Returning it beats creating a second row for the same package. Lookup is client-scoped.
+const REUSABLE_DRAFT = new Set(['draft', 'approved', 'awaiting_approval', 'scheduled', 'queued', 'posting', 'needs_review']);
 const bad = (m, status = 400) => Object.assign(new Error(m), { status });
 
 export const isPlaceholderStory = (s) => {
@@ -60,15 +62,19 @@ async function pickMedia(pkg, deps) {
 
 /**
  * Creates (or returns the existing) social_posts DRAFT. Never schedules or posts.
- * deps: { getPackage, findDraft(packageId), createPost(clientId,payload), patchPost(postId,patch), signEvLong, hitloopUrl }
+ * deps: { getPackage, findDraft(packageId, clientId), createPost(clientId,payload), ensureDraft?(clientId,{idempotencyKey,...payload}) -> {post,existing},
+ *         patchPost(postId,patch), signEvLong, hitloopUrl }
+ * When deps.ensureDraft is provided it is used (idempotency key `item:<packageId>`); otherwise createPost.
  */
 export async function createDraftFromItem(deps, { clientId, id }) {
   if (!id) throw bad('id is required.');
   const pkg = await deps.getPackage(id);
   if (!pkg) throw bad(`No package ${id}.`, 404);
 
-  const prior = await deps.findDraft(id);
-  if (prior && REUSABLE_DRAFT.has(prior.status)) return { ok: true, postId: prior.id, existing: true };
+  const prior = await deps.findDraft(id, clientId);
+  // Defensive: a lookup that ignores clientId must still never hand back another client's row.
+  const sameClient = !prior || !prior.clientId || prior.clientId === clientId;
+  if (prior && sameClient && REUSABLE_DRAFT.has(prior.status)) return { ok: true, postId: prior.id, existing: true };
 
   if (pkg.rights !== 'owned' && pkg.rights !== 'cleared') throw bad(`Rights are "${pkg.rights}"; set rights to owned or cleared before drafting.`, 409);
   if (needsApproval(pkg) && !isApproved(pkg)) throw bad('This item needs approval before it can be drafted.', 409);
@@ -79,7 +85,7 @@ export async function createDraftFromItem(deps, { clientId, id }) {
   if (!text) throw bad('Item has no text to draft from.');
 
   const media = await pickMedia(pkg, deps);
-  const post = await deps.createPost(clientId, {
+  const payload = {
     content: text,
     status: 'draft',
     scheduledAt: null,
@@ -87,7 +93,15 @@ export async function createDraftFromItem(deps, { clientId, id }) {
     packageId: pkg.id,
     engine: pkg.engine || null,
     ...(media || {}),
-  });
+  };
+  let post;
+  if (typeof deps.ensureDraft === 'function') {
+    const r = await deps.ensureDraft(clientId, { idempotencyKey: `item:${pkg.id}`, ...payload });
+    post = r.post;
+    if (r.existing) return { ok: true, postId: post.id, existing: true };
+  } else {
+    post = await deps.createPost(clientId, payload);
+  }
   if (pkg.bucketId) await deps.patchPost(post.id, { bucketId: pkg.bucketId });
   return { ok: true, postId: post.id };
 }

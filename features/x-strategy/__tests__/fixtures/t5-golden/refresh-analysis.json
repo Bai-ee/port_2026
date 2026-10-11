@@ -1,0 +1,1255 @@
+{
+  "ok": true,
+  "report": {
+    "ownHandle": "bai_ee",
+    "benchmarkHandle": "seb__design",
+    "warnings": [
+      "Own view coverage is 88% — engagement-rate figures in this block are a biased subsample; all lifts use likes.",
+      "Benchmark view coverage is 20% — its engagement-rate figures are a biased subsample; all lifts use likes.",
+      "Hour-of-day figures are each account's own local clock and are not aligned across accounts — only the shape (hours occupied, posts per hour) is compared.",
+      "Topic comparison suppressed: the two corpora share 6 of 23 topic labels (26%). Topic labels come from a per-account tagger, so a benchmark topic showing 0% of your output would describe the tagger, not the account."
+    ],
+    "gaps": [
+      {
+        "id": "volume",
+        "dimension": "cadence",
+        "unit": "perDay",
+        "headline": "Publishes 5.69× more authored posts per active day",
+        "own": 1.34,
+        "benchmark": 7.62,
+        "delta": 6.28,
+        "impact": 4.6866,
+        "confidence": "high",
+        "evidence": {
+          "ownActiveDays": 71,
+          "benchmarkActiveDays": 97
+        }
+      },
+      {
+        "id": "authored-share",
+        "dimension": "composition",
+        "unit": "perDay",
+        "headline": "75.1% of the benchmark's output is authored against 36.26% — reallocating existing slots alone is 2.07× your authored output, at today's posting frequency",
+        "own": 36.26,
+        "benchmark": 75.1,
+        "delta": 38.84,
+        "impact": 1.0681,
+        "confidence": "high",
+        "evidence": {
+          "ownRetweets": 167,
+          "benchmarkRetweets": 245,
+          "ownStrangerEligibleShare": 33.59,
+          "benchmarkStrangerEligibleShare": 69.11
+        }
+      },
+      {
+        "id": "type-mix:quote-commentary",
+        "dimension": "type-mix",
+        "unit": "perPost",
+        "direction": "decrease",
+        "headline": "Over-posts quote-commentary — 15.79% against 8.66%, and yours earns only 0.6244× your own average",
+        "own": 15.79,
+        "benchmark": 8.66,
+        "delta": -7.13,
+        "lift": 0.6244,
+        "liftSource": "own",
+        "impact": 0.0229,
+        "confidence": "medium",
+        "evidence": {
+          "ownN": 15,
+          "benchmarkN": 64,
+          "liftFromN": 15,
+          "ownAvgLikes": 1.4,
+          "ownPooledER": 1.9
+        }
+      },
+      {
+        "id": "hour-density",
+        "dimension": "cadence",
+        "unit": "shape",
+        "headline": "Benchmark is denser per occupied hour (1.83 vs 1.3) — spacing is not the lever, volume is",
+        "own": 1.3,
+        "benchmark": 1.83,
+        "delta": 0.53,
+        "impact": 0,
+        "confidence": "high",
+        "evidence": {
+          "ownOccupiedHoursPerDay": 2.83,
+          "benchmarkOccupiedHoursPerDay": 5.56,
+          "ownBusiestHour": 5,
+          "benchmarkBusiestHour": 11
+        }
+      },
+      {
+        "id": "type-mix:original-showcase",
+        "dimension": "type-mix",
+        "unit": "perPost",
+        "direction": "hold",
+        "headline": "You post more original-showcase than the benchmark (32.63% against 25.17%) and it is one of your stronger types at 1.6258× — keep it",
+        "own": 32.63,
+        "benchmark": 25.17,
+        "delta": -7.46,
+        "lift": 1.6258,
+        "liftSource": "own",
+        "impact": 0,
+        "confidence": "high",
+        "evidence": {
+          "ownN": 31,
+          "benchmarkN": 186,
+          "liftFromN": 31,
+          "ownAvgLikes": 3.65,
+          "ownPooledER": 1.65
+        }
+      },
+      {
+        "id": "type-mix:original-text",
+        "dimension": "type-mix",
+        "unit": "perPost",
+        "direction": "investigate",
+        "headline": "Benchmark leans on original-text (27.47% against your 10.53%) but yours earns 0.1784× your average — an execution question, not a mix one",
+        "own": 10.53,
+        "benchmark": 27.47,
+        "delta": 16.94,
+        "lift": 0.1784,
+        "liftSource": "own",
+        "impact": 0,
+        "confidence": "medium",
+        "evidence": {
+          "ownN": 10,
+          "benchmarkN": 203,
+          "liftFromN": 10,
+          "ownAvgLikes": 0.4,
+          "ownPooledER": 1.13
+        }
+      }
+    ],
+    "projection": {
+      "mixMultiplier": 1.04,
+      "targetMix": {
+        "original-showcase": 37.43,
+        "quote-react": 30.89,
+        "original-text": 12.08,
+        "quote-commentary": 9.93,
+        "reply": 8.45,
+        "self-quote": 1.2
+      },
+      "volumeRatio": 5.69,
+      "combined": 5.89,
+      "caveat": "combined = mixMultiplier × volumeRatio assumes per-post performance holds as volume rises. It usually does not: more posts per day compete for the same followers and the marginal post tends to earn less. Treat it as a ceiling, not a forecast.",
+      "liftBasis": "avgLikes"
+    },
+    "tier": {
+      "tier": 1,
+      "authoredPerDay": 4,
+      "label": "Foundation",
+      "source": "next-step"
+    },
+    "alternates": []
+  },
+  "calendar": {
+    "meta": {
+      "generated": true,
+      "generatedFrom": {
+        "ownHandle": "bai_ee",
+        "benchmarkHandle": "seb__design"
+      },
+      "tier": 1,
+      "tierLabel": "Foundation",
+      "slotsPerDay": 4,
+      "occupiedHours": 2,
+      "hours": [
+        8,
+        13
+      ],
+      "targetMix": {
+        "original-showcase": 37.43,
+        "quote-react": 30.89,
+        "original-text": 12.08,
+        "quote-commentary": 9.93,
+        "reply": 8.45,
+        "self-quote": 1.2
+      },
+      "allocation": {
+        "original-showcase": 2,
+        "quote-react": 1,
+        "original-text": 1
+      },
+      "days": 15,
+      "hoursSource": "own-history",
+      "startDate": "2026-10-11"
+    },
+    "days": [
+      {
+        "day": 1,
+        "weekday": "Sun",
+        "theme": null,
+        "slots": [
+          {
+            "slot": "A",
+            "timeCT": "08:00",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "B",
+            "timeCT": "08:30",
+            "type": "original-text",
+            "lane": "general",
+            "brief": "one idea, stated. no link",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "C",
+            "timeCT": "13:00",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "D",
+            "timeCT": "13:30",
+            "type": "quote-react",
+            "lane": "general",
+            "brief": "a post climbing right now in this lane — react in one line, no question mark",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": true,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          }
+        ]
+      },
+      {
+        "day": 2,
+        "weekday": "Mon",
+        "theme": null,
+        "slots": [
+          {
+            "slot": "A",
+            "timeCT": "08:00",
+            "type": "original-text",
+            "lane": "general",
+            "brief": "one idea, stated. no link",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "B",
+            "timeCT": "08:30",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "C",
+            "timeCT": "13:00",
+            "type": "quote-react",
+            "lane": "general",
+            "brief": "a post climbing right now in this lane — react in one line, no question mark",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": true,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "D",
+            "timeCT": "13:30",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          }
+        ]
+      },
+      {
+        "day": 3,
+        "weekday": "Tue",
+        "theme": null,
+        "slots": [
+          {
+            "slot": "A",
+            "timeCT": "08:00",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "B",
+            "timeCT": "08:30",
+            "type": "quote-react",
+            "lane": "general",
+            "brief": "a post climbing right now in this lane — react in one line, no question mark",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": true,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "C",
+            "timeCT": "13:00",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "D",
+            "timeCT": "13:30",
+            "type": "original-text",
+            "lane": "general",
+            "brief": "one idea, stated. no link",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          }
+        ]
+      },
+      {
+        "day": 4,
+        "weekday": "Wed",
+        "theme": null,
+        "slots": [
+          {
+            "slot": "A",
+            "timeCT": "08:00",
+            "type": "quote-react",
+            "lane": "general",
+            "brief": "a post climbing right now in this lane — react in one line, no question mark",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": true,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "B",
+            "timeCT": "08:30",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "C",
+            "timeCT": "13:00",
+            "type": "original-text",
+            "lane": "general",
+            "brief": "one idea, stated. no link",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "D",
+            "timeCT": "13:30",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          }
+        ]
+      },
+      {
+        "day": 5,
+        "weekday": "Thu",
+        "theme": null,
+        "slots": [
+          {
+            "slot": "A",
+            "timeCT": "08:00",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "B",
+            "timeCT": "08:30",
+            "type": "original-text",
+            "lane": "general",
+            "brief": "one idea, stated. no link",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "C",
+            "timeCT": "13:00",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "D",
+            "timeCT": "13:30",
+            "type": "quote-react",
+            "lane": "general",
+            "brief": "a post climbing right now in this lane — react in one line, no question mark",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": true,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          }
+        ]
+      },
+      {
+        "day": 6,
+        "weekday": "Fri",
+        "theme": null,
+        "slots": [
+          {
+            "slot": "A",
+            "timeCT": "08:00",
+            "type": "original-text",
+            "lane": "general",
+            "brief": "one idea, stated. no link",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "B",
+            "timeCT": "08:30",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "C",
+            "timeCT": "13:00",
+            "type": "quote-react",
+            "lane": "general",
+            "brief": "a post climbing right now in this lane — react in one line, no question mark",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": true,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "D",
+            "timeCT": "13:30",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          }
+        ]
+      },
+      {
+        "day": 7,
+        "weekday": "Sat",
+        "theme": null,
+        "slots": [
+          {
+            "slot": "A",
+            "timeCT": "08:00",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "B",
+            "timeCT": "08:30",
+            "type": "quote-react",
+            "lane": "general",
+            "brief": "a post climbing right now in this lane — react in one line, no question mark",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": true,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "C",
+            "timeCT": "13:00",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "D",
+            "timeCT": "13:30",
+            "type": "original-text",
+            "lane": "general",
+            "brief": "one idea, stated. no link",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          }
+        ]
+      },
+      {
+        "day": 8,
+        "weekday": "Sun",
+        "theme": null,
+        "slots": [
+          {
+            "slot": "A",
+            "timeCT": "08:00",
+            "type": "quote-react",
+            "lane": "general",
+            "brief": "a post climbing right now in this lane — react in one line, no question mark",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": true,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "B",
+            "timeCT": "08:30",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "C",
+            "timeCT": "13:00",
+            "type": "original-text",
+            "lane": "general",
+            "brief": "one idea, stated. no link",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "D",
+            "timeCT": "13:30",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          }
+        ]
+      },
+      {
+        "day": 9,
+        "weekday": "Mon",
+        "theme": null,
+        "slots": [
+          {
+            "slot": "A",
+            "timeCT": "08:00",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "B",
+            "timeCT": "08:30",
+            "type": "original-text",
+            "lane": "general",
+            "brief": "one idea, stated. no link",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "C",
+            "timeCT": "13:00",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "D",
+            "timeCT": "13:30",
+            "type": "quote-react",
+            "lane": "general",
+            "brief": "a post climbing right now in this lane — react in one line, no question mark",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": true,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          }
+        ]
+      },
+      {
+        "day": 10,
+        "weekday": "Tue",
+        "theme": null,
+        "slots": [
+          {
+            "slot": "A",
+            "timeCT": "08:00",
+            "type": "original-text",
+            "lane": "general",
+            "brief": "one idea, stated. no link",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "B",
+            "timeCT": "08:30",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "C",
+            "timeCT": "13:00",
+            "type": "quote-react",
+            "lane": "general",
+            "brief": "a post climbing right now in this lane — react in one line, no question mark",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": true,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "D",
+            "timeCT": "13:30",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          }
+        ]
+      },
+      {
+        "day": 11,
+        "weekday": "Wed",
+        "theme": null,
+        "slots": [
+          {
+            "slot": "A",
+            "timeCT": "08:00",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "B",
+            "timeCT": "08:30",
+            "type": "quote-react",
+            "lane": "general",
+            "brief": "a post climbing right now in this lane — react in one line, no question mark",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": true,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "C",
+            "timeCT": "13:00",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "D",
+            "timeCT": "13:30",
+            "type": "original-text",
+            "lane": "general",
+            "brief": "one idea, stated. no link",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          }
+        ]
+      },
+      {
+        "day": 12,
+        "weekday": "Thu",
+        "theme": null,
+        "slots": [
+          {
+            "slot": "A",
+            "timeCT": "08:00",
+            "type": "quote-react",
+            "lane": "general",
+            "brief": "a post climbing right now in this lane — react in one line, no question mark",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": true,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "B",
+            "timeCT": "08:30",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "C",
+            "timeCT": "13:00",
+            "type": "original-text",
+            "lane": "general",
+            "brief": "one idea, stated. no link",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "D",
+            "timeCT": "13:30",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          }
+        ]
+      },
+      {
+        "day": 13,
+        "weekday": "Fri",
+        "theme": null,
+        "slots": [
+          {
+            "slot": "A",
+            "timeCT": "08:00",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "B",
+            "timeCT": "08:30",
+            "type": "original-text",
+            "lane": "general",
+            "brief": "one idea, stated. no link",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "C",
+            "timeCT": "13:00",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "D",
+            "timeCT": "13:30",
+            "type": "quote-react",
+            "lane": "general",
+            "brief": "a post climbing right now in this lane — react in one line, no question mark",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": true,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          }
+        ]
+      },
+      {
+        "day": 14,
+        "weekday": "Sat",
+        "theme": null,
+        "slots": [
+          {
+            "slot": "A",
+            "timeCT": "08:00",
+            "type": "original-text",
+            "lane": "general",
+            "brief": "one idea, stated. no link",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "B",
+            "timeCT": "08:30",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "C",
+            "timeCT": "13:00",
+            "type": "quote-react",
+            "lane": "general",
+            "brief": "a post climbing right now in this lane — react in one line, no question mark",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": true,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "D",
+            "timeCT": "13:30",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          }
+        ]
+      },
+      {
+        "day": 15,
+        "weekday": "Sun",
+        "theme": null,
+        "slots": [
+          {
+            "slot": "A",
+            "timeCT": "08:00",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "B",
+            "timeCT": "08:30",
+            "type": "quote-react",
+            "lane": "general",
+            "brief": "a post climbing right now in this lane — react in one line, no question mark",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": true,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "C",
+            "timeCT": "13:00",
+            "type": "original-showcase",
+            "lane": "general",
+            "brief": "something you made — video out-reaches image inside this type",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          },
+          {
+            "slot": "D",
+            "timeCT": "13:30",
+            "type": "original-text",
+            "lane": "general",
+            "brief": "one idea, stated. no link",
+            "copy": null,
+            "asset": null,
+            "selfReply": null,
+            "dynamic": false,
+            "guard": {
+              "hardBlock": false,
+              "lane": null,
+              "reviewRequired": true
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "tier": {
+    "tier": 1,
+    "authoredPerDay": 4,
+    "label": "Foundation",
+    "source": "next-step"
+  }
+}

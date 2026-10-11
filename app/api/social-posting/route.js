@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
+import { alertOnHeldPosts } from '../../../features/social-posting/publish-alert.js';
 import {
+  approveAndSchedule,
   approveDraft,
   attachMediaToPost,
   createSocialPost,
@@ -13,7 +15,10 @@ import {
   retrySelfReply,
   processDuePostsForAllClients,
   publishApprovedPost,
+  getSocialPost,
   readSocialQueue,
+  reconcilePost,
+  rejectDraft,
   rejectSocialPost,
   runPostingAgents,
   schedulePost,
@@ -32,11 +37,12 @@ const { verifyRequestUser } = require('../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../api/_lib/client-provisioning.cjs');
 const { revokeApprovalsForClient, revokeApprovalsForPost } = require('../../../api/_lib/social-approval.cjs');
 const { getHeaderValue, safeSecretEquals } = require('../../../api/_lib/auth.cjs');
+const { requirePilotOwner } = require('../../../api/_lib/pilot-access.cjs');
 
 // The due-sweep cron used to live at /api/social-posting/process-due, a thin
 // wrapper that only called processDuePostsForAllClients. It was folded in here
-// because Vercel Hobby caps a deployment at 12 function groups and the route
-// earned none of its own. Vercel crons issue GET with a bearer CRON_SECRET, so
+// (written when the project was on Vercel Hobby's 12-function cap; the project is now on Pro and this cron
+// runs every 15 minutes, but the route stays folded so nothing else changes). Vercel crons issue GET with a bearer CRON_SECRET, so
 // the sweep hangs off GET ahead of the user-session path below.
 //
 // Fails closed in production: no CRON_SECRET configured means no cron access.
@@ -55,6 +61,23 @@ function makeReqShim(request) {
       Authorization: request.headers.get('authorization'),
     },
   };
+}
+
+// Content Management boundary: lifecycle-v2 rows (the pilot's) are owner-only; legacy rows keep serving every
+// client's Copywriter / Schedule Posts. The client id is the server-resolved one, never the body's.
+async function gatePilotRow(context, decoded, postId) {
+  const row = postId ? await getSocialPost(context.clientId, postId) : null;
+  if (row && Number(row.lifecycleVersion) >= 2) requirePilotOwner(context, decoded);
+}
+
+// Explicit, audited plan override: only reachable on owner-gated actions, only with a written reason. The service
+// stamps {by, at, reason} on the post; the UI shows it.
+function planOverrideFrom(body, decoded) {
+  const o = body?.planOverride;
+  if (!o || o.confirm !== true) return null;
+  const reason = String(o.reason || '').trim();
+  if (!reason) throw Object.assign(new Error('An override needs a written reason.'), { status: 400, code: 'override-reason-required' });
+  return { by: decoded?.email || decoded?.uid || null, reason };
 }
 
 function json(body, status = 200) {
@@ -80,11 +103,15 @@ export async function GET(request) {
     try {
       const maxParam = Number(new URL(request.url).searchParams.get('max'));
       const result = await processDuePostsForAllClients(Number.isFinite(maxParam) && maxParam > 0 ? { maxPerRun: Math.min(maxParam, 10) } : {});
+      // Owner alert when the run parked or failed anything (off unless PILOT_ALERT_* + RESEND_API_KEY are set).
+      const alert = await alertOnHeldPosts(result);
       return json({
         ok: true,
+        alert: alert.sent ? 'sent' : alert.reason,
         posted: result.posted.length,
         failed: result.failed.length,
         skipped: result.skipped.length,
+        expired: (result.expired || []).length,
         deferred: result.deferred,
         needsReview: result.needsReview.map((p) => p.id),
       });
@@ -151,7 +178,7 @@ export async function POST(request) {
         const { loadClientBrainContext } = require('../../../features/client-brain/store.cjs');
         clientBrainContext = await loadClientBrainContext(context.clientId, { useFor: 'socialPosts', maxChars: 1500 });
       } catch { /* non-fatal — fall back to brand-only tone */ }
-      const { voice, algo } = await enhancePost(body.content, { clientBrainContext });
+      const { voice, algo } = await enhancePost(body.content, { clientBrainContext, clientId: context.clientId });
       const scoreOf = (text) => scoreXPost(String(text || ''), { mediaType: body.mediaType || 'none' });
       const candidates = [
         { id: 'voice', label: 'Brand Voice', text: voice, score: scoreOf(voice) },
@@ -237,30 +264,67 @@ export async function POST(request) {
 
     if (action === 'schedule') {
       const agents = body.agents || runPostingAgents(body.content, agentContext).agents;
-      const post = await schedulePost(context.clientId, { ...body, agents });
+      const post = await schedulePost(context.clientId, { ...body, agents }, { by: decoded?.email || decoded?.uid || null });
       return json({ ok: true, post });
     }
 
     // Edit a saved draft/scheduled post in place (Copywriter notepad). Re-scores
     // via the same agents pass so the updated doc carries a fresh xGrowthScore.
     if (action === 'update') {
+      await gatePilotRow(context, decoded, body.postId);
       const agents = body.agents || runPostingAgents(body.content, agentContext).agents;
-      const post = await updateSocialPost(context.clientId, body.postId, { ...body, agents });
+      // The override is never read from the generic payload: only an owner-gated v2 row may carry one.
+      const row = body.planOverride ? await getSocialPost(context.clientId, body.postId) : null;
+      const overrideAllowed = row && Number(row.lifecycleVersion) >= 2;
+      const post = await updateSocialPost(context.clientId, body.postId, { ...body, agents, planOverride: undefined }, {
+        expectedRevision: body.expectedRevision,
+        planOverride: overrideAllowed ? planOverrideFrom(body, decoded) : null,
+      });
       return json({ ok: true, post });
     }
 
     // draft -> approved (stamps reviewedAt/reviewedBy). Does not schedule or publish.
     if (action === 'approve-draft') {
-      const post = await approveDraft(context.clientId, body.postId, { reviewedBy: decoded?.email || decoded?.uid || null });
+      requirePilotOwner(context, decoded);
+      const post = await approveDraft(context.clientId, body.postId, { reviewedBy: decoded?.email || decoded?.uid || null, expectedRevision: body.expectedRevision });
+      return json({ ok: true, post });
+    }
+
+    // Calendar Approve: draft -> approved -> scheduled at the shown time, in one call (explicit operator click only).
+    if (action === 'approve-and-schedule') {
+      requirePilotOwner(context, decoded);
+      const post = await approveAndSchedule(context.clientId, body.postId, {
+        scheduledAt: body.scheduledAt,
+        content: typeof body.content === 'string' ? body.content : undefined,
+        reviewedBy: decoded?.email || decoded?.uid || null,
+        expectedRevision: body.expectedRevision,
+        planOverride: planOverrideFrom(body, decoded),
+      });
+      return json({ ok: true, post });
+    }
+
+    // Calendar Reject: draft -> rejected. Never touches scheduled/posted rows.
+    if (action === 'reject-draft') {
+      requirePilotOwner(context, decoded);
+      const post = await rejectDraft(context.clientId, body.postId, { reviewedBy: decoded?.email || decoded?.uid || null, expectedRevision: body.expectedRevision });
+      return json({ ok: true, post });
+    }
+
+    // Reconcile a held / ambiguous post against what X actually shows (owner only; nothing is sent to X).
+    if (action === 'reconcile-post') {
+      requirePilotOwner(context, decoded);
+      const post = await reconcilePost(context.clientId, body.postId, { outcome: body.outcome, platformId: body.platformId, by: decoded?.email || decoded?.uid || null });
       return json({ ok: true, post });
     }
 
     if (action === 'attach-media') {
+      await gatePilotRow(context, decoded, body.postId);
       const post = await attachMediaToPost(context.clientId, body.postId, body);
       return json({ ok: true, post });
     }
 
     if (action === 'retry-self-reply') {
+      await gatePilotRow(context, decoded, body.postId);
       const post = await retrySelfReply(context.clientId, body.postId);
       return json({ ok: true, post });
     }
@@ -274,6 +338,7 @@ export async function POST(request) {
     // an 'awaiting_approval' post directly, or revoke every pending link for
     // this client (e.g. before switching a platform back to 'off').
     if (action === 'approve-post') {
+      await gatePilotRow(context, decoded, body.postId);
       const post = await publishApprovedPost(context.clientId, body.postId, { source: 'dashboard' });
       // Retire any still-pending email token for this post — the publish above
       // already happened, so a later click on that link must not double-post.
@@ -284,6 +349,7 @@ export async function POST(request) {
     }
 
     if (action === 'reject-post') {
+      await gatePilotRow(context, decoded, body.postId);
       const post = await rejectSocialPost(context.clientId, body.postId);
       await revokeApprovalsForPost(body.postId).catch((err) => {
         console.error('[social-posting] revokeApprovalsForPost failed after reject-post', body.postId, err?.message);

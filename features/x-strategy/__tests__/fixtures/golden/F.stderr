@@ -1,0 +1,1 @@
+ERROR: --source scrape is not available. ScrapeCreators returns an empty tweet list for accounts of this size (verified 2026-09-12), and the X API is spend-gated. bird is the only path.

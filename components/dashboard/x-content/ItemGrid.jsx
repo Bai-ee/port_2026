@@ -195,11 +195,18 @@ export function Legend() {
   );
 }
 
+// Tiles are sliced a page at a time so a bucket of thousands does not mount thousands of tiles.
+const GRID_PAGE = 60;
+
 export default function ItemGrid({ items, bucketById, selectedItemId, onOpen, call }) {
+  const [limit, setLimit] = useState(GRID_PAGE);
+  // A different list (bucket, view, search) starts over at the first page.
+  useEffect(() => { setLimit(GRID_PAGE); }, [items]);
+  const shown = items.length > limit ? items.slice(0, limit) : items;
   return (
     <>
       <ul id="x-content-item-grid" className="xce-bk-grid">
-        {items.map((item) => {
+        {shown.map((item) => {
           const bucket = bucketById[item._bucketId];
           return (
             <li key={item.id} className="xce-bk-card-li">
@@ -213,6 +220,17 @@ export default function ItemGrid({ items, bucketById, selectedItemId, onOpen, ca
           );
         })}
       </ul>
+      {items.length > GRID_PAGE ? (
+        <div id="x-content-item-grid-footer-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 10 }}>
+          <span id="x-content-item-grid-showing" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'rgba(31,29,27,0.5)' }}>
+            Showing {shown.length.toLocaleString()} of {items.length.toLocaleString()}
+          </span>
+          {shown.length < items.length ? (
+            <button type="button" id="x-content-item-grid-load-more-button" className="xce-btn xce-btn-ghost"
+              onClick={() => setLimit((n) => n + GRID_PAGE)}>Load more</button>
+          ) : null}
+        </div>
+      ) : null}
     </>
   );
 }

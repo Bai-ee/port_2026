@@ -16,8 +16,12 @@
 import { DISCOGS_SOURCE, packageId } from './draft-builder.js';
 import { mergeEngineConfig } from '../x-content-inventory/engine-quota.js';
 import { needsApproval } from '../x-content-inventory/schema.js';
+import {
+  OWNER_TIMEZONE, OCCUPYING, zonedTimeToUtcMs, localDayKey, zonedParts as parts, postMs, isReply, findSpacingConflict,
+} from '../x-content-inventory/allocate-slot.js';
+import { findPackageCollision } from '../social-posting/lifecycle.js';
 
-export const OWNER_TIMEZONE = 'America/Chicago';
+export { OWNER_TIMEZONE, zonedTimeToUtcMs, localDayKey };
 export const MEMORY_PLACEHOLDER = '[add your memory]';
 
 export const DEFAULT_SCHEDULE_CONFIG = Object.freeze({
@@ -30,35 +34,7 @@ export const DEFAULT_SCHEDULE_CONFIG = Object.freeze({
   horizonDays: 21,
 });
 
-// Statuses that occupy the calendar / count against quotas.
-const OCCUPYING = new Set(['scheduled', 'queued', 'approved', 'posting', 'posted']);
 const DAY_MS = 86_400_000;
-
-function parts(date, tz) {
-  const f = new Intl.DateTimeFormat('en-US', {
-    timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
-  });
-  const o = {};
-  for (const p of f.formatToParts(date)) o[p.type] = p.value;
-  return { y: +o.year, m: +o.month, d: +o.day, h: +o.hour, min: +o.minute };
-}
-
-/** Local wall time in `tz` -> UTC ms (DST-safe; slots avoid the 02:00 gap). */
-export function zonedTimeToUtcMs(y, m, d, h, min, tz) {
-  const wall = Date.UTC(y, m - 1, d, h, min);
-  let guess = wall;
-  for (let i = 0; i < 3; i += 1) {
-    const p = parts(new Date(guess), tz);
-    const seen = Date.UTC(p.y, p.m - 1, p.d, p.h, p.min);
-    guess += wall - seen;
-  }
-  return guess;
-}
-
-export function localDayKey(ms, tz) {
-  const p = parts(new Date(ms), tz);
-  return `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`;
-}
 
 export function isRecordReady(post) {
   if (!post || post.source !== DISCOGS_SOURCE) return false;
@@ -76,11 +52,6 @@ const fmtLocal = (ms, tz) => {
 };
 const hhmm = (s) => s.split(':').map(Number);
 
-function postMs(p) {
-  const t = Date.parse(p.status === 'posted' ? (p.postedAt || p.scheduledAt) : p.scheduledAt);
-  return Number.isFinite(t) ? t : null;
-}
-const isReply = (p) => Boolean(p.replyTo) || p.kind === 'reply';
 const isRecordPost = (p) => p.engine === 'record' || p.source === DISCOGS_SOURCE;
 const packageIdOf = (p) => p.packageId || (p.source === DISCOGS_SOURCE && p.sourceRef?.releaseId != null ? packageId(p.sourceRef.releaseId) : null);
 
@@ -145,12 +116,20 @@ export function planRecordSchedule({ posts = [], packages = {}, now = new Date()
 
   const scheduled = [];
   const skipped = [];
+  // Rows that hold a package open (pending statuses), keyed by the package id the record scheduler derives.
+  const pending = posts.map((p) => ({ id: p.id, status: p.status, packageId: packageIdOf(p) }));
   for (const post of candidates) {
     const releaseId = post.sourceRef?.releaseId ?? null;
     const pid = packageIdOf(post);
     const pkg = packages[pid];
     if (pkg && needsApproval(pkg) && post.status !== 'approved') {
       skipped.push({ postId: post.id, releaseId, reasons: ['needs approval before it can be scheduled'] });
+      continue;
+    }
+    // One open copy per package: another pending row (any source) or a copy scheduled earlier in this run blocks it.
+    const collision = findPackageCollision(pending, { packageId: pid, selfId: post.id });
+    if (collision) {
+      skipped.push({ postId: post.id, releaseId, reasons: [`package ${pid} already has an open copy (${collision.id}, ${collision.status})`] });
       continue;
     }
     const keys = keysOf(pkg);
@@ -169,7 +148,7 @@ export function planRecordSchedule({ posts = [], packages = {}, now = new Date()
       let why = null;
       for (const t of times) {
         if (t < nowMs + cfg.minLeadMs) { why = why || 'time already past'; continue; }
-        const near = occupied.find((o) => Math.abs(o.ms - t) < spacingMs);
+        const near = findSpacingConflict(occupied, t, spacingMs);
         if (near) { why = why || `within ${eng.authored.minSpacingMin} min of another post at ${fmtLocal(near.ms, tz)} CT`; continue; }
         const clash = cooldownDays && ledger.find((l) => l.id !== pid && Math.abs(l.ms - t) < cooldownDays * DAY_MS && l.keys.some((k) => keys.includes(k)));
         if (clash) { blockers.push(`${key}: entity cooldown (${cooldownDays}d) - shares "${clash.keys.find((k) => keys.includes(k))}" with a record near ${new Date(clash.ms).toISOString().slice(0, 10)}`); why = null; times.length = 0; break; }
@@ -183,6 +162,7 @@ export function planRecordSchedule({ posts = [], packages = {}, now = new Date()
       continue;
     }
     occupied.push({ ms: placed.t, record: true });
+    if (pid) pending.push({ id: post.id, status: 'scheduled', packageId: pid });
     ledger.push({ ms: placed.t, id: pid, keys });
     const when = `${placed.key} ${fmtLocal(placed.t, tz)} CT`;
     scheduled.push({

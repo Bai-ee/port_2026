@@ -69,3 +69,6 @@ services/site-clone/.out/
 # Stray local reference files at repo root (unreferenced by any code)
 /2006.glb
 /Layout Example.jpg
+
+# Content Engine UI build screenshots (kept out of git; regenerate locally)
+docs/plans/content-engine-ui-shots/

@@ -1,0 +1,5 @@
+Pulling @fixture_handle back to 2026-10-07…
+round 1: +12 (total 12) oldest=2026-10-07
+round 2: +12 (total 24) oldest=2026-10-04
+
+Wrote 15 normalized rows -> features/x-strategy/__tests__/fixtures/golden/C.rows.json

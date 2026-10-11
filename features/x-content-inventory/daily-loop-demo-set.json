@@ -1,0 +1,224 @@
+{
+  "_note": "Verified demo set for the Daily Content Loop POC (2026-10-10). Mechanically verified: source record present, rights owned, not retired. NAS flyers (903 with printed facts) are excluded until the owner checks OCR.",
+  "ids": [
+    "discogs-10207",
+    "discogs-1247",
+    "discogs-12839082",
+    "discogs-151581",
+    "discogs-15399",
+    "discogs-1580157",
+    "discogs-16103",
+    "discogs-24191",
+    "discogs-2525744",
+    "discogs-30820134",
+    "discogs-3679686",
+    "discogs-4393",
+    "discogs-461456",
+    "discogs-5660",
+    "discogs-7351",
+    "discogs-74379",
+    "discogs-92069",
+    "rv-026f3ae6-7573-4a5c-92db-7c6785b5b13b",
+    "rv-06f0e5cc-1a8e-409d-8726-934d3ab83c00",
+    "rv-0801d5f5-c7b2-4964-b0b7-d3b21f2e4b11",
+    "rv-0889bbda-a71b-40cb-8817-92b21d5e660e",
+    "rv-0fc1f8ef-cfe0-4062-9418-ec6e1e466288",
+    "rv-13d26729-c19e-4c30-a395-3389e8d8d451",
+    "rv-14e9ebb1-6856-4a73-9c50-542d52245965",
+    "rv-1dba2c5d-1176-4ab8-91a3-a48d2d74adc0",
+    "rv-2078ee19-f77a-47c6-9abf-5302aebf6407",
+    "rv-5102f614-a0c2-47b9-9260-595b3cde0f3e",
+    "rv-5321e98b-8164-4e0e-bc5b-2866d8267a2c",
+    "rv-5770d298-3cba-4a2f-9a6b-6b481449a8ca",
+    "rv-909dc820-2f57-45e2-91e0-69e736f1236d",
+    "holopaper-cloth-grab"
+  ],
+  "items": [
+    {
+      "id": "discogs-10207",
+      "kind": "discogs",
+      "title": "Glenn Underground, Cei-Bei – House Music Will Never Die",
+      "verified": "title/label/year from Discogs release https://www.discogs.com/release/10207-G-U-Cei-Bei-House-Music-Will-Never-Die; no personal story — facts only"
+    },
+    {
+      "id": "discogs-1247",
+      "kind": "discogs",
+      "title": "Blue Boy – Scattered Emotions EP",
+      "verified": "title/label/year from Discogs release https://www.discogs.com/release/1247-Blue-Boy-Scattered-Emotions-EP; no personal story — facts only"
+    },
+    {
+      "id": "discogs-12839082",
+      "kind": "discogs",
+      "title": "Black Traxx – Volume III",
+      "verified": "title/label/year from Discogs release https://www.discogs.com/release/12839082-Black-Traxx-Volume-III; no personal story — facts only"
+    },
+    {
+      "id": "discogs-151581",
+      "kind": "discogs",
+      "title": "Braxton Holmes, Dewey B., Weezie Jefferson – The Adventures Of A Full Figured Woman E.P.",
+      "verified": "title/label/year from Discogs release https://www.discogs.com/release/151581-Braxton-Holmes-Dewey-B-Present-Weezie-Jefferson-The-Adventures-Of-A-Full-Figured-Woman-EP; no personal story — facts only"
+    },
+    {
+      "id": "discogs-15399",
+      "kind": "discogs",
+      "title": "DJ Sneak – Recycled Loops",
+      "verified": "title/label/year from Discogs release https://www.discogs.com/release/15399-DJ-Sneak-Recycled-Loops; no personal story — facts only"
+    },
+    {
+      "id": "discogs-1580157",
+      "kind": "discogs",
+      "title": "Ricky Bradshaw – The Jump? Skip! EP.",
+      "verified": "title/label/year from Discogs release https://www.discogs.com/release/1580157-Ricky-Bradshaw-The-Jump-Skip-EP; no personal story — facts only"
+    },
+    {
+      "id": "discogs-16103",
+      "kind": "discogs",
+      "title": "Johnny Fiasco – Deep State E.P.",
+      "verified": "title/label/year from Discogs release https://www.discogs.com/release/16103-Johnny-Fiasco-Deep-State-EP; no personal story — facts only"
+    },
+    {
+      "id": "discogs-24191",
+      "kind": "discogs",
+      "title": "Roger Sanchez, Twilight – I Want Your Love",
+      "verified": "title/label/year from Discogs release https://www.discogs.com/release/24191-Roger-Sanchez-Presents-Twilight-7-I-Want-Your-Love; no personal story — facts only"
+    },
+    {
+      "id": "discogs-2525744",
+      "kind": "discogs",
+      "title": "Furious George – 3",
+      "verified": "title/label/year from Discogs release https://www.discogs.com/release/2525744-Furious-George-3; no personal story — facts only"
+    },
+    {
+      "id": "discogs-30820134",
+      "kind": "discogs",
+      "title": "Kojak – Hold Me",
+      "verified": "title/label/year from Discogs release https://www.discogs.com/release/30820134-Kojak-Hold-Me; no personal story — facts only"
+    },
+    {
+      "id": "discogs-3679686",
+      "kind": "discogs",
+      "title": "DJ Jacq – Ghetto Survival",
+      "verified": "title/label/year from Discogs release https://www.discogs.com/release/3679686-DJ-Jacq-Ghetto-Survival; no personal story — facts only"
+    },
+    {
+      "id": "discogs-4393",
+      "kind": "discogs",
+      "title": "Mateo & Matos – Night Moods",
+      "verified": "title/label/year from Discogs release https://www.discogs.com/release/4393-Mateo-Matos-Night-Moods; no personal story — facts only"
+    },
+    {
+      "id": "discogs-461456",
+      "kind": "discogs",
+      "title": "Just 4 Groovers, Freddy Turner – I Got Jazz In My Soul",
+      "verified": "title/label/year from Discogs release https://www.discogs.com/release/461456-Just-4-Groovers-Featuring-Frederick-Turner-I-Got-Jazz-In-My-Soul; no personal story — facts only"
+    },
+    {
+      "id": "discogs-5660",
+      "kind": "discogs",
+      "title": "DJ Q – Porn King EP",
+      "verified": "title/label/year from Discogs release https://www.discogs.com/release/5660-DJQ-Porn-King-EP; no personal story — facts only"
+    },
+    {
+      "id": "discogs-7351",
+      "kind": "discogs",
+      "title": "DJ Sneak – Moon Doggy E.P.",
+      "verified": "title/label/year from Discogs release https://www.discogs.com/release/7351-DJ-Sneak-Moon-Doggy-EP; no personal story — facts only"
+    },
+    {
+      "id": "discogs-74379",
+      "kind": "discogs",
+      "title": "Lith De Lanka – Fairy Tale",
+      "verified": "title/label/year from Discogs release https://www.discogs.com/release/74379-Lith-De-Lanka-Fairy-Tale; no personal story — facts only"
+    },
+    {
+      "id": "discogs-92069",
+      "kind": "discogs",
+      "title": "3-Play – The Cream Of The Krop EP",
+      "verified": "title/label/year from Discogs release https://www.discogs.com/release/92069-3-Play-The-Cream-Of-The-Krop-EP; no personal story — facts only"
+    },
+    {
+      "id": "rv-026f3ae6-7573-4a5c-92db-7c6785b5b13b",
+      "kind": "rendered-video",
+      "title": "BAI-EE – Love Manifesto V-Day Mix",
+      "verified": "own mix (title \"BAI-EE – Love Manifesto V-Day Mix\", rights owned, not retired, has thumb); no personal story — facts only"
+    },
+    {
+      "id": "rv-06f0e5cc-1a8e-409d-8726-934d3ab83c00",
+      "kind": "rendered-video",
+      "title": "BAI-EE – Fathers Day Jazz Mix",
+      "verified": "own mix (title \"BAI-EE – Fathers Day Jazz Mix\", rights owned, not retired, has thumb); no personal story — facts only"
+    },
+    {
+      "id": "rv-0801d5f5-c7b2-4964-b0b7-d3b21f2e4b11",
+      "kind": "rendered-video",
+      "title": "BAI-EE – Live in Hawaii (Asylum)",
+      "verified": "own mix (title \"BAI-EE – Live in Hawaii (Asylum)\", rights owned, not retired, has thumb); no personal story — facts only"
+    },
+    {
+      "id": "rv-0889bbda-a71b-40cb-8817-92b21d5e660e",
+      "kind": "rendered-video",
+      "title": "BAI-EE – Sounds From the Divide Mix 19",
+      "verified": "own mix (title \"BAI-EE – Sounds From the Divide Mix 19\", rights owned, not retired, has thumb); no personal story — facts only"
+    },
+    {
+      "id": "rv-0fc1f8ef-cfe0-4062-9418-ec6e1e466288",
+      "kind": "rendered-video",
+      "title": "BAI-EE – Rough Times",
+      "verified": "own mix (title \"BAI-EE – Rough Times\", rights owned, not retired, has thumb); no personal story — facts only"
+    },
+    {
+      "id": "rv-13d26729-c19e-4c30-a395-3389e8d8d451",
+      "kind": "rendered-video",
+      "title": "BAI-EE – Love Manifesto #3",
+      "verified": "own mix (title \"BAI-EE – Love Manifesto #3\", rights owned, not retired, has thumb); no personal story — facts only"
+    },
+    {
+      "id": "rv-14e9ebb1-6856-4a73-9c50-542d52245965",
+      "kind": "rendered-video",
+      "title": "BAI-EE – Love Manifesto (2) V-Day Mix",
+      "verified": "own mix (title \"BAI-EE – Love Manifesto (2) V-Day Mix\", rights owned, not retired, has thumb); no personal story — facts only"
+    },
+    {
+      "id": "rv-1dba2c5d-1176-4ab8-91a3-a48d2d74adc0",
+      "kind": "rendered-video",
+      "title": "BAI-EE – 12 Step Music Mix",
+      "verified": "own mix (title \"BAI-EE – 12 Step Music Mix\", rights owned, not retired, has thumb); no personal story — facts only"
+    },
+    {
+      "id": "rv-2078ee19-f77a-47c6-9abf-5302aebf6407",
+      "kind": "rendered-video",
+      "title": "BAI-EE – Live Performance",
+      "verified": "own mix (title \"BAI-EE – Live Performance\", rights owned, not retired, has thumb); no personal story — facts only"
+    },
+    {
+      "id": "rv-5102f614-a0c2-47b9-9260-595b3cde0f3e",
+      "kind": "rendered-video",
+      "title": "BAI-EE – Music Mix",
+      "verified": "own mix (title \"BAI-EE – Music Mix\", rights owned, not retired, has thumb); no personal story — facts only"
+    },
+    {
+      "id": "rv-5321e98b-8164-4e0e-bc5b-2866d8267a2c",
+      "kind": "rendered-video",
+      "title": "BAI-EE – Love Manifesto 3",
+      "verified": "own mix (title \"BAI-EE – Love Manifesto 3\", rights owned, not retired, has thumb); no personal story — facts only"
+    },
+    {
+      "id": "rv-5770d298-3cba-4a2f-9a6b-6b481449a8ca",
+      "kind": "rendered-video",
+      "title": "BAI-EE – Live @ Viva Acid '24",
+      "verified": "own mix (title \"BAI-EE – Live @ Viva Acid '24\", rights owned, not retired, has thumb); no personal story — facts only"
+    },
+    {
+      "id": "rv-909dc820-2f57-45e2-91e0-69e736f1236d",
+      "kind": "rendered-video",
+      "title": "BAI-EE – Naree Bday Mix",
+      "verified": "own mix (title \"BAI-EE – Naree Bday Mix\", rights owned, not retired, has thumb); no personal story — facts only"
+    },
+    {
+      "id": "holopaper-cloth-grab",
+      "kind": "story",
+      "title": "Cloth grabbed and released — real Verlet rebound",
+      "verified": "owner-written story in content-packages.json (committed)"
+    }
+  ]
+}

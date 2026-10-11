@@ -1,5 +1,8 @@
 # X growth system — SSOT
 
+> **Content Management (2026-10-11):** plan ownership, the shared input context, the single post lifecycle, scheduling and results now follow [`CONTENT-MANAGEMENT.md`](CONTENT-MANAGEMENT.md). Where this doc disagrees about who decides cadence, who creates/approves/schedules a post, or what chat may do, that doc wins.
+
+
 How the X work fits together: what measures the account, what decides a post, and what publishes it.
 
 Built 2026-09-10. The account is **@bai_ee** (`bryan-balli-WUoltG84`). The goal is creative enquiries into HITLOOP.
@@ -21,6 +24,8 @@ Built 2026-09-10. The account is **@bai_ee** (`bryan-balli-WUoltG84`). The goal 
 | **Publish** | Getting it onto the timeline | 15-day calendar → `social_posts` drafts → Copywriter card → manual Post Now | drafts seeded, posting **manual** |
 
 Nothing in the Decide or Publish layer is automated. That is deliberate — see §7.
+
+**Strategy tab (as built 2026-10-11):** the Content Engine's Strategy tab sits across these layers — it refreshes the corpora (bird, local), evaluates own vs benchmark accounts, holds the versioned posting plan every planner reads, and runs a propose-only agent chat. SSOT: [`X-STRATEGY-TAB.md`](X-STRATEGY-TAB.md).
 
 ---
 
@@ -207,9 +212,8 @@ One-off, backward-looking. Free except view backfill. Full runbook: [`scripts/x-
 ### ⚠️ Auto-posting has two independent blockers
 
 1. **The spend gate.** Writes to @bai_ee are irreversible, credit-metered, and **invisible to the Operating Cost card**. X-API-write trigger points: `twitter-service.js:565,599,608` and `adapters/x.js:45,47,64`.
-2. **The cron cannot run this calendar.** `vercel.json:22-25` is **`40 13 * * *` — once daily** (Vercel Hobby limit). An 8-posts-a-day schedule is unschedulable on current infrastructure. Options: Vercel Pro, an external trigger (GitHub Actions / Cloud Run, patterns already in this repo), or batching.
+2. **Resolved 2026-10-11:** the project moved to Vercel Pro and `process-due` now runs **every 15 minutes** (`vercel.json`) with a **2h** staleness guard, so a multi-post day is schedulable. See [`CONTENT-PILOT-OPERATIONS.md`](CONTENT-PILOT-OPERATIONS.md).
 
-⚠️ **CLAUDE.md documents this cron as `*/30 * * * *` with a 12h staleness guard. That is wrong** — it is daily, with a **26h** guard (`twitter-service.js:270`).
 
 ---
 

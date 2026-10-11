@@ -1,27 +1,26 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 import { randomUUID } from 'crypto';
-import { createSocialPost, readSocialQueue } from '../../../../features/social-posting/twitter-service.js';
+import { createSocialPost, readSocialQueue, getSocialPost, createDraftPostOnce, ensureDraftPost, findOpenPostForPackage } from '../../../../features/social-posting/twitter-service.js';
 import { buildDayPlan } from '../../../../features/x-quote-targets/day-plan.js';
 // Static import so Next bundles the calendar — docs/audits/ is NOT in
 // .vercelignore, but a runtime fs read of a repo path is fragile on serverless.
 import bundledCalendar from '../../../../docs/audits/x-calendar-15day.json' with { type: 'json' };
 import { guardXPost } from '../../../../features/x-content-guard/index.js';
-import { compareToBenchmark, resolveXGrowthProfile, resolveTier } from '../../../../features/x-benchmark/index.js';
-import { buildCalendar } from '../../../../features/x-benchmark/build-calendar.js';
 import { readCorpus, readCorpora, saveGapReport } from '../../../../features/x-benchmark/store.js';
 // Aliased: features/x-quote-targets/day-plan.js already owns the name
 // `buildDayPlan` in this file, and the two build entirely different things —
 // that one merges a calendar day with scanned quote candidates, this one plans
 // a day of authored posts out of the content inventory.
 import { buildDayPlan as buildContentDayPlan } from '../../../../features/x-content-inventory/plan-day.js';
-import { projectDayPlan } from '../../../../features/x-content-inventory/day-plan-projection.js';
 import { validateInventory } from '../../../../features/x-content-inventory/schema.js';
 import { readInventory, upsertPackage, deletePackage, getPackage } from '../../../../features/x-content-inventory/store.js';
 import { buildClientPackage, applyApproval } from '../../../../features/x-content-inventory/client-capture.js';
-import { buildWeekCalendar } from '../../../../features/x-content-inventory/week-calendar.js';
+import { ageHoursOf, DEFAULT_WINDOW_HOURS } from '../../../../features/x-quote-targets/rank.js';
+import { buildPostResults } from '../../../../features/x-content-inventory/results.js';
+import { recentPostsFromQueue } from '../../../../features/x-content-inventory/allocate-slot.js';
+import { buildMonthCalendar, ctDate } from '../../../../features/x-content-inventory/month-calendar.js';
 import { joinPerformance, engineStats } from '../../../../features/x-content-inventory/performance.js';
-import { mergeEngineConfig } from '../../../../features/x-content-inventory/engine-quota.js';
 import * as bucketStore from '../../../../features/x-content-inventory/bucket-store.js';
 import { normalizeFacets } from '../../../../features/x-content-inventory/facets.js';
 import { resolveMediaUrls } from '../../../../features/rendered-videos/media-url.js';
@@ -29,12 +28,25 @@ import { syncRenderedVideos } from '../../../../features/rendered-videos/sync.js
 import { resolveMediaUrlsBatch, MEDIA_URLS_MAX_IDS, MEDIA_KINDS, tokenUrlFor } from '../../../../features/x-content-inventory/thumbs.js';
 import { setRights, saveThumb, createDraftFromItem } from '../../../../features/x-content-inventory/item-actions.js';
 import { NAS_ACTIONS, handleNasAction } from '../../../../features/x-content-inventory/nas.js';
-// Same static-import reasoning as bundledCalendar above. These are the two
-// ingested corpora the planner needs as ROWS — x_corpora stores summarized stat
-// blocks, which summarizeCorpus cannot be fed, so the committed JSON is the
-// only source of rows a serverless request can reach.
+import { runDailyLoop, assertOwnerClient, localDateOf, LOOP_VERSION } from '../../../../features/x-content-inventory/daily-loop.js';
+import {
+  createFirestoreRunStore, loadDailyLoopInputs, saveSuggestionDraft, editSuggestion, dismissSuggestion, createModelDrafter,
+} from '../../../../features/x-content-inventory/daily-run-store.js';
+import { createStrategyHandlersFromDb, STRATEGY_ROUTE_ACTIONS } from '../../../../features/x-strategy/route-handlers.js';
+import { createContentPlanHandlers } from '../../../../features/x-strategy/content-plan.js';
+import { createFirestoreCorpusStore } from '../../../../features/x-strategy/corpus-store.js';
+import { createFirestorePlanStore } from '../../../../features/x-strategy/plan-store.js';
+import { loadContentContext, summarizeContentContext, resolveCalendarEngineConfig } from '../../../../features/content-context/load-content-context.js';
+import { loadLoopCorpora } from '../../../../features/x-strategy/loop-corpora.js';
+import { resolveXGrowthProfile } from '../../../../features/x-benchmark/profile.js';
+// Committed corpora: bundled here as the fallback for the rows store (getCorpusStore) and the legacy evaluate rows.
+// The daily loop reads them through loadLoopCorpora (rows store first); the plan doc reaches it via `readPlanDoc`.
+import { DISCOGS_ACTIONS, handleDiscogsAction } from '../../../../features/discogs-ingest/actions.js';
+import { TIMELINE_ACTIONS, handleTimelineAction } from '../../../../features/social-archive/actions.js';
+import * as timelineStore from '../../../../features/social-archive/timeline-store.js';
 import ownCorpusRows from '../../../../docs/audits/bai-ee-x-corpus.json' with { type: 'json' };
 import benchmarkCorpusRows from '../../../../docs/audits/seb-design-x-corpus.json' with { type: 'json' };
+import dailyLoopDemoSet from '../../../../features/x-content-inventory/daily-loop-demo-set.json' with { type: 'json' };
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -42,6 +54,7 @@ export const dynamic = 'force-dynamic';
 const require = createRequire(import.meta.url);
 const { verifyRequestUser, isAdminEmail } = require('../../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../../api/_lib/client-provisioning.cjs');
+const { requirePilotOwner } = require('../../../../api/_lib/pilot-access.cjs');
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
 
 // Quote Targets — draft/dismiss surface over X accounts worth quote-tweeting.
@@ -95,6 +108,9 @@ async function requireAdminContext(request) {
     err.status = 404;
     throw err;
   }
+  // Owner pilot boundary: the whole route is Content Management (global package store, NAS, strategy chat,
+  // calendar). Allowlisted uid + client only; the client id is the server-resolved one (never body/model).
+  requirePilotOwner(context, decoded);
   return { decoded, context };
 }
 
@@ -265,8 +281,16 @@ async function handleDismiss(clientId, body) {
   return { ok: true, dismissed };
 }
 
+// Daily Content Loop (docs/plans/DAILY-CONTENT-LOOP-MASTER-PLAN.md). Owner
+// account only; reads saved inputs, writes the run store, and — on Save Draft
+// only — one unscheduled social_posts draft. Never schedules or posts.
+const DAILY_RUN_ACTIONS = ['daily-run-latest', 'daily-run-generate', 'daily-run-edit', 'daily-run-save-draft', 'daily-run-dismiss'];
+
 const SUPPORTED_ACTIONS = [
+  ...STRATEGY_ROUTE_ACTIONS,
   ...NAS_ACTIONS,
+  ...DISCOGS_ACTIONS,
+  ...TIMELINE_ACTIONS,
   'engine-performance',
   'draft-quote',
   'dismiss',
@@ -275,7 +299,10 @@ const SUPPORTED_ACTIONS = [
   'inventory-list',
   'inventory-save',
   'inventory-delete',
-  'week-calendar',
+  'month-calendar',
+  'content-context',
+  'post-status',
+  'post-results',
   'capture-client-story',
   'approve-package',
   'reject-package',
@@ -293,54 +320,45 @@ const SUPPORTED_ACTIONS = [
   'save-thumb',
   'set-rights',
   'create-draft-from-item',
+  ...DAILY_RUN_ACTIONS,
 ];
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-/** Slot count per day. The upper bound is not a guess: tier 2 in
- * build-calendar.js tops out well below it, and a caller asking for 50 slots is
- * asking the planner to invent content that does not exist. */
-const MAX_PLAN_POSTS = 12;
-
-/**
- * Plan one day of authored posts from the content inventory.
- *
- * Free and offline in the same sense as refresh-analysis: two committed corpora,
- * the client's saved inventory, and pure functions over both. No X API, no
- * ScrapeCreators, no LLM — drafting the actual copy is a separate, explicit step.
- *
- * ⚠️ The corpora are @bai_ee's, so the mix this returns is benchmarked against
- * @bai_ee's history regardless of which client is loaded. Per-client planning
- * needs per-client corpus ROWS, which nothing stores yet.
- */
-async function handleContentPlan(context, body) {
-  const requestedPosts = Number(body?.posts);
-  const posts = Number.isFinite(requestedPosts) && requestedPosts >= 1
-    ? Math.min(Math.floor(requestedPosts), MAX_PLAN_POSTS)
-    : 5;
-  const date = typeof body?.date === 'string' && DATE_RE.test(body.date.trim())
-    ? body.date.trim()
-    : new Date().toISOString().slice(0, 10);
-
-  const { packages, seeded } = await readInventory();
-
-  const plan = buildContentDayPlan({
-    corpusRows: ownCorpusRows,
-    benchmarkRows: benchmarkCorpusRows,
-    packages,
-    date,
-    posts,
-  });
-
-  // `seeded` travels with the plan so the card can say the gaps come from the
-  // example rows, not from an inventory someone actually curated.
-  //
-  // `summary` is the narrowed view (day-plan-projection.js): it names each
-  // slot's state once and counts each route into a slot separately, because
-  // `plan.filled` counts inventory matches only — a day carrying a re-surfaced
-  // winner and two scan slots would otherwise read as one-fifth built. Additive;
-  // the panel keeps reading `plan`.
-  return { ok: true, plan, seeded, summary: projectDayPlan(plan, { posts }).summary };
+// `content-plan` and `refresh-analysis` live in features/x-strategy/content-plan.js: they read the client's Strategy
+// plan doc (x_strategy_plans) and corpus ROWS (x_corpora rows, committed-JSON fallback) so the Plan tab, the
+// Strategy tab and the daily loop share one plan. Built lazily on first use (no Firestore at import).
+// With NO plan doc they run the pre-T5 logic over `legacyRows` (the two static imports above) - see content-plan.js.
+//
+// Vercel: the corpus store's own default loader reads docs/audits via runtime fs, which the tracer may not bundle.
+// These static JSON imports ARE bundled, so the store is given them as its committed-JSON fallback instead.
+const COMMITTED_CORPORA = { bai_ee: ownCorpusRows, seb__design: benchmarkCorpusRows };
+const committedCorpusRows = (handle) => (Object.hasOwn(COMMITTED_CORPORA, handle) ? COMMITTED_CORPORA[handle] : null);
+let corpusStoreSingleton = null;
+function getCorpusStore() {
+  if (!corpusStoreSingleton) corpusStoreSingleton = createFirestoreCorpusStore(fb.adminDb, { loadCommitted: committedCorpusRows });
+  return corpusStoreSingleton;
 }
+const readXGrowthConfigFor = async (clientId) => {
+  const snap = await fb.adminDb.collection('client_configs').doc(clientId).get();
+  return snap.exists ? snap.data()?.marketingBriefConfig?.xGrowth ?? null : null;
+};
+let contentPlanHandlers = null;
+function getContentPlanHandlers() {
+  if (!contentPlanHandlers) {
+    contentPlanHandlers = createContentPlanHandlers({
+      corpusStore: getCorpusStore(),
+      planStore: createFirestorePlanStore(fb.adminDb),
+      readXGrowthConfig: readXGrowthConfigFor,
+      readInventory,
+      readCorpus,
+      readCorpora,
+      legacyRows: { own: ownCorpusRows, benchmark: benchmarkCorpusRows },
+      saveGapReport,
+    });
+  }
+  return contentPlanHandlers;
+}
+
+const handleContentPlan = (context, body) => getContentPlanHandlers().contentPlan(context, body);
 
 async function handleInventoryList(context) {
   const { packages, updatedAt, seeded } = await readInventory();
@@ -360,15 +378,12 @@ async function handleInventoryDelete(context, body) {
 }
 
 /**
- * Week calendar over social_posts. Read-only: the buttons on the card call the
- * existing social-posting actions (approve-draft / schedule), never this route.
- * Reads the whole client queue and filters in memory, which needs no new index.
+ * Month calendar over social_posts, with undated drafts PROPOSED onto days (display only, nothing is written).
+ * Read-only like the week view: Approve / Reject / edit go through the social-posting route.
  */
-async function handleWeekCalendar(context, body) {
-  const start = typeof body?.start === 'string' && DATE_RE.test(body.start.trim())
-    ? body.start.trim()
-    : new Date().toISOString().slice(0, 10);
-
+async function handleMonthCalendar(context, body) {
+  const raw = typeof body?.month === 'string' ? body.month.trim() : '';
+  const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(raw) ? raw : ctDate(Date.now()).slice(0, 7);
   let overrides = null;
   try {
     const snap = await fb.adminDb.collection('content_system_config').doc('x').get();
@@ -376,9 +391,92 @@ async function handleWeekCalendar(context, body) {
   } catch {
     // Config is advisory; defaults keep the calendar usable.
   }
-  const config = mergeEngineConfig(overrides);
+  const planDoc = await createFirestorePlanStore(fb.adminDb).get(context.clientId).catch(() => null);
+  const config = resolveCalendarEngineConfig({ planDoc, legacyOverrides: overrides });
   const posts = await readSocialQueue(context.clientId);
-  return { ok: true, calendar: buildWeekCalendar({ posts, start, config }) };
+  return { ok: true, calendar: buildMonthCalendar({ posts, month, now: Date.now(), config }) };
+}
+
+// ---- Content Management: status strip, post status, bounded chat readers (all client-scoped, read-only) ----
+
+const excerptOf = (t, n = 160) => String(t ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
+
+const postStatusRow = (p) => ({
+  id: p.id, status: p.status, scheduledAt: p.scheduledAt || null, postedAt: p.postedAt || null,
+  reviewedAt: p.reviewedAt || null, content: p.content, packageId: p.packageId || null,
+  errorClass: p.errorClass || null, error: p.error || null, replyTo: !!p.replyTo, revision: p.revision || 0,
+  lifecycleVersion: p.lifecycleVersion || null,
+  provenance: { runId: p.runId || null, suggestionId: p.suggestionId || null, strategyVersion: p.strategyVersion ?? null, sourceRef: p.sourceRef || null },
+});
+
+/** Post-level results for THIS client: posted / waiting / needs attention, joined to package, run and plan version. Read-only. */
+async function handlePostResults(context) {
+  const [posts, inventory] = await Promise.all([readSocialQueue(context.clientId), readInventory().catch(() => ({ packages: [] }))]);
+  return { ok: true, results: buildPostResults({ posts, packages: inventory?.packages || [], now: Date.now() }) };
+}
+
+/** Status of specific posts of THIS client (a foreign or missing id is simply absent). */
+async function handlePostStatus(context, body) {
+  const ids = (Array.isArray(body?.postIds) ? body.postIds : []).map((x) => String(x || '').trim()).filter(Boolean).slice(0, 20);
+  const rows = (await Promise.all(ids.map((id) => getSocialPost(context.clientId, id)))).filter(Boolean);
+  return { ok: true, posts: rows.map(postStatusRow) };
+}
+
+async function readQueueSummary(clientId) {
+  const posts = await readSocialQueue(clientId);
+  const counts = {};
+  for (const p of posts) counts[p.status] = (counts[p.status] || 0) + 1;
+  return {
+    counts,
+    posts: posts.slice(0, 20).map((p) => ({
+      id: p.id, status: p.status, scheduledAt: p.scheduledAt || null, excerpt: excerptOf(p.content), packageId: p.packageId || null, errorClass: p.errorClass || null,
+    })),
+  };
+}
+
+async function readPostForChat(clientId, postId) {
+  const p = await getSocialPost(clientId, postId);
+  return p ? postStatusRow(p) : null;
+}
+
+async function readOpportunities(clientId) {
+  const qt = await readQuoteTargets(clientId);
+  const now = Date.now();
+  const generatedMs = Date.parse(qt?.generatedAt || '');
+  const targets = (Array.isArray(qt?.candidates) ? qt.candidates : []).slice(0, 10).map((c) => {
+    const ageHours = ageHoursOf(c.createdAt, now);
+    return {
+      id: c.id || c.url || null,
+      handle: c.author?.username || (typeof c.author === 'string' ? c.author : null),
+      url: c.url || null,
+      text: excerptOf(c.text),
+      ageHours: ageHours == null ? null : Math.round(ageHours * 10) / 10,
+      windowOpen: ageHours == null ? null : ageHours <= DEFAULT_WINDOW_HOURS,
+      kind: 'quote',
+    };
+  });
+  return {
+    generatedAt: qt?.generatedAt || null,
+    stale: Number.isFinite(generatedMs) ? (now - generatedMs) / 3_600_000 > 48 : null,
+    targets,
+  };
+}
+
+async function readResultsForChat(clientId) {
+  const rows = joinPerformance({ posts: await readSocialQueue(clientId) });
+  const stats = engineStats(rows, { windowDays: 30, now: Date.now() });
+  return {
+    window: `last ${stats.windowDays} days`,
+    engines: Object.entries(stats.engines).map(([engine, e]) => ({
+      engine,
+      n: e.n ?? null,
+      medianViews: e.medianViews ?? null,
+      caveats: [
+        e.insufficient ? `Fewer than ${stats.minN} measured posts: not ranked.` : null,
+        'Lift is likes-based; missing metrics are not zero.',
+      ].filter(Boolean),
+    })),
+  };
 }
 
 /**
@@ -426,75 +524,7 @@ async function handleDecidePackage(decoded, body, state) {
   return { ok: true, pkg };
 }
 
-/**
- * Recompute the client's gap report and calendar from already-ingested corpora.
- *
- * Free and offline: it reads stat blocks that scripts/x-content/ingest-corpus.mjs
- * already stored and runs two pure functions over them. No X API, no
- * ScrapeCreators, no LLM — the ingest that costs something is the separate,
- * local, human-run step.
- */
-async function handleRefreshAnalysis(context) {
-  const snap = await fb.adminDb.collection('client_configs').doc(context.clientId).get();
-  const profile = resolveXGrowthProfile({
-    config: snap.exists ? snap.data()?.marketingBriefConfig?.xGrowth : null,
-  });
-
-  if (!profile.ready) {
-    const err = new Error(`X growth profile is incomplete — missing: ${profile.missing.join(', ')}.`);
-    err.status = 400;
-    throw err;
-  }
-
-  const ownCorpus = await readCorpus(profile.ownHandle);
-  if (!ownCorpus?.stats) {
-    const err = new Error(`No ingested corpus for @${profile.ownHandle}. Run: node scripts/x-content/ingest-corpus.mjs --handle ${profile.ownHandle} --write`);
-    err.status = 409;
-    throw err;
-  }
-
-  const benchmarks = await readCorpora(profile.benchmarkHandles);
-  if (!benchmarks.length) {
-    const err = new Error(`No ingested corpus for any benchmark account (${profile.benchmarkHandles.join(', ')}).`);
-    err.status = 409;
-    throw err;
-  }
-
-  // One report per benchmark. They are kept separate rather than averaged:
-  // two benchmark accounts can disagree, and an average of two strategies is
-  // usually neither. The first is the primary and drives the calendar.
-  const reports = benchmarks
-    .map((b) => compareToBenchmark({ own: ownCorpus.stats, benchmark: b.stats }))
-    .filter((r) => Array.isArray(r.gaps));
-  const primary = reports[0];
-
-  const tier = resolveTier({
-    tierOverride: profile.tierOverride,
-    currentAuthoredPerDay: ownCorpus.stats?.cadence?.authoredPerActiveDay,
-  });
-  const calendar = buildCalendar({
-    report: primary,
-    ownStats: ownCorpus.stats,
-    tier,
-    profile,
-    days: 15,
-    startDate: new Date().toISOString().slice(0, 10),
-  });
-
-  const report = {
-    ...primary,
-    tier,
-    // Secondary benchmarks are reported but never merged into the primary.
-    alternates: reports.slice(1).map((r) => ({ benchmarkHandle: r.benchmarkHandle, gaps: r.gaps, projection: r.projection })),
-    corpora: {
-      own: { handle: ownCorpus.handle, ...(ownCorpus.meta ?? {}) },
-      benchmarks: benchmarks.map((b) => ({ handle: b.handle, ...(b.meta ?? {}) })),
-    },
-  };
-
-  await saveGapReport(context.clientId, { report, calendar });
-  return { ok: true, report, calendar, tier };
-}
+const handleRefreshAnalysis = (context) => getContentPlanHandlers().refreshAnalysis(context);
 
 // ---- Content Engine v2: buckets / folders / item facets (admin-only route) ----
 
@@ -639,11 +669,9 @@ async function handleCreateDraftFromItem(context, body) {
   const bridge = loadBridge();
   return createDraftFromItem({
     getPackage,
-    async findDraft(packageId) {
-      const snap = await fb.adminDb.collection('social_posts').where('packageId', '==', packageId).limit(10).get();
-      const rows = snap.docs.map((d) => d.data());
-      return rows.find((r) => r.status === 'draft' || r.status === 'scheduled') || rows[0] || null;
-    },
+    // Client-scoped, any open status (draft/approved/scheduled/queued/...): one package, one open post.
+    findDraft: (packageId) => findOpenPostForPackage(context.clientId, packageId),
+    ensureDraft: (clientId, payload) => ensureDraftPost(clientId, payload),
     createPost: createSocialPost,
     patchPost: (postId, patch) => fb.adminDb.collection('social_posts').doc(postId).set(patch, { merge: true }),
     async signEvLong(p) {
@@ -654,6 +682,87 @@ async function handleCreateDraftFromItem(context, body) {
     },
     hitloopUrl: (p) => tokenUrlFor(fb.adminStorage.bucket(), p),
   }, { clientId: context.clientId, id: String(body?.id || '').trim() });
+}
+
+async function latestDailyRun(store, clientId) {
+  return store.latest({ clientId, localDate: localDateOf(Date.now()), channel: 'x', version: LOOP_VERSION });
+}
+
+/** One loader for the runner and the chat: same plan read, same Brain gating, same freshness rules. */
+async function readContentContext(clientId, { packageIds = dailyLoopDemoSet.ids, now = Date.now() } = {}) {
+  const { loadClientBrainContext } = require('../../../../features/client-brain/store.cjs');
+  const loopCorpora = await loadLoopCorpora({
+    corpusStore: getCorpusStore(),
+    profileHandles: resolveXGrowthProfile({ config: await readXGrowthConfigFor(clientId).catch(() => null) }),
+    loadCommitted: committedCorpusRows,
+  });
+  return loadContentContext({
+    db: fb.adminDb,
+    buildDayPlan: buildContentDayPlan,
+    // Pending/scheduled copies count toward today's engine quota, not just posted ones.
+    readRecentPosts: async (id) => recentPostsFromQueue(await readSocialQueue(id)),
+    // One plan everywhere: the Strategy plan doc sets the loop's cadence, engine targets, floors and caps.
+    readPlanDoc: (id) => createFirestorePlanStore(fb.adminDb).get(id),
+    loadBrainContext: (id) => loadClientBrainContext(id, { useFor: 'socialPosts', requireApproved: true }),
+  }, { clientId, now, packageIds, corpora: loopCorpora });
+}
+
+async function handleDailyRun(context, action, body) {
+  assertOwnerClient(context.clientId);
+  const store = createFirestoreRunStore(fb.adminDb);
+  if (action === 'daily-run-latest') return { ok: true, run: await latestDailyRun(store, context.clientId) };
+
+  if (action === 'daily-run-generate') {
+    let draft;
+    if (body?.draftWithModel === true) {
+      const { createAnthropicClient } = require('../../../../features/not-the-rug-brief/anthropic-client.js');
+      const { logAnthropicCall } = require('../../../../api/_lib/usage-logger.cjs');
+      draft = createModelDrafter({ anthropic: createAnthropicClient(), logAnthropicCall, clientId: context.clientId });
+    }
+    const res = await runDailyLoop({
+      now: () => Date.now(),
+      store,
+      draft,
+      // The shared content context (same loader the strategy chat reads); `raw` is the runner's legacy input shape.
+      readInputs: async () => {
+        const ctx = await readContentContext(context.clientId, {
+          // POC: the verified demo set unless the caller asks for the whole library.
+          packageIds: body?.library === 'full' ? null : dailyLoopDemoSet.ids,
+        });
+        // Degraded mode: never generate against a queue we could not read (it could conflict with scheduled posts).
+        if (ctx.raw.recentPostsError) {
+          throw Object.assign(new Error('The posting queue could not be read, so recommendations are paused (they could conflict with scheduled posts). Try again in a minute.'), { status: 503 });
+        }
+        return ctx.raw;
+      },
+    }, { clientId: context.clientId, force: body?.force === true, inputSource: 'live' });
+    return { ok: true, skipped: !!res.skipped, reason: res.reason || null, run: res.run || await latestDailyRun(store, context.clientId) };
+  }
+
+  const run = await latestDailyRun(store, context.clientId);
+  if (!run) throw Object.assign(new Error('No daily run to review yet — generate one first.'), { status: 404 });
+  const key = { clientId: run.clientId, localDate: run.localDate, channel: run.channel, version: run.version };
+  const suggestionId = String(body?.suggestionId || '').trim();
+  if (!suggestionId) throw Object.assign(new Error('suggestionId is required.'), { status: 400 });
+
+  if (action === 'daily-run-dismiss') {
+    await dismissSuggestion({ store }, { key, suggestionId });
+  } else if (action === 'daily-run-edit') {
+    // Empty text clears the edit; saved/dismissed suggestions are refused (409) by editSuggestion.
+    const suggestion = await editSuggestion({ store }, { key, suggestionId, text: typeof body?.text === 'string' ? body.text : '' });
+    return { ok: true, suggestion, run: await store.read(key) };
+  } else {
+    const text = typeof body?.text === 'string' ? body.text : undefined;
+    const postExists = async (id) => (await fb.adminDb.collection('social_posts').doc(String(id)).get()).exists;
+    try {
+      const saved = await saveSuggestionDraft({ store, getPackage, createDraftPostOnce, postExists }, { key, suggestionId, text });
+      return { ok: true, ...saved, run: await store.read(key) };
+    } catch (err) {
+      if (err.checks) return { ok: false, error: err.message, checks: err.checks, status: err.status };
+      throw err;
+    }
+  }
+  return { ok: true, run: await store.read(key) };
 }
 
 /** Accept either {bucket:{...}} or the fields flat beside action/clientId. */
@@ -682,6 +791,26 @@ function nasDeps() {
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
     randomId: () => randomUUID(),
   };
+}
+
+// X Strategy tab (master plan T2b). Lazy: Firestore stores are built on first strategy request.
+let strategyHandlers = null;
+function getStrategyHandlers() {
+  if (!strategyHandlers) {
+    strategyHandlers = createStrategyHandlersFromDb(fb.adminDb, {
+      loadCommitted: committedCorpusRows,
+      readPackages: async () => (await readInventory()).packages,
+      runDailyAction: (context, action, body) => handleDailyRun(context, action, body),
+      runUpdateItemFacets: (context, body) => handleUpdateItemFacets(context, body),
+      readTodayRun: (clientId) => latestDailyRun(createFirestoreRunStore(fb.adminDb), clientId),
+      readContentContext: async (clientId) => summarizeContentContext(await readContentContext(clientId)),
+      readQueueSummary,
+      readPost: readPostForChat,
+      readOpportunities,
+      readResults: readResultsForChat,
+    });
+  }
+  return strategyHandlers;
 }
 
 const BUCKET_ACTIONS = new Set(['list-buckets', 'upsert-bucket', 'delete-bucket', 'list-folders', 'upsert-folder', 'delete-folder']);
@@ -732,8 +861,13 @@ export async function POST(request) {
       const result = await handleInventoryDelete(context, body);
       return json(result);
     }
-    if (action === 'week-calendar') {
-      return json(await handleWeekCalendar(context, body));
+    if (action === 'content-context') {
+      return json({ ok: true, context: summarizeContentContext(await readContentContext(context.clientId)) });
+    }
+    if (action === 'post-status') return json(await handlePostStatus(context, body));
+    if (action === 'post-results') return json(await handlePostResults(context));
+    if (action === 'month-calendar') {
+      return json(await handleMonthCalendar(context, body));
     }
     if (action === 'engine-performance') {
       return json(await handleEnginePerformance(context, body));
@@ -747,6 +881,10 @@ export async function POST(request) {
     if (action === 'reject-package') {
       return json(await handleDecidePackage(decoded, body, 'rejected'));
     }
+    if (STRATEGY_ROUTE_ACTIONS.includes(action)) {
+      const result = await getStrategyHandlers().handle(action, body, context, { decoded });
+      return json(result, result.ok === false ? (result.status || 422) : 200);
+    }
     if (BUCKET_ACTIONS.has(action)) return json(await handleBucketAction(context, action, body));
     if (action === 'update-item-facets') return json(await handleUpdateItemFacets(context, body));
     if (action === 'move-item') return json(await handleMoveItem(context, body));
@@ -757,6 +895,12 @@ export async function POST(request) {
     if (action === 'set-rights') return json(await handleSetRights(body));
     if (action === 'create-draft-from-item') return json(await handleCreateDraftFromItem(context, body));
     if (NAS_ACTIONS.includes(action)) return json(await handleNasAction(nasDeps(), action, body, decoded));
+    if (DAILY_RUN_ACTIONS.includes(action)) {
+      const result = await handleDailyRun(context, action, body);
+      return json(result, result.ok === false ? (result.status || 422) : 200);
+    }
+    if (DISCOGS_ACTIONS.includes(action)) return json(await handleDiscogsAction(nasDeps(), action, body, decoded));
+    if (TIMELINE_ACTIONS.includes(action)) return json(await handleTimelineAction({ db: fb.adminDb, clientId: context.clientId, store: timelineStore }, action, body));
     return json({ error: `Unknown action: ${action}`, supportedActions: SUPPORTED_ACTIONS }, 400);
   } catch (err) {
     if (err?.status) {

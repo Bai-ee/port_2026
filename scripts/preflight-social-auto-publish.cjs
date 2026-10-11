@@ -19,7 +19,8 @@ require('../features/not-the-rug-brief/load-env');
 const fb = require('../api/_lib/firebase-admin.cjs');
 const digestConfig = require('../features/intelligence/_digest-config.js');
 
-const STALE_DUE_MS = 12 * 60 * 60 * 1000;
+// Keep in step with STALE_DUE_MS in features/social-posting/twitter-service.js (2h on Vercel Pro, 15-minute cron).
+const STALE_DUE_MS = 2 * 60 * 60 * 1000;
 const DUE_STATUSES = new Set(['scheduled', 'queued', 'failed']);
 
 function line(label, value) {

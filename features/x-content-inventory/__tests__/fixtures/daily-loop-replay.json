@@ -1,0 +1,65 @@
+{
+  "_note": "FIXTURE — shapes copied from real saved data (Discogs facets, bird search rows, corpus summary), texts and engagement edited for deterministic tests. Not a real run.",
+  "clientId": "bryan-balli-WUoltG84",
+  "now": "2026-10-10T16:00:00.000Z",
+  "scan": {
+    "generatedAt": "2026-10-10T13:24:55.735Z",
+    "candidates": [
+      { "id": "9001", "url": "https://x.com/SciFiArchives/status/9001", "author": "SciFiArchives", "text": "Star Wars poster from Japan.", "createdAt": "2026-10-10T02:35:00.000Z", "ageHours": 10.8, "likes": 900, "reposts": 120, "replies": 30, "hasMedia": true, "vein": "retro-analog-preinternet", "score": 0.61, "reasons": ["moving (85/h)", "image"] }
+    ]
+  },
+  "search": {
+    "generatedAt": "2026-10-10T15:30:00.000Z",
+    "queries": ["\"house\" min_faves:20 -filter:replies", "\"cajual\" min_faves:20 -filter:replies"],
+    "posts": [
+      { "id": "9101", "query": "\"house\" min_faves:20 -filter:replies", "author": { "username": "madchester_mdcr" }, "text": "Adamski at The Hacienda, 1989. Pure voltage. Early house music at its best.", "createdAt": "2026-10-09T02:00:00.000Z", "likeCount": 1510, "retweetCount": 233, "replyCount": 59, "media": [{ "type": "photo" }] },
+      { "id": "9102", "query": "\"house\" min_faves:20 -filter:replies", "author": { "username": "AnthonyTeasdale" }, "text": "Which Chicago house record from 1996 still sounds like the future? Cajual and Relief releases for me.", "createdAt": "2026-10-10T12:30:00.000Z", "likeCount": 167, "retweetCount": 11, "replyCount": 14, "media": [] },
+      { "id": "9103", "query": "\"house\" min_faves:20 -filter:replies", "author": { "username": "newsdesk" }, "text": "White House press briefing on the election and the senate vote today.", "createdAt": "2026-10-10T14:00:00.000Z", "likeCount": 5000, "retweetCount": 900, "replyCount": 700, "media": [] },
+      { "id": "9104", "query": "\"cajual\" min_faves:20 -filter:replies", "author": { "username": "deephouseorg" }, "text": "Cajual Records catalogue is a masterclass in Chicago house. Glenn Underground forever.", "createdAt": "2026-10-10T07:00:00.000Z", "likeCount": 88, "retweetCount": 9, "replyCount": 4, "media": [] }
+    ]
+  },
+  "packages": [
+    {
+      "id": "discogs-10207", "series": "C1", "pillar": "found-this", "title": "Glenn Underground, Cei-Bei – House Music Will Never Die",
+      "story": "", "mediaState": "video", "effort": "10-min", "rights": "owned", "status": "idea", "assetRefs": ["ev:discogs/10207.mp4"],
+      "source": { "kind": "discogs", "externalId": "10207", "url": "https://www.discogs.com/release/10207-G-U-Cei-Bei-House-Music-Will-Never-Die" },
+      "facets": { "vibe": { "kind": "record" }, "decade": "1990s", "credits": ["mark richardson", "curtis harman"], "genres": ["electronic", "house", "deep house", "garage house"], "catalogNumbers": ["caj 261"], "people": ["glenn underground", "cei-bei"], "eraYear": 1996, "labels": ["cajual records"], "cities": ["chicago"] }
+    },
+    {
+      "id": "rv-fathers-day", "series": "C6", "pillar": "made-this", "title": "BAI-EE – Fathers Day Jazz Mix", "story": "[add your memory]",
+      "mediaState": "video", "effort": "ready", "rights": "owned", "status": "idea", "assetRefs": ["ev:renders/fathers-day.mp4"],
+      "source": { "kind": "rendered-video", "externalId": "01869ce0" },
+      "facets": { "vibe": { "kind": "video" }, "decade": "2020s", "genres": ["jazz", "house"], "people": ["bai-ee"], "eraYear": 2024 }
+    },
+    {
+      "id": "holopaper-cloth-grab", "series": "C6", "pillar": "building-now", "title": "Cloth grabbed and released — real Verlet rebound",
+      "story": "A sheet of holo paper you can grab, fling and watch rebound with a real Verlet cloth solver running in the browser.",
+      "mediaState": "needs-capture", "effort": "10-min", "rights": "owned", "status": "idea", "entities": ["HITLOOP", "HOLO PAPER"]
+    },
+    {
+      "id": "nas-photo-no-text", "series": "C3", "pillar": "was-there", "title": "IMG_2041.jpg", "story": "[add your memory]",
+      "mediaState": "still", "effort": "ready", "rights": "owned", "status": "idea", "source": { "kind": "nas-archive" },
+      "facets": { "vibe": { "kind": "crowd" } }, "variants": { "x": { "suggestedStory": "An unforgettable night with the whole crew." } }
+    },
+    {
+      "id": "rv-client-retired", "series": "C6", "pillar": "made-this", "title": "Client promo render", "story": "",
+      "mediaState": "video", "effort": "ready", "rights": "never-public", "status": "retired", "source": { "kind": "rendered-video" }
+    }
+  ],
+  "brain": { "status": "draft", "version": 1, "context": "CLAIRE CALLS voice: calm, a daily call for your parent", "note": "Draft compiled from a CLIENT_BRAIN.md for a different product (Claire Calls)." },
+  "strategyPlan": { "generatedAt": "2026-09-08T17:54:21.257Z", "items": [{ "scheduledAt": "2026-09-09T10:00:00-04:00", "content": "governance" }], "excluded": "stale (covers 2026-09-09 → 2026-10-08) and off-brand (built from VTC and Not The Rug sources)" },
+  "ownSummary": {
+    "posts": 246, "source": "docs/audits/bai-ee-x-corpus.json", "range": { "from": "2026-07-07T20:57:18.000Z", "to": "2026-09-10T14:29:12.000Z" },
+    "byType": {
+      "quote-react": { "n": 26, "lift": 0.7804 }, "original-showcase": { "n": 29, "lift": 1.6092 }, "reply": { "n": 4, "lift": 1.0145 }, "original-text": { "n": 10, "lift": 0.1623 }
+    },
+    "byTopic": { "music-archive-dj": { "n": 22, "lift": 0.9038 }, "web3-design-work": { "n": 14, "lift": 2.2899 }, "design-engineering": { "n": 14, "lift": 0.6957 } }
+  },
+  "benchmark": {
+    "source": "computed from docs/audits/bai-ee-x-corpus.json vs seb-design-x-corpus.json", "asOf": "2026-09-10",
+    "gaps": [
+      { "id": "type-mix:quote-commentary", "direction": "decrease", "lift": 0.5797 },
+      { "id": "type-mix:original-showcase", "direction": "hold", "lift": 1.6092 }
+    ]
+  }
+}

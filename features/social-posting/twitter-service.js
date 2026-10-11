@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { config as loadDotenv } from 'dotenv';
@@ -8,10 +9,13 @@ import { compactTwitterError, mapTwitterError } from './twitter-errors.js';
 import { getAdapter } from './adapters/index.js';
 import { storySyncPlan } from '../discogs-ingest/draft-builder.js';
 import { needsApproval } from '../x-content-inventory/schema.js';
+import { reserveInTx, releaseReservations } from './reservations.js';
+import { toMs, contentHash, LIFECYCLE_VERSION, OPEN_STATUSES, APPROVAL_VOID_STATUSES, isV2, packageClearance, replyBlock, findPackageCollision, isMaterialEdit, deliveryBlock } from './lifecycle.js';
 import { assertNoMemoryPlaceholder, hasMemoryPlaceholder, sanitizeMediaVariants, sanitizeSelfReply, sanitizeSourceRef } from './self-reply.js';
 
 const require = createRequire(import.meta.url);
 const fb = require('../../api/_lib/firebase-admin.cjs');
+const { isPilotClient } = require('../../api/_lib/pilot-access.cjs');
 const { logUsage } = require('../../api/_lib/usage-logger.cjs');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -285,13 +289,15 @@ export const STALE_CLAIM_MS = 15 * 60 * 1000;
 // that single daily tick — i.e. most of them. The window must exceed the cron
 // period. If this project moves to Vercel Pro and the cron goes back to a
 // sub-daily schedule (*/30), drop this to 12h.
-const STALE_DUE_MS = 26 * 60 * 60 * 1000; // 26h — must stay > the cron period
+const STALE_DUE_MS = 2 * 60 * 60 * 1000; // 2h — must stay well above the 15-minute process-due cron period (Vercel Pro)
 const STALE_DUE_HOURS = STALE_DUE_MS / 3600000;
 
 // The request never left this machine — X cannot have accepted the post.
 const PRE_SEND_ERROR_RE = /ENOTFOUND|EAI_AGAIN|ECONNREFUSED/i;
 // The request may have reached X — the post may already be live.
-const AMBIGUOUS_NETWORK_RE = /ECONNRESET|ETIMEDOUT|EPIPE|socket hang up|fetch failed|network/i;
+const AMBIGUOUS_NETWORK_RE = /ECONNRESET|ETIMEDOUT|EPIPE|socket hang up|fetch failed|network|timed out|timeout|abort/i;
+// Outcomes where X may already have the post: never auto-retried; lifecycle-v2 rows park as needs_review.
+export const AMBIGUOUS_CLASSES = new Set(['server-error-ambiguous', 'network-ambiguous', 'unknown']);
 
 // Is this publish failure worth another automatic attempt? Only failures that
 // prove X did not accept the post: 429 (rejected) and pre-send network errors.
@@ -338,8 +344,9 @@ export async function claimDuePost(postId, { now = Date.now() } = {}) {
       idempotencyKey: post.id,
       updatedAt: stamp,
     };
-    tx.set(ref, { status: claimed.status, claimedAt: stamp, attempts: claimed.attempts, idempotencyKey: post.id, updatedAt: stamp }, { merge: true });
-    return claimed;
+    const revision = (post.revision || 0) + 1;
+    tx.set(ref, { status: claimed.status, claimedAt: stamp, attempts: claimed.attempts, idempotencyKey: post.id, updatedAt: stamp, revision }, { merge: true });
+    return { ...claimed, revision };
   });
 }
 
@@ -351,6 +358,7 @@ async function readDuePosts(clientId = null, { now = Date.now() } = {}) {
 
   const due = [];
   const stale = [];
+  const expired = [];
   const writes = [];
   const nowStamp = nowIso;
   for (const doc of snap.docs) {
@@ -364,7 +372,8 @@ async function readDuePosts(clientId = null, { now = Date.now() } = {}) {
           error: 'Publish claim went stale (sweeper died or timed out mid-publish). The post may already be live on X — check before re-scheduling. Not retried automatically.',
           updatedAt: nowStamp,
         };
-        writes.push(patchPost(post.id, marked));
+        writes.push(guardedPatch(post.id, { statuses: ['posting'], claimedAt: post.claimedAt || null }, marked)
+          .then((ok) => (ok ? releaseHeldSlot(post) : null)));
         stale.push({ ...post, ...marked });
       }
       continue;
@@ -373,18 +382,37 @@ async function readDuePosts(clientId = null, { now = Date.now() } = {}) {
     if (post.status === 'failed' && !isRetryableFailure(post)) continue;
     const scheduledMs = Date.parse(post.scheduledAt);
     if (Number.isFinite(scheduledMs) && now - scheduledMs > STALE_DUE_MS) {
-      writes.push(patchPost(post.id, {
+      writes.push(guardedPatch(post.id, { statuses: ['scheduled', 'queued', 'failed'], scheduledAt: post.scheduledAt || null }, {
         status: 'expired',
         error: `Scheduled time was more than ${STALE_DUE_HOURS}h in the past when the due sweep ran — not posted.`,
         updatedAt: nowStamp,
-      }));
+      }).then((ok) => (ok ? releaseHeldSlot(post) : null)));
+      expired.push({ id: post.id, clientId: post.clientId, status: 'expired', errorClass: 'missed-window' });
       continue;
     }
     due.push(post);
   }
+  // Claimed rows with no scheduledAt (approval-page and post-now publishes) are invisible to the range query above:
+  // sweep them by claim age so a crashed publish surfaces as needs_review instead of sitting in 'posting' forever.
+  const seen = new Set(snap.docs.map((d) => d.id));
+  const posting = await postsCol().where('status', '==', 'posting').get().catch(() => ({ docs: [] }));
+  for (const doc of posting.docs) {
+    const post = doc.data();
+    if (seen.has(post.id) || (clientId && post.clientId !== clientId)) continue;
+    const claimedMs = Date.parse(post.claimedAt || post.updatedAt || post.createdAt || '');
+    if (Number.isFinite(claimedMs) && now - claimedMs > STALE_CLAIM_MS) {
+      const marked = {
+        status: 'needs_review',
+        error: 'Publish claim went stale (the publish may have died mid-flight). The post may already be live on X: check, then reconcile it. Not retried automatically.',
+        updatedAt: nowStamp,
+      };
+      writes.push(guardedPatch(post.id, { statuses: ['posting'], claimedAt: post.claimedAt || null }, marked));
+      stale.push({ ...post, ...marked });
+    }
+  }
   if (writes.length) await Promise.all(writes);
   due.sort((a, b) => String(a.scheduledAt).localeCompare(String(b.scheduledAt)));
-  return { due, stale };
+  return { due, stale, expired };
 }
 
 function makeId() {
@@ -476,7 +504,7 @@ export async function generatePromoCopy(brand = {}, { clientBrainContext = '' } 
 // established voice (Client Brain), `algo` rewrites to score best on the X
 // algorithm. Mirrors generatePromoCopy's client/model. Always returns usable
 // text — on any failure both options fall back to the normalized original.
-export async function enhancePost(content, { clientBrainContext = '' } = {}) {
+export async function enhancePost(content, { clientBrainContext = '', clientId = null } = {}) {
   const base = normalizePostText(content).slice(0, 280);
   const fallback = { voice: base, algo: base };
   if (!base) return fallback;
@@ -503,6 +531,11 @@ export async function enhancePost(content, { clientBrainContext = '' } = {}) {
       system: 'You are a senior social media copy editor. Return only valid minified JSON, nothing else.',
       messages: [{ role: 'user', content: prompt }],
     });
+    // Spend visibility: this call used to be invisible on the Operating Cost card. Best-effort, never fails Enhance.
+    try {
+      const { logAnthropicCall } = require('../../api/_lib/usage-logger.cjs');
+      await logAnthropicCall({ module: 'social-posting', action: 'enhance-post', model: 'claude-sonnet-4-6', response: res, clientId });
+    } catch { /* logging only */ }
     let text = String(res?.content?.[0]?.text || '').trim();
     // Strip ```json fences if present, then isolate the JSON object.
     text = text.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
@@ -753,6 +786,134 @@ function cleanStr(value, max) {
 }
 
 export async function createSocialPost(clientId, payload) {
+  const post = buildSocialPostRecord(clientId, payload, makeId());
+  await savePost(post);
+  return post;
+}
+
+/**
+ * Draft-only, create-once. The same `postId` always yields exactly one row: a
+ * second call (double-click, retry, concurrent request) returns the existing
+ * row instead of writing a duplicate. Used by the Daily Content Loop's Save
+ * Draft. Never schedules — status is forced to 'draft', scheduledAt to null.
+ */
+export async function createDraftPostOnce(clientId, postId, payload) {
+  if (!/^social_[A-Za-z0-9_-]{6,120}$/.test(String(postId || ''))) {
+    const err = new Error('createDraftPostOnce needs a stable social_* id.');
+    err.status = 400;
+    throw err;
+  }
+  const post = buildSocialPostRecord(clientId, { ...payload, status: 'draft', scheduledAt: null }, postId);
+  const ref = postsCol().doc(postId);
+  try {
+    await ref.create(post);
+    return { post, existing: false };
+  } catch (err) {
+    // 6 = ALREADY_EXISTS: someone else won the race; hand back their row.
+    if (err?.code !== 6 && !/already exists/i.test(String(err?.message || ''))) throw err;
+    const snap = await ref.get();
+    return { post: snap.data(), existing: true };
+  }
+}
+
+/**
+ * The shared producer entry point: one durable draft per (client, idempotencyKey). Repeated calls
+ * (double click, retry, a second producer with the same key) return the SAME post id. Rows are v2.
+ */
+export async function ensureDraftPost(clientId, { idempotencyKey, ...payload } = {}) {
+  const key = String(idempotencyKey || '').trim();
+  if (!clientId || !key) {
+    const err = new Error('ensureDraftPost needs a clientId and an idempotencyKey.');
+    err.status = 400;
+    throw err;
+  }
+  // A key maps to one open row. If that row has reached a terminal state (posted/failed/expired/rejected), the
+  // next generation of the key gets a fresh id, so re-drafting after a post or failure still works.
+  for (let gen = 0; gen < 25; gen += 1) {
+    const postId = `social_${createHash('sha1').update(`${clientId}|${key}${gen ? `#${gen}` : ''}`).digest('hex').slice(0, 24)}`;
+    const res = await createDraftPostOnce(clientId, postId, { ...payload, lifecycleVersion: LIFECYCLE_VERSION, idempotencyKey: key });
+    if (!res.existing || OPEN_STATUSES.includes(res.post?.status)) return res;
+  }
+  throw Object.assign(new Error('Too many prior posts for this idempotency key.'), { status: 409 });
+}
+
+/** Client-scoped: the newest still-open row for a package (any open status), or null. */
+export async function findOpenPostForPackage(clientId, packageId) {
+  if (!clientId || !packageId) return null;
+  const snap = await postsCol().where('clientId', '==', clientId).where('packageId', '==', packageId).get();
+  const rows = snap.docs.map((d) => d.data()).filter((r) => OPEN_STATUSES.includes(r.status));
+  rows.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+  return rows[0] || null;
+}
+
+async function loadPackageForRules(packageId) {
+  if (!packageId) return null;
+  const { getPackage } = await import('../x-content-inventory/store.js');
+  return getPackage(packageId);
+}
+
+// A timely window must still be open now, and the slot must fall inside it.
+function assertWindowOpen(expiresAt, scheduledAt) {
+  const end = toMs(expiresAt);
+  if (!Number.isFinite(end)) return;
+  const slot = toMs(scheduledAt);
+  if (end <= Date.now() || (Number.isFinite(slot) && slot > end)) {
+    throw Object.assign(new Error(`The window for this post closed at ${new Date(end).toISOString()}. Pick an earlier time or drop it.`), { status: 409, code: 'opportunity-expired' });
+  }
+}
+
+// KNOWN LIMIT: the collision check below is read-then-write, so two truly concurrent schedules of the same
+// package can both pass. Sequential producers (the supported case) are blocked; a transaction/slot doc is future work.
+// New scheduling action only: a reply must not become a standalone original, cleared material only,
+// and one package cannot sit in the queue twice. Runs AFTER the approval gate (assertSchedulable).
+async function assertSchedulingRules(post, { clientId, selfId = null, scheduledAt = null }) {
+  // New (lifecycle-v2) posts only: legacy reply rows schedule exactly as before. v2 replies stay blocked.
+  const reply = isV2(post) ? replyBlock(post) : { ok: true };
+  if (!reply.ok) throw Object.assign(new Error(reply.reason), { status: 409, code: reply.code });
+  // Timely-window rule is v2-only (legacy flows keep scheduling as before); delivery re-checks it for v2 rows.
+  const windowRule = isV2(post);
+  if (windowRule) assertWindowOpen(post.expiresAt, scheduledAt);
+  if (!post.packageId) return;
+  let pkg;
+  try {
+    pkg = await loadPackageForRules(post.packageId);
+  } catch {
+    throw Object.assign(new Error('Could not verify clearance for this package. Try again.'), { status: 409, code: 'clearance-unverifiable' });
+  }
+  const clearance = packageClearance(pkg);
+  if (!clearance.ok) throw Object.assign(new Error(clearance.reason), { status: 409, code: clearance.code });
+  if (windowRule) assertWindowOpen(pkg?.expiresAt, scheduledAt);
+  const snap = await postsCol().where('clientId', '==', clientId).where('packageId', '==', post.packageId).get();
+  const dupe = findPackageCollision(snap.docs.map((d) => d.data()), { packageId: post.packageId, selfId });
+  if (dupe) {
+    throw Object.assign(new Error(`This package is already ${dupe.status} as another post (${dupe.id}). Schedule that one or remove it first.`), { status: 409, code: 'package-already-pending', existingPostId: dupe.id });
+  }
+}
+
+// Delivery-time recheck for lifecycleVersion-2 rows: park as needs_review instead of publishing.
+async function deliveryHold(post) {
+  if (!isV2(post)) return null;
+  let pkg = null;
+  let lookupFailed = false;
+  if (post.packageId) {
+    try { pkg = await loadPackageForRules(post.packageId); } catch { lookupFailed = true; }
+  }
+  const block = lookupFailed
+    ? { code: 'clearance-unverifiable', reason: 'Could not verify package clearance at delivery time.' }
+    : deliveryBlock(post, { pkg, now: Date.now() });
+  if (!block) return null;
+  const parked = {
+    ...post,
+    status: 'needs_review',
+    error: `Held at delivery: ${block.reason}`,
+    errorClass: block.code,
+    retryable: false,
+    updatedAt: new Date().toISOString(),
+  };
+  return parked;
+}
+
+function buildSocialPostRecord(clientId, payload, id) {
   const now = new Date().toISOString();
   const content = normalizePostText(payload.content);
   if (!content) {
@@ -768,8 +929,8 @@ export async function createSocialPost(clientId, payload) {
 
   const status = payload.status || 'draft';
   const media = extractMedia(payload);
-  const post = {
-    id: makeId(),
+  return {
+    id,
     clientId,
     platform: payload.platform || 'x',
     content,
@@ -817,10 +978,16 @@ export async function createSocialPost(clientId, payload) {
     priority: cleanStr(payload.priority, 20),
     needsApproval: payload.needsApproval === true,
     attempts: 0,
+    // Additive provenance (only present when the producer supplies it, so legacy rows keep their exact shape).
+    // lifecycleVersion 2 opts the row into the stricter edit/delivery rules in ./lifecycle.js.
+    ...(payload.lifecycleVersion === LIFECYCLE_VERSION ? { lifecycleVersion: LIFECYCLE_VERSION } : {}),
+    ...(cleanStr(payload.idempotencyKey, 200) ? { idempotencyKey: cleanStr(payload.idempotencyKey, 200) } : {}),
+    ...(cleanStr(payload.runId, 160) ? { runId: cleanStr(payload.runId, 160) } : {}),
+    ...(cleanStr(payload.suggestionId, 160) ? { suggestionId: cleanStr(payload.suggestionId, 160) } : {}),
+    ...(Number.isFinite(Number(payload.strategyVersion)) && payload.strategyVersion !== null ? { strategyVersion: Number(payload.strategyVersion) } : {}),
+    ...(cleanStr(payload.channel, 40) ? { channel: cleanStr(payload.channel, 40) } : {}),
+    ...(cleanStr(payload.expiresAt, 40) ? { expiresAt: cleanStr(payload.expiresAt, 40) } : {}),
   };
-
-  await savePost(post);
-  return post;
 }
 
 export async function postNow(clientId, payload) {
@@ -845,12 +1012,11 @@ export async function postNow(clientId, payload) {
     return updated;
   } catch (error) {
     const failed = {
-      ...draft,
-      status: 'failed',
-      error: error.message || 'Failed to post.',
+      ...failedRow(draft, error),
+      // Explicitly non-retryable: nothing re-sends a post-now failure; the class is for the operator.
+      retryable: false,
       errorHint: error.hint || null,
       twitterError: error.twitterError || null,
-      updatedAt: new Date().toISOString(),
     };
     await savePost(failed);
     throw error;
@@ -880,10 +1046,29 @@ export async function publishApprovedPost(clientId, postId, { source = 'email' }
   assertNoMemoryPlaceholder(post.content);
   assertNoMemoryPlaceholder(post.selfReply?.text);
   const now = new Date().toISOString();
+  // Claim before publishing: a double click / token-vs-dashboard race now loses at the transaction instead of
+  // double-posting to the live account. Everything below settles against OUR claim.
+  const ref = postsCol().doc(postId);
+  const claimed = await fb.adminDb.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const cur = snap.exists ? snap.data() : null;
+    if (!cur || cur.status !== 'awaiting_approval') {
+      throw Object.assign(new Error('This post is not awaiting approval — it may have already been handled.'), { status: 409, code: 'not-pending' });
+    }
+    const next = { ...cur, status: 'posting', claimedAt: now, updatedAt: now, revision: (cur.revision || 0) + 1 };
+    tx.set(ref, next);
+    return next;
+  });
+  // Delivery recheck on the FRESH claimed row (clearance / reply / expiry / approval hash), settled against our claim.
+  const heldRow = await deliveryHold(claimed);
+  if (heldRow) {
+    await settleClaimed(claimed, heldRow);
+    throw Object.assign(new Error(heldRow.error), { status: 409, code: heldRow.errorClass });
+  }
   try {
-    const result = await publishStoredPost({ ...post, clientId }, now);
+    const result = await publishStoredPost({ ...claimed, clientId }, now);
     const updated = {
-      ...post,
+      ...claimed,
       status: 'posted',
       twitterId: result.twitterId,
       apiVersion: result.apiVersion || 'v2',
@@ -892,22 +1077,20 @@ export async function publishApprovedPost(clientId, postId, { source = 'email' }
       approvalSource: source,
       error: null,
       updatedAt: now,
-      ...selfReplyFields(post, result, now),
+      ...selfReplyFields(claimed, result, now),
     };
-    await savePost(updated);
+    await settleClaimed(claimed, updated);
     await recordPackagePosted(updated, now);
     return updated;
   } catch (error) {
     const failed = {
-      ...post,
-      status: 'failed',
-      error: error.message || 'Failed to post.',
+      ...failedRow(claimed, error),
+      retryable: false,
       errorHint: error.hint || null,
       approvedAt: now,
       approvalSource: source,
-      updatedAt: now,
     };
-    await savePost(failed);
+    await settleClaimed(claimed, failed);
     throw error;
   }
 }
@@ -931,7 +1114,7 @@ export async function listPendingApprovalPosts({ maxAgeMs, limit = 200 } = {}) {
     const post = doc.data();
     const createdMs = Date.parse(post.createdAt);
     if (maxAgeMs && Number.isFinite(createdMs) && now - createdMs > maxAgeMs) {
-      expireWrites.push(patchPost(post.id, {
+      expireWrites.push(guardedPatch(post.id, { statuses: ['awaiting_approval'] }, {
         status: 'expired',
         error: 'Approval window closed before anyone approved or rejected it — not posted.',
         updatedAt: nowStamp,
@@ -964,8 +1147,8 @@ export async function rejectSocialPost(clientId, postId) {
   }
   const now = new Date().toISOString();
   const updated = { ...post, status: 'rejected', rejectedAt: now, updatedAt: now };
-  await savePost(updated);
-  return updated;
+  // Revision/status-checked: a concurrent claim, edit or reject loses instead of being overwritten.
+  return commitPostTransition(clientId, post, updated);
 }
 
 // Approval gate for scheduling. A post may be scheduled directly (legacy path)
@@ -976,6 +1159,10 @@ export async function rejectSocialPost(clientId, postId) {
 async function assertSchedulable(post) {
   const reviewed = post.status === 'approved' || Boolean(post.reviewedAt);
   if (reviewed) return;
+  // lifecycleVersion-2 rows: approval is a separate step and always precedes scheduling.
+  if (isV2(post)) {
+    throw Object.assign(new Error('Approve this draft before scheduling it.'), { status: 409, code: 'approval-required' });
+  }
   let needs = post.needsApproval === true;
   if (!needs && post.packageId) {
     const { getPackage } = await import('../x-content-inventory/store.js');
@@ -990,12 +1177,106 @@ async function assertSchedulable(post) {
   }
 }
 
+
+// ---- Revision-safe, reservation-aware row transitions -------------------------------------------------
+// Every material transition (edit, approve, reject, schedule/reschedule/unschedule, approve-and-schedule) is
+// computed from a SNAPSHOT outside the transaction (package lookups etc.) and committed in ONE transaction that
+// re-reads the row, refuses if it changed meanwhile (revision/status), reserves/releases the slot and package
+// (./reservations.js) and writes the row with revision+1. Nothing restores an old whole document over a newer one.
+function conflict(message = 'This post changed while you were working on it. Reload and try again.') {
+  return Object.assign(new Error(message), { status: 409, code: 'revision-conflict' });
+}
+
+async function planConfigFor(clientId) {
+  try {
+    const [{ createFirestorePlanStore }, { resolveCalendarEngineConfig }] = await Promise.all([
+      import('../x-strategy/plan-store.js'),
+      import('../content-context/load-content-context.js'),
+    ]);
+    const planDoc = await createFirestorePlanStore(fb.adminDb).get(clientId).catch(() => null);
+    const legacy = await fb.adminDb.collection('content_system_config').doc('x').get().then((d) => (d.exists ? d.data() : null)).catch(() => null);
+    return resolveCalendarEngineConfig({ planDoc, legacyOverrides: legacy });
+  } catch {
+    return null;
+  }
+}
+
+const slotted = (p) => p && (p.status === 'scheduled' || p.status === 'queued') && p.scheduledAt;
+
+/**
+ * @param snapshot  the row as read before computing `updated` (null = create a new row)
+ * @param opts      { planOverride?: {by, reason}, expectedRevision? }  override only ever arrives from an owner-gated route
+ */
+async function commitPostTransition(clientId, snapshot, updated, opts = {}) {
+  const pilot = isPilotClient(clientId);
+  const scheduling = slotted(updated);
+  const override = Boolean(opts.planOverride?.reason);
+  const config = pilot && scheduling ? await planConfigFor(clientId) : null;
+  const rescheduled = scheduling && (snapshot?.scheduledAt || null) !== updated.scheduledAt;
+  const next = override && scheduling
+    ? { ...updated, planOverride: { by: String(opts.planOverride.by || '').slice(0, 200) || null, at: new Date().toISOString(), reason: String(opts.planOverride.reason).slice(0, 300) } }
+    : (rescheduled && updated.planOverride ? { ...updated, planOverride: null } : updated);
+  const ref = postsCol().doc(next.id);
+  return fb.adminDb.runTransaction(async (tx) => {
+    const curSnap = await tx.get(ref);
+    if (snapshot) {
+      if (!curSnap.exists) throw Object.assign(new Error('Post not found.'), { status: 404 });
+      const cur = curSnap.data();
+      if ((cur.revision || 0) !== (snapshot.revision || 0) || cur.status !== snapshot.status) throw conflict();
+    } else if (curSnap.exists) {
+      throw conflict('That post already exists.');
+    }
+    const cur = curSnap.exists ? curSnap.data() : null;
+    let writes = [];
+    if (slotted(next) || slotted(snapshot) || next.packageId) {
+      ({ writes } = await reserveInTx(fb.adminDb, tx, { clientId, previous: snapshot, next, config, enforcePlan: pilot, override }));
+    }
+    const final = { ...next, revision: (cur?.revision || 0) + 1 };
+    writes.forEach((w) => w());
+    tx.set(ref, final);
+    return final;
+  });
+}
+
+// Settle a claimed ('posting') row. A published result is the truth about the outside world, so it is always
+// written; any other outcome is written only while OUR claim still holds (a stale-claim sweep or a manual
+// reconcile may have moved the row meanwhile).
+async function settleClaimed(post, updated) {
+  const ref = postsCol().doc(post.id);
+  return fb.adminDb.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const cur = snap.exists ? snap.data() : post;
+    const ours = cur.status === 'posting' && cur.claimedAt === post.claimedAt;
+    if (!ours && updated.status !== 'posted') return false;
+    tx.set(ref, { ...updated, revision: (cur.revision || 0) + 1 });
+    return true;
+  });
+}
+
+// Best-effort: free the ledger slot / package reservation a no-longer-pending row still holds.
+function releaseHeldSlot(post) {
+  return releaseReservations(fb.adminDb, { clientId: post.clientId, post: { ...post, status: 'scheduled' }, enforcePlan: isPilotClient(post.clientId) }).catch(() => {});
+}
+
+// Guarded merge patch used by sweeps (expiry / stale claim): applies only if the row is still in the expected state.
+async function guardedPatch(postId, { statuses, scheduledAt, claimedAt }, patch) {
+  const ref = postsCol().doc(postId);
+  return fb.adminDb.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return false;
+    const cur = snap.data();
+    if (!statuses.includes(cur.status)) return false;
+    if (scheduledAt !== undefined && (cur.scheduledAt || null) !== scheduledAt) return false;
+    if (claimedAt !== undefined && (cur.claimedAt || null) !== claimedAt) return false;
+    tx.set(ref, { ...patch, revision: (cur.revision || 0) + 1 }, { merge: true });
+    return true;
+  });
+}
+
 // draft -> approved. The story gate runs here: a post still carrying the
 // "[add your memory]" placeholder (or flagged needsStory) cannot be approved.
 // Idempotent for an already-approved post. Approving never schedules anything.
-export async function approveDraft(clientId, postId, { reviewedBy = null } = {}) {
-  const post = await getSocialPost(clientId, postId);
-  if (!post) throw Object.assign(new Error('Post not found.'), { status: 404 });
+function approveInMemory(post, reviewedBy) {
   if (post.status === 'approved') return post;
   if (post.status !== 'draft') {
     throw Object.assign(new Error(`Only a draft can be approved (this post is ${post.status}).`), { status: 409, code: 'not-draft' });
@@ -1006,7 +1287,7 @@ export async function approveDraft(clientId, postId, { reviewedBy = null } = {})
   assertNoMemoryPlaceholder(post.content);
   assertNoMemoryPlaceholder(post.selfReply?.text);
   const now = new Date().toISOString();
-  const updated = {
+  const approved = {
     ...post,
     status: 'approved',
     reviewedAt: now,
@@ -1014,11 +1295,65 @@ export async function approveDraft(clientId, postId, { reviewedBy = null } = {})
     error: null,
     updatedAt: now,
   };
-  await savePost(updated);
-  return updated;
+  // Approval binds exactly what would be published; lifecycle-v2 delivery refuses a row that changed since.
+  approved.approvedHash = contentHash(approved);
+  return approved;
 }
 
-export async function schedulePost(clientId, payload) {
+export async function approveDraft(clientId, postId, { reviewedBy = null, expectedRevision = null } = {}) {
+  const post = await getSocialPost(clientId, postId);
+  if (!post) throw Object.assign(new Error('Post not found.'), { status: 404 });
+  if (expectedRevision != null && (post.revision || 0) !== Number(expectedRevision)) throw conflict();
+  if (post.status === 'approved') return post;
+  return commitPostTransition(clientId, post, approveInMemory(post, reviewedBy));
+}
+
+// draft -> rejected (the calendar's "disapprove"). Only an unpublished draft/needs_review row can be
+// rejected here, never a scheduled/posted row, so a live tweet can't be hidden. The doc is kept.
+export async function rejectDraft(clientId, postId, { reviewedBy = null, expectedRevision = null } = {}) {
+  const post = await getSocialPost(clientId, postId);
+  if (!post) throw Object.assign(new Error('Post not found.'), { status: 404 });
+  if (post.status === 'rejected') return post;
+  if (expectedRevision != null && (post.revision || 0) !== Number(expectedRevision)) throw conflict();
+  const rejectable = post.status === 'draft' || post.status === 'needs_review' || (post.status === 'approved' && !post.scheduledAt);
+  if (!rejectable) {
+    throw Object.assign(new Error(`Only an unscheduled draft can be rejected (this post is ${post.status}).`), { status: 409, code: 'not-draft' });
+  }
+  const now = new Date().toISOString();
+  return commitPostTransition(clientId, post, { ...post, status: 'rejected', rejectedAt: now, reviewedBy: reviewedBy ? String(reviewedBy).slice(0, 200) : null, updatedAt: now });
+}
+
+// The calendar's Approve: (optional text edit) -> approved -> scheduled at the time the reviewer saw, as ONE atomic
+// transition: computed in memory from a snapshot, committed in a single transaction that refuses if the row changed
+// (revision) and reserves the slot/package. Nothing is written until everything passes, so there is nothing to
+// restore. A repeated identical request returns the existing result. A scheduled post is published by the sweeper:
+// this IS the go-live decision, so it is only ever called from an explicit operator click.
+export async function approveAndSchedule(clientId, postId, { scheduledAt, content, reviewedBy = null, expectedRevision = null, planOverride = null } = {}) {
+  const when = scheduledAt ? new Date(scheduledAt) : null;
+  if (!when || Number.isNaN(when.getTime())) {
+    throw Object.assign(new Error('A valid scheduled time is required.'), { status: 400 });
+  }
+  if (when.getTime() < Date.now() + 60_000) {
+    throw Object.assign(new Error('Pick a time at least a minute in the future.'), { status: 400, code: 'past-time' });
+  }
+  const iso = when.toISOString();
+  const snapshot = await getSocialPost(clientId, postId);
+  if (!snapshot) throw Object.assign(new Error('Post not found.'), { status: 404 });
+  if (expectedRevision != null && (snapshot.revision || 0) !== Number(expectedRevision)) throw conflict();
+  const sameText = typeof content !== 'string' || normalizePostText(content) === snapshot.content;
+  if ((snapshot.status === 'scheduled' || snapshot.status === 'queued') && snapshot.scheduledAt === iso && sameText && snapshot.reviewedAt) {
+    return snapshot; // repeated request: same result, no second transition
+  }
+  let working = snapshot;
+  if (!sameText) working = (await prepareUpdate(clientId, working, { content })).updated;
+  if (!((working.status === 'scheduled' || working.status === 'queued') && working.reviewedAt)) {
+    working = approveInMemory(working, reviewedBy);
+  }
+  const { updated } = await prepareUpdate(clientId, working, { content: working.content, scheduledAt: iso });
+  return commitPostTransition(clientId, snapshot, updated, { planOverride });
+}
+
+export async function schedulePost(clientId, payload, opts = {}) {
   assertNoMemoryPlaceholder(normalizePostText(payload.content));
   assertNoMemoryPlaceholder(payload.selfReply?.text);
   const scheduledAt = payload.scheduledAt ? new Date(payload.scheduledAt) : null;
@@ -1028,11 +1363,21 @@ export async function schedulePost(clientId, payload) {
     throw err;
   }
   await assertSchedulable({ ...payload, status: 'draft' });
-  return createSocialPost(clientId, {
+  await assertSchedulingRules({ ...payload, status: 'draft', ...(isPilotClient(clientId) ? { lifecycleVersion: LIFECYCLE_VERSION } : {}) }, { clientId, scheduledAt: scheduledAt.toISOString() });
+  const record = buildSocialPostRecord(clientId, {
     ...payload,
     status: scheduledAt.getTime() <= Date.now() ? 'queued' : 'scheduled',
     scheduledAt: scheduledAt.toISOString(),
-  });
+  }, makeId());
+  // Pilot clients: every NEW scheduled post goes through the full lifecycle (v2 protections, plan enforcement in
+  // the commit below). Scheduling is the operator's explicit approval for this exact copy, so the row is stamped
+  // reviewed and bound to its content hash. Reply posts stay blocked above (assertSchedulingRules, v2 rule).
+  if (isPilotClient(clientId) && record.lifecycleVersion !== LIFECYCLE_VERSION) {
+    const now = new Date().toISOString();
+    Object.assign(record, { lifecycleVersion: LIFECYCLE_VERSION, reviewedAt: now, reviewedBy: opts.by ? String(opts.by).slice(0, 200) : 'owner-schedule' });
+    record.approvedHash = contentHash(record);
+  }
+  return commitPostTransition(clientId, null, record, { planOverride: opts.planOverride });
 }
 
 // Pair a rendered asset (Studio video / image) onto an existing post. Used when
@@ -1064,14 +1409,20 @@ export async function attachMediaToPost(clientId, postId, payload) {
     mediaUrl: media.mediaUrl,
     jobId: media.mediaJobId || null,
   };
+  if (isV2(post) && (post.status === 'posted' || post.status === 'posting')) {
+    throw Object.assign(new Error('This post has already been published; media can no longer be changed.'), { status: 409 });
+  }
   const updated = {
     ...post,
     ...media,
     agents,
     updatedAt: new Date().toISOString(),
   };
-  await savePost(updated);
-  return updated;
+  // Media is part of what approval binds: on a lifecycle-v2 row it voids approval and the schedule like a text edit.
+  if (isV2(post) && APPROVAL_VOID_STATUSES.includes(post.status) && isMaterialEdit(post, updated)) {
+    Object.assign(updated, { status: 'draft', scheduledAt: null, reviewedAt: null, reviewedBy: null, approvedHash: null });
+  }
+  return commitPostTransition(clientId, post, updated);
 }
 
 // Approval-page remix lifecycle. These mutations are deliberately restricted
@@ -1114,8 +1465,8 @@ export async function markApprovalRemixPending(clientId, postId, pending) {
     remixCount: remixCount + 1,
     updatedAt: now,
   };
-  await savePost(updated);
-  return updated;
+  // Revision/status-checked: a concurrent claim, edit or reject loses instead of being overwritten.
+  return commitPostTransition(clientId, post, updated);
 }
 
 export async function failApprovalRemix(clientId, postId, message) {
@@ -1129,8 +1480,8 @@ export async function failApprovalRemix(clientId, postId, message) {
       : null,
     updatedAt: now,
   };
-  await savePost(updated);
-  return updated;
+  // Revision/status-checked: a concurrent claim, edit or reject loses instead of being overwritten.
+  return commitPostTransition(clientId, post, updated);
 }
 
 export async function completeApprovalRemix(clientId, postId, payload) {
@@ -1165,15 +1516,15 @@ export async function completeApprovalRemix(clientId, postId, payload) {
     remixPending: null,
     updatedAt: now,
   };
-  await savePost(updated);
-  return updated;
+  // Revision/status-checked: a concurrent claim, edit or reject loses instead of being overwritten.
+  return commitPostTransition(clientId, post, updated);
 }
 
 // Edit an existing post in place (content and/or schedule) and re-score, scoped
 // to the owning client. Used by the Copywriter notepad "update" action so editing
 // a saved draft patches the same doc instead of creating a duplicate. Already
 // posted/posting rows are locked — editing local text can't un-post them.
-export async function updateSocialPost(clientId, postId, payload = {}) {
+export async function updateSocialPost(clientId, postId, payload = {}, opts = {}) {
   if (!postId) {
     const err = new Error('postId is required to update a post.');
     err.status = 400;
@@ -1185,10 +1536,24 @@ export async function updateSocialPost(clientId, postId, payload = {}) {
     err.status = 404;
     throw err;
   }
+  const expected = opts.expectedRevision ?? payload.expectedRevision;
+  if (expected != null && (post.revision || 0) !== Number(expected)) throw conflict();
+  const { updated } = await prepareUpdate(clientId, post, payload);
+  const saved = await commitPostTransition(clientId, post, updated, { planOverride: opts.planOverride });
+  await syncDiscogsStory(post, saved.content);
+  return saved;
+}
+
+// Pure-ish: validates and computes the next row from a snapshot (async only for package lookups). Writes nothing.
+async function prepareUpdate(clientId, post, payload = {}) {
   if (post.status === 'posted' || post.status === 'posting') {
     const err = new Error('This post has already been published and can no longer be edited.');
     err.status = 409;
     throw err;
+  }
+  // A held row may already be live on X: it needs an explicit reconcile before it can be edited back into the queue.
+  if (post.status === 'needs_review' && payload.scheduledAt) {
+    throw Object.assign(new Error('This post was held for review (it may already be live on X). Reconcile it first.'), { status: 409, code: 'needs-review-reconcile' });
   }
 
   const content = normalizePostText(payload.content != null ? payload.content : post.content);
@@ -1212,12 +1577,36 @@ export async function updateSocialPost(clientId, postId, payload = {}) {
   const contentChanged = content !== post.content;
   let reviewedAt = post.reviewedAt || null;
   let reviewedBy = post.reviewedBy || null;
+  let approvalVoided = false;
+  let voidHash = false;
   if (contentChanged && post.status === 'approved') {
     status = 'draft';
     reviewedAt = null;
     reviewedBy = null;
+    voidHash = true;
   }
-  if (hasOwn(payload, 'scheduledAt')) {
+  // lifecycleVersion-2 rows: ANY material edit (text, self-reply, media, reply target) voids approval and the
+  // schedule, not just a text edit of an approved draft. Legacy rows keep the rule above.
+  if (isV2(post) && APPROVAL_VOID_STATUSES.includes(post.status) && status !== 'draft') {
+    const next = {
+      ...post,
+      content,
+      selfReply: hasOwn(payload, 'selfReply') ? sanitizeSelfReply(payload.selfReply) : post.selfReply,
+      mediaVariants: hasOwn(payload, 'mediaVariants') ? sanitizeMediaVariants(payload.mediaVariants) : post.mediaVariants,
+    };
+    if (isMaterialEdit(post, next)) {
+      status = 'draft';
+      scheduledAt = null;
+      reviewedAt = null;
+      reviewedBy = null;
+      approvalVoided = true;
+      voidHash = true;
+    }
+  }
+  // An edit that voided approval keeps the row a draft even if the client re-sent the old schedule time.
+  const resentOldSchedule = approvalVoided && hasOwn(payload, 'scheduledAt')
+    && payload.scheduledAt && new Date(payload.scheduledAt).toISOString() === (post.scheduledAt || null);
+  if (hasOwn(payload, 'scheduledAt') && !resentOldSchedule) {
     if (!payload.scheduledAt) {
       scheduledAt = null;
       if (status === 'scheduled' || status === 'queued') status = reviewedAt ? 'approved' : 'draft';
@@ -1236,6 +1625,10 @@ export async function updateSocialPost(clientId, postId, payload = {}) {
         packageId: hasOwn(payload, 'packageId') ? cleanStr(payload.packageId, 160) : post.packageId,
         needsApproval: payload.needsApproval === true || post.needsApproval === true,
       });
+      await assertSchedulingRules({
+        ...post,
+        packageId: hasOwn(payload, 'packageId') ? cleanStr(payload.packageId, 160) : post.packageId,
+      }, { clientId, selfId: post.id, scheduledAt: scheduledAt });
       status = dt.getTime() <= Date.now() ? 'queued' : 'scheduled';
     }
   }
@@ -1259,13 +1652,12 @@ export async function updateSocialPost(clientId, postId, payload = {}) {
     ...(payload.needsApproval === true ? { needsApproval: true } : {}),
     reviewedAt,
     reviewedBy,
+    ...(voidHash ? { approvedHash: null } : {}),
     updatedAt: new Date().toISOString(),
   };
   const plan = storySyncPlan(post, content, null);
   if (plan?.postPatch) Object.assign(updated, plan.postPatch);
-  await savePost(updated);
-  await syncDiscogsStory(post, content);
-  return updated;
+  return { updated };
 }
 
 // Discogs drafts: push the owner's story into the content package. Never fails the post update.
@@ -1290,6 +1682,11 @@ async function syncDiscogsStory(post, content) {
 async function postAndRecord(snapshot) {
   const post = await claimDuePost(snapshot.id);
   if (!post) return { ok: false, skipped: true, updated: snapshot };
+  const held = await deliveryHold(post);
+  if (held) {
+    await settleClaimed(post, held);
+    return { ok: false, updated: held };
+  }
   // Placeholder guard (same rule as post-now/schedule): never publish a draft
   // that still says "[add your memory]". Park it as a draft with a reason.
   if (hasMemoryPlaceholder(post.content) || hasMemoryPlaceholder(post.selfReply?.text)) {
@@ -1299,7 +1696,7 @@ async function postAndRecord(snapshot) {
       error: 'Skipped by due sweep: post still contains "[add your memory]".',
       updatedAt: new Date().toISOString(),
     };
-    await savePost(updated);
+    await settleClaimed(post, updated);
     return { ok: false, updated };
   }
   try {
@@ -1316,22 +1713,65 @@ async function postAndRecord(snapshot) {
       errorClass: null,
       ...selfReplyFields(post, result, now),
     };
-    await savePost(updated);
+    await settleClaimed(post, updated);
     await recordPackagePosted(updated, now);
     return { ok: true, updated };
   } catch (error) {
-    const { retryable, errorClass } = classifyPublishError(error);
-    const updated = {
-      ...post,
-      status: 'failed',
-      error: error.message || 'Failed to post.',
-      retryable,
-      errorClass,
-      updatedAt: new Date().toISOString(),
-    };
-    await savePost(updated);
+    const updated = failedRow(post, error);
+    await settleClaimed(post, updated);
+    // A retryable failure (429) will be re-claimed by the next sweep: it keeps its slot and package until terminal.
+    if (updated.status === 'failed' && !isRetryableFailure(updated)) await releaseHeldSlot(updated);
     return { ok: false, updated };
   }
+}
+
+// A failed publish. Lifecycle-v2 rows whose outcome is AMBIGUOUS (timeout/5xx/unknown: X may already have the
+// post) park as needs_review with no automatic retry, to be reconciled by platform id; every other row keeps the
+// existing failed + retryable semantics (legacy rows are unchanged).
+function failedRow(post, error) {
+  const { retryable, errorClass } = classifyPublishError(error);
+  const ambiguous = isV2(post) && AMBIGUOUS_CLASSES.has(errorClass);
+  return {
+    ...post,
+    status: ambiguous ? 'needs_review' : 'failed',
+    error: ambiguous
+      ? `Publish outcome unknown (${error.message || 'no detail'}). The post may already be live on X: check, then reconcile it by platform id. Not retried automatically.`
+      : (error.message || 'Failed to post.'),
+    retryable: ambiguous ? false : retryable,
+    errorClass,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Operator reconciliation of a held/ambiguous row against the real X outcome.
+ *  outcome 'posted'     + platformId  -> mark posted with that id (records package usage)
+ *  outcome 'not-posted'               -> back to an unscheduled draft (re-approve to schedule again)
+ */
+export async function reconcilePost(clientId, postId, { outcome, platformId = null, by = null } = {}) {
+  const post = await getSocialPost(clientId, postId);
+  if (!post) throw Object.assign(new Error('Post not found.'), { status: 404 });
+  const ambiguousFailed = post.status === 'failed' && AMBIGUOUS_CLASSES.has(post.errorClass);
+  if (post.status !== 'needs_review' && !ambiguousFailed) {
+    throw Object.assign(new Error(`Only a held post can be reconciled (this post is ${post.status}).`), { status: 409, code: 'not-held' });
+  }
+  const now = new Date().toISOString();
+  const stamp = { reconciledAt: now, reconciledBy: by ? String(by).slice(0, 200) : null };
+  if (outcome === 'posted') {
+    const id = String(platformId || '').trim();
+    if (!/^\d{5,25}$/.test(id)) throw Object.assign(new Error('A numeric platform post id is required.'), { status: 400, code: 'platform-id-required' });
+    const updated = { ...post, ...stamp, status: 'posted', twitterId: id, postedAt: post.postedAt || now, error: null, retryable: false, updatedAt: now };
+    const saved = await commitPostTransition(clientId, post, updated);
+    await recordPackagePosted(saved, now);
+    return saved;
+  }
+  if (outcome === 'not-posted' || outcome === 'not_posted') {
+    const updated = { ...post, ...stamp, status: 'draft', scheduledAt: null, reviewedAt: null, reviewedBy: null, approvedHash: null, error: null, retryable: false, updatedAt: now };
+    const saved = await commitPostTransition(clientId, post, updated);
+    await releaseHeldSlot(post);
+    return saved;
+  }
+  throw Object.assign(new Error("outcome must be 'posted' or 'not-posted'."), { status: 400, code: 'bad-outcome' });
 }
 
 // Write a published post back onto its content package (post.packageId join):
@@ -1378,11 +1818,12 @@ export async function retrySelfReply(clientId, postId) {
       text: post.selfReply.text || '',
       media: post.selfReply,
     });
-    const updated = { ...post, selfReplyTwitterId: reply.twitterId, selfReplyPostedAt: now, selfReplyError: null, updatedAt: now };
-    await savePost(updated);
-    return updated;
+    // Merge patch on the posted row (fields only): never rewrites a newer whole document.
+    const patch = { selfReplyTwitterId: reply.twitterId, selfReplyPostedAt: now, selfReplyError: null, updatedAt: now };
+    await guardedPatch(post.id, { statuses: ['posted'] }, patch);
+    return { ...post, ...patch };
   } catch (error) {
-    await savePost({ ...post, selfReplyError: error.message || 'Self-reply failed.', updatedAt: now });
+    await guardedPatch(post.id, { statuses: ['posted'] }, { selfReplyError: error.message || 'Self-reply failed.', updatedAt: now });
     throw error;
   }
 }
@@ -1390,7 +1831,7 @@ export async function retrySelfReply(clientId, postId) {
 // maxPerRun caps live publishes per sweep (oldest-due first); the rest simply stay
 // due for the next sweep. Rows skipped because another sweeper claimed them do not
 // count against the cap.
-async function runDueSweep({ due, stale }, { maxPerRun = DEFAULT_MAX_PER_RUN } = {}) {
+async function runDueSweep({ due, stale, expired = [] }, { maxPerRun = DEFAULT_MAX_PER_RUN } = {}) {
   const posted = [];
   const failed = [];
   const skipped = [];
@@ -1403,7 +1844,7 @@ async function runDueSweep({ due, stale }, { maxPerRun = DEFAULT_MAX_PER_RUN } =
     attempted += 1;
     (ok ? posted : failed).push(updated);
   }
-  return { posted, failed, skipped, needsReview: stale, deferred };
+  return { posted, failed, skipped, needsReview: stale, expired, deferred };
 }
 
 export async function processDuePosts(clientId, opts = {}) {

@@ -269,10 +269,10 @@ test('a missing package never fails the publish', async () => {
   assert.equal(raw(post.id).status, 'posted');
 });
 
-test('stale due posts expire with the 26h wording', async () => {
+test('stale due posts expire with the 2h wording (Pro: 15-minute cron)', async () => {
   const post = await due('Way too old.', { scheduledAt: new Date(Date.now() - 30 * 3600 * 1000).toISOString() });
   await svc.processDuePostsForAllClients();
   assert.equal(tweets.length, 0);
   assert.equal(raw(post.id).status, 'expired');
-  assert.match(raw(post.id).error, /26h/);
+  assert.match(raw(post.id).error, /2h/);
 });

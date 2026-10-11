@@ -14,6 +14,7 @@ import { matchDay } from './match.js';
 import { buildPostLedger, pickResurrectionCandidates, assetFatigue } from './ledger.js';
 import { validateInventory } from './schema.js';
 import { DEFAULT_ENGINE_CONFIG, allocateEngines } from './engine-quota.js';
+import { zonedTimeToIso } from './daily-loop/time-ids.js';
 
 /** A type has to earn this much more than the benchmark's own average before
  * it is worth adopting on lift alone. */
@@ -131,8 +132,8 @@ export function buildDayPlan(input = {}) {
   const allocation = allocateEngines({ slots: adopted, config: engineConfig, recentPosts, now, date });
 
   const slots = allocation.slots.map((s) => {
-    const [h, m] = String(s.timeCT ?? '12:00').split(':').map(Number);
-    const when = Date.parse(`${date}T${String(h).padStart(2, '0')}:${String(m || 0).padStart(2, '0')}:00Z`);
+    // timeCT is a Chicago wall clock; reading it as UTC made hoursFromNow 5-6h off.
+    const when = Date.parse(zonedTimeToIso(date, String(s.timeCT ?? '12:00'), 'America/Chicago'));
     return { ...s, hoursFromNow: Math.max(0, (when - now) / 3_600_000) };
   });
 

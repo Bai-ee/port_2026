@@ -1,8 +1,11 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Check, Plus, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronRight, Plus, Search, Trash2, X } from 'lucide-react';
 import { ConfirmButton } from './Feedback';
+import Badge from './ui/Badge';
+import { mergeBuckets, resolveBucket } from '../../../features/x-content-inventory/buckets.js';
+import { buildIndex, search } from '../../../features/x-content-inventory/search-index.js';
 
 import { PILLARS, SERIES } from '../../../features/x-content-inventory/categories.js';
 import {
@@ -32,6 +35,21 @@ import {
 // dropped and nothing stale survives the first keystroke.
 
 const NEW_ID = '__new__';
+
+// The list is fully loaded client-side; rendering all of it at once is what made
+// this tab thousands of rows tall, so it is sliced a page at a time.
+const PAGE_SIZE = 50;
+
+const STATUS_TONE = { idea: 'grey', drafted: 'blue', scheduled: 'amber', posted: 'green', retired: 'grey' };
+
+// Default buckets are enough to name a row's source; this panel fetches nothing.
+const DEFAULT_BUCKET_LIST = mergeBuckets([]);
+
+function hitIds(result) {
+  const list = Array.isArray(result) ? result : Array.isArray(result?.hits) ? result.hits : Array.isArray(result?.results) ? result.results : [];
+  return list.map((h) => (typeof h === 'string' ? h : h?.id ?? h?.item?.id)).filter(Boolean);
+}
+
 
 const EMPTY_DRAFT = {
   id: '',
@@ -75,10 +93,6 @@ function pillarShort(key) {
   const label = PILLARS[key];
   if (!label) return key || '';
   return label.split('—')[0].trim();
-}
-
-function seriesLabel(key) {
-  return SERIES[key]?.label || '';
 }
 
 function toDraft(pkg) {
@@ -142,6 +156,40 @@ export default function InventoryPanel({ packages, audit, loading, error, saving
   const [draft, setDraft] = useState(EMPTY_DRAFT);
   const [dirty, setDirty] = useState(false);
   const [idTouched, setIdTouched] = useState(false);
+
+  const [query, setQuery] = useState('');
+  const [bucketFilter, setBucketFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [limit, setLimit] = useState(PAGE_SIZE);
+
+  const index = useMemo(() => {
+    try { return buildIndex(rows, { buckets: DEFAULT_BUCKET_LIST }); } catch { return null; }
+  }, [rows]);
+
+  const filtered = useMemo(() => {
+    let list = rows;
+    const q = query.trim();
+    if (q) {
+      if (!index) return [];
+      try {
+        const byId = new Map(rows.map((p) => [p.id, p]));
+        list = hitIds(search(index, q, { limit: rows.length || 1 })).map((id) => byId.get(id)).filter(Boolean);
+      } catch { list = []; }
+    }
+    if (bucketFilter !== 'all') list = list.filter((p) => resolveBucket(p, DEFAULT_BUCKET_LIST) === bucketFilter);
+    if (statusFilter !== 'all') list = list.filter((p) => (p.status || 'idea') === statusFilter);
+    return list;
+  }, [rows, index, query, bucketFilter, statusFilter]);
+
+  useEffect(() => { setLimit(PAGE_SIZE); }, [query, bucketFilter, statusFilter]);
+  const shown = filtered.slice(0, limit);
+
+  // The editor sits above the list (a row can be far down it), so bring it into view.
+  useEffect(() => {
+    if (!editingId) return;
+    const el = document.getElementById('x-content-inventory-editor');
+    if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'nearest' });
+  }, [editingId]);
 
   // A row deleted elsewhere must not leave an editor open over nothing.
   useEffect(() => {
@@ -243,15 +291,36 @@ export default function InventoryPanel({ packages, audit, loading, error, saving
     ? audit.results.filter((r) => r && r.ok).length
     : null;
 
+  const filtering = query.trim() !== '' || bucketFilter !== 'all' || statusFilter !== 'all';
+
   return (
     <div id="x-content-inventory-panel" className="xce-inv">
+      <style jsx global>{`
+#x-content-card #x-content-inventory-panel .xce-inv-head { gap: 10px; }
+#x-content-card #x-content-inventory-panel .xce-inv-title { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.01em; color: #1f1d1b; }
+#x-content-card #x-content-inventory-panel .xce-inv-count { margin-right: auto; }
+#x-content-card #x-content-inventory-panel .xce-inv-search { position: relative; display: block; }
+#x-content-card #x-content-inventory-panel .xce-inv-search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: rgba(31,29,27,0.5); pointer-events: none; }
+#x-content-card #x-content-inventory-panel .xce-inv-search input { width: 100%; min-height: 44px; padding: 0 12px 0 36px; border-radius: 12px; box-sizing: border-box; }
+#x-content-card #x-content-inventory-panel .xce-inv-filters-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+#x-content-card #x-content-inventory-panel .xce-inv-filters-row select { width: 100%; min-height: 44px; border-radius: 12px; box-sizing: border-box; }
+#x-content-card #x-content-inventory-panel .xce-inv-row { grid-template-columns: 40px minmax(0, 1fr) auto 16px; align-items: center; padding: 10px; }
+#x-content-card #x-content-inventory-panel .xce-inv-code { width: 40px; height: 40px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: #f6f5f3; border: 1px solid rgba(31,29,27,0.12); font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: #1f1d1b; }
+#x-content-card #x-content-inventory-panel .xce-inv-row-title { font-size: 14px; font-weight: 600; color: #1f1d1b; overflow-wrap: anywhere; }
+#x-content-card #x-content-inventory-panel .xce-inv-row-flags { grid-column: auto; display: grid; gap: 4px; justify-items: end; }
+#x-content-card #x-content-inventory-panel .xce-inv-row { box-sizing: border-box; height: 100%; }
+#x-content-card #x-content-inventory-panel .xce-inv-row.is-active { border-color: #1f1d1b; }
+#x-content-card #x-content-inventory-panel .xce-inv-row-chevron { color: rgba(31,29,27,0.5); }
+#x-content-card #x-content-inventory-panel .xce-inv-footer-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+#x-content-card #x-content-inventory-panel .xce-inv-editor-slot { order: -1; }
+`}</style>
       {/* ── Inventory list ──────────────────────────────────────────────── */}
       <section id="x-content-inventory-list-section" className="xce-inv-section">
         <div id="x-content-inventory-list-head" className="xce-inv-head">
-          <span className="xce-inv-kicker">Inventory</span>
-          <span className="xce-inv-count">
-            {countLabel(total, 'package')}
-            {valid != null ? ` · ${valid} valid` : ''}
+          <h2 id="x-content-inventory-title" className="xce-inv-title">Content</h2>
+          <span id="x-content-inventory-count" className="xce-inv-count">
+            {total.toLocaleString()}
+            {valid != null ? ` · ${valid.toLocaleString()} valid` : ''}
           </span>
           <button
             type="button"
@@ -263,6 +332,42 @@ export default function InventoryPanel({ packages, audit, loading, error, saving
           </button>
         </div>
 
+        <label id="x-content-inventory-search-shell" className="xce-inv-search">
+          <Search size={14} aria-hidden="true" />
+          <input
+            id="x-content-inventory-search-input"
+            className="xce-input"
+            type="search"
+            aria-label="Search content"
+            placeholder="Search content…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </label>
+
+        <div id="x-content-inventory-filters-row" className="xce-inv-filters-row">
+          <select
+            id="x-content-inventory-bucket-filter"
+            className="xce-select"
+            aria-label="Filter by bucket"
+            value={bucketFilter}
+            onChange={(e) => setBucketFilter(e.target.value)}
+          >
+            <option value="all">All buckets</option>
+            {DEFAULT_BUCKET_LIST.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+          <select
+            id="x-content-inventory-status-filter"
+            className="xce-select"
+            aria-label="Filter by status"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
+            <option value="all">All statuses</option>
+            {STATUSES.map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
+        </div>
+
         {error ? (
           <p id="x-content-inventory-error" className="xce-notice xce-notice-error">{String(error)}</p>
         ) : null}
@@ -271,63 +376,78 @@ export default function InventoryPanel({ packages, audit, loading, error, saving
           <div id="x-content-inventory-loading" className="xce-empty">Loading packages…</div>
         ) : total === 0 ? (
           <div id="x-content-inventory-empty" className="xce-empty">No packages yet.</div>
+        ) : filtered.length === 0 ? (
+          <div id="x-content-inventory-no-match" className="xce-empty">Nothing matches those filters.</div>
         ) : (
-          <ul id="x-content-inventory-list" className="xce-inv-list">
-            {rows.map((pkg) => {
-              const entry = auditEntryFor(audit, pkg.id);
-              const warnCount = entry?.warnings?.length || 0;
-              const errCount = entry?.errors?.length || 0;
-              const active = editingId === pkg.id;
-              const rowBusy = savingId != null && savingId === pkg.id;
-              return (
-                <li
-                  id={`x-content-inventory-row-${domId(pkg.id)}`}
-                  key={pkg.id || pkg.title}
-                  className="xce-inv-row-item"
-                >
-                  <button
-                    type="button"
-                    className={`xce-inv-row${active ? ' is-active' : ''}${rowBusy ? ' is-busy' : ''}`}
-                    onClick={() => openRow(pkg)}
-                    aria-current={active ? 'true' : undefined}
+          <>
+            <ul id="x-content-inventory-list" className="xce-inv-list">
+              {shown.map((pkg) => {
+                const entry = auditEntryFor(audit, pkg.id);
+                const warnCount = entry?.warnings?.length || 0;
+                const errCount = entry?.errors?.length || 0;
+                const active = editingId === pkg.id;
+                const rowBusy = savingId != null && savingId === pkg.id;
+                const bucket = DEFAULT_BUCKET_LIST.find((b) => b.id === resolveBucket(pkg, DEFAULT_BUCKET_LIST));
+                const status = pkg.status || 'idea';
+                return (
+                  <li
+                    id={`x-content-inventory-row-${domId(pkg.id)}`}
+                    key={pkg.id || pkg.title}
+                    className="xce-inv-row-item"
                   >
-                    <span className="xce-inv-thumb" data-series={pkg.series || 'none'} aria-hidden="true">
-                      {pkg.series || '—'}
-                    </span>
-                    <span className="xce-inv-row-main">
-                      <span className="xce-inv-row-title">{pkg.title || pkg.id || 'Untitled'}</span>
-                      <span className="xce-inv-row-meta">
-                        <span className="xce-inv-meta-item">{pillarShort(pkg.pillar) || 'no pillar'}</span>
-                        {rowBusy ? <span className="xce-inv-meta-item">Saving…</span> : null}
+                    <button
+                      type="button"
+                      className={`xce-inv-row${active ? ' is-active' : ''}${rowBusy ? ' is-busy' : ''}`}
+                      onClick={() => openRow(pkg)}
+                      aria-current={active ? 'true' : undefined}
+                    >
+                      <span className="xce-inv-code" data-series={pkg.series || 'none'} aria-hidden="true">
+                        {pkg.series || '—'}
                       </span>
-                    </span>
-                    <span className="xce-inv-row-flags">
-                      <span className="xce-chip xce-chip-series">
-                        {pkg.series || '—'}{seriesLabel(pkg.series) ? ` · ${seriesLabel(pkg.series)}` : ''}
-                      </span>
-                      <span className="xce-chip xce-chip-status" data-status={pkg.status || 'idea'}>
-                        {pkg.status || 'idea'}
-                      </span>
-                      {errCount ? (
-                        <span className="xce-chip xce-chip-error">
-                          <AlertTriangle size={11} /> {countLabel(errCount, 'error')}
+                      <span className="xce-inv-row-main">
+                        <span className="xce-inv-row-title">{pkg.title || pkg.id || 'Untitled'}</span>
+                        <span className="xce-inv-row-meta">
+                          <span className="xce-inv-meta-item">
+                            {[bucket?.name, pillarShort(pkg.pillar)].filter(Boolean).join(' · ') || 'no pillar'}
+                          </span>
+                          {rowBusy ? <span className="xce-inv-meta-item">Saving…</span> : null}
                         </span>
-                      ) : null}
-                      {warnCount ? (
-                        <span className="xce-chip xce-chip-warn">{countLabel(warnCount, 'note')}</span>
-                      ) : null}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+                      </span>
+                      <span className="xce-inv-row-flags">
+                        <Badge tone={STATUS_TONE[status] || 'grey'} style={{ textTransform: 'uppercase' }}>{status}</Badge>
+                        {errCount ? (
+                          <Badge tone="red" icon={<AlertTriangle size={11} />}>{countLabel(errCount, 'error')}</Badge>
+                        ) : null}
+                        {warnCount ? <Badge tone="amber">{countLabel(warnCount, 'note')}</Badge> : null}
+                      </span>
+                      <ChevronRight size={16} className="xce-inv-row-chevron" aria-hidden="true" />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            <div id="x-content-inventory-footer-row" className="xce-inv-footer-row">
+              <span id="x-content-inventory-showing" className="xce-inv-count">
+                Showing {shown.length.toLocaleString()} of {filtered.length.toLocaleString()}{filtering ? ' matches' : ''}
+              </span>
+              {shown.length < filtered.length ? (
+                <button
+                  type="button"
+                  id="x-content-inventory-load-more-button"
+                  className="xce-btn xce-btn-ghost"
+                  onClick={() => setLimit((n) => n + PAGE_SIZE)}
+                >
+                  Load more
+                </button>
+              ) : null}
+            </div>
+          </>
         )}
       </section>
 
       {/* ── Editor ──────────────────────────────────────────────────────── */}
       {editingId ? (
-        <section id="x-content-inventory-editor" className="xce-inv-section xce-editor">
+        <section id="x-content-inventory-editor" className="xce-inv-section xce-editor xce-inv-editor-slot">
           <div id="x-content-inventory-editor-head" className="xce-inv-head">
             <span className="xce-inv-kicker">{editingId === NEW_ID ? 'New package' : 'Edit package'}</span>
             <button

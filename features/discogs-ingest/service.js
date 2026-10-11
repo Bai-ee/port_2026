@@ -55,13 +55,15 @@ export async function ensureDownloadUrl(storagePath) {
   return buildDownloadUrl(bucket.name, storagePath, token);
 }
 
-export async function findExistingDraft(releaseId) {
+// Client-scoped: only rows owned by the ingest client match (no cross-client reuse).
+export async function findExistingDraft(releaseId, clientId = discogsClientId()) {
   const snap = await fb.adminDb.collection('social_posts')
     .where('source', '==', DISCOGS_SOURCE)
     .where('sourceRef.releaseId', '==', releaseId)
-    .limit(1)
+    .limit(20)
     .get();
-  return snap.empty ? null : snap.docs[0].data();
+  const row = snap.docs.map((d) => d.data()).find((r) => r.clientId === clientId);
+  return row || null;
 }
 
 export async function ingestDiscogsDraft(req) {
