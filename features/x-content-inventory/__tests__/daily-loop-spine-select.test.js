@@ -45,15 +45,16 @@ test('calendar lanes prefer the veins that list them, strongest measured vein fi
 });
 
 test('fill-quote prefers a vein the slot lane favours, via the map (not name equality)', () => {
-  const a = scanPosts.find((c) => c.author === 'applefiles_'); // retro, 0.8845
+  // The real top-scoring retro post is the @grok joke (now rejected), so a media retro post carries its score.
+  const a = { ...scanPosts.find((c) => c.author === 'SciFiArchives'), hasMedia: true, score: scanPosts.find((c) => c.author === 'applefiles_').score };
   // INVENTED: a motion-vein post just under the top score.
   const motion = { ...scanPosts.find((c) => c.author === 'rare_jpg'), vein: 'motion-generative', score: a.score - 0.1 };
   const pick = (lane) => fillQuoteSlot({ slot: slot('A', 'quote-react', { lane }), candidates: [a, motion], now: NOW });
   assert.equal(pick('craft').post.vein, 'motion-generative');
   assert.match(pick('craft').fit.reason, /preferred by craft lane/);
   // 'music' favours retro, already the top pick; no lane leaves the top score alone.
-  assert.equal(pick('music').post.author, 'applefiles_');
-  assert.equal(pick(null).post.author, 'applefiles_');
+  assert.equal(pick('music').post.author, 'SciFiArchives');
+  assert.equal(pick(null).post.author, 'SciFiArchives');
 });
 
 // --- orchestrator ---

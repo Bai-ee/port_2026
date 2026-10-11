@@ -14,6 +14,13 @@ export const QUOTE_WINDOW_HOURS = 36;
 
 const QUOTE_TYPES = new Set(['quote-react', 'quote-commentary']);
 
+/** AI-assistant handles; a post that mentions or addresses one is a bot prompt/joke, never a quote target. */
+export const AI_BOT_HANDLES = ['grok', 'chatgpt', 'claudeai', 'perplexity_ai', 'gemini', 'askperplexity', 'meta_ai', 'copilot'];
+const BOT_MENTION = new RegExp(`(?<![\\w])@(?:${AI_BOT_HANDLES.join('|')})(?![\\w])`, 'i');
+
+const addressesBot = (c) => BOT_MENTION.test(String(c.text ?? ''));
+const hasMediaOf = (c) => Boolean(c.hasMedia) || (Array.isArray(c.media) && c.media.length > 0);
+
 function ageHoursOf(c, now) {
   const created = typeof c.createdAt === 'string' ? Date.parse(c.createdAt) : NaN;
   if (Number.isFinite(created)) return Math.max(0, (now - created) / 3_600_000);
@@ -52,8 +59,11 @@ function gapReason(total, counts) {
   if (total === 0) return 'no candidates';
   const live = total - counts.used - counts.stale - counts.unknownAge;
   if (live === 0) return 'no fresh candidates';
-  if (counts.blocked === 0) return `${live} candidates, none on a P1 vein`;
-  return `${live} fresh candidates, none usable (${counts.blocked} blocked, ${counts.offVein} off-vein)`;
+  if (counts.blocked === 0 && counts.noMedia === 0 && counts.addressesBot === 0) return `${live} candidates, none on a P1 vein`;
+  const parts = [`${counts.blocked} blocked`, `${counts.offVein} off-vein`];
+  if (counts.noMedia > 0) parts.push(`${counts.noMedia} no media`);
+  if (counts.addressesBot > 0) parts.push(`${counts.addressesBot} addresses an AI bot`);
+  return `${live} fresh candidates, none usable (${parts.join(', ')})`;
 }
 
 /**
@@ -66,7 +76,7 @@ function gapReason(total, counts) {
  * @returns {{slot, post, fit:{vein,lane,reason}, related, rejected} | {slot, gap:{code,reason}, rejected}}
  */
 export function fillQuoteSlot({ slot, candidates, now, usedIds = [], related = [] }) {
-  const rejected = { used: 0, stale: 0, unknownAge: 0, blocked: 0, offVein: 0 };
+  const rejected = { used: 0, stale: 0, unknownAge: 0, blocked: 0, offVein: 0, noMedia: 0, addressesBot: 0 };
   const list = Array.isArray(candidates) ? candidates : [];
   const gap = (reason) => ({ slot, gap: { code: `slot-unfilled:${slot?.letter}`, reason }, rejected });
   if (!QUOTE_TYPES.has(slot?.type)) return gap(`not a quote slot (${slot?.type})`);
@@ -80,12 +90,16 @@ export function fillQuoteSlot({ slot, candidates, now, usedIds = [], related = [
     if (age > QUOTE_WINDOW_HOURS) { rejected.stale += 1; continue; }
 
     // Hard blocks (casino, politics) apply even to a post the scan tagged with a vein.
-    const verdict = guardXPost({ text: c.text, type: slot.type, media: c.hasMedia ? 'image' : 'none' });
+    const verdict = guardXPost({ text: c.text, type: slot.type, media: hasMediaOf(c) ? 'image' : 'none' });
     if (verdict.hardBlock) { rejected.blocked += 1; continue; }
 
     // A scan vein is trusted; without one the guard lane must be a known one.
     const lane = c.vein ? verdict.lane : classifyLane(c.text).lane;
     if (!c.vein && lane === 'unknown') { rejected.offVein += 1; continue; }
+    // Fit gates run after vein/lane so the counts say why an otherwise on-vein post was dropped.
+    // P1 requires media; a post that talks to an AI assistant is a prompt/joke, not a take to quote.
+    if (addressesBot(c)) { rejected.addressesBot += 1; continue; }
+    if (!hasMediaOf(c)) { rejected.noMedia += 1; continue; }
     eligible.push({ ...c, lane, ageHours: Math.round(age * 10) / 10 });
   }
   if (eligible.length === 0) return gap(gapReason(list.length, rejected));
