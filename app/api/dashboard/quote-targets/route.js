@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 import { randomUUID } from 'crypto';
-import { createSocialPost, readSocialQueue, createDraftPostOnce } from '../../../../features/social-posting/twitter-service.js';
+import { createSocialPost, readSocialQueue, createDraftPostOnce, ensureDraftPost, findOpenPostForPackage } from '../../../../features/social-posting/twitter-service.js';
 import { buildDayPlan } from '../../../../features/x-quote-targets/day-plan.js';
 // Static import so Next bundles the calendar — docs/audits/ is NOT in
 // .vercelignore, but a runtime fs read of a repo path is fragile on serverless.
@@ -581,11 +581,9 @@ async function handleCreateDraftFromItem(context, body) {
   const bridge = loadBridge();
   return createDraftFromItem({
     getPackage,
-    async findDraft(packageId) {
-      const snap = await fb.adminDb.collection('social_posts').where('packageId', '==', packageId).limit(10).get();
-      const rows = snap.docs.map((d) => d.data());
-      return rows.find((r) => r.status === 'draft' || r.status === 'scheduled') || rows[0] || null;
-    },
+    // Client-scoped, any open status (draft/approved/scheduled/queued/...): one package, one open post.
+    findDraft: (packageId) => findOpenPostForPackage(context.clientId, packageId),
+    ensureDraft: (clientId, payload) => ensureDraftPost(clientId, payload),
     createPost: createSocialPost,
     patchPost: (postId, patch) => fb.adminDb.collection('social_posts').doc(postId).set(patch, { merge: true }),
     async signEvLong(p) {

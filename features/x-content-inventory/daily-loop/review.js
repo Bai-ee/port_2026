@@ -59,6 +59,8 @@ export async function saveSuggestionDraft(deps, { key, suggestionId, text }) {
   }
 
   const postId = socialPostIdFor(s.id);
+  const planVersion = run?.strategySource?.planVersion;
+  const expiresAt = s.expiresAt || s.package?.expiresAt || null;
   const { post, existing } = await deps.createDraftPostOnce(key.clientId, postId, {
     content: composeQueueContent(s, finalText),
     platform: 'x',
@@ -81,6 +83,13 @@ export async function saveSuggestionDraft(deps, { key, suggestionId, text }) {
     },
     xStrategy: { postType: guardTypeFor(s), source: 'daily-loop' },
     algorithmProfileVersion: checks.score?.profile || null,
+    // Provenance (lifecycle v2).
+    runId: runDocId(key),
+    suggestionId: s.id,
+    ...(typeof planVersion === 'number' ? { strategyVersion: planVersion } : {}),
+    channel: 'x',
+    ...(expiresAt ? { expiresAt } : {}),
+    lifecycleVersion: 2,
   });
 
   await deps.store.updateSuggestion(key, s.id, () => ({

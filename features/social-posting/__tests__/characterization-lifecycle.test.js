@@ -326,14 +326,14 @@ test('postNow: success stores a posted row with twitterId and publishes immediat
   assert.equal(tweets[0].text, 'Right now.');
 });
 
-test('postNow: failure stores status failed (without retryable/errorClass) and rethrows', async () => {
+test('postNow: failure stores status failed (PHASE 2: retryable=false + errorClass) and rethrows', async () => {
   tweetError = Object.assign(new Error('nope'), { code: 400 });
   await assert.rejects(svc.postNow('c1', { content: 'Will fail.' }));
   const [row] = await svc.readSocialQueue('c1');
   assert.equal(row.status, 'failed');
   assert.equal(row.error, 'X rejected the request as invalid.');
-  assert.equal('retryable' in row, false);
-  assert.equal('errorClass' in row, false);
+  assert.equal(row.retryable, false);
+  assert.equal(row.errorClass, 'client-error');
 });
 
 test('CURRENT: postNow skips assertSchedulable - a needsApproval post publishes immediately; placeholder is still blocked', async () => {
@@ -355,13 +355,14 @@ test('publishApprovedPost: awaiting_approval publishes to posted with approvalSo
   await assert.rejects(svc.publishApprovedPost('c2', p.id), { status: 404 });
 });
 
-test('publishApprovedPost: failed publish stores failed (no retryable/errorClass) and rethrows', async () => {
+test('publishApprovedPost: failed publish stores failed (PHASE 2: retryable=false + errorClass) and rethrows', async () => {
   const p = await svc.createSocialPost('c1', { content: 'Will fail.', status: 'awaiting_approval' });
   tweetError = Object.assign(new Error('x down'), { code: 400 });
   await assert.rejects(svc.publishApprovedPost('c1', p.id));
   assert.equal(raw(p.id).status, 'failed');
   assert.equal(raw(p.id).error, 'X rejected the request as invalid.');
-  assert.equal('retryable' in raw(p.id), false);
+  assert.equal(raw(p.id).retryable, false);
+  assert.equal(raw(p.id).errorClass, 'client-error');
 });
 
 test('CURRENT: publishApprovedPost does not run assertSchedulable - needsApproval flag does not block it', async () => {

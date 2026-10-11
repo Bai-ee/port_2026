@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { config as loadDotenv } from 'dotenv';
@@ -8,6 +9,7 @@ import { compactTwitterError, mapTwitterError } from './twitter-errors.js';
 import { getAdapter } from './adapters/index.js';
 import { storySyncPlan } from '../discogs-ingest/draft-builder.js';
 import { needsApproval } from '../x-content-inventory/schema.js';
+import { LIFECYCLE_VERSION, OPEN_STATUSES, APPROVAL_VOID_STATUSES, isV2, packageClearance, replyBlock, findPackageCollision, isMaterialEdit, deliveryBlock } from './lifecycle.js';
 import { assertNoMemoryPlaceholder, hasMemoryPlaceholder, sanitizeMediaVariants, sanitizeSelfReply, sanitizeSourceRef } from './self-reply.js';
 
 const require = createRequire(import.meta.url);
@@ -783,6 +785,89 @@ export async function createDraftPostOnce(clientId, postId, payload) {
   }
 }
 
+/**
+ * The shared producer entry point: one durable draft per (client, idempotencyKey). Repeated calls
+ * (double click, retry, a second producer with the same key) return the SAME post id. Rows are v2.
+ */
+export async function ensureDraftPost(clientId, { idempotencyKey, ...payload } = {}) {
+  const key = String(idempotencyKey || '').trim();
+  if (!clientId || !key) {
+    const err = new Error('ensureDraftPost needs a clientId and an idempotencyKey.');
+    err.status = 400;
+    throw err;
+  }
+  // A key maps to one open row. If that row has reached a terminal state (posted/failed/expired/rejected), the
+  // next generation of the key gets a fresh id, so re-drafting after a post or failure still works.
+  for (let gen = 0; gen < 25; gen += 1) {
+    const postId = `social_${createHash('sha1').update(`${clientId}|${key}${gen ? `#${gen}` : ''}`).digest('hex').slice(0, 24)}`;
+    const res = await createDraftPostOnce(clientId, postId, { ...payload, lifecycleVersion: LIFECYCLE_VERSION, idempotencyKey: key });
+    if (!res.existing || OPEN_STATUSES.includes(res.post?.status)) return res;
+  }
+  throw Object.assign(new Error('Too many prior posts for this idempotency key.'), { status: 409 });
+}
+
+/** Client-scoped: the newest still-open row for a package (any open status), or null. */
+export async function findOpenPostForPackage(clientId, packageId) {
+  if (!clientId || !packageId) return null;
+  const snap = await postsCol().where('clientId', '==', clientId).where('packageId', '==', packageId).get();
+  const rows = snap.docs.map((d) => d.data()).filter((r) => OPEN_STATUSES.includes(r.status));
+  rows.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+  return rows[0] || null;
+}
+
+async function loadPackageForRules(packageId) {
+  if (!packageId) return null;
+  const { getPackage } = await import('../x-content-inventory/store.js');
+  return getPackage(packageId);
+}
+
+// KNOWN LIMIT: the collision check below is read-then-write, so two truly concurrent schedules of the same
+// package can both pass. Sequential producers (the supported case) are blocked; a transaction/slot doc is future work.
+// New scheduling action only: a reply must not become a standalone original, cleared material only,
+// and one package cannot sit in the queue twice. Runs AFTER the approval gate (assertSchedulable).
+async function assertSchedulingRules(post, { clientId, selfId = null }) {
+  const reply = replyBlock(post);
+  if (!reply.ok) throw Object.assign(new Error(reply.reason), { status: 409, code: reply.code });
+  if (!post.packageId) return;
+  let pkg;
+  try {
+    pkg = await loadPackageForRules(post.packageId);
+  } catch {
+    throw Object.assign(new Error('Could not verify clearance for this package. Try again.'), { status: 409, code: 'clearance-unverifiable' });
+  }
+  const clearance = packageClearance(pkg);
+  if (!clearance.ok) throw Object.assign(new Error(clearance.reason), { status: 409, code: clearance.code });
+  const snap = await postsCol().where('clientId', '==', clientId).where('packageId', '==', post.packageId).get();
+  const dupe = findPackageCollision(snap.docs.map((d) => d.data()), { packageId: post.packageId, selfId });
+  if (dupe) {
+    throw Object.assign(new Error(`This package is already ${dupe.status} as another post (${dupe.id}). Schedule that one or remove it first.`), { status: 409, code: 'package-already-pending', existingPostId: dupe.id });
+  }
+}
+
+// Delivery-time recheck for lifecycleVersion-2 rows: park as needs_review instead of publishing.
+async function parkIfBlockedAtDelivery(post) {
+  if (!isV2(post)) return null;
+  let pkg = null;
+  let lookupFailed = false;
+  if (post.packageId) {
+    try { pkg = await loadPackageForRules(post.packageId); } catch { lookupFailed = true; }
+  }
+  const block = lookupFailed
+    ? { code: 'clearance-unverifiable', reason: 'Could not verify package clearance at delivery time.' }
+    : deliveryBlock(post, { pkg, now: Date.now() });
+  if (!block) return null;
+  const parked = {
+    ...post,
+    status: 'needs_review',
+    error: `Held at delivery: ${block.reason}`,
+    errorClass: block.code,
+    retryable: false,
+    updatedAt: new Date().toISOString(),
+  };
+  await savePost(parked);
+  return parked;
+}
+
 function buildSocialPostRecord(clientId, payload, id) {
   const now = new Date().toISOString();
   const content = normalizePostText(payload.content);
@@ -848,6 +933,15 @@ function buildSocialPostRecord(clientId, payload, id) {
     priority: cleanStr(payload.priority, 20),
     needsApproval: payload.needsApproval === true,
     attempts: 0,
+    // Additive provenance (only present when the producer supplies it, so legacy rows keep their exact shape).
+    // lifecycleVersion 2 opts the row into the stricter edit/delivery rules in ./lifecycle.js.
+    ...(payload.lifecycleVersion === LIFECYCLE_VERSION ? { lifecycleVersion: LIFECYCLE_VERSION } : {}),
+    ...(cleanStr(payload.idempotencyKey, 200) ? { idempotencyKey: cleanStr(payload.idempotencyKey, 200) } : {}),
+    ...(cleanStr(payload.runId, 160) ? { runId: cleanStr(payload.runId, 160) } : {}),
+    ...(cleanStr(payload.suggestionId, 160) ? { suggestionId: cleanStr(payload.suggestionId, 160) } : {}),
+    ...(Number.isFinite(Number(payload.strategyVersion)) && payload.strategyVersion !== null ? { strategyVersion: Number(payload.strategyVersion) } : {}),
+    ...(cleanStr(payload.channel, 40) ? { channel: cleanStr(payload.channel, 40) } : {}),
+    ...(cleanStr(payload.expiresAt, 40) ? { expiresAt: cleanStr(payload.expiresAt, 40) } : {}),
   };
 }
 
@@ -875,6 +969,9 @@ export async function postNow(clientId, payload) {
     const failed = {
       ...draft,
       status: 'failed',
+      // Explicitly non-retryable: nothing re-sends a post-now failure; the class is for the operator.
+      retryable: false,
+      errorClass: classifyPublishError(error).errorClass,
       error: error.message || 'Failed to post.',
       errorHint: error.hint || null,
       twitterError: error.twitterError || null,
@@ -907,6 +1004,10 @@ export async function publishApprovedPost(clientId, postId, { source = 'email' }
   }
   assertNoMemoryPlaceholder(post.content);
   assertNoMemoryPlaceholder(post.selfReply?.text);
+  const held = await parkIfBlockedAtDelivery(post);
+  if (held) {
+    throw Object.assign(new Error(held.error), { status: 409, code: held.errorClass });
+  }
   const now = new Date().toISOString();
   try {
     const result = await publishStoredPost({ ...post, clientId }, now);
@@ -929,6 +1030,8 @@ export async function publishApprovedPost(clientId, postId, { source = 'email' }
     const failed = {
       ...post,
       status: 'failed',
+      retryable: false,
+      errorClass: classifyPublishError(error).errorClass,
       error: error.message || 'Failed to post.',
       errorHint: error.hint || null,
       approvedAt: now,
@@ -1004,6 +1107,10 @@ export async function rejectSocialPost(clientId, postId) {
 async function assertSchedulable(post) {
   const reviewed = post.status === 'approved' || Boolean(post.reviewedAt);
   if (reviewed) return;
+  // lifecycleVersion-2 rows: approval is a separate step and always precedes scheduling.
+  if (isV2(post)) {
+    throw Object.assign(new Error('Approve this draft before scheduling it.'), { status: 409, code: 'approval-required' });
+  }
   let needs = post.needsApproval === true;
   if (!needs && post.packageId) {
     const { getPackage } = await import('../x-content-inventory/store.js');
@@ -1056,6 +1163,7 @@ export async function schedulePost(clientId, payload) {
     throw err;
   }
   await assertSchedulable({ ...payload, status: 'draft' });
+  await assertSchedulingRules({ ...payload, status: 'draft' }, { clientId });
   return createSocialPost(clientId, {
     ...payload,
     status: scheduledAt.getTime() <= Date.now() ? 'queued' : 'scheduled',
@@ -1240,12 +1348,33 @@ export async function updateSocialPost(clientId, postId, payload = {}) {
   const contentChanged = content !== post.content;
   let reviewedAt = post.reviewedAt || null;
   let reviewedBy = post.reviewedBy || null;
+  let approvalVoided = false;
   if (contentChanged && post.status === 'approved') {
     status = 'draft';
     reviewedAt = null;
     reviewedBy = null;
   }
-  if (hasOwn(payload, 'scheduledAt')) {
+  // lifecycleVersion-2 rows: ANY material edit (text, self-reply, media, reply target) voids approval and the
+  // schedule, not just a text edit of an approved draft. Legacy rows keep the rule above.
+  if (isV2(post) && APPROVAL_VOID_STATUSES.includes(post.status) && status !== 'draft') {
+    const next = {
+      ...post,
+      content,
+      selfReply: hasOwn(payload, 'selfReply') ? sanitizeSelfReply(payload.selfReply) : post.selfReply,
+      mediaVariants: hasOwn(payload, 'mediaVariants') ? sanitizeMediaVariants(payload.mediaVariants) : post.mediaVariants,
+    };
+    if (isMaterialEdit(post, next)) {
+      status = 'draft';
+      scheduledAt = null;
+      reviewedAt = null;
+      reviewedBy = null;
+      approvalVoided = true;
+    }
+  }
+  // An edit that voided approval keeps the row a draft even if the client re-sent the old schedule time.
+  const resentOldSchedule = approvalVoided && hasOwn(payload, 'scheduledAt')
+    && payload.scheduledAt && new Date(payload.scheduledAt).toISOString() === (post.scheduledAt || null);
+  if (hasOwn(payload, 'scheduledAt') && !resentOldSchedule) {
     if (!payload.scheduledAt) {
       scheduledAt = null;
       if (status === 'scheduled' || status === 'queued') status = reviewedAt ? 'approved' : 'draft';
@@ -1264,6 +1393,10 @@ export async function updateSocialPost(clientId, postId, payload = {}) {
         packageId: hasOwn(payload, 'packageId') ? cleanStr(payload.packageId, 160) : post.packageId,
         needsApproval: payload.needsApproval === true || post.needsApproval === true,
       });
+      await assertSchedulingRules({
+        ...post,
+        packageId: hasOwn(payload, 'packageId') ? cleanStr(payload.packageId, 160) : post.packageId,
+      }, { clientId, selfId: post.id });
       status = dt.getTime() <= Date.now() ? 'queued' : 'scheduled';
     }
   }
@@ -1318,6 +1451,8 @@ async function syncDiscogsStory(post, content) {
 async function postAndRecord(snapshot) {
   const post = await claimDuePost(snapshot.id);
   if (!post) return { ok: false, skipped: true, updated: snapshot };
+  const held = await parkIfBlockedAtDelivery(post);
+  if (held) return { ok: false, updated: held };
   // Placeholder guard (same rule as post-now/schedule): never publish a draft
   // that still says "[add your memory]". Park it as a draft with a reason.
   if (hasMemoryPlaceholder(post.content) || hasMemoryPlaceholder(post.selfReply?.text)) {

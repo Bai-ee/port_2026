@@ -168,3 +168,31 @@ test('regenerate keeps a dismissed suggestion dismissed (it is not resurrected a
   assert.equal(kept.length, 1);
   assert.equal(kept[0].reviewState, 'dismissed');
 });
+
+test('PHASE 2: save persists provenance (runId, suggestionId, strategyVersion, channel, lifecycleVersion) and keeps the deterministic id', async () => {
+  const { run, key, deps, calls } = await setup();
+  const s = run.suggestions[0];
+  const r = await saveSuggestionDraft(deps, { key, suggestionId: s.id });
+  assert.equal(r.postId, `social_${s.id}`);
+  const p = calls[0].payload;
+  assert.equal(p.runId, `${key.clientId}__${key.localDate}__x__v${key.version}`);
+  assert.equal(p.suggestionId, s.id);
+  assert.equal(p.channel, 'x');
+  assert.equal(p.lifecycleVersion, 2);
+  const pv = run.strategySource?.planVersion;
+  if (typeof pv === 'number') assert.equal(p.strategyVersion, pv); else assert.equal('strategyVersion' in p, false);
+});
+
+test('PHASE 2: strategyVersion is persisted when the run carries a numeric planVersion; expiresAt only when the suggestion has one', async () => {
+  const { run, key, deps, calls, store } = await setup();
+  const s = run.suggestions[0];
+  await store.updateSuggestion(key, s.id, () => ({ expiresAt: '2026-10-12T00:00:00.000Z' }));
+  const orig = store.read.bind(store);
+  store.read = async (k) => ({ ...(await orig(k)), strategySource: { planSource: 'plan-doc', planVersion: 7 } });
+  await saveSuggestionDraft(deps, { key, suggestionId: s.id });
+  assert.equal(calls[0].payload.strategyVersion, 7);
+  assert.equal(calls[0].payload.expiresAt, '2026-10-12T00:00:00.000Z');
+  const o = await setup();
+  await saveSuggestionDraft(o.deps, { key: o.key, suggestionId: o.run.suggestions[1].id });
+  assert.equal('expiresAt' in o.calls[0].payload, false);
+});

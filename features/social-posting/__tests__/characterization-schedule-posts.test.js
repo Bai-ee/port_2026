@@ -182,13 +182,13 @@ test('CURRENT (known gap): post-now has no idempotency -- the same content poste
   assert.equal((await svc.readSocialQueue('c1')).length, 2);
 });
 
-test('CURRENT (known gap): post-now failure carries no retryable/errorClass classification (only the sweep path does)', async () => {
+test('PHASE 2: post-now failure is classified and explicitly non-retryable (never re-sent)', async () => {
   tweetError = Object.assign(new Error('rate'), { code: 429 });
   await assert.rejects(() => svc.postNow('c1', { content: 'Rate limited.' }));
   const [row] = await svc.readSocialQueue('c1');
   assert.equal(row.status, 'failed');
-  assert.equal(row.retryable, undefined);
-  assert.equal(row.errorClass, undefined);
+  assert.equal(row.retryable, false);
+  assert.ok(row.errorClass);
 });
 
 // ── default (draft) ─────────────────────────────────────────────────────────
