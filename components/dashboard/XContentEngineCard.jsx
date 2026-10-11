@@ -444,7 +444,7 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
       ) : null}
 
       {tab === 'plan' || tab === 'today' || tab === 'calendar' ? (
-        <InputStatusStrip call={call} clientKey={activeClientId} onOpenStrategy={() => pickTab('strategy')} />
+        <InputStatusStrip call={call} clientKey={activeClientId} defaultOpen={tab !== 'calendar'} onOpenStrategy={() => pickTab('strategy')} />
       ) : null}
 
       {tab === 'strategy' ? (

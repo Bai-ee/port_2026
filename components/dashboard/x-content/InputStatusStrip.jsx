@@ -23,11 +23,14 @@ function fix(input, { onOpenStrategy }) {
   }
 }
 
-export default function InputStatusStrip({ call, clientKey, onOpenStrategy }) {
+export default function InputStatusStrip({ call, clientKey, onOpenStrategy, defaultOpen = true }) {
   const [inputs, setInputs] = useState(null);
   const [workerLine, setWorkerLine] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  // Open by default only where it matters (Today); the operator's own toggle always wins. On Queue & Calendar it starts
+  // collapsed so the calendar is the first thing on screen.
+  const [userOpen, setUserOpen] = useState(null);
   const keyRef = useRef(clientKey);
   keyRef.current = clientKey;
 
@@ -56,7 +59,7 @@ export default function InputStatusStrip({ call, clientKey, onOpenStrategy }) {
   const attention = rows.filter((i) => !i.usable || i.caveats.some((c) => /stale|No saved plan|failed to load/i.test(c)));
 
   return (
-    <details id="x-content-input-status-strip" className="xce-is" open={attention.length > 0}>
+    <details id="x-content-input-status-strip" className="xce-is" open={userOpen ?? (defaultOpen && attention.length > 0)} onToggle={(e) => { if (e.currentTarget.open !== (userOpen ?? (defaultOpen && attention.length > 0))) setUserOpen(e.currentTarget.open); }}>
       <summary id="x-content-input-status-summary" className="xce-is-summary">
         <span className="xce-is-title">Inputs</span>
         {error ? <span className="xce-is-bad">status unavailable</span>

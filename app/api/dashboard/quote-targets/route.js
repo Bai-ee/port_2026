@@ -20,9 +20,7 @@ import { ageHoursOf, DEFAULT_WINDOW_HOURS } from '../../../../features/x-quote-t
 import { buildPostResults } from '../../../../features/x-content-inventory/results.js';
 import { recentPostsFromQueue } from '../../../../features/x-content-inventory/allocate-slot.js';
 import { buildMonthCalendar, ctDate } from '../../../../features/x-content-inventory/month-calendar.js';
-import { buildWeekCalendar } from '../../../../features/x-content-inventory/week-calendar.js';
 import { joinPerformance, engineStats } from '../../../../features/x-content-inventory/performance.js';
-import { mergeEngineConfig } from '../../../../features/x-content-inventory/engine-quota.js';
 import * as bucketStore from '../../../../features/x-content-inventory/bucket-store.js';
 import { normalizeFacets } from '../../../../features/x-content-inventory/facets.js';
 import { resolveMediaUrls } from '../../../../features/rendered-videos/media-url.js';
@@ -299,7 +297,6 @@ const SUPPORTED_ACTIONS = [
   'inventory-list',
   'inventory-save',
   'inventory-delete',
-  'week-calendar',
   'month-calendar',
   'content-context',
   'post-status',
@@ -324,7 +321,6 @@ const SUPPORTED_ACTIONS = [
   ...DAILY_RUN_ACTIONS,
 ];
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 // `content-plan` and `refresh-analysis` live in features/x-strategy/content-plan.js: they read the client's Strategy
 // plan doc (x_strategy_plans) and corpus ROWS (x_corpora rows, committed-JSON fallback) so the Plan tab, the
 // Strategy tab and the daily loop share one plan. Built lazily on first use (no Firestore at import).
@@ -377,30 +373,6 @@ async function handleInventorySave(context, body) {
 async function handleInventoryDelete(context, body) {
   const { removed } = await deletePackage(body?.id);
   return { ok: true, removed };
-}
-
-/**
- * Week calendar over social_posts. Read-only: the buttons on the card call the
- * existing social-posting actions (approve-draft / schedule), never this route.
- * Reads the whole client queue and filters in memory, which needs no new index.
- */
-async function handleWeekCalendar(context, body) {
-  const start = typeof body?.start === 'string' && DATE_RE.test(body.start.trim())
-    ? body.start.trim()
-    : new Date().toISOString().slice(0, 10);
-
-  let overrides = null;
-  try {
-    const snap = await fb.adminDb.collection('content_system_config').doc('x').get();
-    overrides = snap.exists ? snap.data() : null;
-  } catch {
-    // Config is advisory; defaults keep the calendar usable.
-  }
-  // The saved plan's engine targets win when a plan doc exists; otherwise the legacy global override applies.
-  const planDoc = await createFirestorePlanStore(fb.adminDb).get(context.clientId).catch(() => null);
-  const config = resolveCalendarEngineConfig({ planDoc, legacyOverrides: overrides });
-  const posts = await readSocialQueue(context.clientId);
-  return { ok: true, calendar: buildWeekCalendar({ posts, start, config }) };
 }
 
 /**
@@ -886,9 +858,6 @@ export async function POST(request) {
     if (action === 'inventory-delete') {
       const result = await handleInventoryDelete(context, body);
       return json(result);
-    }
-    if (action === 'week-calendar') {
-      return json(await handleWeekCalendar(context, body));
     }
     if (action === 'content-context') {
       return json({ ok: true, context: summarizeContentContext(await readContentContext(context.clientId)) });

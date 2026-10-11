@@ -153,7 +153,9 @@ export default function PostSheet({ post, busy, queue, onNavigate, onClose, onAp
   useEffect(() => {
     const onKey = (e) => {
       const cur = latest.current;
-      if (e.key === 'Escape') { e.preventDefault(); cur.requestClose(); return; }
+      // Capture phase + stopPropagation: Escape closes THIS sheet only. The dashboard's own Escape handler (which
+      // closes the whole Content Engine modal) must not also fire and drop the operator's place and unsaved edits.
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); cur.requestClose(); return; }
       if (e.key === 'Tab') {
         const root = sheetRef.current;
         if (!root) return;
@@ -173,8 +175,8 @@ export default function PostSheet({ post, busy, queue, onNavigate, onClose, onAp
       if (k === 'j' && cur.nextId) { e.preventDefault(); cur.onNavigate(cur.nextId); }
       else if (k === 'k' && cur.prevId) { e.preventDefault(); cur.onNavigate(cur.prevId); }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
   }, []);
 
   // Editing clears the discard prompt (the user is clearly not discarding).

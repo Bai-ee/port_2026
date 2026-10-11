@@ -102,7 +102,7 @@ function SavedPostFlow({ s, call, callSocial, showToast, onOpenQueue }) {
 
   return (
     <div id={`daily-suggestion-saved-flow-${s.id}`} className="xce-dl-saved-flow">
-      <span id={`daily-suggestion-saved-note-${s.id}`} className="xce-dl-ok">Saved as draft · post {postId}</span>
+      <span id={`daily-suggestion-saved-note-${s.id}`} className="xce-dl-ok">{post && post.status !== 'draft' ? 'Saved post' : 'Saved as draft'} · post {postId}</span>
       <span id={`daily-suggestion-post-status-${s.id}`} className="xce-dl-status" role="status">
         {post ? `${STATUS_LINE[post.status] || post.status}${post.scheduledAt ? ` · ${new Date(post.scheduledAt).toLocaleString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} CT` : ''}` : 'checking status…'}
         {post?.status === 'needs_review' && post.errorClass ? ` — held because ${HOLD_REASON[post.errorClass] || post.errorClass}` : ''}
