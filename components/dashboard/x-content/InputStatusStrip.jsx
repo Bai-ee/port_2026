@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
+import { workerHealthLine } from '../../../features/x-strategy/ui-model.js';
 
 // Input status for Content Management: what the daily runner and the chat are working from, each with source,
 // age, and a direct fix. Data = the shared server context (`content-context` action); nothing is computed here
@@ -24,6 +25,7 @@ function fix(input, { onOpenStrategy }) {
 
 export default function InputStatusStrip({ call, clientKey, onOpenStrategy }) {
   const [inputs, setInputs] = useState(null);
+  const [workerLine, setWorkerLine] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const keyRef = useRef(clientKey);
@@ -37,6 +39,10 @@ export default function InputStatusStrip({ call, clientKey, onOpenStrategy }) {
       const res = await call('content-context');
       if (keyRef.current !== startedFor) return; // client switched while loading: drop the late response
       setInputs(res?.context?.inputs || []);
+      // Heartbeat is best-effort: any failure keeps the 'status unknown' fallback.
+      let line = null;
+      try { line = workerHealthLine((await call('strategy-refresh-status', { clientId: startedFor, workerOnly: true }))?.workerHealth); } catch { line = null; }
+      if (keyRef.current === startedFor) setWorkerLine(line);
     } catch (err) {
       if (keyRef.current === startedFor) setError(err.message || 'Could not read input status.');
     } finally {
@@ -44,7 +50,7 @@ export default function InputStatusStrip({ call, clientKey, onOpenStrategy }) {
     }
   }, [call]);
 
-  useEffect(() => { setInputs(null); load(); }, [clientKey, load]);
+  useEffect(() => { setInputs(null); setWorkerLine(null); load(); }, [clientKey, load]);
 
   const rows = (inputs || []).filter((i) => ORDER.includes(i.id)).sort((a, b) => ORDER.indexOf(a.id) - ORDER.indexOf(b.id));
   const attention = rows.filter((i) => !i.usable || i.caveats.some((c) => /stale|No saved plan|failed to load/i.test(c)));
@@ -85,9 +91,9 @@ export default function InputStatusStrip({ call, clientKey, onOpenStrategy }) {
         <li id="x-content-input-status-worker" className="xce-is-item xce-is-item-warn">
           <div className="xce-is-head">
             <strong>Refresh worker</strong>
-            <span className="xce-is-warn">status unknown</span>
+            <span id="x-content-input-status-worker-state" className="xce-is-warn">{workerLine || 'status unknown'}</span>
           </div>
-          <p className="xce-is-caveat">The app has no heartbeat from the local refresh/scan worker. A refresh you request shows “queued” until the worker finishes it; if it stays queued, the worker is not running.</p>
+          <p className="xce-is-caveat">{workerLine ? 'Based on the worker’s last check-in. A refresh you request shows “queued” until the worker picks it up.' : 'The app has no heartbeat from the local refresh/scan worker. A refresh you request shows “queued” until the worker finishes it; if it stays queued, the worker is not running.'}</p>
         </li>
       </ul>
       <details id="x-content-input-status-setup" className="xce-is-setup">

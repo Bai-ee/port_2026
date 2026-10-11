@@ -86,6 +86,18 @@ export function refreshStatusView(request, { polls = 0 } = {}) {
   return { headline, tone, lines, hint, active: refreshIsActive(status) };
 }
 
+// ---- worker heartbeat ------------------------------------------------------------------------------------
+const spanText = (min) => (min < 1 ? 'less than a minute' : min < 60 ? `${min} min` : `${Math.round(min / 60)} h`);
+
+/** Honest one-liner from readWorkerHealth(); null when the payload has no workerHealth (caller keeps its fallback). */
+export function workerHealthLine(health) {
+  if (!isObj(health) || !['recent', 'stale', 'never'].includes(health.state)) return null;
+  if (health.state === 'never') return 'Worker has never reported in (not running, or an older worker without this signal)';
+  const min = Number.isFinite(health.ageMinutes) ? health.ageMinutes : 0;
+  if (health.state === 'recent') return min < 1 ? 'Worker last seen just now' : `Worker last seen ${min} min ago`;
+  return `Worker not seen for ${spanText(min)} — refresh requests will stay queued until it runs`;
+}
+
 // ---- evaluation ------------------------------------------------------------------------------------------
 /** "Tier 2 - 6/day (Label)" from a tier object {tier, authoredPerDay, label} or a bare tier number. */
 export function tierText(t) {

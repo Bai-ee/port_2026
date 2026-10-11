@@ -110,6 +110,51 @@ export function createFirestoreRefreshQueue(db) {
   };
 }
 
+// ---- worker heartbeat ------------------------------------------------------------------------------------
+// The Mac worker writes x_strategy_workers/{workerId} on every poll (even with an empty queue). The app only reads it.
+// It proves "the worker polled at T", nothing more: no claim of online/offline is made from it.
+
+export const WORKER_COLLECTION = 'x_strategy_workers';
+export const WORKER_VERSION = 'strategy-refresh-worker/1';
+export const WORKER_STALE_AFTER_MINUTES = 15;
+
+const toMs = (v) => (typeof v === 'number' ? v : v instanceof Date ? v.getTime() : Date.parse(v));
+
+/** Upsert the heartbeat doc (merge). lastRequestId is only written when a request id is given, so an idle poll keeps the last one. */
+export async function recordWorkerSeen(db, { workerId, now = Date.now(), requestId = null } = {}) {
+  const id = String(workerId || '').trim();
+  if (!id || id.includes('/')) throw new Error('recordWorkerSeen: a valid workerId is required');
+  const at = new Date(toMs(now)).toISOString();
+  const doc = { lastSeenAt: at, lastPollAt: at, version: WORKER_VERSION, ...(requestId ? { lastRequestId: String(requestId) } : {}) };
+  await db.collection(WORKER_COLLECTION).doc(id).set(doc, { merge: true });
+  return doc;
+}
+
+/**
+ * Honest worker signal. state: 'recent' (seen <= 15 min ago) | 'stale' | 'never' (no heartbeat doc at all).
+ * oldestQueuedAgeMinutes counts only status==='queued' requests carrying THIS clientId (legacy requests without one are ignored).
+ * Single-field equality reads only (no composite index).
+ */
+export async function readWorkerHealth(db, { now = Date.now(), clientId = null } = {}) {
+  const nowMs = toMs(now);
+  const [workers, queued] = await Promise.all([
+    db.collection(WORKER_COLLECTION).limit(50).get(),
+    clientId ? db.collection(STRATEGY_COLLECTIONS.refreshRequests).where('status', '==', REQUEST_STATUS.QUEUED).limit(200).get() : Promise.resolve({ docs: [] }),
+  ]);
+  const seen = workers.docs.map((d) => toMs(d.data()?.lastSeenAt)).filter(Number.isFinite);
+  const last = seen.length ? Math.max(...seen) : null;
+  const created = queued.docs.map((d) => d.data()).filter((d) => d.clientId === clientId).map((d) => toMs(d.createdAt)).filter(Number.isFinite);
+  const oldest = created.length ? Math.min(...created) : null;
+  const ageMinutes = last === null ? null : Math.max(0, Math.floor((nowMs - last) / 60000));
+  return {
+    lastSeenAt: last === null ? null : new Date(last).toISOString(),
+    ageMinutes,
+    state: last === null ? 'never' : ageMinutes > WORKER_STALE_AFTER_MINUTES ? 'stale' : 'recent',
+    staleAfterMinutes: WORKER_STALE_AFTER_MINUTES,
+    oldestQueuedAgeMinutes: oldest === null ? null : Math.max(0, Math.floor((nowMs - oldest) / 60000)),
+  };
+}
+
 // ---- service ---------------------------------------------------------------------------------------------
 
 /**
@@ -216,10 +261,10 @@ export function createRefreshService({
     return { status: 'done', ...base };
   }
 
-  async function requestRefresh({ handles, requestedBy } = {}) {
+  async function requestRefresh({ handles, requestedBy, clientId } = {}) {
     const list = normalizeRefreshHandles(handles);
     const id = idGen();
-    await queueStore.create({ id, handles: list, status: REQUEST_STATUS.QUEUED, requestedBy: requestedBy || null, createdAt: iso(), results: {} });
+    await queueStore.create({ id, handles: list, status: REQUEST_STATUS.QUEUED, requestedBy: requestedBy || null, ...(clientId ? { clientId } : {}), createdAt: iso(), results: {} });
     const out = { requestId: id, status: REQUEST_STATUS.QUEUED };
     if (isEnabled()) {
       const det = await detectBird().catch(() => ({ available: false }));

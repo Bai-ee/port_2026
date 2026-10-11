@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
+import { alertOnHeldPosts } from '../../../features/social-posting/publish-alert.js';
 import {
   approveAndSchedule,
   approveDraft,
@@ -102,11 +103,15 @@ export async function GET(request) {
     try {
       const maxParam = Number(new URL(request.url).searchParams.get('max'));
       const result = await processDuePostsForAllClients(Number.isFinite(maxParam) && maxParam > 0 ? { maxPerRun: Math.min(maxParam, 10) } : {});
+      // Owner alert when the run parked or failed anything (off unless PILOT_ALERT_* + RESEND_API_KEY are set).
+      const alert = await alertOnHeldPosts(result);
       return json({
         ok: true,
+        alert: alert.sent ? 'sent' : alert.reason,
         posted: result.posted.length,
         failed: result.failed.length,
         skipped: result.skipped.length,
+        expired: (result.expired || []).length,
         deferred: result.deferred,
         needsReview: result.needsReview.map((p) => p.id),
       });
@@ -173,7 +178,7 @@ export async function POST(request) {
         const { loadClientBrainContext } = require('../../../features/client-brain/store.cjs');
         clientBrainContext = await loadClientBrainContext(context.clientId, { useFor: 'socialPosts', maxChars: 1500 });
       } catch { /* non-fatal — fall back to brand-only tone */ }
-      const { voice, algo } = await enhancePost(body.content, { clientBrainContext });
+      const { voice, algo } = await enhancePost(body.content, { clientBrainContext, clientId: context.clientId });
       const scoreOf = (text) => scoreXPost(String(text || ''), { mediaType: body.mediaType || 'none' });
       const candidates = [
         { id: 'voice', label: 'Brand Voice', text: voice, score: scoreOf(voice) },

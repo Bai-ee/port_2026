@@ -102,7 +102,7 @@ export async function loadDailyLoopInputs(deps, { clientId, packageIds = null, c
   // caller degrade explicitly (recommendations paused) instead of planning against a queue it could not see.
   let recentPostsError = null;
   const recentPosts = deps.readRecentPosts
-    ? await Promise.resolve(deps.readRecentPosts(clientId)).catch((err) => { recentPostsError = err?.message || 'unreadable'; return null; })
+    ? await (async () => deps.readRecentPosts(clientId))().catch((err) => { recentPostsError = err?.message || 'unreadable'; return null; })
     : null;
 
   return {

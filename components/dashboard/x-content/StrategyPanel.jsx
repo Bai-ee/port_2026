@@ -9,7 +9,7 @@ import {
   PLANNABLE_SLOT_TYPES, freshnessLabel, rowCountOf, indexRowsMeta, cleanHandle, refreshStatusView, refreshIsActive,
   tierComparison, tierText, groupCaveats, comparisonRows, handlesDraftFromProfile, normalizeHandlesDraft, handlesDirty,
   validateHandlesDraft, planDraftFromPlan, planChangesFromDraft, draftTier, historyNewestFirst, historyDiffSummary,
-  todayPlanLine, planErrorView,
+  todayPlanLine, planErrorView, workerHealthLine,
 } from '../../../features/x-strategy/ui-model.js';
 import StrategyChat, { formatDayTime } from './StrategyChat.jsx';
 import { XCE_COLORS, XCE_RADII } from './xce-tokens';
@@ -712,6 +712,8 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
                     {refreshView.hint ? <div id="x-strategy-refresh-hint" style={{ marginTop: 4 }}>{refreshView.hint}</div> : null}
                   </div>
                 ) : null}
+
+                {workerHealthLine(data?.workerHealth) ? <div id="x-strategy-worker-health-line" style={S.note}>{workerHealthLine(data?.workerHealth)}</div> : null}
 
                 <div id="x-strategy-accounts-actions" style={S.stack}>
                   <button type="button" id="x-strategy-refresh-button" className="xce-btn" style={S.fullBtn} disabled={!profile || refreshing} onClick={() => startRefresh()}>

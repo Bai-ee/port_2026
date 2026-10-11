@@ -358,6 +358,7 @@ async function readDuePosts(clientId = null, { now = Date.now() } = {}) {
 
   const due = [];
   const stale = [];
+  const expired = [];
   const writes = [];
   const nowStamp = nowIso;
   for (const doc of snap.docs) {
@@ -386,6 +387,7 @@ async function readDuePosts(clientId = null, { now = Date.now() } = {}) {
         error: `Scheduled time was more than ${STALE_DUE_HOURS}h in the past when the due sweep ran — not posted.`,
         updatedAt: nowStamp,
       }).then((ok) => (ok ? releaseHeldSlot(post) : null)));
+      expired.push({ id: post.id, clientId: post.clientId, status: 'expired', errorClass: 'missed-window' });
       continue;
     }
     due.push(post);
@@ -410,7 +412,7 @@ async function readDuePosts(clientId = null, { now = Date.now() } = {}) {
   }
   if (writes.length) await Promise.all(writes);
   due.sort((a, b) => String(a.scheduledAt).localeCompare(String(b.scheduledAt)));
-  return { due, stale };
+  return { due, stale, expired };
 }
 
 function makeId() {
@@ -502,7 +504,7 @@ export async function generatePromoCopy(brand = {}, { clientBrainContext = '' } 
 // established voice (Client Brain), `algo` rewrites to score best on the X
 // algorithm. Mirrors generatePromoCopy's client/model. Always returns usable
 // text — on any failure both options fall back to the normalized original.
-export async function enhancePost(content, { clientBrainContext = '' } = {}) {
+export async function enhancePost(content, { clientBrainContext = '', clientId = null } = {}) {
   const base = normalizePostText(content).slice(0, 280);
   const fallback = { voice: base, algo: base };
   if (!base) return fallback;
@@ -529,6 +531,11 @@ export async function enhancePost(content, { clientBrainContext = '' } = {}) {
       system: 'You are a senior social media copy editor. Return only valid minified JSON, nothing else.',
       messages: [{ role: 'user', content: prompt }],
     });
+    // Spend visibility: this call used to be invisible on the Operating Cost card. Best-effort, never fails Enhance.
+    try {
+      const { logAnthropicCall } = require('../../api/_lib/usage-logger.cjs');
+      await logAnthropicCall({ module: 'social-posting', action: 'enhance-post', model: 'claude-sonnet-4-6', response: res, clientId });
+    } catch { /* logging only */ }
     let text = String(res?.content?.[0]?.text || '').trim();
     // Strip ```json fences if present, then isolate the JSON object.
     text = text.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
@@ -1571,10 +1578,12 @@ async function prepareUpdate(clientId, post, payload = {}) {
   let reviewedAt = post.reviewedAt || null;
   let reviewedBy = post.reviewedBy || null;
   let approvalVoided = false;
+  let voidHash = false;
   if (contentChanged && post.status === 'approved') {
     status = 'draft';
     reviewedAt = null;
     reviewedBy = null;
+    voidHash = true;
   }
   // lifecycleVersion-2 rows: ANY material edit (text, self-reply, media, reply target) voids approval and the
   // schedule, not just a text edit of an approved draft. Legacy rows keep the rule above.
@@ -1591,6 +1600,7 @@ async function prepareUpdate(clientId, post, payload = {}) {
       reviewedAt = null;
       reviewedBy = null;
       approvalVoided = true;
+      voidHash = true;
     }
   }
   // An edit that voided approval keeps the row a draft even if the client re-sent the old schedule time.
@@ -1642,6 +1652,7 @@ async function prepareUpdate(clientId, post, payload = {}) {
     ...(payload.needsApproval === true ? { needsApproval: true } : {}),
     reviewedAt,
     reviewedBy,
+    ...(voidHash ? { approvedHash: null } : {}),
     updatedAt: new Date().toISOString(),
   };
   const plan = storySyncPlan(post, content, null);
@@ -1820,7 +1831,7 @@ export async function retrySelfReply(clientId, postId) {
 // maxPerRun caps live publishes per sweep (oldest-due first); the rest simply stay
 // due for the next sweep. Rows skipped because another sweeper claimed them do not
 // count against the cap.
-async function runDueSweep({ due, stale }, { maxPerRun = DEFAULT_MAX_PER_RUN } = {}) {
+async function runDueSweep({ due, stale, expired = [] }, { maxPerRun = DEFAULT_MAX_PER_RUN } = {}) {
   const posted = [];
   const failed = [];
   const skipped = [];
@@ -1833,7 +1844,7 @@ async function runDueSweep({ due, stale }, { maxPerRun = DEFAULT_MAX_PER_RUN } =
     attempted += 1;
     (ok ? posted : failed).push(updated);
   }
-  return { posted, failed, skipped, needsReview: stale, deferred };
+  return { posted, failed, skipped, needsReview: stale, expired, deferred };
 }
 
 export async function processDuePosts(clientId, opts = {}) {

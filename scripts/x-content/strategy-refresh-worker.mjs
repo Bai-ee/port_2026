@@ -14,7 +14,8 @@
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRefreshService, createFirestoreRefreshQueue } from '../../features/x-strategy/refresh.js';
+import os from 'node:os';
+import { createRefreshService, createFirestoreRefreshQueue, recordWorkerSeen } from '../../features/x-strategy/refresh.js';
 import { createFirestoreCorpusStore } from '../../features/x-strategy/corpus-store.js';
 
 const require = createRequire(import.meta.url);
@@ -51,9 +52,15 @@ async function main() {
     log,
   });
 
+  // Heartbeat: x_strategy_workers/{workerId}. Never fatal: a failed write must not stop the drain.
+  const workerId = process.env.X_STRATEGY_WORKER_ID || `worker-${os.hostname().toLowerCase().replace(/[^a-z0-9_-]+/g, '-')}`;
+  const beat = (requestId = null) => recordWorkerSeen(db, { workerId, now: Date.now(), requestId }).catch((err) => log(`heartbeat failed: ${err?.message}`));
+
   do {
+    await beat();
     const res = await svc.drainQueue();
     log(`[${new Date().toISOString()}] drained ${res.processed}${res.reason ? ` (${res.reason})` : ''}${res.requests.length ? ` ${JSON.stringify(res.requests)}` : ''}`);
+    if (res.requests.length) await beat(res.requests[res.requests.length - 1].id);
     if (args.once) break;
     await sleep(args.loop * 1000);
   } while (true); // eslint-disable-line no-constant-condition

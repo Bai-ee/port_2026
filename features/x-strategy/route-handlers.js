@@ -14,7 +14,7 @@ import { DEFAULT_PLAN, EVALUATION_THRESHOLDS } from './contracts.js';
 import { evaluate as defaultEvaluate } from './evaluate.js';
 import { StrategyPlanError, createFirestorePlanStore } from './plan-store.js';
 import { createFirestoreCorpusStore, normalizeHandle, CorpusStoreError } from './corpus-store.js';
-import { createRefreshService, createFirestoreRefreshQueue } from './refresh.js';
+import { createRefreshService, createFirestoreRefreshQueue, readWorkerHealth as readWorkerHealthFromDb } from './refresh.js';
 import { resolveXGrowthProfile } from '../x-benchmark/profile.js';
 import { buildDayPlan as buildContentDayPlan } from '../x-content-inventory/plan-day.js';
 import { projectDayPlan } from '../x-content-inventory/day-plan-projection.js';
@@ -118,6 +118,7 @@ export function describeRows(handle, read, nowMs) {
  * @param {(clientId:string)=>Promise<object|null>} deps.readXGrowthConfig  raw client_configs marketingBriefConfig.xGrowth
  * @param {()=>Promise<object[]>} [deps.readPackages]  content inventory packages for the preview
  * @param {(input:object)=>Promise<object>|object} [deps.evaluate]  FIXED interface, see master plan T2a
+ * @param {(clientId:string)=>Promise<object>} [deps.readWorkerHealth]  heartbeat signal; absent => responses omit workerHealth
  * @param {()=>number} [deps.clock]
  * Chat / proposals (T4b), all injected and optional so the T2 surface is unchanged without them:
  * @param {object} [deps.chatStore]  agent/chat-store.js store
@@ -132,7 +133,7 @@ export function describeRows(handle, read, nowMs) {
  */
 export function createStrategyHandlers({
   corpusStore, planStore, refreshService, readXGrowthConfig,
-  readPackages = async () => [], evaluate = defaultEvaluate, clock = Date.now,
+  readPackages = async () => [], readWorkerHealth = null, evaluate = defaultEvaluate, clock = Date.now,
   resolveProfile = resolveXGrowthProfile, buildPreviewPlan = buildContentDayPlan,
   chatStore = null, agentLoopFactory = null, callModel = null, logUsage = null,
   runDailyAction = null, runUpdateItemFacets = null, readTodayRun = null, readContentContext = null, saveXGrowthProfile = null,
@@ -155,6 +156,12 @@ export function createStrategyHandlers({
   async function loadProfile(clientId) {
     const config = await readXGrowthConfig(clientId);
     return withDefaultPair(resolveProfile({ config }));
+  }
+
+  /** Never fails a read path: a health lookup error just omits the field. */
+  async function workerHealthFor(clientId) {
+    if (typeof readWorkerHealth !== 'function') return {};
+    try { return { workerHealth: await readWorkerHealth(clientId) }; } catch { return {}; }
   }
 
   const safeHandle = (h) => { try { return normalizeHandle(h); } catch { return null; } };
@@ -231,6 +238,7 @@ export function createStrategyHandlers({
       ...(evaluationError ? { evaluationError } : {}),
       plan: planDoc,
       todayPlanPreview: todayPreview({ profile, planDoc, own, bench, packages, now }),
+      ...(await workerHealthFor(c.clientId)),
     };
   }
 
@@ -244,16 +252,25 @@ export function createStrategyHandlers({
       if (!handles.length) return fail(400, 'No handles to refresh: the X growth profile has no own or benchmark handle.');
     }
     // requestRefresh validates (chars, non-empty, <= PLAN_LIMITS.maxHandlesPerRefreshRequest) and throws status-400 errors.
-    const out = await refreshService.requestRefresh({ handles, requestedBy: auth?.decoded?.email || auth?.decoded?.uid || null });
+    const out = await refreshService.requestRefresh({ handles, clientId: c.clientId, requestedBy: auth?.decoded?.email || auth?.decoded?.uid || null });
     return { ok: true, requestId: out.requestId, status: out.status }; // drain (if any) is intentionally not awaited
   }
 
-  async function strategyRefreshStatus(body) {
+  // body.workerOnly:true (+ clientId) returns just the worker heartbeat, no requestId needed (the Inputs strip uses it).
+  async function strategyRefreshStatus(body, context) {
     const id = typeof body?.requestId === 'string' ? body.requestId.trim() : '';
+    const hasClient = body?.clientId !== undefined && body?.clientId !== null && body?.clientId !== '';
+    let health = {};
+    if (hasClient) {
+      const c = requireClient(body, context);
+      if (c.error) return c.error;
+      health = await workerHealthFor(c.clientId);
+    }
+    if (!id && hasClient && body?.workerOnly === true) return { ok: true, ...health };
     if (!REQUEST_ID_RE.test(id)) return fail(400, 'requestId is required.');
     const request = await refreshService.getRequestStatus(id);
     if (!request) return fail(404, 'Refresh request not found.');
-    return { ok: true, request };
+    return { ok: true, request, ...health };
   }
 
   async function strategyEvaluateHandle(body, context) {
@@ -637,6 +654,7 @@ export function createStrategyHandlersFromDb(db, {
   });
   return createStrategyHandlers({
     corpusStore, planStore, refreshService, readPackages,
+    readWorkerHealth: (clientId) => readWorkerHealthFromDb(db, { now: Date.now(), clientId }),
     chatStore, agentLoopFactory, callModel, logUsage, runDailyAction, runUpdateItemFacets, readTodayRun, readContentContext, saveXGrowthProfile, env,
     readQueueSummary, readPost, readOpportunities, readResults,
     readXGrowthConfig: async (clientId) => {
