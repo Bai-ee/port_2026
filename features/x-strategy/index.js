@@ -2,3 +2,4 @@
 export * from './contracts.js';
 export * from './corpus-rows.js';
 export * from './plan-state.js';
+export * from './evaluate.js';

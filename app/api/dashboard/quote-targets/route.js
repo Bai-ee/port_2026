@@ -33,6 +33,7 @@ import { runDailyLoop, assertOwnerClient, localDateOf, LOOP_VERSION } from '../.
 import {
   createFirestoreRunStore, loadDailyLoopInputs, saveSuggestionDraft, editSuggestion, dismissSuggestion, createModelDrafter,
 } from '../../../../features/x-content-inventory/daily-run-store.js';
+import { createStrategyHandlersFromDb, STRATEGY_ROUTE_ACTIONS } from '../../../../features/x-strategy/route-handlers.js';
 import dailyLoopDemoSet from '../../../../features/x-content-inventory/daily-loop-demo-set.json' with { type: 'json' };
 // Same static-import reasoning as bundledCalendar above. These are the two
 // ingested corpora the planner needs as ROWS — x_corpora stores summarized stat
@@ -276,6 +277,7 @@ async function handleDismiss(clientId, body) {
 const DAILY_RUN_ACTIONS = ['daily-run-latest', 'daily-run-generate', 'daily-run-edit', 'daily-run-save-draft', 'daily-run-dismiss'];
 
 const SUPPORTED_ACTIONS = [
+  ...STRATEGY_ROUTE_ACTIONS,
   ...NAS_ACTIONS,
   'engine-performance',
   'draft-quote',
@@ -756,6 +758,17 @@ function nasDeps() {
   };
 }
 
+// X Strategy tab (master plan T2b). Lazy: Firestore stores are built on first strategy request.
+let strategyHandlers = null;
+function getStrategyHandlers() {
+  if (!strategyHandlers) {
+    strategyHandlers = createStrategyHandlersFromDb(fb.adminDb, {
+      readPackages: async () => (await readInventory()).packages,
+    });
+  }
+  return strategyHandlers;
+}
+
 const BUCKET_ACTIONS = new Set(['list-buckets', 'upsert-bucket', 'delete-bucket', 'list-folders', 'upsert-folder', 'delete-folder']);
 
 export async function POST(request) {
@@ -818,6 +831,10 @@ export async function POST(request) {
     }
     if (action === 'reject-package') {
       return json(await handleDecidePackage(decoded, body, 'rejected'));
+    }
+    if (STRATEGY_ROUTE_ACTIONS.includes(action)) {
+      const result = await getStrategyHandlers().handle(action, body, context, { decoded });
+      return json(result, result.ok === false ? (result.status || 422) : 200);
     }
     if (BUCKET_ACTIONS.has(action)) return json(await handleBucketAction(context, action, body));
     if (action === 'update-item-facets') return json(await handleUpdateItemFacets(context, body));

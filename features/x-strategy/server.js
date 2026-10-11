@@ -3,3 +3,4 @@ export * from './corpus-store.js';
 export * from './plan-store.js';
 export * from './ingest.js';
 export * from './refresh.js';
+export * from './route-handlers.js';

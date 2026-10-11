@@ -95,7 +95,7 @@ components/dashboard/x-content/StrategyChat.jsx       chat column + proposal car
 ```
 Handles stay in the existing `xGrowth` profile (one source); the plan doc never duplicates them.
 
-**Evaluation view model** — `{own:{handle,rows,range,stale,viewsCoverage,cadence,byType}, benchmarks:[…], gaps:[…top 8], recommendedTier, caveats:[string], baselinePlan}`. Caveats always include "likes-only lift" when views coverage <50%, row counts <60, and data older than 7 days.
+**Evaluation view model** — `{own:{handle,rows,range,stale,viewsCoverage,cadence,byType}, benchmarks:[…], gaps:[…top 8], recommendedTier, caveats:[{code,message,handle?}], currentTier, gapsAgainst, planSource, needsRefresh, baselinePlan}` (as built in T2: caveats are objects so the UI can group by handle). Caveats always include "likes-only lift" when views coverage <50%, row counts <60, and data older than 7 days.
 
 **Proposal** — `{id, threadId, kind, payload, summary, rationale, evidence:[{source, figure}], status:'pending'|'confirmed'|'rejected'|'failed', result?}`. Kinds and the action each runs on confirm:
 
