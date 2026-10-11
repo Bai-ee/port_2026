@@ -12,3 +12,9 @@
 - Visual: 8 tabs x 1280/400, zero console errors, no horizontal overflow, bottom nav sticky in-flow (does not cover content). Shots: docs/plans/content-engine-ui-shots/U2/.
 - Note: Next dev overlay "4 Issues" pre-exists (baseline).
 - Open: phone controls do not carry canonical tab ids; desktop tab-row ids stay in DOM at all widths for QA.
+
+## Merge: feat/daily-content-loop into feat/content-engine-ui (before U3a)
+- Pre-merge: `git status` clean on feat/content-engine-ui at 5281c3c8. `git merge feat/daily-content-loop` (11ce37f6, X Strategy build through T7 + handoff) → clean merge, merge commit 971df330, no conflicts.
+- Coherence: XContentEngineCard.jsx kept the U2 shell and the Strategy tab (TABS has 'strategy' first; `<StrategyPanel … onPlanChanged>`; plan tab `onOpenStrategy={() => setTab('strategy')}`; phone nav has Chat → 'strategy').
+- npm test after merge: 4522 tests, 4520 pass, 2 fail (vendor-api-lib only) — equals the daily-content-loop branch's final count.
+- Constraint carried into U3a: the inputs-panel source labels (`rows store, pulled <date>` / `committed file <path>` / `… (rows store unavailable)` / `no stored rows`, rendered from inputs.js via DailySuggestionsPanel's #daily-run-inputs-panel) must stay visible — restyle them, don't drop them.
