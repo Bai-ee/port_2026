@@ -425,6 +425,7 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
           planSource={planMeta.source}
           planVersion={planMeta.version}
           onOpenStrategy={() => setTab('strategy')}
+          onOpenContent={() => setTab('inventory')}
           onRefresh={() => load()}
           onDraft={onDraft}
           draftingId={draftingId}
