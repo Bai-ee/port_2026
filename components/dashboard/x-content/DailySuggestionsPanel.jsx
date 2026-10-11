@@ -51,15 +51,15 @@ function SuggestionCard({ s, text, thumbUrl, onText, onCommit, onSave, onDismiss
   const checks = s.edit?.checks || s.checks;
   const max = s.type === 'quote' ? 90 : s.type === 'reply' ? 200 : 280;
   return (
-    <article id="daily-suggestion-card" data-suggestion-id={s.id} className={`xce-dl-card${checks.blocked ? ' xce-dl-blocked' : ''}`}>
-      <header id="daily-suggestion-header-row" className="xce-dl-card-head">
+    <article id={`daily-suggestion-card-${s.id}`} data-suggestion-id={s.id} className={`xce-dl-card${checks.blocked ? ' xce-dl-blocked' : ''}`}>
+      <header id={`daily-suggestion-header-row-${s.id}`} className="xce-dl-card-head">
         <span className={`xce-dl-type xce-dl-type-${s.type}`}>{TYPE_LABEL[s.type] || s.type}</span>
         {s.match?.tier === 'genre' ? <span className="xce-dl-tier">genre-level match</span> : null}
         <span className="xce-dl-slot">proposed {s.proposedSlot.localTime} CT · suggestion only, not scheduled</span>
       </header>
 
       {s.conversation ? (
-        <div id="daily-suggestion-conversation" className="xce-dl-convo">
+        <div id={`daily-suggestion-conversation-${s.id}`} className="xce-dl-convo">
           {s.conversation.posts.slice(0, 3).map((p) => (
             <a key={p.id} href={p.url} target="_blank" rel="noreferrer" className="xce-dl-post">
               <span className="xce-dl-post-meta">@{p.author} · {p.ageHours}h old · {p.likes}♥ {p.replies}↩ <ExternalLink size={11} /></span>
@@ -69,15 +69,15 @@ function SuggestionCard({ s, text, thumbUrl, onText, onCommit, onSave, onDismiss
         </div>
       ) : null}
 
-      <dl id="daily-suggestion-why" className="xce-dl-why">
+      <dl id={`daily-suggestion-why-${s.id}`} className="xce-dl-why">
         {WHY_ROWS.map(([k, label]) => (
           <React.Fragment key={k}><dt>{label}</dt><dd>{s.why[k]}</dd></React.Fragment>
         ))}
         <dt>Your history</dt><dd>{historyLine(s.why.history)}</dd>
       </dl>
 
-      <div id="daily-suggestion-content" className="xce-dl-content">
-        {thumbUrl ? <img id="daily-suggestion-thumb" src={thumbUrl} alt="" loading="lazy" style={{ display: 'block', maxWidth: 120, maxHeight: 120, marginBottom: 6, borderRadius: 8, objectFit: 'cover' }} /> : null}
+      <div id={`daily-suggestion-content-${s.id}`} className="xce-dl-content">
+        {thumbUrl ? <img id={`daily-suggestion-thumb-${s.id}`} src={thumbUrl} alt="" loading="lazy" style={{ display: 'block', maxWidth: 120, maxHeight: 120, marginBottom: 6, borderRadius: 8, objectFit: 'cover' }} /> : null}
         <strong>{s.package.title}</strong>
         <ul>
           {s.package.basis === 'story' ? <li>your own story on file</li> : null}
@@ -91,7 +91,7 @@ function SuggestionCard({ s, text, thumbUrl, onText, onCommit, onSave, onDismiss
         Draft <span>({s.edit ? 'your edit' : s.draft.source})</span>
       </span>
       <textarea
-        id="daily-suggestion-edit-textarea"
+        id={`daily-suggestion-edit-textarea-${s.id}`}
         aria-label="Draft text"
         className="xce-dl-textarea"
         value={text}
@@ -100,7 +100,7 @@ function SuggestionCard({ s, text, thumbUrl, onText, onCommit, onSave, onDismiss
         disabled={reviewed || busy}
         rows={3}
       />
-      <div id="daily-suggestion-checks-row" className="xce-dl-checks">
+      <div id={`daily-suggestion-checks-row-${s.id}`} className="xce-dl-checks">
         <span className={text.length > max ? 'xce-dl-bad' : ''}>{text.length}/{max}</span>
         {dirty ? <span>click outside the box to re-check before saving</span> : (
           <>
@@ -113,15 +113,15 @@ function SuggestionCard({ s, text, thumbUrl, onText, onCommit, onSave, onDismiss
         {s.type === 'reply' ? <span>saved with its reply target</span> : null}
       </div>
       {!dirty && (checks.violations.length || checks.warnings.length) ? (
-        <ul id="daily-suggestion-violations-list" style={{ margin: 0, paddingLeft: 16, fontSize: 12, lineHeight: 1.4, overflowWrap: 'anywhere' }}>
+        <ul id={`daily-suggestion-violations-list-${s.id}`} style={{ margin: 0, paddingLeft: 16, fontSize: 12, lineHeight: 1.4, overflowWrap: 'anywhere' }}>
           {checks.violations.map((v) => <li key={`v-${v}`} className="xce-dl-bad">{v}</li>)}
           {checks.warnings.map((w) => <li key={`w-${w}`} className="xce-dl-muted">warning: {w}</li>)}
         </ul>
       ) : null}
 
-      <div id="daily-suggestion-actions-row" className="xce-dl-actions">
+      <div id={`daily-suggestion-actions-row-${s.id}`} className="xce-dl-actions">
         {s.reviewState === 'saved' ? (
-          <span id="daily-suggestion-saved-note" className="xce-dl-ok">Saved as draft · post {s.socialPostId}</span>
+          <span id={`daily-suggestion-saved-note-${s.id}`} className="xce-dl-ok">Saved as draft · post {s.socialPostId}</span>
         ) : s.reviewState === 'dismissed' ? (
           <span className="xce-dl-muted">Dismissed</span>
         ) : (
