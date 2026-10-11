@@ -176,7 +176,7 @@ test('runDailyLoop replay: inputs listed with freshness; unapproved Brain is a g
   assert.equal(run.brainVersion, null);
   assert.ok(run.gaps.some((g) => g.code === 'brain-not-approved'));
   assert.ok(run.gaps.some((g) => g.code === 'feedback-loop-manual'));
-  assert.deepEqual(run.inputs.map((i) => i.input), ['watchlist scan', 'brand-topic search', 'content library', 'Client Brain', 'Strategy Builder plan', 'own-account history', 'benchmark report']);
+  assert.deepEqual(run.inputs.map((i) => i.input), ['watchlist scan', 'brand-topic search', 'content library', 'Client Brain', 'Strategy Builder plan', 'strategy slots', 'own-account history', 'benchmark report']);
   assert.equal(run.inputs.find((i) => i.input === 'Strategy Builder plan').status, 'excluded');
 });
 

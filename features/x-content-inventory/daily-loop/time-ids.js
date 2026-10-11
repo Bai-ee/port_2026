@@ -41,8 +41,9 @@ export function stableHash(input) {
   return h.toString(16).padStart(8, '0');
 }
 
-export function suggestionIdFor({ clientId, localDate, opportunityId, packageId }) {
-  return `dl_${localDate.replace(/-/g, '')}_${stableHash(`${clientId}|${localDate}|${opportunityId || 'original'}|${packageId || 'none'}`)}`;
+/** Hashes slot TYPE, never the slot letter, so edits/saves/dismissals survive a calendar shift. */
+export function suggestionIdFor({ clientId, localDate, slotType, opportunityId, packageId }) {
+  return `dl_${localDate.replace(/-/g, '')}_${stableHash(`${clientId}|${localDate}|${slotType || 'any'}|${opportunityId || 'original'}|${packageId || 'none'}`)}`;
 }
 
 /** The queue id Save Draft writes to. Derived, so a double-click lands on the same row. */

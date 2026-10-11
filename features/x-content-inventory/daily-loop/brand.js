@@ -7,6 +7,19 @@ import { PILLARS } from '../categories.js';
 import { classifyLane } from '../../x-content-guard/index.js';
 import { tokenize, arrayValues, FACET_ARRAYS, ownerTags, packagePhrases, phraseHits, WEAK_TERMS, GENERIC_PHRASES } from './text.js';
 
+// --- where brand fit applies ---------------------------------------------------
+
+/**
+ * Library-vocabulary fit asks "is this conversation about things the owner holds",
+ * which only matters when the post JOINS a conversation: replies, and originals
+ * that are linked to one. Quote-react (vein/lane fit), showcase/text (owned
+ * content) and self-quote (own corpus) are never gated by it.
+ */
+export function brandFitApplies(slotType, { conversationLinked = false } = {}) {
+  if (slotType === 'reply') return true;
+  return conversationLinked && (slotType === 'original-showcase' || slotType === 'original-text');
+}
+
 // --- brand profile -------------------------------------------------------------
 
 /**

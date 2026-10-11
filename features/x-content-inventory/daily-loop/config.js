@@ -5,7 +5,7 @@
 
 import { HARD_LIMITS } from '../draft.js';
 
-export const LOOP_VERSION = 2;
+export const LOOP_VERSION = 3;
 export const CHANNEL = 'x';
 export const DEFAULT_TIMEZONE = 'America/Chicago';
 export const MAX_SUGGESTIONS = 3;

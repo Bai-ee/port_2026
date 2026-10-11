@@ -10,7 +10,17 @@ import { deriveStrategy } from './evidence.js';
 import { selectSuggestions } from './select.js';
 import { buildContributionPrompt, fallbackCopy, checkSuggestionText } from './copy.js';
 
+const REVIEWED = new Set(['edited', 'saved', 'dismissed']);
+// Fallback sources all start with "fallback"; anything else names the model.
+const isModelDraft = (d) => !!d?.source && !String(d.source).startsWith('fallback');
+
 // --- orchestration -------------------------------------------------------------------
+
+function strategyRow(src) {
+  if (!src) return { input: 'strategy slots', status: 'missing', asOf: null, age: null, detail: 'no slot plan for this run' };
+  const letters = (src.slotLetters || []).join(', ');
+  return { input: 'strategy slots', status: 'loaded', asOf: src.date || null, age: null, detail: `${src.mixSource || 'unknown mix'}, tier ${src.tier ?? '?'}, ${src.authoredPerDay ?? '?'} authored/day — slots ${letters || 'none'}` };
+}
 
 /** Freshness of every input, shown first in every run. */
 export function describeInputs(inputs, now) {
@@ -19,14 +29,15 @@ export function describeInputs(inputs, now) {
     { input: 'watchlist scan', status: inputs.scan ? 'loaded' : 'missing', asOf: inputs.scan?.generatedAt || null, age: inputs.scan ? age(inputs.scan.generatedAt) : null, detail: inputs.scan ? `${(inputs.scan.candidates || []).length} candidates` : 'run scan-quote-targets' },
     { input: 'brand-topic search', status: inputs.search ? 'loaded' : 'missing', asOf: inputs.search?.generatedAt || null, age: inputs.search ? age(inputs.search.generatedAt) : null, detail: inputs.search ? `${(inputs.search.queries || []).length} queries, ${(inputs.search.posts || []).length} posts` : 'run daily-run --discover' },
     { input: 'content library', status: (inputs.packages || []).length ? 'loaded' : 'missing', asOf: null, age: null, detail: `${(inputs.packages || []).length} items${inputs.libraryNote ? ` — ${inputs.libraryNote}` : ''}` },
-    { input: 'Client Brain', status: inputs.brain?.status === 'approved' ? 'approved' : (inputs.brain?.status || 'missing'), asOf: inputs.brain?.updatedAt || null, age: null, detail: inputs.brain?.status === 'approved' ? 'used for voice' : (inputs.brain?.note || 'not approved — not used') },
-    { input: 'Strategy Builder plan', status: inputs.strategyPlan ? (inputs.strategyPlan.excluded ? 'excluded' : 'loaded') : 'missing', asOf: inputs.strategyPlan?.generatedAt || null, age: null, detail: inputs.strategyPlan?.excluded || '' },
+    { input: 'Client Brain', status: inputs.brain?.status === 'approved' ? 'approved' : (inputs.brain?.status || 'missing'), asOf: inputs.brain?.updatedAt || null, age: null, detail: 'Seb rules §7 + content guard — Brain not used' },
+    { input: 'Strategy Builder plan', status: inputs.strategyPlan ? (inputs.strategyPlan.excluded ? 'excluded' : 'loaded') : 'missing', asOf: inputs.strategyPlan?.generatedAt || null, age: null, detail: `not used for X${inputs.strategyPlan?.excluded ? ` — ${inputs.strategyPlan.excluded}` : ''}` },
+    strategyRow(inputs.strategySource),
     { input: 'own-account history', status: inputs.ownSummary ? 'loaded' : 'missing', asOf: inputs.ownSummary?.range?.to || null, age: null, detail: inputs.ownSummary ? `${inputs.ownSummary.posts} posts, ${inputs.ownSummary.range?.from?.slice(0, 10)} → ${inputs.ownSummary.range?.to?.slice(0, 10)} (${inputs.ownSummary.source})` : '' },
     { input: 'benchmark report', status: inputs.benchmark ? 'loaded' : 'missing', asOf: inputs.benchmark?.asOf || null, age: null, detail: inputs.benchmark?.source || '' },
   ];
 }
 
-export function inputFingerprint({ scan, search, packages, brain, strategyPlan, benchmark, max }) {
+export function inputFingerprint({ scan, search, packages, brain, strategyPlan, strategySource, benchmark, max }) {
   const pkgSig = packages.map((p) => `${p.id}:${p.updatedAt || ''}:${String(p.story || '').length}:${p.rights}:${p.status}`).sort().join(',');
   return stableHash([
     scan?.generatedAt || 'no-scan',
@@ -35,6 +46,8 @@ export function inputFingerprint({ scan, search, packages, brain, strategyPlan, 
     brain?.status === 'approved' ? (brain.version || 'approved') : 'no-brain',
     strategyPlan?.excluded ? 'excluded' : (strategyPlan?.generatedAt || 'no-plan'),
     benchmark?.asOf || (benchmark ? 'computed' : 'no-benchmark'),
+    // A changed slot plan must regenerate.
+    strategySource ? stableHash(JSON.stringify([strategySource.date, strategySource.tier, strategySource.authoredPerDay, strategySource.mixSource, strategySource.slotLetters])) : 'no-slots',
     max,
     LOOP_VERSION,
   ].join('|'));
@@ -57,6 +70,10 @@ export async function runDailyLoop(deps, opts = {}) {
   const packages = Array.isArray(inputs.packages) ? inputs.packages : [];
   const fingerprint = inputFingerprint({ ...inputs, packages, max });
   const key = { clientId, localDate, channel: CHANNEL, version: LOOP_VERSION };
+
+  // Prior doc: lets a no-model regenerate keep model drafts and lets reviewed cards skip the model.
+  const prior = deps.store.read ? await deps.store.read(key) : null;
+  const priorById = new Map((prior?.suggestions || []).map((p) => [p.id, p]));
 
   const claim = await deps.store.claim({ key, fingerprint, force: !!opts.force, now });
   if (!claim.claimed) return { skipped: true, reason: claim.reason, run: claim.run || null };
@@ -84,6 +101,7 @@ export async function runDailyLoop(deps, opts = {}) {
     copySource: 'fallback', // set after drafting
     // Legacy field kept one version for old readers; derived, not authoritative.
     mode: deps.draft ? 'execute' : 'replay',
+    strategySource: inputs.strategySource || null,
     inputFingerprint: fingerprint,
     inputs: describeInputs(inputs, now),
     scanGeneratedAt: inputs.scan?.generatedAt || null,
@@ -103,6 +121,16 @@ export async function runDailyLoop(deps, opts = {}) {
   const modelFlags = [];
   try {
     for (const s of selection.suggestions) {
+      const before = priorById.get(s.id);
+      const reviewed = before && (REVIEWED.has(before.reviewState) || before.socialPostId);
+      const keepModel = before && isModelDraft(before.draft) && (reviewed || !deps.draft);
+      if (reviewed || keepModel) {
+        // The store keeps reviewed cards as they are; a model draft is reused rather than paid for again.
+        modelFlags.push(isModelDraft(before.draft));
+        run.suggestions.push(reviewed ? { ...s, slot: s.slot ?? null, package: s.package ?? null, draft: before.draft, checks: before.checks, edit: before.edit ?? null, reviewState: before.reviewState, socialPostId: before.socialPostId ?? null }
+          : { ...s, slot: s.slot ?? null, package: s.package ?? null, draft: before.draft, checks: checkSuggestionText(before.draft.text, s), edit: null, reviewState: 'pending', socialPostId: null });
+        continue;
+      }
       const built = buildContributionPrompt({ suggestion: s, voice });
       let text = fallbackCopy(s);
       let source = 'fallback (item text, cut to fit)';
@@ -120,7 +148,7 @@ export async function runDailyLoop(deps, opts = {}) {
         source = `fallback — ${built.reason}`;
       }
       modelFlags.push(fromModel);
-      run.suggestions.push({ ...s, draft: { text, selfReply: '', source }, checks: checkSuggestionText(text, s), edit: null, reviewState: 'pending', socialPostId: null });
+      run.suggestions.push({ ...s, slot: s.slot ?? null, package: s.package ?? null, draft: { text, selfReply: '', source }, checks: checkSuggestionText(text, s), edit: null, reviewState: 'pending', socialPostId: null });
     }
     run.copySource = modelFlags.length && modelFlags.every(Boolean) ? 'model' : modelFlags.some(Boolean) ? 'mixed' : 'fallback';
     run.status = 'complete';
