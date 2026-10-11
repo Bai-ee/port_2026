@@ -56,6 +56,10 @@ function readSavedBucket() {
   }
 }
 
+function sourceKindOf(list, id) {
+  return list.find((b) => b.id === id)?.sourceKind;
+}
+
 export default function BucketsPanel({ call, packages, loading, error, onReload }) {
   const [buckets, setBuckets] = useState(() => mergeBuckets([]));
   const [folders, setFolders] = useState([]);
@@ -89,7 +93,7 @@ export default function BucketsPanel({ call, packages, loading, error, onReload 
       if (r && r.ok !== false) setNasStatus(r);
     } catch { setNasStatus((s) => (s ? { ...s, online: false } : s)); }
   }, [call]);
-  const nasWatch = bucketId === 'nas' || bucketId === 'all';
+  const nasWatch = bucketId === 'nas' || bucketId === 'all' || bucketId === 'record' || sourceKindOf(buckets, bucketId) === 'discogs';
   useEffect(() => {
     if (!nasWatch) return undefined;
     loadNasStatus();

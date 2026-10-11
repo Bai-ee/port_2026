@@ -96,3 +96,11 @@ test('adapter registry is lazy and covers the three platforms', () => {
   assert.deepEqual(Object.keys(ADAPTERS).sort(), ['facebook', 'instagram', 'x']);
   assert.ok(Object.values(ADAPTERS).every((f) => typeof f === 'function'));
 });
+
+test('mediaOnly keeps only entries with media and counts the rest as no-media', async () => {
+  const db = makeDb(); seed(db);
+  const r = await ingestArchive(base(db, { mediaOnly: true }));
+  assert.equal(r.entries, 1);
+  assert.equal(r.withMedia, 1);
+  assert.equal(r.rejected['no-media'], 3);
+});

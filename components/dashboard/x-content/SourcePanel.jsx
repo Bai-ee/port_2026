@@ -3,6 +3,7 @@
 import React from 'react';
 import { RefreshCw, X } from 'lucide-react';
 import NasPanel from './NasPanel.jsx';
+import DiscogsPanel from './DiscogsPanel.jsx';
 
 // SourcePanel — floating right-side panel (same shell as the item drawer) with
 // per-bucket source info. Opens from the toolbar's Source icon; never pushes layout.
@@ -21,13 +22,8 @@ export default function SourcePanel({ bucket, bucketId, count, sync, onSync, cal
         </button>
       </div>
     );
-  } else if (bucketId === 'discogs') {
-    body = (
-      <div id="x-content-source-discogs" className="xce-nas-panel">
-        <p className="xce-field-hint">Fed by the Discogs pipeline.</p>
-        <p className="xce-nas-estimate">{count} items</p>
-      </div>
-    );
+  } else if (bucket?.sourceKind === 'discogs' || bucketId === 'record') {
+    body = <DiscogsPanel call={call} status={nasStatus} onReload={onReload} />;
   } else {
     body = (
       <div id="x-content-source-info" className="xce-nas-panel">
