@@ -418,3 +418,15 @@ export function costFooterText(usage, used, cap) {
   if (typeof cost === 'number' && Number.isFinite(cost)) parts.push(`last turn $${cost.toFixed(3)}`);
   return parts.join(' · ');
 }
+
+/**
+ * Chat display text: the agent is told to answer in plain text but still sometimes wraps words in
+ * **bold** or `code` markers, which the bubble would show as raw symbols. Presentation only: the
+ * stored message and what the model sees are unchanged.
+ */
+export function plainChatText(text) {
+  return String(text ?? '')
+    .replace(/\*\*([^*\n]+)\*\*/g, '$1')
+    .replace(/__([^_\n]+)__/g, '$1')
+    .replace(/`([^`\n]+)`/g, '$1');
+}

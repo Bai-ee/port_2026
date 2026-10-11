@@ -22,6 +22,8 @@ Built 2026-09-10. The account is **@bai_ee** (`bryan-balli-WUoltG84`). The goal 
 
 Nothing in the Decide or Publish layer is automated. That is deliberate — see §7.
 
+**Strategy tab (as built 2026-10-11):** the Content Engine's Strategy tab sits across these layers — it refreshes the corpora (bird, local), evaluates own vs benchmark accounts, holds the versioned posting plan every planner reads, and runs a propose-only agent chat. SSOT: [`X-STRATEGY-TAB.md`](X-STRATEGY-TAB.md).
+
 ---
 
 ## 2. Why this exists — the finding

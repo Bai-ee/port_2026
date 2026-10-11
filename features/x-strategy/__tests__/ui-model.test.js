@@ -213,3 +213,12 @@ test('proposalStatusText: a deciding proposal reads as applying/interrupted (no 
   assert.equal(st.label, 'applying');
   assert.match(st.detail, /Applying.*interrupted.*check Today\/Plan before retrying/);
 });
+
+test('plainChatText strips bold/code markers but keeps text, numbers and lists', async () => {
+  const { plainChatText } = await import('../ui-model.js');
+  assert.equal(plainChatText('**Volume** — 1.34 vs 7.63 (5.69×)'), 'Volume — 1.34 vs 7.63 (5.69×)');
+  assert.equal(plainChatText('use `authoredPerDay` and __this__'), 'use authoredPerDay and this');
+  assert.equal(plainChatText('1. a * b * c\n- item'), '1. a * b * c\n- item');
+  assert.equal(plainChatText(null), '');
+  assert.equal(plainChatText('**unclosed'), '**unclosed');
+});
