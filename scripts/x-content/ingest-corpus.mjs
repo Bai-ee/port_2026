@@ -31,16 +31,9 @@
 // remaining hosted option is the paid X API, which is spend-gated
 // (docs/source-of-truth/X-API-AND-PROFILE-OPERATIONS.md).
 
-import { execFileSync } from 'node:child_process';
-import { writeFileSync, existsSync } from 'node:fs';
-import path from 'node:path';
-import { normalizeTimeline } from '../../features/x-benchmark/normalize-corpus.js';
-import { summarizeCorpus } from '../../features/x-benchmark/summarize.js';
+import { writeFileSync } from 'node:fs';
 import { untaggedShare } from '../../features/x-benchmark/taxonomy.js';
-import { deriveWatchlist } from '../../features/x-benchmark/derive-watchlist.js';
-
-const DEFAULT_DAYS = 65;
-const MAX_ROUNDS = 12;
+import { ingestHandle, createBirdRunner, resolveBird, DEFAULT_DAYS, MAX_ROUNDS } from '../../features/x-strategy/ingest.js';
 
 function parseArgs(argv) {
   const out = { tz: 0, days: DEFAULT_DAYS, rounds: MAX_ROUNDS, lanes: [] };
@@ -60,67 +53,6 @@ function parseArgs(argv) {
   return out;
 }
 
-function resolveBird() {
-  if (process.env.BIRD && existsSync(process.env.BIRD)) return process.env.BIRD;
-  const candidates = [
-    path.join(process.env.HOME || '', '.local/birdtool/node_modules/.bin/bird'),
-    path.join(process.cwd(), 'node_modules/.bin/bird'),
-  ];
-  return candidates.find((p) => existsSync(p)) || 'bird';
-}
-
-/** Chain bird's paged user-tweets until the cutoff is passed. */
-function pullTimeline(handle, sinceIso, rounds) {
-  const bird = resolveBird();
-  const cutoff = Date.parse(sinceIso);
-  const all = [];
-  const seen = new Set();
-  let cursor = null;
-
-  for (let round = 1; round <= rounds; round += 1) {
-    const args = ['user-tweets', `@${handle}`, '-n', '200', '--max-pages', '10', '--delay', '1200', '--json'];
-    if (cursor) args.push('--cursor', cursor);
-    let raw;
-    try {
-      raw = execFileSync(bird, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
-    } catch (err) {
-      process.stderr.write(`round ${round} failed: ${String(err.stderr || err.message).slice(0, 300)}\n`);
-      break;
-    }
-    const objStart = raw.indexOf('{');
-    const arrStart = raw.indexOf('[');
-    const jsonStart = objStart === -1 ? arrStart : (arrStart === -1 ? objStart : Math.min(objStart, arrStart));
-    if (jsonStart === -1) { process.stderr.write(`round ${round}: no JSON in output\n`); break; }
-    let payload;
-    try {
-      payload = JSON.parse(raw.slice(jsonStart));
-    } catch (err) {
-      process.stderr.write(`round ${round} parse failed: ${String(err.message).slice(0, 200)}\n`);
-      break;
-    }
-    const tweets = Array.isArray(payload) ? payload : (payload.tweets || []);
-    const next = Array.isArray(payload) ? null : (payload.nextCursor || null);
-
-    let added = 0;
-    let oldest = null;
-    for (const t of tweets) {
-      if (!t?.id || seen.has(t.id)) continue;
-      seen.add(t.id);
-      all.push(t);
-      added += 1;
-      const d = Date.parse(t.createdAt);
-      if (Number.isFinite(d) && (oldest === null || d < oldest)) oldest = d;
-    }
-    process.stderr.write(
-      `round ${round}: +${added} (total ${all.length}) oldest=${oldest ? new Date(oldest).toISOString().slice(0, 10) : 'n/a'}\n`,
-    );
-    if (oldest !== null && Number.isFinite(cutoff) && oldest < cutoff) break;
-    if (!next || added === 0) break;
-    cursor = next;
-  }
-  return all;
-}
-
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const handle = String(args.handle || '').replace(/^@+/, '').trim();
@@ -136,38 +68,29 @@ async function main() {
     process.exit(1);
   }
 
-  const since = args.since || new Date(Date.now() - args.days * 86_400_000).toISOString();
-  process.stderr.write(`Pulling @${handle} back to ${since.slice(0, 10)}…\n`);
-
-  const rawTweets = pullTimeline(handle, since, args.rounds);
-  if (!rawTweets.length) {
-    process.stderr.write('No posts returned. Is bird authenticated (browser cookies) and the handle correct?\n');
-    process.exit(1);
+  // Paging, cutoff, normalize -> summarize -> watchlist all live in features/x-strategy/ingest.js (shared with the
+  // strategy refresh path). This wrapper keeps argv, the stdout summary, --out, --write and exit codes.
+  let result;
+  try {
+    result = await ingestHandle({
+      handle,
+      tz: args.tz,
+      days: args.days,
+      since: args.since,
+      rounds: args.rounds,
+      lanes: args.lanes,
+      clientId: args.client,
+      runBird: createBirdRunner({ bird: resolveBird() }),
+      log: (line) => process.stderr.write(`${line}\n`),
+    });
+  } catch (err) {
+    if (err?.code === 'NO_POSTS') {
+      process.stderr.write('No posts returned. Is bird authenticated (browser cookies) and the handle correct?\n');
+      process.exit(1);
+    }
+    throw err;
   }
-
-  const { rows, dropped } = normalizeTimeline(rawTweets, {
-    handle,
-    tzOffsetHours: args.tz,
-    lanes: args.lanes,
-    since,
-  });
-  const stats = summarizeCorpus(rows, { handle });
-  // Derived here, at ingest, because it is the one artifact that needs the raw
-  // rows — and the rows are not stored.
-  const watchlist = deriveWatchlist(rows, { ownHandle: handle });
-
-  const meta = {
-    source: 'bird',
-    posts: rows.length,
-    droppedRows: dropped,
-    firstDate: stats.cadence.firstDate,
-    lastDate: stats.cadence.lastDate,
-    tzOffsetHours: args.tz,
-    since,
-    clientId: args.client || null,
-    watchlistAccounts: watchlist.accounts.length,
-    watchlistCoverage: watchlist.meta.coverageAchieved,
-  };
+  const { rows, stats, watchlist, meta } = result;
 
   process.stdout.write(`\n@${handle} — ${rows.length} posts over ${stats.cadence.activeDays} active days\n`);
   process.stdout.write(`  ${stats.cadence.postsPerActiveDay}/day  ·  ${stats.cadence.authoredPerActiveDay} authored/day  ·  ${stats.cadence.postsPerOccupiedHour}/occupied hour\n`);

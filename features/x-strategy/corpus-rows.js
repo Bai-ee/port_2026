@@ -66,3 +66,66 @@ export function mergeRowsById(existingRows, incomingRows) {
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Chunking + rowsMeta helpers (pure, client-safe). Contract: master plan §5.
+// ---------------------------------------------------------------------------
+
+export const CHUNK_SIZE = 250;
+export const STALE_AFTER_DAYS = 7;
+
+/** Split rows into arrays of at most `size` (default 250). Empty input -> []. Order kept. */
+export function chunkRows(rows, size = CHUNK_SIZE) {
+  const list = Array.isArray(rows) ? rows : [];
+  const n = Number.isInteger(size) && size > 0 ? size : CHUNK_SIZE;
+  const out = [];
+  for (let i = 0; i < list.length; i += n) out.push(list.slice(i, i + n));
+  return out;
+}
+
+/** Inverse of chunkRows. Accepts chunk arrays or `{rows}` docs; ignores malformed chunks. */
+export function unchunkRows(chunks) {
+  const out = [];
+  for (const c of Array.isArray(chunks) ? chunks : []) {
+    const rows = Array.isArray(c) ? c : c && Array.isArray(c.rows) ? c.rows : [];
+    for (const r of rows) out.push(r);
+  }
+  return out;
+}
+
+/**
+ * Build x_corpora/{handle}.rowsMeta.
+ * viewsCoverage = share of rows whose `views` is non-null (0 for no rows). range = min/max `utc` (null/null if none).
+ * `pulledAt` defaults to now; pass null explicitly when the pull time is unknown (committed seeds).
+ */
+export function buildRowsMeta(rows, { pulledAt, source } = {}) {
+  const list = Array.isArray(rows) ? rows : [];
+  let withViews = 0;
+  let from = null;
+  let to = null;
+  for (const r of list) {
+    if (r && present(r.views)) withViews += 1;
+    const u = r && typeof r.utc === 'string' && r.utc ? r.utc : null;
+    if (u) {
+      if (from === null || u < from) from = u;
+      if (to === null || u > to) to = u;
+    }
+  }
+  return {
+    rowCount: list.length,
+    range: { from, to },
+    pulledAt: pulledAt === undefined ? new Date().toISOString() : pulledAt,
+    viewsCoverage: list.length ? withViews / list.length : 0,
+    chunks: Math.ceil(list.length / CHUNK_SIZE),
+    source: source ?? 'bird',
+  };
+}
+
+/** Age of a rowsMeta. Stale when older than 7 days (exactly 7d is not stale) or when pulledAt is unknown. */
+export function freshness(meta, now = Date.now()) {
+  const pulled = meta && meta.pulledAt ? new Date(meta.pulledAt).getTime() : NaN;
+  const nowMs = new Date(now).getTime();
+  if (!Number.isFinite(pulled) || !Number.isFinite(nowMs)) return { ageDays: null, stale: true };
+  const ageDays = (nowMs - pulled) / 86400000;
+  return { ageDays, stale: ageDays > STALE_AFTER_DAYS };
+}

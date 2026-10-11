@@ -1,0 +1,7 @@
+Pulling @fixture_handle back to 2026-09-01…
+round 1: +12 (total 12) oldest=2026-10-07
+round 2: +12 (total 24) oldest=2026-10-04
+round 3 failed: boom
+
+
+Wrote 24 normalized rows -> features/x-strategy/__tests__/fixtures/golden/B.rows.json

@@ -1,0 +1,12 @@
+
+@fixture_handle — 24 posts over 7 active days
+  3.43/day  ·  3.14 authored/day  ·  1/occupied hour
+  authored 91.67%  ·  stranger-eligible 79.17%  ·  views coverage 0%
+  untagged 17% (45–55% is normal)
+  watchlist: 1 accounts covering 100% of quote-derived likes
+    original-text        n=  12  54.55%  lift 0.9976
+    original-showcase    n=   4  18.18%  lift 1.0106
+    quote-react          n=   3  13.64%  lift 0.9329
+    reply                n=   3  13.64%  lift 1.0624
+
+Dry run. Re-run with --write to persist the stat block to x_corpora/.

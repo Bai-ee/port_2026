@@ -122,3 +122,47 @@ test('new rows keep their own tags and fields whole', () => {
   assert.deepEqual(out.map((r) => r.id), ['2', '1']);
   assert.deepEqual(out[0].topics, ['fresh']);
 });
+
+import { chunkRows, unchunkRows, buildRowsMeta, freshness } from '../corpus-rows.js';
+
+const mk = (n) => Array.from({ length: n }, (_, i) => ({ id: String(i), utc: `2026-01-${String((i % 28) + 1).padStart(2, '0')}T00:00:00Z`, views: i % 2 ? 5 : null }));
+
+test('chunkRows boundaries 0/249/250/251/501', () => {
+  assert.deepEqual(chunkRows([]), []);
+  for (const [n, sizes] of [[249, [249]], [250, [250]], [251, [250, 1]], [501, [250, 250, 1]]]) {
+    const c = chunkRows(mk(n));
+    assert.deepEqual(c.map((x) => x.length), sizes, `n=${n}`);
+    assert.equal(unchunkRows(c).length, n);
+  }
+});
+
+test('unchunkRows accepts {rows} docs, ignores malformed', () => {
+  assert.deepEqual(unchunkRows([{ rows: [{ id: 1 }] }, null, { nope: 1 }, [{ id: 2 }]]).map((r) => r.id), [1, 2]);
+});
+
+test('buildRowsMeta viewsCoverage, range, chunks', () => {
+  const rows = [
+    { id: '1', utc: '2026-02-01T00:00:00Z', views: 0 },
+    { id: '2', utc: '2026-01-01T00:00:00Z', views: null },
+    { id: '3', utc: '2026-03-01T00:00:00Z' },
+    { id: '4', utc: '2026-01-15T00:00:00Z', views: 9 },
+  ];
+  const m = buildRowsMeta(rows, { pulledAt: 'P', source: 'bird' });
+  assert.equal(m.rowCount, 4);
+  assert.equal(m.viewsCoverage, 0.5); // views 0 counts as known
+  assert.deepEqual(m.range, { from: '2026-01-01T00:00:00Z', to: '2026-03-01T00:00:00Z' });
+  assert.equal(m.chunks, 1);
+  assert.equal(m.pulledAt, 'P');
+  const e = buildRowsMeta([], { pulledAt: null, source: 'committed-json' });
+  assert.deepEqual([e.rowCount, e.viewsCoverage, e.chunks, e.range.from], [0, 0, 0, null]);
+  assert.equal(buildRowsMeta(mk(251), {}).chunks, 2);
+});
+
+test('freshness: stale only strictly past 7 days; unknown is stale', () => {
+  const now = Date.parse('2026-10-11T00:00:00Z');
+  assert.equal(freshness({ pulledAt: '2026-10-04T00:00:00Z' }, now).stale, false); // exactly 7d
+  assert.equal(freshness({ pulledAt: '2026-10-03T23:59:59Z' }, now).stale, true);
+  assert.equal(freshness({ pulledAt: '2026-10-10T00:00:00Z' }, now).ageDays, 1);
+  assert.deepEqual(freshness({ pulledAt: null }, now), { ageDays: null, stale: true });
+  assert.equal(freshness(null, now).stale, true);
+});

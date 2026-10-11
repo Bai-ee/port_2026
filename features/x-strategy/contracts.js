@@ -10,7 +10,7 @@ import { STRATEGY_PRIORITY, DEFAULT_TYPE_FLOORS } from '../x-content-inventory/d
  * @typedef {Object} RowsMeta  x_corpora/{handle}.rowsMeta
  * @property {number} rowCount
  * @property {{from:string,to:string}} range
- * @property {string} pulledAt  ISO
+ * @property {string|null} pulledAt  ISO; null for committed-json seeds
  * @property {number} viewsCoverage  0..1
  * @property {number} chunks  docs at x_corpora/{handle}/rows/{0..chunks-1}
  * @property {'bird'|'committed-json'} source
