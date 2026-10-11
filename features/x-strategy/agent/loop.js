@@ -125,7 +125,7 @@ export function createAgentLoop({
   const call = callModel || createAnthropicCaller();
   const log = logUsage || createDefaultLogUsage();
 
-  async function runTurn({ clientId, threadId, history = [], userText } = {}) {
+  async function runTurn({ clientId, threadId, history = [], userText, selectedContext } = {}) {
     const usage = { calls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 };
     const proposals = [];
     const userMessages = [...(Array.isArray(history) ? history : []).filter((m) => m?.role === 'user').map((m) => String(m.text ?? '')), String(userText ?? '')];
@@ -134,7 +134,7 @@ export function createAgentLoop({
     // Plan summary is the only data in the system prompt; everything else comes from tools.
     let planSummary;
     try { planSummary = await toolDeps?.getPlan?.(); } catch { planSummary = null; }
-    const system = buildSystemPrompt({ planSummary: planSummary ?? null });
+    const system = buildSystemPrompt({ planSummary: planSummary ?? null, selectedContext: typeof selectedContext === 'string' ? selectedContext : '' });
 
     const account = async (resp, ok) => {
       const u = resp?.usage || {};

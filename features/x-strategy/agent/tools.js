@@ -14,6 +14,10 @@ export const LIMITS = Object.freeze({
   evidenceMax: 6,
   evidenceFieldMax: 240,
   resultMaxChars: 12000,
+  queueMax: 20,
+  excerptMax: 160,
+  opportunitiesMax: 10,
+  engineRowsMax: 12,
 });
 
 const str = (description, extra = {}) => ({ type: 'string', description, ...extra });
@@ -120,6 +124,26 @@ export const READ_TOOLS = Object.freeze([
       },
     },
   },
+  {
+    name: 'get_queue',
+    description: `The owner's post queue for this client: counts by status plus up to ${LIMITS.queueMax} newest posts (id, status, scheduledAt, ${LIMITS.excerptMax}-char excerpt, packageId, errorClass). Read-only. Optionally filter by status.`,
+    input_schema: { type: 'object', properties: { status: str('Only posts with this status, e.g. draft, approved, scheduled, failed') } },
+  },
+  {
+    name: 'get_post',
+    description: 'One saved post by id: status, full content, scheduledAt, reviewedAt, whether it is a reply, lifecycle flags, provenance (runId, suggestionId, strategyVersion) and any error. Read-only.',
+    input_schema: { type: 'object', properties: { postId: str('Post id, e.g. from get_queue') }, required: ['postId'] },
+  },
+  {
+    name: 'get_opportunities',
+    description: `Top ${LIMITS.opportunitiesMax} quote/reply scan targets with age in hours and whether the window is still open, plus when the scan was generated and whether it is stale. Read-only.`,
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'get_results',
+    description: 'Per-engine performance summary: post count, median views and caveats. A metric that was not captured is null (missing), never 0. Read-only.',
+    input_schema: { type: 'object', properties: {} },
+  },
 ]);
 
 export const PROPOSE_TOOLS = Object.freeze([
@@ -164,6 +188,74 @@ function capRows(res, max) {
 }
 const clampLimit = (n, max) => (Number.isFinite(Number(n)) && Number(n) >= 1 ? Math.min(Math.floor(Number(n)), max) : max);
 
+const NA = () => ({ error: 'not available' });
+const finiteOrNull = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+const strOrNull = (v) => (typeof v === 'string' && v ? v : null);
+const excerpt = (v) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, LIMITS.excerptMax);
+
+function shapeQueue(res, statusFilter) {
+  if (!isPlain(res)) return null;
+  const posts = (Array.isArray(res.posts) ? res.posts : []).filter(isPlain)
+    .filter((p) => !statusFilter || p.status === statusFilter)
+    .slice(0, LIMITS.queueMax)
+    .map((p) => ({
+      id: strOrNull(p.id), status: strOrNull(p.status), scheduledAt: p.scheduledAt ?? null,
+      excerpt: excerpt(p.excerpt ?? p.content ?? p.text), packageId: strOrNull(p.packageId), errorClass: strOrNull(p.errorClass),
+    }));
+  return { counts: isPlain(res.counts) ? res.counts : {}, filter: statusFilter || null, posts };
+}
+
+function shapePost(p) {
+  if (!isPlain(p)) return { found: false };
+  const status = strOrNull(p.status);
+  const lc = isPlain(p.lifecycle) ? p.lifecycle : {};
+  return {
+    found: true, id: strOrNull(p.id), status,
+    content: String(p.content ?? p.text ?? '').slice(0, LIMITS.textMax * 2),
+    scheduledAt: p.scheduledAt ?? null, reviewedAt: p.reviewedAt ?? null,
+    isReply: !!(p.replyTo ?? p.isReply),
+    lifecycle: {
+      approved: lc.approved ?? (p.approved === undefined ? null : !!p.approved),
+      scheduled: lc.scheduled ?? (p.scheduledAt ? true : null),
+      published: lc.published ?? (status === 'published' ? true : null),
+      ...Object.fromEntries(Object.entries(lc).filter(([, v]) => typeof v === 'boolean' || v === null)),
+    },
+    provenance: { runId: strOrNull(p.runId), suggestionId: strOrNull(p.suggestionId), strategyVersion: p.strategyVersion ?? null },
+    error: strOrNull(p.error) ? String(p.error).slice(0, 300) : null,
+    errorClass: strOrNull(p.errorClass),
+  };
+}
+
+function shapeOpportunities(res) {
+  if (!isPlain(res)) return null;
+  const list = Array.isArray(res.targets) ? res.targets : Array.isArray(res.rows) ? res.rows : [];
+  return {
+    generatedAt: res.generatedAt ?? null,
+    stale: typeof res.stale === 'boolean' ? res.stale : null,
+    targets: list.filter(isPlain).slice(0, LIMITS.opportunitiesMax).map((t) => ({
+      id: strOrNull(t.id), handle: strOrNull(t.handle), url: strOrNull(t.url),
+      text: excerpt(t.text ?? t.excerpt), ageHours: finiteOrNull(t.ageHours),
+      windowOpen: typeof t.windowOpen === 'boolean' ? t.windowOpen : null, kind: strOrNull(t.kind),
+    })),
+  };
+}
+
+function shapeResults(res) {
+  if (!isPlain(res)) return null;
+  const list = Array.isArray(res.engines) ? res.engines : [];
+  return {
+    window: res.window ?? null,
+    engines: list.filter(isPlain).slice(0, LIMITS.engineRowsMax).map((e) => {
+      const medianViews = finiteOrNull(e.medianViews);
+      return {
+        engine: strOrNull(e.engine), n: finiteOrNull(e.n),
+        medianViews, ...(medianViews === null ? { medianViewsNote: 'missing' } : {}),
+        caveats: (Array.isArray(e.caveats) ? e.caveats : []).slice(0, 6).map((c) => String(c).slice(0, 200)),
+      };
+    }),
+  };
+}
+
 /** Run a read tool through injected deps. Throws on dep failure (the loop turns that into a tool error). */
 export async function runReadTool(name, input, toolDeps) {
   const deps = toolDeps ?? {};
@@ -186,6 +278,26 @@ export async function runReadTool(name, input, toolDeps) {
         limit: clampLimit(input?.limit, LIMITS.topPostsMax),
       };
       return capRows(await need('topPosts')(args), LIMITS.topPostsMax);
+    }
+    // Bounded owner-facing reads. clientId is never a model input: the readers close over the request's client.
+    case 'get_queue': {
+      if (typeof deps.readQueueSummary !== 'function') return NA();
+      const status = typeof input?.status === 'string' && input.status.trim() ? input.status.trim().slice(0, 40) : '';
+      return shapeQueue(await deps.readQueueSummary(), status) ?? { counts: {}, posts: [] };
+    }
+    case 'get_post': {
+      if (typeof deps.readPost !== 'function') return NA();
+      const postId = typeof input?.postId === 'string' ? input.postId.trim().slice(0, 160) : '';
+      if (!postId) return { error: 'postId is required' };
+      return shapePost(await deps.readPost(postId));
+    }
+    case 'get_opportunities': {
+      if (typeof deps.readOpportunities !== 'function') return NA();
+      return shapeOpportunities(await deps.readOpportunities()) ?? { generatedAt: null, stale: null, targets: [] };
+    }
+    case 'get_results': {
+      if (typeof deps.readResults !== 'function') return NA();
+      return shapeResults(await deps.readResults()) ?? { window: null, engines: [] };
     }
     default: throw new Error(`unknown read tool: ${name}`);
   }

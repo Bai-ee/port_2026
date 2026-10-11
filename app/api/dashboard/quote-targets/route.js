@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 import { randomUUID } from 'crypto';
-import { createSocialPost, readSocialQueue, createDraftPostOnce, ensureDraftPost, findOpenPostForPackage } from '../../../../features/social-posting/twitter-service.js';
+import { createSocialPost, readSocialQueue, getSocialPost, createDraftPostOnce, ensureDraftPost, findOpenPostForPackage } from '../../../../features/social-posting/twitter-service.js';
 import { buildDayPlan } from '../../../../features/x-quote-targets/day-plan.js';
 // Static import so Next bundles the calendar — docs/audits/ is NOT in
 // .vercelignore, but a runtime fs read of a repo path is fragile on serverless.
@@ -16,6 +16,7 @@ import { buildDayPlan as buildContentDayPlan } from '../../../../features/x-cont
 import { validateInventory } from '../../../../features/x-content-inventory/schema.js';
 import { readInventory, upsertPackage, deletePackage, getPackage } from '../../../../features/x-content-inventory/store.js';
 import { buildClientPackage, applyApproval } from '../../../../features/x-content-inventory/client-capture.js';
+import { ageHoursOf, DEFAULT_WINDOW_HOURS } from '../../../../features/x-quote-targets/rank.js';
 import { recentPostsFromQueue } from '../../../../features/x-content-inventory/allocate-slot.js';
 import { buildMonthCalendar, ctDate } from '../../../../features/x-content-inventory/month-calendar.js';
 import { buildWeekCalendar } from '../../../../features/x-content-inventory/week-calendar.js';
@@ -295,6 +296,8 @@ const SUPPORTED_ACTIONS = [
   'inventory-delete',
   'week-calendar',
   'month-calendar',
+  'content-context',
+  'post-status',
   'capture-client-story',
   'approve-package',
   'reject-package',
@@ -412,6 +415,82 @@ async function handleMonthCalendar(context, body) {
   const config = resolveCalendarEngineConfig({ planDoc, legacyOverrides: overrides });
   const posts = await readSocialQueue(context.clientId);
   return { ok: true, calendar: buildMonthCalendar({ posts, month, now: Date.now(), config }) };
+}
+
+// ---- Content Management: status strip, post status, bounded chat readers (all client-scoped, read-only) ----
+
+const excerptOf = (t, n = 160) => String(t ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
+
+const postStatusRow = (p) => ({
+  id: p.id, status: p.status, scheduledAt: p.scheduledAt || null, postedAt: p.postedAt || null,
+  reviewedAt: p.reviewedAt || null, content: p.content, packageId: p.packageId || null,
+  errorClass: p.errorClass || null, error: p.error || null, replyTo: !!p.replyTo,
+  lifecycleVersion: p.lifecycleVersion || null,
+  provenance: { runId: p.runId || null, suggestionId: p.suggestionId || null, strategyVersion: p.strategyVersion ?? null, sourceRef: p.sourceRef || null },
+});
+
+/** Status of specific posts of THIS client (a foreign or missing id is simply absent). */
+async function handlePostStatus(context, body) {
+  const ids = (Array.isArray(body?.postIds) ? body.postIds : []).map((x) => String(x || '').trim()).filter(Boolean).slice(0, 20);
+  const rows = (await Promise.all(ids.map((id) => getSocialPost(context.clientId, id)))).filter(Boolean);
+  return { ok: true, posts: rows.map(postStatusRow) };
+}
+
+async function readQueueSummary(clientId) {
+  const posts = await readSocialQueue(clientId);
+  const counts = {};
+  for (const p of posts) counts[p.status] = (counts[p.status] || 0) + 1;
+  return {
+    counts,
+    posts: posts.slice(0, 20).map((p) => ({
+      id: p.id, status: p.status, scheduledAt: p.scheduledAt || null, excerpt: excerptOf(p.content), packageId: p.packageId || null, errorClass: p.errorClass || null,
+    })),
+  };
+}
+
+async function readPostForChat(clientId, postId) {
+  const p = await getSocialPost(clientId, postId);
+  return p ? postStatusRow(p) : null;
+}
+
+async function readOpportunities(clientId) {
+  const qt = await readQuoteTargets(clientId);
+  const now = Date.now();
+  const generatedMs = Date.parse(qt?.generatedAt || '');
+  const targets = (Array.isArray(qt?.candidates) ? qt.candidates : []).slice(0, 10).map((c) => {
+    const ageHours = ageHoursOf(c.createdAt, now);
+    return {
+      id: c.id || c.url || null,
+      handle: c.author?.username || (typeof c.author === 'string' ? c.author : null),
+      url: c.url || null,
+      text: excerptOf(c.text),
+      ageHours: ageHours == null ? null : Math.round(ageHours * 10) / 10,
+      windowOpen: ageHours == null ? null : ageHours <= DEFAULT_WINDOW_HOURS,
+      kind: 'quote',
+    };
+  });
+  return {
+    generatedAt: qt?.generatedAt || null,
+    stale: Number.isFinite(generatedMs) ? (now - generatedMs) / 3_600_000 > 48 : null,
+    targets,
+  };
+}
+
+async function readResultsForChat(clientId) {
+  const rows = joinPerformance({ posts: await readSocialQueue(clientId) });
+  const stats = engineStats(rows, { windowDays: 30, now: Date.now() });
+  return {
+    window: `last ${stats.windowDays} days`,
+    engines: Object.entries(stats.engines).map(([engine, e]) => ({
+      engine,
+      n: e.n ?? null,
+      medianViews: e.medianViews ?? null,
+      caveats: [
+        e.insufficient ? `Fewer than ${stats.minN} measured posts: not ranked.` : null,
+        'Lift is likes-based; missing metrics are not zero.',
+      ].filter(Boolean),
+    })),
+  };
 }
 
 /**
@@ -732,6 +811,10 @@ function getStrategyHandlers() {
       runUpdateItemFacets: (context, body) => handleUpdateItemFacets(context, body),
       readTodayRun: (clientId) => latestDailyRun(createFirestoreRunStore(fb.adminDb), clientId),
       readContentContext: async (clientId) => summarizeContentContext(await readContentContext(clientId)),
+      readQueueSummary,
+      readPost: readPostForChat,
+      readOpportunities,
+      readResults: readResultsForChat,
     });
   }
   return strategyHandlers;
@@ -788,6 +871,10 @@ export async function POST(request) {
     if (action === 'week-calendar') {
       return json(await handleWeekCalendar(context, body));
     }
+    if (action === 'content-context') {
+      return json({ ok: true, context: summarizeContentContext(await readContentContext(context.clientId)) });
+    }
+    if (action === 'post-status') return json(await handlePostStatus(context, body));
     if (action === 'month-calendar') {
       return json(await handleMonthCalendar(context, body));
     }

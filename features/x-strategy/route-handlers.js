@@ -24,6 +24,7 @@ import { createFirestoreChatStore, ChatCapError, ChatStoreError, THREAD_ID_RE } 
 import {
   validateProposal, assignProposal, decideProposal, buildExecutors, normalizeHandleInput,
 } from './agent/proposals.js';
+import { normalizeSelected, describeSelected } from './agent/prompt.js';
 import { randomUUID } from 'node:crypto';
 
 export const STRATEGY_ROUTE_ACTIONS = Object.freeze([
@@ -135,6 +136,7 @@ export function createStrategyHandlers({
   resolveProfile = resolveXGrowthProfile, buildPreviewPlan = buildContentDayPlan,
   chatStore = null, agentLoopFactory = null, callModel = null, logUsage = null,
   runDailyAction = null, runUpdateItemFacets = null, readTodayRun = null, readContentContext = null, saveXGrowthProfile = null,
+  readQueueSummary = null, readPost = null, readOpportunities = null, readResults = null, // chat read tools: (clientId[, postId]) -> plain JSON | null
   env = {}, // explicit on purpose: only createStrategyHandlersFromDb passes process.env, so a bare handler can never reach a real model
 } = {}) {
   if (!corpusStore || !planStore || !refreshService || typeof readXGrowthConfig !== 'function') {
@@ -326,6 +328,11 @@ export function createStrategyHandlers({
       getPlan: async () => ((await planStore.get(clientId)) ?? { version: 0, plan: DEFAULT_PLAN, history: [], isDefault: true }),
       getContext: async () => (readContentContext ? readContentContext(clientId) : { error: 'Content context is not available.' }),
       getTodayRun: async () => summarizeTodayRun(readTodayRun ? await readTodayRun(clientId) : null),
+      // Closed over THIS request's clientId; the model never supplies one. Absent reader => key absent => tool says 'not available'.
+      ...(readQueueSummary ? { readQueueSummary: () => readQueueSummary(clientId) } : {}),
+      ...(readPost ? { readPost: (postId) => readPost(clientId, postId) } : {}),
+      ...(readOpportunities ? { readOpportunities: () => readOpportunities(clientId) } : {}),
+      ...(readResults ? { readResults: () => readResults(clientId) } : {}),
       searchInventory: async ({ query, limit } = {}) => {
         const max = Math.min(Math.max(1, Number(limit) || 10), 20);
         const tokens = String(query ?? '').toLowerCase().split(/\s+/).filter(Boolean).slice(0, 8);
@@ -376,6 +383,28 @@ export function createStrategyHandlers({
     });
   }
 
+  /** Resolve the selected item for the request's OWN client only; null when unknown/other-client/unreadable. */
+  async function resolveSelectedContext(clientId, rawSelected) {
+    const sel = normalizeSelected(rawSelected);
+    if (!sel) return '';
+    let resolved = null;
+    try {
+      if (sel.kind === 'suggestion' && readTodayRun) {
+        const hit = summarizeTodayRun(await readTodayRun(clientId)).suggestions.find((s) => s.id === sel.id);
+        if (hit) resolved = { status: hit.status, text: hit.text };
+      } else if (sel.kind === 'post' && readPost) {
+        const p = await readPost(clientId, sel.id);
+        if (p && typeof p === 'object') resolved = { status: p.status ?? null, scheduledAt: p.scheduledAt ?? null, text: p.content ?? p.text ?? '' };
+      } else if (sel.kind === 'opportunity' && readOpportunities) {
+        const o = await readOpportunities(clientId);
+        const list = Array.isArray(o?.targets) ? o.targets : Array.isArray(o?.rows) ? o.rows : [];
+        const hit = list.find((t) => t && t.id === sel.id);
+        if (hit) resolved = { text: hit.text ?? hit.excerpt ?? '' };
+      }
+    } catch { resolved = null; }
+    return describeSelected(sel, resolved);
+  }
+
   async function strategyChatSend(body, context) {
     const c = requireClient(body, context);
     if (c.error) return c.error;
@@ -416,7 +445,8 @@ export function createStrategyHandlers({
     ];
     let turn;
     try {
-      turn = await loop.runTurn({ clientId: c.clientId, threadId, history, userText: text, now });
+      const selectedContext = await resolveSelectedContext(c.clientId, body?.selected);
+      turn = await loop.runTurn({ clientId: c.clientId, threadId, history, userText: text, now, ...(selectedContext ? { selectedContext } : {}) });
     } catch (err) {
       return fail(502, `The strategy agent failed: ${String(err?.message || err).slice(0, 200)}`, { turnsUsedToday: used, cap: chatStore.cap });
     }
@@ -593,6 +623,7 @@ export function createXGrowthProfileSaver(db) {
  */
 export function createStrategyHandlersFromDb(db, {
   readPackages, env = process.env, runDailyAction, runUpdateItemFacets, readTodayRun, readContentContext,
+  readQueueSummary, readPost, readOpportunities, readResults,
   saveXGrowthProfile = createXGrowthProfileSaver(db), chatStore = createFirestoreChatStore(db, { env }),
   agentLoopFactory, callModel, logUsage, loadCommitted,
 } = {}) {
@@ -607,6 +638,7 @@ export function createStrategyHandlersFromDb(db, {
   return createStrategyHandlers({
     corpusStore, planStore, refreshService, readPackages,
     chatStore, agentLoopFactory, callModel, logUsage, runDailyAction, runUpdateItemFacets, readTodayRun, readContentContext, saveXGrowthProfile, env,
+    readQueueSummary, readPost, readOpportunities, readResults,
     readXGrowthConfig: async (clientId) => {
       const snap = await db.collection('client_configs').doc(clientId).get();
       return snap.exists ? snap.data()?.marketingBriefConfig?.xGrowth ?? null : null;

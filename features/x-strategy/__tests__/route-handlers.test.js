@@ -541,3 +541,25 @@ test('createStrategyHandlersFromDb passes loadCommitted to its corpus store (no 
   assert.equal(own.source, 'committed-json');
   assert.equal(own.rowsMeta.rowCount, 4);
 });
+
+test('chat-send resolves `selected` only for its own client and passes a labelled selectedContext', async () => {
+  const readCalls = [];
+  const s = chatSetup({ extra: {
+    readPost: async (cid, id) => { readCalls.push([cid, id]); return id === 'p1' ? { id, status: 'draft', content: 'my draft' } : null; },
+    readQueueSummary: async (cid) => ({ cid, counts: {}, posts: [] }),
+  } });
+  await s.call('strategy-chat-send', { text: 'hi', selected: { kind: 'post', id: 'p1' } });
+  assert.match(s.loopCalls[0].selectedContext, /SAVED POST \(draft/);
+  assert.deepEqual(readCalls[0], ['c1', 'p1']);
+  await s.call('strategy-chat-send', { text: 'hi', selected: { kind: 'suggestion', id: 's1' } });
+  assert.match(s.loopCalls[1].selectedContext, /RECOMMENDATION/);
+  await s.call('strategy-chat-send', { text: 'hi', selected: { kind: 'post', id: 'nope' } });
+  assert.match(s.loopCalls[2].selectedContext, /could not be found/);
+  await s.call('strategy-chat-send', { text: 'hi', selected: { kind: 'weird', id: 'p1' } });
+  assert.ok(!('selectedContext' in s.loopCalls[3]));
+  // toolDeps are closed over the request client: readers are called with c1 and take no client from the model
+  const deps = s.toolsSeen[0];
+  assert.equal(typeof deps.readQueueSummary, 'function');
+  assert.equal((await deps.readQueueSummary()).cid, 'c1');
+  assert.equal(deps.readOpportunities, undefined);
+});

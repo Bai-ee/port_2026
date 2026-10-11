@@ -15,7 +15,10 @@ import SectionLabel from './ui/SectionLabel';
 // StrategyChat - the agent chat in the Strategy tab's right column.
 //
 //   <StrategyChat clientId call onPlanChanged onRefreshed currentPlan?
-//                 planVersion? history? prefill? onViewPlan? onViewChange? onUndo? undoNote? />
+//                 planVersion? history? prefill? onViewPlan? onViewChange? onUndo? undoNote? selected? />
+//
+// `selected` = {kind:'suggestion'|'post'|'opportunity', id} (optional): sent with each message so the agent knows
+// which item the owner means. The server re-resolves it for this client; chat itself never approves/schedules.
 //
 // Presentation props (all optional, owned by StrategyPanel): `history` = plan history (oldest first), used only
 // to interleave manual-edit rows into the timeline; `prefill` = {text, nonce} fills the composer WITHOUT
@@ -194,7 +197,7 @@ function ProposalCard({ proposal, currentPlan, history, planVersion, deciding, o
   );
 }
 
-export default function StrategyChat({ clientId, call, onPlanChanged, onRefreshed, currentPlan, planVersion, history, prefill, onViewPlan, onViewChange, onUndo, undoNote }) {
+export default function StrategyChat({ clientId, call, onPlanChanged, onRefreshed, currentPlan, planVersion, history, prefill, onViewPlan, onViewChange, onUndo, undoNote, selected }) {
   const [threadId, setThreadId] = useState('');
   const [messages, setMessages] = useState([]);      // {role, text, proposalIds?}
   const [proposals, setProposals] = useState({});    // id -> proposal
@@ -281,12 +284,13 @@ export default function StrategyChat({ clientId, call, onPlanChanged, onRefreshe
     const body = text.trim();
     if (!body || sending || typeof call !== 'function') return;
     const startedFor = clientId; // a response for a client that is no longer shown must not touch state
+    const sel = selected && typeof selected === 'object' && typeof selected.kind === 'string' && typeof selected.id === 'string' && selected.id ? { kind: selected.kind, id: selected.id } : null;
     setSending(true);
     setError('');
     setMessages((m) => [...m, { role: 'user', text: body, pending: true }]);
     setText('');
     try {
-      const res = await call('strategy-chat-send', { clientId, text: body, ...(threadId ? { threadId } : {}) });
+      const res = await call('strategy-chat-send', { clientId, text: body, ...(threadId ? { threadId } : {}), ...(sel ? { selected: sel } : {}) });
       if (!mounted.current || clientIdRef.current !== startedFor) return;
       const fresh = Array.isArray(res.proposals) ? res.proposals : [];
       setThreadId(res.threadId || threadId);
@@ -309,7 +313,7 @@ export default function StrategyChat({ clientId, call, onPlanChanged, onRefreshe
     } finally {
       if (mounted.current) setSending(false); // always release the busy flag (it is not client-specific data)
     }
-  }, [text, sending, call, clientId, threadId]);
+  }, [text, sending, call, clientId, threadId, selected]);
 
   const decide = useCallback(async (proposal, decision) => {
     if (decidingId || typeof call !== 'function') return;

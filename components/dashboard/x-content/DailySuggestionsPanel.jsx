@@ -50,7 +50,82 @@ const STATUS_WORDS = {
 const COLLAPSED_GAPS = 3;
 const TOGGLE = { alignSelf: 'flex-start', padding: 0, border: 0, background: 'none', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'rgba(42,36,32,0.7)', textDecoration: 'underline' };
 
-function SuggestionCard({ s, text, thumbUrl, onText, onCommit, onSave, onDismiss, busy }) {
+const STATUS_LINE = {
+  draft: 'Saved draft — not approved',
+  approved: 'Approved — not scheduled',
+  awaiting_approval: 'Awaiting approval',
+  scheduled: 'Scheduled',
+  queued: 'Queued for the next publish run',
+  posting: 'Posting now',
+  posted: 'Posted',
+  failed: 'Failed to post',
+  needs_review: 'Held for review',
+  rejected: 'Rejected',
+  expired: 'Expired',
+};
+const HOLD_REASON = {
+  'reply-threading-unsupported': 'it is a reply and threaded replies are not supported yet',
+  'clearance-revoked': 'the content package is no longer cleared',
+  'opportunity-expired': 'its timely window closed',
+  'clearance-unverifiable': 'package clearance could not be verified',
+};
+
+// After Save draft the SAME post id carries on here: see status, pick a time, approve + schedule (explicit click),
+// or jump to Queue & Calendar. Approving schedules this exact copy; the publish run posts it later.
+function SavedPostFlow({ s, call, callSocial, showToast, onOpenQueue }) {
+  const postId = s.socialPostId;
+  const [post, setPost] = useState(null);
+  const [when, setWhen] = useState('');
+  const [working, setWorking] = useState(false);
+  const [err, setErr] = useState('');
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await call('post-status', { postIds: [postId] });
+      setPost(res.posts?.[0] || null);
+    } catch (e) { setErr(e.message || 'Could not read the post status.'); }
+  }, [call, postId]);
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const whenMs = when ? new Date(when).getTime() : NaN;
+  const timeOk = Number.isFinite(whenMs) && whenMs >= Date.now() + 60_000;
+  const open = post && (post.status === 'draft' || post.status === 'approved');
+
+  const approve = async () => {
+    setWorking(true); setErr('');
+    try {
+      await callSocial({ action: 'approve-and-schedule', postId, scheduledAt: new Date(when).toISOString() });
+      showToast?.('Approved and scheduled. It posts when the publish run picks it up.');
+      await refresh();
+    } catch (e) { setErr(e.message || 'Could not schedule.'); showToast?.(e.message || 'Could not schedule.', 'error'); } finally { setWorking(false); }
+  };
+
+  return (
+    <div id={`daily-suggestion-saved-flow-${s.id}`} className="xce-dl-saved-flow">
+      <span id={`daily-suggestion-saved-note-${s.id}`} className="xce-dl-ok">Saved as draft · post {postId}</span>
+      <span id={`daily-suggestion-post-status-${s.id}`} className="xce-dl-status" role="status">
+        {post ? `${STATUS_LINE[post.status] || post.status}${post.scheduledAt ? ` · ${new Date(post.scheduledAt).toLocaleString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} CT` : ''}` : 'checking status…'}
+        {post?.status === 'needs_review' && post.errorClass ? ` — held because ${HOLD_REASON[post.errorClass] || post.errorClass}` : ''}
+      </span>
+      {open ? (
+        <div id={`daily-suggestion-schedule-row-${s.id}`} className="xce-dl-actions">
+          <label className="xce-dl-model" htmlFor={`daily-suggestion-when-${s.id}`}>Publish at (your local time)
+            <input id={`daily-suggestion-when-${s.id}`} type="datetime-local" className="xce-input" value={when} onChange={(e) => setWhen(e.target.value)} />
+          </label>
+          <button id={`daily-suggestion-approve-schedule-${s.id}`} type="button" className="xce-btn-primary" disabled={working || !timeOk || post.replyTo} onClick={approve}>
+            {working ? 'Working…' : 'Approve & schedule'}
+          </button>
+          {timeOk ? <span id={`daily-suggestion-when-ct-${s.id}`} className="xce-dl-muted">= {new Date(when).toLocaleString('en-US', { timeZone: 'America/Chicago', weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} CT</span> : null}
+        </div>
+      ) : null}
+      {open ? <p id={`daily-suggestion-consequence-${s.id}`} className="xce-dl-muted">Approving schedules this exact copy for the publish run; nothing is posted from this button. Editing it later voids the approval.{post.replyTo ? ' This is a reply: replies cannot be scheduled yet.' : ''}</p> : null}
+      {err ? <p className="xce-dl-bad" role="alert">{err}</p> : null}
+      <button id={`daily-suggestion-open-queue-${s.id}`} type="button" className="xce-btn-ghost" onClick={onOpenQueue}>Open in Queue &amp; Calendar</button>
+    </div>
+  );
+}
+
+function SuggestionCard({ s, text, thumbUrl, onText, onCommit, onSave, onDismiss, busy, call, callSocial, showToast, onOpenQueue }) {
   const reviewed = s.reviewState === 'saved' || s.reviewState === 'dismissed';
   const stored = s.edit?.text ?? s.draft.text;
   const dirty = text !== stored;
@@ -140,7 +215,7 @@ function SuggestionCard({ s, text, thumbUrl, onText, onCommit, onSave, onDismiss
 
       <div id={`daily-suggestion-actions-row-${s.id}`} className="xce-dl-actions">
         {s.reviewState === 'saved' ? (
-          <span id={`daily-suggestion-saved-note-${s.id}`} className="xce-dl-ok">Saved as draft · post {s.socialPostId}</span>
+          <SavedPostFlow s={s} call={call} callSocial={callSocial} showToast={showToast} onOpenQueue={onOpenQueue} />
         ) : s.reviewState === 'dismissed' ? (
           <span className="xce-dl-muted">Dismissed</span>
         ) : (
@@ -246,7 +321,7 @@ function Shortlist({ run }) {
   );
 }
 
-export default function DailySuggestionsPanel({ call, showToast }) {
+export default function DailySuggestionsPanel({ call, callSocial, showToast, onOpenQueue, onSelect }) {
   const [run, setRun] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -299,6 +374,7 @@ export default function DailySuggestionsPanel({ call, showToast }) {
     try {
       const res = await call('daily-run-save-draft', { suggestionId: s.id, text: texts[s.id] });
       adopt(res.run);
+      if (res.post?.id || res.postId) onSelect?.({ kind: 'post', id: res.post?.id || res.postId });
       showToast?.(res.existing ? 'Already saved — no duplicate created.' : 'Saved to the queue as an unscheduled draft.');
     } catch (err) { showToast?.(err.message, 'error'); } finally { setBusy(null); }
   }, [call, adopt, texts, showToast]);
@@ -361,8 +437,12 @@ export default function DailySuggestionsPanel({ call, showToast }) {
                 text={texts[s.id] ?? s.edit?.text ?? s.draft.text}
                 thumbUrl={thumbs[s.package?.id] || null}
                 onText={(v) => setTexts((t) => ({ ...t, [s.id]: v }))}
-                onCommit={() => commitEdit(s)}
+                onCommit={() => { onSelect?.({ kind: s.socialPostId ? 'post' : 'suggestion', id: s.socialPostId || s.id }); commitEdit(s); }}
                 onSave={() => save(s)}
+                call={call}
+                callSocial={callSocial}
+                showToast={showToast}
+                onOpenQueue={onOpenQueue}
                 onDismiss={() => dismiss(s)}
                 busy={busy === s.id || busy === 'generate'}
               />

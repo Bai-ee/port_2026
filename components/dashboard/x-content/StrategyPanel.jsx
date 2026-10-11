@@ -232,7 +232,7 @@ const showVal = (v) => {
   return typeof v === 'object' ? JSON.stringify(v).slice(0, 40) : String(v);
 };
 
-const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlanChanged, clientName }, ref) {
+const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlanChanged, clientName, selected }, ref) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -517,6 +517,7 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
             planVersion={planVersion}
             history={planDoc?.history}
             prefill={prefill}
+            selected={selected}
             onPlanChanged={() => { reload(); if (typeof onPlanChanged === 'function') onPlanChanged(); }}
             onRefreshed={() => reload({ keepDrafts: true })}
             onViewPlan={() => goDetails('plan')}
