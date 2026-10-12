@@ -17,8 +17,11 @@ import { createFirestoreCorpusStore, normalizeHandle, CorpusStoreError } from '.
 import { createRefreshService, createFirestoreRefreshQueue, readWorkerHealth as readWorkerHealthFromDb } from './refresh.js';
 import { resolveXGrowthProfile } from '../x-benchmark/profile.js';
 import { buildDayPlan as buildContentDayPlan } from '../x-content-inventory/plan-day.js';
+import { hasPlaceholderStory } from '../x-content-inventory/match.js';
 import { projectDayPlan } from '../x-content-inventory/day-plan-projection.js';
 import { resolvePlanInputs } from './plan-inputs.js';
+import { tracksOf } from './content-tracks.js';
+import { hasExplicitTracks, trackBenchmarkHandles, newTrackBenchmarkHandles, loadTrackProfiles } from './track-profile.js';
 import { normalizeXGrowthProfile } from '../x-benchmark/profile.js';
 import { createFirestoreChatStore, ChatCapError, ChatStoreError, THREAD_ID_RE } from './agent/chat-store.js';
 import {
@@ -205,24 +208,34 @@ export function createStrategyHandlers({
     }
   }
 
+  /** Per-track profiles (never averaged across tracks); a failure omits them rather than failing the read. */
+  async function safeTrackProfiles(planDoc, profile) {
+    try {
+      return await loadTrackProfiles({ tracks: tracksOf(planDoc), corpusStore, ownHandle: safeHandle(profile.ownHandle) });
+    } catch { return []; }
+  }
+
   async function strategyGet(body, context) {
     const c = requireClient(body, context);
     if (c.error) return c.error;
     const now = clock();
     const profile = await loadProfile(c.clientId);
     const planDoc = await planStore.get(c.clientId);
-    const handles = [...new Set([profile.ownHandle, ...profile.benchmarkHandles].filter(Boolean).map((h) => safeHandle(h) || h))];
+    const explicitTracks = hasExplicitTracks(planDoc);
+    const trackHandles = explicitTracks ? trackBenchmarkHandles(tracksOf(planDoc)) : [];
+    const handles = [...new Set([profile.ownHandle, ...profile.benchmarkHandles, ...trackHandles].filter(Boolean).map((h) => safeHandle(h) || h))];
     const reads = {};
     for (const h of handles) reads[h] = await readHandle(h);
     const rowsMeta = handles.map((h) => describeRows(h, reads[h], now));
 
     const ownKey = safeHandle(profile.ownHandle);
     const own = (ownKey && reads[ownKey]) || { handle: ownKey || profile.ownHandle, rows: [], meta: null, source: 'none' };
-    const benchmarks = profile.benchmarkHandles.map((h) => safeHandle(h)).filter(Boolean)
-      .map((h) => ({ handle: h, rows: reads[h].rows, meta: reads[h].meta }));
+    const benchmarkKeys = [...new Set([...profile.benchmarkHandles, ...trackHandles].map((h) => safeHandle(h)).filter(Boolean))];
+    const benchmarks = benchmarkKeys.map((h) => ({ handle: h, rows: reads[h].rows, meta: reads[h].meta }));
 
     const { evaluation, evaluationError } = await runEvaluate({
       ownHandle: own.handle, ownRows: own.rows, ownMeta: own.meta, benchmarks,
+      ...(explicitTracks ? { tracks: tracksOf(planDoc) } : {}),
       plan: planDoc?.plan ?? DEFAULT_PLAN, now,
     });
 
@@ -237,6 +250,7 @@ export function createStrategyHandlers({
       evaluation,
       ...(evaluationError ? { evaluationError } : {}),
       plan: planDoc,
+      trackProfiles: await safeTrackProfiles(planDoc, profile),
       todayPlanPreview: todayPreview({ profile, planDoc, own, bench, packages, now }),
       ...(await workerHealthFor(c.clientId)),
     };
@@ -305,11 +319,21 @@ export function createStrategyHandlers({
   async function strategyPlanApply(body, context, auth) {
     const c = requireClient(body, context);
     if (c.error) return c.error;
+    const before = body?.changes && 'contentTracks' in body.changes ? await planStore.get(c.clientId) : null;
     const doc = await planStore.apply(c.clientId, {
       changes: body?.changes, expectedVersion: body?.expectedVersion, reason: typeof body?.reason === 'string' ? body.reason : '',
       by: by(auth), source: 'manual', now: clock(),
     });
-    return { ok: true, plan: doc.doc, changed: doc.changed };
+    // A new track benchmark handle queues a corpus refresh (drained by the Mac worker); a queue failure never fails the save.
+    let refresh = null;
+    const added = before !== null ? newTrackBenchmarkHandles(before, doc.doc) : [];
+    if (added.length) {
+      try {
+        const out = await refreshService.requestRefresh({ handles: added, clientId: c.clientId, requestedBy: by(auth) });
+        refresh = { requestId: out.requestId, status: out.status, handles: added };
+      } catch (err) { refresh = { error: String(err?.message || err).slice(0, 160), handles: added }; }
+    }
+    return { ok: true, plan: doc.doc, changed: doc.changed, ...(refresh ? { refresh } : {}) };
   }
 
   async function strategyPlanRevert(body, context, auth) {
@@ -342,6 +366,11 @@ export function createStrategyHandlers({
         const profile = preloaded.profile ?? (preloaded.profile = await loadProfile(clientId));
         return [profile.ownHandle, ...(profile.benchmarkHandles || [])].map((h) => safeHandle(h)).filter(Boolean);
       },
+      getTracks: async () => {
+        const planDoc = await planStore.get(clientId);
+        const profile = preloaded.profile ?? (preloaded.profile = await loadProfile(clientId));
+        return { tracks: tracksOf(planDoc), profiles: await safeTrackProfiles(planDoc, profile) };
+      },
       getPlan: async () => ((await planStore.get(clientId)) ?? { version: 0, plan: DEFAULT_PLAN, history: [], isDefault: true }),
       getContext: async () => (readContentContext ? readContentContext(clientId) : { error: 'Content context is not available.' }),
       getTodayRun: async () => summarizeTodayRun(readTodayRun ? await readTodayRun(clientId) : null),
@@ -363,7 +392,7 @@ export function createStrategyHandlers({
         scored.sort((a, b) => b.score - a.score);
         return scored.slice(0, max).map(({ p }) => ({
           id: p.id, title: p.title ?? null, story: String(p.story ?? '').slice(0, 160), bucketId: p.bucketId ?? null,
-          hasStory: !!String(p.story ?? '').trim(), facets: p.humanEdits || p.facets || {},
+          hasStory: !!String(p.story ?? '').trim() && !hasPlaceholderStory(p), facets: p.humanEdits || p.facets || {},
         }));
       },
       topPosts: async ({ handle, type, topic, limit } = {}) => {

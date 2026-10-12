@@ -21,7 +21,7 @@
       "C"
     ]
   },
-  "inputFingerprint": "b81682dc",
+  "inputFingerprint": "89318236",
   "inputs": [
     {
       "input": "watchlist scan",
@@ -287,6 +287,8 @@
         "iso": "2026-10-10T20:00:00.000Z",
         "note": "suggestion only — not scheduled"
       },
+      "track": "design",
+      "promotion": null,
       "draft": {
         "text": "the detail on this is really well made.",
         "selfReply": "",
@@ -305,6 +307,132 @@
         },
         "score": null,
         "chars": 39
+      },
+      "edit": null,
+      "reviewState": "pending",
+      "socialPostId": null
+    },
+    {
+      "id": "dl_20261010_15ca11ec",
+      "type": "original",
+      "rank": null,
+      "conversation": null,
+      "opportunity": null,
+      "package": {
+        "id": "rv-fathers-day",
+        "title": "BAI-EE – Fathers Day Jazz Mix",
+        "series": "C6",
+        "pillar": "made-this",
+        "sourceKind": "rendered-video",
+        "sourceUrl": null,
+        "mediaState": "video",
+        "rights": "owned",
+        "basis": "facts",
+        "story": "",
+        "facts": [
+          {
+            "label": "own work",
+            "value": "BAI-EE – Fathers Day Jazz Mix — a mix rendered by the owner's own video pipeline",
+            "provenance": "rendered-videos"
+          },
+          {
+            "label": "year",
+            "value": "2024",
+            "provenance": "rendered-videos"
+          },
+          {
+            "label": "artist genre tag",
+            "value": "jazz, house",
+            "provenance": "Underground Existence artist record"
+          }
+        ],
+        "assetRefs": [
+          "ev:renders/fathers-day.mp4"
+        ],
+        "thumbRef": null,
+        "engine": null,
+        "media": {
+          "kind": "video",
+          "ref": "ev:renders/fathers-day.mp4"
+        }
+      },
+      "why": {
+        "now": "original-showcase slot A at 08:00 CT",
+        "brand": "your own content",
+        "brain": "Client Brain is draft — not used",
+        "strategy": "no current strategy plan — benchmark type evidence only",
+        "content": "\"BAI-EE – Fathers Day Jazz Mix\" (has media); grounded in verifiable facts",
+        "history": {
+          "available": true,
+          "range": {
+            "from": "2026-07-07T20:57:18.000Z",
+            "to": "2026-09-10T14:29:12.000Z"
+          },
+          "topics": [],
+          "type": {
+            "key": "original-showcase",
+            "n": 29,
+            "lift": 1.6092,
+            "weak": false
+          },
+          "score": 0,
+          "note": "Conversation does not map to any topic in the shared taxonomy — no topic evidence."
+        }
+      },
+      "scores": {
+        "momentum": null,
+        "brandFit": null,
+        "contentFit": null,
+        "history": 0
+      },
+      "match": {
+        "terms": [],
+        "score": null
+      },
+      "slot": {
+        "letter": "A",
+        "timeCT": "08:00",
+        "startsAt": "2026-10-10T13:00:00.000Z",
+        "type": "original-showcase",
+        "lane": "music",
+        "pillar": "P6",
+        "fillReason": "lane:music · ready · never posted · thin story"
+      },
+      "proposedSlot": {
+        "localDate": "2026-10-10",
+        "localTime": "08:00",
+        "timezone": "America/Chicago",
+        "iso": "2026-10-10T13:00:00.000Z",
+        "note": "suggestion only — not scheduled"
+      },
+      "track": "design",
+      "promotion": {
+        "id": "client",
+        "label": "Client work",
+        "url": null
+      },
+      "draft": {
+        "text": "BAI-EE – Fathers Day Jazz Mix (2024)",
+        "selfReply": "",
+        "source": "fallback (item text, cut to fit)"
+      },
+      "checks": {
+        "blocked": false,
+        "violations": [],
+        "warnings": [],
+        "guard": {
+          "hardBlock": false,
+          "lane": "unknown",
+          "readyToPublish": false,
+          "flags": [],
+          "note": "Clean, but the lane is unclear — needs a judgement pass."
+        },
+        "score": {
+          "value": 0.23286104025522789,
+          "profile": "x-2026-10-03",
+          "advisory": true
+        },
+        "chars": 36
       },
       "edit": null,
       "reviewState": "pending",
@@ -421,7 +549,11 @@
           "ev:discogs/10207.mp4"
         ],
         "thumbRef": null,
-        "engine": null
+        "engine": null,
+        "media": {
+          "kind": "video",
+          "ref": "ev:discogs/10207.mp4"
+        }
       },
       "why": {
         "now": "moving (55/h); 293 engagements across 2 post(s); anchor is 3.5h old, inside the 6h reply window",
@@ -483,6 +615,12 @@
         "timezone": "America/Chicago",
         "iso": null,
         "note": "suggestion only — not scheduled"
+      },
+      "track": "music",
+      "promotion": {
+        "id": "discogs",
+        "label": "Discogs store",
+        "url": null
       },
       "draft": {
         "text": "Glenn Underground, Cei-Bei – House Music Will Never Die (1996)",
@@ -579,6 +717,8 @@
         "iso": "2026-10-10T18:00:00.000Z",
         "note": "suggestion only — not scheduled"
       },
+      "track": "design",
+      "promotion": null,
       "draft": {
         "text": "",
         "selfReply": "",
@@ -619,19 +759,6 @@
       "code": "ineligible-rights",
       "count": 1,
       "message": "1 item(s) skipped: rights not owned or cleared."
-    },
-    {
-      "code": "slot-unfilled:A",
-      "message": "Slot A (original-showcase) not filled: no eligible package.",
-      "slot": {
-        "letter": "A",
-        "timeCT": "08:00",
-        "startsAt": "2026-10-10T13:00:00.000Z",
-        "type": "original-showcase",
-        "lane": "music",
-        "pillar": "P6",
-        "fillReason": "no eligible package"
-      }
     },
     {
       "code": "slot-unfilled:B",

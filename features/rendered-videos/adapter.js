@@ -9,8 +9,9 @@
 // RULES
 // - Store the OBJECT PATH (`ev:videos/<file>.mp4`), never a signed URL: the
 //   worker's URLs are 1-year signed links and the Studio re-signs on demand.
-// - Rights reuse features/ue-content: owner artists are 'owned', everyone else
-//   is 'never-public' (non-publishing) until the artist confirms.
+// - Rights (owner decision D1, 2026-10-11): owner artists are 'owned'; every other
+//   UE-hosted mix is 'cleared' (approval none, rightsSource recorded). A human
+//   rights choice (`rightsSetBy:'human'`) always wins in sync.
 // - `story` is always the placeholder; nothing here can reach a post unreviewed.
 //
 // AUTO-DAILY DETECTION (documented rule, see isAutoDailyRender):
@@ -30,6 +31,10 @@ export const DAILY_FILTER_KEY = 'look_hard_bw_street_doc';
 export const DAILY_END_LOGO = 'mixtapes_white_square.png';
 export const BUCKET_ID = 'ue';
 export const EV_PREFIX = 'ev:';
+export const UE_CLEARED_POLICY = 'ue-hosted-cleared';
+export const UE_CLEARED_AT = '2026-10-11';
+/** Provenance stamped on every non-owned rendered mix (D1). */
+export const UE_RIGHTS_SOURCE = Object.freeze({ by: 'owner', policy: UE_CLEARED_POLICY, at: UE_CLEARED_AT });
 
 const BAD_STATUS = new Set(['failed', 'deleted', 'error', 'cancelled', 'canceled']);
 
@@ -151,7 +156,7 @@ export function renderedVideoToPackage(videoDoc, ctx = {}) {
   const tags = ['rendered-video', origin];
   if (!mixKnown) tags.push('mix-unknown');
   if (!artistKnown) tags.push('artist-unknown');
-  if (!owned) tags.push('rights:third-party-unconfirmed');
+  if (!owned) tags.push('rights:ue-hosted-cleared');
 
   const dur = formatDuration(videoDoc.duration);
   const facts = [`Rendered video for ${artistName}${mixKnown ? `, "${mixTitle}"` : ''}${year ? ` (${year})` : ''}`];
@@ -174,8 +179,9 @@ export function renderedVideoToPackage(videoDoc, ctx = {}) {
     mediaState: 'video',
     format: 'video',
     effort: 'ready',
-    rights: owned ? 'owned' : 'never-public',
-    approval: { state: owned ? 'none' : 'needed' },
+    rights: owned ? 'owned' : 'cleared',
+    approval: { state: 'none' },
+    ...(owned ? {} : { rightsSource: { ...UE_RIGHTS_SOURCE } }),
     platforms: ['x'],
     cta: null,
     eraYear: year,
@@ -191,6 +197,7 @@ export function renderedVideoToPackage(videoDoc, ctx = {}) {
     tags,
     source: { kind: 'rendered-video', externalId: jobId }, // no url key: validatePackage rejects null
     renderedAt,
+    ...(Number(videoDoc.duration) > 0 ? { durationSec: Math.round(Number(videoDoc.duration)) } : {}),
     ...(nowIso ? { ingestedAt: nowIso } : {}),
     variants: { x: { suggestedStory } },
     facetVersion: FACET_VERSION,

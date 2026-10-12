@@ -24,7 +24,7 @@ export const X_GROWTH_MODES = ['off', 'approval', 'auto'];
 /** At most this many benchmark accounts. More than a handful stops being a
  * comparison and starts being an average, which is exactly the thing a
  * benchmark is supposed to beat. */
-export const MAX_BENCHMARK_HANDLES = 5;
+export const MAX_BENCHMARK_HANDLES = 8;
 
 export const MAX_LANES = 12;
 

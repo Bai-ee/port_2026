@@ -108,9 +108,9 @@ test('default engine config is untouched by merge with undefined (what planSlots
 
 // --- (5) Tier-1 clamp + MAX_SUGGESTIONS -----------------------------------------------------
 
-test('constants: TIER_1_MAX_POSTS is 7 and MAX_SUGGESTIONS is 3', () => {
+test('constants: TIER_1_MAX_POSTS is 7 and MAX_SUGGESTIONS is 5', () => {
   assert.equal(TIER_1_MAX_POSTS, 7);
-  assert.equal(MAX_SUGGESTIONS, 3);
+  assert.equal(MAX_SUGGESTIONS, 5);
 });
 
 test('planSlots clamps the requested posts: 1..7 pass through, 8+ is cut to 7, unset/invalid/<1 means undefined (engine default)', () => {

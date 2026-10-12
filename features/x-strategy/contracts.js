@@ -25,6 +25,7 @@ import { STRATEGY_PRIORITY, DEFAULT_TYPE_FLOORS } from '../x-content-inventory/d
  * @property {Object} engineTargets  mergeEngineConfig overrides
  * @property {string} benchmarkPrimary
  * @property {string} notes
+ * @property {import('./content-tracks.js').ContentTrack[]} [contentTracks]  optional; absent => DEFAULT_TRACKS (old plans unchanged)
  */
 
 /**
@@ -64,7 +65,7 @@ export const PLAN_LIMITS = Object.freeze({
   authoredPerDayMin: 1,
   authoredPerDayMax: 16,
   historyCap: 30,
-  maxBenchmarkHandles: 5,
+  maxBenchmarkHandles: 8, // total distinct across content tracks (content-tracks.js MAX_DISTINCT_BENCHMARKS)
   maxHandlesPerRefreshRequest: 6,
 });
 

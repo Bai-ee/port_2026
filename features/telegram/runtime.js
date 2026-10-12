@@ -6,6 +6,7 @@
 // features/social-posting/twitter-service.js, the same functions the web calendar uses.
 
 import { createRequire } from 'node:module';
+import crypto from 'node:crypto';
 import * as store from './store.js';
 import * as briefing from './briefing.js';
 import { createBotTransport } from './transport.js';
@@ -17,18 +18,62 @@ import { createIntake } from './intake.js';
 import { createIntakeStorage } from './intake-storage.js';
 import { signContinuationToken, continuationUrlFor, UPLOAD_SECRET_ENV } from './continuation.js';
 import {
-  getSocialPost, readSocialQueue, updateSocialPost, approveAndSchedule, rejectDraft,
+  createDraftPostOnce, getSocialPost, readSocialQueue, updateSocialPost, approveAndSchedule, rejectDraft,
   claimManualDelivery, recordManualPosted, releaseManualClaim, approveAndPostNow,
 } from '../social-posting/twitter-service.js';
 import { buildMonthCalendar } from '../x-content-inventory/month-calendar.js';
 import { resolveCalendarEngineConfig } from '../content-context/load-content-context.js';
 import { createFirestorePlanStore } from '../x-strategy/plan-store.js';
-import { upsertPackage } from '../x-content-inventory/store.js';
+import { upsertPackage, getPackage } from '../x-content-inventory/store.js';
+import { createFirestoreRunStore } from '../x-content-inventory/daily-loop/run-store.js';
+import { saveSuggestionDraft, dismissSuggestion as dismissDailySuggestion, overlayStagedMedia } from '../x-content-inventory/daily-loop/review.js';
+import { handleNasAction } from '../x-content-inventory/nas.js';
+import { tokenUrlFor } from '../x-content-inventory/thumbs.js';
 
 const require = createRequire(import.meta.url);
 const fb = require('../../api/_lib/firebase-admin.cjs');
 const briefIntel = require('../intelligence/_brief-intel.js');
 const digestConfig = require('../intelligence/_digest-config.js');
+
+const EV_LONG_SIGN_MS = 6.9 * 24 * 60 * 60 * 1000; // v4 signed URLs cap at 7 days
+
+// "<clientId>__<localDate>__<channel>__v<version>" (daily-loop runDocId) -> run-store key. Null when malformed.
+function parseRunKey(runKey) {
+  const m = /^(.+)__(\d{4}-\d{2}-\d{2})__([a-z]+)__v(\d+)$/.exec(String(runKey || ''));
+  return m ? { clientId: m[1], localDate: m[2], channel: m[3], version: Number(m[4]) } : null;
+}
+
+// Same signers the web daily-run Save uses; the draft stores the object ref and publish re-signs.
+function mediaSigners() {
+  return {
+    async signEvLong(path) {
+      try {
+        void fb.adminDb; // initialize the Hitloop app BEFORE the named EditVideos bridge app
+        const bridge = require('../../api/_lib/editvideos-bridge.cjs');
+        const [url] = await bridge.bridgeBucket().file(path).getSignedUrl({ version: 'v4', action: 'read', expires: Date.now() + EV_LONG_SIGN_MS });
+        return url;
+      } catch { return null; }
+    },
+    hitloopUrl: (path) => tokenUrlFor(fb.adminStorage.bucket(), path),
+  };
+}
+
+// Resolve a suggestion's storage-path media ref to a sendable URL (read side only; saves keep the raw object ref).
+async function withMediaUrls(rawRun) {
+  const run = await overlayStagedMedia(rawRun, getPackage); // a card staged since the run was written shows its media + Save
+  if (!run?.suggestions?.length) return run;
+  const signers = mediaSigners();
+  const suggestions = await Promise.all(run.suggestions.map(async (s) => {
+    const m = s?.package?.media;
+    if (!m?.ref || m.url || typeof m.ref !== 'string') return s;
+    const ev = /^ev:(.+)$/.exec(m.ref)?.[1];
+    const path = ev || (m.ref.startsWith('publish-staging/') ? m.ref : null);
+    if (!path) return s;
+    const url = await (ev ? signers.signEvLong(path) : signers.hitloopUrl(path)).catch(() => null);
+    return url ? { ...s, package: { ...s.package, media: { ...m, url } } } : s;
+  }));
+  return { ...run, suggestions };
+}
 
 const PUBLIC_BASE_URL = () => String(process.env.TELEGRAM_PUBLIC_BASE_URL || 'https://hitloop.agency').replace(/\/+$/, '');
 
@@ -50,7 +95,48 @@ export function createTelegramRuntime({ env = process.env, db = fb.adminDb, tran
   if (!tx) throw Object.assign(new Error('Telegram bot is not configured.'), { status: 503, code: 'telegram-not-configured' });
   const now = () => Date.now();
 
+  const runStore = createFirestoreRunStore(db);
+  const keyFor = (clientId, runKey) => {
+    const key = parseRunKey(runKey);
+    if (!key || key.clientId !== clientId) throw Object.assign(new Error('Suggestion run not found.'), { status: 404 });
+    return key;
+  };
+  const nasDeps = {
+    db, fieldValue: fb.FieldValue, getPackage, upsertPackage: (pkg) => upsertPackage(pkg, { returnPackages: false }),
+    now, sleep: (ms) => new Promise((r) => setTimeout(r, ms)), randomId: () => crypto.randomUUID(),
+  };
+
   const services = {
+    // Suggestions (daily loop). All writes reuse the web Save/Dismiss functions, so Telegram and the dashboard cannot diverge.
+    async saveSuggestion({ clientId, runKey, suggestionId }) {
+      const key = keyFor(clientId, runKey);
+      const postExists = async (id) => (await db.collection('social_posts').doc(String(id)).get()).exists;
+      const saved = await saveSuggestionDraft(
+        { store: runStore, getPackage, createDraftPostOnce, postExists, ...mediaSigners() },
+        { key, suggestionId },
+      );
+      return { draftId: saved.postId, post: await getSocialPost(clientId, saved.postId) };
+    },
+    async dismissSuggestion({ clientId, runKey, suggestionId }) {
+      return dismissDailySuggestion({ store: runStore }, { key: keyFor(clientId, runKey), suggestionId });
+    },
+    // Owner tap = approval (nas-stage marks the item approved and queues STAGE_FOR_PUBLISH). Never called automatically.
+    async stageSuggestion({ clientId, runKey, suggestionId }) {
+      const key = keyFor(clientId, runKey);
+      const run = await runStore.read(key);
+      const s = (run?.suggestions || []).find((x) => x.id === suggestionId);
+      const packageId = s?.package?.id;
+      if (!packageId) return { ok: false, status: 'error', message: 'This suggestion has no library item to stage.' };
+      try {
+        const online = (await handleNasAction(nasDeps, 'nas-status', {}, null)).online === true;
+        await handleNasAction(nasDeps, 'nas-stage', { id: packageId }, { email: 'telegram-owner' });
+        return online
+          ? { ok: true, status: 'queued', message: 'Staging started. Check back in a few minutes.' }
+          : { ok: true, status: 'offline', message: 'Queued, but the Mac analyzer is offline. It stages when the analyzer is back online.' };
+      } catch (err) {
+        return { ok: false, status: 'error', message: String(err?.message || err).slice(0, 200) };
+      }
+    },
     getSocialPost, updateSocialPost, approveAndSchedule, rejectDraft,
     claimManualDelivery, recordManualPosted, releaseManualClaim, approveAndPostNow,
   };
@@ -62,6 +148,7 @@ export function createTelegramRuntime({ env = process.env, db = fb.adminDb, tran
     readEngineConfig,
     getDigestConfig: (clientId) => digestConfig.getDigestConfig(clientId),
     getSocialPost,
+    runStore: { read: async (key) => withMediaUrls(await runStore.read(key)) },
     now,
   });
 

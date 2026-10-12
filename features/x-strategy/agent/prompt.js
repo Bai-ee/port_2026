@@ -2,6 +2,8 @@
 // Rules are distilled from docs/plans/X-STRATEGY-SEB-MODEL.md sections 5-7. Figures are NOT
 // hardcoded here: the agent must fetch them with tools (get_evaluation, top_posts, ...) at runtime.
 
+import { tracksOf } from '../content-tracks.js';
+
 export const STRATEGY_AGENT_MODEL = 'claude-sonnet-4-6';
 export const PLAN_SUMMARY_MAX_CHARS = 2400; // ~600 tokens
 
@@ -21,6 +23,9 @@ export function summarizePlan(planInput) {
     `type floors: ${map(plan.typeFloors)}`,
     `type caps: ${map(plan.typeCaps)}`,
     plan.benchmarkPrimary ? `primary benchmark @${plan.benchmarkPrimary}` : null,
+    Array.isArray(plan.contentTracks)
+      ? `content tracks: ${tracksOf(plan).map((t) => `${t.id} ${Math.round(t.share * 100)}% (${t.benchmarks.length ? t.benchmarks.map((h) => `@${h}`).join('+') : 'no benchmark'})`).join(', ')}`
+      : null,
     plan.notes ? `notes: ${String(plan.notes).slice(0, 300)}` : null,
   ].filter(Boolean);
   return parts.join('; ');
@@ -76,6 +81,7 @@ export function buildSystemPrompt({ evaluationSummary, planSummary, selectedCont
     'DATA RULES (hard)',
     '- Get every number from a tool result. Use get_evaluation, get_plan, get_context (input freshness, Brain approval, caveats), get_today_run, search_inventory, top_posts, and the read-only get_queue, get_post, get_opportunities, get_results. Never quote figures from memory or from this prompt.',
     '- Cite each figure with its source and window: which account, how many rows, and the date range, as the tool reports them. Example shape: "@handle, N rows, from-date to to-date".',
+    '- CONTENT TRACKS: a plan may split authored posts into tracks (e.g. design vs music), each with its own engines, share, benchmarks and promotions. Use get_tracks for any track question. Each track is profiled ONLY from its own benchmarks; never average or blend benchmarks across tracks. A track with no benchmark shows the owner\'s own history as a labelled fallback: say it is a gap, do not invent a benchmark. To change tracks, propose a plan change with the full contentTracks list.',
     '- If a tool returns nothing or the data does not cover the question, say "no data" and stop. Do not estimate or fill gaps.',
     '- LIKES-ONLY CAVEAT: whenever you discuss quote-react lift or volume, and whenever get_evaluation caveats include likes-only, state plainly that lift is measured from likes, not views, and that likes-only lift undervalues quote-reacts (they borrow reach from the quoted post). Say it unprompted, every time.',
     '- Also surface stale-data and few-rows caveats when they affect the answer.',

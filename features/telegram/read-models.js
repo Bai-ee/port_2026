@@ -6,6 +6,9 @@
 // globals. It never calls an LLM, a paid search or a refresh.
 
 import { ctDate, addDays, buildMonthCalendar as defaultBuildMonthCalendar } from '../x-content-inventory/month-calendar.js';
+import { runDocId } from '../x-content-inventory/daily-loop/run-store.js';
+import { LOOP_VERSION, CHANNEL } from '../x-content-inventory/daily-loop/config.js';
+import { normalizeSuggestion } from './suggestions.js';
 
 export { ctDate, addDays };
 
@@ -43,7 +46,7 @@ export function groupQueue(rows) {
 export function createReadModels(deps = {}) {
   const {
     db, getBriefForClient, readSocialQueue, buildMonthCalendar = defaultBuildMonthCalendar,
-    readEngineConfig, getDigestConfig, getSocialPost, now,
+    readEngineConfig, getDigestConfig, getSocialPost, now, runStore, runVersion = LOOP_VERSION,
   } = deps;
 
   async function readQuoteTargets(clientId) {
@@ -70,17 +73,39 @@ export function createReadModels(deps = {}) {
     }
   }
 
+  /**
+   * Today's (America/Chicago) daily-loop run from x_content_daily_runs via the injected `runStore.read(key)`.
+   * Returns { runKey, localDate, suggestions } with normalised suggestions (state open|saved|dismissed), or an
+   * empty result when there is no run / no store / the read fails. Never throws, never writes.
+   */
+  async function todaySuggestions(clientId, { now: nowOverride } = {}) {
+    const empty = { runKey: null, localDate: null, suggestions: [] };
+    if (!runStore?.read) return empty;
+    try {
+      const localDate = ctDate(nowMsOf(nowOverride ?? now));
+      const key = { clientId, localDate, channel: CHANNEL, version: runVersion };
+      const run = await runStore.read(key);
+      if (!run || !Array.isArray(run.suggestions)) return { ...empty, localDate };
+      return { runKey: runDocId(key), localDate, suggestions: run.suggestions.map((s) => normalizeSuggestion(run, s)).filter(Boolean) };
+    } catch {
+      return empty;
+    }
+  }
+
   async function loadBriefing(clientId) {
     let brief = null;
     try { brief = await getBriefForClient?.(clientId); } catch { brief = null; }
     const intel = brief?.intel && typeof brief.intel === 'object' ? brief.intel : null;
-    const [quoteTargets, rows, tz] = await Promise.all([
+    const [quoteTargets, rows, tz, sugg] = await Promise.all([
       readQuoteTargets(clientId),
       Promise.resolve(readSocialQueue?.(clientId)).then((r) => r || []).catch(() => []),
       readTimezone(clientId),
+      todaySuggestions(clientId),
     ]);
     return {
       clientId,
+      suggestions: sugg.suggestions.filter((x) => x.state === 'open'),
+      suggestionsRunKey: sugg.runKey,
       clientName: brief?.clientName || null,
       intel,
       quoteTargets,
@@ -133,5 +158,5 @@ export function createReadModels(deps = {}) {
     return rows.find((p) => p && String(p.id) === String(postId)) || null;
   }
 
-  return { loadBriefing, loadCalendar, loadAccountHandle, loadPost };
+  return { loadBriefing, loadCalendar, todaySuggestions, loadAccountHandle, loadPost };
 }

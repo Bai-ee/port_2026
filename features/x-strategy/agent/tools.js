@@ -4,6 +4,7 @@
 
 import { PROPOSAL_KINDS, PLAN_LIMITS, KNOWN_SLOT_TYPES } from '../contracts.js';
 import { PLAN_FIELDS, HANDLE_RE, applyChange } from '../plan-state.js';
+import { tracksOf } from '../content-tracks.js';
 
 export const LIMITS = Object.freeze({
   inventoryMax: 20,
@@ -75,6 +76,23 @@ const planChangeProps = {
       engineTargets: { type: 'object', description: 'Engine quota overrides (authored / engines).' },
       benchmarkPrimary: str('Primary benchmark handle, no @'),
       notes: str('Rationale note shown on the Plan card', { maxLength: 1000 }),
+      contentTracks: {
+        type: 'array',
+        description: 'Replace ALL content tracks (whole list; call get_tracks first and send every track you keep). Every engine (record, ue, client, identity) must belong to exactly one track; at most 3 benchmark handles per track and 8 distinct overall; shares are fractions of authored posts and are normalized to sum 1. Promotion urls must be https or null.',
+        items: {
+          type: 'object',
+          properties: {
+            id: str('Track id, lowercase slug'),
+            label: str('Track label'),
+            engines: { type: 'array', items: str('record | ue | client | identity') },
+            benchmarks: { type: 'array', maxItems: 3, items: str('Handle, no @') },
+            share: { type: 'number', minimum: 0, maximum: 1 },
+            topics: { type: 'array', items: str('Topic label') },
+            promotions: { type: 'array', items: { type: 'object' } },
+          },
+          required: ['id', 'label', 'engines', 'share'],
+        },
+      },
     },
     additionalProperties: false,
   },
@@ -90,6 +108,11 @@ export const READ_TOOLS = Object.freeze([
   {
     name: 'get_plan',
     description: 'The saved strategy plan document (version, plan fields, recent history) or null if none is saved.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'get_tracks',
+    description: 'The content tracks in effect (explicit plan.contentTracks, or the defaults when none is saved): per track its engines, share, benchmarks, promotions, and its own benchmark profile (format mix, median length, link-in-reply rate, best hours, post-type mix, example ids, per-handle breakdown). A track with no benchmark reports status no-benchmark with your own history as the fallback. Never averaged across tracks.',
     input_schema: { type: 'object', properties: {} },
   },
   {
@@ -263,6 +286,12 @@ export async function runReadTool(name, input, toolDeps) {
   switch (name) {
     case 'get_evaluation': return need('getEvaluation')();
     case 'get_plan': return { plan: await need('getPlan')() };
+    case 'get_tracks': {
+      if (typeof deps.getTracks === 'function') return deps.getTracks();
+      // No profile loader injected: still report the tracks in effect (no figures).
+      const doc = typeof deps.getPlan === 'function' ? await deps.getPlan() : null;
+      return { tracks: tracksOf(doc), explicit: Array.isArray(doc?.plan?.contentTracks), profiles: [] };
+    }
     case 'get_context': return need('getContext')();
     case 'get_today_run': return need('getTodayRun')();
     case 'search_inventory': {

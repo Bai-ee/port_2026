@@ -23,7 +23,7 @@ CONVERSATIONS  5 posts → 4 narratives → 1 on-brand with owned content (3 off
 
 LIBRARY  3/5 eligible (story 1, facts 2)
 
-SUGGESTIONS (3)
+SUGGESTIONS (4)
 
   1. QUOTE  dl_20261010_c0cf260d  [pending]
      why now:      13.4h old, 1050 engagements; quote window 36h
@@ -38,7 +38,20 @@ SUGGESTIONS (3)
      slot:         D · 15:00 CT · quote-react · P1
      proposed slot: 15:00 America/Chicago — suggestion only — not scheduled
 
-  2. REPLY  dl_20261010_cdeba060  [pending]
+  2. ORIGINAL  dl_20261010_15ca11ec  [pending]
+     why now:      original-showcase slot A at 08:00 CT
+     why brand:    your own content
+     brain:        Client Brain is draft — not used
+     strategy:     no current strategy plan — benchmark type evidence only
+     content:      "BAI-EE – Fathers Day Jazz Mix" (has media); grounded in verifiable facts
+     history:      original-showcase n=29 lift=1.6092; no topic match — Conversation does not map to any topic in the shared taxonomy — no topic evidence. [2026-07-07 → 2026-09-10]
+     draft (fallback (item text, cut to fit)):
+        BAI-EE – Fathers Day Jazz Mix (2024)
+     checks:       pass · guard lane unknown · 36 chars · score 0.233 (advisory, x-2026-10-03)
+     slot:         A · 08:00 CT · original-showcase · P6
+     proposed slot: 08:00 America/Chicago — suggestion only — not scheduled
+
+  3. REPLY  dl_20261010_cdeba060  [pending]
      conversation: @AnthonyTeasdale (3.5h, 167♥) https://x.com/AnthonyTeasdale/status/9102
         "Which Chicago house record from 1996 still sounds like the future? Cajual and Relief releases for me."
      conversation: @deephouseorg (9h, 88♥) https://x.com/deephouseorg/status/9104
@@ -55,7 +68,7 @@ SUGGESTIONS (3)
      slot:         R · anytime today · reply
      proposed slot: anytime today — suggestion only, not scheduled
 
-  3. QUOTE  dl_20261010_33c3ce8a  [pending]
+  4. QUOTE  dl_20261010_33c3ce8a  [pending]
      why now:      own post from 58 days ago, past the resurrection cooldown
      why brand:    your own past winner
      brain:        Client Brain is draft — not used
@@ -72,11 +85,10 @@ GAPS
   - [strategy-excluded] Strategy Builder plan excluded: stale (covers 2026-09-09 → 2026-10-08) and off-brand (built from VTC and Not The Rug sources)
   - [ineligible-no-grounding] 1 item(s) skipped: no story and no verifiable facts — an asset with nothing to say.
   - [ineligible-rights] 1 item(s) skipped: rights not owned or cleared.
-  - [slot-unfilled:A] Slot A (original-showcase) not filled: no eligible package.
   - [slot-unfilled:B] Slot B (original-text) not filled: no story/facts for this slot.
   - [off-brand-conversations] 3 active conversation(s) skipped as off-brand or out of lane (e.g. @SciFiArchives — no library phrase, only broad words; @madchester_mdcr — no library phrase, only broad words; @newsdesk — politics lane).
   - [brain-not-approved] Client Brain is draft — drafts use a plain voice, not the Brain. Draft compiled from a CLIENT_BRAIN.md for a different product (Claire Calls).
   - [feedback-loop-manual] Performance feedback is not automated: history comes from saved corpora, not from today’s results.
 
 usage: 0 model call(s), 0 failure(s). Nothing was scheduled or posted.
-replay output: features/x-strategy/__tests__/fixtures/t5-golden/daily-replay-run.json
+replay output: /tmp/claude-501/new-run.json

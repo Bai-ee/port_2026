@@ -6,11 +6,13 @@ import { summarizeCorpus, compareToBenchmark } from '../../x-benchmark/index.js'
 import { tagTopics } from '../../x-benchmark/taxonomy.js';
 import { localDateOf } from './time-ids.js';
 import { resolvePlanInputs } from '../../x-strategy/plan-inputs.js';
+import { tracksOf } from '../../x-strategy/content-tracks.js';
+import { promotionsOf } from '../../x-strategy/promotions.js';
 
 // --- inputs ----------------------------------------------------------------
 
 const PACKAGE_FIELDS = ['series', 'pillar', 'title', 'story', 'mediaState', 'effort', 'rights', 'status', 'platforms', 'approval',
-  'expiresAt', 'priority', 'source', 'facets', 'tags', 'entities', 'assetRefs', 'thumbRef', 'engine', 'updatedAt', 'lastPostedAt'];
+  'expiresAt', 'priority', 'source', 'facets', 'tags', 'entities', 'assetRefs', 'thumbRef', 'engine', 'updatedAt', 'lastPostedAt', 'searchTokens'];
 
 function corpusRange(rows) {
   const ts = rows.map((r) => r.utc).filter(Boolean).sort();
@@ -105,7 +107,11 @@ export async function loadDailyLoopInputs(deps, { clientId, packageIds = null, c
     ? await (async () => deps.readRecentPosts(clientId))().catch((err) => { recentPostsError = err?.message || 'unreadable'; return null; })
     : null;
 
+  const contentTracks = tracksOf(planDoc);
   return {
+    // Tracks + promotions from the Strategy plan doc (defaults when absent): run.js threads them into selection.
+    contentTracks,
+    promotions: promotionsOf({ contentTracks }),
     scan: state.marketingBrief?.quoteTargets || null,
     search: state.marketingBrief?.conversationSearch || null,
     packages,

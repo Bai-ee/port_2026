@@ -63,6 +63,14 @@ export async function runDispatch(ctx, { now: nowIn } = {}) {
       }
     }
 
+    // One notice per run (key = clientId/date/channel/version), so a same-day regenerate never re-notifies.
+    try {
+      const sugg = await readModels.todaySuggestions?.(clientId, { now });
+      if (sugg?.runKey && sugg.suggestions.some((x) => x.state === 'open')) {
+        if (await enq(`suggestions:${sugg.runKey}`, 'suggestions', { kind: 'suggestions', runKey: sugg.runKey })) counts.suggestions = (counts.suggestions || 0) + 1;
+      }
+    } catch { /* advisory */ }
+
     let rows = [];
     try {
       const [cal, brief] = await Promise.all([readModels.loadCalendar(clientId, { now }).catch(() => null), readModels.loadBriefing(clientId).catch(() => null)]);
@@ -118,6 +126,10 @@ export async function runDispatch(ctx, { now: nowIn } = {}) {
       let messageIds = [];
       if (item.payload?.kind === 'card') {
         ({ messageIds } = await bot.sendCard(binding, post, { mode: item.payload.mode, withMedia: !!item.payload.withMedia, targetAt: item.payload.targetAt }));
+      } else if (item.payload?.kind === 'suggestions') {
+        const r = await bot.sendSuggestionsNotice(binding);
+        if (r?.skipped) { await store.supersedeOutbox(db, item.id, { reason: 'no-open-suggestions', now }); continue; }
+        messageIds = r.messageIds;
       } else if (item.payload?.kind === 'briefing') {
         await bot.showHappening(binding);
       }

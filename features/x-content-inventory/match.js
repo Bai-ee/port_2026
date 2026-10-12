@@ -15,6 +15,7 @@
 import { SERIES, resolveLabels } from './categories.js';
 import { resolveEngine } from './engines.js';
 import { DEFAULT_ENGINE_CONFIG } from './engine-quota.js';
+import { contentBasis } from './daily-loop/content-basis.js';
 
 /** A package this far above `ready` cannot be promised to a slot inside this
  * many hours — a plan that queues a video shoot for 13:00 today is a plan that
@@ -102,12 +103,21 @@ export function hasPlaceholderStory(pkg) {
   return PLACEHOLDER_STORY_RE.test(String(pkg?.story ?? ''));
 }
 
+/** A placeholder story blocks a slot only when the package has no facts basis.
+ * Scoped to rendered mixes (an owned or cleared UE mix is fully described by its
+ * metadata); Discogs/NAS shells keep waiting for the owner's words, as before. */
+function blockedByPlaceholder(pkg) {
+  if (!hasPlaceholderStory(pkg)) return false;
+  if (pkg?.source?.kind !== 'rendered-video') return true;
+  return contentBasis(pkg).kind !== 'facts';
+}
+
 export function scoreMatch(pkg, slot, { today = Date.now(), ledger = {}, engineConfig = DEFAULT_ENGINE_CONFIG } = {}) {
   const series = SERIES[pkg?.series];
   if (!series) return null;
   if (!isPublishable(pkg)) return null;
   if (pkg.status === 'retired') return null;
-  if (hasPlaceholderStory(pkg)) return null;
+  if (blockedByPlaceholder(pkg)) return null;
   const extraReasons = [];
   if (pkg.status === 'posted') {
     const r = recycleVerdict(pkg, engineConfig, today);

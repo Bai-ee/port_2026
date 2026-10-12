@@ -4,6 +4,7 @@ import React, { useContext, useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import { FACET_FIELDS, VIBE, effectiveFacets } from '../../../features/x-content-inventory/facets.js';
 import { describeEventDate } from '../../../features/x-content-inventory/throwback.js';
+import { storyStateLabel } from '../../../features/x-strategy/ui-model.js';
 import { storyMissing, thumbUrl, isVideoItem, useSignedMedia, isRenderedVideo, rightsBadge } from './ItemGrid.jsx';
 import { NasContext, isNasItem } from './nas-context.js';
 import { getThumbState } from './thumb-capture.js';
@@ -263,7 +264,7 @@ export default function ItemDrawer({ call, item, buckets, manualFolders, busy, e
         </div>
 
         <div id="x-content-item-drawer-story" className="xce-field">
-          <label htmlFor="x-content-item-story">Story {storyMissing(item) ? <span className="xce-chip xce-chip-warn">missing</span> : null}</label>
+          <label htmlFor="x-content-item-story">Story {storyMissing(item) ? <span id="x-content-item-story-missing-chip" className="xce-chip xce-chip-warn">{storyStateLabel(item, true)}</span> : null}</label>
           <textarea id="x-content-item-story" className="xce-textarea" value={story} onChange={(e) => setStory(e.target.value)}
             placeholder="The story is the post. Write what only you can say." />
           {item.facets?.storySuggestion ? <p className="xce-field-hint">Suggested: {item.facets.storySuggestion}</p> : null}

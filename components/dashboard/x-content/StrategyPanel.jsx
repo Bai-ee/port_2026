@@ -9,8 +9,9 @@ import {
   PLANNABLE_SLOT_TYPES, freshnessLabel, rowCountOf, indexRowsMeta, cleanHandle, refreshStatusView, refreshIsActive,
   tierComparison, tierText, groupCaveats, comparisonRows, handlesDraftFromProfile, normalizeHandlesDraft, handlesDirty,
   validateHandlesDraft, planDraftFromPlan, planChangesFromDraft, draftTier, historyNewestFirst, historyDiffSummary,
-  todayPlanLine, planErrorView, workerHealthLine,
+  todayPlanLine, planErrorView, workerHealthLine, trackDraftFromPlan, trackChangesFromDraft,
 } from '../../../features/x-strategy/ui-model.js';
+import ContentTracksPanel from './ContentTracksPanel.jsx';
 import StrategyChat, { formatDayTime } from './StrategyChat.jsx';
 import { XCE_COLORS, XCE_RADII } from './xce-tokens';
 import Accordion from './ui/Accordion';
@@ -249,6 +250,8 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
   // plan
   const [planDraft, setPlanDraft] = useState(planDraftFromPlan(DEFAULT_PLAN));
   const [reason, setReason] = useState('');
+  const [tracksDraft, setTracksDraft] = useState(trackDraftFromPlan(DEFAULT_PLAN));
+  const [tracksMsg, setTracksMsg] = useState({ kind: '', text: '' });
   const [planBusy, setPlanBusy] = useState(false);
   const [planMsg, setPlanMsg] = useState({ kind: '', text: '', errors: [], conflict: false });
 
@@ -280,6 +283,8 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
       if (!keepDrafts) {
         setHandles(handlesDraftFromProfile(res.profile));
         setPlanDraft(planDraftFromPlan(res.plan?.plan ?? DEFAULT_PLAN));
+        setTracksDraft(trackDraftFromPlan(res.plan?.plan ?? DEFAULT_PLAN));
+        setTracksMsg({ kind: '', text: '' });
         setPlanMsg({ kind: '', text: '', errors: [], conflict: false });
       }
       return res;
@@ -399,6 +404,24 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
       if (mounted.current) setPlanMsg({ kind: 'ok', text: 'Plan saved.', errors: [], conflict: false });
     } catch (err) {
       if (mounted.current) handlePlanFailure(err);
+    } finally {
+      if (mounted.current) setPlanBusy(false);
+    }
+  };
+
+  const tracksCheck = trackChangesFromDraft(savedPlan, tracksDraft);
+  const savedTrackHandles = trackDraftFromPlan(savedPlan).flatMap((t) => t.benchmarks);
+  const saveTracks = async () => {
+    if (!tracksCheck.contentTracks) return;
+    setPlanBusy(true);
+    setTracksMsg({ kind: '', text: '' });
+    try {
+      await call('strategy-plan-apply', baseBody({ changes: { contentTracks: tracksCheck.contentTracks }, expectedVersion, reason: reason.trim() }));
+      if (!mounted.current) return;
+      await afterPlanChange();
+      if (mounted.current) setTracksMsg({ kind: 'ok', text: 'Tracks saved.' });
+    } catch (err) {
+      if (mounted.current) { const v = planErrorView({ status: err?.status, code: err?.data?.code, error: errText(err, 'Tracks were not saved.'), errors: err?.data?.errors }); setTracksMsg({ kind: 'err', text: [v.message, ...v.errors].join(' ') }); }
     } finally {
       if (mounted.current) setPlanBusy(false);
     }
@@ -613,6 +636,22 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
                     </div>
                   ) : null}
                 </Card>
+
+                <ContentTracksPanel
+                  draft={tracksDraft}
+                  setDraft={setTracksDraft}
+                  savedHandles={savedTrackHandles}
+                  rowsMeta={metaByHandle}
+                  request={refresh.request}
+                  refreshing={refreshing}
+                  profiles={data?.trackProfiles}
+                  check={tracksCheck}
+                  busy={planBusy}
+                  message={tracksMsg}
+                  onSave={saveTracks}
+                  onDiscard={() => setTracksDraft(trackDraftFromPlan(savedPlan))}
+                  onRefreshHandle={(h) => startRefresh([h])}
+                />
 
                 {staleBenchmarks.length ? (
                   <WarnRow id="x-strategy-benchmark-refresh-banner" actionLabel="Details" onAction={() => setDetailTab('accounts')}>

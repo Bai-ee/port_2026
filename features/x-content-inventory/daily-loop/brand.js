@@ -3,6 +3,8 @@
 // Decides "is this conversation about things the owner holds"; never picks content or copy.
 // Depends on text.js only (plus the pillar list and content guard lane).
 
+import { resolveEngine } from '../engines.js';
+import { tracksOf, trackForEngine } from '../../x-strategy/content-tracks.js';
 import { PILLARS } from '../categories.js';
 import { classifyLane } from '../../x-content-guard/index.js';
 import { tokenize, arrayValues, FACET_ARRAYS, ownerTags, packagePhrases, phraseHits, WEAK_TERMS, GENERIC_PHRASES } from './text.js';
@@ -66,7 +68,10 @@ export function buildBrandProfile({ packages = [], brain = null } = {}) {
  * whole phrases (labels, artists, multi-word genres, cities), ranked by how
  * many owned items carry them. Not single tokens.
  */
-export function discoveryQueries(packages = [], { limit = 6, minFaves = 20, sinceDate = null } = {}) {
+export function discoveryQueries(packages = [], { limit = 6, minFaves = 20, sinceDate = null, contentTracks = null } = {}) {
+  // The owner-artist name ("bai-ee") is blanket-excluded from discovery, except for items inside the music track.
+  const musicEngines = new Set(trackForEngine(contentTracks || tracksOf(null), 'ue')?.engines || []);
+  const ownerMusicTrack = (pkg) => musicEngines.has(resolveEngine(pkg));
   const counts = new Map();
   for (const pkg of packages) {
     const f = pkg.facets && typeof pkg.facets === 'object' ? pkg.facets : {};
@@ -74,7 +79,7 @@ export function discoveryQueries(packages = [], { limit = 6, minFaves = 20, sinc
       ...arrayValues(f.labels), ...arrayValues(f.people), ...arrayValues(f.cities), ...arrayValues(f.partyNames),
       ...arrayValues(f.genres).filter((g) => /\s/.test(g)),
     ].map((s) => s.toLowerCase().replace(/\s+records?$|\s+recordings$|\s+music$/, '').trim())
-      .filter((s) => s.length >= 4 && !GENERIC_PHRASES.has(s) && !/^bai-?ee$/.test(s)));
+      .filter((s) => s.length >= 4 && !GENERIC_PHRASES.has(s) && !(/^bai-?ee$/.test(s) && !ownerMusicTrack(pkg))));
     for (const p of phrases) counts.set(p, (counts.get(p) || 0) + 1);
   }
   return [...counts.entries()]

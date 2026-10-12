@@ -2,6 +2,7 @@
 // Turns route payloads (strategy-get / refresh status / plan doc) into the plain-English strings and
 // request bodies StrategyPanel renders. Keep wording here so it is unit-testable.
 
+import { tracksOf, normalizeContentTracks, MAX_BENCHMARKS_PER_TRACK, MAX_DISTINCT_BENCHMARKS } from './content-tracks.js';
 import { PLAN_LIMITS, KNOWN_SLOT_TYPES, EVALUATION_CAVEAT, tierForAuthoredPerDay, isValidAuthoredPerDay } from './contracts.js';
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -441,4 +442,208 @@ export function plainChatText(text) {
     .replace(/\*\*([^*\n]+)\*\*/g, '$1')
     .replace(/__([^_\n]+)__/g, '$1')
     .replace(/`([^`\n]+)`/g, '$1');
+}
+
+
+// ---- content tracks (plan section 4.6) ----------------------------------------------------------------------
+// Draft shape: [{ id, label, engines[], benchmarks[], share: <whole percent number>, promotions:[{id,label,engine,url:string,weeklyTarget}], topics[] }]
+// Shares are whole percents that always sum to 100; the payload converts to 0..1 fractions.
+
+/** Split 100 across weights with the largest-remainder rule so the integers sum to exactly 100. */
+export function percentsFromWeights(weights) {
+  const w = (weights || []).map((x) => (Number.isFinite(Number(x)) && Number(x) > 0 ? Number(x) : 0));
+  if (!w.length) return [];
+  const total = w.reduce((a, b) => a + b, 0);
+  const raw = total > 0 ? w.map((x) => (x / total) * 100) : w.map(() => 100 / w.length);
+  const out = raw.map(Math.floor);
+  let left = 100 - out.reduce((a, b) => a + b, 0);
+  raw.map((r, i) => [r - Math.floor(r), i]).sort((a, b) => b[0] - a[0] || a[1] - b[1]).forEach(([, i]) => { if (left > 0) { out[i] += 1; left -= 1; } });
+  return out;
+}
+
+/** Editable draft from the saved plan (or plan doc); absent/invalid contentTracks => the contract defaults. */
+export function trackDraftFromPlan(planOrDoc) {
+  const tracks = tracksOf(planOrDoc);
+  const pct = percentsFromWeights(tracks.map((t) => t.share));
+  return tracks.map((t, i) => ({
+    id: t.id, label: t.label, engines: [...t.engines], benchmarks: [...t.benchmarks], topics: [...(t.topics || [])],
+    share: pct[i],
+    promotions: t.promotions.map((p) => ({ id: p.id, label: p.label, engine: p.engine, url: p.url || '', weeklyTarget: p.weeklyTarget })),
+  }));
+}
+
+/** Set one track's share (0-100); the others rescale proportionally so the total stays exactly 100. */
+export function setTrackShare(draft, trackId, value) {
+  const list = Array.isArray(draft) ? draft : [];
+  if (list.length < 2) return list.map((t) => ({ ...t, share: 100 }));
+  const v = Math.min(100, Math.max(0, Math.round(Number(value) || 0)));
+  const others = list.filter((t) => t.id !== trackId);
+  const sum = others.reduce((x, o) => x + o.share, 0);
+  const share = percentsFromWeights(others.map((o) => (sum > 0 ? o.share : 1)));
+  const scaled = share.map((p) => Math.round((p / 100) * (100 - v)));
+  const drift = (100 - v) - scaled.reduce((x, y) => x + y, 0); // rounding drift lands on the largest other track
+  if (drift && scaled.length) scaled[scaled.indexOf(Math.max(...scaled))] += drift;
+  let k = 0;
+  return list.map((t) => (t.id === trackId ? { ...t, share: v } : { ...t, share: scaled[k++] }));
+}
+
+/** @returns {string|null} first problem with a handle about to be added to a track. */
+export function validateTrackBenchmark(draft, trackId, raw) {
+  const h = cleanHandle(raw);
+  if (!h) return 'Enter an X handle.';
+  if (!/^[a-z0-9_]{1,15}$/.test(h)) return `"${h}" is not a valid X handle.`;
+  const list = Array.isArray(draft) ? draft : [];
+  const track = list.find((t) => t.id === trackId);
+  if (!track) return 'Unknown track.';
+  if (track.benchmarks.includes(h)) return `@${h} is already a benchmark here.`;
+  if (track.benchmarks.length >= MAX_BENCHMARKS_PER_TRACK) return `At most ${MAX_BENCHMARKS_PER_TRACK} benchmarks per track.`;
+  const distinct = new Set(list.flatMap((t) => t.benchmarks));
+  if (!distinct.has(h) && distinct.size >= MAX_DISTINCT_BENCHMARKS) return `At most ${MAX_DISTINCT_BENCHMARKS} distinct benchmarks across tracks.`;
+  return null;
+}
+
+export function addTrackBenchmark(draft, trackId, raw) {
+  const h = cleanHandle(raw);
+  return (draft || []).map((t) => (t.id === trackId && !t.benchmarks.includes(h) ? { ...t, benchmarks: [...t.benchmarks, h] } : t));
+}
+
+export function removeTrackBenchmark(draft, trackId, handle) {
+  const h = cleanHandle(handle);
+  return (draft || []).map((t) => (t.id === trackId ? { ...t, benchmarks: t.benchmarks.filter((x) => x !== h) } : t));
+}
+
+/** @returns {string|null} inline problem for a promotion link input (blank is fine: no link). */
+export function validatePromotionUrl(value) {
+  const v = String(value ?? '').trim();
+  if (!v) return null;
+  let u;
+  try { u = new URL(v); } catch { return 'Not a valid link. Use a full https:// address.'; }
+  return u.protocol === 'https:' ? null : 'Links must start with https://';
+}
+
+export function setPromotionUrl(draft, trackId, promotionId, url) {
+  return (draft || []).map((t) => (t.id !== trackId ? t : { ...t, promotions: t.promotions.map((p) => (p.id === promotionId ? { ...p, url } : p)) }));
+}
+
+/** Request body fragment for the plan save: shares become 0..1 fractions, blank links null. */
+export function trackPayloadFromDraft(draft) {
+  return (draft || []).map((t) => ({
+    id: t.id, label: t.label, engines: [...t.engines], benchmarks: t.benchmarks.map(cleanHandle), topics: [...(t.topics || [])],
+    share: (Number(t.share) || 0) / 100,
+    promotions: t.promotions.map((p) => ({ id: p.id, label: p.label, engine: p.engine, url: String(p.url ?? '').trim() || null, weeklyTarget: p.weeklyTarget })),
+  }));
+}
+
+/**
+ * Compare the track draft with the saved plan.
+ * @returns {{contentTracks:object[]|null, errors:string[], dirty:boolean}}  contentTracks only when dirty and valid
+ */
+export function trackChangesFromDraft(planOrDoc, draft) {
+  const errors = [];
+  for (const t of draft || []) for (const p of t.promotions) {
+    const e = validatePromotionUrl(p.url);
+    if (e) errors.push(`${p.label}: ${e}`);
+  }
+  const dirty = JSON.stringify(trackPayloadFromDraft(draft)) !== JSON.stringify(trackPayloadFromDraft(trackDraftFromPlan(planOrDoc)));
+  if (!errors.length && dirty) {
+    try { normalizeContentTracks(trackPayloadFromDraft(draft)); } catch (err) { errors.push(String(err?.message || 'Tracks are not valid.')); }
+  }
+  return { contentTracks: dirty && !errors.length ? trackPayloadFromDraft(draft) : null, errors, dirty };
+}
+
+const WORKER_CMD = 'node scripts/x-content/strategy-refresh-worker.mjs';
+
+/** Per-benchmark row: rows pulled, last pulled, and honest refresh state. */
+export function trackBenchmarkRow(handle, rowsMetaByHandle, request) {
+  const h = cleanHandle(handle);
+  const item = rowsMetaByHandle?.[h];
+  const rows = rowCountOf(item);
+  const result = isObj(request?.results) ? request.results[h] : null;
+  const inRequest = Array.isArray(request?.handles) && request.handles.includes(h);
+  let note = '';
+  if (inRequest && request.status === 'queued') note = `Queued. Needs the Mac worker: ${WORKER_CMD}`;
+  else if (inRequest && request.status === 'running') note = 'Refreshing now…';
+  else if (inRequest && result) note = handleResultText(h, result);
+  return { handle: h, rows, freshness: freshnessLabel(item), needsRefresh: /refresh/.test(freshnessLabel(item)), note, queued: inRequest && request.status === 'queued' };
+}
+
+const pctText = (x) => (Number.isFinite(x) ? `${Math.round(x * 100)}%` : null);
+
+/**
+ * Per-track profile summary lines. `profile` is the server's per-track profile (tolerated absent):
+ * { status:'no-benchmark'|'ok', rowCount, formatMix:{video,image,text}, medianLength, linkInReplyRate, bestHoursCT:[] }.
+ * @returns {{state:'no-benchmark'|'pending'|'ready', headline:string, lines:string[]}}
+ */
+export function trackProfileSummary(track, profile) {
+  if (!track?.benchmarks?.length || profile?.status === 'no-benchmark') {
+    return { state: 'no-benchmark', headline: 'No benchmark yet. Add one.', lines: ['Until then this track leans on your own history, shown as a gap, not as benchmark numbers.'] };
+  }
+  if (!isObj(profile) || profile.status === 'pending' || !(profile.rowCount > 0)) {
+    return { state: 'pending', headline: 'Profile not built yet.', lines: ['Refresh the benchmark data, then reload.'] };
+  }
+  const lines = [];
+  const mix = isObj(profile.formatMix) ? Object.entries(profile.formatMix).filter(([, v]) => Number.isFinite(v)).map(([k, v]) => `${pctText(v)} ${k}`) : [];
+  if (mix.length) lines.push(`Format mix: ${mix.join(' · ')}`);
+  if (Number.isFinite(profile.medianLength)) lines.push(`Median length: ${Math.round(profile.medianLength)} characters`);
+  if (Number.isFinite(profile.linkInReplyRate)) lines.push(`Link in reply: ${pctText(profile.linkInReplyRate)} of posts`);
+  if (Array.isArray(profile.bestHoursCT) && profile.bestHoursCT.length) lines.push(`Best hours (CT): ${profile.bestHoursCT.join(', ')}`);
+  return { state: 'ready', headline: `Built from ${profile.rowCount} benchmark posts.`, lines };
+}
+
+// ---- library labels (rights / story) ------------------------------------------------------------------------
+/** Label for a cleared rights state; UE-hosted policy clearance reads differently from a hand-cleared one. */
+export function rightsLabel(item) {
+  if (item?.rights === 'cleared') return item?.rightsSource?.policy === 'ue-hosted-cleared' ? 'cleared (UE-hosted)' : 'Cleared';
+  return null;
+}
+
+/** Placeholder stories ("TODO", "[add your memory]") read as an honest state, not as missing data. */
+export function storyStateLabel(item, isMissing) {
+  return isMissing ? 'no memory yet — facts used' : null;
+}
+
+// ---- daily suggestion chips ---------------------------------------------------------------------------------
+/** "music · Underground Existence" style chip text, or null when neither is present. */
+export function suggestionTrackChip(s) {
+  const parts = [s?.track && (typeof s.track === 'string' ? s.track : s.track.label || s.track.id), s?.promotion?.label].filter(Boolean);
+  return parts.length ? parts.join(' · ') : null;
+}
+
+/** The self-reply / promotion link line, or null. */
+export function suggestionLinkLine(s) {
+  const reply = String(s?.draft?.selfReply ?? '').trim();
+  if (reply) return { kind: 'self-reply', text: reply };
+  if (s?.promotion?.url) return { kind: 'promotion', text: `${s.promotion.label || 'Link'}: ${s.promotion.url}` };
+  return null;
+}
+
+// ---- suggestion media staging (NAS item with no playable ref) -------------------------------------------------
+export const STAGE_APPROVAL_COPY = 'Your click is the approval: it uploads this file from the NAS to Firebase so it can be scheduled. The Mac analyzer must be online to do the upload.';
+
+/**
+ * Button set for a suggestion card's media.
+ * @param {object} s  suggestion ({package:{media:{kind,ref}|{status:'needs-staging'}}})
+ * @param {{busy?:boolean, queued?:boolean, error?:string}} [stage]  local state of the owner's Stage click
+ * @returns {{status:'none'|'ready'|'needs-staging', chip:string|null, canSave:boolean, showStage:boolean, stageLabel:string, stageDisabled:boolean, note:string, noteTone:'info'|'warn'|'error'|null}}
+ */
+export function suggestionMediaState(s, stage = {}) {
+  const media = s?.package?.media;
+  if (!isObj(media) || media.status !== 'needs-staging') {
+    const has = isObj(media) && !!media.ref;
+    return { status: has ? 'ready' : 'none', chip: null, canSave: true, showStage: false, stageLabel: '', stageDisabled: true, note: '', noteTone: null };
+  }
+  let note = STAGE_APPROVAL_COPY;
+  let noteTone = 'info';
+  let stageLabel = 'Stage from NAS';
+  if (stage.busy) { stageLabel = 'Staging…'; }
+  if (stage.error) { note = stage.error; noteTone = 'error'; }
+  else if (stage.queued) { note = 'Queued for the Mac analyzer. If it is offline the upload waits until it is back. Check again once it finishes; Save draft turns on when the file is staged.'; noteTone = 'warn'; stageLabel = 'Check again'; }
+  return { status: 'needs-staging', chip: 'needs staging', canSave: false, showStage: true, stageLabel, stageDisabled: !!stage.busy, note, noteTone };
+}
+
+/** Plain text for a failed nas-stage call (offline analyzer, rights block, etc.). */
+export function stageErrorText(err) {
+  const msg = String(err?.message || '');
+  if (/analyzer|offline|worker/i.test(msg)) return `The Mac analyzer is offline or not registered, so nothing was queued. ${msg}`.trim();
+  return msg || 'Could not queue the staging upload.';
 }

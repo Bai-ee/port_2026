@@ -44,20 +44,27 @@ export async function saveThumb(deps, { clientId, id, dataUrl }) {
 const contentTypeFor = (p) => (/\.mov$/i.test(p) ? 'video/quicktime' : /\.webm$/i.test(p) ? 'video/webm' : /\.(mp4|m4v)$/i.test(p) ? 'video/mp4'
   : /\.png$/i.test(p) ? 'image/png' : /\.webp$/i.test(p) ? 'image/webp' : /\.gif$/i.test(p) ? 'image/gif' : 'image/jpeg');
 
-/** Pick the post media from assetRefs. deps.signEvLong(path), deps.hitloopUrl(path). */
-async function pickMedia(pkg, deps) {
-  for (const ref of pkg.assetRefs || []) {
+/** First usable post-media ref of a package (pure; no signing): { ref, path, viaEv, kind, contentType } or null. */
+export function pickMediaRef(pkg) {
+  for (const ref of pkg?.assetRefs || []) {
     const r = String(ref);
     const ev = /^ev:(.+)$/.exec(r)?.[1];
     const path = ev || (r.startsWith('publish-staging/') ? r : null);
     if (!path || path.startsWith('/') || path.split('/').includes('..')) continue;
     if (!/\.(mp4|mov|m4v|webm|jpe?g|png|webp|gif)$/i.test(path)) continue;
-    const url = ev ? await deps.signEvLong(path) : await deps.hitloopUrl(path);
-    if (!url) throw bad(`Could not resolve media for ${r}.`, 502);
-    const ct = contentTypeFor(path);
-    return { mediaUrl: url, mediaType: ct.startsWith('video/') ? 'video' : 'image', mediaContentType: ct, mediaStoragePath: r.slice(0, 500) };
+    const contentType = contentTypeFor(path);
+    return { ref: r.slice(0, 500), path, viaEv: Boolean(ev), kind: contentType.startsWith('video/') ? 'video' : 'image', contentType };
   }
   return null;
+}
+
+/** Pick the post media from assetRefs. deps.signEvLong(path), deps.hitloopUrl(path). */
+export async function pickMedia(pkg, deps) {
+  const m = pickMediaRef(pkg);
+  if (!m) return null;
+  const url = m.viaEv ? await deps.signEvLong(m.path) : await deps.hitloopUrl(m.path);
+  if (!url) throw bad(`Could not resolve media for ${m.ref}.`, 502);
+  return { mediaUrl: url, mediaType: m.kind, mediaContentType: m.contentType, mediaStoragePath: m.ref };
 }
 
 /**

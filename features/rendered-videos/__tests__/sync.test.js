@@ -62,10 +62,60 @@ test('update refreshes machine fields but never owner fields', async () => {
 test('rights refreshed unless set by a human', async () => {
   const d = makeDeps([vid('a', { artist: 'Someone Else' })]);
   await syncRenderedVideos(d, { force: true });
-  assert.equal(d.store.get('rv-a').rights, 'never-public');
-  d.store.set('rv-a', { ...d.store.get('rv-a'), rights: 'cleared', rightsSetBy: 'human', syncHash: 'stale' });
-  await syncRenderedVideos({ ...d, listVideos: async () => [vid('a', { artist: 'Someone Else' })] }, { force: true });
   assert.equal(d.store.get('rv-a').rights, 'cleared');
+  d.store.set('rv-a', { ...d.store.get('rv-a'), rights: 'never-public', rightsSetBy: 'human', approval: { state: 'needed' }, syncHash: 'stale' });
+  await syncRenderedVideos({ ...d, listVideos: async () => [vid('a', { artist: 'Someone Else' })] }, { force: true });
+  assert.equal(d.store.get('rv-a').rights, 'never-public'); // human choice wins
+  assert.equal(d.store.get('rv-a').approval.state, 'needed');
+});
+
+test('legacy never-public/needed rows migrate to cleared/none on sync; an approved state is kept', async () => {
+  const d = makeDeps([vid('a', { artist: 'Someone Else' }), vid('b', { artist: 'Someone Else' })]);
+  await syncRenderedVideos(d, { force: true });
+  d.store.set('rv-a', { ...d.store.get('rv-a'), rights: 'never-public', approval: { state: 'needed' }, syncHash: 'stale' });
+  d.store.set('rv-b', { ...d.store.get('rv-b'), rights: 'never-public', approval: { state: 'approved', by: 'me' }, syncHash: 'stale' });
+  await syncRenderedVideos(d, { force: true });
+  assert.deepEqual([d.store.get('rv-a').rights, d.store.get('rv-a').approval.state], ['cleared', 'none']);
+  assert.equal(d.store.get('rv-a').rightsSource.policy, 'ue-hosted-cleared');
+  assert.equal(d.store.get('rv-b').approval.state, 'approved');
+});
+
+test('sync twice => same items, no writes second time (accept. 5)', async () => {
+  const d = makeDeps([vid('a'), vid('b', { artist: 'Bai-ee' })]);
+  await syncRenderedVideos(d, { force: true });
+  const snap = JSON.stringify([...d.store.entries()].sort());
+  d.calls.upsert.length = 0;
+  await syncRenderedVideos(d, { force: true });
+  assert.equal(d.calls.upsert.length, 0);
+  assert.equal(JSON.stringify([...d.store.entries()].sort()), snap);
+});
+
+test('upstream-deleted => retired(source-missing) only after a COMPLETE listing; never deleted; restored on return', async () => {
+  const d = makeDeps([vid('a'), vid('b')]);
+  await syncRenderedVideos(d, { force: true });
+  d.listStored = async () => [...d.store.values()].map((x) => structuredClone(x));
+  const only = [vid('a')];
+  // bare array and complete:false => completeness unknown => no invalidation
+  await syncRenderedVideos({ ...d, listVideos: async () => only }, { force: true });
+  await syncRenderedVideos({ ...d, listVideos: async () => ({ videos: only, complete: false }) }, { force: true });
+  assert.notEqual(d.store.get('rv-b').status, 'retired');
+  // an empty "complete" listing never mass-retires
+  await syncRenderedVideos({ ...d, listVideos: async () => ({ videos: [], complete: true }) }, { force: true });
+  assert.notEqual(d.store.get('rv-b').status, 'retired');
+  const r = await syncRenderedVideos({ ...d, listVideos: async () => ({ videos: only, complete: true }) }, { force: true });
+  assert.equal(r.retired, 1);
+  assert.equal(d.store.get('rv-b').status, 'retired');
+  assert.equal(d.store.get('rv-b').retiredReason, 'source-missing');
+  assert.notEqual(d.store.get('rv-a').status, 'retired');
+  assert.equal(d.store.has('rv-b'), true);
+  // idempotent
+  const r2 = await syncRenderedVideos({ ...d, listVideos: async () => ({ videos: only, complete: true }) }, { force: true });
+  assert.equal(r2.retired, 0);
+  // comes back upstream => restored
+  const r3 = await syncRenderedVideos({ ...d, listVideos: async () => ({ videos: [vid('a'), vid('b')], complete: true }) }, { force: true });
+  assert.equal(r3.restored, 1);
+  assert.equal(d.store.get('rv-b').status, 'idea');
+  assert.equal(d.store.get('rv-b').retiredReason, undefined);
 });
 
 test('stored genres/era survive a sync that has no artists.json', async () => {

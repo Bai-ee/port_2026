@@ -7,6 +7,7 @@
 
 import { mergeEngineConfig } from '../x-content-inventory/engine-quota.js';
 import { DEFAULT_TYPE_FLOORS } from '../x-content-inventory/daily-loop/slots.js';
+import { applyTrackAllocation } from './track-profile.js';
 
 const isPlain = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const isCount = (v) => Number.isInteger(v) && v >= 1;
@@ -31,7 +32,7 @@ export function resolvePlanInputs(planDoc) {
   return {
     posts: authored,
     // Only a non-empty override is merged: an empty map must leave buildDayPlan's own default config untouched.
-    engineConfig: targets ? mergeEngineConfig(targets) : undefined,
+    engineConfig: applyTrackAllocation(planDoc, targets ? mergeEngineConfig(targets) : undefined),
     // An explicit {} floors map means "no floors" and is honoured; only a MISSING map falls back to the default.
     typeFloors: isPlain(plan.typeFloors) ? { ...plan.typeFloors } : { ...DEFAULT_TYPE_FLOORS },
     typeCaps: isPlain(plan.typeCaps) ? { ...plan.typeCaps } : {},

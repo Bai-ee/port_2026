@@ -27,7 +27,7 @@ test('handles are stored bare, however they were typed', () => {
 
 test('benchmark handles are deduped and capped', () => {
   const p = normalizeXGrowthProfile({
-    benchmarkHandles: ['a', '@a', 'b', 'c', 'd', 'e', 'f', 'g'],
+    benchmarkHandles: ['a', '@a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'],
   });
   assert.equal(p.benchmarkHandles.length, MAX_BENCHMARK_HANDLES);
   assert.deepEqual(p.benchmarkHandles.slice(0, 3), ['a', 'b', 'c']);

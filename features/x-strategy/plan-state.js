@@ -12,13 +12,14 @@
 // - engineTargets.authored.targetPerDay is not cross-checked against authoredPerDay (separate knobs).
 
 import { mergeEngineConfig } from '../x-content-inventory/engine-quota.js';
+import { normalizeContentTracks } from './content-tracks.js';
 import {
   DEFAULT_PLAN, PLAN_LIMITS, KNOWN_SLOT_TYPES, tierForAuthoredPerDay, isValidAuthoredPerDay,
 } from './contracts.js';
 
 export const UNPLANNABLE_TYPES = Object.freeze(['reply', 'retweet']);
 export const PLAN_FIELDS = Object.freeze([
-  'authoredPerDay', 'tier', 'typeFloors', 'typeCaps', 'engineTargets', 'benchmarkPrimary', 'notes',
+  'authoredPerDay', 'tier', 'typeFloors', 'typeCaps', 'engineTargets', 'benchmarkPrimary', 'notes', 'contentTracks',
 ]);
 export const NOTES_MAX = 1000;
 export const HANDLE_RE = /^[A-Za-z0-9_]{1,15}$/;
@@ -45,6 +46,12 @@ export function defaultPlanDoc() {
 export function normalizePlan(partial) {
   const plan = { ...defaultPlan(), ...(isPlain(partial) ? clone(partial) : {}) };
   for (const k of Object.keys(plan)) if (!PLAN_FIELDS.includes(k)) delete plan[k];
+  // contentTracks is optional: absent/null => the field stays off the plan (defaults apply, old plans unchanged).
+  // A valid list is stored normalized (shares sum to 1); an invalid one is kept raw so validatePlan reports why.
+  if (plan.contentTracks == null) delete plan.contentTracks;
+  else {
+    try { plan.contentTracks = normalizeContentTracks(plan.contentTracks, { maxDistinctBenchmarks: PLAN_LIMITS.maxBenchmarkHandles }); } catch { /* validatePlan reports it */ }
+  }
   if (isValidAuthoredPerDay(plan.authoredPerDay)) plan.tier = tierForAuthoredPerDay(plan.authoredPerDay);
   else delete plan.tier;
   return plan;
@@ -114,6 +121,9 @@ export function validatePlan(plan) {
 
   if (typeof plan.benchmarkPrimary !== 'string' || !HANDLE_RE.test(plan.benchmarkPrimary)) {
     errors.push('benchmarkPrimary must be an X handle (1-15 letters, digits, underscore; no @)');
+  }
+  if (plan.contentTracks !== undefined) {
+    try { normalizeContentTracks(plan.contentTracks, { maxDistinctBenchmarks: PLAN_LIMITS.maxBenchmarkHandles }); } catch (err) { errors.push(`contentTracks: ${err.message}`); }
   }
   if (typeof plan.notes !== 'string' || plan.notes.length > NOTES_MAX) errors.push(`notes must be a string of at most ${NOTES_MAX} chars`);
 

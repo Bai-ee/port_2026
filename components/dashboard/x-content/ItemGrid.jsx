@@ -3,6 +3,7 @@
 import React, { useContext, useEffect, useRef, useState } from 'react';
 import { ImageIcon, Film, Disc3, FileText } from 'lucide-react';
 import { NasContext, isNasItem } from './nas-context.js';
+import { rightsLabel, storyStateLabel } from '../../../features/x-strategy/ui-model.js';
 import { requestThumb, getThumbState, subscribeThumb } from './thumb-capture.js';
 
 // ItemGrid — thumbnail grid of content items. Presentational.
@@ -91,7 +92,7 @@ export function rightsBadge(item) {
   if (!isRenderedVideo(item)) return null;
   const r = item?.rights;
   if (r === 'owned') return { label: 'Yours', cls: 'xce-chip-ok' };
-  if (r === 'cleared') return { label: 'Cleared', cls: 'xce-chip-ok' };
+  if (r === 'cleared') return { label: rightsLabel(item), cls: 'xce-chip-ok' };
   if (r === 'never-public') return { label: 'Never public', cls: 'xce-chip-warn' };
   return { label: 'Needs clearance', cls: 'xce-chip-warn' };
 }
@@ -169,7 +170,7 @@ function ItemDots({ item, bucket }) {
     <span className="xce-bk-card-dots">
       {bucket ? <Dot color={bucket.color || '#475569'} label={`Bucket: ${bucket.name}`} /> : null}
       <Dot color={status.color} label={`Status: ${status.label}`} />
-      <Dot color={missing ? WARN : OK} hollow={missing} label={missing ? 'Story missing' : 'Story written'} />
+      <Dot color={missing ? WARN : OK} hollow={missing} label={missing ? storyStateLabel(item, true) : 'Story written'} />
       {rights ? <Dot color={rights.cls === 'xce-chip-ok' ? OK : BLOCK} label={`Rights: ${rights.label}`} /> : null}
       {isAutoDaily(item) ? <Dot color="#7c3aed" hollow label="Daily auto render" /> : null}
     </span>

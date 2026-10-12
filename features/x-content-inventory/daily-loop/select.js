@@ -15,10 +15,23 @@ import { fillQuoteSlot, QUOTE_WINDOW_HOURS } from './fill-quote.js';
 import { fillShowcaseSlot, fillTextSlot, fillSelfQuoteSlot } from './fill-original.js';
 import { fillReplySlot } from './fill-reply.js';
 import { suggestionIdFor, zonedTimeToIso } from './time-ids.js';
+import { pickMediaRef } from '../item-actions.js';
+import { resolveEngine } from '../engines.js';
+import { tracksOf, trackForEngine } from '../../x-strategy/content-tracks.js';
+import { promotionFor, promotionsOf } from '../../x-strategy/promotions.js';
 
 // --- content match -------------------------------------------------------------
 
-export function matchScore(text, pkg = {}, pkgTerms = packageTerms(pkg), pkgPhrases = packagePhrases(pkg)) {
+/** packageTerms plus the package's search tokens (weight 1: they say what it is about, not what it is named). */
+export function matchTerms(pkg = {}) {
+  const terms = packageTerms(pkg);
+  for (const raw of Array.isArray(pkg.searchTokens) ? pkg.searchTokens : []) {
+    for (const t of tokenize(raw)) if (!terms.has(t)) terms.set(t, 1);
+  }
+  return terms;
+}
+
+export function matchScore(text, pkg = {}, pkgTerms = matchTerms(pkg), pkgPhrases = packagePhrases(pkg)) {
   const phrases = phraseHits(text, pkgPhrases);
   const terms = [];
   let score = phrases.reduce((n, p) => n + p.weight, 0);
@@ -35,9 +48,36 @@ export function matchScore(text, pkg = {}, pkgTerms = packageTerms(pkg), pkgPhra
   return { score, tier: specific ? 'specific' : 'genre', terms: terms.sort(), phrases: phrases.map((p) => p.phrase) };
 }
 
+// --- tracks + promotions ---------------------------------------------------------------
+
+function trackCtx({ contentTracks, promotions } = {}) {
+  const tracks = Array.isArray(contentTracks) && contentTracks.length ? contentTracks : tracksOf(null);
+  return { tracks, promotions: Array.isArray(promotions) ? promotions : promotionsOf({ contentTracks: tracks }) };
+}
+
+/** Adds `track` (id) and `promotion` ({id,label,url}|null). Package-less suggestions (reactions, replies) belong to the identity engine's track. */
+function withTrack(suggestion, pkg, { tracks, promotions }) {
+  const engine = pkg ? resolveEngine(pkg) : (suggestion.slot?.engine || 'identity');
+  const p = pkg ? promotionFor(pkg, promotions) : null;
+  return {
+    ...suggestion,
+    track: trackForEngine(tracks, engine)?.id || null,
+    promotion: p ? { id: p.id, label: p.label, url: p.url ?? null } : null,
+  };
+}
+
+const decorateAll = (suggestions, packages, ctx) => suggestions.map((s) => withTrack(s, s.package?.id ? packages.find((p) => p.id === s.package.id) : null, ctx));
+
 // --- selection -------------------------------------------------------------------
 
-function packageSnapshot(pkg, basis) {
+/** {kind, ref} when a playable ref exists; {status:'needs-staging'} for an item that should carry media but has none; else null. */
+function mediaOf(pkg, { showcase = false } = {}) {
+  const m = pickMediaRef(pkg);
+  if (m) return { kind: m.kind, ref: m.ref };
+  return showcase || pkg.mediaState === 'video' || pkg.mediaState === 'still' ? { status: 'needs-staging' } : null;
+}
+
+function packageSnapshot(pkg, basis, opts) {
   return {
     id: pkg.id,
     title: pkg.title || '',
@@ -53,6 +93,7 @@ function packageSnapshot(pkg, basis) {
     assetRefs: Array.isArray(pkg.assetRefs) ? pkg.assetRefs.slice(0, 4) : [],
     thumbRef: pkg.thumbRef || null,
     engine: pkg.engine || null,
+    media: mediaOf(pkg, opts),
   };
 }
 
@@ -110,7 +151,7 @@ function prepare({ packages, brain, conversationPosts, now, strategy }) {
  * rank = 0.35 momentum + 0.35 brand fit + 0.20 owned-content fit + 0.10 own history
  */
 function rankNarratives({ narratives, eligible, profile, ownSummary }) {
-  const termsById = new Map(eligible.map((p) => [p.id, packageTerms(p)]));
+  const termsById = new Map(eligible.map((p) => [p.id, matchTerms(p)]));
   const phrasesById = new Map(eligible.map((p) => [p.id, packagePhrases(p)]));
   const ranked = [];
   const offBrand = [];
@@ -201,6 +242,7 @@ export function selectSuggestions(input = {}) {
     clientId, localDate, timezone = DEFAULT_TIMEZONE, now = Date.now(),
     conversationPosts = [], packages = [], brain = null, strategy, ownSummary = null, max = MAX_SUGGESTIONS,
   } = input;
+  const ctx = trackCtx(input);
   const limit = Math.max(0, Math.min(MAX_SUGGESTIONS, Number(max) || MAX_SUGGESTIONS));
   const decisions = strategy?.decisions || { maxQuotes: limit, includeShowcase: false };
 
@@ -216,7 +258,10 @@ export function selectSuggestions(input = {}) {
     const pick = r.candidates.find((c) => !used.has(c.pkg.id) && c.m.tier === r.best.m.tier);
     if (!pick) continue;
     r.best = pick;
-    const contribution = pickContributionType(r.n, { quotesUsed, maxQuotes: decisions.maxQuotes });
+    let contribution = pickContributionType(r.n, { quotesUsed, maxQuotes: decisions.maxQuotes });
+    // A strong (named) match to a track item with media becomes an original with that media, not a quote with a video.
+    const strong = contribution.type === 'quote' && r.best.m.tier === 'specific' && pickMediaRef(r.best.pkg) && trackForEngine(ctx.tracks, resolveEngine(r.best.pkg));
+    if (strong) contribution = { type: 'original', why: `strong match to "${r.best.pkg.title}" — an original with its media, related to @${r.n.anchor.author}'s post` };
     if (contribution.type === 'quote') quotesUsed += 1;
     used.add(r.best.pkg.id);
     const basis = contentBasis(r.best.pkg);
@@ -228,6 +273,7 @@ export function selectSuggestions(input = {}) {
       conversation: conversationSnapshot(r.n),
       opportunity: { id: r.n.anchor.id, url: r.n.anchor.url, author: r.n.anchor.author, text: r.n.anchor.text },
       package: packageSnapshot(r.best.pkg, basis),
+      ...(strong ? { related: { author: r.n.anchor.author, url: r.n.anchor.url, id: r.n.anchor.id } } : {}),
       why: {
         now: `${r.n.momentum.reasons.join(', ') || 'active'}; ${r.n.momentum.engagement} engagements across ${r.n.momentum.posts} post(s); ${contribution.why}`,
         brand: `${r.fit.phrases.length ? `names ${r.fit.phrases.slice(0, 4).join(', ')} from your library` : `shares distinctive library terms ${r.fit.terms.slice(0, 5).map((t) => `"${t}"`).join(', ')}`}; guard lane: ${r.fit.lane} (${r.fit.laneConfidence})`,
@@ -282,7 +328,7 @@ export function selectSuggestions(input = {}) {
   });
 
   return {
-    suggestions,
+    suggestions: decorateAll(suggestions, packages, ctx),
     gaps,
     brandProfile: brandProfileOf(profile),
     shortlist: shortlistOf({ scored, offBrand, noContent }),
@@ -342,7 +388,7 @@ function ownedSuggestion({ slot, ids, pkg, brain, strategy, ownSummary }) {
     rank: null,
     conversation: null,
     opportunity: null,
-    package: packageSnapshot(pkg, basis),
+    package: packageSnapshot(pkg, basis, { showcase: slot.type === 'original-showcase' }),
     why: {
       now: `${slot.type} slot ${slot.letter}${slot.timeCT ? ` at ${slot.timeCT} CT` : ''}`,
       brand: 'your own content',
@@ -368,8 +414,9 @@ function ownedSuggestion({ slot, ids, pkg, brain, strategy, ownSummary }) {
 export function selectForSlots({
   clientId, localDate, timezone = DEFAULT_TIMEZONE, now = Date.now(), slots = [], matchedSlots = [],
   candidates, conversationPosts = [], packages = [], brain = null, strategy, ownSummary = null,
-  ownPosts = [], ownHandle = null, max = MAX_SUGGESTIONS,
+  ownPosts = [], ownHandle = null, max = MAX_SUGGESTIONS, contentTracks, promotions,
 } = {}) {
+  const ctx = trackCtx({ contentTracks, promotions });
   const limit = Math.max(0, Math.min(MAX_SUGGESTIONS, Number(max) || MAX_SUGGESTIONS));
   const ids = { clientId, localDate };
   const { gaps, eligible, ineligible, byBasis, profile, narratives } = prepare({ packages, brain, conversationPosts, now, strategy });
@@ -395,6 +442,20 @@ export function selectForSlots({
       rejected[slot.letter] = r.rejected;
       if (r.gap) { gapFor(slot, r.gap.reason); continue; }
       usedPosts.push(r.post.id);
+      // A named match to an unused track item with media: post that item as an original, related to this post.
+      const strongPkg = eligible.filter((p) => !usedPackages.includes(p.id) && pickMediaRef(p) && trackForEngine(ctx.tracks, resolveEngine(p)))
+        .map((p) => ({ p, m: matchScore(r.post.text, p) })).filter((x) => x.m?.tier === 'specific')
+        .sort((a, b) => b.m.score - a.m.score || String(a.p.id).localeCompare(String(b.p.id)))[0];
+      if (strongPkg) {
+        usedPackages.push(strongPkg.p.id);
+        const s = ownedSuggestion({ slot: { ...slot, type: 'original-showcase' }, ids, pkg: strongPkg.p, brain, strategy, ownSummary });
+        take({ ...slot, type: 'original-showcase' }, {
+          ...s,
+          related: { author: r.post.author, url: r.post.url, id: r.post.id },
+          why: { ...s.why, now: `related to @${r.post.author}'s post (named: ${strongPkg.m.phrases.join(', ')}); ${s.why.now}` },
+        }, `strong match to "${strongPkg.p.title}" — original with media instead of a quote`);
+        continue;
+      }
       // A floor-added/kept slot says why it exists; that replaces the fit reason, which stays in why.brand.
       take(slot, quoteSuggestion({ r, slot, ids, brain, strategy, ownSummary }), slot.floor ? slot.fillReason : r.fit.reason);
     } else if (slot.type === 'original-showcase') {
@@ -478,7 +539,7 @@ export function selectForSlots({
   gaps.push(...skippedGaps(ranking));
 
   return {
-    suggestions,
+    suggestions: decorateAll(suggestions, packages, ctx),
     gaps,
     brandProfile: brandProfileOf(profile),
     shortlist: shortlistOf(ranking),

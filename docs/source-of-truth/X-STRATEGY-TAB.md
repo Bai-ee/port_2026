@@ -197,3 +197,6 @@ Run: `node --test features/x-strategy/__tests__/*.test.js` (targeted) and `npm t
 | `proposals.test.js` / `chat-store.test.js` | validation, executors, claim/deciding/release, stale, thread bounds, daily cap |
 | `agent-integration.test.js` | the halves wired together (7 interface mismatches were found here) |
 | `ui-model.test.js` | UI view-model helpers (refresh status, history rows, labels) |
+
+## Content tracks (2026-10-11)
+`plan.contentTracks`, per-track benchmarks/profiles and the "Content tracks" panel: see [`CONTENT-TRACKS.md`](CONTENT-TRACKS.md).

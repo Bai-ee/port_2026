@@ -8,6 +8,7 @@
 // analyzer excerpts in "More detail" stand in for them).
 
 import { isFreshWithin } from '../email-digest/render.js';
+import { readySummary } from './suggestions.js';
 
 export const TELEGRAM_MAX = 4096;
 export const DASHBOARD_URL = 'https://hitloop.agency/dashboard';
@@ -192,6 +193,8 @@ function buildOverview(b, nowMs, tz) {
   const waiting = c.needsReview + c.awaitingApproval + c.drafts;
   if (waiting) bullets.push(`${waiting} post${waiting === 1 ? '' : 's'} waiting on you`);
   for (const bl of bullets.slice(0, 3)) lines.push(`• ${esc(bl)}`);
+  const ready = arr(b?.suggestions).filter((x) => x && (x.state === undefined || x.state === 'open'));
+  if (ready.length) lines.push(`• ${esc(readySummary(ready))}`);
   lines.push('');
   lines.push(`<i>${esc(fresh.text)}</i>`);
   if (b?.freshness?.scanAt) {
@@ -392,7 +395,7 @@ function dayCountsText(day) {
   ].filter(Boolean).join(', ');
 }
 
-export function formatToday(calendar, { now, tz = 'America/Chicago', handle } = {}) {
+export function formatToday(calendar, { now, tz = 'America/Chicago', handle, suggestions } = {}) {
   const day = arr(calendar?.week).find((d) => d.date === calendar?.today) || arr(calendar?.week)[0];
   const head = `${bold(`Today — ${day ? dayLabel(day.date) : ''}`)}${handle ? ` · @${esc(String(handle).replace(/^@+/, ''))}` : ''}`;
   if (!day) return `${head}\nNo calendar data.`;
@@ -408,7 +411,9 @@ export function formatToday(calendar, { now, tz = 'America/Chicago', handle } = 
   if (target != null && live < target) foot.push(`Gap: ${live} of ${target} planned — ${target - live} short.`);
   else if (target != null) foot.push(`${live} of ${target} planned.`);
   if (posts.some((p) => p.proposed)) foot.push('<i>Proposed times are suggestions; nothing is scheduled until you approve.</i>');
-  return section(head, [...lines, ...foot]);
+  const open = arr(suggestions).filter((x) => x && (x.state === undefined || x.state === 'open'));
+  const sugg = open.length ? ['', bold('Unsaved suggestions'), ...open.slice(0, 6).map((x) => `• ${esc(x.trackLabel || x.track || 'general')}: ${esc(excerpt(x.text, 90))}`)] : [];
+  return section(head, [...lines, ...foot, ...sugg]);
 }
 
 export function formatWeek(calendar, { now, tz = 'America/Chicago' } = {}) {

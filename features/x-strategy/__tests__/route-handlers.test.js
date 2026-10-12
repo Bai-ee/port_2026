@@ -488,10 +488,10 @@ test('proposal-decide: item-story and benchmarks-change run their mapped capabil
   assert.deepEqual(s.saved, [['c1', { ownHandle: 'me_acct', benchmarkHandles: ['bench_a', 'bench_b'] }]]);
 });
 
-test('profile-save: validation (6 benchmarks, bad chars, own in benchmarks, missing own) and success', async () => {
+test('profile-save: validation (9 benchmarks, bad chars, own in benchmarks, missing own) and success', async () => {
   const s = chatSetup();
   const base = { ownHandle: 'me_acct', benchmarkHandles: ['a'] };
-  assert.equal((await s.call('strategy-profile-save', { ...base, benchmarkHandles: ['a', 'b', 'c', 'd', 'e', 'f'] })).status, 400);
+  assert.equal((await s.call('strategy-profile-save', { ...base, benchmarkHandles: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'] })).status, 400);
   assert.equal((await s.call('strategy-profile-save', { ...base, benchmarkHandles: ['bad handle!'] })).status, 400);
   assert.equal((await s.call('strategy-profile-save', { ownHandle: 'me_acct', benchmarkHandles: ['ME_acct'] })).status, 400);
   assert.equal((await s.call('strategy-profile-save', { benchmarkHandles: ['a'] })).status, 400);
@@ -562,4 +562,17 @@ test('chat-send resolves `selected` only for its own client and passes a labelle
   assert.equal(typeof deps.readQueueSummary, 'function');
   assert.equal((await deps.readQueueSummary()).cid, 'c1');
   assert.equal(deps.readOpportunities, undefined);
+});
+
+test('searchInventory: hasStory is false for placeholder stories, finds a mix by artist (accept. 9)', async () => {
+  const pkgs = [
+    { id: 'rv-1', title: 'ACIDMAN – Night Set', story: '[add your memory]', searchTokens: ['acidman'], bucketId: 'ue' },
+    { id: 'p2', title: 'Real', story: 'A real memory of the night we pressed the first run of this record.', searchTokens: ['acidman'] },
+    { id: 'p3', title: 'Seed', story: 'TODO — write this', searchTokens: ['acidman'] },
+  ];
+  let deps;
+  const s = chatSetup({ packages: pkgs, loopResult: (a, d) => { deps = d; return { text: 'ok', proposals: [] }; } });
+  await s.call('strategy-chat-send', { text: 'q' });
+  const hits = await deps.searchInventory({ query: 'acidman', limit: 5 });
+  assert.deepEqual(hits.map((p) => [p.id, p.hasStory]).sort(), [['p2', true], ['p3', false], ['rv-1', false]]);
 });

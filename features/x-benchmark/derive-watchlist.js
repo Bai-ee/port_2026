@@ -189,3 +189,35 @@ export function mergeWatchlist(derived = [], curated = []) {
   }
   return [...out.values()];
 }
+
+/**
+ * Per-track watchlists (content tracks, plan section 4.1): run deriveWatchlist over each track's OWN benchmark rows
+ * and tag every candidate with its `track`. Tracks are never merged, so an account quoted by two tracks' benchmarks
+ * appears once per track. A track with no benchmarks (or no rows) yields an empty list and a status, never a guess.
+ *
+ * @param {{id:string, benchmarks:string[]}[]} tracks
+ * @param {Record<string, object[]>} rowsByHandle - benchmark handle (lowercase, no @) -> corpus rows
+ * @param {object} [opts] - forwarded to deriveWatchlist (coverage, max, ownHandle)
+ * @returns {{accounts: object[], perTrack: Record<string, {status: string, accounts: object[], meta: object|null}>}}
+ */
+export function deriveTrackWatchlists(tracks, rowsByHandle = {}, opts = {}) {
+  const perTrack = {};
+  const accounts = [];
+  for (const track of Array.isArray(tracks) ? tracks : []) {
+    const handles = (track.benchmarks || []).map((h) => cleanHandle(h).toLowerCase()).filter(Boolean);
+    if (!handles.length) {
+      perTrack[track.id] = { status: 'no-benchmark', accounts: [], meta: null };
+      continue;
+    }
+    const rows = handles.flatMap((h) => (Array.isArray(rowsByHandle[h]) ? rowsByHandle[h] : []));
+    if (!rows.length) {
+      perTrack[track.id] = { status: 'no-rows', accounts: [], meta: null };
+      continue;
+    }
+    const derived = deriveWatchlist(rows, opts);
+    const tagged = derived.accounts.map((a) => ({ ...a, track: track.id }));
+    perTrack[track.id] = { status: 'ok', accounts: tagged, meta: derived.meta };
+    accounts.push(...tagged);
+  }
+  return { accounts, perTrack };
+}

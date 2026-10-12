@@ -72,3 +72,31 @@ export async function loadLoopCorpora({ corpusStore, profileHandles, loadCommitt
 export async function safeProfileHandles(readConfig, resolveProfile) {
   try { return resolveProfile({ config: (await readConfig()) ?? null }) || {}; } catch { return {}; }
 }
+
+/**
+ * Per-track corpora for the loop: for each track, the stored rows of ITS benchmark handles (never pooled across tracks).
+ * Same store-first / committed-fallback rule as loadLoopCorpora; the primary path above is untouched.
+ * @param {object} p
+ * @param {{readRows:(h:string)=>Promise<object>}} p.corpusStore
+ * @param {{id:string, benchmarks:string[]}[]} p.tracks
+ * @returns {Promise<Record<string,{handles:string[], byHandle:Record<string,{rows:object[], source:string}>}>>}  keyed by track id
+ */
+export async function loadTrackCorpora({ corpusStore, tracks, loadCommitted = defaultLoadCommitted } = {}) {
+  if (!corpusStore || typeof corpusStore.readRows !== 'function') throw new Error('loadTrackCorpora: corpusStore is required');
+  const deps = { corpusStore, loadCommitted };
+  const cache = new Map();
+  const out = {};
+  for (const track of Array.isArray(tracks) ? tracks : []) {
+    const handles = [];
+    const byHandle = {};
+    for (const raw of track.benchmarks || []) {
+      let h;
+      try { h = normalizeHandle(raw); } catch { continue; }
+      if (!cache.has(h)) cache.set(h, readOne(h, deps));
+      handles.push(h);
+      byHandle[h] = await cache.get(h);
+    }
+    out[track.id] = { handles, byHandle };
+  }
+  return out;
+}

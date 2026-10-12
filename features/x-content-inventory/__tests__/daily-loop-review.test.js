@@ -73,7 +73,7 @@ test('regeneration cap: 2 kept + 3 fresh yields MAX_SUGGESTIONS total, kept firs
 test('a dismissed pair is not re-suggested and does not use a slot', () => {
   const prev = { suggestions: [sug('a', { reviewState: 'dismissed' })] };
   // Same opportunity+package under a new id must still be skipped.
-  const next = { suggestions: [sug('z', { opportunity: { id: 'o-a' }, package: { id: 'p-a' } }), sug('c'), sug('d'), sug('e')] };
+  const next = { suggestions: [sug('z', { opportunity: { id: 'o-a' }, package: { id: 'p-a' } }), sug('c'), sug('d'), sug('e'), sug('f'), sug('g')] };
   const ids = mergePreserved(prev, next).suggestions.map((s) => s.id);
   assert.ok(!ids.includes('z'));
   assert.equal(ids.filter((id) => id !== 'a').length, MAX_SUGGESTIONS);

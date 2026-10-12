@@ -24,6 +24,8 @@ import { resolvePlanInputs } from './plan-inputs.js';
 import { withDefaultPair } from './route-handlers.js';
 import { normalizeHandle } from './corpus-store.js';
 import { tierForAuthoredPerDay } from './contracts.js';
+import { tracksOf } from './content-tracks.js';
+import { applyTrackAllocation, hasExplicitTracks, loadTrackProfiles } from './track-profile.js';
 
 export const MAX_PLAN_POSTS = 12;
 export const DEFAULT_REQUEST_POSTS = 5;
@@ -126,18 +128,24 @@ export function createContentPlanHandlers({
     if (!own.rows.length) throw httpError(409, `No corpus rows for @${ownHandle} yet - run Refresh in the Strategy tab first.`);
     const bench = benchHandle ? await corpusStore.readRows(benchHandle) : null;
     const { packages, seeded } = await readInventory();
+    // Content tracks (opt-in): track shares raise per-engine minimums; a plan without contentTracks is untouched.
+    const engineConfig = applyTrackAllocation(planDoc, resolved.engineConfig);
 
     const plan = buildPlan({
       corpusRows: own.rows,
       benchmarkRows: bench?.rows?.length ? bench.rows : null,
       packages, date, posts, now, handle: ownHandle,
       ...(profile.lanes.length ? { lanes: profile.lanes } : {}),
-      ...(resolved.engineConfig ? { engineConfig: resolved.engineConfig } : {}),
+      ...(engineConfig ? { engineConfig } : {}),
     });
+    const trackProfiles = hasExplicitTracks(planDoc)
+      ? await loadTrackProfiles({ tracks: tracksOf(planDoc), corpusStore, ownHandle }).catch(() => null)
+      : null;
     // `seeded` travels with the plan so the card can say the gaps come from the example rows.
     return {
       ok: true, plan, seeded, summary: projectDayPlan(plan, { posts }).summary,
       planSource: resolved.source, planVersion: resolved.planVersion,
+      ...(trackProfiles ? { trackProfiles } : {}),
     };
   }
 

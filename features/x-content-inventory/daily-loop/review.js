@@ -7,6 +7,21 @@ import { packageEligibility } from './content-basis.js';
 import { checkSuggestionText, guardTypeFor } from './copy.js';
 import { socialPostIdFor } from './time-ids.js';
 import { bad, runDocId } from './run-store.js';
+import { pickMedia, pickMediaRef } from '../item-actions.js';
+
+/**
+ * Read-side refresh: a suggestion flagged `needs-staging` whose package has since been staged (STAGE_FOR_PUBLISH wrote an
+ * assetRef) shows its media instead. Display only - the stored run doc is never rewritten, and Save re-checks the live package.
+ */
+export async function overlayStagedMedia(run, getPackage) {
+  if (!run?.suggestions?.some((x) => x?.package?.media?.status === 'needs-staging')) return run;
+  const suggestions = await Promise.all(run.suggestions.map(async (x) => {
+    if (x?.package?.media?.status !== 'needs-staging' || !x.package.id) return x;
+    const m = pickMediaRef(await getPackage(x.package.id).catch(() => null));
+    return m ? { ...x, package: { ...x.package, media: { kind: m.kind, ref: m.ref } } } : x;
+  }));
+  return { ...run, suggestions };
+}
 
 // --- review actions --------------------------------------------------------
 
@@ -32,7 +47,10 @@ export function composeQueueContent(suggestion, text) {
  * a blocked suggestion never reaches the queue.
  *
  * deps: { store, getPackage(id), createDraftPostOnce(clientId, postId, payload), now(),
- *         postExists?(id) }  — postExists lets a deleted queue row be saved again.
+ *         postExists?(id), signEvLong?(path), hitloopUrl?(path) }
+ *   postExists lets a deleted queue row be saved again. signEvLong/hitloopUrl (both optional) resolve the
+ *   package's media; the draft stores the object ref as `mediaStoragePath`, which the existing publish path
+ *   re-signs. Without them the draft is text-only (old behaviour).
  */
 export async function saveSuggestionDraft(deps, { key, suggestionId, text }) {
   const run = await deps.store.read(key);
@@ -58,6 +76,17 @@ export async function saveSuggestionDraft(deps, { key, suggestionId, text }) {
     if (!eligibility.ok) throw bad(`Content item is no longer eligible (${eligibility.reason}).`, 409);
   }
 
+  // A showcase suggestion whose item has no playable media yet is never saved text-only. Staging is a separate,
+  // explicit owner action (nas-stage); once it has written a ref onto the package, this check passes and the ref attaches below.
+  if (pkg && (s.package?.media?.status === 'needs-staging' || s.slot?.type === 'original-showcase') && !pickMediaRef(pkg)) {
+    throw bad('This item has no staged media yet — stage it first ("Use for posting"), then save.', 409, { code: 'needs-staging', packageId });
+  }
+
+  // Media rides on the draft only for a package-backed suggestion whose media can be resolved here.
+  const media = pkg && (deps.signEvLong || deps.hitloopUrl)
+    ? await pickMedia(pkg, { signEvLong: deps.signEvLong || (async () => null), hitloopUrl: deps.hitloopUrl || (async () => null) })
+    : null;
+
   const postId = socialPostIdFor(s.id);
   const planVersion = run?.strategySource?.planVersion;
   const expiresAt = s.expiresAt || s.package?.expiresAt || null;
@@ -67,6 +96,7 @@ export async function saveSuggestionDraft(deps, { key, suggestionId, text }) {
     source: 'daily-loop',
     packageId,
     engine: pkg?.engine || null,
+    ...(media || {}),
     selfReply: s.draft?.selfReply ? { text: s.draft.selfReply } : null,
     // A reply carries its target the same way Reply Targets drafts do; the
     // operator posts it into the thread.
@@ -80,6 +110,8 @@ export async function saveSuggestionDraft(deps, { key, suggestionId, text }) {
       opportunityId: s.opportunity?.id || null,
       opportunityUrl: s.opportunity?.url || null,
       matchTerms: s.match?.terms || [],
+      track: s.track || null,
+      promotionId: s.promotion?.id || null,
     },
     xStrategy: { postType: guardTypeFor(s), source: 'daily-loop' },
     algorithmProfileVersion: checks.score?.profile || null,

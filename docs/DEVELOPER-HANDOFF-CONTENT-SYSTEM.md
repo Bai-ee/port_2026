@@ -185,3 +185,6 @@ Cleanup afterwards: confirm all `[CM test]` rows are `rejected`; leftover empty 
 
 ## Telegram command center (2026-10-11, branch feat/telegram-command-center)
 Telegram is a second interface to the same posts: briefing, calendar, timed handoff cards, manual delivery and uploads. It adds the shared `manual` post status ("Posting manually"; the sweeper never claims it) plus `recordManualPosted` (self-reported, `deliveryVerified:false`, no `twitterId`), `releaseManualClaim` and `approveAndPostNow` in `twitter-service.js`. As-built, security model, activation steps: [`docs/source-of-truth/TELEGRAM-COMMAND-CENTER.md`](source-of-truth/TELEGRAM-COMMAND-CENTER.md).
+
+## Addendum — Content tracks + promotion loop (2026-10-11)
+Start at [`source-of-truth/CONTENT-TRACKS.md`](source-of-truth/CONTENT-TRACKS.md); plan in `docs/plans/CONTENT-TRACKS-PROMOTION-MASTER-PLAN.md`.

@@ -142,7 +142,7 @@ test('handles: normalize, dirty, validate', () => {
   assert.deepEqual(normalizeHandlesDraft({ own: 'me', benchmarks: ['me', 'a', 'A', ' '] }), { own: 'me', benchmarks: ['a'] });
   assert.match(validateHandlesDraft({ own: '', benchmarks: [] }), /own X handle/);
   assert.match(validateHandlesDraft({ own: 'me', benchmarks: ['bad handle'] }), /not a valid/);
-  assert.match(validateHandlesDraft({ own: 'me', benchmarks: ['a', 'b', 'c', 'd', 'e', 'f'] }), /At most 5/);
+  assert.match(validateHandlesDraft({ own: 'me', benchmarks: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'] }), /At most 8/);
   assert.equal(validateHandlesDraft({ own: 'me', benchmarks: ['a'] }), null);
 });
 
@@ -221,4 +221,154 @@ test('plainChatText strips bold/code markers but keeps text, numbers and lists',
   assert.equal(plainChatText('1. a * b * c\n- item'), '1. a * b * c\n- item');
   assert.equal(plainChatText(null), '');
   assert.equal(plainChatText('**unclosed'), '**unclosed');
+});
+
+import { suggestionMediaState, stageErrorText } from '../ui-model.js';
+
+test('media state: staged media => Save enabled, no Stage button', () => {
+  const m = suggestionMediaState({ package: { media: { kind: 'video', ref: 'publish-staging/nas/x.mp4' } } });
+  assert.equal(m.status, 'ready');
+  assert.equal(m.canSave, true);
+  assert.equal(m.showStage, false);
+});
+
+test('media state: unstaged NAS item => needs-staging chip, Stage, no Save, approval + Mac-online copy', () => {
+  const m = suggestionMediaState({ package: { media: { status: 'needs-staging' } } });
+  assert.equal(m.status, 'needs-staging');
+  assert.equal(m.chip, 'needs staging');
+  assert.equal(m.canSave, false);
+  assert.equal(m.showStage, true);
+  assert.equal(m.stageLabel, 'Stage from NAS');
+  assert.match(m.note, /click is the approval/);
+  assert.match(m.note, /Mac analyzer must be online/);
+});
+
+test('media state: busy / queued / error stay honest and keep Save off', () => {
+  const s = { package: { media: { status: 'needs-staging' } } };
+  assert.equal(suggestionMediaState(s, { busy: true }).stageDisabled, true);
+  const q = suggestionMediaState(s, { queued: true });
+  assert.equal(q.canSave, false);
+  assert.equal(q.stageLabel, 'Check again');
+  assert.match(q.note, /offline/);
+  const e = suggestionMediaState(s, { error: 'boom' });
+  assert.equal(e.note, 'boom');
+  assert.equal(e.noteTone, 'error');
+});
+
+test('media state: no media or no package => Save unaffected', () => {
+  assert.equal(suggestionMediaState({}).canSave, true);
+  assert.equal(suggestionMediaState({ package: {} }).status, 'none');
+  assert.match(stageErrorText(new Error('No analyzer registered')), /Mac analyzer is offline/);
+  assert.equal(stageErrorText(new Error('Rights: never-public')), 'Rights: never-public');
+});
+
+import {
+  percentsFromWeights, trackDraftFromPlan, setTrackShare, validateTrackBenchmark, addTrackBenchmark, removeTrackBenchmark,
+  validatePromotionUrl, setPromotionUrl, trackPayloadFromDraft, trackChangesFromDraft, trackBenchmarkRow, trackProfileSummary,
+  rightsLabel, storyStateLabel, suggestionTrackChip, suggestionLinkLine,
+} from '../ui-model.js';
+
+test('percentsFromWeights always sums to 100', () => {
+  assert.deepEqual(percentsFromWeights([1, 1]), [50, 50]);
+  assert.equal(percentsFromWeights([1, 1, 1]).reduce((a, b) => a + b, 0), 100);
+  assert.deepEqual(percentsFromWeights([0, 0]), [50, 50]);
+  assert.deepEqual(percentsFromWeights([]), []);
+});
+
+test('track draft defaults when plan has no contentTracks', () => {
+  const d = trackDraftFromPlan({});
+  assert.deepEqual(d.map((t) => [t.id, t.share]), [['design', 50], ['music', 50]]);
+  assert.equal(d[1].benchmarks.length, 0);
+  assert.equal(d[1].promotions[0].url, '');
+});
+
+test('setTrackShare rebalances the others to total 100', () => {
+  const d = setTrackShare(trackDraftFromPlan({}), 'design', 70);
+  assert.deepEqual(d.map((t) => t.share), [70, 30]);
+  assert.deepEqual(setTrackShare(d, 'music', 120).map((t) => t.share), [0, 100]);
+  const three = [{ id: 'a', share: 50 }, { id: 'b', share: 30 }, { id: 'c', share: 20 }];
+  const r = setTrackShare(three, 'a', 33);
+  assert.equal(r.reduce((x, t) => x + t.share, 0), 100);
+  assert.equal(r[0].share, 33);
+});
+
+test('benchmark validation: format, duplicates, per-track and distinct caps', () => {
+  let d = trackDraftFromPlan({});
+  assert.equal(validateTrackBenchmark(d, 'music', ''), 'Enter an X handle.');
+  assert.match(validateTrackBenchmark(d, 'music', 'bad handle!'), /not a valid/);
+  assert.match(validateTrackBenchmark(d, 'design', '@Seb__Design'), /already/);
+  assert.equal(validateTrackBenchmark(d, 'music', '@Some_One'), null);
+  d = addTrackBenchmark(d, 'music', '@Some_One');
+  assert.deepEqual(d[1].benchmarks, ['some_one']);
+  d = addTrackBenchmark(addTrackBenchmark(d, 'music', 'b2'), 'music', 'b3');
+  assert.match(validateTrackBenchmark(d, 'music', 'b4'), /At most 3/);
+  assert.deepEqual(removeTrackBenchmark(d, 'music', '@B2')[1].benchmarks, ['some_one', 'b3']);
+});
+
+test('promotion url validation: blank ok, https only', () => {
+  assert.equal(validatePromotionUrl(''), null);
+  assert.equal(validatePromotionUrl('https://example.com/x'), null);
+  assert.match(validatePromotionUrl('http://example.com'), /https/);
+  assert.match(validatePromotionUrl('not a url'), /valid/);
+});
+
+test('trackChangesFromDraft: clean => not dirty; edits => payload with fractions and null links', () => {
+  const clean = trackChangesFromDraft({}, trackDraftFromPlan({}));
+  assert.equal(clean.dirty, false);
+  assert.equal(clean.contentTracks, null);
+  let d = setTrackShare(trackDraftFromPlan({}), 'design', 60);
+  d = setPromotionUrl(d, 'music', 'ue', 'https://ue.example.com');
+  const r = trackChangesFromDraft({}, d);
+  assert.equal(r.dirty, true);
+  assert.deepEqual(r.errors, []);
+  assert.equal(r.contentTracks[0].share, 0.6);
+  assert.equal(r.contentTracks[1].promotions[0].url, 'https://ue.example.com');
+  assert.equal(r.contentTracks[1].promotions[1].url, null);
+});
+
+test('trackChangesFromDraft: bad link blocks the payload; re-opening saved tracks is not dirty', () => {
+  const bad = trackChangesFromDraft({}, setPromotionUrl(trackDraftFromPlan({}), 'music', 'ue', 'http://x.com'));
+  assert.equal(bad.contentTracks, null);
+  assert.equal(bad.errors.length, 1);
+  const saved = { contentTracks: trackPayloadFromDraft(setTrackShare(trackDraftFromPlan({}), 'design', 70)) };
+  assert.equal(trackChangesFromDraft(saved, trackDraftFromPlan(saved)).dirty, false);
+});
+
+test('trackBenchmarkRow: queued shows the Mac worker command; rows and freshness pass through', () => {
+  const meta = { a: { handle: 'a', source: 'bird', rowsMeta: { rowCount: 40 }, freshness: { pulledAt: 'x', ageDays: 1, stale: false } } };
+  const idle = trackBenchmarkRow('@A', meta, null);
+  assert.equal(idle.rows, 40);
+  assert.equal(idle.freshness, 'fresh 1d');
+  assert.equal(idle.note, '');
+  const q = trackBenchmarkRow('a', meta, { status: 'queued', handles: ['a'] });
+  assert.match(q.note, /strategy-refresh-worker\.mjs/);
+  const none = trackBenchmarkRow('zz', meta, null);
+  assert.equal(none.rows, 0);
+  assert.equal(none.needsRefresh, true);
+});
+
+test('trackProfileSummary: honest no-benchmark / pending / ready states', () => {
+  assert.equal(trackProfileSummary({ benchmarks: [] }, null).state, 'no-benchmark');
+  assert.match(trackProfileSummary({ benchmarks: [] }, null).headline, /add one/i);
+  assert.equal(trackProfileSummary({ benchmarks: ['a'] }, null).state, 'pending');
+  const r = trackProfileSummary({ benchmarks: ['a'] }, { rowCount: 120, formatMix: { video: 0.5, text: 0.5 }, medianLength: 88.4, linkInReplyRate: 0.2, bestHoursCT: ['9am'] });
+  assert.equal(r.state, 'ready');
+  assert.deepEqual(r.lines, ['Format mix: 50% video · 50% text', 'Median length: 88 characters', 'Link in reply: 20% of posts', 'Best hours (CT): 9am']);
+});
+
+test('library labels: UE-hosted clearance and placeholder story', () => {
+  assert.equal(rightsLabel({ rights: 'cleared', rightsSource: { policy: 'ue-hosted-cleared' } }), 'cleared (UE-hosted)');
+  assert.equal(rightsLabel({ rights: 'cleared' }), 'Cleared');
+  assert.equal(rightsLabel({ rights: 'owned' }), null);
+  assert.equal(storyStateLabel({}, true), 'no memory yet — facts used');
+  assert.equal(storyStateLabel({}, false), null);
+});
+
+test('suggestion chips tolerate absent fields', () => {
+  assert.equal(suggestionTrackChip({}), null);
+  assert.equal(suggestionTrackChip({ track: 'music', promotion: { label: 'Discogs store' } }), 'music · Discogs store');
+  assert.equal(suggestionTrackChip({ track: 'design' }), 'design');
+  assert.equal(suggestionLinkLine({}), null);
+  assert.deepEqual(suggestionLinkLine({ draft: { selfReply: 'UE: https://u.example' } }), { kind: 'self-reply', text: 'UE: https://u.example' });
+  assert.equal(suggestionLinkLine({ promotion: { label: 'UE', url: 'https://u.example' } }).kind, 'promotion');
 });

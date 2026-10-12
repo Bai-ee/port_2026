@@ -56,8 +56,8 @@ test('item-story validation: story only, required, bounded; extra humanEdits are
   assert.deepEqual(v.proposal.payload, { id: 'pkg1', story: 'shot at the pier' });
 });
 
-test('benchmarks validation: <=5, regex, dedupe, own not in benchmarks', () => {
-  assert.equal(normalizeHandleInput({ benchmarkHandles: ['a', 'b', 'c', 'd', 'e', 'f'] }).ok, false);
+test('benchmarks validation: <=8, regex, dedupe, own not in benchmarks', () => {
+  assert.equal(normalizeHandleInput({ benchmarkHandles: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'] }).ok, false);
   assert.equal(normalizeHandleInput({ benchmarkHandles: ['bad handle'] }).ok, false);
   assert.equal(normalizeHandleInput({ benchmarkHandles: ['waytoolonghandle_12345'] }).ok, false);
   assert.equal(normalizeHandleInput({ ownHandle: 'me', benchmarkHandles: ['Me'] }).ok, false);
@@ -225,7 +225,7 @@ test('benchmarks-change calls the injected saver with normalized handles; failur
   const out = (await decideProposal({ proposal: pending('benchmarks-change', { ownHandle: 'me', benchmarkHandles: ['a', 'b'] }), decision: 'confirm', executors, context: CTX, clientId: 'c1' })).proposal;
   assert.equal(out.status, 'confirmed');
   assert.deepEqual(saved, [['c1', { ownHandle: 'me', benchmarkHandles: ['a', 'b'] }]]);
-  const bad = (await decideProposal({ proposal: pending('benchmarks-change', { benchmarkHandles: Array.from({ length: 6 }, (_, i) => `h${i}`) }), decision: 'confirm', executors, context: CTX, clientId: 'c1' })).proposal;
+  const bad = (await decideProposal({ proposal: pending('benchmarks-change', { benchmarkHandles: Array.from({ length: 9 }, (_, i) => `h${i}`) }), decision: 'confirm', executors, context: CTX, clientId: 'c1' })).proposal;
   assert.equal(bad.status, 'failed', 'executor re-validates even if a bad payload slipped past assignment');
   assert.equal(saved.length, 1);
 });

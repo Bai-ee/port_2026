@@ -4,6 +4,7 @@
 // Safety model: no free text is ever an approval. Every state-changing button is a single-use ticket bound to
 // (post, revision, telegram user, bindingVersion); a stale/superseded/expired/foreign ticket never reaches a service.
 import { checkBindingAccess } from './access.js';
+import { buildSuggestionBundle, readySummary } from './suggestions.js';
 import {
   MAX_POST_CHARS, buildHandoffBundle, escapeHtml, localTime, parseLocalTime, tomorrowSameTime, toMs, TERMINAL_STATUSES,
 } from './handoff.js';
@@ -115,6 +116,90 @@ export function createBot(ctx) {
     if (post) await sendCard(binding, post, { headline: 'Latest version of this post' });
   }
 
+  // ── Daily-loop suggestions ─────────────────────────────────────────────────
+  async function loadSuggestions(clientId) {
+    const empty = { runKey: null, suggestions: [] };
+    try {
+      if (typeof services.listTodaySuggestions === 'function') return (await services.listTodaySuggestions(clientId)) || empty;
+      if (typeof readModels.todaySuggestions === 'function') return (await readModels.todaySuggestions(clientId, { now: nowMs() })) || empty;
+    } catch { /* unavailable: behave as "none" */ }
+    return empty;
+  }
+
+  async function sendSuggestionCard(binding, runKey, s) {
+    const chatId = binding.chatId;
+    const bundle = buildSuggestionBundle(s);
+    if (bundle.media) {
+      try {
+        if (bundle.media.type === 'video') await transport.sendVideo(chatId, bundle.media.url, {});
+        else await transport.sendPhoto(chatId, bundle.media.url, {});
+      } catch { await say(chatId, `Open media: ${bundle.media.url}`); }
+    }
+    if (bundle.copyText) await say(chatId, bundle.copyText, { disablePreview: true }); // exact copy, no parse mode
+    const params = { runKey, suggestionId: s.id, rev: s.rev };
+    const buttons = [];
+    if (s.needsStaging) buttons.push({ text: 'Stage from NAS', ticket: await mkTicket(binding, { action: 'suggestion', params: { op: 'stage', ...params } }) });
+    else buttons.push({ text: 'Save draft', ticket: await mkTicket(binding, { action: 'suggestion', params: { op: 'save', ...params } }) });
+    buttons.push({ text: 'Dismiss', ticket: await mkTicket(binding, { action: 'suggestion', params: { op: 'dismiss', ...params } }) });
+    return sayHtml(chatId, bundle.metaHtml, { replyMarkup: keyboard([buttons.map((b) => b)]) });
+  }
+
+  async function sendSuggestionsNotice(binding) {
+    const sugg = await loadSuggestions(binding.clientId);
+    const open = sugg.suggestions.filter((x) => x.state === 'open');
+    if (!open.length || !sugg.runKey) return { skipped: true, messageIds: [] };
+    const ticket = await mkTicket(binding, { action: 'suggestion', params: { op: 'review', runKey: sugg.runKey } });
+    const sent = await sayHtml(binding.chatId, `<b>Today's suggestions</b>\n${escapeHtml(readySummary(open))}`, { replyMarkup: keyboard([[{ text: `Review suggestions (${open.length})`, ticket }]]) });
+    return { messageIds: sent?.message_id != null ? [sent.message_id] : [] };
+  }
+
+  // op: review | show | save | dismiss | stage. Every write re-reads the run and compares the card's rev: a regenerate
+  // or edit since the card was sent means "out of date" and nothing is written.
+  async function runSuggestionAction(binding, t) {
+    const { clientId, chatId } = binding;
+    const { op, runKey, suggestionId, rev } = t.params || {};
+    const sugg = await loadSuggestions(clientId);
+    const stale = { answer: OUT_OF_DATE, followup: () => say(chatId, 'Those suggestions changed. Tap "What\'s happening?" or "Today\'s posts" for the latest.') };
+    if (!runKey || sugg.runKey !== runKey) return stale;
+    if (op === 'review') {
+      const open = sugg.suggestions.filter((x) => x.state === 'open').slice(0, 5);
+      if (!open.length) return { answer: 'No open suggestions.' };
+      return { answer: `Sending ${open.length}.`, followup: async () => { for (const x of open) await sendSuggestionCard(binding, runKey, x); } };
+    }
+    const s = sugg.suggestions.find((x) => x.id === suggestionId);
+    if (!s || s.rev !== rev) return stale;
+    if (op === 'show') {
+      if (s.state !== 'open') return { answer: s.state === 'dismissed' ? 'Already dismissed.' : 'Already saved.' };
+      return { answer: 'Opening.', followup: () => sendSuggestionCard(binding, runKey, s) };
+    }
+    if (s.state === 'dismissed') return { answer: 'Already dismissed.' };
+    if (op === 'dismiss') {
+      if (s.state === 'saved') return { answer: 'Already saved as a draft. Skip it from the post card.' };
+      await services.dismissSuggestion({ clientId, runKey, suggestionId });
+      return { answer: 'Dismissed.' };
+    }
+    if (op === 'stage') {
+      if (!s.needsStaging) return { answer: 'Already staged.' };
+      const r = await services.stageSuggestion({ clientId, runKey, suggestionId });
+      const msg = r?.status === 'queued' ? 'Staging requested. The Mac analyzer must be online; I will not save anything until the file is ready.'
+        : r?.status === 'offline' ? 'The Mac analyzer is offline, so nothing was staged. Bring it online and tap Stage from NAS again.'
+          : `Could not stage: ${String(r?.message || 'error').slice(0, 140)}`;
+      return { answer: r?.status === 'queued' ? 'Staging requested.' : r?.status === 'offline' ? 'Mac analyzer offline.' : 'Could not stage.', followup: () => say(chatId, r?.status === 'queued' || r?.status === 'offline' ? msg : msg) };
+    }
+    if (op === 'save') {
+      if (s.needsStaging) return { answer: 'Stage this from the NAS first.' }; // never a text-only save for showcase slots
+      let post = null;
+      if (s.state === 'saved' && s.postId) post = await services.getSocialPost(clientId, s.postId); // already saved: no second write
+      else {
+        const res = await services.saveSuggestion({ clientId, runKey, suggestionId });
+        post = res?.post || (res?.draftId ? await services.getSocialPost(clientId, res.draftId) : null);
+      }
+      if (!post) return { answer: 'Saved, but the draft could not be loaded. Open HITLOOP.' };
+      return { answer: 'Saved as a draft.', followup: () => sendCard(binding, post, { headline: 'Draft saved. Review it before posting.' }) };
+    }
+    return { answer: 'That action is not available.' };
+  }
+
   // ── Menu surfaces ──────────────────────────────────────────────────────────
   async function showHappening(binding) {
     const tz = await tzOf(binding.clientId);
@@ -122,6 +207,9 @@ export function createBot(ctx) {
     const f = briefing.formatWhatsHappening(data, { now: nowMs(), tz });
     const secs = [['insights', 'Market insights'], ['conversations', 'Conversations to join'], ['review', 'Needs review'], ['detail', 'More detail']];
     const buttons = [];
+    const sugg = data.suggestions ? { runKey: data.suggestionsRunKey, suggestions: data.suggestions } : await loadSuggestions(binding.clientId);
+    const open = sugg.suggestions.filter((x) => x.state === undefined || x.state === 'open');
+    if (open.length && sugg.runKey) buttons.push({ text: `Review suggestions (${open.length})`, ticket: await mkTicket(binding, { action: 'suggestion', params: { op: 'review', runKey: sugg.runKey } }) });
     for (const [section, text] of secs) buttons.push({ text, ticket: await mkTicket(binding, { action: 'show-section', params: { section } }) });
     await sayHtml(binding.chatId, f.overview, { replyMarkup: keyboard(pack(buttons)) });
   }
@@ -144,6 +232,8 @@ export function createBot(ctx) {
     const now = nowMs();
     const cal = await readModels.loadCalendar(binding.clientId, { now });
     const handle = await readModels.loadAccountHandle(binding.clientId).catch(() => null);
+    const sugg = await loadSuggestions(binding.clientId);
+    const openSugg = sugg.suggestions.filter((x) => x.state === 'open').slice(0, 6);
     const day = (cal?.week || []).find((d) => d.date === cal.today);
     const rows = (day?.posts || []).filter((r) => r?.id && !TERMINAL_STATUSES.has(r.status)).slice(0, 6);
     const buttons = [];
@@ -151,7 +241,8 @@ export function createBot(ctx) {
       const label = `${localTime(r.scheduledAt || r.proposedAt, tz).split(', ').pop()} ${String(r.content || '').replace(/\s+/g, ' ').slice(0, 24)}`.trim();
       buttons.push({ text: label, ticket: await mkTicket(binding, { postId: r.id, action: 'show-card' }) });
     }
-    await sayHtml(binding.chatId, briefing.formatToday(cal, { now, tz, handle }), buttons.length ? { replyMarkup: keyboard(buttons.map((b) => [b])) } : {});
+    for (const x of openSugg) buttons.push({ text: `${x.trackLabel}: ${x.text.replace(/\s+/g, ' ').slice(0, 24)}`.trim(), ticket: await mkTicket(binding, { action: 'suggestion', params: { op: 'show', runKey: sugg.runKey, suggestionId: x.id, rev: x.rev } }) });
+    await sayHtml(binding.chatId, briefing.formatToday(cal, { now, tz, handle, suggestions: openSugg }), buttons.length ? { replyMarkup: keyboard(buttons.map((b) => [b])) } : {});
   }
 
   async function showCalendar(binding) {
@@ -331,6 +422,8 @@ export function createBot(ctx) {
         const patch = await applyToggle(binding, t.params?.key);
         return patch ? { answer: 'Updated.', followup: () => showSettings(binding) } : { answer: 'Unknown setting.' };
       }
+      case 'suggestion':
+        return runSuggestionAction(binding, t);
       case 'intake': {
         if (!ctx.intake?.handleCallback) return { answer: 'Uploads are not available.' };
         const r = await ctx.intake.handleCallback(binding, String(t.params?.op || ''), String(t.params?.intakeId || ''));
@@ -497,5 +590,5 @@ export function createBot(ctx) {
     return undefined;
   }
 
-  return { handleUpdate, handleMessage, handleCallback, sendCard, showHappening, sendMedia, sendTakeover, retirePostCards };
+  return { handleUpdate, handleMessage, handleCallback, sendCard, sendSuggestionsNotice, showHappening, sendMedia, sendTakeover, retirePostCards };
 }

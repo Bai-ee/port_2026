@@ -7,6 +7,7 @@ import Badge from './ui/Badge.jsx';
 import Card from './ui/Card.jsx';
 import { XCE_COLORS, XCE_RADII, XCE_SHADOWS } from './xce-tokens';
 import { Skeleton, RetryError } from './Feedback.jsx';
+import { suggestionTrackChip, suggestionLinkLine, suggestionMediaState, stageErrorText } from '../../../features/x-strategy/ui-model.js';
 import { slotLabel, timingLine, strategySourceLine, slotStatuses, VOICE_LINE } from '../../../features/x-content-inventory/daily-loop/present.js';
 
 // DailySuggestionsPanel — which X conversations to join today, with what owned
@@ -126,7 +127,21 @@ function SavedPostFlow({ s, call, callSocial, showToast, onOpenQueue }) {
   );
 }
 
-function SuggestionCard({ s, text, thumbUrl, onText, onCommit, onSave, onDismiss, busy, call, callSocial, showToast, onOpenQueue }) {
+function SuggestionCard({ s, text, thumbUrl, onText, onCommit, onSave, onDismiss, onReload, busy, call, callSocial, showToast, onOpenQueue }) {
+  const [stage, setStage] = useState({ busy: false, queued: false, error: '' });
+  const media = suggestionMediaState(s, stage);
+  const trackChip = suggestionTrackChip(s);
+  const linkLine = suggestionLinkLine(s);
+  // Owner click is the approval. Never auto-stages. Same call as ItemDrawer: nas-stage { id } -> { ok, commandId } (queues STAGE_FOR_PUBLISH).
+  const stageFromNas = async () => {
+    if (stage.queued) { setStage((x) => ({ ...x, busy: true })); try { await onReload?.(); } finally { setStage((x) => ({ ...x, busy: false })); } return; }
+    setStage({ busy: true, queued: false, error: '' });
+    try {
+      const r = await call('nas-stage', { id: s.package.id });
+      if (!r || r.ok === false) throw new Error(r?.error || 'Could not queue the staging upload.');
+      setStage({ busy: false, queued: true, error: '' });
+    } catch (err) { setStage({ busy: false, queued: false, error: stageErrorText(err) }); }
+  };
   const reviewed = s.reviewState === 'saved' || s.reviewState === 'dismissed';
   const stored = s.edit?.text ?? s.draft.text;
   const dirty = text !== stored;
@@ -140,6 +155,8 @@ function SuggestionCard({ s, text, thumbUrl, onText, onCommit, onSave, onDismiss
         {s.match?.tier === 'genre' ? <span className="xce-dl-tier">genre-level match</span> : null}
         {slotLabel(s.slot) ? <span id={`daily-suggestion-slot-label-${s.id}`} className="xce-dl-slot-label" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: '#2a2420' }}>{slotLabel(s.slot)}</span> : null}
         <span className="xce-dl-slot">{timingLine(s)}</span>
+        {trackChip ? <span id={`daily-suggestion-track-chip-${s.id}`} className="xce-chip">{trackChip}</span> : null}
+        {media.chip ? <span id={`daily-suggestion-needs-staging-chip-${s.id}`} className="xce-chip xce-chip-warn">{media.chip}</span> : null}
       </header>
 
       {s.conversation ? (
@@ -214,6 +231,14 @@ function SuggestionCard({ s, text, thumbUrl, onText, onCommit, onSave, onDismiss
         </ul>
       ) : null}
 
+      {linkLine ? <p id={`daily-suggestion-link-line-${s.id}`} className="xce-dl-muted" style={{ margin: '4px 0', overflowWrap: 'anywhere' }}>{linkLine.kind === 'self-reply' ? 'Self-reply: ' : 'Promotion link: '}{linkLine.text}</p> : null}
+      {media.showStage && s.reviewState !== 'saved' && s.reviewState !== 'dismissed' ? (
+        <div id={`daily-suggestion-stage-panel-${s.id}`} style={{ margin: '4px 0', display: 'grid', gap: 6 }}>
+          <p id={`daily-suggestion-stage-note-${s.id}`} role={media.noteTone === 'error' ? 'alert' : 'status'} className={media.noteTone === 'error' ? 'xce-dl-bad' : 'xce-dl-muted'} style={{ margin: 0 }}>{media.note}</p>
+          <button type="button" id={`daily-suggestion-stage-button-${s.id}`} className="xce-btn-ghost" disabled={media.stageDisabled || busy} onClick={stageFromNas}>{media.stageLabel}</button>
+        </div>
+      ) : null}
+
       <div id={`daily-suggestion-actions-row-${s.id}`} className="xce-dl-actions">
         {s.reviewState === 'saved' ? (
           <SavedPostFlow s={s} call={call} callSocial={callSocial} showToast={showToast} onOpenQueue={onOpenQueue} />
@@ -221,7 +246,7 @@ function SuggestionCard({ s, text, thumbUrl, onText, onCommit, onSave, onDismiss
           <span className="xce-dl-muted">Dismissed</span>
         ) : (
           <>
-            <button type="button" className="xce-btn-primary" disabled={busy || dirty || empty || checks.blocked} onClick={onSave}>
+            <button type="button" className="xce-btn-primary" disabled={busy || dirty || empty || checks.blocked || !media.canSave} title={media.canSave ? undefined : 'Stage the media first'} onClick={onSave}>
               <Save size={13} /> {busy ? 'Working…' : 'Save draft'}
             </button>
             <button type="button" className="xce-btn-ghost" disabled={busy} onClick={onDismiss}>
@@ -445,6 +470,7 @@ export default function DailySuggestionsPanel({ call, callSocial, showToast, onO
                 showToast={showToast}
                 onOpenQueue={onOpenQueue}
                 onDismiss={() => dismiss(s)}
+                onReload={load}
                 busy={busy === s.id || busy === 'generate'}
               />
             )) : <div className="xce-empty">No suggestion today — see the gaps above.</div>}

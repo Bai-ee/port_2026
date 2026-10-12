@@ -34,7 +34,7 @@ test('limits cover every tier', () => {
   assert.equal(C.PLAN_LIMITS.authoredPerDayMin, 1);
   assert.equal(C.PLAN_LIMITS.authoredPerDayMax, Math.max(...perDay));
   assert.equal(C.PLAN_LIMITS.historyCap, 30);
-  assert.equal(C.PLAN_LIMITS.maxBenchmarkHandles, 5);
+  assert.equal(C.PLAN_LIMITS.maxBenchmarkHandles, 8);
   assert.equal(C.PLAN_LIMITS.maxHandlesPerRefreshRequest, 6);
   assert.ok(C.isValidAuthoredPerDay(4) && !C.isValidAuthoredPerDay(0) && !C.isValidAuthoredPerDay(17) && !C.isValidAuthoredPerDay(2.5));
 });

@@ -30,7 +30,7 @@ import { setRights, saveThumb, createDraftFromItem } from '../../../../features/
 import { NAS_ACTIONS, handleNasAction } from '../../../../features/x-content-inventory/nas.js';
 import { runDailyLoop, assertOwnerClient, localDateOf, LOOP_VERSION } from '../../../../features/x-content-inventory/daily-loop.js';
 import {
-  createFirestoreRunStore, loadDailyLoopInputs, saveSuggestionDraft, editSuggestion, dismissSuggestion, createModelDrafter,
+  createFirestoreRunStore, loadDailyLoopInputs, saveSuggestionDraft, editSuggestion, dismissSuggestion, overlayStagedMedia, createModelDrafter,
 } from '../../../../features/x-content-inventory/daily-run-store.js';
 import { createStrategyHandlersFromDb, STRATEGY_ROUTE_ACTIONS } from '../../../../features/x-strategy/route-handlers.js';
 import { createContentPlanHandlers } from '../../../../features/x-strategy/content-plan.js';
@@ -612,13 +612,18 @@ async function handleSyncRenderedVideos(context, body) {
     async listVideos() {
       const videos = [];
       let cursor = null;
+      let complete = false;
       for (let i = 0; i < 50; i += 1) {
         const page = await bridge.listRenderedVideos({ limit: 200, startAfter: cursor });
         videos.push(...page.videos);
         cursor = page.nextCursor;
-        if (!cursor) break;
+        if (!cursor) { complete = true; break; }
       }
-      return videos;
+      return { videos, complete }; // complete only when the cursor ran out (enables retire-on-missing)
+    },
+    async listStored() {
+      const snap = await fb.adminDb.collection('x_content_packages').where('source.kind', '==', 'rendered-video').get();
+      return snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
     },
     async listMediaJobs(jobIds) {
       const map = new Map();
@@ -665,6 +670,19 @@ async function handleSetRights(body) {
     { id: String(body?.id || '').trim(), rights: body?.rights });
 }
 
+/** Media URL resolvers shared by create-draft-from-item and the daily loop's Save (the post stores the object ref; publish re-signs). */
+function mediaSigners(bridge = loadBridge()) {
+  return {
+    async signEvLong(p) {
+      try {
+        const [url] = await bridge.bridgeBucket().file(p).getSignedUrl({ version: 'v4', action: 'read', expires: Date.now() + EV_LONG_SIGN_MS });
+        return url;
+      } catch { return null; }
+    },
+    hitloopUrl: (p) => tokenUrlFor(fb.adminStorage.bucket(), p),
+  };
+}
+
 async function handleCreateDraftFromItem(context, body) {
   const bridge = loadBridge();
   return createDraftFromItem({
@@ -674,13 +692,7 @@ async function handleCreateDraftFromItem(context, body) {
     ensureDraft: (clientId, payload) => ensureDraftPost(clientId, payload),
     createPost: createSocialPost,
     patchPost: (postId, patch) => fb.adminDb.collection('social_posts').doc(postId).set(patch, { merge: true }),
-    async signEvLong(p) {
-      try {
-        const [url] = await bridge.bridgeBucket().file(p).getSignedUrl({ version: 'v4', action: 'read', expires: Date.now() + EV_LONG_SIGN_MS });
-        return url;
-      } catch { return null; }
-    },
-    hitloopUrl: (p) => tokenUrlFor(fb.adminStorage.bucket(), p),
+    ...mediaSigners(bridge),
   }, { clientId: context.clientId, id: String(body?.id || '').trim() });
 }
 
@@ -710,7 +722,7 @@ async function readContentContext(clientId, { packageIds = dailyLoopDemoSet.ids,
 async function handleDailyRun(context, action, body) {
   assertOwnerClient(context.clientId);
   const store = createFirestoreRunStore(fb.adminDb);
-  if (action === 'daily-run-latest') return { ok: true, run: await latestDailyRun(store, context.clientId) };
+  if (action === 'daily-run-latest') return { ok: true, run: await overlayStagedMedia(await latestDailyRun(store, context.clientId), getPackage) };
 
   if (action === 'daily-run-generate') {
     let draft;
@@ -726,8 +738,8 @@ async function handleDailyRun(context, action, body) {
       // The shared content context (same loader the strategy chat reads); `raw` is the runner's legacy input shape.
       readInputs: async () => {
         const ctx = await readContentContext(context.clientId, {
-          // POC: the verified demo set unless the caller asks for the whole library.
-          packageIds: body?.library === 'full' ? null : dailyLoopDemoSet.ids,
+          // Pilot client: the full library by default; the verified demo set only when explicitly asked for.
+          packageIds: body?.library === 'demo' ? dailyLoopDemoSet.ids : null,
         });
         // Degraded mode: never generate against a queue we could not read (it could conflict with scheduled posts).
         if (ctx.raw.recentPostsError) {
@@ -755,10 +767,11 @@ async function handleDailyRun(context, action, body) {
     const text = typeof body?.text === 'string' ? body.text : undefined;
     const postExists = async (id) => (await fb.adminDb.collection('social_posts').doc(String(id)).get()).exists;
     try {
-      const saved = await saveSuggestionDraft({ store, getPackage, createDraftPostOnce, postExists }, { key, suggestionId, text });
+      const saved = await saveSuggestionDraft({ store, getPackage, createDraftPostOnce, postExists, ...mediaSigners() }, { key, suggestionId, text });
       return { ok: true, ...saved, run: await store.read(key) };
     } catch (err) {
       if (err.checks) return { ok: false, error: err.message, checks: err.checks, status: err.status };
+      if (err.code === 'needs-staging') return { ok: false, error: err.message, code: err.code, packageId: err.packageId, status: err.status };
       throw err;
     }
   }

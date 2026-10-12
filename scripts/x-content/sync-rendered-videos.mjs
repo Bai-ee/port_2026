@@ -38,13 +38,18 @@ const result = await syncRenderedVideos({
   async listVideos() {
     const videos = [];
     let cursor = null;
+    let complete = false;
     for (let i = 0; i < 50; i += 1) {
       const page = await bridge.listRenderedVideos({ limit: 200, startAfter: cursor });
       videos.push(...page.videos);
       cursor = page.nextCursor;
-      if (!cursor) break;
+      if (!cursor) { complete = true; break; }
     }
-    return videos;
+    return { videos, complete }; // complete only when the cursor ran out (enables retire-on-missing)
+  },
+  async listStored() {
+    const snap = await fb.adminDb.collection('x_content_packages').where('source.kind', '==', 'rendered-video').get();
+    return snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
   },
   async listMediaJobs(jobIds) {
     const map = new Map();

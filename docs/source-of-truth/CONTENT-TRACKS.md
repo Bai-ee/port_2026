@@ -1,0 +1,32 @@
+# Content Tracks + Promotion Loop (SSOT, 2026-10-11)
+
+Plan: `docs/plans/CONTENT-TRACKS-PROMOTION-MASTER-PLAN.md`. Client: `bryan-balli-WUoltG84` (posts as @bai_ee). Owner decisions D1–D5 + the NAS-staging amendment are binding.
+
+## What it is
+- `plan.contentTracks` on `x_strategy_plans/{clientId}` (optional; absent ⇒ defaults, old plans behave exactly as before). Contract: `features/x-strategy/content-tracks.js` (`tracksOf`, `normalizeContentTracks`, `trackForEngine`, `allPromotions`).
+- Defaults: **design** (client+identity engines, benchmark `seb__design`, 50%) and **music** (ue+record engines, **no benchmark yet**, 50%). Every engine belongs to exactly one track; ≤6 tracks, ≤3 benchmarks/track, ≤8 distinct (`PLAN_LIMITS.maxBenchmarkHandles`).
+- Pace stays `plan.benchmarkPrimary`. Track `share` × authored originals raises per-engine minimums (`track-profile.js applyTrackAllocation`, called from `plan-inputs.js`); never lowers a cap/floor.
+- Per-track profile (`track-profile.js`): pools only that track's benchmark corpora. No benchmark ⇒ `status:'no-benchmark'`, fallback own history, surfaced as a gap — never invented numbers.
+- Promotions (`promotions.js`): ue → rendered-video packages, record → Discogs, client → client work. URL starts `null`; the link rides **only in the self-reply** (`promotionSelfReply`, `''` when null).
+
+## Rights (D1)
+UE-hosted rendered mixes: BAI-EE ⇒ `owned`; others ⇒ `rights:'cleared'`, `approval:{state:'none'}`, `rightsSource:{by:'owner',policy:'ue-hosted-cleared',at:'2026-10-11'}`. `rightsSetBy:'human'` always wins. Applied by sync (`features/rendered-videos/`) and the one-off `scripts/x-content/apply-ue-rights-policy.mjs` (dry-run default, `--write`, counts only, idempotent). Upstream-deleted videos are retired (`retiredReason:'source-missing'`, prior status kept in `retiredFromStatus`) only after a **complete** listing.
+
+## Daily loop
+- Suggestions carry `track`, `promotion`, `package.media {kind,ref}`, `draft.selfReply`; max 5; default library `full`.
+- **NAS amendment:** a package with no playable assetRefs ⇒ `package.media = {status:'needs-staging'}`. Save **refuses** (409 `needs-staging`) — never a text-only showcase draft (also enforced for old run docs via the live package). Web + Telegram offer **Stage from NAS** → existing `nas-stage` (owner click = approval; Mac analyzer must be online, UI says so). Never auto-staged. After `STAGE_FOR_PUBLISH` writes `publish-staging/nas/...` onto the package, reads overlay the media (`overlayStagedMedia`) and Save attaches it via `pickMedia`.
+- Save writes one unscheduled `social_posts` draft with `mediaStoragePath` = object ref (re-signed at publish), `sourceRef.{track,promotionId}`.
+- Cloud cron `GET /api/worker/daily-loop` (`30 11 * * *`): Bearer `CRON_SECRET` (fail closed in prod), `PILOT_CLIENT_IDS` required (503 if unset), **no model drafter**, saved scan only, no bird/X.
+
+## Telegram
+Briefing groups suggestions by track; suggestion card = media + exact copy + `track · promotion · why`; buttons Save draft / Dismiss (or Stage from NAS / Dismiss), tickets revision-bound (`rev` strict). One outbox notice per run key. Services wired in `features/telegram/runtime.js` (`saveSuggestion`, `dismissSuggestion`, `stageSuggestion`). Activation remains an owner gate (see TELEGRAM-COMMAND-CENTER.md).
+
+## UI
+X Strategy → Plan tab → "Content tracks" (`#x-strategy-content-tracks-panel`): engines, benchmarks (add ⇒ queues a refresh for the Mac worker), shares, promotion links, profile summary. Suggestion cards show track/promotion chips and the staging flow.
+
+## Limits
+- Corpus refresh needs the owner's Mac: `node scripts/x-content/strategy-refresh-worker.mjs`.
+- Library is global (owner pilot only). Cron copy is plain fallback copy; regenerate with the model from the dashboard.
+- Telegram video by URL caps at 20MB (else poster + link). Staging completion is not pushed — reopen Today's posts.
+- Strategy-chat edits of `contentTracks` are supported by the proposal schema; no dedicated chat UI.
+- Local `npm run build` with the symlinked `node_modules` needs `--webpack` (Turbopack rejects the symlink); Vercel builds normally.

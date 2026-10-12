@@ -49,13 +49,16 @@ test('exclusion: failed, deleted, non-completed, no path', () => {
   assert.equal(skipped.length, 2);
 });
 
-test('rights: owner owned, others never-public; default mixTitle = unknown mix', () => {
+test('rights (D1): owner owned, others cleared + rightsSource; default mixTitle = unknown mix', () => {
   const owned = renderedVideoToPackage(vid({ artist: 'Bai-ee' }));
   assert.equal(owned.rights, 'owned');
   assert.equal(owned.approval.state, 'none');
   const other = renderedVideoToPackage(vid());
-  assert.equal(other.rights, 'never-public');
-  assert.equal(other.approval.state, 'needed');
+  assert.equal(other.rights, 'cleared');
+  assert.equal(other.approval.state, 'none');
+  assert.deepEqual(other.rightsSource, { by: 'owner', policy: 'ue-hosted-cleared', at: '2026-10-11' });
+  assert.equal(owned.rightsSource, undefined);
+  assert.equal(validatePackage(other).ok, true);
   const unk = renderedVideoToPackage(vid({ mixTitle: 'Hitloop Video Remix' }), { ueArtists: ue });
   assert.ok(unk.tags.includes('mix-unknown'));
   assert.equal(unk.eraYear, null);

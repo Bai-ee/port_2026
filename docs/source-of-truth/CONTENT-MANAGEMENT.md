@@ -53,3 +53,6 @@ Read tools: `get_evaluation, get_plan, get_context, get_today_run, search_invent
 - **Assets:** NAS/EditVideos media must be reachable for posts with media; not exercised.
 - **Model usage:** only chat turns and optional `--draft-with-model`/Enhance spend; daily-loop Generate defaults to no model. Generate in the UI is manual; the scheduled daily path is the launchd `install-daily-loop` job (not installed here).
 - **Manual vs scheduled:** Generate/Regenerate = manual and spends nothing without the model box ticked; scheduled posting = the sweeps above.
+
+## Content tracks + promotion loop (2026-10-11)
+UE-hosted mixes are `cleared` by owner policy (D1); suggestions carry track/promotion/media; NAS items need explicit staging. See [`CONTENT-TRACKS.md`](CONTENT-TRACKS.md).

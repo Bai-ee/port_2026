@@ -9,6 +9,8 @@ import { conversationPostsFrom } from './conversations.js';
 import { deriveStrategy } from './evidence.js';
 import { selectSuggestions, selectForSlots } from './select.js';
 import { planSlots } from './slots.js';
+import { tracksOf } from '../../x-strategy/content-tracks.js';
+import { promotionsOf, promotionSelfReply } from '../../x-strategy/promotions.js';
 import { buildContributionPrompt, fallbackCopy, checkSuggestionText } from './copy.js';
 
 const REVIEWED = new Set(['edited', 'saved', 'dismissed']);
@@ -63,7 +65,7 @@ export function describeInputs(inputs, now) {
   ];
 }
 
-export function inputFingerprint({ scan, search, packages, brain, strategyPlan, strategySource, benchmark, max }) {
+export function inputFingerprint({ scan, search, packages, brain, strategyPlan, strategySource, benchmark, max, contentTracks }) {
   const pkgSig = packages.map((p) => `${p.id}:${p.updatedAt || ''}:${String(p.story || '').length}:${p.rights}:${p.status}`).sort().join(',');
   return stableHash([
     scan?.generatedAt || 'no-scan',
@@ -77,6 +79,8 @@ export function inputFingerprint({ scan, search, packages, brain, strategyPlan, 
     strategySource ? stableHash(JSON.stringify([strategySource.date, strategySource.tier, strategySource.authoredPerDay, strategySource.mixSource, strategySource.slotLetters,
       ...(strategySource.planSource ? [strategySource.planSource, strategySource.planVersion] : [])])) : 'no-slots',
     max,
+    // Track shares/promotion links join the hash only when tracks were supplied, so old inputs keep their fingerprint.
+    ...(contentTracks ? [stableHash(JSON.stringify(contentTracks.map((t) => [t.id, t.engines, t.share, t.promotions.map((p) => [p.id, p.url])])))] : []),
     LOOP_VERSION,
   ].join('|'));
 }
@@ -98,7 +102,9 @@ export async function runDailyLoop(deps, opts = {}) {
   const packages = Array.isArray(inputs.packages) ? inputs.packages : [];
   const spine = spineOf(inputs, packages, { localDate, now, timezone });
   const strategySource = spine ? spine.strategySource : inputs.strategySource || null;
-  const fingerprint = inputFingerprint({ ...inputs, packages, strategySource, max });
+  const contentTracks = Array.isArray(inputs.contentTracks) && inputs.contentTracks.length ? inputs.contentTracks : tracksOf(null);
+  const promotions = promotionsOf({ contentTracks });
+  const fingerprint = inputFingerprint({ ...inputs, packages, strategySource, max, contentTracks: inputs.contentTracks });
   const key = { clientId, localDate, channel: CHANNEL, version: LOOP_VERSION };
 
   // Prior doc: lets a no-model regenerate keep model drafts and lets reviewed cards skip the model.
@@ -113,7 +119,7 @@ export async function runDailyLoop(deps, opts = {}) {
   const conversationPosts = conversationPostsFrom(inputs);
   const selection = spine
     ? selectForSlots({
-      clientId, localDate, timezone, now, max, strategy, brain, packages, conversationPosts,
+      clientId, localDate, timezone, now, max, strategy, brain, packages, conversationPosts, contentTracks, promotions,
       slots: spine.slots,
       matchedSlots: spine.plan.slots,
       // Quote slots draw on the watchlist scan only, carrying the scan's own score.
@@ -124,7 +130,7 @@ export async function runDailyLoop(deps, opts = {}) {
       ownHandle: spine.ownHandle,
     })
     : selectSuggestions({
-      clientId, localDate, timezone, now, max, strategy, brain, packages, conversationPosts,
+      clientId, localDate, timezone, now, max, strategy, brain, packages, conversationPosts, contentTracks, promotions,
       ownSummary: inputs.ownSummary || null,
     });
 
@@ -171,7 +177,7 @@ export async function runDailyLoop(deps, opts = {}) {
         // The store keeps reviewed cards as they are; a model draft is reused rather than paid for again.
         modelFlags.push(isModelDraft(before.draft));
         run.suggestions.push(reviewed ? { ...s, slot: s.slot ?? null, package: s.package ?? null, draft: before.draft, checks: before.checks, edit: before.edit ?? null, reviewState: before.reviewState, socialPostId: before.socialPostId ?? null }
-          : { ...s, slot: s.slot ?? null, package: s.package ?? null, draft: before.draft, checks: checkSuggestionText(before.draft.text, s), edit: null, reviewState: 'pending', socialPostId: null });
+          : { ...s, slot: s.slot ?? null, package: s.package ?? null, draft: { ...before.draft, selfReply: before.draft.selfReply || promotionSelfReply(s.promotion) }, checks: checkSuggestionText(before.draft.text, s), edit: null, reviewState: 'pending', socialPostId: null });
         continue;
       }
       const built = buildContributionPrompt({ suggestion: s, voice });
@@ -192,7 +198,7 @@ export async function runDailyLoop(deps, opts = {}) {
         source = `fallback — ${built.reason}`;
       }
       modelFlags.push(fromModel);
-      run.suggestions.push({ ...s, slot: s.slot ?? null, package: s.package ?? null, draft: { text, selfReply: '', source }, checks: checkSuggestionText(text, s), edit: null, reviewState: 'pending', socialPostId: null });
+      run.suggestions.push({ ...s, slot: s.slot ?? null, package: s.package ?? null, draft: { text, selfReply: promotionSelfReply(s.promotion), source }, checks: checkSuggestionText(text, s), edit: null, reviewState: 'pending', socialPostId: null });
     }
     run.copySource = modelFlags.length && modelFlags.every(Boolean) ? 'model' : modelFlags.some(Boolean) ? 'mixed' : 'fallback';
     run.status = 'complete';

@@ -124,6 +124,34 @@ export function mergeEngineConfig(overrides) {
   return cfg;
 }
 
+/**
+ * Track-allocation hook (docs/plans/CONTENT-TRACKS-PROMOTION-MASTER-PLAN.md section 4.1).
+ * Raise per-engine minimums on a merged config. Only ever RAISES `minPerDay` / `weeklyMin`, and never past the
+ * engine's own hard caps (maxPerDay, weeklyMax, 7 x maxPerDay): caps and existing floors are never lowered.
+ * Input is not mutated; unknown engines and non-count values are ignored.
+ *
+ * @param {object} config  from mergeEngineConfig
+ * @param {Record<string,{minPerDay?:number, weeklyMin?:number}>} minimums
+ */
+export function raiseEngineMinimums(config, minimums) {
+  const out = JSON.parse(JSON.stringify(config ?? DEFAULT_ENGINE_CONFIG));
+  if (!isObj(minimums)) return out;
+  for (const id of ENGINE_IDS) {
+    const want = minimums[id];
+    const cur = out.engines[id];
+    if (!isObj(want) || !cur) continue;
+    if (isCount(want.minPerDay)) {
+      const ceiling = cur.maxPerDay ?? Infinity;
+      cur.minPerDay = Math.max(cur.minPerDay ?? 0, Math.min(want.minPerDay, ceiling));
+    }
+    if (isCount(want.weeklyMin)) {
+      const ceiling = Math.min(cur.weeklyMax ?? Infinity, (cur.maxPerDay ?? Infinity) * WEEK_DAYS);
+      cur.weeklyMin = Math.max(cur.weeklyMin ?? 0, Math.min(want.weeklyMin, ceiling));
+    }
+  }
+  return out;
+}
+
 function minutesOf(timeCT) {
   const [h, m] = String(timeCT ?? '12:00').split(':').map(Number);
   return (Number.isFinite(h) ? h : 12) * 60 + (Number.isFinite(m) ? m : 0);

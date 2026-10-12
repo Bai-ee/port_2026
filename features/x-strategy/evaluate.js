@@ -16,6 +16,7 @@ import { resolveTier } from '../x-benchmark/profile.js';
 import { DEFAULT_PLAN, EVALUATION_CAVEAT, EVALUATION_THRESHOLDS, tierForAuthoredPerDay } from './contracts.js';
 import { buildRowsMeta, freshness } from './corpus-rows.js';
 import { normalizePlan } from './plan-state.js';
+import { tracksOf } from './content-tracks.js';
 
 export const QUOTE_REACT_CAVEAT = 'quote-react-undervalued';
 export const MAX_GAPS = 8;
@@ -73,9 +74,42 @@ function entryCaveats(entry, role) {
 }
 
 /**
+ * Per-track evaluation: each track is compared with ITS OWN benchmarks only (never averaged across tracks, and the
+ * plan's overall primary is only a tie-break inside a track that contains it). A track without benchmarks reports
+ * { status:'no-benchmark', fallback:'own-history' } with no gaps.
+ */
+function evaluateTracks(tracks, bench, own, primaryWanted) {
+  return tracks.map((track) => {
+    const base = { trackId: track.id, label: track.label, engines: [...track.engines], share: track.share, benchmarks: [...track.benchmarks] };
+    if (!track.benchmarks.length) {
+      return { ...base, status: 'no-benchmark', fallback: 'own-history', gapsAgainst: null, gaps: [], perBenchmark: [], needsRefresh: [], caveats: [] };
+    }
+    const entries = track.benchmarks.map((h) => ({ handle: h, found: bench.find((b) => b.entry.handle === h) ?? null }));
+    const withSummary = entries.map((e) => e.found).filter((f) => f?.summary);
+    const needsRefresh = entries.filter((e) => !e.found?.summary).map((e) => e.handle);
+    const perBenchmark = own.summary
+      ? withSummary.map((b) => ({ handle: b.entry.handle, gaps: compareToBenchmark({ own: own.summary, benchmark: b.summary }).gaps.slice(0, MAX_GAPS) }))
+      : [];
+    const lead = withSummary.find((b) => b.entry.handle === primaryWanted) ?? withSummary[0] ?? null;
+    const gaps = lead ? (perBenchmark.find((p) => p.handle === lead.entry.handle)?.gaps ?? []) : [];
+    return {
+      ...base,
+      status: withSummary.length ? 'ok' : 'no-rows',
+      fallback: null,
+      gapsAgainst: lead ? lead.entry.handle : null,
+      gaps: clone(gaps),
+      perBenchmark: clone(perBenchmark),
+      needsRefresh,
+      caveats: withSummary.flatMap((b) => entryCaveats(b.entry, 'benchmark')),
+    };
+  });
+}
+
+/**
  * @param {{ownHandle:string, ownRows:object[], ownMeta:object|null,
  *          benchmarks:{handle:string, rows:object[], meta:object|null}[],
- *          plan:object|null, now?:number|string|Date}} input
+ *          plan:object|null, now?:number|string|Date, tracks?:object[]}} input
+ *   `byTrack` is added ONLY when the plan has contentTracks (or `tracks` is passed); otherwise the output is unchanged.
  */
 export function evaluate(input = {}) {
   const nowMs = toMs(input.now);
@@ -115,7 +149,10 @@ export function evaluate(input = {}) {
   const recommendedTier = resolveTier({ currentAuthoredPerDay: own.entry.cadence?.authoredPerActiveDay });
   const currentTier = tierForAuthoredPerDay(plan.authoredPerDay);
 
+  const trackList = Array.isArray(input.tracks) ? input.tracks : Array.isArray(plan.contentTracks) ? tracksOf(plan) : null;
+
   return {
+    ...(trackList ? { byTrack: evaluateTracks(trackList, bench, own, primaryWanted) } : {}),
     generatedAt: new Date(nowMs).toISOString(),
     own: own.entry,
     benchmarks: bench.map((b) => b.entry),

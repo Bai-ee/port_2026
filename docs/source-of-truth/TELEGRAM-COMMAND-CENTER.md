@@ -143,3 +143,6 @@ Without the token, the webhook returns 503, dispatch reports `skipped: telegram-
 - **Manual claims and packages.** A manual claim taken from a draft or failed row doesn't hold a package reservation doc. Other schedulers are still blocked by the pending-row collision check, which is read-then-write.
 - **No timeout on manual rows.** A manual row that kept its slot holds it until the owner acts.
 - **Ticket TTL** is 24h. The server revision check, not the TTL, is what blocks stale actions.
+
+## Daily-loop suggestions (2026-10-11)
+Suggestion cards, Save/Dismiss/Stage-from-NAS tickets and the per-run notice are specified in [`CONTENT-TRACKS.md`](CONTENT-TRACKS.md). Services: `saveSuggestion`, `dismissSuggestion`, `stageSuggestion` in `runtime.js`.

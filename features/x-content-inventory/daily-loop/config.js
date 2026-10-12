@@ -8,7 +8,7 @@ import { HARD_LIMITS } from '../draft.js';
 export const LOOP_VERSION = 3;
 export const CHANNEL = 'x';
 export const DEFAULT_TIMEZONE = 'America/Chicago';
-export const MAX_SUGGESTIONS = 3;
+export const MAX_SUGGESTIONS = 5;
 
 /** ⚠️ POC isolation. The inventory store is global and the corpora are
  * Bryan's, so the selected dashboard client does NOT establish isolation.

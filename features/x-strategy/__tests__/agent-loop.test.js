@@ -199,7 +199,7 @@ test('unknown suggestionId and invalid handles are tool errors', async () => {
     toolResp(
       tu('a', 'propose_suggestion_dismiss', { suggestionId: 'zzz', ...base }),
       tu('b', 'propose_refresh_handles', { handles: ['a', 'b', 'c', 'd', 'e', 'f', 'g'], ...base }),
-      tu('c', 'propose_benchmarks_change', { benchmarkHandles: ['a', 'b', 'c', 'd', 'e', 'f'], ...base }),
+      tu('c', 'propose_benchmarks_change', { benchmarkHandles: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'], ...base }),
       tu('d', 'propose_benchmarks_change', { ownHandle: 'bad handle!', ...base }),
     ),
     resp([text('ok')]),

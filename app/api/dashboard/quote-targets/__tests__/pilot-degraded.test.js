@@ -32,7 +32,8 @@ function breakQueueReads(db) {
   const orig = db.collection.bind(db);
   db.collection = (name) => {
     const col = orig(name);
-    if (name !== 'social_posts') return col;
+    // The full library (the pilot default) reads packages with a field projection the shared fake does not implement.
+    if (name !== 'social_posts') return col.select ? col : Object.assign(col, { select: () => col });
     const boom = () => { queueReads += 1; return Promise.reject(new Error('firestore unavailable')); };
     const chain = { where: () => chain, orderBy: () => chain, limit: () => chain, select: () => chain, get: boom };
     return { ...col, doc: col.doc.bind(col), where: () => chain, orderBy: () => chain, get: boom };

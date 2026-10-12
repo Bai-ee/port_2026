@@ -7,9 +7,14 @@
 //   refreshed : title, facets (genres/eraYear kept when the source can't supply
 //               them), source, assetRefs, posterRef, tags (human-added tags kept),
 //               entities, renderedAt, mediaState, format, variants.x.suggestedStory,
-//               rights ONLY while `rightsSetBy !== 'human'`.
-//   NEVER     : story, humanEdits, approval, status, lastPostedAt, postCount,
+//               rights + rightsSource (+ approval, only while it is still none/needed)
+//               ONLY while `rightsSetBy !== 'human'` (owner decision D1).
+//   NEVER     : story, humanEdits, a human/approved approval, lastPostedAt, postCount,
 //               bucketId, thumbRef, rightsSetBy/At, any other field.
+//   RETIRE    : a stored rv- row missing from a COMPLETE, non-empty upstream listing
+//               gets status 'retired' + retiredReason 'source-missing' (never deleted).
+//               Only when `listVideos` reports `complete:true`; a bare array = unknown
+//               completeness = no invalidation. If the row reappears it is restored.
 // A package whose machine-field hash (`syncHash`) is unchanged is skipped with no write.
 
 import { createHash } from 'node:crypto';
@@ -17,7 +22,7 @@ import { mapRenderedVideos } from './adapter.js';
 import { normalizeFacets, buildSearchTokens } from '../x-content-inventory/facets.js';
 
 export const SYNC_THROTTLE_MS = 10 * 60 * 1000;
-const MACHINE_TAGS = new Set(['rendered-video', 'auto-daily', 'deliberate', 'origin-unknown', 'mix-unknown', 'artist-unknown', 'rights:third-party-unconfirmed']);
+const MACHINE_TAGS = new Set(['rendered-video', 'auto-daily', 'deliberate', 'origin-unknown', 'mix-unknown', 'artist-unknown', 'rights:third-party-unconfirmed', 'rights:ue-hosted-cleared']);
 const ORIGIN_TAGS = ['auto-daily', 'deliberate', 'origin-unknown'];
 
 const stable = (v) => JSON.stringify(v, (_k, x) => (x && typeof x === 'object' && !Array.isArray(x)
@@ -51,17 +56,28 @@ export function machineFields(fresh, existing) {
     tags,
     entities: fresh.entities,
     renderedAt: fresh.renderedAt,
+    ...(fresh.durationSec ? { durationSec: fresh.durationSec } : {}),
     mediaState: fresh.mediaState,
     format: fresh.format,
     eraYear: eraYear ?? null,
     suggestedStory: fresh.variants?.x?.suggestedStory ?? null,
-    ...(humanRights ? {} : { rights: fresh.rights }),
+    ...(humanRights ? {} : rightsFields(fresh, existing)),
   };
 }
 
+// D1 policy fields; approval is only touched while no human/approved decision is on it.
+function rightsFields(fresh, existing) {
+  const out = { rights: fresh.rights, rightsSource: fresh.rightsSource ?? null };
+  const state = existing?.approval?.state;
+  if (!existing || !state || state === 'none' || state === 'needed') out.approval = fresh.approval;
+  return out;
+}
+
 function applyMachine(existing, m) {
-  const { suggestedStory, ...rest } = m;
+  const { suggestedStory, rightsSource, ...rest } = m;
   const next = { ...existing, ...rest };
+  if (rightsSource) next.rightsSource = rightsSource;
+  else if ('rightsSource' in m) delete next.rightsSource;
   if (suggestedStory) next.variants = { ...(existing.variants || {}), x: { ...(existing.variants?.x || {}), suggestedStory } };
   next.searchTokens = buildSearchTokens(next);
   return next;
@@ -76,7 +92,8 @@ async function pool(items, n, fn) {
 
 /**
  * deps: {
- *  listVideos(): Promise<videoDoc[]>,
+ *  listVideos(): Promise<videoDoc[] | {videos: videoDoc[], complete: boolean}>,
+ *  listStored?(): Promise<storedPkg[]>,                        // rv- rows; enables retire-on-missing
  *  listMediaJobs(editJobIds[]): Promise<Map<string,object>>,   // only called for NEW ids
  *  readExisting(ids[]): Promise<Map<string,object>>,           // bulk, no seed overlay
  *  upsert(pkg): Promise<any>,
@@ -91,14 +108,17 @@ export async function syncRenderedVideos(deps, { force = false } = {}) {
     return { ok: true, throttled: true, created: c.created ?? 0, updated: c.updated ?? 0, unchanged: c.unchanged ?? 0, total: c.total ?? 0, lastSyncAt: meta.lastSyncAt ?? null };
   }
 
-  const videos = await deps.listVideos();
+  const listed = await deps.listVideos();
+  // Array = legacy shape (completeness unknown); {videos, complete} = explicit.
+  const videos = Array.isArray(listed) ? listed : (listed?.videos || []);
+  const complete = !Array.isArray(listed) && listed?.complete === true && videos.length > 0;
   const ids = [...new Set(videos.map((v) => `rv-${String(v.jobId || v.videoId || v.id || '').trim()}`))].filter((x) => x !== 'rv-');
   const existingMap = await deps.readExisting(ids);
   const newJobIds = ids.filter((id) => !existingMap.has(id)).map((id) => id.slice(3));
   const mediaJobsByEditJobId = newJobIds.length ? await deps.listMediaJobs(newJobIds) : new Map();
 
   const { packages } = mapRenderedVideos(videos, { ueArtists: deps.ueArtists || [], mediaJobsByEditJobId, now });
-  const counts = { created: 0, updated: 0, unchanged: 0, total: packages.length };
+  const counts = { created: 0, updated: 0, unchanged: 0, retired: 0, restored: 0, total: packages.length };
   const writes = [];
 
   for (const fresh of packages) {
@@ -110,13 +130,25 @@ export async function syncRenderedVideos(deps, { force = false } = {}) {
     }
     const m = machineFields(fresh, existing);
     const h = hashOf(m);
-    if (existing.syncHash === h) { counts.unchanged += 1; continue; }
-    writes.push({ kind: 'updated', pkg: { ...applyMachine({ ...existing, id: fresh.id }, m), syncHash: h } });
+    const comeback = existing.status === 'retired' && existing.retiredReason === 'source-missing';
+    if (existing.syncHash === h && !comeback) { counts.unchanged += 1; continue; }
+    const next = { ...applyMachine({ ...existing, id: fresh.id }, m), syncHash: h };
+    if (comeback) { next.status = existing.retiredFromStatus || 'idea'; delete next.retiredReason; delete next.retiredAt; delete next.retiredFromStatus; }
+    writes.push({ kind: comeback ? 'restored' : 'updated', pkg: next });
+  }
+
+  if (complete && deps.listStored) {
+    const present = new Set(packages.map((p) => p.id));
+    const iso = new Date(now).toISOString();
+    for (const row of (await deps.listStored()) || []) {
+      if (!row?.id || !String(row.id).startsWith('rv-') || present.has(row.id) || row.status === 'retired') continue;
+      writes.push({ kind: 'retired', pkg: { ...row, retiredFromStatus: row.status || 'idea', status: 'retired', retiredReason: 'source-missing', retiredAt: iso } });
+    }
   }
 
   await pool(writes, deps.concurrency || 8, async (w) => { await deps.upsert(w.pkg); counts[w.kind] += 1; });
 
   const lastSyncAt = new Date(now).toISOString();
   await deps.writeMeta({ lastSyncAt, lastSyncAtMs: now, counts });
-  return { ok: true, created: counts.created, updated: counts.updated, unchanged: counts.unchanged, total: counts.total, lastSyncAt };
+  return { ok: true, created: counts.created, updated: counts.updated, unchanged: counts.unchanged, retired: counts.retired, restored: counts.restored, total: counts.total, lastSyncAt };
 }

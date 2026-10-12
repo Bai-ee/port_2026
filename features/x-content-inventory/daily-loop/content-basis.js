@@ -36,6 +36,19 @@ export function contentBasis(pkg = {}) {
     push('source', pkg.source?.url, 'Discogs');
   } else if (kind === 'rendered-video') {
     const own = /^bai-?ee\b/i.test(String(pkg.title || '')) || arrayValues(f.people).some((p) => /^bai-?ee$/i.test(p));
+    const tags = arrayValues(pkg.tags);
+    const identified = !tags.includes('mix-unknown') && !tags.includes('artist-unknown') && String(pkg.title || '').includes(' – ');
+    if (!own && identified) {
+      // A third-party mix hosted on Underground Existence: what it IS, nothing about
+      // what happened. No memories, no invented dates. Rights are gated separately.
+      push('mix', `${pkg.title}, hosted on Underground Existence`, 'Underground Existence');
+      push('year', f.eraYear, 'Underground Existence');
+      if (Number(pkg.durationSec) > 0) {
+        const s = Math.round(Number(pkg.durationSec));
+        push('duration', `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`, 'rendered-videos');
+      }
+      push('artist genre tag', arrayValues(f.genres).join(', '), 'Underground Existence artist record');
+    }
     if (own) {
       push('own work', `${pkg.title} — a mix rendered by the owner's own video pipeline`, 'rendered-videos');
       push('year', f.eraYear, 'rendered-videos');
