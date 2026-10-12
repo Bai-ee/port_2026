@@ -409,3 +409,30 @@ test('tracksSavedText: saved, queued handles, mirror failure', async () => {
   assert.equal(bad.kind, 'err');
   assert.match(bad.text, /not copied .*denied/);
 });
+
+test('trackInsightsView: per-track state, benchmark stats, gaps vs the track lead, honest own-side note', async () => {
+  const { trackInsightsView } = await import('../ui-model.js');
+  assert.deepEqual(trackInsightsView({ own: {}, benchmarks: [] }), [], 'no byTrack => nothing');
+  const evaluation = {
+    own: { handle: 'bai_ee', rows: 100, cadence: { authoredPerActiveDay: 2.1 }, byType: {} },
+    benchmarks: [
+      { handle: 'seb__design', rows: 700, cadence: { authoredPerActiveDay: 6 }, byType: {} },
+      { handle: 'dorksirjur', rows: 543, cadence: { authoredPerActiveDay: 3.2 }, byType: {} },
+    ],
+    byTrack: [
+      { trackId: 'design', label: 'Design', share: 0.5, benchmarks: ['seb__design'], status: 'ok', gapsAgainst: 'seb__design', gaps: [{ id: 'g1', headline: 'Post more video' }], needsRefresh: [] },
+      { trackId: 'music', label: 'Music', share: 0.5, benchmarks: ['dorksirjur', 'discogs'], status: 'ok', gapsAgainst: 'dorksirjur', gaps: [], needsRefresh: ['discogs'] },
+      { trackId: 'other', label: 'Other', share: 0, benchmarks: [], status: 'no-benchmark', gaps: [], needsRefresh: [] },
+    ],
+  };
+  const [design, music, other] = trackInsightsView(evaluation);
+  assert.equal(design.headline, 'Post more video');
+  assert.equal(design.sharePct, 50);
+  assert.deepEqual(design.benchmarks[0], { handle: 'seb__design', rows: 700, perDay: 6, types: design.benchmarks[0].types });
+  assert.equal(music.headline, 'No meaningful gaps vs @dorksirjur.');
+  assert.deepEqual(music.benchmarks.map((b) => [b.handle, b.rows]), [['dorksirjur', 543], ['discogs', 0]]);
+  assert.deepEqual(music.needsRefresh, ['discogs']);
+  assert.equal(other.state, 'no-benchmark');
+  assert.match(other.headline, /No benchmark yet/);
+  assert.match(design.ownNote, /all @bai_ee posts \(2.1\/day\).*not tagged by track/);
+});

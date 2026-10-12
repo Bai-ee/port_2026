@@ -191,6 +191,36 @@ export function comparisonRows(evaluation) {
   return [mk(evaluation.own, 'own'), ...(evaluation.benchmarks || []).map((b) => mk(b, 'benchmark'))];
 }
 
+/**
+ * Per-track Insights from evaluation.byTrack (evaluate.js evaluateTracks). Each track: its benchmarks' stats, the gaps
+ * against its lead benchmark, and what still needs a refresh. Own posts are NOT tagged by track, so the own side of
+ * every track is all of your posts (`ownNote` says so). [] when the evaluation has no byTrack (no explicit tracks).
+ * @returns {{trackId:string,label:string,sharePct:number|null,state:'no-benchmark'|'no-rows'|'ok',headline:string,
+ *            benchmarks:{handle:string,rows:number,perDay:number|null,types:string}[],gaps:string[],gapsAgainst:string|null,
+ *            needsRefresh:string[],ownNote:string}[]}
+ */
+export function trackInsightsView(evaluation) {
+  if (!isObj(evaluation) || !Array.isArray(evaluation.byTrack)) return [];
+  const rowsByHandle = new Map(comparisonRows(evaluation).filter((r) => r.role === 'benchmark').map((r) => [r.handle, r]));
+  const ownPerDay = evaluation.own?.cadence?.authoredPerActiveDay;
+  const ownNote = `Your side: all @${evaluation.own?.handle || 'you'} posts${Number.isFinite(ownPerDay) ? ` (${ownPerDay}/day)` : ''} — posts are not tagged by track yet.`;
+  return evaluation.byTrack.map((t) => {
+    const benchmarks = (t.benchmarks || []).map((h) => {
+      const r = rowsByHandle.get(cleanHandle(h));
+      return { handle: cleanHandle(h), rows: r?.rows ?? 0, perDay: r?.perDay ?? null, types: r?.types ?? '—' };
+    });
+    const state = t.status === 'no-benchmark' ? 'no-benchmark' : t.status === 'ok' ? 'ok' : 'no-rows';
+    const headline = state === 'no-benchmark' ? 'No benchmark yet — add one in Plan → Content tracks.'
+      : state === 'no-rows' ? 'Benchmarks have no posts yet — refresh them.'
+        : (t.gaps?.[0]?.headline || `No meaningful gaps vs @${t.gapsAgainst}.`);
+    return {
+      trackId: t.trackId, label: t.label || t.trackId, sharePct: Number.isFinite(t.share) ? Math.round(t.share * 100) : null, state, headline, benchmarks,
+      gaps: (t.gaps || []).map((g) => g.headline || g.id), gapsAgainst: t.gapsAgainst ?? null,
+      needsRefresh: t.needsRefresh || [], ownNote,
+    };
+  });
+}
+
 // ---- handles -----------------------------------------------------------------------------------------------
 /** Edit-state for the accounts section from profile. */
 export function handlesDraftFromProfile(profile) {

@@ -9,9 +9,10 @@ import {
   PLANNABLE_SLOT_TYPES, freshnessLabel, rowCountOf, indexRowsMeta, cleanHandle, refreshStatusView, refreshIsActive,
   tierComparison, tierText, groupCaveats, comparisonRows, handlesDraftFromProfile, normalizeHandlesDraft, handlesDirty,
   validateHandlesDraft, planDraftFromPlan, planChangesFromDraft, draftTier, historyNewestFirst, historyDiffSummary,
-  todayPlanLine, planErrorView, workerHealthLine, trackDraftFromPlan, trackChangesFromDraft, tracksSavedText,
+  todayPlanLine, planErrorView, workerHealthLine, trackDraftFromPlan, trackChangesFromDraft, tracksSavedText, trackInsightsView,
 } from '../../../features/x-strategy/ui-model.js';
 import ContentTracksPanel from './ContentTracksPanel.jsx';
+import { profileBenchmarksFromPlan } from '../../../features/x-strategy/track-profile.js';
 import StrategyChat, { formatDayTime } from './StrategyChat.jsx';
 import { XCE_COLORS, XCE_RADII } from './xce-tokens';
 import Accordion from './ui/Accordion';
@@ -246,6 +247,40 @@ function EvaluationView({ evaluation, idPrefix }) {
   );
 }
 
+// Per-track Insights: each track vs its own benchmarks (evaluation.byTrack). Separate from the overall pace section.
+function TrackInsights({ evaluation, onEditTracks }) {
+  const tracks = trackInsightsView(evaluation);
+  if (!tracks.length) return null;
+  return (
+    <section id="x-strategy-track-insights-panel" data-section="track-insights" style={S.stack}>
+      <div style={{ ...S.label, fontSize: 11, letterSpacing: '0.08em', color: XCE_COLORS.inkSoft }}>By content track</div>
+      {tracks.map((t) => (
+        <Card key={t.trackId} id={`x-strategy-track-insights-${t.trackId}-card`} data-state={t.state} padding={14}>
+          <div id={`x-strategy-track-insights-${t.trackId}-header`} style={{ ...S.row, justifyContent: 'space-between' }}>
+            <b style={{ fontSize: 15 }}>{t.label}</b>
+            {t.sharePct !== null ? <Badge tone="grey">{t.sharePct}% of authored</Badge> : null}
+          </div>
+          <p id={`x-strategy-track-insights-${t.trackId}-headline`} style={{ margin: '6px 0 0', fontSize: 15, fontWeight: 600, color: t.state === 'ok' ? XCE_COLORS.ink : XCE_COLORS.amber }}>{t.headline}</p>
+          {t.gapsAgainst ? <p style={{ ...S.muted, margin: '2px 0 0' }}>Compared with @{t.gapsAgainst}.</p> : null}
+          {t.benchmarks.length ? (
+            <ul id={`x-strategy-track-insights-${t.trackId}-benchmarks`} style={S.list}>
+              {t.benchmarks.map((b) => (
+                <li key={b.handle}>@{b.handle}: {b.rows ? `${b.rows} posts${b.perDay !== null ? ` · ${b.perDay}/day` : ''} · ${b.types}` : 'no posts yet — needs refresh'}</li>
+              ))}
+            </ul>
+          ) : (
+            <button type="button" id={`x-strategy-track-insights-${t.trackId}-add-benchmark-button`} className="xce-btn xce-btn-ghost" style={{ marginTop: 6, minHeight: 36 }} onClick={onEditTracks}>Add a benchmark</button>
+          )}
+          {t.gaps.length > 1 ? (
+            <ol id={`x-strategy-track-insights-${t.trackId}-gaps`} style={S.list}>{t.gaps.slice(1).map((g) => <li key={g}>{g}</li>)}</ol>
+          ) : null}
+          {t.state !== 'no-benchmark' ? <p style={{ ...S.note, margin: '6px 0 0' }}>{t.ownNote}</p> : null}
+        </Card>
+      ))}
+    </section>
+  );
+}
+
 const showVal = (v) => {
   if (v === null || v === undefined) return 'none';
   if (typeof v === 'string') return v.length > 40 ? `"${v.slice(0, 40)}…"` : `"${v}"`;
@@ -370,7 +405,8 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
     setSaveBusy(true);
     setSaveMsg({ kind: '', text: '' });
     try {
-      await call('strategy-profile-save', baseBody({ ownHandle: n.own, benchmarkHandles: n.benchmarks }));
+      // Tracks own the benchmark list when they exist; this save only changes your own handle then.
+      await call('strategy-profile-save', baseBody({ ownHandle: n.own, benchmarkHandles: trackBenchmarks || n.benchmarks }));
       if (!mounted.current) return;
       setSaveMsg({ kind: 'ok', text: 'Handles saved.' });
       await reload();
@@ -432,6 +468,9 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
     }
   };
 
+  // With explicit tracks the benchmark list is derived (tracks own it); null => the Accounts list stays editable.
+  const trackBenchmarks = profileBenchmarksFromPlan(planDoc);
+
   const tracksCheck = trackChangesFromDraft(savedPlan, tracksDraft);
   const savedTrackHandles = trackDraftFromPlan(savedPlan).flatMap((t) => t.benchmarks);
   const saveTracks = async () => {
@@ -479,6 +518,10 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
     setDetailTab(tab);
     if (version) setExpandedVersion(version);
     if (typeof window !== 'undefined') window.requestAnimationFrame(() => document.getElementById('x-strategy-details-panel')?.scrollIntoView?.({ block: 'nearest' }));
+  };
+  const goToTracks = () => {
+    goDetails('plan');
+    if (typeof window !== 'undefined') window.requestAnimationFrame(() => document.getElementById('x-strategy-content-tracks-panel')?.scrollIntoView?.({ block: 'start' }));
   };
   const askInChat = (text) => {
     setPrefill({ text, nonce: Date.now() });
@@ -723,6 +766,34 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
                       </div>
                     </Card>
 
+                    {trackBenchmarks ? (
+                      <Card id="x-strategy-benchmarks-card" data-source="content-tracks" padding={14}>
+                        <SectionLabel id="x-strategy-benchmarks-header">{`Benchmarks · ${trackBenchmarks.length}/${PLAN_LIMITS.maxBenchmarkHandles}`}</SectionLabel>
+                        <p id="x-strategy-benchmarks-derived-note" style={{ ...S.note, margin: '6px 0 0' }}>
+                          Set by your content tracks (pace benchmark first). Edit them in Plan → Content tracks.
+                        </p>
+                        <div id="x-strategy-benchmarks-list" style={{ ...S.stack, marginTop: 8 }}>
+                          {trackBenchmarks.map((clean, i) => {
+                            const n = i + 1;
+                            const stale = needsRefresh(clean);
+                            return (
+                              <div key={clean} id={`x-strategy-benchmark-handle-row-${n}`} style={{ ...S.row, flexWrap: 'nowrap', padding: 10, border: `1px solid ${XCE_COLORS.border}`, borderRadius: XCE_RADII.md }}>
+                                <Avatar id={`x-strategy-benchmark-avatar-${n}`} handle={clean} />
+                                <div style={{ flex: 1, minWidth: 0, display: 'grid', gap: 4 }}>
+                                  <span id={`x-strategy-benchmark-handle-text-${n}`} style={{ fontSize: 15, overflowWrap: 'anywhere' }}>@{clean}{clean === cleanHandle(savedPlan.benchmarkPrimary) ? <span style={S.label}> · pace</span> : null}</span>
+                                  <span style={S.muted}>{rowsFor(clean)} posts</span>
+                                </div>
+                                <Badge id={`x-strategy-benchmark-handle-status-${n}`} tone={stale ? 'amber' : 'green'}>{stale ? 'Needs refresh' : freshnessLabel(metaByHandle[clean])}</Badge>
+                                <IconButton id={`x-strategy-benchmark-refresh-button-${n}`} label={`Refresh @${clean}`} icon={<RefreshCw size={16} />} size={40} disabled={refreshing} onClick={() => startRefresh([clean])} />
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <button type="button" id="x-strategy-benchmarks-edit-tracks-button" className="xce-btn xce-btn-ghost" style={{ ...S.fullBtn, marginTop: 8 }} onClick={goToTracks}>
+                          Edit content tracks <ArrowUpRight size={15} />
+                        </button>
+                      </Card>
+                    ) : (
                     <Card id="x-strategy-benchmarks-card" padding={14}>
                       <SectionLabel id="x-strategy-benchmarks-header">{`Benchmarks · ${handles.benchmarks.length}/${PLAN_LIMITS.maxBenchmarkHandles}`}</SectionLabel>
                       <div id="x-strategy-benchmarks-list" style={{ ...S.stack, marginTop: 8 }}>
@@ -760,6 +831,7 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
                         </div>
                       </div>
                     </Card>
+                    )}
 
                     <Card id="x-strategy-data-coverage-card" padding={'0 14px'}>
                       <Accordion id="x-strategy-data-coverage" title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><Database size={16} /> Data coverage</span>}>
@@ -821,6 +893,7 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
                     ) : null}
 
                     <div id="x-strategy-insights-headline-block">
+                      {evaluation.byTrack ? <div id="x-strategy-insights-pace-label" style={{ ...S.label, fontSize: 11, letterSpacing: '0.08em', color: XCE_COLORS.inkSoft, marginBottom: 4 }}>Overall pace{evaluation.gapsAgainst ? ` · vs @${evaluation.gapsAgainst}` : ''}</div> : null}
                       {headline ? (
                         <h4 id="x-strategy-insights-headline" style={{ margin: 0, fontSize: 20, lineHeight: 1.25, fontWeight: 600, color: XCE_COLORS.ink }}>{headline}</h4>
                       ) : (
@@ -854,6 +927,8 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
                         </div>
                       ) : null}
                     </div>
+
+                    <TrackInsights evaluation={evaluation} onEditTracks={goToTracks} />
 
                     <Card id="x-strategy-insights-more-card" padding={'0 14px'}>
                       <Accordion id="x-strategy-insights-comparison" title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}><BarChart3 size={16} /> View comparison</span>}>

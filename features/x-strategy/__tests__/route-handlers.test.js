@@ -632,3 +632,11 @@ test('track save: new handles queue ONE refresh; a second save merges into it', 
   assert.deepEqual((await s.queueStore.get(a.refresh.requestId)).handles, ['toshioueki', 'dorksirjur', 'discogs']);
   assert.equal(await s.queueStore.get('req-2'), null);
 });
+
+test('with explicit tracks, a direct profile save keeps the track-derived benchmarks (own handle still changes)', async () => {
+  const s = mirrorSetup();
+  await s.call('strategy-plan-apply', { changes: { contentTracks: musicTracks(['dorksirjur']) }, expectedVersion: 0, reason: '' });
+  const res = await s.call('strategy-profile-save', { ownHandle: 'new_me', benchmarkHandles: ['someone_else'] });
+  assert.equal(res.ok, true, res.error);
+  assert.deepEqual(s.saves.at(-1), { clientId: 'c1', ownHandle: 'new_me', benchmarkHandles: ['seb__design', 'dorksirjur'] });
+});

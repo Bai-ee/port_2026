@@ -167,6 +167,12 @@ export function createStrategyHandlers({
     const profileSync = out?.changed ? await mirrorProfile(clientId, before, out.doc) : null;
     return profileSync ? { ...out, profileSync } : out;
   };
+  // Direct profile saves (Handles editor, chat benchmarks-change) keep the track-derived list when tracks exist,
+  // so they can only change the own handle there.
+  const saveProfileKeepingTracks = typeof saveXGrowthProfile !== 'function' ? null : async (clientId, p) => {
+    const derived = profileBenchmarksFromPlan(await basePlanStore.get(clientId));
+    return saveXGrowthProfile(clientId, derived ? { ...p, benchmarkHandles: derived } : p);
+  };
   const planStore = {
     ...basePlanStore,
     get: (...a) => basePlanStore.get(...a),
@@ -564,7 +570,7 @@ export function createStrategyHandlers({
   }
 
   const executors = buildExecutors({
-    planStore, runDailyAction, runUpdateItemFacets, saveXGrowthProfile, clock,
+    planStore, runDailyAction, runUpdateItemFacets, saveXGrowthProfile: saveProfileKeepingTracks, clock,
     refreshHandles: async ({ clientId, handles, context, auth }) => strategyRefresh({ clientId, handles }, context, auth),
   });
   async function strategyProposalDecide(body, context, auth) {
@@ -628,8 +634,8 @@ export function createStrategyHandlers({
     if (c.error) return c.error;
     const h = normalizeHandleInput({ ownHandle: body?.ownHandle, benchmarkHandles: body?.benchmarkHandles }, { requireOwn: true });
     if (!h.ok) return fail(400, h.errors.join('; '), { errors: h.errors });
-    if (typeof saveXGrowthProfile !== 'function') return fail(501, 'Profile save is not available on this deployment.');
-    const profile = await saveXGrowthProfile(c.clientId, { ownHandle: h.ownHandle, benchmarkHandles: h.benchmarkHandles });
+    if (!saveProfileKeepingTracks) return fail(501, 'Profile save is not available on this deployment.');
+    const profile = await saveProfileKeepingTracks(c.clientId, { ownHandle: h.ownHandle, benchmarkHandles: h.benchmarkHandles });
     return { ok: true, profile: profile ?? { ownHandle: h.ownHandle, benchmarkHandles: h.benchmarkHandles } };
   }
 
