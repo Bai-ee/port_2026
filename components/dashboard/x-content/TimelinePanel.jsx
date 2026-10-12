@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDownUp, RefreshCw, Search } from 'lucide-react';
 import { Skeleton, RetryError } from './Feedback.jsx';
+import { isCompleteDay, latestDayFor, dayCountLabel } from '../../../features/social-archive/timeline-view.js';
 
 // TimelinePanel — the living archive: imported Facebook / X / Instagram entries
 // by day. PURE PRESENTATION plus the four timeline calls (`call` is the card's
@@ -48,6 +49,7 @@ function EntryRow({ entry, thumbs, showDay = false }) {
         <span className="xce-timeline-kind">{entry.kind}</span>
         <span className="xce-timeline-time">{showDay ? `${isoDay(entry.ts)} ` : ''}{timeOf(entry.ts)}{entry.tsKind && entry.tsKind !== 'posted' ? ` (${entry.tsKind})` : ''}</span>
         {mediaCount ? <span className="xce-timeline-media">{mediaCount} media</span> : null}
+        {entry.place ? <span className="xce-timeline-media">At {entry.place}</span> : null}
       </div>
       {entry.text ? <p className="xce-timeline-text">{clip(entry.text, 180)}</p> : null}
       {urls.length ? (
@@ -71,6 +73,8 @@ export default function TimelinePanel({ call }) {
   const [textInput, setTextInput] = useState('');
   const [openDay, setOpenDay] = useState(null); // { day, entries, total } | { day, loading } | { day, error }
   const [results, setResults] = useState(null); // search entries | null
+  const [resultsTo, setResultsTo] = useState(''); // date anchor the last search was bounded by
+  const dayReq = useRef(''); // latest requested day; older responses are dropped
   const [thumbs, setThumbs] = useState({});
 
   const loadThumbs = useCallback(async (entries) => {
@@ -97,44 +101,59 @@ export default function TimelinePanel({ call }) {
       const a = await call('timeline-archives');
       const list = Array.isArray(a?.archives) ? a.archives : [];
       setArchives(list);
-      const last = list.map((x) => isoDay(x.lastTs)).filter(Boolean).sort().pop();
+      const last = latestDayFor(list, platform);
       if (last) await loadDays(last); else setDays([]);
     } catch (err) {
       setError(err.message || 'Could not load the timeline.');
     } finally {
       setLoading(false);
     }
-  }, [call, loadDays]);
+  }, [call, loadDays, platform]);
 
   useEffect(() => { init(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
   const openDayEntries = useCallback(async (day) => {
+    dayReq.current = day;
     setResults(null);
     setOpenDay({ day, loading: true });
     try {
       const r = await call('timeline-day', { day });
+      if (dayReq.current !== day) return;
       const entries = Array.isArray(r?.entries) ? r.entries : [];
       setOpenDay({ day, entries, total: r?.total ?? entries.length });
       loadThumbs(entries);
     } catch (err) {
+      if (dayReq.current !== day) return;
       setOpenDay({ day, error: err.message || 'Could not load that day.' });
     }
   }, [call, loadThumbs]);
 
   const runSearch = useCallback(async () => {
     const q = textInput.trim();
-    if (!q && !platform) { setResults(null); return; }
+    const to = isCompleteDay(dayInput) ? dayInput : '';
+    // Date alone = open that day; date + text/platform = search up to that day.
+    if (!q && !platform) { if (to) openDayEntries(to); else setResults(null); return; }
+    dayReq.current = '';
     setOpenDay(null);
     setResults([]);
+    setResultsTo(to);
     try {
-      const r = await call('timeline-search', { q, platform: platform || undefined, limit: 100 });
+      const r = await call('timeline-search', { q, platform: platform || undefined, to: to || undefined, limit: 100 });
       const entries = Array.isArray(r?.entries) ? r.entries : [];
       setResults(entries);
       loadThumbs(entries);
     } catch (err) {
       setError(err.message || 'Search failed.');
     }
-  }, [call, textInput, platform, loadThumbs]);
+  }, [call, textInput, platform, dayInput, openDayEntries, loadThumbs]);
+
+  // Switching platform jumps the day window to that platform's newest day, so
+  // an archive that ended years ago is not hidden behind many "Older" clicks.
+  const changePlatform = (value) => {
+    setPlatform(value);
+    const last = latestDayFor(archives, value);
+    if (last && last !== windowTo) loadDays(last).catch((e) => setError(e.message || 'Could not load days.'));
+  };
 
   const shiftWindow = (dir) => { if (windowTo) loadDays(dayShift(windowTo, dir * WINDOW_DAYS)).catch((e) => setError(e.message || 'Could not load days.')); };
 
@@ -158,10 +177,10 @@ export default function TimelinePanel({ call }) {
 
       <div id="x-content-timeline-search-row" className="xce-timeline-search">
         <input id="x-content-timeline-day-input" className="xce-input" type="date" aria-label="Jump to a day" value={dayInput}
-          onChange={(e) => { setDayInput(e.target.value); if (e.target.value) openDayEntries(e.target.value); }} />
+          onChange={(e) => { setDayInput(e.target.value); if (isCompleteDay(e.target.value)) openDayEntries(e.target.value); }} />
         <input id="x-content-timeline-text-input" className="xce-input" type="search" aria-label="Search archive text" placeholder="Search captions, albums, hashtags" value={textInput}
           onChange={(e) => setTextInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') runSearch(); }} />
-        <select id="x-content-timeline-platform-select" className="xce-input xce-select" aria-label="Platform" value={platform} onChange={(e) => setPlatform(e.target.value)}>
+        <select id="x-content-timeline-platform-select" className="xce-input xce-select" aria-label="Platform" value={platform} onChange={(e) => changePlatform(e.target.value)}>
           <option value="">All platforms</option>
           {Object.entries(PLATFORM_META).map(([k, v]) => <option key={k} value={k}>{v.name}</option>)}
         </select>
@@ -181,7 +200,7 @@ export default function TimelinePanel({ call }) {
 
       {results ? (
         <section id="x-content-timeline-results" className="xce-timeline-section" aria-label="Search results">
-          <p className="xce-kicker">{results.length} result{results.length === 1 ? '' : 's'}</p>
+          <p className="xce-kicker">{results.length} result{results.length === 1 ? '' : 's'}{resultsTo ? ` up to ${resultsTo}` : ''}</p>
           {results.length ? (
             <ul className="xce-timeline-entries">{results.map((e) => <EntryRow key={e.id} entry={e} thumbs={thumbs} showDay />)}</ul>
           ) : <p className="xce-empty-note">Nothing matches that search.</p>}
@@ -192,7 +211,7 @@ export default function TimelinePanel({ call }) {
       {openDay ? (
         <section id="x-content-timeline-day-detail" className="xce-timeline-section" aria-label={`Entries for ${openDay.day}`}>
           <div className="xce-timeline-day-head">
-            <p className="xce-kicker">{openDay.day}{openDay.entries ? ` · ${openDay.total} entr${openDay.total === 1 ? 'y' : 'ies'}` : ''}</p>
+            <p className="xce-kicker">{openDay.day}{openDay.entries ? ` · ${dayCountLabel(dayEntries.length, openDay.total, platform ? meta(platform).name : '')}` : ''}</p>
             <button type="button" id="x-content-timeline-day-close" className="xce-btn-ghost" onClick={() => setOpenDay(null)}>Close</button>
           </div>
           {openDay.loading ? <Skeleton id="x-content-timeline-day-loading" rows={3} /> : null}

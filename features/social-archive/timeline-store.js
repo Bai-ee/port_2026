@@ -162,7 +162,7 @@ export async function linkEntriesToPackages(db, clientId, links, entriesById) {
     }
     const patch = { postIds: postIds.slice(0, 20), dates };
     if (first) {
-      patch.post = { platform: first.platform, account: first.account, entryId: first.id, postedAt: first.ts, day: first.day, text: String(first.text || '').slice(0, 300), ...(first.album ? { album: first.album } : {}) };
+      patch.post = { platform: first.platform, account: first.account, entryId: first.id, postedAt: first.ts, day: first.day, text: String(first.text || '').slice(0, 300), ...(first.album ? { album: first.album } : {}), ...(first.place ? { place: first.place } : {}) };
     }
     const changed = Object.entries(patch).some(([k, v]) => JSON.stringify(prev[k]) !== JSON.stringify(v));
     if (changed) { sets.push([ref, patch]); packagesUpdated += 1; }

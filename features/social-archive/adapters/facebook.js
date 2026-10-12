@@ -83,6 +83,35 @@ function joinLines(lines) {
   return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
+const COORDS_RE = /\s*\(-?\d+(?:\.\d+)?,\s*-?\d+(?:\.\d+)?\)\s*$/;
+
+/**
+ * Facebook appends check-in/tag lines ("You tagged …", "Place: …", "Address: …")
+ * to a post body. They are metadata, not the owner's words: move them to
+ * `place` / `peopleTagged` so `text` (voice, Posted copy) is only what was written.
+ */
+export function splitFbMeta(lines) {
+  const kept = [];
+  let place = '';
+  const peopleTagged = [];
+  for (const l of lines) {
+    const tagged = /^You tagged (.+)$/i.exec(l);
+    if (tagged) {
+      for (const n of cleanMentions(tagged[1]).split(/,\s*|\s+and\s+/)) if (n.trim()) peopleTagged.push(n.trim());
+      continue;
+    }
+    if (/^Place:/i.test(l)) { place = place || l.replace(/^Place:\s*/i, '').replace(COORDS_RE, '').trim(); continue; }
+    if (/^Address:/i.test(l)) continue;
+    kept.push(l);
+  }
+  return { lines: kept, place, peopleTagged };
+}
+
+const metaFields = ({ place, peopleTagged }) => ({
+  ...(place ? { place } : {}),
+  ...(peopleTagged.length ? { peopleTagged } : {}),
+});
+
 function splitBlocks(html) {
   const marks = [...html.matchAll(BLOCK_RE)];
   return marks.map((m, i) => html.slice(m.index + m[0].length, i + 1 < marks.length ? marks[i + 1].index : html.length));
@@ -163,11 +192,14 @@ export function parse({ reader, account, archiveName, tz = DEFAULT_TZ } = {}) {
       const lines = htmlToLines(body)
         .filter((l) => !/^Updated /.test(l) || !DATE_RE.test(l))
         .filter((l) => !/^Upload IP Address/i.test(l));
-      const text = cleanMentions(joinLines(lines));
-      if (!text && !media.length) { skip('post-empty'); continue; }
+      // platformId hashes the RAW text so ids stay stable across adapter changes.
+      const rawText = cleanMentions(joinLines(lines));
+      const meta = splitFbMeta(lines);
+      const text = cleanMentions(joinLines(meta.lines));
+      if (!rawText && !media.length) { skip('post-empty'); continue; }
       push({
-        ...base, kind: 'post', ts, tsKind: 'posted', tsSource: TS_SOURCE.post, text, media,
-        platformId: `post:${sha1(`${ts}|${text.slice(0, 80)}|${media[0]?.relPath || ''}`)}`,
+        ...base, kind: 'post', ts, tsKind: 'posted', tsSource: TS_SOURCE.post, text, media, ...metaFields(meta),
+        platformId: `post:${sha1(`${ts}|${rawText.slice(0, 80)}|${media[0]?.relPath || ''}`)}`,
         source: { archive: archiveName, file },
       });
       for (const m of media) postMediaDays.add(`${m.relPath}|${dayKey(ts)}`);
@@ -188,11 +220,12 @@ export function parse({ reader, account, archiveName, tz = DEFAULT_TZ } = {}) {
       const media = extractMedia(rest).slice(0, 1);
       if (!media.length) { skip('album-no-media'); continue; }
       if (postMediaDays.has(`${media[0].relPath}|${dayKey(ts)}`)) { skip('album-photo-carried-by-post'); continue; }
-      const caption = cleanMentions(joinLines(htmlToLines(rest.replace(/<table[\s\S]*?<\/table>/gi, '').replace(/<video[\s\S]*?<\/video>/gi, ''))
-        .filter((l) => !/^Upload IP Address/i.test(l))));
+      const meta = splitFbMeta(htmlToLines(rest.replace(/<table[\s\S]*?<\/table>/gi, '').replace(/<video[\s\S]*?<\/video>/gi, ''))
+        .filter((l) => !/^Upload IP Address/i.test(l)));
+      const caption = cleanMentions(joinLines(meta.lines));
       const album = unescapeHtml(title || headerTitle || '').trim();
       push({
-        ...base, kind: 'media', ts, tsKind: 'posted', tsSource: TS_SOURCE.album, text: caption, media,
+        ...base, kind: 'media', ts, tsKind: 'posted', tsSource: TS_SOURCE.album, text: caption, media, ...metaFields(meta),
         ...(album ? { album } : {}),
         platformId: `album:${f}:${media[0].relPath}`,
         source: { archive: archiveName, file },

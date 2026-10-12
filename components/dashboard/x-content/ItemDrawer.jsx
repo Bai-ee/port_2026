@@ -59,6 +59,7 @@ function PostedCopy({ item, onSearchDay }) {
         <span>{platform}{post.account ? ` · ${post.account}` : ''}</span>
         {day ? <span> · {day}</span> : null}
         {post.album ? <span> · Album: {post.album}</span> : null}
+        {post.place ? <span> · At {post.place}</span> : null}
       </p>
       {post.text ? <p id="x-content-item-posted-copy-text" className="xce-timeline-posted-text">{post.text}</p> : null}
       {day && onSearchDay ? (

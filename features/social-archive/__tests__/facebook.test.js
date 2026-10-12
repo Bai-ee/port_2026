@@ -5,7 +5,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readerFromMap } from '../fs-reader.js';
 import { sanitizeEntry } from '../schema.js';
-import { ADAPTER, detect, parse, parseFbDate, zonedToUtcIso, unescapeHtml } from '../adapters/facebook.js';
+import { createHash } from 'node:crypto';
+import { ADAPTER, detect, parse, parseFbDate, zonedToUtcIso, unescapeHtml, splitFbMeta } from '../adapters/facebook.js';
 
 const FX = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '__fixtures__', 'facebook');
 const fx = (n) => fs.readFileSync(path.join(FX, n), 'utf8');
@@ -147,3 +148,42 @@ test('deterministic and stats consistent; entries pass sanitizeEntry', () => {
 });
 
 test('unescapeHtml', () => assert.equal(unescapeHtml('a &amp; b &#064;c &#x41; &quot;d&quot; &#039;'), "a & b @c A \"d\" '"));
+
+// --- check-in / tag metadata lines (not the owner's words) ---
+const BLOCK = (body, date = 'Aug 23, 2018, 5:00 PM') => `<div class="pam _3-95 _2pi0 _2lej uiBoxWhite noborder"><div class="_3-96 _2pio _2lek _2lel">Test Page was at East Room.</div><div class="_3-96 _2let"><div><div class="_2pin"><div>${body}</div></div></div></div><div class="_3-94 _2lem">${date}</div></div>`;
+const postsHtml = (...blocks) => `<html><body><div role="main">${blocks.join('')}</div></body></html>`;
+
+test('splitFbMeta moves tag/place/address lines out of the text', () => {
+  const out = splitFbMeta(['Great night.', 'You tagged Ana Ruiz, Ben Lo and Cy Day', 'Place: East Room (41.92396, -87.6994)', 'Address: 2354 N Milwaukee, Chicago, Illinois 60647']);
+  assert.deepEqual(out.lines, ['Great night.']);
+  assert.equal(out.place, 'East Room');
+  assert.deepEqual(out.peopleTagged, ['Ana Ruiz', 'Ben Lo', 'Cy Day']);
+  const own = splitFbMeta(['with rotating residents SOLD & friends', 'Starts at 9pm']);
+  assert.deepEqual(own.lines, ['with rotating residents SOLD & friends', 'Starts at 9pm']);
+  assert.equal(own.place, '');
+});
+
+test('posts: check-in lines become place/peopleTagged; text keeps only the owner words', () => {
+  const html = postsHtml(
+    BLOCK('Much love to the crew.<br />You tagged Ana Ruiz and Ben Lo<br /><br />Place: East Room (41.92396, -87.6994)<br />Address: 2354 N Milwaukee, Chicago, Illinois 60647'),
+    BLOCK('You tagged Cy Day<br />Place: East Room (41.92396, -87.6994)<br />Address: 2354 N Milwaukee, Chicago, Illinois 60647', 'Aug 23, 2018, 6:00 PM'),
+  );
+  const { entries } = run({ 'posts/posts_1.html': html, 'page_profile_information/no-data.txt': 'none' });
+  const [a, b] = entries.sort((x, y) => (x.ts < y.ts ? -1 : 1));
+  assert.equal(a.text, 'Much love to the crew.');
+  assert.equal(a.place, 'East Room');
+  assert.deepEqual(a.peopleTagged, ['Ana Ruiz', 'Ben Lo']);
+  assert.equal(b.text, '');
+  assert.equal(b.place, 'East Room');
+  const { entry: stored } = sanitizeEntry(a, { archiveName: 'fb-test' });
+  assert.equal(stored.place, 'East Room');
+  assert.deepEqual(stored.peopleTagged, ['Ana Ruiz', 'Ben Lo']);
+});
+
+test('posts: platformId hashes the raw text, so ids do not change when metadata is split out', () => {
+  const body = 'Much love.<br />Place: East Room (41.92396, -87.6994)';
+  const { entries } = run({ 'posts/posts_1.html': postsHtml(BLOCK(body)), 'page_profile_information/no-data.txt': 'none' });
+  const ts = entries[0].ts;
+  const raw = 'Much love.\nPlace: East Room (41.92396, -87.6994)';
+  assert.equal(entries[0].platformId, `post:${createHash('sha1').update(`${ts}|${raw.slice(0, 80)}|`).digest('hex')}`);
+});
