@@ -5,6 +5,7 @@ Plan: `docs/plans/CONTENT-TRACKS-PROMOTION-MASTER-PLAN.md`. Client: `bryan-balli
 ## What it is
 - `plan.contentTracks` on `x_strategy_plans/{clientId}` (optional; absent ⇒ defaults, old plans behave exactly as before). Contract: `features/x-strategy/content-tracks.js` (`tracksOf`, `normalizeContentTracks`, `trackForEngine`, `allPromotions`).
 - Defaults: **design** (client+identity engines, benchmark `seb__design`, 50%) and **music** (ue+record engines, **no benchmark yet**, 50%). Every engine belongs to exactly one track; ≤6 tracks, ≤3 benchmarks/track, ≤8 distinct (`PLAN_LIMITS.maxBenchmarkHandles`).
+- **Tracks own the profile's benchmark list.** Any plan write (apply / revert / chat plan-change) that changes tracks or pace mirrors `[benchmarkPrimary, ...track benchmarks]` (≤8) into `client_configs.marketingBriefConfig.xGrowth.benchmarkHandles` (`track-profile.js profileBenchmarksFromPlan`, wrapper in `route-handlers.js`). A mirror failure never fails the save (`profileSync.error`). The Handles editor still writes the profile directly; the next track/pace change overwrites it. Old drift: `scripts/x-content/sync-profile-benchmarks.mjs` (dry-run default, `--write`).
 - Pace stays `plan.benchmarkPrimary`. Track `share` × authored originals raises per-engine minimums (`track-profile.js applyTrackAllocation`, called from `plan-inputs.js`); never lowers a cap/floor.
 - Per-track profile (`track-profile.js`): pools only that track's benchmark corpora. No benchmark ⇒ `status:'no-benchmark'`, fallback own history, surfaced as a gap — never invented numbers.
 - Promotions (`promotions.js`): ue → rendered-video packages, record → Discogs, client → client work. URL starts `null`; the link rides **only in the self-reply** (`promotionSelfReply`, `''` when null).
@@ -22,9 +23,10 @@ UE-hosted rendered mixes: BAI-EE ⇒ `owned`; others ⇒ `rights:'cleared'`, `ap
 Briefing groups suggestions by track; suggestion card = media + exact copy + `track · promotion · why`; buttons Save draft / Dismiss (or Stage from NAS / Dismiss), tickets revision-bound (`rev` strict). One outbox notice per run key. Services wired in `features/telegram/runtime.js` (`saveSuggestion`, `dismissSuggestion`, `stageSuggestion`). Activation remains an owner gate (see TELEGRAM-COMMAND-CENTER.md).
 
 ## UI
-X Strategy → Plan tab → "Content tracks" (`#x-strategy-content-tracks-panel`): engines, benchmarks (add ⇒ queues a refresh for the Mac worker), shares, promotion links, profile summary. Suggestion cards show track/promotion chips and the staging flow.
+X Strategy → Plan tab → "Content tracks" (`#x-strategy-content-tracks-panel`): engines, benchmarks (add ⇒ queues a refresh for the Mac worker), shares, promotion links, profile summary. Save returns as soon as the plan is written (reload runs in the background). Refresh requests: one open `queued` request per client (re-requests merge into it); a queued request is polled 5× then parks with "Queued at …" + **Re-check**; `rate-limited` shows "retry after ~15 min" + **Retry** for the handles that did not pull. Suggestion cards show track/promotion chips and the staging flow.
 
 ## Limits
+- `readInventory()` (un-paginated) reads ids in two bounded queries: the head (READ_LIMIT) and everything after the NAS id range (`NAS_ID_END`), so the NAS archive can't crowd rendered videos out. Sources sorting before `nas-` still share the head budget.
 - Corpus refresh needs the owner's Mac: `node scripts/x-content/strategy-refresh-worker.mjs`.
 - Library is global (owner pilot only). Cron copy is plain fallback copy; regenerate with the model from the dashboard.
 - Telegram video by URL caps at 20MB (else poster + link). Staging completion is not pushed — reopen Today's posts.

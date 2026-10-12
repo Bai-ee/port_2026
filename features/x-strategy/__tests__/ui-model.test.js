@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  freshnessLabel, refreshStatusView, handleResultText, groupCaveats, tierText, tierComparison,
+  freshnessLabel, refreshStatusView, handleResultText, QUEUED_POLL_LIMIT, clockText, groupCaveats, tierText, tierComparison,
   planChangesFromDraft, planDraftFromPlan, historyDiffSummary, handlesDirty, validateHandlesDraft,
   normalizeHandlesDraft, todayPlanLine, planErrorView, typeShareText, comparisonRows, draftTier,
   PLANNABLE_SLOT_TYPES, historyNewestFirst,
@@ -32,6 +32,32 @@ test('refresh status: each status has plain words; queued hint only after repeat
   assert.equal(refreshStatusView({ status: 'done' }, { polls: 9 }).hint, null);
   assert.equal(refreshStatusView(null).active, false);
   assert.equal(refreshStatusView({ status: 'weird' }).headline, 'Refresh status: weird.');
+});
+
+test('refresh status: a queued request parks after QUEUED_POLL_LIMIT polls (no endless spinner) and shows its queued time', () => {
+  const req = { status: 'queued', handles: ['discogs'], createdAt: '2026-10-12T02:31:56.674Z' };
+  const live = refreshStatusView(req, { polls: QUEUED_POLL_LIMIT - 1 });
+  assert.equal(live.active, true);
+  assert.equal(live.parked, false);
+  const parked = refreshStatusView(req, { polls: QUEUED_POLL_LIMIT });
+  assert.equal(parked.active, false);
+  assert.equal(parked.parked, true);
+  assert.match(parked.headline, /Queued — run the Mac refresh worker/);
+  assert.equal(parked.queuedAt, clockText(req.createdAt));
+  assert.ok(parked.queuedAt);
+  assert.equal(refreshStatusView({ ...req, requeuedAt: '2026-10-12T02:40:00.000Z' }).queuedAt, clockText('2026-10-12T02:40:00.000Z'));
+});
+
+test('refresh status: rate-limited says retry after ~15 min and offers the handles that did not pull', () => {
+  const v = refreshStatusView({
+    status: 'rate-limited', handles: ['dorksirjur', 'discogs', 'toshioueki'], finishedAt: '2026-10-12T02:45:46.364Z',
+    results: { dorksirjur: { status: 'done', rowCount: 543 }, discogs: { status: 'failed', errorKind: 'rate-limited' }, toshioueki: { status: 'skipped' } },
+  });
+  assert.match(v.headline, /Rate-limited by X — retry after ~15 min/);
+  assert.equal(v.retryAt, clockText('2026-10-12T03:00:46.364Z'));
+  assert.deepEqual(v.retryHandles, ['discogs', 'toshioueki']);
+  assert.equal(v.active, false);
+  assert.deepEqual(refreshStatusView({ status: 'done', handles: ['a'], results: { a: { status: 'done' } } }).retryHandles, []);
 });
 
 test('refresh status lists per-handle results incl. errors', () => {
@@ -371,4 +397,15 @@ test('suggestion chips tolerate absent fields', () => {
   assert.equal(suggestionLinkLine({}), null);
   assert.deepEqual(suggestionLinkLine({ draft: { selfReply: 'UE: https://u.example' } }), { kind: 'self-reply', text: 'UE: https://u.example' });
   assert.equal(suggestionLinkLine({ promotion: { label: 'UE', url: 'https://u.example' } }).kind, 'promotion');
+});
+
+test('tracksSavedText: saved, queued handles, mirror failure', async () => {
+  const { tracksSavedText } = await import('../ui-model.js');
+  assert.deepEqual(tracksSavedText({ ok: true }), { kind: 'ok', text: 'Tracks saved.' });
+  assert.equal(tracksSavedText({ refresh: { requestId: 'r1', handles: ['discogs', 'Dorksirjur'] } }).text,
+    'Tracks saved. @discogs, @dorksirjur queued — run the Mac refresh worker to load posts.');
+  assert.match(tracksSavedText({ refresh: { error: 'boom', handles: ['a'] } }).text, /Could not queue @a .*boom/);
+  const bad = tracksSavedText({ profileSync: { error: 'denied' } });
+  assert.equal(bad.kind, 'err');
+  assert.match(bad.text, /not copied .*denied/);
 });

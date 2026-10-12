@@ -146,6 +146,30 @@ test('throttle: <10min skips without force and returns last counts; force overri
   assert.ok(!(await syncRenderedVideos(spy)).throttled);
 });
 
+test('volatile fields (clock, stored key order, write stamps) never count as an update', async () => {
+  const d = makeDeps([vid('a'), vid('b', { artist: 'Bai-ee' })]);
+  await syncRenderedVideos(d, { force: true });
+  // Firestore hands keys back in its own order and the store stamps updatedAt on write.
+  for (const [id, p] of d.store) {
+    const shuffled = Object.fromEntries(Object.entries(p).reverse());
+    shuffled.facets = Object.fromEntries(Object.entries(p.facets || {}).reverse());
+    d.store.set(id, { ...shuffled, updatedAt: 123 });
+  }
+  d.advance(60 * 60 * 1000);
+  const r = await syncRenderedVideos(d, { force: true });
+  assert.deepEqual([r.created, r.updated, r.unchanged], [0, 0, 2]);
+});
+
+test('a hash-shape change (new machine fields) rewrites each row once, then reports unchanged', async () => {
+  const d = makeDeps([vid('a'), vid('b')]);
+  await syncRenderedVideos(d, { force: true });
+  for (const [id, p] of d.store) d.store.set(id, { ...p, syncHash: 'pre-rights-policy' });
+  const once = await syncRenderedVideos(d, { force: true });
+  assert.deepEqual([once.updated, once.unchanged], [2, 0]);
+  const twice = await syncRenderedVideos(d, { force: true });
+  assert.deepEqual([twice.updated, twice.unchanged], [0, 2]);
+});
+
 test('skips non-completed videos', async () => {
   const d = makeDeps([vid('a'), vid('b', { status: 'failed' })]);
   const r = await syncRenderedVideos(d, { force: true });

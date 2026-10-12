@@ -15,7 +15,8 @@ import SectionLabel from './ui/SectionLabel';
 // ContentTracksPanel - X Strategy > Plan tab. Thin view over the pure helpers in features/x-strategy/ui-model.js.
 // Draft state lives in StrategyPanel (so reload/discard stay in one place); this file only renders and forwards edits.
 // Saving goes through the existing plan save (strategy-plan-apply with changes.contentTracks); benchmark refresh goes
-// through the existing strategy-refresh request (onRefreshHandle -> startRefresh([handle])).
+// through the existing strategy-refresh request (onRefreshHandle -> startRefresh([handle])). The refresh status
+// (queued time, Re-check, rate-limit Retry) is rendered by StrategyPanel and passed in as refreshFollowUp.
 
 const S = {
   stack: { display: 'grid', gap: 12, minWidth: 0 },
@@ -117,7 +118,7 @@ function TrackRow({ track, draft, setDraft, savedHandles, rowsMeta, request, ref
   );
 }
 
-export default function ContentTracksPanel({ draft, setDraft, savedHandles = [], rowsMeta = {}, request = null, refreshing = false, profiles = [], check, busy, message, onSave, onDiscard, onRefreshHandle }) {
+export default function ContentTracksPanel({ draft, setDraft, savedHandles = [], rowsMeta = {}, request = null, refreshView = null, refreshFollowUp = null, refreshing = false, profiles = [], check, busy, message, onSave, onDiscard, onRefreshHandle }) {
   const total = draft.reduce((a, t) => a + t.share, 0);
   return (
     <Card id="x-strategy-content-tracks-panel" data-section="content-tracks" padding={14}>
@@ -138,6 +139,12 @@ export default function ContentTracksPanel({ draft, setDraft, savedHandles = [],
         <button type="button" id="x-strategy-content-tracks-discard-button" className="xce-btn xce-btn-ghost" style={{ minHeight: 44 }} disabled={busy || !check.dirty} onClick={onDiscard}>Discard edits</button>
       </div>
       {message?.text ? <div id="x-strategy-content-tracks-message" role={message.kind === 'err' ? 'alert' : 'status'} style={message.kind === 'err' ? S.err : { ...S.note, color: XCE_COLORS.green }}>{message.text}</div> : null}
+      {refreshView ? (
+        <div id="x-strategy-content-tracks-refresh-status" role="status" style={{ ...S.note, marginTop: 8 }}>
+          <div id="x-strategy-content-tracks-refresh-headline">{refreshView.headline}</div>
+          {refreshFollowUp}
+        </div>
+      ) : null}
     </Card>
   );
 }

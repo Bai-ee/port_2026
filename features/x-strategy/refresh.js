@@ -11,6 +11,8 @@
 //    guarded on (status==='running' && leaseId===mine) and bumps leaseAt (heartbeat). A 'running' whose leaseAt
 //    (legacy docs: startedAt) is older than 30 min is reclaimable by a new leaseId; the old worker's next guarded
 //    write fails and it stops without more bird calls. A reclaimed request resumes: 'done' handles are not re-pulled.
+//  - One open request per client: a re-request with a clientId merges its handles into that client's
+//    still-'queued' request (guarded update; falls back to a new doc if a worker claimed it or it would overflow).
 //  - Writes only: the queue store (x_strategy_refresh_requests/*) and the injected corpus store's writeMergedRows.
 //  - bird detection is `bird --version` only: no network, no auth.
 
@@ -78,8 +80,14 @@ export function createMemoryRefreshQueue() {
     async listQueued({ now = Date.now(), staleMs = STALE_RUNNING_MS } = {}) {
       return [...docs.values()].filter((d) => claimable(d, now, staleMs)).sort(byCreated).map(copy);
     },
+    async findOpenQueued(clientId) {
+      return copy([...docs.values()].filter((d) => openFor(d, clientId)).sort(byCreated)[0] || null);
+    },
   };
 }
+
+// An unclaimed request for this client: a re-request merges into it instead of queueing a duplicate.
+const openFor = (d, clientId) => !!clientId && d?.status === REQUEST_STATUS.QUEUED && d.clientId === clientId;
 
 export function createFirestoreRefreshQueue(db) {
   const col = () => db.collection(STRATEGY_COLLECTIONS.refreshRequests);
@@ -106,6 +114,11 @@ export function createFirestoreRefreshQueue(db) {
         col().where('status', '==', REQUEST_STATUS.RUNNING).limit(200).get(),
       ]);
       return [...q.docs, ...r.docs].map((s) => s.data()).filter((d) => claimable(d, now, staleMs)).sort(byCreated);
+    },
+    // Single-field equality + in-memory clientId filter (no composite index), oldest first.
+    async findOpenQueued(clientId) {
+      const q = await col().where('status', '==', REQUEST_STATUS.QUEUED).limit(200).get();
+      return q.docs.map((s) => s.data()).filter((d) => openFor(d, clientId)).sort(byCreated)[0] || null;
     },
   };
 }
@@ -261,11 +274,26 @@ export function createRefreshService({
     return { status: 'done', ...base };
   }
 
+  /** Merge `list` into this client's open queued request; null when there is none, it would overflow, or a worker claimed it first. */
+  async function mergeIntoOpen(clientId, list) {
+    if (!clientId || typeof queueStore.findOpenQueued !== 'function') return null;
+    const open = await queueStore.findOpenQueued(clientId);
+    if (!open) return null;
+    const merged = [...new Set([...(open.handles || []), ...list])];
+    if (merged.length > PLAN_LIMITS.maxHandlesPerRefreshRequest) return null;
+    const patch = merged.length === (open.handles || []).length ? { requeuedAt: iso() } : { handles: merged, requeuedAt: iso() };
+    // Guard on the handles we merged from too: a concurrent merge in between makes ours fall back to a new doc.
+    const same = (d) => JSON.stringify(d.handles || []) === JSON.stringify(open.handles || []);
+    const updated = await queueStore.update(open.id, patch, { when: (d) => openFor(d, clientId) && same(d) });
+    return updated ? open.id : null;
+  }
+
   async function requestRefresh({ handles, requestedBy, clientId } = {}) {
     const list = normalizeRefreshHandles(handles);
-    const id = idGen();
-    await queueStore.create({ id, handles: list, status: REQUEST_STATUS.QUEUED, requestedBy: requestedBy || null, ...(clientId ? { clientId } : {}), createdAt: iso(), results: {} });
-    const out = { requestId: id, status: REQUEST_STATUS.QUEUED };
+    const mergedId = await mergeIntoOpen(clientId, list);
+    const id = mergedId || idGen();
+    if (!mergedId) await queueStore.create({ id, handles: list, status: REQUEST_STATUS.QUEUED, requestedBy: requestedBy || null, ...(clientId ? { clientId } : {}), createdAt: iso(), results: {} });
+    const out = { requestId: id, status: REQUEST_STATUS.QUEUED, ...(mergedId ? { merged: true } : {}) };
     if (isEnabled()) {
       const det = await detectBird().catch(() => ({ available: false }));
       if (det?.available) {

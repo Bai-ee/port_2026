@@ -4,6 +4,7 @@ import React from 'react';
 import { RefreshCw, X } from 'lucide-react';
 import NasPanel from './NasPanel.jsx';
 import DiscogsPanel from './DiscogsPanel.jsx';
+import { syncResultLine } from '../../../features/rendered-videos/sync-view.js';
 
 // SourcePanel — floating right-side panel (same shell as the item drawer) with
 // per-bucket source info. Opens from the toolbar's Source icon; never pushes layout.
@@ -16,7 +17,7 @@ export default function SourcePanel({ bucket, bucketId, count, sync, onSync, cal
     body = (
       <div id="x-content-source-rendered" className="xce-nas-panel">
         <p className="xce-field-hint">Fed by the Video Remix pipeline. Rendered videos appear here automatically.</p>
-        <p className="xce-nas-estimate">{sync.lastSyncAt ? `Last synced ${sync.lastSyncText}` : 'Not synced yet'}{sync.total != null ? ` · ${sync.total} in feed` : ''}</p>
+        <p id="x-content-source-sync-result" className="xce-nas-estimate">{sync.result ? syncResultLine(sync.result, sync.lastSyncText) : 'Not synced yet'}{sync.total != null ? ` · ${sync.total} in feed` : ''}</p>
         <button type="button" id="x-content-source-sync" className="xce-btn-primary" disabled={sync.busy} onClick={onSync}>
           <RefreshCw size={14} className={sync.busy ? 'xce-spin' : ''} /> {sync.busy ? 'Syncing…' : 'Sync now'}
         </button>

@@ -10,6 +10,7 @@ import { summarizeCorpus, MIN_CLASS_N } from '../x-benchmark/summarize.js';
 import { mergeEngineConfig, raiseEngineMinimums } from '../x-content-inventory/engine-quota.js';
 import { ENGINE_IDS } from '../x-content-inventory/engines.js';
 import { tracksOf } from './content-tracks.js';
+import { PLAN_LIMITS } from './contracts.js';
 
 export const TOP_EXAMPLES = 5;
 export const BEST_HOURS = 3;
@@ -32,6 +33,18 @@ export function hasExplicitTracks(planOrDoc) {
 /** Every distinct benchmark handle across tracks, in track order. */
 export function trackBenchmarkHandles(tracks) {
   return [...new Set((tracks || []).flatMap((t) => t.benchmarks || []).map(cleanHandle).filter(Boolean))];
+}
+
+/**
+ * Tracks are the source of truth for benchmark handles once a plan carries them: the xGrowth profile's
+ * benchmarkHandles = [pace benchmark (plan.benchmarkPrimary), ...track benchmarks], deduped, capped.
+ * The pace benchmark leads because profile readers take benchmarkHandles[0] as the primary.
+ * @returns {string[]|null} null when the plan has no explicit tracks (the profile stays its own source)
+ */
+export function profileBenchmarksFromPlan(planOrDoc, max = PLAN_LIMITS.maxBenchmarkHandles) {
+  if (!hasExplicitTracks(planOrDoc)) return null;
+  const primary = cleanHandle(planOf(planOrDoc)?.benchmarkPrimary);
+  return [...new Set([primary, ...trackBenchmarkHandles(tracksOf(planOrDoc))].filter(Boolean))].slice(0, max);
 }
 
 /** Handles present in `after`'s tracks but not `before`'s: the ones that need a corpus refresh queued. */

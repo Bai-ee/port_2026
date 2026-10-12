@@ -2,8 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   upsertPackage, deletePackage, readInventory, readCandidates, getPackage,
-  backfillIndexFields, PACKAGE_CAP,
+  backfillIndexFields, PACKAGE_CAP, READ_LIMIT, NAS_ID_END,
 } from '../store.js';
+import { nasPackageId } from '../nas.js';
 import seedRows from '../content-packages.json' with { type: 'json' };
 
 // ---- in-memory Firestore fake -------------------------------------------
@@ -214,6 +215,21 @@ test('readInventory paginates by id; default shape unchanged', async () => {
   } while (cursor && pages < 10);
   assert.equal(new Set(seen).size, seen.length, 'no repeated rows across pages');
   assert.equal(seen.length, all.packages.length);
+});
+
+test('readInventory: a NAS archive past READ_LIMIT never crowds out later sources (rv-)', async () => {
+  const db = makeDb();
+  await upsertPackage(row({ id: 'discogs-1' }), { db, returnPackages: false }); // writes meta.updatedAt
+  const col = db.cols.get('x_content_packages');
+  const { id: _drop, ...body } = row();
+  for (let i = 0; i < READ_LIMIT + 50; i += 1) col.set(`nas-${String(i).padStart(16, '0')}`, body);
+  for (const id of ['rv-a', 'rv-b', 'zz-other']) col.set(id, body);
+  const { packages } = await readInventory({ db });
+  const ids = new Set(packages.map((p) => p.id));
+  for (const id of ['discogs-1', 'rv-a', 'rv-b', 'zz-other']) assert.ok(ids.has(id), `${id} is in the default view`);
+  assert.equal(packages.length, ids.size, 'no duplicate rows');
+  assert.ok(packages.filter((p) => p.id.startsWith('nas-')).length <= READ_LIMIT, 'NAS stays bounded');
+  assert.ok(NAS_ID_END > nasPackageId('f'.repeat(64)) && NAS_ID_END < 'rv-', 'NAS_ID_END sits after every nas-<sha16> id');
 });
 
 test('getPackage is a single doc read', async () => {

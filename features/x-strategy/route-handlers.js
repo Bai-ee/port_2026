@@ -21,7 +21,7 @@ import { hasPlaceholderStory } from '../x-content-inventory/match.js';
 import { projectDayPlan } from '../x-content-inventory/day-plan-projection.js';
 import { resolvePlanInputs } from './plan-inputs.js';
 import { tracksOf } from './content-tracks.js';
-import { hasExplicitTracks, trackBenchmarkHandles, newTrackBenchmarkHandles, loadTrackProfiles } from './track-profile.js';
+import { hasExplicitTracks, trackBenchmarkHandles, newTrackBenchmarkHandles, loadTrackProfiles, profileBenchmarksFromPlan } from './track-profile.js';
 import { normalizeXGrowthProfile } from '../x-benchmark/profile.js';
 import { createFirestoreChatStore, ChatCapError, ChatStoreError, THREAD_ID_RE } from './agent/chat-store.js';
 import {
@@ -135,7 +135,7 @@ export function describeRows(handle, read, nowMs) {
  * @param {(clientId:string, profile:{ownHandle?:string,benchmarkHandles:string[]})=>Promise<object>} [deps.saveXGrowthProfile]
  */
 export function createStrategyHandlers({
-  corpusStore, planStore, refreshService, readXGrowthConfig,
+  corpusStore, planStore: basePlanStore, refreshService, readXGrowthConfig,
   readPackages = async () => [], readWorkerHealth = null, evaluate = defaultEvaluate, clock = Date.now,
   resolveProfile = resolveXGrowthProfile, buildPreviewPlan = buildContentDayPlan,
   chatStore = null, agentLoopFactory = null, callModel = null, logUsage = null,
@@ -143,9 +143,36 @@ export function createStrategyHandlers({
   readQueueSummary = null, readPost = null, readOpportunities = null, readResults = null, // chat read tools: (clientId[, postId]) -> plain JSON | null
   env = {}, // explicit on purpose: only createStrategyHandlersFromDb passes process.env, so a bare handler can never reach a real model
 } = {}) {
-  if (!corpusStore || !planStore || !refreshService || typeof readXGrowthConfig !== 'function') {
+  if (!corpusStore || !basePlanStore || !refreshService || typeof readXGrowthConfig !== 'function') {
     throw new Error('createStrategyHandlers: corpusStore, planStore, refreshService, readXGrowthConfig are required');
   }
+
+  // Every plan write (manual apply, revert, chat plan-change) goes through this wrapper: when it changes the
+  // tracks or the pace benchmark, the xGrowth profile's benchmarkHandles are rewritten from the tracks
+  // (profileBenchmarksFromPlan) so the daily loop, content plan and scripts read the same handles.
+  // A mirror failure never fails the plan write; it is reported as result.profileSync.error.
+  async function mirrorProfile(clientId, before, after) {
+    const next = profileBenchmarksFromPlan(after);
+    if (!next || typeof saveXGrowthProfile !== 'function') return null;
+    const prev = profileBenchmarksFromPlan(before);
+    if (prev && prev.join() === next.join()) return null;
+    try {
+      const saved = await saveXGrowthProfile(clientId, { benchmarkHandles: next });
+      return { benchmarkHandles: saved?.benchmarkHandles ?? next };
+    } catch (err) { return { error: String(err?.message || err).slice(0, 160), benchmarkHandles: next }; }
+  }
+  const withMirror = (write) => async (clientId, ...args) => {
+    const before = await basePlanStore.get(clientId);
+    const out = await write(clientId, ...args);
+    const profileSync = out?.changed ? await mirrorProfile(clientId, before, out.doc) : null;
+    return profileSync ? { ...out, profileSync } : out;
+  };
+  const planStore = {
+    ...basePlanStore,
+    get: (...a) => basePlanStore.get(...a),
+    apply: withMirror((...a) => basePlanStore.apply(...a)),
+    revert: withMirror((...a) => basePlanStore.revert(...a)),
+  };
 
   /** The admin-selected client only: body.clientId must be present and equal context.clientId. */
   function requireClient(body, context) {
@@ -267,7 +294,7 @@ export function createStrategyHandlers({
     }
     // requestRefresh validates (chars, non-empty, <= PLAN_LIMITS.maxHandlesPerRefreshRequest) and throws status-400 errors.
     const out = await refreshService.requestRefresh({ handles, clientId: c.clientId, requestedBy: auth?.decoded?.email || auth?.decoded?.uid || null });
-    return { ok: true, requestId: out.requestId, status: out.status }; // drain (if any) is intentionally not awaited
+    return { ok: true, requestId: out.requestId, status: out.status, ...(out.merged ? { merged: true } : {}) }; // drain (if any) is intentionally not awaited
   }
 
   // body.workerOnly:true (+ clientId) returns just the worker heartbeat, no requestId needed (the Inputs strip uses it).
@@ -319,28 +346,29 @@ export function createStrategyHandlers({
   async function strategyPlanApply(body, context, auth) {
     const c = requireClient(body, context);
     if (c.error) return c.error;
-    const before = body?.changes && 'contentTracks' in body.changes ? await planStore.get(c.clientId) : null;
+    const tracksTouched = !!body?.changes && 'contentTracks' in body.changes;
+    const before = tracksTouched ? await planStore.get(c.clientId) : null;
     const doc = await planStore.apply(c.clientId, {
       changes: body?.changes, expectedVersion: body?.expectedVersion, reason: typeof body?.reason === 'string' ? body.reason : '',
       by: by(auth), source: 'manual', now: clock(),
     });
     // A new track benchmark handle queues a corpus refresh (drained by the Mac worker); a queue failure never fails the save.
     let refresh = null;
-    const added = before !== null ? newTrackBenchmarkHandles(before, doc.doc) : [];
+    const added = tracksTouched ? newTrackBenchmarkHandles(before, doc.doc) : [];
     if (added.length) {
       try {
         const out = await refreshService.requestRefresh({ handles: added, clientId: c.clientId, requestedBy: by(auth) });
         refresh = { requestId: out.requestId, status: out.status, handles: added };
       } catch (err) { refresh = { error: String(err?.message || err).slice(0, 160), handles: added }; }
     }
-    return { ok: true, plan: doc.doc, changed: doc.changed, ...(refresh ? { refresh } : {}) };
+    return { ok: true, plan: doc.doc, changed: doc.changed, ...(refresh ? { refresh } : {}), ...(doc.profileSync ? { profileSync: doc.profileSync } : {}) };
   }
 
   async function strategyPlanRevert(body, context, auth) {
     const c = requireClient(body, context);
     if (c.error) return c.error;
     const doc = await planStore.revert(c.clientId, body?.version, { by: by(auth), now: clock() });
-    return { ok: true, plan: doc.doc, changed: doc.changed };
+    return { ok: true, plan: doc.doc, changed: doc.changed, ...(doc.profileSync ? { profileSync: doc.profileSync } : {}) };
   }
 
   // ---- T4b: chat, proposals, profile save -------------------------------------------------------------

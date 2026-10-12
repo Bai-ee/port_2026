@@ -54,11 +54,16 @@ export const COLLECTION = 'x_content_packages';
  * a runaway ingest loop. The count it checks is approximate (see touch below). */
 export const PACKAGE_CAP = 50000;
 
-/** Bound on ONE un-paginated `readInventory()` — the card's whole view. Callers
- * that need more pass `pageSize` and follow `nextCursor`. */
+/** Bound on each read of an un-paginated `readInventory()` (head + post-NAS tail) —
+ * the card's whole view. Callers that need more pass `pageSize` and follow `nextCursor`. */
 export const READ_LIMIT = 2000;
 
 export const CANDIDATE_LIMIT = 50;
+
+/** Sorts just past every NAS package id (`nas-<sha16>`, nas.js nasPackageId): '.' follows '-'.
+ * The NAS archive is thousands of rows and sorts before `rv-…`, so an id-ordered READ_LIMIT
+ * read alone would crowd every later source (rendered videos) out of the card's view. */
+export const NAS_ID_END = 'nas.';
 
 /** Marks that the inventory has been written at least once. Lives in its own
  * collection rather than as a `__meta` document inside the package collection,
@@ -153,8 +158,12 @@ export async function readInventory(opts = {}) {
     query = query.orderBy('__name__');
     if (opts.startAfter) query = query.startAfter(opts.startAfter);
   }
-  const [snap, meta] = await Promise.all([query.limit(limit).get(), readMeta(opts.db)]);
-  const stored = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
+  // Un-paginated: also read the ids after the NAS range, so only NAS rows absorb the bound.
+  const tail = paged ? null : db.collection(COLLECTION).orderBy('__name__').startAfter(NAS_ID_END).limit(READ_LIMIT).get();
+  const [snap, meta, tailSnap] = await Promise.all([query.limit(limit).get(), readMeta(opts.db), tail]);
+  const byId = new Map();
+  for (const d of [...snap.docs, ...(tailSnap?.docs || [])]) byId.set(d.id, { id: d.id, ...(d.data() || {}) });
+  const stored = [...byId.values()];
   const updatedAt = Number.isFinite(meta.updatedAt) ? meta.updatedAt : null;
 
   if (!stored.length && !updatedAt) {

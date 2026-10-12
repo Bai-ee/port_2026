@@ -194,7 +194,7 @@ export function buildExecutors({ planStore, runDailyAction, runUpdateItemFacets,
           changes: payload.changes, expectedVersion: payload.expectedVersion, reason: proposal?.summary || '',
           by, source: 'chat', proposalId, now: clock(),
         });
-        return { changed: out.changed, version: out.doc?.version ?? currentVersion };
+        return { changed: out.changed, version: out.doc?.version ?? currentVersion, ...(out.profileSync ? { profileSync: out.profileSync } : {}) };
       } catch (err) {
         if (err instanceof StrategyPlanError && err.code === 'version-conflict') {
           throw new ProposalExecutionError('plan changed since this was proposed', { error: 'stale', currentVersion: err.currentVersion ?? null });

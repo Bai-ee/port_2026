@@ -41,14 +41,26 @@ export const REFRESH_ACTIVE = Object.freeze(['queued', 'running']);
 export const refreshIsActive = (status) => REFRESH_ACTIVE.includes(status);
 
 const REFRESH_WORDS = {
-  queued: 'Queued, waiting for the refresh worker.',
+  queued: 'Queued — run the Mac refresh worker to load posts.',
   running: 'Refreshing now…',
   done: 'Refresh finished.',
   partial: 'Refresh finished partially; some handles did not fully pull.',
-  'rate-limited': 'X rate-limited the pull. Wait a few minutes and try again; remaining handles were skipped.',
+  'rate-limited': 'Rate-limited by X — retry after ~15 min. Remaining handles were skipped.',
   'bird-unavailable': 'The pull tool (bird) is not available on this machine. Run the refresh worker on your Mac.',
   failed: 'Refresh failed.',
 };
+
+/** Auto-polls of a still-queued request before the UI parks it (no spinner) and offers Re-check. 5 x 4s. */
+export const QUEUED_POLL_LIMIT = 5;
+/** X rate-limit window the worker hit; the retry time shown is finishedAt + this. */
+export const RATE_LIMIT_RETRY_MS = 15 * 60 * 1000;
+const RETRYABLE = new Set(['rate-limited', 'bird-unavailable']);
+
+/** "9:41 PM" for an ISO time, or '' when unparseable. */
+export function clockText(iso) {
+  const ms = Date.parse(iso);
+  return Number.isFinite(ms) ? new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
+}
 
 const KIND_WORDS = {
   'rate-limited': 'rate-limited',
@@ -69,11 +81,14 @@ export function handleResultText(handle, r) {
 
 /**
  * @param {object|null} request  strategy-refresh-status `request`
- * @param {{polls?:number}} [opts]  polls = consecutive polls still showing `queued` (hint after 3)
- * @returns {{headline:string, tone:'info'|'ok'|'warn'|'error', lines:string[], hint:string|null, active:boolean}}
+ * @param {{polls?:number}} [opts]  polls = consecutive polls still showing `queued` (hint after 3, parked at QUEUED_POLL_LIMIT)
+ * @returns {{headline:string, tone:'info'|'ok'|'warn'|'error', lines:string[], hint:string|null, active:boolean,
+ *            parked:boolean, queuedAt:string, retryAt:string, retryHandles:string[]}}
+ *   active = keep auto-polling / show progress; parked = queued but polling stopped (offer Re-check);
+ *   retryHandles = handles not pulled by a rate-limited / bird-unavailable request (offer Retry).
  */
 export function refreshStatusView(request, { polls = 0 } = {}) {
-  if (!isObj(request)) return { headline: 'No refresh started.', tone: 'info', lines: [], hint: null, active: false };
+  if (!isObj(request)) return { headline: 'No refresh started.', tone: 'info', lines: [], hint: null, active: false, parked: false, queuedAt: '', retryAt: '', retryHandles: [] };
   const status = request.status;
   const headline = REFRESH_WORDS[status] || `Refresh status: ${String(status || 'unknown')}.`;
   const tone = status === 'done' ? 'ok' : status === 'failed' ? 'error' : refreshIsActive(status) ? 'info' : 'warn';
@@ -81,10 +96,17 @@ export function refreshStatusView(request, { polls = 0 } = {}) {
   const order = Array.isArray(request.handles) ? request.handles : Object.keys(results);
   const lines = order.map((h) => handleResultText(h, results[h]));
   if (status === 'failed' && request.error) lines.push(String(request.error).slice(0, 200));
-  const hint = status === 'queued' && polls >= 3
+  const queued = status === 'queued';
+  const parked = queued && polls >= QUEUED_POLL_LIMIT;
+  const hint = queued && polls >= 3
     ? 'Still queued. The refresh runs from your Mac: start the refresh worker there (or enable local ingest) and it will pick this up.'
     : null;
-  return { headline, tone, lines, hint, active: refreshIsActive(status) };
+  const queuedAt = queued ? clockText(request.requeuedAt || request.createdAt) : '';
+  const retryable = RETRYABLE.has(status);
+  const retryAt = status === 'rate-limited' && Number.isFinite(Date.parse(request.finishedAt))
+    ? clockText(new Date(Date.parse(request.finishedAt) + RATE_LIMIT_RETRY_MS).toISOString()) : '';
+  const retryHandles = retryable ? order.filter((h) => results[h]?.status !== 'done') : [];
+  return { headline, tone, lines, hint, active: status === 'running' || (queued && !parked), parked, queuedAt, retryAt, retryHandles };
 }
 
 // ---- worker heartbeat ------------------------------------------------------------------------------------
@@ -553,6 +575,20 @@ export function trackChangesFromDraft(planOrDoc, draft) {
 
 const WORKER_CMD = 'node scripts/x-content/strategy-refresh-worker.mjs';
 
+/**
+ * Message after a track save (strategy-plan-apply response): saved, which new handles were queued for the
+ * Mac worker, and whether the xGrowth profile mirror failed. kind 'err' only when the mirror failed.
+ * @returns {{kind:'ok'|'err', text:string}}
+ */
+export function tracksSavedText(res) {
+  const bits = ['Tracks saved.'];
+  const handles = (res?.refresh?.handles || []).map((h) => `@${cleanHandle(h)}`).join(', ');
+  if (res?.refresh?.requestId) bits.push(`${handles} queued — run the Mac refresh worker to load posts.`);
+  else if (res?.refresh?.error) bits.push(`Could not queue ${handles} for a refresh: ${res.refresh.error}`);
+  if (res?.profileSync?.error) bits.push(`Benchmark list was not copied to the X growth profile: ${res.profileSync.error}`);
+  return { kind: res?.profileSync?.error ? 'err' : 'ok', text: bits.join(' ') };
+}
+
 /** Per-benchmark row: rows pulled, last pulled, and honest refresh state. */
 export function trackBenchmarkRow(handle, rowsMetaByHandle, request) {
   const h = cleanHandle(handle);
@@ -561,7 +597,8 @@ export function trackBenchmarkRow(handle, rowsMetaByHandle, request) {
   const result = isObj(request?.results) ? request.results[h] : null;
   const inRequest = Array.isArray(request?.handles) && request.handles.includes(h);
   let note = '';
-  if (inRequest && request.status === 'queued') note = `Queued. Needs the Mac worker: ${WORKER_CMD}`;
+  const at = clockText(request?.requeuedAt || request?.createdAt);
+  if (inRequest && request.status === 'queued') note = `Queued${at ? ` at ${at}` : ''}. Needs the Mac worker: ${WORKER_CMD}`;
   else if (inRequest && request.status === 'running') note = 'Refreshing now…';
   else if (inRequest && result) note = handleResultText(h, result);
   return { handle: h, rows, freshness: freshnessLabel(item), needsRefresh: /refresh/.test(freshnessLabel(item)), note, queued: inRequest && request.status === 'queued' };

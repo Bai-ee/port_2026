@@ -576,3 +576,59 @@ test('searchInventory: hasStory is false for placeholder stories, finds a mix by
   const hits = await deps.searchInventory({ query: 'acidman', limit: 5 });
   assert.deepEqual(hits.map((p) => [p.id, p.hasStory]).sort(), [['p2', true], ['p3', false], ['rv-1', false]]);
 });
+
+// ---- tracks are the source of truth for xGrowth.benchmarkHandles ----
+
+function mirrorSetup({ saveFails = false } = {}) {
+  const saves = [];
+  const queueStore = createMemoryRefreshQueue();
+  let n = 0;
+  const corpusStore = createMemoryCorpusStore({ loadCommitted: () => null });
+  const planStore = createMemoryPlanStore();
+  const h = createStrategyHandlers({
+    corpusStore, planStore, clock: () => NOW,
+    refreshService: createRefreshService({ store: corpusStore, queueStore, now: () => NOW, enabled: false, idGen: () => `req-${++n}` }),
+    readXGrowthConfig: async () => ({ ownHandle: 'bai_ee', benchmarkHandles: ['seb__design', 'toshioueki'] }),
+    saveXGrowthProfile: async (clientId, p) => { if (saveFails) throw new Error('config write denied'); saves.push({ clientId, ...p }); return { ownHandle: 'bai_ee', ...p }; },
+  });
+  const call = (a, b) => h.handle(a, { clientId: 'c1', ...b }, CTX, AUTH);
+  return { saves, queueStore, planStore, call };
+}
+const musicTracks = (benchmarks) => [
+  { id: 'design', label: 'Design', engines: ['client', 'identity'], benchmarks: ['seb__design'], share: 0.5 },
+  { id: 'music', label: 'Music', engines: ['ue', 'record'], benchmarks, share: 0.5 },
+];
+
+test('track save mirrors [pace benchmark, ...track benchmarks] into the xGrowth profile', async () => {
+  const s = mirrorSetup();
+  const res = await s.call('strategy-plan-apply', { changes: { contentTracks: musicTracks(['dorksirjur', 'discogs', 'toshioueki']) }, expectedVersion: 0, reason: '' });
+  assert.equal(res.ok, true, res.error);
+  assert.deepEqual(s.saves, [{ clientId: 'c1', benchmarkHandles: ['seb__design', 'dorksirjur', 'discogs', 'toshioueki'] }]);
+  assert.deepEqual(res.profileSync.benchmarkHandles, ['seb__design', 'dorksirjur', 'discogs', 'toshioueki']);
+  // a plan write that leaves tracks + pace alone does not touch the profile
+  await s.call('strategy-plan-apply', { changes: { authoredPerDay: 6 }, expectedVersion: 1, reason: '' });
+  assert.equal(s.saves.length, 1);
+  // revert back past the tracks: plan has no explicit tracks => profile is left as its own source
+  await s.call('strategy-plan-apply', { changes: { contentTracks: musicTracks(['dorksirjur']) }, expectedVersion: 2, reason: '' });
+  assert.deepEqual(s.saves.at(-1).benchmarkHandles, ['seb__design', 'dorksirjur']);
+  const rev = await s.call('strategy-plan-revert', { version: 1 });
+  assert.equal(rev.ok, true, rev.error);
+  assert.deepEqual(s.saves.at(-1).benchmarkHandles, ['seb__design', 'dorksirjur', 'discogs', 'toshioueki']);
+});
+
+test('a profile mirror failure never fails the plan save; it is reported', async () => {
+  const s = mirrorSetup({ saveFails: true });
+  const res = await s.call('strategy-plan-apply', { changes: { contentTracks: musicTracks(['dorksirjur']) }, expectedVersion: 0, reason: '' });
+  assert.equal(res.ok, true);
+  assert.equal(res.plan.version, 1);
+  assert.match(res.profileSync.error, /denied/);
+});
+
+test('track save: new handles queue ONE refresh; a second save merges into it', async () => {
+  const s = mirrorSetup();
+  const a = await s.call('strategy-plan-apply', { changes: { contentTracks: musicTracks(['toshioueki']) }, expectedVersion: 0, reason: '' });
+  const b = await s.call('strategy-plan-apply', { changes: { contentTracks: musicTracks(['toshioueki', 'dorksirjur', 'discogs']) }, expectedVersion: 1, reason: '' });
+  assert.equal(b.refresh.requestId, a.refresh.requestId);
+  assert.deepEqual((await s.queueStore.get(a.refresh.requestId)).handles, ['toshioueki', 'dorksirjur', 'discogs']);
+  assert.equal(await s.queueStore.get('req-2'), null);
+});

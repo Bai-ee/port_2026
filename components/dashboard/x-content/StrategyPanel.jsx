@@ -9,7 +9,7 @@ import {
   PLANNABLE_SLOT_TYPES, freshnessLabel, rowCountOf, indexRowsMeta, cleanHandle, refreshStatusView, refreshIsActive,
   tierComparison, tierText, groupCaveats, comparisonRows, handlesDraftFromProfile, normalizeHandlesDraft, handlesDirty,
   validateHandlesDraft, planDraftFromPlan, planChangesFromDraft, draftTier, historyNewestFirst, historyDiffSummary,
-  todayPlanLine, planErrorView, workerHealthLine, trackDraftFromPlan, trackChangesFromDraft,
+  todayPlanLine, planErrorView, workerHealthLine, trackDraftFromPlan, trackChangesFromDraft, tracksSavedText,
 } from '../../../features/x-strategy/ui-model.js';
 import ContentTracksPanel from './ContentTracksPanel.jsx';
 import StrategyChat, { formatDayTime } from './StrategyChat.jsx';
@@ -99,6 +99,25 @@ const ASK_PROMPTS = {
 function Msg({ id, kind, children }) {
   if (!children || (Array.isArray(children) && !children.length)) return null;
   return <div id={id} role={kind === 'err' ? 'alert' : 'status'} style={S[kind]}>{children}</div>;
+}
+
+// Queued time + Re-check for a parked queued request; retry time + Retry for a rate-limited one.
+function RefreshFollowUp({ idPrefix, view, onRecheck, onRetry }) {
+  if (!view?.queuedAt && !view?.parked && !view?.retryHandles?.length) return null;
+  return (
+    <div id={`${idPrefix}-follow-up-row`} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 6 }}>
+      {view.queuedAt ? <span id={`${idPrefix}-queued-at`}>Queued at {view.queuedAt}.</span> : null}
+      {view.parked ? <button type="button" id={`${idPrefix}-recheck-button`} className="xce-btn xce-btn-ghost" style={{ minHeight: 36 }} onClick={onRecheck}>Re-check</button> : null}
+      {view.retryHandles?.length ? (
+        <>
+          {view.retryAt ? <span id={`${idPrefix}-retry-at`}>Retry after ~{view.retryAt}.</span> : null}
+          <button type="button" id={`${idPrefix}-retry-button`} className="xce-btn xce-btn-ghost" style={{ minHeight: 36 }} onClick={() => onRetry(view.retryHandles)}>
+            Retry {view.retryHandles.map((h) => `@${h}`).join(', ')}
+          </button>
+        </>
+      ) : null}
+    </div>
+  );
 }
 
 // Initials circle (no avatar URL is stored anywhere).
@@ -312,8 +331,10 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
   }, [call, baseBody]);
 
   const refreshStatus = refresh.request?.status || '';
+  // A queued request is polled QUEUED_POLL_LIMIT times, then parked (no spinner) until Re-check.
+  const pollActive = !!refresh.request && refreshStatusView(refresh.request, { polls: refresh.polls }).active;
   useEffect(() => {
-    if (!refresh.requestId || !refreshIsActive(refreshStatus)) return undefined;
+    if (!refresh.requestId || !pollActive) return undefined;
     let cancelled = false;
     const timer = setTimeout(async () => {
       try {
@@ -328,7 +349,9 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
     }, POLL_MS);
     return () => { cancelled = true; clearTimeout(timer); };
     // tick changes on every poll, which re-arms the timer
-  }, [refresh.requestId, refreshStatus, refresh.tick, call, baseBody, reload]);
+  }, [refresh.requestId, refreshStatus, pollActive, refresh.tick, call, baseBody, reload]);
+
+  const recheckRefresh = useCallback(() => setRefresh((s) => ({ ...s, polls: 0, error: '', tick: s.tick + 1 })), []);
 
   // ---- handles -----------------------------------------------------------------------------------------------
   const profile = data?.profile || null;
@@ -416,10 +439,16 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
     setPlanBusy(true);
     setTracksMsg({ kind: '', text: '' });
     try {
-      await call('strategy-plan-apply', baseBody({ changes: { contentTracks: tracksCheck.contentTracks }, expectedVersion, reason: reason.trim() }));
+      const res = await call('strategy-plan-apply', baseBody({ changes: { contentTracks: tracksCheck.contentTracks }, expectedVersion, reason: reason.trim() }));
       if (!mounted.current) return;
-      await afterPlanChange();
-      if (mounted.current) setTracksMsg({ kind: 'ok', text: 'Tracks saved.' });
+      // Save returns as soon as the plan is written: show the new version now, re-read the rest in the background.
+      setData((d) => (d && res?.plan ? { ...d, plan: res.plan } : d));
+      if (res?.plan) setTracksDraft(trackDraftFromPlan(res.plan.plan ?? DEFAULT_PLAN));
+      setTracksMsg(tracksSavedText(res));
+      if (res?.refresh?.requestId) {
+        setRefresh({ requestId: res.refresh.requestId, request: { status: 'queued', handles: res.refresh.handles || [], results: {}, createdAt: new Date().toISOString() }, polls: 0, tick: 0, error: '', starting: false });
+      }
+      reload({ keepDrafts: true }).then(() => { if (mounted.current && typeof onPlanChanged === 'function') onPlanChanged(); });
     } catch (err) {
       if (mounted.current) { const v = planErrorView({ status: err?.status, code: err?.data?.code, error: errText(err, 'Tracks were not saved.'), errors: err?.data?.errors }); setTracksMsg({ kind: 'err', text: [v.message, ...v.errors].join(' ') }); }
     } finally {
@@ -643,6 +672,8 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
                   savedHandles={savedTrackHandles}
                   rowsMeta={metaByHandle}
                   request={refresh.request}
+                  refreshView={refreshView}
+                  refreshFollowUp={refreshView ? <RefreshFollowUp idPrefix="x-strategy-content-tracks-refresh" view={refreshView} onRecheck={recheckRefresh} onRetry={startRefresh} /> : null}
                   refreshing={refreshing}
                   profiles={data?.trackProfiles}
                   check={tracksCheck}
@@ -749,6 +780,7 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
                       <ul id="x-strategy-refresh-results-list" style={S.list}>{refreshView.lines.map((l) => <li key={l}>{l}</li>)}</ul>
                     ) : null}
                     {refreshView.hint ? <div id="x-strategy-refresh-hint" style={{ marginTop: 4 }}>{refreshView.hint}</div> : null}
+                    <RefreshFollowUp idPrefix="x-strategy-refresh" view={refreshView} onRecheck={recheckRefresh} onRetry={startRefresh} />
                   </div>
                 ) : null}
 

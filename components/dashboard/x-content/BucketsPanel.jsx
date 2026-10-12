@@ -14,6 +14,7 @@ import ItemGrid, { isAutoDaily } from './ItemGrid.jsx';
 import { effectiveFacets } from '../../../features/x-content-inventory/facets.js';
 import ItemDrawer from './ItemDrawer.jsx';
 import SourcePanel from './SourcePanel.jsx';
+import { syncChangedRows } from '../../../features/rendered-videos/sync-view.js';
 import { NasContext } from './nas-context.js';
 
 // BucketsPanel — the library: buckets (sources) → folders → items.
@@ -80,7 +81,7 @@ export default function BucketsPanel({ call, packages, loading, error, onReload 
   const [viewId, setViewId] = useState('all');
   const [query, setQuery] = useState('');
   const [openId, setOpenId] = useState(null);
-  const [sync, setSync] = useState({ busy: false, error: '', total: null, lastSyncAt: null });
+  const [sync, setSync] = useState({ busy: false, error: '', total: null, lastSyncAt: null, result: null });
 
   const [sourceOpen, setSourceOpen] = useState(false);
   const [nasStatus, setNasStatus] = useState(null);
@@ -123,8 +124,8 @@ export default function BucketsPanel({ call, packages, loading, error, onReload 
     setSync((s) => ({ ...s, busy: true, error: '' }));
     try {
       const r = await call('sync-rendered-videos', force ? { force: true } : {});
-      setSync({ busy: false, error: '', total: r?.total ?? null, lastSyncAt: r?.lastSyncAt || null });
-      if (r && (r.created || r.updated || force)) await onReload();
+      setSync({ busy: false, error: '', total: r?.total ?? null, lastSyncAt: r?.lastSyncAt || null, result: r || null });
+      if (syncChangedRows(r) || force) await onReload();
     } catch (err) {
       setSync((s) => ({ ...s, busy: false, error: err.message || 'Sync failed.' }));
     }

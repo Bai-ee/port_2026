@@ -113,6 +113,36 @@ test('enabled + detected: JSON result is only {requestId,status}; drain promise 
   assert.ok(doc.startedAt && doc.finishedAt);
 });
 
+// ---- duplicate collapse ----
+
+test('re-request for the same client merges into its open queued request (no duplicate docs)', async () => {
+  for (const queueStore of [createMemoryRefreshQueue(), createFirestoreRefreshQueue(fakeDb())]) {
+    const { svc } = build({ enabled: false, queueStore });
+    const a = await svc.requestRefresh({ handles: ['toshioueki'], clientId: 'c1' });
+    const b = await svc.requestRefresh({ handles: ['dorksirjur', 'discogs', 'toshioueki'], clientId: 'c1' });
+    const c = await svc.requestRefresh({ handles: ['bai_ee'], clientId: 'c2' }); // other client: own request
+    assert.equal(b.requestId, a.requestId);
+    assert.equal(b.merged, true);
+    assert.notEqual(c.requestId, a.requestId);
+    assert.deepEqual((await svc.getRequestStatus(a.requestId)).handles, ['toshioueki', 'dorksirjur', 'discogs']);
+    assert.equal(await queueStore.get('req3'), null, 'no third doc was created');
+  }
+});
+
+test('merge falls back to a new request once the open one is claimed, or when it would overflow', async () => {
+  const { svc } = build({ enabled: false });
+  const a = await svc.requestRefresh({ handles: ['a1', 'a2', 'a3', 'a4', 'a5'], clientId: 'c1' });
+  const over = await svc.requestRefresh({ handles: ['b1', 'b2'], clientId: 'c1' });
+  assert.notEqual(over.requestId, a.requestId);
+  assert.equal(over.merged, undefined);
+  const { svc: s2, queueStore } = build({ enabled: false });
+  const first = await s2.requestRefresh({ handles: ['alice'], clientId: 'c1' });
+  await queueStore.update(first.requestId, { status: 'running', leaseId: 'w', leaseAt: new Date(NOW).toISOString() });
+  const next = await s2.requestRefresh({ handles: ['bob'], clientId: 'c1' });
+  assert.notEqual(next.requestId, first.requestId);
+  assert.deepEqual((await queueStore.get(first.requestId)).handles, ['alice'], 'a claimed request is never edited');
+});
+
 // ---- typed failures ----
 
 test('429 on 2nd of 3: first done, second rate-limited, third skipped, no further bird calls', async () => {
@@ -377,4 +407,23 @@ test('bird timeout: typed kind, partial rows kept, other handles continue', asyn
   assert.equal(r.request.results.bob.errorKind, 'timeout');
   assert.equal(r.request.results.carol.status, 'done');
   assert.equal(r.request.status, 'partial');
+});
+
+test('two concurrent merges never lose a handle: the one that lost the race gets its own request', async () => {
+  const base = createMemoryRefreshQueue();
+  let gate;
+  const held = new Promise((r) => { gate = r; });
+  let first = false;
+  // Both callers read the open request before either writes (the race the guard must catch).
+  const queueStore = { ...base, async findOpenQueued(c) { const d = await base.findOpenQueued(c); if (first) { first = false; await held; } return d; } };
+  const { svc } = build({ enabled: false, queueStore });
+  await svc.requestRefresh({ handles: ['a'], clientId: 'c1' });
+  first = true;
+  const slow = svc.requestRefresh({ handles: ['x'], clientId: 'c1' });
+  const fast = await svc.requestRefresh({ handles: ['y'], clientId: 'c1' });
+  gate();
+  const late = await slow;
+  const all = new Set([...(await base.get(fast.requestId)).handles, ...(await base.get(late.requestId)).handles]);
+  assert.ok(all.has('x') && all.has('y') && all.has('a'), [...all].join());
+  assert.notEqual(late.requestId, fast.requestId);
 });
