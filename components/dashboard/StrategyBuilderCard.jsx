@@ -84,7 +84,7 @@ export default function StrategyBuilderCard({ bootstrap, getIdToken, onOpenCard,
 
   // Centralized push — CalendarPane and PushPane both call this with their item set.
   const handlePush = useCallback(async (items) => {
-    if (!plan || !items?.length) return { scheduled: 0, failed: [] };
+    if (!plan || !items?.length) return { scheduled: 0, failed: [], flagged: [] };
     try {
       const token = await getIdToken();
       const res = await fetch('/api/dashboard/strategy-builder/push', {
@@ -94,7 +94,7 @@ export default function StrategyBuilderCard({ bootstrap, getIdToken, onOpenCard,
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
-      return { scheduled: data.scheduled || 0, failed: data.failed || [] };
+      return { scheduled: data.scheduled || 0, failed: data.failed || [], flagged: data.flagged || [] };
     } catch (err) {
       return { scheduled: 0, failed: [{ id: 'request', reason: err.message }] };
     }
@@ -140,6 +140,17 @@ export default function StrategyBuilderCard({ bootstrap, getIdToken, onOpenCard,
           </button>
         ))}
       </div>
+
+      {plan && (
+        <div
+          id="strategy-builder-strategy-doc-line"
+          style={{ margin: '10px 0 0', fontSize: 11, opacity: 0.75 }}
+        >
+          {plan.strategyDocVersion
+            ? `Following Strategy v${plan.strategyDocVersion}`
+            : 'No confirmed strategy — open Content Center → Strategy'}
+        </div>
+      )}
 
       {/* Error banner — established error style */}
       {notice?.kind === 'error' && (

@@ -6,6 +6,8 @@ const fb = require('../../../../../api/_lib/firebase-admin.cjs');
 const { verifyRequestUser } = require('../../../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../../../api/_lib/client-provisioning.cjs');
 
+import { decidePushGuard } from '../../../../../features/strategy-builder/push-guard.js';
+
 export const maxDuration = 120;
 
 function makeReqShim(request) {
@@ -75,6 +77,7 @@ export async function POST(request) {
 
   const scheduled = [];
   const failed = [];
+  const flagged = [];
 
   // Compose final tweet text: keep the strategist copy and append its own
   // hashtags (brand-aligned) within the 280-char budget. We intentionally do
@@ -127,6 +130,13 @@ export async function POST(request) {
 
   // Push each post to the social-posting API
   for (const item of plan.items) {
+    // Content guard: hard block => never scheduled; major flags => scheduled but reported.
+    const text = composeContent(item);
+    const verdict = decidePushGuard(item, text);
+    if (verdict.action === 'block') {
+      failed.push({ id: item.id, reason: verdict.reason });
+      continue;
+    }
     try {
       const res = await fetch(`${base}/api/social-posting`, {
         method: 'POST',
@@ -136,7 +146,7 @@ export async function POST(request) {
         },
         body: JSON.stringify({
           action: 'schedule',
-          content: composeContent(item),
+          content: text,
           scheduledAt: item.scheduledAt,
           source: `strategy-builder:${plan.campaignId}`,
           agents: agentsFor(item),
@@ -158,6 +168,7 @@ export async function POST(request) {
         failed.push({ id: item.id, reason: data?.error || data?.hint || `HTTP ${res.status}` });
       } else {
         scheduled.push(item.id);
+        if (verdict.action === 'flag') flagged.push({ id: item.id, guard: verdict.guard });
       }
     } catch (err) {
       failed.push({ id: item.id, reason: err.message || 'Network error' });
@@ -195,5 +206,6 @@ export async function POST(request) {
     ok: true,
     scheduled: scheduled.length,
     failed,
+    flagged,
   });
 }
