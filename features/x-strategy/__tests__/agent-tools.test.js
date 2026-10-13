@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { buildSystemPrompt, summarizePlan } from '../agent/prompt.js';
 import { TOOL_SCHEMAS, PROPOSE_TOOL_BY_KIND, READ_TOOL_NAMES, PROPOSE_TOOLS, runReadTool, serializeResult } from '../agent/tools.js';
 import { normalizeSelected, describeSelected } from '../agent/prompt.js';
-import { PROPOSAL_KINDS } from '../contracts.js';
+import { PROPOSAL_KINDS, SERVER_ONLY_PROPOSAL_KINDS } from '../contracts.js';
 import { defaultPlanDoc } from '../plan-state.js';
 
 test('prompt carries the likes-only rule and the no-invention rule', () => {
@@ -31,10 +31,11 @@ test('prompt stays compact and embeds only a capped plan summary, not the evalua
   assert.match(summarizePlan(null), /No saved plan/);
 });
 
-test('one propose tool per proposal kind, plus the sixteen read tools, all with object schemas', () => {
-  assert.deepEqual(Object.keys(PROPOSE_TOOL_BY_KIND).sort(), [...PROPOSAL_KINDS].sort());
-  assert.deepEqual(READ_TOOL_NAMES, ['get_strategy_doc', 'get_algorithm', 'score_posts', 'get_rule_check', 'get_audience', 'get_evaluation', 'get_plan', 'get_tracks', 'get_context', 'get_today_run', 'search_inventory', 'top_posts', 'get_queue', 'get_post', 'get_opportunities', 'get_results']);
-  assert.equal(TOOL_SCHEMAS.length, 25);
+test('one propose tool per agent-proposable kind (server-only kinds like paid-sync have none), plus the seventeen read tools, all with object schemas', () => {
+  assert.deepEqual(Object.keys(PROPOSE_TOOL_BY_KIND).sort(), PROPOSAL_KINDS.filter((k) => !SERVER_ONLY_PROPOSAL_KINDS.includes(k)).sort());
+  assert.ok(PROPOSAL_KINDS.includes('paid-sync') && !('paid-sync' in PROPOSE_TOOL_BY_KIND));
+  assert.deepEqual(READ_TOOL_NAMES, ['get_strategy_doc', 'get_algorithm', 'score_posts', 'get_rule_check', 'get_audience', 'get_evaluation', 'get_plan', 'get_tracks', 'get_context', 'get_today_run', 'search_inventory', 'top_posts', 'get_queue', 'get_market_signals', 'get_post', 'get_opportunities', 'get_results']);
+  assert.equal(TOOL_SCHEMAS.length, 27);
   for (const t of TOOL_SCHEMAS) {
     assert.equal(t.input_schema.type, 'object');
     assert.ok(t.description);
@@ -48,7 +49,7 @@ test('one propose tool per proposal kind, plus the sixteen read tools, all with 
 // ---- Phase 4 chat read tools + selected-item context ----
 
 test('propose-only surface: the strategy-doc edit is the only new propose tool, none can schedule/approve/publish', () => {
-  assert.equal(PROPOSE_TOOLS.length, 9);
+  assert.equal(PROPOSE_TOOLS.length, 10);
   for (const t of TOOL_SCHEMAS) assert.ok(!/schedule|publish|approve_post|approve|post_now/i.test(t.name) || t.name.startsWith('propose_'), t.name);
   assert.ok(!TOOL_SCHEMAS.some((t) => /^(schedule|publish|approve)/.test(t.name)));
   assert.deepEqual(TOOL_SCHEMAS.filter((t) => !t.name.startsWith('propose_')).map((t) => t.name), READ_TOOL_NAMES);

@@ -9,6 +9,16 @@
 // Writes only through the injected stores: x_strategy_plans, x_strategy_refresh_requests, x_corpora rows.
 // Never calls bird / X API / ScrapeCreators / a model. A refresh only enqueues (the service may start an
 // in-process drain when X_STRATEGY_LOCAL_INGEST=1 and bird is detected; that promise is never awaited here).
+//
+// Besides `handle` and `actions`, the returned object exposes two functions for other server modules (the MCP server):
+//   toolDepsFor(clientId, context?) -> toolDeps
+//       A NEW read-tool deps object (fresh preload cache) for exactly that client, same readers the chat uses; feed it to
+//       runReadTool / prepareProposal from agent/tools.js. clientId is closed over: nothing the caller passes later can
+//       reach another client.
+//   createProposalInThread({ clientId, threadId?, proposals }) -> Promise<{ok, threadId, proposals, dropped}>
+//       Validates + assigns + persists raw proposals ({kind,payload,summary,rationale,evidence}) into a chat thread
+//       (default threadId `t_mcp_<yyyymmdd>`, created on first use) so they show up as ordinary pending cards in the
+//       Strategy chat. Executes nothing; the owner still confirms in the UI. Needs a chatStore (else {ok:false,status:503}).
 
 import { DEFAULT_PLAN, EVALUATION_THRESHOLDS } from './contracts.js';
 import { evaluate as defaultEvaluate } from './evaluate.js';
@@ -73,6 +83,7 @@ export function buildReviewBrief(doc) {
 
 export const CHAT_TEXT_MAX = 2000;
 const MAX_PROPOSALS_PER_TURN = 2;
+const MAX_EXTERNAL_PROPOSALS = 5; // createProposalInThread (MCP) per call
 const HISTORY_MESSAGES_TO_MODEL = 60;
 
 const DAY_MS = 86400000;
@@ -170,6 +181,9 @@ export function createStrategyHandlers({
   chatStore = null, agentLoopFactory = null, callModel = null, logUsage = null,
   runDailyAction = null, runUpdateItemFacets = null, readTodayRun = null, readContentContext = null, saveXGrowthProfile = null,
   readQueueSummary = null, readPost = null, readOpportunities = null, readResults = null, // chat read tools: (clientId[, postId]) -> plain JSON | null
+  readMarketSignals = null, // (clientId) -> projected brief (features/intelligence/_brief-intel.js projectBrief) | null
+  editPost = null, // ({clientId, postId, content?, scheduledAt?}) -> saved post; the existing updateSocialPost path
+  runPaidSync = null, // ({clientId, kind, params, by, auth, context}) -> result; the `paid-sync` proposal executor (features/mcp/paid-syncs.js). Absent => confirming one fails with a clear message
   readAudience = null, // (ownHandle) -> {account, snapshots, events, posts} from stored X Monitor data; null => tool says unavailable
   env = {}, // explicit on purpose: only createStrategyHandlersFromDb passes process.env, so a bare handler can never reach a real model
 } = {}) {
@@ -445,6 +459,7 @@ export function createStrategyHandlers({
       ...(readPost ? { readPost: (postId) => readPost(clientId, postId) } : {}),
       ...(readOpportunities ? { readOpportunities: () => readOpportunities(clientId) } : {}),
       ...(readResults ? { readResults: () => readResults(clientId) } : {}),
+      ...(readMarketSignals ? { readMarketSignals: () => readMarketSignals(clientId) } : {}),
       searchInventory: async ({ query, limit } = {}) => {
         const max = Math.min(Math.max(1, Number(limit) || 10), 20);
         const tokens = String(query ?? '').toLowerCase().split(/\s+/).filter(Boolean).slice(0, 8);
@@ -669,6 +684,7 @@ export function createStrategyHandlers({
   const executors = buildExecutors({
     planStore, runDailyAction, runUpdateItemFacets, saveXGrowthProfile: saveProfileKeepingTracks, clock,
     docStore, docBase: SEED_STRATEGY_SECTIONS,
+    readPost, editPost: editPost ? (a) => editPost(a) : null, runPaidSync,
     refreshHandles: async ({ clientId, handles, context, auth }) => strategyRefresh({ clientId, handles }, context, auth),
   });
   async function strategyProposalDecide(body, context, auth) {
@@ -819,7 +835,57 @@ export function createStrategyHandlers({
     }
   }
 
-  return { handle, actions: STRATEGY_ROUTE_ACTIONS };
+  /** Fresh tool deps for one client (see file header). */
+  function toolDepsFor(clientId, context = {}) {
+    const id = typeof clientId === 'string' ? clientId.trim() : '';
+    if (!id) throw new Error('toolDepsFor: clientId is required');
+    return buildToolDeps(id, { ...context, clientId: id }, {});
+  }
+
+  /** Persist externally created proposals as pending cards in a chat thread (see file header). */
+  async function createProposalInThread({ clientId, threadId, proposals } = {}) {
+    const off = needChat(); if (off) return off;
+    const id = typeof clientId === 'string' ? clientId.trim() : '';
+    if (!id) return fail(400, 'clientId is required.');
+    const t = parseThreadId(threadId);
+    if (t.error) return t.error;
+    const now = clock();
+    const tid = t.id || `t_mcp_${new Date(now).toISOString().slice(0, 10).replace(/-/g, '')}`;
+    const planDoc = await planStore.get(id);
+    const out = [];
+    const dropped = [];
+    for (const raw of (Array.isArray(proposals) ? proposals : []).slice(0, MAX_EXTERNAL_PROPOSALS)) {
+      const v = validateProposal(raw, { currentPlan: planDoc?.plan });
+      if (!v.ok) { dropped.push({ kind: raw?.kind ?? null, errors: v.errors }); continue; }
+      const payload = { ...v.proposal.payload };
+      if (v.proposal.kind === 'post-edit') {
+        // Same checks the chat tool runs, and the card's "current text" snapshot, from this client's own post.
+        const post = readPost ? await readPost(id, payload.postId) : null;
+        const errs = [];
+        if (!post) errs.push('post not found for this client');
+        else {
+          if (!['draft', 'approved', 'scheduled'].includes(post.status)) errs.push(`post is ${post.status}; only draft, approved or scheduled posts can be edited`);
+          if ((post.updatedAt || '') !== payload.expectedUpdatedAt) errs.push('post changed since it was read; re-read it and retry');
+          if (payload.scheduledAt !== undefined && post.status !== 'scheduled') errs.push('only a scheduled post can be moved to a new time');
+          if (payload.scheduledAt !== undefined && Date.parse(payload.scheduledAt) <= now) errs.push('scheduledAt must be in the future');
+        }
+        if (errs.length) { dropped.push({ kind: 'post-edit', errors: errs }); continue; }
+        payload.currentText = String(post.content ?? '').slice(0, 560);
+        payload.currentStatus = post.status;
+        if (post.scheduledAt) payload.currentScheduledAt = String(post.scheduledAt);
+      }
+      out.push(assignProposal({ ...raw, kind: v.proposal.kind, payload }, { threadId: tid, now }));
+    }
+    if (!out.length) return fail(400, 'No valid proposals.', { dropped });
+    await chatStore.appendTurn({
+      clientId: id, threadId: tid, userText: 'Proposals from an external assistant (MCP).',
+      assistantText: `${out.length} proposal${out.length === 1 ? '' : 's'} created outside the chat. Review and confirm or reject each card.`,
+      proposals: out, now,
+    });
+    return { ok: true, threadId: tid, proposals: out, ...(dropped.length ? { dropped } : {}) };
+  }
+
+  return { handle, actions: STRATEGY_ROUTE_ACTIONS, toolDepsFor, createProposalInThread };
 }
 
 /**
@@ -849,7 +915,7 @@ export function createXGrowthProfileSaver(db) {
  */
 export function createStrategyHandlersFromDb(db, {
   readPackages, env = process.env, runDailyAction, runUpdateItemFacets, readTodayRun, readContentContext,
-  readQueueSummary, readPost, readOpportunities, readResults,
+  readQueueSummary, readPost, readOpportunities, readResults, readMarketSignals, editPost, runPaidSync,
   saveXGrowthProfile = createXGrowthProfileSaver(db), chatStore = createFirestoreChatStore(db, { env }),
   agentLoopFactory, callModel, logUsage, loadCommitted, docStore = createFirestoreStrategyDocStore(db),
 } = {}) {
@@ -878,7 +944,7 @@ export function createStrategyHandlersFromDb(db, {
     corpusStore, planStore, refreshService, readPackages, readAudience,
     readWorkerHealth: (clientId) => readWorkerHealthFromDb(db, { now: Date.now(), clientId }),
     docStore, chatStore, agentLoopFactory, callModel, logUsage, runDailyAction, runUpdateItemFacets, readTodayRun, readContentContext, saveXGrowthProfile, env,
-    readQueueSummary, readPost, readOpportunities, readResults,
+    readQueueSummary, readPost, readOpportunities, readResults, readMarketSignals, editPost, runPaidSync,
     readXGrowthConfig: async (clientId) => {
       const snap = await db.collection('client_configs').doc(clientId).get();
       return snap.exists ? snap.data()?.marketingBriefConfig?.xGrowth ?? null : null;

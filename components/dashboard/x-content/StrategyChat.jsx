@@ -105,6 +105,8 @@ const TONE_BY_STATUS = { pending: 'amber', ok: 'green', muted: 'grey', error: 'r
 function ProposalCard({ proposal, currentPlan, history, planVersion, deciding, onDecide, useModel, onUseModel, onViewPlan, onUndo, undoNote, docSections, onViewDoc }) {
   const isDocEdit = proposal.kind === 'strategy-doc-edit';
   const id = proposal.id;
+  // Cards made by an external assistant over MCP live in `t_mcp_<yyyymmdd>` threads (createProposalInThread).
+  const fromMcp = typeof proposal.threadId === 'string' && proposal.threadId.startsWith('t_mcp_');
   const st = proposalStatusText(proposal);
   const evidence = Array.isArray(proposal.evidence) ? proposal.evidence : [];
   const pending = proposal.status === 'pending';
@@ -114,7 +116,9 @@ function ProposalCard({ proposal, currentPlan, history, planVersion, deciding, o
   // After a confirm, `currentPlan` already holds the NEW values, so a from -> to preview would read "3 -> 3".
   // The saved history entry carries the real diff, so use that instead.
   const savedEntry = savedVersion ? (history || []).find((h) => h.version === savedVersion) : null;
-  const preview = confirmed && isPlanChange ? [] : proposalPayloadPreview(proposal.kind, proposal.payload, currentPlan);
+  const rawPreview = confirmed && isPlanChange ? [] : proposalPayloadPreview(proposal.kind, proposal.payload, currentPlan);
+  // post-edit shows current vs new text in its own block (below); keep only the time/notes lines here.
+  const preview = proposal.kind === 'post-edit' ? rawPreview.filter((l) => !/^(Current|New) text:/.test(l)) : rawPreview;
   const diffLine = savedEntry ? historyDiffSummary(savedEntry) : '';
   // Undo = restore the plan as it stood after the prior version. Only while this is still the newest version
   // (reverting an older change would silently discard later ones) and only when a prior version still exists.
@@ -141,6 +145,7 @@ function ProposalCard({ proposal, currentPlan, history, planVersion, deciding, o
         <div id={`x-strategy-proposal-main-${id}`} style={{ display: 'grid', gap: 6, flex: 1, minWidth: 0 }}>
           <div id={`x-strategy-proposal-header-${id}`} style={S.cardHead}>
             <span style={S.kind}>{confirmed && isPlanChange ? 'Plan updated' : confirmed && isDocEdit ? 'Strategy updated' : proposalKindLabel(proposal.kind)}</span>
+            {fromMcp ? <Badge id={`x-strategy-proposal-from-mcp-badge-${id}`} tone="blue">From MCP</Badge> : null}
             <Badge id={`x-strategy-proposal-status-${id}`} tone={TONE_BY_STATUS[st.tone] || 'grey'}>{badgeLabel}</Badge>
           </div>
           {proposal.summary ? <div id={`x-strategy-proposal-summary-${id}`} style={S.summary}>{proposal.summary}</div> : null}
@@ -170,6 +175,20 @@ function ProposalCard({ proposal, currentPlan, history, planVersion, deciding, o
           {isDocEdit && confirmed && typeof onViewDoc === 'function' ? (
             <div style={{ ...S.row, justifyContent: 'flex-end' }}>
               <button type="button" id={`x-strategy-proposal-view-doc-${id}`} style={S.textLink} onClick={onViewDoc}>View strategy <ArrowUpRight size={14} /></button>
+            </div>
+          ) : null}
+          {proposal.kind === 'post-edit' && pending ? (
+            <div id={`x-strategy-proposal-post-edit-compare-${id}`} style={{ display: 'grid', gap: 6 }}>
+              <div id={`x-strategy-proposal-post-edit-current-${id}`}>
+                <div style={S.label}>Current text{proposal.payload?.currentStatus ? ` (${proposal.payload.currentStatus})` : ''}</div>
+                <p id={`x-strategy-proposal-post-edit-current-text-${id}`} style={{ ...S.rationale, whiteSpace: 'pre-wrap' }}>{proposal.payload?.currentText || 'Not captured.'}</p>
+              </div>
+              {proposal.payload?.text !== undefined ? (
+                <div id={`x-strategy-proposal-post-edit-new-${id}`}>
+                  <div style={S.label}>New text</div>
+                  <p id={`x-strategy-proposal-post-edit-new-text-${id}`} style={{ ...S.rationale, whiteSpace: 'pre-wrap' }}>{proposal.payload.text}</p>
+                </div>
+              ) : null}
             </div>
           ) : null}
           {proposal.kind === 'item-story' && proposal.payload?.sourceQuote ? (

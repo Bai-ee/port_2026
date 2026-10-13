@@ -380,6 +380,8 @@ const PROPOSAL_KIND_LABELS = Object.freeze({
   'regenerate-today': "Regenerate today's suggestions",
   'refresh-handles': 'Refresh account data',
   'strategy-doc-edit': 'Edit the strategy',
+  'post-edit': 'Edit a queued post',
+  'paid-sync': 'Run a paid sync',
 });
 
 /** Plain-words label for a proposal kind. Unknown kinds fall back to a readable form, never throw. */
@@ -394,6 +396,25 @@ const showVal = (v) => {
   return String(v);
 };
 const atHandles = (list) => (Array.isArray(list) && list.length ? list.map((h) => `@${String(h).replace(/^@+/, '')}`).join(', ') : 'none');
+
+const PAID_SYNC_WHAT = Object.freeze({
+  strategy_review: 'Runs a Strategy review: one AI agent turn that reads the Strategy document and the latest data, then may put proposal cards in a new thread.',
+  x_monitor_sync: 'Refreshes X Monitor from the X API (reads only, no posting).',
+  nas_analyze: 'Runs AI analysis on NAS files through the Mac worker (Anthropic batch).',
+});
+
+function paidSyncPreview(p) {
+  const params = p.params && typeof p.params === 'object' ? p.params : {};
+  const lines = [PAID_SYNC_WHAT[p.kind] || `Runs a paid sync (${showVal(p.kind)}).`];
+  if (p.kind === 'x_monitor_sync' && Array.isArray(params.include)) lines.push(`Syncs: ${params.include.join(', ')}`);
+  if (p.kind === 'nas_analyze') {
+    const paths = Array.isArray(params.paths) ? params.paths : [];
+    lines.push(`Source: ${showVal(params.sourceId)}`, `Files: ${paths.length}${paths.length ? ` (${paths.slice(0, 3).join(', ')}${paths.length > 3 ? ', ...' : ''})` : ''}`);
+    if (params.capUsd !== undefined) lines.push(`Spend cap: $${Number(params.capUsd).toFixed(2)}`);
+  }
+  lines.push(`Estimated cost: ${showVal(p.estimate)}`, 'Nothing runs until you press Confirm. Confirming spends money.');
+  return lines;
+}
 
 /**
  * What a proposal will do, as short lines for the card. Pure; tolerates missing/odd payloads.
@@ -421,6 +442,12 @@ export function proposalPayloadPreview(kind, payload, currentPlan) {
     }
     case 'refresh-handles': return [`Pull fresh posts for: ${atHandles(p.handles)}`];
     case 'strategy-doc-edit': return [`Section: ${sectionTitle(p.section)}`, `New text:\n${showVal(p.text)}`];
+    case 'post-edit': return [
+      ...(p.text !== undefined ? [`Current text: ${showVal(p.currentText)}`, `New text: ${showVal(p.text)}`] : []),
+      ...(p.scheduledAt !== undefined ? [`Time: ${showVal(p.currentScheduledAt)} → ${showVal(p.scheduledAt)}`] : []),
+      'Edit only: this does not approve, schedule or publish.',
+    ];
+    case 'paid-sync': return paidSyncPreview(p);
     case 'regenerate-today': return [`Model drafting: ${p.useModel === true ? 'on' : 'off'}`, ...(p.force === true ? ['Replaces the existing run.'] : [])];
     default: return [];
   }
@@ -436,6 +463,8 @@ const RESULT_LINES = {
   'item-story': () => 'Story saved.',
   'refresh-handles': () => 'Refresh started.',
   'strategy-doc-edit': (r) => (r?.version ? `Strategy updated to v${r.version}.` : 'Strategy updated.'),
+  'paid-sync': (r) => (r?.kind === 'x_monitor_sync' ? `Done. ${r.calls ?? 0} X API read call${r.calls === 1 ? '' : 's'} made.` : r?.kind === 'strategy_review' ? 'Review done - see the new thread.' : 'Started. Check progress in the matching card.'),
+  'post-edit': (r) => (r?.status ? `Post updated. It is now ${r.status}${r.scheduledAt ? ` for ${r.scheduledAt}` : ''} \u2014 check the Queue tab.` : 'Post updated \u2014 check the Queue tab.'),
 };
 
 /**

@@ -8,6 +8,7 @@ import { useAuth, NEW_USER_SIGNIN_ERROR } from './AuthContext';
 import InternalPageBackground from './InternalPageBackground';
 import { internalPageGlassCardStyle } from './pageSurfaceSystem';
 import { trackSignIn, trackSignUp } from '@/lib/analytics';
+import { safeRedirectPath } from '@/lib/safe-redirect';
 
 const PENDING_DASHBOARD_SIGNUP_KEY = 'pending-dashboard-signup';
 
@@ -46,7 +47,7 @@ const AuthPageInner = () => {
   // the dashboard WebsiteUrlGate.
   const [isEmailEntry, setIsEmailEntry] = useState(false);
 
-  const redirectPath = useMemo(() => searchParams.get('redirect') || '/dashboard', [searchParams]);
+  const redirectPath = useMemo(() => safeRedirectPath(searchParams.get('redirect')), [searchParams]);
 
   // Marquee — rAF loop for pixel-consistent speed, never restarts on tab switch
   const marqueeTrackRef = useRef(null);

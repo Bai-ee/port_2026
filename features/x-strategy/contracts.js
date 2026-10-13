@@ -82,7 +82,15 @@ export const PROPOSAL_KINDS = Object.freeze([
   'regenerate-today',
   'refresh-handles',
   'strategy-doc-edit',
+  'post-edit',
+  'paid-sync',
 ]);
+
+/** Kinds only server code may create (the MCP server's request_sync). The in-app agent has no propose tool for them. */
+export const SERVER_ONLY_PROPOSAL_KINDS = Object.freeze(['paid-sync']);
+
+/** What a `paid-sync` proposal may run on confirm. Pricing/validation + execution live in features/mcp/paid-syncs.js. */
+export const PAID_SYNC_KINDS = Object.freeze(['strategy_review', 'x_monitor_sync', 'nas_analyze']);
 
 /**
  * Action each proposal kind runs on confirm (§5 table). `marketing-brief-config` is
@@ -99,6 +107,8 @@ export const PROPOSAL_KIND_ACTIONS = Object.freeze({
   'regenerate-today': 'daily-run-generate',
   'refresh-handles': 'strategy-refresh',
   'strategy-doc-edit': 'strategy-doc-save',
+  'post-edit': 'update', // social-posting `update` (updateSocialPost); not a strategy ROUTE_ACTION
+  'paid-sync': 'paid-sync', // features/mcp/paid-syncs.js via the injected runPaidSync; not a strategy ROUTE_ACTION
 });
 
 export const PROPOSAL_STATUSES = Object.freeze(['pending', 'deciding', 'confirmed', 'rejected', 'failed']);

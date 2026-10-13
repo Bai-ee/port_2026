@@ -3,6 +3,8 @@
  * Compresses StrategyContext into a single user message for the Anthropic API.
  */
 
+import { strategyDocPromptBlock } from './strategy-doc-context.js';
+
 /** Cap a string at max chars. */
 function cap(str, max = 400) {
   const s = String(str || '');
@@ -148,7 +150,7 @@ ${clientBrainBlock || 'CLIENT BRAIN CONTEXT: none'}
 EDITORIAL STRATEGY RECOMMENDATION
 ${editorialRecommendationText || 'none'}
 
-${xGrowthBlock || ''}
+${strategyDocPromptBlock(ctx.strategyDoc)}${xGrowthBlock || ''}
 
 BRAND
 - Voice: ${cap(brand?.voice)}
@@ -361,7 +363,7 @@ ${clientBrainBlock || 'none'}
 EDITORIAL STRATEGY LAYER (campaign-first recommendation above the schedule)
 ${editorialRecommendationText || 'none'}
 
-PIPELINE SIGNALS (read-only context, do not echo)
+${strategyDocPromptBlock(ctx.strategyDoc)}PIPELINE SIGNALS (read-only context, do not echo)
 ${findingsSummary}
 
 ANCHOR EVENTS (FACTS — use exactly these dates; do not invent new ones)

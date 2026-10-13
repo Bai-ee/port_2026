@@ -5,6 +5,8 @@ const fb = require('../../api/_lib/firebase-admin.cjs');
 const { loadClientBrainContext } = require('../client-brain/store.cjs');
 
 import { normalizeVertical } from './normalize-vertical.js';
+import { buildStrategyDocContext } from './strategy-doc-context.js';
+import { createFirestoreStrategyDocStore } from '../x-strategy/strategy-doc-store.js';
 import {
   buildKnowledgeBaseRuntimeQuery,
   getKnowledgeBaseRuntimeContext,
@@ -28,9 +30,11 @@ import {
  * @param {Object}  args.clientConfig  Visible Strategy Builder config (sources,
  *   signals, campaign, days, vertical, editorial). Pass the persisted
  *   dashboard_state.strategyBuilder.config for headless/cron runs.
+ * @param {Function} [args.readStrategyDoc]  Injected reader `(clientId) => doc|null` (tests).
+ *   Defaults to the Firestore Strategy document store; only a confirmed doc is used.
  * @returns {Promise<{ok:true, plan:Object} | {ok:false, status:number, error:string}>}
  */
-export async function generateStrategyPlan({ clientId, clientConfig = {} }) {
+export async function generateStrategyPlan({ clientId, clientConfig = {}, readStrategyDoc = null }) {
   if (!clientId) return { ok: false, status: 400, error: 'Missing clientId.' };
 
   const rawVertical = String(clientConfig.vertical || '').trim();
@@ -179,6 +183,15 @@ export async function generateStrategyPlan({ clientId, clientConfig = {} }) {
   const brandIncluded = srcOn('brand-snapshot');
   const includedCardFindings = srcOn('analyzer') ? cardFindings : {};
 
+  // The owner's CONFIRMED X Strategy document (draft/absent/unreadable => null => prompts unchanged).
+  let strategyDoc = null;
+  try {
+    const read = readStrategyDoc || ((id) => createFirestoreStrategyDocStore(fb.adminDb).get(id));
+    strategyDoc = buildStrategyDocContext(await read(clientId));
+  } catch (err) {
+    console.error('[strategy-builder/generate] strategy doc read error:', err.message);
+  }
+
   // Build StrategyContext
   const now = new Date().toISOString();
   const startDate = now.slice(0, 10);
@@ -276,6 +289,7 @@ export async function generateStrategyPlan({ clientId, clientConfig = {} }) {
         }
       : null,
     clientBrain: clientBrainContext ? { context: clientBrainContext } : null,
+    strategyDoc,
     cardFindings: includedCardFindings,
     campaign,
     editorial,
@@ -355,6 +369,7 @@ export async function generateStrategyPlan({ clientId, clientConfig = {} }) {
 
   // Attach today strategy to the plan before saving
   if (todayStrategy) plan.today = todayStrategy;
+  if (strategyDoc) plan.strategyDocVersion = strategyDoc.version;
   if (editorialRecommendation) plan.editorialRecommendation = editorialRecommendation;
   if (knowledgeBase?.available) {
     plan.knowledgeBaseSources = knowledgeBase.sources || [];

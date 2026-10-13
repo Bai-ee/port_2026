@@ -9499,10 +9499,13 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 
     ...(isAdmin ? [{
       id: 'x-content',
-      category: 'social',
+      // Content Center lives with the rest of the knowledge (Brain, library, strategy); still listed in Social for the
+      // source → plan → publish flow.
+      category: 'knowledge',
+      extraCategories: ['social'],
       number: 'XE',
       label: 'CONTENT',
-      title: 'Content Engine',
+      title: 'Content Center',
       description: 'What to post in each of the day\u2019s slots, matched from your own catalogue \u2014 and the catalogue itself. An unfilled slot names what is missing instead of showing a blank.',
       placeholderLabel: 'CONTENT\nENGINE',
       rows: [
@@ -11172,7 +11175,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   if (activeCapabilityFilter === 'knowledge') {
                     // Knowledge Officer: Cross-Device Layouts, Data Coverage,
                     // Source Library, Day-of Post lead; Market Category stays last.
-                    const order = ['multi-device-view', 'social-preview', 'audit-summary', 'client-brain', 'knowledge-base', 'priority-signal', 'survey-status', 'business-model', 'industry'];
+                    const order = ['multi-device-view', 'social-preview', 'audit-summary', 'client-brain', 'x-content', 'knowledge-base', 'priority-signal', 'survey-status', 'business-model', 'industry'];
                     const ai = order.indexOf(a.id); const bi = order.indexOf(b.id);
                     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
                   }

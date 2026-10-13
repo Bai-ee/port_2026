@@ -117,7 +117,7 @@ export default function PushPane({ plan, getIdToken, onPush, onOpenSocialPosting
       {/* Result banner */}
       {result && (
         result.failed?.length > 0 ? (
-          <div className="brand-snapshot-error" style={{ marginBottom: 14 }}>
+          <div id="strategy-builder-push-failed-list" className="brand-snapshot-error" style={{ marginBottom: 14 }}>
             {result.scheduled} post{result.scheduled !== 1 ? 's' : ''} scheduled. {result.failed.length} failed.
             <ul style={{ marginTop: 6, paddingLeft: 16 }}>
               {result.failed.map((f) => (
@@ -130,6 +130,19 @@ export default function PushPane({ plan, getIdToken, onPush, onOpenSocialPosting
             {result.scheduled} post{result.scheduled !== 1 ? 's' : ''} scheduled.
           </div>
         )
+      )}
+
+      {result?.flagged?.length > 0 && (
+        <div id="strategy-builder-push-guard-flags" className="sb-notice" style={{ marginBottom: 14 }}>
+          {result.flagged.length} scheduled post{result.flagged.length !== 1 ? 's' : ''} flagged by the content guard — review in Schedule Posts.
+          <ul style={{ marginTop: 6, paddingLeft: 16 }}>
+            {result.flagged.map((f) => (
+              <li key={f.id} style={{ fontSize: 10 }}>
+                {f.id}: {(f.guard?.flags || []).map((x) => x.code).join(', ')}{f.guard?.lane ? ` (lane: ${f.guard.lane})` : ''}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {/* Schedule All button */}

@@ -192,6 +192,14 @@ const nextConfig = {
         ],
       },
       {
+        // The OAuth consent page must never be framed (clickjacking the Allow button).
+        source: '/oauth/:path*',
+        headers: [
+          { key: 'Content-Security-Policy', value: "frame-ancestors 'none'" },
+          { key: 'X-Frame-Options', value: 'DENY' },
+        ],
+      },
+      {
         source: '/md/:path*',
         headers: [
           { key: 'Content-Type', value: 'text/markdown; charset=utf-8' },
