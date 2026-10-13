@@ -21,10 +21,11 @@ Credential collections (users, admins, system_flags, calendar_connections, ...) 
 
 SPEND AND SAFETY RULES (hard)
 - X API costs real money and its spend is invisible on the cost card. This server never writes to X, never posts, schedules, approves, deletes or emails. Reads of X data go through stored Firestore data; the only X-API action is x_monitor_sync (reads only), which runs solely when the owner presses Confirm on its card in HITLOOP.
-- Anything that costs money is request_sync, which only creates a proposal card; the owner presses Confirm in HITLOOP Content Center > Strategy chat (there is no confirm tool). Market Signals refreshes are not available over MCP. Free syncs: request_strategy_refresh, regenerate_today_suggestions (template drafting only), nas_status/nas_browse/nas_estimate.
-- Proposals (strategy_propose_*) only create pending cards in Content Center > Strategy chat; the owner confirms them there.
+- Anything that costs money is request_sync, which only creates a proposal card; the owner presses Confirm in HITLOOP Marketing Director > Strategy (chat) (there is no confirm tool). Market Signals refreshes run from the Refresh button in the Marketing Director header (group 1); there is no request_sync kind for them, so tell the owner to click Refresh. Free syncs: request_strategy_refresh, regenerate_today_suggestions (template drafting only), nas_status/nas_browse/nas_estimate.
+- Proposals (strategy_propose_*) only create pending cards in Marketing Director > Strategy (chat); the owner confirms them there.
 
 WHICH TOOL FOR WHAT
+- "What's going on today / what can I do": get_daily_brief, then get_action_playbook for exact paste-ready messages and where to click.
 - "How is the account doing / what should I post / why": strategy_* read tools (evaluation, algorithm, score_posts, rule check, audience, tracks, queue, results).
 - "Show me the data": get_client_overview -> get_document / query_collection; search_timeline for the archive; get_operating_costs; get_x_monitor.
 - "How does X work in the code": get_hitloop_guide -> list_repo_path / search_repo / read_repo_file / recent_commits.

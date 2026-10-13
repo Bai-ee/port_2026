@@ -1,14 +1,15 @@
 'use client';
 
+import { usePerformanceProps } from './standalone.js';
 import React from 'react';
-import { Skeleton, RetryError } from './Feedback.jsx';
+import { Skeleton, RetryError } from '../content-ui/Feedback.jsx';
 import { BarChart3, FileText, RefreshCw } from 'lucide-react';
-import Card from './ui/Card.jsx';
-import Badge from './ui/Badge.jsx';
-import IconButton from './ui/IconButton.jsx';
-import Accordion from './ui/Accordion.jsx';
+import Card from '../content-ui/ui/Card.jsx';
+import Badge from '../content-ui/ui/Badge.jsx';
+import IconButton from '../content-ui/ui/IconButton.jsx';
+import Accordion from '../content-ui/ui/Accordion.jsx';
 import ResultsPostList from './ResultsPostList.jsx';
-import { XCE_COLORS, XCE_RADII, XCE_TYPE } from './xce-tokens';
+import { XCE_COLORS, XCE_RADII, XCE_TYPE } from '../content-ui/xce-tokens';
 
 // PerformancePanel — per-engine results over stored social_posts.performance.
 //
@@ -36,7 +37,7 @@ function meaning(label, s, minN) {
   return `${bits.join('; ')}.`;
 }
 
-export default function PerformancePanel({ stats, lastCapturedAt, loading, error, onRefresh, postResults }) {
+function PerformancePanelView({ stats, lastCapturedAt, loading, error, onRefresh, postResults, hideRefresh = false }) {
   const entries = stats?.engines ? Object.entries(stats.engines) : [];
   const minN = stats?.minN ?? 5;
   const measured = stats ? Math.max(0, (stats.total || 0) - (stats.unmeasured || 0)) : 0;
@@ -51,7 +52,7 @@ export default function PerformancePanel({ stats, lastCapturedAt, loading, error
             <span id="x-results-window-label" style={{ display: 'inline-flex', alignItems: 'center', minHeight: 38, padding: '0 12px', borderRadius: XCE_RADII.md, border: `1px solid ${XCE_COLORS.border}`, background: XCE_COLORS.surface, fontSize: 13, color: XCE_COLORS.ink }}>
               {windowLabel}
             </span>
-            {onRefresh ? (
+            {onRefresh && !hideRefresh ? (
               <IconButton id="x-content-performance-refresh-button" label="Refresh results" icon={<RefreshCw size={15} />} size={38} disabled={loading} onClick={onRefresh} />
             ) : null}
           </div>
@@ -137,4 +138,13 @@ export default function PerformancePanel({ stats, lastCapturedAt, loading, error
       ) : null}
     </div>
   );
+}
+
+function PerformancePanelStandalone({ clientId, call, hideRefresh }) {
+  return <PerformancePanelView {...usePerformanceProps(call, clientId)} hideRefresh={hideRefresh} />;
+}
+
+// Content Center passes `postResults`/`stats` (even null); a standalone host passes only { clientId, call, onNavigate }.
+export default function PerformancePanel(props) {
+  return props.stats === undefined && props.postResults === undefined && props.loading === undefined ? <PerformancePanelStandalone {...props} /> : <PerformancePanelView {...props} />;
 }

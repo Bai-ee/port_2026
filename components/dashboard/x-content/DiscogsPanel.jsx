@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUp, ChevronRight, Check, Circle, Folder, Loader2, RefreshCw, X as XIcon } from 'lucide-react';
-import { ConfirmButton, RetryError, Skeleton } from './Feedback.jsx';
+import { ConfirmButton, RetryError, Skeleton } from '../content-ui/Feedback.jsx';
 
 // DiscogsPanel — read record labels on the Mac, match them to Discogs, review, add to the collection, undo.
 // Free / read-only calls go to the Mac analyzer DIRECTLY (`${localThumbBase}/nas/status|browse`,

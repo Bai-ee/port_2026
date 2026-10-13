@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDownUp, RefreshCw, Search } from 'lucide-react';
-import { Skeleton, RetryError } from './Feedback.jsx';
+import { Skeleton, RetryError } from '../content-ui/Feedback.jsx';
 import { isCompleteDay, latestDayFor, dayCountLabel } from '../../../features/social-archive/timeline-view.js';
 
 // TimelinePanel — the living archive: imported Facebook / X / Instagram entries

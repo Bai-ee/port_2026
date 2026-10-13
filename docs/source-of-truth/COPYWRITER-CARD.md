@@ -1,5 +1,7 @@
 # Copywriter Card — Source of Truth
 
+> **Marketing Director unification (2026-10-13, POC, admin only, uncommitted on `feat/marketing-director-poc`):** For admins the Copywriter card moves from the Social Media Manager bucket to Marketing Director › WHAT'S OUR STRATEGY (category `isAdmin ? 'growth' : 'social'`), placed after Custom Post Strategy; component, backend actions (`score`/`update`/`enhance`) and `social_posts` flow are unchanged, and drafts appear in Queue & Calendar. Stale for admins: any statement that it leads the Social Media Manager bucket ahead of Schedule Posts (Schedule Posts is hidden for admins; its compose UI is Queue & Calendar › Compose). Non-admins are unchanged. See [`MARKETING-DIRECTOR.md`](MARKETING-DIRECTOR.md).
+
 As-built reference for the **Copywriter** card (`cardId: 'copywriter'`) in the **Social Media Manager** bucket. A quick tweet notepad: draft, score live, edit, AI-enhance, and save / schedule / post — all on top of the existing social-posting backend, so drafts flow between it and the **Schedule Posts** card.
 
 > If anything here conflicts with [`SOURCE-OF-TRUTH.md`](SOURCE-OF-TRUTH.md), that wins. Read this before touching the `copywriter` card, `CopywriterCard.jsx`, or the `score` / `update` / `enhance` actions in `app/api/social-posting/route.js`.

@@ -2,11 +2,11 @@
 
 import React, { useState } from 'react';
 import { AlertTriangle, Check, X } from 'lucide-react';
-import { ConfirmButton } from './Feedback';
-import Card from './ui/Card.jsx';
-import Badge from './ui/Badge.jsx';
-import SectionLabel from './ui/SectionLabel.jsx';
-import { XCE_COLORS, XCE_TYPE } from './xce-tokens';
+import { ConfirmButton } from '../content-ui/Feedback';
+import Card from '../content-ui/ui/Card.jsx';
+import Badge from '../content-ui/ui/Badge.jsx';
+import SectionLabel from '../content-ui/ui/SectionLabel.jsx';
+import { XCE_COLORS, XCE_TYPE } from '../content-ui/xce-tokens';
 
 // ClientCapturePanel — capture a client story, and approve/reject client packages.
 //

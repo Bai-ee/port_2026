@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import Badge from './ui/Badge.jsx';
+import Badge from '../content-ui/ui/Badge.jsx';
 
 // ResultsPostList — one labelled group of post-result rows (Posted / Waiting /
 // Needs attention). PURE PRESENTATION over features/x-content-inventory/results.js

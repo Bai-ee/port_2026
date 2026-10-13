@@ -5,7 +5,7 @@ import { AlertTriangle, RefreshCw } from 'lucide-react';
 
 // Feedback — small shared UX pieces for the Content Engine tabs.
 // PRESENTATION ONLY. Styling lives in the card's single `<style jsx global>`
-// block (`#x-content-card .xce-confirm*`, `.xce-skeleton*`, `.xce-retry*`).
+// block (`.xce-scope .xce-confirm*`, `.xce-skeleton*`, `.xce-retry*`).
 
 const DISARM_MS = 5000;
 

@@ -72,7 +72,7 @@ function impactLabel(gap) {
   return `${value > 0 ? '+' : ''}${Math.round(value * 100)}% per post`;
 }
 
-export default function XCalendarCard({ getIdToken, activeClientId, clientName }) {
+export default function XCalendarCard({ getIdToken, activeClientId, clientName, hideRefresh = false }) {
   const [quoteTargets, setQuoteTargets] = useState(null);
   const [dayPlan, setDayPlan] = useState(null);
   const [gapReport, setGapReport] = useState(null);
@@ -266,12 +266,14 @@ export default function XCalendarCard({ getIdToken, activeClientId, clientName }
         <section id="x-calendar-gap-report-panel" className="xc-panel">
           <div className="xc-head">
             <span className="xc-kicker"><BarChart3 size={13} /> Against {gapReport?.benchmarkHandle ? `@${gapReport.benchmarkHandle}` : 'benchmark'}</span>
-            <button type="button" id="x-calendar-recompute-button" className="xc-ghost" onClick={refreshAnalysis} disabled={analysisBusy}>
-              {analysisBusy
-                ? <span className="comet-spinner" style={{ width: 13, height: 13, ['--comet-ring']: '2px' }} aria-hidden="true" />
-                : <RefreshCw size={13} />}
-              Recompute
-            </button>
+            {!hideRefresh ? (
+              <button type="button" id="x-calendar-recompute-button" className="xc-ghost" onClick={refreshAnalysis} disabled={analysisBusy}>
+                {analysisBusy
+                  ? <span className="comet-spinner" style={{ width: 13, height: 13, ['--comet-ring']: '2px' }} aria-hidden="true" />
+                  : <RefreshCw size={13} />}
+                Recompute
+              </button>
+            ) : null}
           </div>
 
           {gapReport ? (

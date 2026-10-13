@@ -141,7 +141,7 @@ test('market_signals_refresh is gone (paid X reads): not a valid kind anywhere',
   await assert.rejects(describePaidSync('market_signals_refresh', {}, {}), PaidSyncError);
   assert.throws(() => normalizeParams('market_signals_refresh', {}), PaidSyncError);
   assert.equal(validateProposal({ kind: 'paid-sync', payload: { kind: 'market_signals_refresh', params: {}, estimate: 'x' } }).ok, false);
-  assert.match(registry.find((t) => t.name === 'request_sync').description, /Market Signals card/);
+  assert.match(registry.find((t) => t.name === 'request_sync').description, /Refresh button in the Marketing Director header/);
 });
 
 test('daily cap is enforced IN the executor, atomically: 12 concurrent confirms -> exactly 10 run', async () => {

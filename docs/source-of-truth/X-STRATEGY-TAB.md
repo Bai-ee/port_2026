@@ -1,5 +1,7 @@
 # X Strategy tab — SSOT (as built)
 
+> **Marketing Director unification (2026-10-13, POC, admin only, uncommitted on `feat/marketing-director-poc`):** For admins the Strategy panel (chat, document, plan/cadence, content tracks, insights, history, review) is no longer a Content Center tab; it mounts as the **Strategy** card (`strategy-document`) in Marketing Director › WHAT'S OUR STRATEGY, and the Strategy-account refresh and ContentTracks refresh buttons are hidden for admins in favor of the header Refresh (group 4 Strategy accounts, free, Mac worker). Stale for admins: the "Strategy tab inside Content Center" location and any instruction to click a Refresh button in the panel; `StrategyPanel`'s `onNavigate` is inert in the standalone mount. Plan and backend semantics are unchanged. See [`MARKETING-DIRECTOR.md`](MARKETING-DIRECTOR.md).
+
 > **Content Management (2026-10-11):** plan ownership, the shared input context, the single post lifecycle, scheduling and results now follow [`CONTENT-MANAGEMENT.md`](CONTENT-MANAGEMENT.md). Where this doc disagrees about who decides cadence, who creates/approves/schedules a post, or what chat may do, that doc wins.
 
 

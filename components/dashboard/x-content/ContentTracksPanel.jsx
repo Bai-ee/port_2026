@@ -7,10 +7,10 @@ import {
   trackBenchmarkRow, trackProfileSummary,
 } from '../../../features/x-strategy/ui-model.js';
 import { MAX_BENCHMARKS_PER_TRACK } from '../../../features/x-strategy/content-tracks.js';
-import { XCE_COLORS } from './xce-tokens';
-import Badge from './ui/Badge';
-import Card from './ui/Card';
-import SectionLabel from './ui/SectionLabel';
+import { XCE_COLORS } from '../content-ui/xce-tokens';
+import Badge from '../content-ui/ui/Badge';
+import Card from '../content-ui/ui/Card';
+import SectionLabel from '../content-ui/ui/SectionLabel';
 
 // ContentTracksPanel - X Strategy > Plan tab. Thin view over the pure helpers in features/x-strategy/ui-model.js.
 // Draft state lives in StrategyPanel (so reload/discard stay in one place); this file only renders and forwards edits.
@@ -27,7 +27,7 @@ const S = {
   trackBox: { border: `1px solid ${XCE_COLORS.border}`, borderRadius: 12, padding: 12, display: 'grid', gap: 10, minWidth: 0 },
 };
 
-function BenchmarkRow({ track, handle, rowsMeta, request, refreshing, saved, onRemove, onRefresh }) {
+function BenchmarkRow({ track, handle, rowsMeta, request, refreshing, saved, onRemove, onRefresh, hideRefresh = false }) {
   const r = trackBenchmarkRow(handle, rowsMeta, request);
   const base = `x-strategy-track-${track.id}-benchmark-${r.handle}`;
   return (
@@ -35,8 +35,10 @@ function BenchmarkRow({ track, handle, rowsMeta, request, refreshing, saved, onR
       <div style={{ ...S.row, flexWrap: 'nowrap' }}>
         <span id={`${base}-handle`} style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere', fontSize: 14 }}>@{r.handle}</span>
         <Badge id={`${base}-status`} tone={r.needsRefresh ? 'amber' : 'green'}>{r.rows} posts · {r.freshness}</Badge>
-        <button type="button" id={`${base}-refresh-button`} className="xce-btn xce-btn-ghost" style={{ minHeight: 36 }} disabled={refreshing || !saved || !onRefresh}
-          title={saved ? 'Pull this benchmark again' : 'Save tracks first'} onClick={() => onRefresh(r.handle)}><RefreshCw size={14} /></button>
+        {!hideRefresh ? (
+          <button type="button" id={`${base}-refresh-button`} className="xce-btn xce-btn-ghost" style={{ minHeight: 36 }} disabled={refreshing || !saved || !onRefresh}
+            title={saved ? 'Pull this benchmark again' : 'Save tracks first'} onClick={() => onRefresh(r.handle)}><RefreshCw size={14} /></button>
+        ) : null}
         <button type="button" id={`${base}-remove-button`} className="xce-btn xce-btn-ghost" style={{ minHeight: 36 }} aria-label={`Remove @${r.handle}`} onClick={() => onRemove(r.handle)}><X size={14} /></button>
       </div>
       {r.note ? <span id={`${base}-note`} style={S.note}>{r.note}</span> : null}
@@ -45,7 +47,7 @@ function BenchmarkRow({ track, handle, rowsMeta, request, refreshing, saved, onR
   );
 }
 
-function TrackRow({ track, draft, setDraft, savedHandles, rowsMeta, request, refreshing, profile, onRefreshHandle }) {
+function TrackRow({ track, draft, setDraft, savedHandles, rowsMeta, request, refreshing, profile, onRefreshHandle, hideRefresh = false }) {
   const [handleInput, setHandleInput] = useState('');
   const [handleErr, setHandleErr] = useState('');
   const id = `x-strategy-track-${track.id}`;
@@ -84,7 +86,7 @@ function TrackRow({ track, draft, setDraft, savedHandles, rowsMeta, request, ref
         {track.benchmarks.length === 0 ? <span id={`${id}-benchmarks-empty`} style={S.note}>No benchmark yet. Add one below.</span> : null}
         {track.benchmarks.map((h) => (
           <BenchmarkRow key={h} track={track} handle={h} rowsMeta={rowsMeta} request={request} refreshing={refreshing} saved={savedHandles.includes(h)}
-            onRemove={(x) => setDraft(removeTrackBenchmark(draft, track.id, x))} onRefresh={onRefreshHandle} />
+            onRemove={(x) => setDraft(removeTrackBenchmark(draft, track.id, x))} onRefresh={onRefreshHandle} hideRefresh={hideRefresh} />
         ))}
         <div id={`${id}-benchmark-add-row`} style={{ ...S.row, flexWrap: 'nowrap' }}>
           <input id={`${id}-benchmark-input`} aria-label={`Add benchmark to ${track.label}`} className="xce-input" style={{ flex: 1, minWidth: 0 }} value={handleInput} placeholder="handle" autoCapitalize="none" autoCorrect="off" spellCheck={false}
@@ -118,7 +120,7 @@ function TrackRow({ track, draft, setDraft, savedHandles, rowsMeta, request, ref
   );
 }
 
-export default function ContentTracksPanel({ draft, setDraft, savedHandles = [], rowsMeta = {}, request = null, refreshView = null, refreshFollowUp = null, refreshing = false, profiles = [], check, busy, message, onSave, onDiscard, onRefreshHandle }) {
+export default function ContentTracksPanel({ draft, setDraft, savedHandles = [], rowsMeta = {}, request = null, refreshView = null, refreshFollowUp = null, refreshing = false, profiles = [], check, busy, message, onSave, onDiscard, onRefreshHandle, hideRefresh = false }) {
   const total = draft.reduce((a, t) => a + t.share, 0);
   return (
     <Card id="x-strategy-content-tracks-panel" data-section="content-tracks" padding={14}>
@@ -130,7 +132,7 @@ export default function ContentTracksPanel({ draft, setDraft, savedHandles = [],
       <div id="x-strategy-content-tracks-list" style={S.stack}>
         {draft.map((t) => (
           <TrackRow key={t.id} track={t} draft={draft} setDraft={setDraft} savedHandles={savedHandles} rowsMeta={rowsMeta} request={request} refreshing={refreshing}
-            profile={(profiles || []).find((p) => p?.trackId === t.id) || null} onRefreshHandle={onRefreshHandle} />
+            profile={(profiles || []).find((p) => p?.trackId === t.id) || null} onRefreshHandle={onRefreshHandle} hideRefresh={hideRefresh} />
         ))}
       </div>
       {check.dirty && check.errors.length ? <div id="x-strategy-content-tracks-errors" role="alert" style={S.err}>{check.errors.join(' ')}</div> : null}

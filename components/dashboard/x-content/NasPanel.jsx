@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronRight, Folder, Image as ImageIcon, Film, X as XIcon, ArrowUp, Loader2, Check, Circle, RefreshCw } from 'lucide-react';
-import { RetryError, Skeleton } from './Feedback.jsx';
+import { RetryError, Skeleton } from '../content-ui/Feedback.jsx';
 import NasCopyMovePanel from './NasCopyMovePanel.jsx';
 import { NAS_PROMPT_VERSION } from '../../../features/x-content-inventory/nas.js';
 

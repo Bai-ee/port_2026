@@ -1,9 +1,10 @@
 'use client';
 
+import { useCalendarProps } from './standalone.js';
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronLeft, ChevronRight, RefreshCw, X } from 'lucide-react';
-import { Skeleton, RetryError } from './Feedback.jsx';
+import { Skeleton, RetryError } from '../content-ui/Feedback.jsx';
 import PostSheet from './PostSheet.jsx';
 import { classifyResult } from '../../../features/x-content-inventory/month-calendar.js';
 import { ENGINE_TAG, STATE_LABEL, StateDot, dayHeading } from './calendar-bits.jsx';
@@ -25,7 +26,7 @@ import { ENGINE_TAG, STATE_LABEL, StateDot, dayHeading } from './calendar-bits.j
 // Apple Calendar phone pattern). Clicking a post opens the PostSheet editor.
 //
 // STYLING: classNames only (`xce-mc-`); the parent card owns the single
-// `<style jsx global>` block, prefixed `#x-content-card`.
+// `<style jsx global>` block, prefixed `.xce-scope`.
 
 const UNPLACED_REASON = {
   'needs-story': 'Needs its story',
@@ -104,7 +105,12 @@ function PostRow({ post, busy, onOpen, onApprove, onReject }) {
   );
 }
 
-export default function MonthCalendarPanel({
+// Sheet portal target: the Content Center card root when present, else the nearest .xce-scope, else body (standalone host).
+function sheetHost() {
+  return document.getElementById('x-content-card') || document.querySelector('.xce-scope') || document.body;
+}
+
+function MonthCalendarPanelView({
   calendar,
   loading,
   error,
@@ -112,6 +118,7 @@ export default function MonthCalendarPanel({
   onShiftMonth,
   onToday,
   onRefresh,
+  hideRefresh = false,
   onApprove,
   onReject,
   onSave,
@@ -212,7 +219,7 @@ export default function MonthCalendarPanel({
               Review {reviewQueue.length}
             </button>
           ) : null}
-          {onRefresh ? (
+          {onRefresh && !hideRefresh ? (
             <button type="button" id="x-content-month-refresh-button" className="xce-mc-icon-btn" onClick={onRefresh} disabled={!!loading} aria-label="Refresh"><RefreshCw size={15} /></button>
           ) : null}
         </div>
@@ -349,8 +356,8 @@ export default function MonthCalendarPanel({
 
       {/* Portalled to the card root: `.xce-panel` has backdrop-filter, which
           makes it the containing block for position:fixed and clips the sheet.
-          The card root keeps every `#x-content-card` style applying. */}
-      {openPost && typeof document !== 'undefined' && document.getElementById('x-content-card') ? createPortal(
+          The card root keeps every `.xce-scope` style applying. */}
+      {openPost && typeof document !== 'undefined' && sheetHost() ? createPortal(
         <PostSheet
           post={openPost}
           busy={busyId === openPost.id}
@@ -365,8 +372,17 @@ export default function MonthCalendarPanel({
           onReconcile={onReconcile ? (post, extra) => decide(onReconcile, post, extra) : undefined}
           onRefresh={onRefresh}
         />,
-        document.getElementById('x-content-card'),
+        sheetHost(),
       ) : null}
     </div>
   );
+}
+
+function MonthCalendarPanelStandalone({ clientId, call, hideRefresh }) {
+  return <MonthCalendarPanelView {...useCalendarProps(call, clientId)} hideRefresh={hideRefresh} />;
+}
+
+// Content Center passes `calendar` (even null); a standalone host passes only { clientId, call, onNavigate }.
+export default function MonthCalendarPanel(props) {
+  return props.calendar === undefined ? <MonthCalendarPanelStandalone {...props} /> : <MonthCalendarPanelView {...props} />;
 }

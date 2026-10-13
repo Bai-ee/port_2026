@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { ArrowDown, ArrowUp, EyeOff, Eye, Pencil, Plus, Check, X, MoreHorizontal } from 'lucide-react';
 import { SOURCE_KINDS, bucketIdFromName } from '../../../features/x-content-inventory/buckets.js';
-import Popover from './Popover.jsx';
+import Popover from '../content-ui/Popover.jsx';
 
 // BucketRail — the bucket list (a bucket is a SOURCE). Presentational: every
 // change is handed to the parent as an `onUpsert(bucket)` call.

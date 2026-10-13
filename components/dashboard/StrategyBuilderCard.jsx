@@ -148,7 +148,7 @@ export default function StrategyBuilderCard({ bootstrap, getIdToken, onOpenCard,
         >
           {plan.strategyDocVersion
             ? `Following Strategy v${plan.strategyDocVersion}`
-            : 'No confirmed strategy — open Content Center → Strategy'}
+            : 'No confirmed strategy — open Marketing Director → Strategy'}
         </div>
       )}
 

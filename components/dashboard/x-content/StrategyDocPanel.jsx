@@ -4,11 +4,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { MessagesSquare, Pencil, RotateCcw } from 'lucide-react';
 import { SECTION_MAX, describeDocChange } from '../../../features/x-strategy/strategy-doc.js';
 import { formatDayTime } from './StrategyChat.jsx';
-import { XCE_COLORS } from './xce-tokens';
-import Accordion from './ui/Accordion';
-import Badge from './ui/Badge';
-import Card from './ui/Card';
-import IconButton from './ui/IconButton';
+import { XCE_COLORS } from '../content-ui/xce-tokens';
+import Accordion from '../content-ui/ui/Accordion';
+import Badge from '../content-ui/ui/Badge';
+import Card from '../content-ui/ui/Card';
+import IconButton from '../content-ui/ui/IconButton';
 
 // StrategyDocPanel - the "Strategy" sub-tab of the Strategy tab's Details pane: the owner's Strategy document.
 // Read view per section, Edit -> textarea -> Save (version-checked), document history with Restore.

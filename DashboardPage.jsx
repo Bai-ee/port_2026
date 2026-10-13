@@ -73,8 +73,11 @@ import { buildBrandSnapshotDraft, draftToStyleGuide, colorInputValue } from './l
 import { sanitizeStylePreviewLabel, tiles, memoryNodes, WORK_NEEDED_LABEL, MOCKUP_STUDIO_VIEWPORTS, MOCKUP_STUDIO_BACKDROPS, MOCKUP_STUDIO_TEMPLATES, MOCKUP_STUDIO_ENVIRONMENTS, MOCKUP_STUDIO_CAMERA_PRESET_MAP, MOCKUP_STUDIO_OUTPUT_BY_DEVICE, CUSTOM_DETAIL_CARD_IDS, FULL_WIDTH_MODAL_CARD_IDS, CARD_ACTION_EDIT, BRIEF_TYPE_BY_CARD, BRIEF_CARD_PREVIEW_TYPES, BRIEF_CARD_PREVIEW_BUCKETS, DELIVERABLES_CARD_COPY, buildUnavailableDescription, buildWorkNeededRows } from './lib/dashboard/tile-config';
 import { readImpersonateClientId, writeImpersonateClientId, withImpersonation, fetchDashboardBootstrap, readPendingDashboardSignup, clearPendingDashboardSignup } from './lib/dashboard/bootstrap-session';
 import { _isModularOnlyRun, buildTerminalLog, buildTerminalLines } from './lib/dashboard/terminal-log';
-import { ONBOARDING_ENTRY_STEPS, ONBOARDING_CARD_IDS, UI_TEASER_VARIATIONS, NON_ADMIN_UNLOCKED_CARD_IDS, OVERLAY_FOR_ALL_CARD_IDS, NON_ADMIN_LOCKED_NAV_KEYS, isCapStepLocked, HIDE_INTAKE_CHAT, CAP_STEPS, CAP_BUCKET_COLOR, TIER_BRIEF_COOLDOWN_SECONDS, FREE_TIER_BRIEF_COOLDOWN_SECONDS } from './lib/dashboard/tier-access-config';
+import { ONBOARDING_ENTRY_STEPS, ONBOARDING_CARD_IDS, UI_TEASER_VARIATIONS, NON_ADMIN_UNLOCKED_CARD_IDS, OVERLAY_FOR_ALL_CARD_IDS, NON_ADMIN_LOCKED_NAV_KEYS, isCapStepLocked, HIDE_INTAKE_CHAT, CAP_STEPS, CAP_STEPS_ADMIN, CAP_BUCKET_COLOR, TIER_BRIEF_COOLDOWN_SECONDS, FREE_TIER_BRIEF_COOLDOWN_SECONDS } from './lib/dashboard/tier-access-config';
 import LazyVideoThumb from './components/dashboard/LazyVideoThumb';
+import MarketingRefreshControl from './components/dashboard/marketing/MarketingRefreshControl';
+import { markGroupRefreshed } from './components/dashboard/marketing/refresh-groups';
+import { GROUP_RUNNERS } from './components/dashboard/marketing/refresh-runners';
 import GlassTooltipLayer from './components/dashboard/GlassTooltipLayer';
 
 const LeadGenDashboard = dynamic(() => import('./components/dashboard/LeadGenDashboard'), {
@@ -136,6 +139,31 @@ const ArchiveInboxCard = dynamic(() => import('./components/dashboard/ArchiveInb
 });
 
 const XContentEngineCard = dynamic(() => import('./components/dashboard/XContentEngineCard'), {
+  loading: () => null,
+  ssr: false,
+});
+
+const StrategyTodayCard = dynamic(() => import('./components/dashboard/marketing/StrategyTodayCard'), {
+  loading: () => null,
+  ssr: false,
+});
+
+const StrategyQueueCalendarCard = dynamic(() => import('./components/dashboard/marketing/StrategyQueueCalendarCard'), {
+  loading: () => null,
+  ssr: false,
+});
+
+const StrategyDocumentCard = dynamic(() => import('./components/dashboard/marketing/StrategyDocumentCard'), {
+  loading: () => null,
+  ssr: false,
+});
+
+const StrategyResultsCard = dynamic(() => import('./components/dashboard/marketing/StrategyResultsCard'), {
+  loading: () => null,
+  ssr: false,
+});
+
+const StrategyPublishingSettingsCard = dynamic(() => import('./components/dashboard/marketing/StrategyPublishingSettingsCard'), {
   loading: () => null,
   ssr: false,
 });
@@ -1971,6 +1999,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   const [marketingBriefLoading, setMarketingBriefLoading] = useState(false);
   const [marketingBriefSaving, setMarketingBriefSaving] = useState(false);
   const [marketingBriefRunning, setMarketingBriefRunning] = useState(false);
+  // Unified Marketing Refresh (admin) — double-run guard + Compose deep-link view.
+  const [marketingRefreshRunning, setMarketingRefreshRunning] = useState(false);
+  const marketingRefreshRunningRef = useRef(false);
+  const [strategyQueueInitialView, setStrategyQueueInitialView] = useState('calendar');
+  useEffect(() => { if (activeTileModal?.cardId !== 'strategy-queue-calendar') setStrategyQueueInitialView('calendar'); }, [activeTileModal?.cardId]);
   const [marketingBriefError, setMarketingBriefError] = useState('');
   // Local weather — live forecast for the configured zip (Local Weather card).
   const [localWeather, setLocalWeather] = useState(null);
@@ -3552,8 +3585,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // Scout via runMarketingBrief — which drives the detailed live brief terminal
   // (each searched item streams in) — and afterward runs whatever Analysis Skills
   // are toggled ON over the fresh signals, landing on the REPORT tab.
-  const generateReport = useCallback(async () => {
-    if (!user || !marketingBriefConfig || marketingBriefRunning) return;
+  const generateReport = useCallback(async ({ embedded = false } = {}) => {
+    if (!user || !marketingBriefConfig || marketingBriefRunning) {
+      if (embedded) throw new Error('Report already running or not ready.');
+      return;
+    }
     const bf = clientBrainDefaults?.fields || {};
     const brainVals = (key) => {
       const w = bf[key];
@@ -3580,7 +3616,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     setIntakeModalDismissed(true); // let the adhoc terminal own the screen
     setMarketingBriefRunning(true);
     setMarketingBriefError('');
-    termStart('GENERATING REPORT', host, '[SAVE]', 'merging Client Brain terms + saving inputs…');
+    if (embedded) termPhaseOpen('[SAVE]', 'merging Client Brain terms + saving inputs…');
+    else termStart('GENERATING REPORT', host, '[SAVE]', 'merging Client Brain terms + saving inputs…');
 
     try {
       const token = await user.getIdToken();
@@ -3632,7 +3669,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       // Phase 3 — analysis skills over the fresh signals.
       if (!ids.length) {
         setModalTab('report');
-        termFinish('signals refreshed — enable an Analysis Skill for a synthesized report');
+        if (embedded) termPhaseClose([{ type: 'dim', prefix: '·', text: 'signals refreshed — no Analysis Skill enabled' }]);
+        else termFinish('signals refreshed — enable an Analysis Skill for a synthesized report');
         return;
       }
       termPhaseOpen('[ANALYZE]', `running ${ids.length} skill${ids.length === 1 ? '' : 's'}: ${ids.map(labelFor).join(' · ')}…`);
@@ -3650,16 +3688,74 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         text: `${labelFor(r.recipeId)}${r.ok ? ` · ${typeof r.costUsd === 'number' ? `$${r.costUsd.toFixed(3)}` : 'done'}` : ` · ${r.error || 'failed'}`}`,
       })));
       setModalTab('report'); // switch underneath so the terminal's auto-close reveals it
-      termFinish(`report ready · ${okCount}/${results.length} skill${results.length === 1 ? '' : 's'} synthesized`);
+      if (embedded) termPhaseClose([{ type: 'dim', prefix: '·', text: `report ready · ${okCount}/${results.length} skill${results.length === 1 ? '' : 's'} synthesized` }]);
+      else termFinish(`report ready · ${okCount}/${results.length} skill${results.length === 1 ? '' : 's'} synthesized`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Generate report failed.';
-      termFinish(msg, false);
+      if (!embedded) termFinish(msg, false);
       setMarketingBriefError(msg);
       setRecipeRun((prev) => ({ ...prev, loading: false, error: msg }));
+      if (embedded) throw err instanceof Error ? err : new Error(msg);
     } finally {
       setMarketingBriefRunning(false);
     }
   }, [user, marketingBriefConfig, marketingBriefRunning, clientBrainDefaults, saveMarketingBriefConfig, apiPath, doBootstrap, recipeCatalog, client, settleActiveLine, activeImpersonateId, applyBootstrapResponse]);
+
+  // Unified Marketing Refresh (admin, P4). ONE terminal, groups run sequentially in
+  // the order given; each group is non-fatal. Group 1 ('market-signals') reuses
+  // generateReport in embedded mode; the rest come from refresh-runners.
+  const MARKETING_REFRESH_LABELS = {
+    'market-signals': 'Market Signals report', 'x-search': 'X search', analysis: 'Analysis',
+    'strategy-accounts': 'Strategy accounts', 'today-queue': 'Today queue', 'x-monitor': 'X monitor', renders: 'Renders',
+  };
+  const runMarketingRefresh = useCallback(async ({ ids, todayWithModel } = {}) => {
+    if (!isAdmin || !user || marketingRefreshRunningRef.current || marketingBriefRunning) return;
+    const list = Array.isArray(ids) ? ids : [];
+    if (!list.length) return;
+    marketingRefreshRunningRef.current = true;
+    setMarketingRefreshRunning(true);
+    let host = ''; try { host = new URL(String(client?.websiteUrl || client?.website || '')).hostname.replace(/^www\./, ''); } catch { /* none */ }
+    const clientId = client?.clientId || client?.id || bootstrap?.effectiveClientId;
+    const appendDim = (text) => setAdhocTerminal((t) => (t ? { ...t, lines: [...t.lines, { type: 'dim', prefix: '·', text: String(text) }] } : t));
+    let okCount = 0; let failCount = 0;
+    try {
+      termStart('MARKETING REFRESH', host, '[START]', `refreshing ${list.length} group${list.length === 1 ? '' : 's'}…`);
+      termPhaseClose();
+      for (let i = 0; i < list.length; i += 1) {
+        const id = list[i];
+        const label = MARKETING_REFRESH_LABELS[id] || id;
+        termPhaseOpen(`[GROUP ${i + 1}]`, label);
+        try {
+          let detail = [];
+          if (id === 'market-signals') {
+            await generateReport({ embedded: true }); // opens/closes its own nested phases
+          } else {
+            const runner = GROUP_RUNNERS[id];
+            if (!runner) throw new Error('No runner for this group.');
+            const out = await runner({ getIdToken: brandSystemGetIdToken, clientId, options: { todayWithModel: !!todayWithModel }, note: appendDim, apiPath });
+            detail = Array.isArray(out?.detail) ? out.detail : [];
+          }
+          if (id !== 'market-signals') termPhaseClose(detail);
+          else termPhaseClose();
+          markGroupRefreshed(id);
+          okCount += 1;
+        } catch (err) {
+          failCount += 1;
+          setAdhocTerminal((t) => {
+            if (!t) return t;
+            const lines = t.lines.slice();
+            while (lines.some((l) => l.cursor)) settleActiveLine(lines, 'error', '✗'); // settle nested + group lines
+            lines.push({ type: 'error', prefix: '[ERR]', text: `${label}: ${err instanceof Error ? err.message : 'failed'}` });
+            return { ...t, lines };
+          });
+        }
+      }
+      termFinish(`done · ${okCount} ok · ${failCount} failed`, failCount === 0);
+    } finally {
+      marketingRefreshRunningRef.current = false;
+      setMarketingRefreshRunning(false);
+    }
+  }, [isAdmin, user, marketingBriefRunning, client, bootstrap?.effectiveClientId, generateReport, brandSystemGetIdToken, settleActiveLine, apiPath]);
 
   // Fast path: re-run the enabled Analysis Skills over the already-stored signals
   // (no new ~3-min search). Use when the signals are fresh but the REPORT didn't
@@ -3879,7 +3975,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             <button type="button" className={`sg-btn ${selected ? 'sg-btn-on' : 'sg-btn-off'}`} style={{ minWidth: 52 }} onClick={() => toggleMarketingBriefSourcePlatform(key)}>{selected ? 'ON' : 'OFF'}</button>
             {selected ? (
               <>
-                <button type="button" className="sg-btn sg-btn-outline" disabled={test?.loading} onClick={() => runScoutTestForPlatform(key)}>{test?.loading ? 'Running…' : 'Run'}</button>
+                {!isAdmin && <button type="button" className="sg-btn sg-btn-outline" disabled={test?.loading} onClick={() => runScoutTestForPlatform(key)}>{test?.loading ? 'Running…' : 'Run'}</button>}
                 {test && !test.loading ? (
                   <button type="button" className="sg-btn" aria-label={`${expanded ? 'Collapse' : 'Expand'} ${label} results`} onClick={() => setScoutTestExpanded((s) => ({ ...s, [key]: !s[key] }))}>{expanded ? '▲' : '▼'}</button>
                 ) : null}
@@ -3972,23 +4068,27 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             <span className="sg-index">▶</span>
             <div>
               <h3>Generate Report</h3>
-              <p>Runs a fresh search on your inputs{brainSuggestions.length ? ' (Client Brain terms included automatically)' : ''}, analyzes it with your enabled Analysis Skills, and shows the result in the REPORT tab.</p>
+              <p>{isAdmin ? 'Run from the Refresh button in the Marketing Director header (group 1, Market signals).' : `Runs a fresh search on your inputs${brainSuggestions.length ? ' (Client Brain terms included automatically)' : ''}, analyzes it with your enabled Analysis Skills, and shows the result in the REPORT tab.`}</p>
             </div>
+            {!isAdmin && (
             <button type="button" className="sg-btn sg-cta" id="signals-generate-report-btn" disabled={generating} onClick={generateReport}>
               <span>{marketingBriefRunning ? 'Searching…' : recipeRun.loading ? 'Analyzing…' : 'Generate Report'}</span>
             </button>
+            )}
           </div>
           {enabledSkillCount === 0 ? (
             <p className="sg-notice" style={{ margin: 0 }}>No Analysis Skills are ON — the report will refresh signals but show no analysis. Turn one on in “04 · Analysis Skills” below.</p>
           ) : (
             <p className="sg-hint" style={{ margin: 0 }}>{enabledSkillCount} analysis skill{enabledSkillCount === 1 ? '' : 's'} enabled · Generate runs a fresh Scout (~$0.10) then analyzes.</p>
           )}
+          {!isAdmin && (
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginTop: 8 }}>
             <button type="button" className="sg-btn sg-btn-outline" id="signals-update-report-btn" disabled={generating} onClick={updateReportFromSignals}>
               {recipeRun.loading ? 'Analyzing…' : 'Update report only (no new search)'}
             </button>
             <span className="sg-hint" style={{ margin: 0 }}>Re-analyzes the latest stored signals (~50s, ~$0.05) — use when signals are fresh but the report didn’t render.</span>
           </div>
+          )}
         </section>
 
         {brainSuggestions.length ? (
@@ -4023,7 +4123,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             <span className="sg-index">01</span>
             <div>
               <h3>Search Sources</h3>
-              <p>Toggle a source on, then Run to spot-check what it returns. Diagnostic only — Generate Report above runs the full search.</p>
+              <p>{isAdmin
+                ? 'Toggle a source on or off. The Refresh button in the Marketing Director header (group 1, Market signals) runs the search.'
+                : 'Toggle a source on, then Run to spot-check what it returns. Diagnostic only — Generate Report above runs the full search.'}</p>
             </div>
           </div>
           <div style={{ display: 'grid', gap: 10 }}>
@@ -4076,7 +4178,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             <div className="sg-list-head">
               <span className="sg-list-title">Watchlist Timelines · X</span>
               <span className="sg-chip">{(watchlistPull.handles || []).filter((h) => h.count > 0).length}/{(watchlistPull.handles || []).length || splitMarketingBriefTerms(marketingBriefConfig?.kols).filter((h) => h.replace(/^@+/, '').length >= 2).length} live</span>
-              <button type="button" className="sg-btn sg-btn-outline" disabled={watchlistPull.loading || (!wd.tweets && !wd.mentions)} onClick={runWatchlistPullNow}>{watchlistPull.loading ? 'Pulling…' : 'Pull timelines'}</button>
+              {!isAdmin && <button type="button" className="sg-btn sg-btn-outline" disabled={watchlistPull.loading || (!wd.tweets && !wd.mentions)} onClick={runWatchlistPullNow}>{watchlistPull.loading ? 'Pulling…' : 'Pull timelines'}</button>}
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', margin: '8px 0 2px' }} id="watchlist-detail-toggles">
               <button type="button" className={`sg-btn ${wd.tweets ? 'sg-btn-on' : 'sg-btn-off'}`} style={{ minWidth: 70 }} onClick={() => toggleDetail('tweets')}>Tweets</button>
@@ -4305,9 +4407,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               </div>
 
               <div className="mu-footer" id="opportunity-signals-footer">
+                {!isAdmin && (
                 <button type="button" className="sg-btn" onClick={runOpportunitySignalsRefresh} disabled={opportunitySignalsRefresh.loading}>
                   {opportunitySignalsRefresh.loading ? 'Refreshing…' : 'Refresh Now'}
                 </button>
+                )}
                 <button type="button" className="mu-cta-primary" style={{ width: 'auto', minWidth: 100 }} onClick={() => saveMarketingBriefConfig({ acknowledge: 'opportunity-signals' })} disabled={marketingBriefSaving}>
                   <span>{marketingBriefSaving ? 'Saving…' : 'Save'}</span>
                 </button>
@@ -6865,6 +6969,25 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     || resolvedDraftPost
     || '';
   const hasSocialGeneratedDraft = Boolean(socialGeneratedDraft);
+  // Open another capability card's modal by id (shared by Strategy Builder + Marketing Director strategy cards).
+  const openCapabilityCardById = (cardId) => {
+    const c = intakeCapabilityCards.find((x) => x.id === cardId);
+    if (!c) return;
+    setActiveTileModal({
+      title: c.title,
+      description: c.description,
+      rows: c.rows,
+      cardId: c.id,
+      placeholderLabel: c.placeholderLabel,
+      number: c.number,
+      label: c.label,
+      isCapabilityCard: true,
+      vizType: null,
+      recommendation: c.recommendation || null,
+      analyzer: c.analyzer || null,
+      readinessBadge: c.readinessBadge || null,
+    });
+  };
   const hasContentAngleData = Boolean(resolvedContentAngle);
   const hasOpportunitiesData = resolvedOpportunities.length > 0;
   const hasSeoAuditData = Boolean((seoAudit?.status === 'ok' || seoAudit?.status === 'partial') && seoAudit?.scores);
@@ -9388,7 +9511,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     // ── SOCIAL MEDIA MANAGER ────────────────────────────────────────────────
     {
       id: 'copywriter',
-      category: 'social',
+      category: isAdmin ? 'growth' : 'social',
       number: 'CW',
       label: 'DRAFT',
       title: 'Copywriter',
@@ -9502,7 +9625,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       // Content Center lives with the rest of the knowledge (Brain, library, strategy); still listed in Social for the
       // source → plan → publish flow.
       category: 'knowledge',
-      extraCategories: ['social'],
       number: 'XE',
       label: 'CONTENT',
       title: 'Content Center',
@@ -9516,6 +9638,86 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         { key: 'xe-cost', label: 'Cost', value: 'Free \u2014 no model calls from this card' },
       ],
       footerLeft: 'Inventory',
+      footerRight: 'ADMIN',
+    }] : []),
+
+    ...(isAdmin ? [{
+      id: 'strategy-today',
+      category: 'growth',
+      number: 'ST',
+      label: 'TODAY',
+      title: 'Today',
+      description: 'What to post today, matched from your own catalogue and the daily plan.',
+      placeholderLabel: 'TODAY',
+      rows: [
+        { key: 'strategy-today-r0', label: 'Includes', value: 'Today\u2019s slots with content matched in' },
+        { key: 'strategy-today-r1', label: 'Also', value: 'Why each piece was chosen' },
+      ],
+      footerLeft: 'Strategy',
+      footerRight: 'ADMIN',
+    }] : []),
+
+    ...(isAdmin ? [{
+      id: 'strategy-queue-calendar',
+      category: 'growth',
+      number: 'SQ',
+      label: 'QUEUE & CALENDAR',
+      title: 'Queue & Calendar',
+      description: 'The scheduled queue and posting calendar for the coming days.',
+      placeholderLabel: 'QUEUE & CALENDAR',
+      rows: [
+        { key: 'strategy-queue-calendar-r0', label: 'Includes', value: 'Queued and scheduled posts' },
+        { key: 'strategy-queue-calendar-r1', label: 'Also', value: 'Calendar view of the plan' },
+      ],
+      footerLeft: 'Strategy',
+      footerRight: 'ADMIN',
+    }] : []),
+
+    ...(isAdmin ? [{
+      id: 'strategy-document',
+      category: 'growth',
+      number: 'SD',
+      label: 'STRATEGY',
+      title: 'Strategy',
+      description: 'The strategy document that drives the content plan.',
+      placeholderLabel: 'STRATEGY',
+      rows: [
+        { key: 'strategy-document-r0', label: 'Includes', value: 'Current strategy document' },
+        { key: 'strategy-document-r1', label: 'Also', value: 'Edit and review the plan' },
+      ],
+      footerLeft: 'Strategy',
+      footerRight: 'ADMIN',
+    }] : []),
+
+    ...(isAdmin ? [{
+      id: 'strategy-results',
+      category: 'growth',
+      number: 'SR',
+      label: 'RESULTS',
+      title: 'Results',
+      description: 'How published posts performed.',
+      placeholderLabel: 'RESULTS',
+      rows: [
+        { key: 'strategy-results-r0', label: 'Includes', value: 'Post performance' },
+        { key: 'strategy-results-r1', label: 'Also', value: 'What worked and what did not' },
+      ],
+      footerLeft: 'Strategy',
+      footerRight: 'ADMIN',
+    }] : []),
+
+    ...(isAdmin ? [{
+      id: 'strategy-publishing-settings',
+      category: 'growth',
+      number: 'SP',
+      label: 'PUBLISHING SETTINGS',
+      title: 'Publishing settings',
+      description: 'Publishing and delivery settings for the content system.',
+      placeholderLabel: 'PUBLISHING SETTINGS',
+      rows: [
+        { key: 'strategy-publishing-settings-r0', label: 'Includes', value: 'Publishing connections' },
+        { key: 'strategy-publishing-settings-r1', label: 'Also', value: 'Delivery settings' },
+      ],
+      footerLeft: 'Strategy',
       footerRight: 'ADMIN',
     }] : []),
 
@@ -11164,6 +11366,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     if (!ONBOARDING_CARD_IDS.has(card.id)) return false;
                     return true;
                   }
+                  // Admin Marketing Director: Today / Strategy cards replace the legacy strategy pair.
+                  if (isAdmin && activeCapabilityFilter === 'growth' && (card.id === 'priority-signal' || card.id === 'strategy-30')) return false;
+                  // Admin: legacy social cards are superseded by the Marketing Director strategy cards (all buckets).
+                  if (isAdmin && (card.id === 'x-calendar' || card.id === 'x-monitor' || card.id === 'social-media-posting')) return false;
                   // A card shows in its own category, plus any bucket listed in
                   // extraCategories (cross-listing — e.g. Executive Brief
                   // appears in both Daily Briefs and Marketing Director).
@@ -11231,8 +11437,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       'signals', 'competitor-info', 'local-signals',
                       // WHAT'S OUR STRATEGY — Day-of Post on top, editable 30-day plan
                       // under it; Custom Post Strategy + Newsletter locked at the bottom.
-                      'priority-signal', 'strategy-30', 'brief',
-                      'strategy-builder', 'newsletter',
+                      ...(isAdmin
+                        ? ['strategy-today', 'strategy-queue-calendar', 'strategy-document', 'brief', 'strategy-builder', 'copywriter', 'strategy-results', 'strategy-publishing-settings', 'newsletter']
+                        : ['priority-signal', 'strategy-30', 'brief', 'strategy-builder', 'newsletter']),
                     ];
                     const ai = order.indexOf(a.id); const bi = order.indexOf(b.id);
                     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
@@ -12123,7 +12330,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               );
             };
 
-            const _bucketSteps = CAP_STEPS[activeCapabilityFilter] || null;
+            const _bucketSteps = (isAdmin ? CAP_STEPS_ADMIN[activeCapabilityFilter] : null) || CAP_STEPS[activeCapabilityFilter] || null;
             let _groups;
             if (activeCapabilityFilter === 'knowledge' && _bucketSteps) {
               // Knowledge Officer is a 3-tab system:
@@ -12210,6 +12417,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               const _visibleGroups = _forceList ? [_groups[activeStepIdx]].filter(Boolean) : _groups;
               return (
                 <React.Fragment>
+                  {isAdmin && activeCapabilityFilter === 'growth' && (
+                    <div id="marketing-director-refresh-shell" style={{ margin: '0 0 8px', maxWidth: '100%' }}>
+                      <MarketingRefreshControl running={marketingRefreshRunning || marketingBriefRunning} onRun={runMarketingRefresh} />
+                    </div>
+                  )}
                   <div className={`segmented cap-step-seg cap-step-seg--top${_forceList ? ' cap-step-seg--tabs' : ''}`} role="tablist" aria-label="Workflow steps" data-tooltip-disabled="true">
                     {_bucketSteps.map((s, i) => {
                       const _stepLocked = isCapStepLocked(activeCapabilityFilter, i, isAdmin);
@@ -16125,6 +16337,103 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   </div>
                 )}
 
+                {/* Today — Marketing Director strategy surface */}
+                {activeTileModal.cardId === 'strategy-today' && (
+                  <div id="strategy-today-modal-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
+                    <div className="tile-detail-tabs">
+                      <button type="button" className="tile-detail-tab tile-detail-tab--active">TODAY</button>
+                    </div>
+                    <div className="tile-detail-tab-content">
+                      <div className="tile-detail-tab-pane">
+                        <StrategyTodayCard
+                          getIdToken={brandSystemGetIdToken}
+                          activeClientId={client?.clientId || client?.id || bootstrap?.effectiveClientId}
+                          clientName={client?.companyName || client?.name || client?.dashboardTitle || null}
+                          onOpenCard={openCapabilityCardById}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Queue & Calendar — Marketing Director strategy surface */}
+                {activeTileModal.cardId === 'strategy-queue-calendar' && (
+                  <div id="strategy-queue-calendar-modal-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
+                    <div className="tile-detail-tabs">
+                      <button type="button" className="tile-detail-tab tile-detail-tab--active">QUEUE & CALENDAR</button>
+                    </div>
+                    <div className="tile-detail-tab-content">
+                      <div className="tile-detail-tab-pane">
+                        <StrategyQueueCalendarCard
+                          getIdToken={brandSystemGetIdToken}
+                          activeClientId={client?.clientId || client?.id || bootstrap?.effectiveClientId}
+                          clientName={client?.companyName || client?.name || client?.dashboardTitle || null}
+                          onOpenCard={openCapabilityCardById}
+                          initialView={strategyQueueInitialView}
+                          socialPanelProps={{ sourceDraft: socialGeneratedDraft, sourceLabel: hasSocialGeneratedDraft ? 'creative-builder' : 'manual', strategyPostPool }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Strategy — Marketing Director strategy surface */}
+                {activeTileModal.cardId === 'strategy-document' && (
+                  <div id="strategy-document-modal-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
+                    <div className="tile-detail-tabs">
+                      <button type="button" className="tile-detail-tab tile-detail-tab--active">STRATEGY</button>
+                    </div>
+                    <div className="tile-detail-tab-content">
+                      <div className="tile-detail-tab-pane">
+                        <StrategyDocumentCard
+                          getIdToken={brandSystemGetIdToken}
+                          activeClientId={client?.clientId || client?.id || bootstrap?.effectiveClientId}
+                          clientName={client?.companyName || client?.name || client?.dashboardTitle || null}
+                          onOpenCard={openCapabilityCardById}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Results — Marketing Director strategy surface */}
+                {activeTileModal.cardId === 'strategy-results' && (
+                  <div id="strategy-results-modal-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
+                    <div className="tile-detail-tabs">
+                      <button type="button" className="tile-detail-tab tile-detail-tab--active">RESULTS</button>
+                    </div>
+                    <div className="tile-detail-tab-content">
+                      <div className="tile-detail-tab-pane">
+                        <StrategyResultsCard
+                          getIdToken={brandSystemGetIdToken}
+                          activeClientId={client?.clientId || client?.id || bootstrap?.effectiveClientId}
+                          clientName={client?.companyName || client?.name || client?.dashboardTitle || null}
+                          onOpenCard={openCapabilityCardById}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Publishing settings — Marketing Director strategy surface */}
+                {activeTileModal.cardId === 'strategy-publishing-settings' && (
+                  <div id="strategy-publishing-settings-modal-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
+                    <div className="tile-detail-tabs">
+                      <button type="button" className="tile-detail-tab tile-detail-tab--active">PUBLISHING SETTINGS</button>
+                    </div>
+                    <div className="tile-detail-tab-content">
+                      <div className="tile-detail-tab-pane">
+                        <StrategyPublishingSettingsCard
+                          getIdToken={brandSystemGetIdToken}
+                          activeClientId={client?.clientId || client?.id || bootstrap?.effectiveClientId}
+                          clientName={client?.companyName || client?.name || client?.dashboardTitle || null}
+                          onOpenCard={openCapabilityCardById}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Social Media Posting card — X composer + queue */}
                 {activeTileModal.cardId === 'social-media-posting' && (
                   <div id="social-posting-modal-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
@@ -16150,25 +16459,13 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     <StrategyBuilderCard
                       bootstrap={bootstrap}
                       getIdToken={brandSystemGetIdToken}
-                      onOpenCard={(cardId) => {
-                        const c = intakeCapabilityCards.find((x) => x.id === cardId);
-                        if (!c) return;
-                        setActiveTileModal({
-                          title: c.title,
-                          description: c.description,
-                          rows: c.rows,
-                          cardId: c.id,
-                          placeholderLabel: c.placeholderLabel,
-                          number: c.number,
-                          label: c.label,
-                          isCapabilityCard: true,
-                          vizType: null,
-                          recommendation: c.recommendation || null,
-                          analyzer: c.analyzer || null,
-                          readinessBadge: c.readinessBadge || null,
-                        });
-                      }}
+                      onOpenCard={openCapabilityCardById}
                       onOpenSocialPosting={() => {
+                        if (isAdmin) {
+                          setStrategyQueueInitialView('compose');
+                          openCapabilityCardById('strategy-queue-calendar');
+                          return;
+                        }
                         setActiveTileModal({
                           title: 'Social Media Posting',
                           description: 'Write, polish, schedule, and publish X/Twitter posts after checking the brand voice.',

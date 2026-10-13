@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
-import { Skeleton, RetryError } from './Feedback.jsx';
+import { Skeleton, RetryError } from '../content-ui/Feedback.jsx';
 
 import { mergeBuckets, resolveBucket } from '../../../features/x-content-inventory/buckets.js';
 import { itemsInFolder, folderCounts, suggestFolders } from '../../../features/x-content-inventory/folders.js';

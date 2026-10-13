@@ -1,5 +1,6 @@
 'use client';
 
+import { useCalendarActions, standaloneCallSocial } from './standalone.js';
 import React, { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { classifyResult, ctDate, ctTime, ctWallToMs } from '../../../features/x-content-inventory/month-calendar.js';
@@ -43,7 +44,7 @@ function whenToIso({ date, time }) {
   return new Date(ctWallToMs(date, h * 60 + m)).toISOString();
 }
 
-export default function PostSheet({ post, busy, queue, onNavigate, onClose, onApprove, onReject, onSave, onUnschedule, onScore, onReconcile, onRefresh }) {
+function PostSheetView({ post, busy, queue, onNavigate, onClose, onApprove, onReject, onSave, onUnschedule, onScore, onReconcile, onRefresh }) {
   const [content, setContent] = useState(post.content || '');
   const [when, setWhen] = useState(() => initialWhen(post));
   const [score, setScore] = useState(null);
@@ -348,5 +349,27 @@ export default function PostSheet({ post, busy, queue, onNavigate, onClose, onAp
         ) : null}
       </section>
     </div>
+  );
+}
+
+// Content Center (via MonthCalendarPanel) passes `queue` and all handlers. Standalone: <PostSheet post onClose? call? clientId? onNavigate? />
+// uses the social-posting actions directly; no queue navigation; onClose defaults to a no-op.
+export default function PostSheet(props) {
+  const actions = useCalendarActions(standaloneCallSocial);
+  if (props.queue !== undefined) return <PostSheetView {...props} />;
+  return (
+    <PostSheetView
+      busy={actions.busyId === props.post?.id}
+      onClose={() => {}}
+      onApprove={actions.onApprove}
+      onReject={actions.onReject}
+      onSave={actions.onSave}
+      onUnschedule={actions.onUnschedule}
+      onScore={actions.onScore}
+      onReconcile={actions.onReconcile}
+      {...props}
+      queue={[]}
+      onNavigate={() => {}}
+    />
   );
 }
