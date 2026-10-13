@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 import { randomUUID } from 'crypto';
-import { createSocialPost, readSocialQueue, getSocialPost, createDraftPostOnce, ensureDraftPost, findOpenPostForPackage } from '../../../../features/social-posting/twitter-service.js';
+import { createSocialPost, readSocialQueue, getSocialPost, createDraftPostOnce, ensureDraftPost, findOpenPostForPackage, updateSocialPost, runPostingAgents } from '../../../../features/social-posting/twitter-service.js';
 import { buildDayPlan } from '../../../../features/x-quote-targets/day-plan.js';
 // Static import so Next bundles the calendar — docs/audits/ is NOT in
 // .vercelignore, but a runtime fs read of a repo path is fragile on serverless.
@@ -404,7 +404,7 @@ const excerptOf = (t, n = 160) => String(t ?? '').replace(/\s+/g, ' ').trim().sl
 
 const postStatusRow = (p) => ({
   id: p.id, status: p.status, scheduledAt: p.scheduledAt || null, postedAt: p.postedAt || null,
-  reviewedAt: p.reviewedAt || null, content: p.content, packageId: p.packageId || null,
+  reviewedAt: p.reviewedAt || null, content: p.content, packageId: p.packageId || null, source: p.source || null, updatedAt: p.updatedAt || null,
   errorClass: p.errorClass || null, error: p.error || null, replyTo: !!p.replyTo, revision: p.revision || 0,
   lifecycleVersion: p.lifecycleVersion || null,
   provenance: { runId: p.runId || null, suggestionId: p.suggestionId || null, strategyVersion: p.strategyVersion ?? null, sourceRef: p.sourceRef || null },
@@ -429,8 +429,9 @@ async function readQueueSummary(clientId) {
   for (const p of posts) counts[p.status] = (counts[p.status] || 0) + 1;
   return {
     counts,
-    posts: posts.slice(0, 20).map((p) => ({
-      id: p.id, status: p.status, scheduledAt: p.scheduledAt || null, excerpt: excerptOf(p.content), packageId: p.packageId || null, errorClass: p.errorClass || null,
+    // Newest 200 across EVERY source; the tool filters by status/source and caps what the model sees at 20.
+    posts: posts.slice(0, 200).map((p) => ({
+      id: p.id, status: p.status, scheduledAt: p.scheduledAt || null, source: p.source || null, excerpt: excerptOf(p.content), packageId: p.packageId || null, errorClass: p.errorClass || null,
     })),
   };
 }
@@ -438,6 +439,25 @@ async function readQueueSummary(clientId) {
 async function readPostForChat(clientId, postId) {
   const p = await getSocialPost(clientId, postId);
   return p ? postStatusRow(p) : null;
+}
+
+// Latest Market Signals report (the canonical brief projection). Read-only Firestore read; null when none exists.
+async function readMarketSignals(clientId) {
+  const snap = await fb.adminDb.collection('dashboard_state').doc(clientId).get();
+  if (!snap.exists) return null;
+  const state = snap.data();
+  const { projectBrief } = require('../../../../features/intelligence/_brief-intel.js');
+  return projectBrief(state?.marketingBrief, state);
+}
+
+// Chat/MCP post edit: the SAME update path the Queue tab uses (social-posting `update` -> updateSocialPost), with a
+// fresh posting-agents score like that route does. Text/time only; approval stays with the owner's buttons.
+async function editQueuedPost({ clientId, postId, content, scheduledAt, expectedRevision }) {
+  const existing = await getSocialPost(clientId, postId);
+  const text = content != null ? content : existing?.content;
+  const payload = { ...(content != null ? { content } : {}), ...(scheduledAt !== undefined ? { scheduledAt } : {}) };
+  const { agents } = runPostingAgents(text, { source: existing?.source || 'copywriter', ...(existing?.replyTo ? { replyTo: existing.replyTo } : {}) });
+  return updateSocialPost(clientId, postId, { ...payload, agents }, { expectedRevision });
 }
 
 async function readOpportunities(clientId) {
@@ -824,6 +844,8 @@ function getStrategyHandlers() {
       readPost: readPostForChat,
       readOpportunities,
       readResults: readResultsForChat,
+      readMarketSignals,
+      editPost: editQueuedPost,
     });
   }
   return strategyHandlers;

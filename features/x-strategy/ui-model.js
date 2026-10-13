@@ -380,6 +380,7 @@ const PROPOSAL_KIND_LABELS = Object.freeze({
   'regenerate-today': "Regenerate today's suggestions",
   'refresh-handles': 'Refresh account data',
   'strategy-doc-edit': 'Edit the strategy',
+  'post-edit': 'Edit a queued post',
 });
 
 /** Plain-words label for a proposal kind. Unknown kinds fall back to a readable form, never throw. */
@@ -421,6 +422,11 @@ export function proposalPayloadPreview(kind, payload, currentPlan) {
     }
     case 'refresh-handles': return [`Pull fresh posts for: ${atHandles(p.handles)}`];
     case 'strategy-doc-edit': return [`Section: ${sectionTitle(p.section)}`, `New text:\n${showVal(p.text)}`];
+    case 'post-edit': return [
+      ...(p.text !== undefined ? [`Current text: ${showVal(p.currentText)}`, `New text: ${showVal(p.text)}`] : []),
+      ...(p.scheduledAt !== undefined ? [`Time: ${showVal(p.currentScheduledAt)} → ${showVal(p.scheduledAt)}`] : []),
+      'Edit only: this does not approve, schedule or publish.',
+    ];
     case 'regenerate-today': return [`Model drafting: ${p.useModel === true ? 'on' : 'off'}`, ...(p.force === true ? ['Replaces the existing run.'] : [])];
     default: return [];
   }
@@ -436,6 +442,7 @@ const RESULT_LINES = {
   'item-story': () => 'Story saved.',
   'refresh-handles': () => 'Refresh started.',
   'strategy-doc-edit': (r) => (r?.version ? `Strategy updated to v${r.version}.` : 'Strategy updated.'),
+  'post-edit': (r) => (r?.status ? `Post updated. It is now ${r.status}${r.scheduledAt ? ` for ${r.scheduledAt}` : ''} \u2014 check the Queue tab.` : 'Post updated \u2014 check the Queue tab.'),
 };
 
 /**

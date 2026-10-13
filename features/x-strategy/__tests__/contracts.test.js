@@ -46,8 +46,8 @@ test('slot types come from slots.js and include the default floors', () => {
 });
 
 test('proposal kinds, statuses, actions, collections', () => {
-  assert.equal(C.PROPOSAL_KINDS.length, 9);
-  assert.equal(new Set(C.PROPOSAL_KINDS).size, 9);
+  assert.equal(C.PROPOSAL_KINDS.length, 10);
+  assert.equal(new Set(C.PROPOSAL_KINDS).size, 10);
   assert.deepEqual(Object.keys(C.PROPOSAL_KIND_ACTIONS).sort(), [...C.PROPOSAL_KINDS].sort());
   assert.deepEqual([...C.PROPOSAL_STATUSES], ['pending', 'deciding', 'confirmed', 'rejected', 'failed']);
   assert.equal(C.ROUTE_ACTIONS.length, 14);

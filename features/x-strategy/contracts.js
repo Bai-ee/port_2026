@@ -82,6 +82,7 @@ export const PROPOSAL_KINDS = Object.freeze([
   'regenerate-today',
   'refresh-handles',
   'strategy-doc-edit',
+  'post-edit',
 ]);
 
 /**
@@ -99,6 +100,7 @@ export const PROPOSAL_KIND_ACTIONS = Object.freeze({
   'regenerate-today': 'daily-run-generate',
   'refresh-handles': 'strategy-refresh',
   'strategy-doc-edit': 'strategy-doc-save',
+  'post-edit': 'update', // social-posting `update` (updateSocialPost); not a strategy ROUTE_ACTION
 });
 
 export const PROPOSAL_STATUSES = Object.freeze(['pending', 'deciding', 'confirmed', 'rejected', 'failed']);

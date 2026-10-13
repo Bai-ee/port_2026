@@ -15,6 +15,8 @@ export const RATIONALE_MAX = 800;
 export const STORY_MAX = 1000;
 export const TEXT_MAX = 1000;
 export const MAX_EVIDENCE = 8;
+export const POST_TEXT_MAX = 280; // X limit; matches updateSocialPost
+export const EDITABLE_POST_STATUSES = Object.freeze(['draft', 'approved', 'scheduled']);
 const RESULT_MAX_CHARS = 4000;
 const ID_RE = /^[A-Za-z0-9_.:-]{1,128}$/;
 
@@ -146,6 +148,32 @@ export function validateProposal(raw, { currentPlan } = {}) {
       norm = { section, text: typeof payload.text === 'string' ? payload.text.trim() : '', expectedVersion: payload.expectedVersion };
       break;
     }
+    case 'post-edit': {
+      const postId = idField(payload, 'postId', errors);
+      const hasText = payload.text !== undefined;
+      const hasTime = payload.scheduledAt !== undefined;
+      if (!hasText && !hasTime) errors.push('provide text and/or scheduledAt');
+      norm = { postId };
+      if (hasText) {
+        const text = typeof payload.text === 'string' ? payload.text.trim() : '';
+        if (!text) errors.push('text must be a non-empty string');
+        else if (text.length > POST_TEXT_MAX) errors.push(`text must be at most ${POST_TEXT_MAX} characters`);
+        norm.text = text;
+      }
+      if (hasTime) {
+        const ms = typeof payload.scheduledAt === 'string' ? Date.parse(payload.scheduledAt) : NaN;
+        if (Number.isNaN(ms)) errors.push('scheduledAt must be an ISO time');
+        else norm.scheduledAt = new Date(ms).toISOString();
+      }
+      const stamp = typeof payload.expectedUpdatedAt === 'string' ? payload.expectedUpdatedAt.trim() : '';
+      if (!stamp) errors.push('expectedUpdatedAt is required (the post updatedAt from get_post)');
+      norm.expectedUpdatedAt = stamp;
+      // Display-only snapshot for the card (current vs new); never used by the executor.
+      if (typeof payload.currentText === 'string') norm.currentText = payload.currentText.slice(0, POST_TEXT_MAX * 2);
+      if (typeof payload.currentScheduledAt === 'string') norm.currentScheduledAt = payload.currentScheduledAt.slice(0, 40);
+      if (typeof payload.currentStatus === 'string') norm.currentStatus = payload.currentStatus.slice(0, 20);
+      break;
+    }
     default: break;
   }
   if (errors.length) return { ok: false, errors };
@@ -189,8 +217,10 @@ export function compactResult(res) {
  * @param {(args:{clientId:string, handles:string[], context:object, auth:object})=>Promise<object>} [deps.refreshHandles]
  * @param {{get:Function,apply:Function}} [deps.docStore]  strategy-doc-store.js
  * @param {object} [deps.docBase]  sections to start from when no doc is saved yet (the seed draft)
+ * @param {(clientId:string, postId:string)=>Promise<object|null>} [deps.readPost]  client-scoped read of the raw post (post-edit)
+ * @param {(a:{clientId:string, postId:string, content?:string, scheduledAt?:string})=>Promise<object>} [deps.editPost]  the existing update path (updateSocialPost)
  */
-export function buildExecutors({ planStore, runDailyAction, runUpdateItemFacets, saveXGrowthProfile, refreshHandles, docStore, docBase, clock = Date.now }) {
+export function buildExecutors({ planStore, runDailyAction, runUpdateItemFacets, saveXGrowthProfile, refreshHandles, docStore, docBase, readPost, editPost, clock = Date.now }) {
   const need = (fn, name) => { if (typeof fn !== 'function') throw new ProposalExecutionError(`${name} is not available on this deployment`); return fn; };
   const daily = (action, body) => async ({ context }) => {
     const res = await need(runDailyAction, 'daily-run actions')(context, action, body);
@@ -253,6 +283,30 @@ export function buildExecutors({ planStore, runDailyAction, runUpdateItemFacets,
         }
         throw err;
       }
+    },
+    // Edits ONE queued post through the existing update path. Re-reads and re-checks everything at confirm time.
+    // Never approves, schedules from nothing, or publishes: a scheduled post stays scheduled (at the new time),
+    // and updateSocialPost itself decides what an edit does to approval (it can void it back to draft).
+    async 'post-edit'({ clientId, payload }) {
+      const read = need(readPost, 'post read');
+      const edit = need(editPost, 'post edit');
+      const post = await read(clientId, payload.postId);
+      if (!post || (post.clientId && post.clientId !== clientId)) throw new ProposalExecutionError('post not found for this client', { error: 'not-found' });
+      if (!EDITABLE_POST_STATUSES.includes(post.status)) throw new ProposalExecutionError(`post is ${post.status} and can no longer be edited from chat`, { error: 'not-editable', status: post.status });
+      if ((post.updatedAt || '') !== payload.expectedUpdatedAt) throw new ProposalExecutionError('post changed since this was proposed', { error: 'stale', currentUpdatedAt: post.updatedAt || null });
+      const body = { clientId, postId: payload.postId, ...(Number.isInteger(post.revision) ? { expectedRevision: post.revision } : {}) };
+      if (payload.text !== undefined) body.content = payload.text;
+      if (payload.scheduledAt !== undefined) {
+        if (post.status !== 'scheduled') throw new ProposalExecutionError('only a scheduled post can be moved to a new time from chat', { error: 'not-scheduled', status: post.status });
+        if (Date.parse(payload.scheduledAt) <= clock()) throw new ProposalExecutionError('the new time must be in the future', { error: 'past-time' });
+        body.scheduledAt = payload.scheduledAt;
+      }
+      let saved;
+      try { saved = await edit(body); } catch (err) {
+        if (err?.code === 'revision-conflict') throw new ProposalExecutionError('post changed since this was proposed', { error: 'stale' });
+        throw err;
+      }
+      return { postId: payload.postId, status: saved?.status ?? null, scheduledAt: saved?.scheduledAt ?? null, updatedAt: saved?.updatedAt ?? null };
     },
     async 'refresh-handles'({ clientId, payload, context, auth }) {
       const res = await need(refreshHandles, 'refresh')({ clientId, handles: payload.handles, context, auth });
