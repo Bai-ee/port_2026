@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { FolderPlus, Info, Plus, DatabaseZap, Trash2 } from 'lucide-react';
-import Popover from './Popover.jsx';
+import Popover from '../content-ui/Popover.jsx';
 import { NewFolderForm } from './FolderRow.jsx';
 import { Legend } from './ItemGrid.jsx';
 

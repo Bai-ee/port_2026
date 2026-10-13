@@ -1,12 +1,13 @@
 'use client';
 
+import { usePlanProps } from './standalone.js';
 import React from 'react';
-import { Skeleton, RetryError } from './Feedback.jsx';
+import { Skeleton, RetryError } from '../content-ui/Feedback.jsx';
 import { AlertTriangle, ArrowUpRight, CalendarDays, Image as ImageIcon, PenSquare, Plus, RefreshCw, Search } from 'lucide-react';
-import Accordion from './ui/Accordion.jsx';
-import Badge from './ui/Badge.jsx';
-import Card from './ui/Card.jsx';
-import { XCE_COLORS, XCE_RADII, XCE_TYPE } from './xce-tokens';
+import Accordion from '../content-ui/ui/Accordion.jsx';
+import Badge from '../content-ui/ui/Badge.jsx';
+import Card from '../content-ui/ui/Card.jsx';
+import { XCE_COLORS, XCE_RADII, XCE_TYPE } from '../content-ui/xce-tokens';
 
 // PlanPanel — one day of the posting plan, rendered.
 //
@@ -18,7 +19,7 @@ import { XCE_COLORS, XCE_RADII, XCE_TYPE } from './xce-tokens';
 // STYLING: inline style props built from the ui/* primitives + xce-tokens (the
 // Today restyle, mock 06). Only the header controls (tier picker, refresh) and
 // the draft read-out still use the card's shared `xce-*` classes. One
-// `<style jsx global>` block (selectors prefixed `#x-content-card`) covers the
+// `<style jsx global>` block (selectors prefixed `.xce-scope`) covers the
 // gaps accordion header; no scoped `<style jsx>` (it skips helper/mapped markup).
 //
 // The thumbnails are deliberately CSS-only placeholders: the archive is not
@@ -211,13 +212,14 @@ function SlotRow({ slot, rowId, gapRow, onDraft, onOpenContent, busy, draft }) {
   );
 }
 
-export default function PlanPanel({
+function PlanPanelView({
   plan,
   loading,
   error,
   posts,
   onPostsChange,
   onRefresh,
+  hideRefresh = false,
   planSource,
   planVersion,
   onOpenStrategy,
@@ -239,8 +241,8 @@ export default function PlanPanel({
   return (
     <div id="x-content-plan-panel" className="xce-panel" style={S.panel}>
       <style jsx global>{`
-        #x-content-card #x-plan-gaps-accordion { border-top: 0 !important; }
-        #x-content-card #x-plan-gaps-accordion > button { color: ${XCE_COLORS.amber} !important; font-weight: 600; }
+        .xce-scope #x-plan-gaps-accordion { border-top: 0 !important; }
+        .xce-scope #x-plan-gaps-accordion > button { color: ${XCE_COLORS.amber} !important; font-weight: 600; }
       `}</style>
 
       <Card id="x-plan-summary-card" padding={12}>
@@ -253,7 +255,7 @@ export default function PlanPanel({
               <CalendarDays size={12} /> {plan?.date || '—'} · {filled}/{total} filled
             </div>
           </div>
-          {onRefresh ? (
+          {onRefresh && !hideRefresh ? (
             <button
               type="button"
               id="x-content-plan-refresh-button"
@@ -380,4 +382,13 @@ export default function PlanPanel({
       ) : null}
     </div>
   );
+}
+
+function PlanPanelStandalone({ clientId, call, onNavigate, hideRefresh }) {
+  return <PlanPanelView {...usePlanProps(call, clientId, onNavigate)} hideRefresh={hideRefresh} />;
+}
+
+// Content Center passes `plan` (even null); a standalone host passes only { clientId, call, onNavigate }.
+export default function PlanPanel(props) {
+  return props.plan === undefined ? <PlanPanelStandalone {...props} /> : <PlanPanelView {...props} />;
 }

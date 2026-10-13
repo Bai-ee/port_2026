@@ -1,5 +1,7 @@
 # X Monitor card — SSOT
 
+> **Marketing Director unification (2026-10-13, POC, admin only, uncommitted on `feat/marketing-director-poc`):** For admins the X Monitor card tile is hidden; the same `XMonitorCard` mounts unchanged (`#x-monitor-card`) as the **X Monitor** sub-tab of Marketing Director › Results (`strategy-results`). Its own **Sync now / Counters / Posts / Audience** buttons and their per-action confirm rows are hidden for admins; metered syncing now happens only through the header Refresh group 6 (`x-monitor {action:'sync-all'}`), behind the unified confirm row that names the cost (about 2 calls plus 1 per 1,000 followers). Stale for admins: Section 4's manual-per-button cadence and "every credit is spent by clicking the card's confirm row"; the manual-only, no-cron rule still holds. Non-admins are unchanged. See [`MARKETING-DIRECTOR.md`](MARKETING-DIRECTOR.md).
+
 Read-only performance dashboard for the connected X account (`@bai_ee`). Answers
 three questions the rest of the repo cannot: **is the account growing**, **who
 arrived and who left**, and **which posts actually worked**.

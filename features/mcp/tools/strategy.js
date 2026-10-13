@@ -39,7 +39,7 @@ function readTool(t) {
 function proposeTool(t) {
   return defTool({
     name: `${STRATEGY_PREFIX}${t.name}`,
-    description: `[X strategy agent tool "${t.name}"] ${t.description} Via MCP this creates a PENDING proposal card in HITLOOP Content Center > Strategy chat (thread "MCP"); it applies nothing until the owner confirms it there. Never tell the user a change was made.`,
+    description: `[X strategy agent tool "${t.name}"] ${t.description} Via MCP this creates a PENDING proposal card in HITLOOP Marketing Director > Strategy (chat) (thread "MCP"); it applies nothing until the owner confirms it there. Never tell the user a change was made.`,
     inputSchema: withClientId(t.input_schema),
     kind: 'propose',
     redactKeys: false,
@@ -61,7 +61,7 @@ function proposeTool(t) {
       return {
         created: true, status: 'pending', proposalId: proposal.id, threadId: res.threadId, kind: proposal.kind, summary: proposal.summary,
         ...(res.dropped?.length ? { dropped: res.dropped } : {}),
-        next: 'Proposal created. It is NOT applied. Tell the owner to confirm it in HITLOOP Content Center > Strategy chat (thread "MCP").',
+        next: 'Proposal created. It is NOT applied. Tell the owner to confirm it in HITLOOP Marketing Director > Strategy (chat) (thread "MCP").',
       };
     },
   });

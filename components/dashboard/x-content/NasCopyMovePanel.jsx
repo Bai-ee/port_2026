@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronRight, Folder, ArrowUp } from 'lucide-react';
-import { ConfirmButton, RetryError } from './Feedback.jsx';
+import { ConfirmButton, RetryError } from '../content-ui/Feedback.jsx';
 
 // NasCopyMovePanel — quick copy/move of the NAS selection to another folder.
 // Talks to the Mac analyzer directly (`${base}/nas/ops/*`, loopback JSON).

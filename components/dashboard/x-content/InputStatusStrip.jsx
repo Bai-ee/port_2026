@@ -23,7 +23,10 @@ function fix(input, { onOpenStrategy }) {
   }
 }
 
-export default function InputStatusStrip({ call, clientKey, onOpenStrategy, defaultOpen = true }) {
+// Standalone mount: <InputStatusStrip clientId call onNavigate /> ('strategy' target replaces onOpenStrategy).
+export default function InputStatusStrip({ call, clientKey: clientKeyProp, clientId, onOpenStrategy: onOpenStrategyProp, onNavigate, defaultOpen = true, hideRefresh = false }) {
+  const clientKey = clientKeyProp ?? clientId;
+  const onOpenStrategy = onOpenStrategyProp || (() => onNavigate?.('strategy'));
   const [inputs, setInputs] = useState(null);
   const [workerLine, setWorkerLine] = useState(null);
   const [error, setError] = useState('');
@@ -65,9 +68,11 @@ export default function InputStatusStrip({ call, clientKey, onOpenStrategy, defa
         {error ? <span className="xce-is-bad">status unavailable</span>
           : inputs == null ? <span className="xce-is-muted">checking…</span>
             : <span className={attention.length ? 'xce-is-warn' : 'xce-is-ok'}>{attention.length ? `${attention.length} need attention` : 'all current'}</span>}
-        <button id="x-content-input-status-refresh" type="button" className="xce-is-refresh" aria-label="Re-check inputs" disabled={loading} onClick={(e) => { e.preventDefault(); load(); }}>
-          <RefreshCw size={12} />
-        </button>
+        {!hideRefresh ? (
+          <button id="x-content-input-status-refresh" type="button" className="xce-is-refresh" aria-label="Re-check inputs" disabled={loading} onClick={(e) => { e.preventDefault(); load(); }}>
+            <RefreshCw size={12} />
+          </button>
+        ) : null}
       </summary>
       <ul id="x-content-input-status-list" className="xce-is-list">
         {error ? <li className="xce-is-bad">{error}</li> : null}

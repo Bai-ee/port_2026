@@ -1,5 +1,5 @@
 // syncs.js - sync requests. Free ones run directly; anything that costs money becomes a PROPOSAL CARD:
-//   request_sync -> validates + prices -> a "Run a paid sync" card in Content Center > Strategy chat (thread "MCP").
+//   request_sync -> validates + prices -> a "Run a paid sync" card in Marketing Director > Strategy (chat) (thread "MCP").
 // It runs only when the OWNER presses Confirm on that card inside HITLOOP (strategy-proposal-decide); MCP has no
 // confirm step and never receives a code. The executors live in ../paid-syncs.js (shared with the dashboard route).
 // NEVER exposed here: X API writes, posting, scheduling, approving, deleting, sending email, Telegram sends.
@@ -96,10 +96,10 @@ const requestSync = defTool({
   name: 'request_sync',
   title: 'Ask the owner to approve a paid sync',
   kind: 'propose',
-  description: `Ask for an action that costs money. This validates the request, prices it, and creates a "Run a paid sync" PROPOSAL CARD in HITLOOP Content Center > Strategy chat (thread "MCP"). NOTHING RUNS and nothing is spent: the owner must press Confirm on the card inside HITLOOP, and you cannot confirm it for them (there is no confirm tool). Tell the owner the estimated cost and where to confirm. Kinds: ${PAID_SYNC_KINDS.join(', ')}. params per kind: strategy_review {clientId?}; x_monitor_sync {include?: ["profile","posts","audience"]} (X API reads, never writes; the card names the metered call count); nas_analyze {sourceId, paths[], capUsd<=${NAS_ANALYZE_MAX_CAP_USD}}. Market Signals refreshes are not available over MCP (they run paid X reads): use the Market Signals card. Max ${DAILY_PAID_CAP} paid syncs run per day.`,
+  description: `Ask for an action that costs money. This validates the request, prices it, and creates a "Run a paid sync" PROPOSAL CARD in HITLOOP Marketing Director > Strategy (chat) (thread "MCP"). NOTHING RUNS and nothing is spent: the owner must press Confirm on the card inside HITLOOP, and you cannot confirm it for them (there is no confirm tool). Tell the owner the estimated cost and where to confirm. Kinds: ${PAID_SYNC_KINDS.join(', ')}. params per kind: strategy_review {clientId?}; x_monitor_sync {include?: ["profile","posts","audience"]} (X API reads, never writes; the card names the metered call count); nas_analyze {sourceId, paths[], capUsd<=${NAS_ANALYZE_MAX_CAP_USD}}. Market Signals refreshes have no kind here: they run from the Refresh button in the Marketing Director header (group 1), so tell the owner to click it. Max ${DAILY_PAID_CAP} paid syncs run per day.`,
   inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: [...PAID_SYNC_KINDS] }, params: { type: 'object', description: 'Kind-specific parameters (see description).' } }, required: ['kind'] },
   handler: async ({ args, ctx }) => {
-    if (!PAID_SYNC_KINDS.includes(args.kind)) throw new ToolError(`Unknown kind "${String(args.kind).slice(0, 40)}". Valid: ${PAID_SYNC_KINDS.join(', ')}. (market_signals_refresh was removed: use the Market Signals card.)`);
+    if (!PAID_SYNC_KINDS.includes(args.kind)) throw new ToolError(`Unknown kind "${String(args.kind).slice(0, 40)}". Valid: ${PAID_SYNC_KINDS.join(', ')}. (Market Signals refreshes: the owner clicks Refresh in the Marketing Director header, group 1.)`);
     const clientId = await resolveClientId(ctx, args.params || {});
     const d = await describePaidSync(args.kind, args.params || {}, ctx);
     const res = await ctx.services.strategyHandlers().createProposalInThread({
@@ -120,7 +120,7 @@ const requestSync = defTool({
     return {
       created: true, status: 'pending', proposalId: proposal.id, threadId: res.threadId, kind: d.kind, params: d.params, estimatedCost: d.estimate,
       ...(res.dropped?.length ? { dropped: res.dropped } : {}),
-      next: 'Nothing has run and nothing was spent. Tell the owner the estimated cost and ask them to press Confirm on the "Run a paid sync" card in HITLOOP Content Center > Strategy chat (thread "MCP"). You cannot confirm it.',
+      next: 'Nothing has run and nothing was spent. Tell the owner the estimated cost and ask them to press Confirm on the "Run a paid sync" card in HITLOOP Marketing Director > Strategy (chat) (thread "MCP"). You cannot confirm it.',
     };
   },
 });

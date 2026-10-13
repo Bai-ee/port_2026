@@ -152,7 +152,7 @@ function AudienceRow({ event }) {
   );
 }
 
-export default function XMonitorCard({ getIdToken }) {
+export default function XMonitorCard({ getIdToken, hideRefresh = false }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
@@ -355,7 +355,7 @@ export default function XMonitorCard({ getIdToken }) {
               </div>
             </div>
             <div id="x-monitor-sync-controls-row" className="xm-actions">
-              {gate('sync-all', {
+              {!hideRefresh ? <>{gate('sync-all', {
                 label: 'Sync now', icon: <RefreshCw size={14} />, primary: true,
                 cost: `≈${totalCalls} metered X API calls (1 profile + 1 posts + ${audienceCalls} follower page${audienceCalls === 1 ? '' : 's'}). Reads only — nothing is posted. This spend does NOT appear on the Operating Cost card.`,
                 run: () => runGated('sync-all', { action: 'sync-all' }),
@@ -379,7 +379,7 @@ export default function XMonitorCard({ getIdToken }) {
                 label: 'Load older posts', icon: <Sparkles size={14} />,
                 cost: '2 metered X API calls — adds your older posts with public metrics only (X serves impressions for the last 30 days only).',
                 run: () => runGated('sync-posts-deep', { action: 'sync-posts', deep: true }),
-              })}
+              })}</> : null}
               <button type="button" onClick={() => load()} disabled={!!busy}>
                 <RefreshCw size={14} /> Reload stored (free)
               </button>

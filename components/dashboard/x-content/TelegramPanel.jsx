@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import Card from './ui/Card.jsx';
-import { XCE_COLORS, XCE_RADII, XCE_TYPE } from './xce-tokens';
+import { auth } from '../../../firebase';
+import Card from '../content-ui/ui/Card.jsx';
+import { XCE_COLORS, XCE_RADII, XCE_TYPE } from '../content-ui/xce-tokens';
 
 // TelegramPanel — connect/disconnect the owner's Telegram account and edit notification settings.
 //
@@ -73,7 +74,12 @@ function fmtDate(iso) {
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
 const hourLabel = (h) => `${String(h).padStart(2, '0')}:00`;
 
-export default function TelegramPanel({ getIdToken, activeClientId }) {
+// Standalone mount: <TelegramPanel clientId={...} /> (getIdToken falls back to the signed-in Firebase user; onNavigate unused).
+const authTokenFallback = async () => (auth?.currentUser ? auth.currentUser.getIdToken() : null);
+
+export default function TelegramPanel({ getIdToken: getIdTokenProp, activeClientId: activeClientIdProp, clientId, onNavigate: _onNavigate }) {
+  const getIdToken = getIdTokenProp || authTokenFallback;
+  const activeClientId = activeClientIdProp || clientId;
   const [state, setState] = useState(null);
   const [loadError, setLoadError] = useState('');
   const [busy, setBusy] = useState('');

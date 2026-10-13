@@ -1,5 +1,7 @@
 # Content Management (X) — as built
 
+> **Marketing Director unification (2026-10-13, POC, admin only, uncommitted on `feat/marketing-director-poc`):** For admins the Content Center (`x-content`) is now content only: tabs are **Library · Buckets · Timeline · Clients**, `extraCategories:['social']` is gone, and the Today / Calendar / Strategy / Results / Telegram panels this doc describes as Content Center tabs now mount as the Marketing Director cards Today, Queue & Calendar, Strategy, Results and Publishing settings (same panels, same `quote-targets`/`social_posts` backends, `.xce-scope` style scope). Stale for admins: any reference to the tab names above inside the Content Center, and to manual Generate/Refresh/reload buttons on those panels (hidden; use the Marketing Director header Refresh, group 5). Non-admin behavior is unchanged. See [`MARKETING-DIRECTOR.md`](MARKETING-DIRECTOR.md).
+
 Status: shipped to `main` in the content-system release (2026-10-11) with the owner-pilot hardening ([`CONTENT-PILOT-OPERATIONS.md`](CONTENT-PILOT-OPERATIONS.md)). Live posting batches, the GitHub sweep and the local worker remain owner actions. Plan: [`docs/plans/CONTENT-MANAGEMENT-NORMALIZATION-MASTER-PLAN.md`](../plans/CONTENT-MANAGEMENT-NORMALIZATION-MASTER-PLAN.md). Audit: [`content-management-audit.md`](../plans/content-management-audit.md). Build log: [`content-management-build-log.md`](../plans/content-management-build-log.md).
 
 Developer handoff for the release PR: [`docs/DEVELOPER-HANDOFF-CONTENT-SYSTEM.md`](../DEVELOPER-HANDOFF-CONTENT-SYSTEM.md).

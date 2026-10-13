@@ -15,14 +15,14 @@ import ContentTracksPanel from './ContentTracksPanel.jsx';
 import StrategyDocPanel from './StrategyDocPanel.jsx';
 import { profileBenchmarksFromPlan } from '../../../features/x-strategy/track-profile.js';
 import StrategyChat, { formatDayTime } from './StrategyChat.jsx';
-import { XCE_COLORS, XCE_RADII } from './xce-tokens';
-import Accordion from './ui/Accordion';
-import Badge from './ui/Badge';
-import Card from './ui/Card';
-import IconButton from './ui/IconButton';
-import SectionLabel from './ui/SectionLabel';
-import SegmentedControl from './ui/SegmentedControl';
-import WarnRow from './ui/WarnRow';
+import { XCE_COLORS, XCE_RADII } from '../content-ui/xce-tokens';
+import Accordion from '../content-ui/ui/Accordion';
+import Badge from '../content-ui/ui/Badge';
+import Card from '../content-ui/ui/Card';
+import IconButton from '../content-ui/ui/IconButton';
+import SectionLabel from '../content-ui/ui/SectionLabel';
+import SegmentedControl from '../content-ui/ui/SegmentedControl';
+import WarnRow from '../content-ui/ui/WarnRow';
 
 // StrategyPanel - the Strategy tab of the Content Engine card.
 //
@@ -292,7 +292,7 @@ const showVal = (v) => {
   return typeof v === 'object' ? JSON.stringify(v).slice(0, 40) : String(v);
 };
 
-const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlanChanged, clientName, selected }, ref) {
+const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlanChanged, clientName, selected, hideRefresh = false }, ref) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -632,9 +632,11 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
       {/* Refresh pulls fresh posts for you + every benchmark (free, via the Mac worker); Review asks the agent
           to check the strategy against them and say in the chat what, if anything, should change. */}
       <div id="x-strategy-actions-row">
-        <button type="button" id="x-strategy-refresh-all-button" className="xce-btn xce-btn-ghost" disabled={refreshing || !profile} onClick={() => startRefresh()}>
-          <RefreshCw size={15} /> {refreshing ? 'Refreshing…' : 'Refresh data'}
-        </button>
+        {!hideRefresh ? (
+          <button type="button" id="x-strategy-refresh-all-button" className="xce-btn xce-btn-ghost" disabled={refreshing || !profile} onClick={() => startRefresh()}>
+            <RefreshCw size={15} /> {refreshing ? 'Refreshing…' : 'Refresh data'}
+          </button>
+        ) : null}
         <button type="button" id="x-strategy-review-button" className="xce-btn" disabled={!stratDoc.doc} onClick={askReview}>
           <Sparkles size={15} /> Review strategy
         </button>
@@ -792,6 +794,7 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
                   onSave={saveTracks}
                   onDiscard={() => setTracksDraft(trackDraftFromPlan(savedPlan))}
                   onRefreshHandle={(h) => startRefresh([h])}
+                  hideRefresh={hideRefresh}
                 />
 
                 {staleBenchmarks.length ? (
@@ -851,7 +854,7 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
                                   <span style={S.muted}>{rowsFor(clean)} posts</span>
                                 </div>
                                 <Badge id={`x-strategy-benchmark-handle-status-${n}`} tone={stale ? 'amber' : 'green'}>{stale ? 'Needs refresh' : freshnessLabel(metaByHandle[clean])}</Badge>
-                                <IconButton id={`x-strategy-benchmark-refresh-button-${n}`} label={`Refresh @${clean}`} icon={<RefreshCw size={16} />} size={40} disabled={refreshing} onClick={() => startRefresh([clean])} />
+                                {!hideRefresh ? <IconButton id={`x-strategy-benchmark-refresh-button-${n}`} label={`Refresh @${clean}`} icon={<RefreshCw size={16} />} size={40} disabled={refreshing} onClick={() => startRefresh([clean])} /> : null}
                               </div>
                             );
                           })}
@@ -882,9 +885,11 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
                                 <Badge id={`x-strategy-benchmark-handle-status-${n}`} tone={stale ? 'amber' : 'green'}>{stale ? 'Needs refresh' : freshnessLabel(metaByHandle[clean])}</Badge>
                               </div>
                               <div id={`x-strategy-benchmark-actions-row-${n}`} style={{ ...S.row, flexWrap: 'nowrap' }}>
-                                <button type="button" id={`x-strategy-benchmark-refresh-button-${n}`} className="xce-btn xce-btn-ghost" style={{ flex: 1, minHeight: 40 }} disabled={refreshing || !clean} onClick={() => startRefresh([clean])}>
-                                  <RefreshCw size={15} /> Refresh
-                                </button>
+                                {!hideRefresh ? (
+                                  <button type="button" id={`x-strategy-benchmark-refresh-button-${n}`} className="xce-btn xce-btn-ghost" style={{ flex: 1, minHeight: 40 }} disabled={refreshing || !clean} onClick={() => startRefresh([clean])}>
+                                    <RefreshCw size={15} /> Refresh
+                                  </button>
+                                ) : null}
                                 <IconButton id={`x-strategy-benchmark-remove-button-${n}`} label={`Remove benchmark ${n}`} icon={<Trash2 size={16} />} size={40} onClick={() => removeBenchmark(i)} />
                               </div>
                             </div>
@@ -926,9 +931,11 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
                 {workerHealthLine(data?.workerHealth) ? <div id="x-strategy-worker-health-line" style={S.note}>{workerHealthLine(data?.workerHealth)}</div> : null}
 
                 <div id="x-strategy-accounts-actions" style={S.stack}>
-                  <button type="button" id="x-strategy-refresh-button" className="xce-btn" style={S.fullBtn} disabled={!profile || refreshing} onClick={() => startRefresh()}>
-                    {refreshing ? 'Refreshing…' : 'Refresh data'}
-                  </button>
+                  {!hideRefresh ? (
+                    <button type="button" id="x-strategy-refresh-button" className="xce-btn" style={S.fullBtn} disabled={!profile || refreshing} onClick={() => startRefresh()}>
+                      {refreshing ? 'Refreshing…' : 'Refresh data'}
+                    </button>
+                  ) : null}
                   <button type="button" id="x-strategy-save-handles-button" className="xce-btn xce-btn-ghost" style={S.fullBtn} disabled={!dirtyHandles || saveBusy || !!handlesProblem} onClick={saveHandles}>
                     {saveBusy ? 'Saving…' : 'Save handles'}
                   </button>
@@ -1014,10 +1021,12 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
                             {adhoc.result.missingOwn
                               ? `@${adhoc.result.handle} has data, but your own handle has none yet — needs refresh.`
                               : `@${adhoc.result.handle} needs refresh — no posts pulled yet.`}{' '}
-                            <button type="button" id="x-strategy-evaluate-refresh-button" className="xce-btn xce-btn-ghost" disabled={refreshing}
-                              onClick={() => startRefresh(adhoc.result.missingOwn && adhoc.result.ownHandle ? [adhoc.result.ownHandle] : [adhoc.result.handle])}>
-                              Refresh {adhoc.result.missingOwn ? 'your handle' : `@${adhoc.result.handle}`}
-                            </button>
+                            {!hideRefresh ? (
+                              <button type="button" id="x-strategy-evaluate-refresh-button" className="xce-btn xce-btn-ghost" disabled={refreshing}
+                                onClick={() => startRefresh(adhoc.result.missingOwn && adhoc.result.ownHandle ? [adhoc.result.ownHandle] : [adhoc.result.handle])}>
+                                Refresh {adhoc.result.missingOwn ? 'your handle' : `@${adhoc.result.handle}`}
+                              </button>
+                            ) : null}
                           </div>
                         ) : null}
                         {adhoc.result && !adhoc.result.needsRefresh ? (

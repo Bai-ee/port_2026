@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
+import { standaloneCallSocial } from './standalone.js';
 import { ExternalLink, RefreshCw, Save, Search, Settings, BookOpen, X } from 'lucide-react';
-import Accordion from './ui/Accordion.jsx';
-import Badge from './ui/Badge.jsx';
-import Card from './ui/Card.jsx';
-import { XCE_COLORS, XCE_RADII, XCE_SHADOWS } from './xce-tokens';
-import { Skeleton, RetryError } from './Feedback.jsx';
+import Accordion from '../content-ui/ui/Accordion.jsx';
+import Badge from '../content-ui/ui/Badge.jsx';
+import Card from '../content-ui/ui/Card.jsx';
+import { XCE_COLORS, XCE_RADII, XCE_SHADOWS } from '../content-ui/xce-tokens';
+import { Skeleton, RetryError } from '../content-ui/Feedback.jsx';
 import { suggestionTrackChip, suggestionLinkLine, suggestionMediaState, stageErrorText } from '../../../features/x-strategy/ui-model.js';
 import { slotLabel, timingLine, strategySourceLine, slotStatuses, VOICE_LINE } from '../../../features/x-content-inventory/daily-loop/present.js';
 
@@ -20,7 +21,7 @@ import { slotLabel, timingLine, strategySourceLine, slotStatuses, VOICE_LINE } f
 //
 // STYLING: the Discover chrome (empty state, options, how-it-works) is inline
 // style + ui/* primitives; suggestion-card internals keep the card's `xce-dl-`
-// classes (parent owns that `<style jsx global>` block, prefixed `#x-content-card`).
+// classes (parent owns that `<style jsx global>` block, prefixed `.xce-scope`).
 
 const TYPE_LABEL = { reply: 'Reply', quote: 'Quote', original: 'Original post' };
 const WHY_ROWS = [
@@ -262,7 +263,7 @@ function SuggestionCard({ s, text, thumbUrl, onText, onCommit, onSave, onDismiss
 // Stack the three-column input rows below 640px (the parent's 481px breakpoint
 // squeezed the detail column to ~60px at 500px). Scoped by id, so it only
 // touches this panel.
-const INPUTS_STACK_CSS = '@media (max-width: 640px) { #x-content-card #daily-run-inputs-panel .xce-dl-input { grid-template-columns: 1fr; } }';
+const INPUTS_STACK_CSS = '@media (max-width: 640px) { .xce-scope #daily-run-inputs-panel .xce-dl-input { grid-template-columns: 1fr; } }';
 
 function StrategySource({ run }) {
   const src = run.strategySource;
@@ -347,7 +348,13 @@ function Shortlist({ run }) {
   );
 }
 
-export default function DailySuggestionsPanel({ call, callSocial, showToast, onOpenQueue, onSelect }) {
+// Standalone mount: <DailySuggestionsPanel clientId call onNavigate />. callSocial falls back to /api/social-posting
+// (token borrowed from the Firebase user), showToast to a local toast line, onOpenQueue to onNavigate('calendar').
+export default function DailySuggestionsPanel({ call, callSocial: callSocialProp, showToast: showToastProp, onOpenQueue: onOpenQueueProp, onSelect, onNavigate, hideRefresh = false }) {
+  const callSocial = callSocialProp || standaloneCallSocial;
+  const [localToast, setLocalToast] = useState('');
+  const showToast = showToastProp || ((text, kind) => setLocalToast(kind === 'error' ? `Error: ${text}` : text));
+  const onOpenQueue = onOpenQueueProp || (() => onNavigate?.('calendar'));
   const [run, setRun] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -423,6 +430,7 @@ export default function DailySuggestionsPanel({ call, callSocial, showToast, onO
         Conversations to join{run ? <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11.5, fontWeight: 500, color: XCE_COLORS.inkSoft }}> · {run.localDate}</span> : null}
       </h3>
 
+      {localToast ? <p id="daily-suggestions-local-toast" style={{ margin: 0, fontSize: 13, color: XCE_COLORS.inkSoft }}>{localToast}</p> : null}
       {loading ? <Skeleton id="daily-suggestions-loading" rows={3} /> : null}
       {error ? <RetryError id="daily-suggestions-error" message={error} onRetry={load} busy={loading} /> : null}
 
@@ -433,20 +441,22 @@ export default function DailySuggestionsPanel({ call, callSocial, showToast, onO
           </span>
           <p style={{ margin: 0, fontSize: 17, fontWeight: 700, color: XCE_COLORS.ink }}>No suggestions yet.</p>
           <p style={NOTE}>Generate from saved inputs. No run today yet.</p>
-          <button type="button" id="x-today-generate-button" style={{ ...BTN_SOLID, marginTop: 8, opacity: busy ? 0.6 : 1 }} disabled={!!busy} onClick={() => generate(false)}>
-            {busy === 'generate' ? 'Generating…' : 'Generate suggestions'}
-          </button>
+          {!hideRefresh ? (
+            <button type="button" id="x-today-generate-button" style={{ ...BTN_SOLID, marginTop: 8, opacity: busy ? 0.6 : 1 }} disabled={!!busy} onClick={() => generate(false)}>
+              {busy === 'generate' ? 'Generating…' : 'Generate suggestions'}
+            </button>
+          ) : null}
         </div>
       ) : null}
 
       {run ? (
         <>
-          <div id="daily-run-generate-controls" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {!hideRefresh ? <div id="daily-run-generate-controls" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <button type="button" id="x-today-refresh-button" style={BTN_OUTLINE} disabled={!!busy} onClick={() => generate(false)}>
               <RefreshCw size={14} /> Refresh
             </button>
             <button type="button" id="x-today-regenerate-button" style={BTN_OUTLINE} disabled={!!busy} onClick={() => generate(true)}>Regenerate</button>
-          </div>
+          </div> : null}
 
           <Card id="x-today-inputs-card" padding="0 14px">
             <Accordion id="x-today-inputs-accordion" title="Saved inputs">

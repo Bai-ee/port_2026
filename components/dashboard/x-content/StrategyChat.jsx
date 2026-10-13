@@ -7,11 +7,11 @@ import {
   historyDiffSummary,
 } from '../../../features/x-strategy/ui-model.js';
 import { describeDocChange, sectionTitle } from '../../../features/x-strategy/strategy-doc.js';
-import { XCE_COLORS, XCE_RADII } from './xce-tokens';
-import Accordion from './ui/Accordion';
-import Badge from './ui/Badge';
-import IconButton from './ui/IconButton';
-import SectionLabel from './ui/SectionLabel';
+import { XCE_COLORS, XCE_RADII } from '../content-ui/xce-tokens';
+import Accordion from '../content-ui/ui/Accordion';
+import Badge from '../content-ui/ui/Badge';
+import IconButton from '../content-ui/ui/IconButton';
+import SectionLabel from '../content-ui/ui/SectionLabel';
 
 // StrategyChat - the agent chat in the Strategy tab's right column.
 //
