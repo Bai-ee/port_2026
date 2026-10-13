@@ -46,17 +46,17 @@ test('slot types come from slots.js and include the default floors', () => {
 });
 
 test('proposal kinds, statuses, actions, collections', () => {
-  assert.equal(C.PROPOSAL_KINDS.length, 8);
-  assert.equal(new Set(C.PROPOSAL_KINDS).size, 8);
+  assert.equal(C.PROPOSAL_KINDS.length, 9);
+  assert.equal(new Set(C.PROPOSAL_KINDS).size, 9);
   assert.deepEqual(Object.keys(C.PROPOSAL_KIND_ACTIONS).sort(), [...C.PROPOSAL_KINDS].sort());
   assert.deepEqual([...C.PROPOSAL_STATUSES], ['pending', 'deciding', 'confirmed', 'rejected', 'failed']);
-  assert.equal(C.ROUTE_ACTIONS.length, 10);
-  assert.equal(new Set(C.ROUTE_ACTIONS).size, 10);
+  assert.equal(C.ROUTE_ACTIONS.length, 14);
+  assert.equal(new Set(C.ROUTE_ACTIONS).size, 14);
   for (const a of C.ROUTE_ACTIONS) assert.match(a, /^strategy-/);
   assert.equal(C.PROPOSAL_KIND_ACTIONS['plan-change'], 'strategy-plan-apply');
   assert.equal(C.PROPOSAL_KIND_ACTIONS['refresh-handles'], 'strategy-refresh');
   assert.deepEqual(Object.values(C.STRATEGY_COLLECTIONS).sort(),
-    ['x_corpora', 'x_strategy_chats', 'x_strategy_plans', 'x_strategy_refresh_requests']);
+    ['x_corpora', 'x_strategy_chats', 'x_strategy_docs', 'x_strategy_plans', 'x_strategy_refresh_requests']);
   assert.deepEqual(Object.values(C.EVALUATION_CAVEAT), ['likes-only', 'few-rows', 'stale']);
   assert.deepEqual({ ...C.EVALUATION_THRESHOLDS }, { viewsCoverageMin: 0.5, minRows: 60, staleDays: 7 });
 });

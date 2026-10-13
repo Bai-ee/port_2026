@@ -29,6 +29,12 @@ import {
 } from './agent/proposals.js';
 import { normalizeSelected, describeSelected } from './agent/prompt.js';
 import { randomUUID } from 'node:crypto';
+import { StrategyDocError, createFirestoreStrategyDocStore } from './strategy-doc-store.js';
+import { draftDoc, STRATEGY_DOC_SECTIONS, describeDocChange } from './strategy-doc.js';
+import { SEED_STRATEGY_SECTIONS } from './strategy-doc-seed.js';
+import { summarizeAlgorithm, scorePosts as shapeScoredPosts, ruleCheck, summarizeAudience } from './insights.js';
+import { scoreXPost, getAlgorithmProfile } from '../x-growth/index.js';
+import { guardXPost } from '../x-content-guard/index.js';
 
 export const STRATEGY_ROUTE_ACTIONS = Object.freeze([
   'strategy-get',
@@ -41,7 +47,29 @@ export const STRATEGY_ROUTE_ACTIONS = Object.freeze([
   'strategy-chat-history',
   'strategy-proposal-decide',
   'strategy-profile-save',
+  'strategy-doc-get',
+  'strategy-doc-save',
+  'strategy-doc-revert',
+  'strategy-review',
 ]);
+
+export const REVIEW_DISPLAY_TEXT = 'Review my strategy against the latest data.';
+const REVIEW_MAX_ROUNDS = 6;
+const REVIEW_MAX_TOKENS = 2500;
+
+/** The model-side brief for a Review. The thread stores REVIEW_DISPLAY_TEXT instead. */
+export function buildReviewBrief(doc) {
+  const draft = !doc?.confirmed;
+  return [
+    'STRATEGY REVIEW (the owner pressed "Review strategy").',
+    'Use tools to check the strategy against current data: get_strategy_doc, get_evaluation, get_tracks, score_posts (own, and the lead benchmark if useful), get_rule_check, get_audience, get_algorithm. Call several in one round where you can; you have a limited tool budget.',
+    'Then answer in plain text, in this order, under about 250 words:',
+    '1. Since the last review: the last review date from get_strategy_doc (or "first review"), and how fresh each account\'s data is.',
+    '2. Section check: for each strategy section the data speaks to, say holds, weaker or contradicted, with one figure and its source/window. Skip sections the data cannot test and say so in one line.',
+    '3. What I would change: at most 2 proposals (a strategy section edit and/or a plan change) as proposal cards. If nothing should change, say "No change recommended" and why.',
+    draft ? 'The document is still a DRAFT: frame section 3 as what to fix before the owner confirms it.' : '',
+  ].filter(Boolean).join('\n');
+}
 
 export const CHAT_TEXT_MAX = 2000;
 const MAX_PROPOSALS_PER_TURN = 2;
@@ -138,9 +166,11 @@ export function createStrategyHandlers({
   corpusStore, planStore: basePlanStore, refreshService, readXGrowthConfig,
   readPackages = async () => [], readWorkerHealth = null, evaluate = defaultEvaluate, clock = Date.now,
   resolveProfile = resolveXGrowthProfile, buildPreviewPlan = buildContentDayPlan,
+  docStore = null, // strategy-doc-store.js; absent => the strategy-doc-* actions answer 503
   chatStore = null, agentLoopFactory = null, callModel = null, logUsage = null,
   runDailyAction = null, runUpdateItemFacets = null, readTodayRun = null, readContentContext = null, saveXGrowthProfile = null,
   readQueueSummary = null, readPost = null, readOpportunities = null, readResults = null, // chat read tools: (clientId[, postId]) -> plain JSON | null
+  readAudience = null, // (ownHandle) -> {account, snapshots, events, posts} from stored X Monitor data; null => tool says unavailable
   env = {}, // explicit on purpose: only createStrategyHandlersFromDb passes process.env, so a bare handler can never reach a real model
 } = {}) {
   if (!corpusStore || !basePlanStore || !refreshService || typeof readXGrowthConfig !== 'function') {
@@ -406,6 +436,8 @@ export function createStrategyHandlers({
         return { tracks: tracksOf(planDoc), profiles: await safeTrackProfiles(planDoc, profile) };
       },
       getPlan: async () => ((await planStore.get(clientId)) ?? { version: 0, plan: DEFAULT_PLAN, history: [], isDefault: true }),
+      // Stored doc or the seeded draft (version 0); absent docStore => null (prompt says none available).
+      getStrategyDoc: async () => (docStore ? readDoc(clientId) : null),
       getContext: async () => (readContentContext ? readContentContext(clientId) : { error: 'Content context is not available.' }),
       getTodayRun: async () => summarizeTodayRun(readTodayRun ? await readTodayRun(clientId) : null),
       // Closed over THIS request's clientId; the model never supplies one. Absent reader => key absent => tool says 'not available'.
@@ -428,6 +460,27 @@ export function createStrategyHandlers({
           id: p.id, title: p.title ?? null, story: String(p.story ?? '').slice(0, 160), bucketId: p.bucketId ?? null,
           hasStory: !!String(p.story ?? '').trim() && !hasPlaceholderStory(p), facets: p.humanEdits || p.facets || {},
         }));
+      },
+      getAlgorithm: async () => summarizeAlgorithm(getAlgorithmProfile()),
+      scorePosts: async ({ handle, days, limit } = {}) => {
+        const profile = preloaded.profile ?? (preloaded.profile = await loadProfile(clientId));
+        const planDoc = await planStore.get(clientId);
+        const allowed = [profile.ownHandle, ...profile.benchmarkHandles, ...trackBenchmarkHandles(tracksOf(planDoc))].map((h) => safeHandle(h)).filter(Boolean);
+        const h = safeHandle(handle) || safeHandle(profile.ownHandle);
+        if (!h || !allowed.includes(h)) return { error: 'handle must be the own or a benchmark handle', allowed: [...new Set(allowed)] };
+        const read = await readHandle(h);
+        return shapeScoredPosts(read.rows, { score: scoreXPost, handle: h, days, limit, nowMs: clock() });
+      },
+      getRuleCheck: async ({ days } = {}) => {
+        const profile = preloaded.profile ?? (preloaded.profile = await loadProfile(clientId));
+        const h = safeHandle(profile.ownHandle);
+        if (!h) return { error: 'no own handle' };
+        return ruleCheck((await readHandle(h)).rows, { guard: guardXPost, handle: h, days, nowMs: clock() });
+      },
+      getAudience: async ({ days } = {}) => {
+        if (typeof readAudience !== 'function') return { available: false, reason: 'X Monitor data is not available on this deployment.' };
+        const profile = preloaded.profile ?? (preloaded.profile = await loadProfile(clientId));
+        return summarizeAudience(await readAudience(safeHandle(profile.ownHandle)), { days, nowMs: clock() });
       },
       topPosts: async ({ handle, type, topic, limit } = {}) => {
         const profile = preloaded.profile ?? (preloaded.profile = await loadProfile(clientId));
@@ -492,7 +545,18 @@ export function createStrategyHandlers({
     const text = typeof body?.text === 'string' ? body.text.trim() : '';
     if (!text) return fail(400, 'text is required.');
     if (text.length > CHAT_TEXT_MAX) return fail(400, `text must be at most ${CHAT_TEXT_MAX} characters.`);
-    const t = parseThreadId(body?.threadId);
+    return runChatTurn(c.clientId, context, { threadIdRaw: body?.threadId, modelText: text, storedText: text, selected: body?.selected });
+  }
+
+  /**
+   * One agent turn: thread lookup, model-config check, turn-cap reservation, the loop, proposal validation, persist.
+   * `modelText` is what the model reads; `storedText` is what the thread shows (a Review stores a short line but
+   * sends the full brief). `turnOpts` ({maxRounds, maxTokens}) lets a Review use a bigger tool budget.
+   */
+  async function runChatTurn(clientId, context, { threadIdRaw, modelText, storedText, selected, turnOpts } = {}) {
+    const c = { clientId };
+    const text = storedText;
+    const t = parseThreadId(threadIdRaw);
     if (t.error) return t.error;
 
     let thread = null;
@@ -525,8 +589,8 @@ export function createStrategyHandlers({
     ];
     let turn;
     try {
-      const selectedContext = await resolveSelectedContext(c.clientId, body?.selected);
-      turn = await loop.runTurn({ clientId: c.clientId, threadId, history, userText: text, now, ...(selectedContext ? { selectedContext } : {}) });
+      const selectedContext = await resolveSelectedContext(c.clientId, selected);
+      turn = await loop.runTurn({ clientId: c.clientId, threadId, history, userText: modelText, now, ...(selectedContext ? { selectedContext } : {}), ...(turnOpts || {}) });
     } catch (err) {
       return fail(502, `The strategy agent failed: ${String(err?.message || err).slice(0, 200)}`, { turnsUsedToday: used, cap: chatStore.cap });
     }
@@ -550,6 +614,39 @@ export function createStrategyHandlers({
     };
   }
 
+  /** Newest corpus pull across the own + benchmark handles (ISO) or null: "the data a review looked at". */
+  async function newestDataAt(clientId) {
+    const profile = await loadProfile(clientId);
+    const planDoc = await planStore.get(clientId);
+    const handles = [...new Set([profile.ownHandle, ...profile.benchmarkHandles, ...trackBenchmarkHandles(tracksOf(planDoc))].map((h) => safeHandle(h)).filter(Boolean))];
+    let best = null;
+    for (const h of handles) {
+      const at = (await corpusStore.readRows(h))?.meta?.pulledAt;
+      if (at && (!best || at > best)) best = at;
+    }
+    return best;
+  }
+
+  // Review = one agent turn with a fixed brief and a bigger tool budget. Same cap, same proposals, same thread.
+  async function strategyReview(body, context) {
+    const c = requireClient(body, context);
+    if (c.error) return c.error;
+    const off = needChat(); if (off) return off;
+    const doc = docStore ? await readDoc(c.clientId) : null;
+    const out = await runChatTurn(c.clientId, context, {
+      threadIdRaw: body?.threadId, modelText: buildReviewBrief(doc), storedText: REVIEW_DISPLAY_TEXT,
+      turnOpts: { maxRounds: REVIEW_MAX_ROUNDS, maxTokens: REVIEW_MAX_TOKENS },
+    });
+    if (!out.ok || !docStore) return out;
+    let lastReview = null;
+    try {
+      const planDoc = await planStore.get(c.clientId);
+      lastReview = { at: new Date(clock()).toISOString(), threadId: out.threadId, docVersion: doc?.version ?? 0, planVersion: planDoc?.version ?? 0, dataAsOf: await newestDataAt(c.clientId) };
+      await docStore.markReviewed(c.clientId, lastReview);
+    } catch { lastReview = null; } // a failed stamp never fails the review the owner already paid for
+    return { ...out, ...(lastReview ? { lastReview } : {}) };
+  }
+
   async function strategyChatHistory(body, context) {
     const c = requireClient(body, context);
     if (c.error) return c.error;
@@ -571,6 +668,7 @@ export function createStrategyHandlers({
 
   const executors = buildExecutors({
     planStore, runDailyAction, runUpdateItemFacets, saveXGrowthProfile: saveProfileKeepingTracks, clock,
+    docStore, docBase: SEED_STRATEGY_SECTIONS,
     refreshHandles: async ({ clientId, handles, context, auth }) => strategyRefresh({ clientId, handles }, context, auth),
   });
   async function strategyProposalDecide(body, context, auth) {
@@ -626,6 +724,7 @@ export function createStrategyHandlers({
     }
     const res = { ok: true, proposal };
     if (proposal.kind === 'plan-change') res.planDoc = await planStore.get(c.clientId);
+    if (proposal.kind === 'strategy-doc-edit' && docStore) res.strategyDoc = await readDoc(c.clientId);
     return res;
   }
 
@@ -639,6 +738,42 @@ export function createStrategyHandlers({
     return { ok: true, profile: profile ?? { ownHandle: h.ownHandle, benchmarkHandles: h.benchmarkHandles } };
   }
 
+  // ---- Strategy document ------------------------------------------------------------------------------
+
+  const needDoc = () => (docStore ? null : fail(503, 'The strategy document is not configured on this deployment.'));
+  const DOC_META = STRATEGY_DOC_SECTIONS.map((s) => ({ ...s }));
+
+  /** Stored doc, or the seeded draft (version 0, never persisted by a read). */
+  async function readDoc(clientId) {
+    return (await docStore.get(clientId)) ?? draftDoc(SEED_STRATEGY_SECTIONS);
+  }
+
+  async function strategyDocGet(body, context) {
+    const c = requireClient(body, context);
+    if (c.error) return c.error;
+    const off = needDoc(); if (off) return off;
+    return { ok: true, doc: await readDoc(c.clientId), sections: DOC_META };
+  }
+
+  async function strategyDocSave(body, context, auth) {
+    const c = requireClient(body, context);
+    if (c.error) return c.error;
+    const off = needDoc(); if (off) return off;
+    const out = await docStore.apply(c.clientId, {
+      sections: body?.sections, expectedVersion: body?.expectedVersion, by: by(auth), source: 'manual',
+      reason: typeof body?.reason === 'string' ? body.reason : '', now: clock(), base: SEED_STRATEGY_SECTIONS,
+    });
+    return { ok: true, doc: out.doc, changed: out.changed, ...(out.changed ? { change: describeDocChange(out.doc.history.at(-1)) } : {}) };
+  }
+
+  async function strategyDocRevert(body, context, auth) {
+    const c = requireClient(body, context);
+    if (c.error) return c.error;
+    const off = needDoc(); if (off) return off;
+    const out = await docStore.revert(c.clientId, body?.version, { by: by(auth), now: clock() });
+    return { ok: true, doc: out.doc, changed: out.changed, ...(out.changed ? { change: describeDocChange(out.doc.history.at(-1)) } : {}) };
+  }
+
   const table = {
     'strategy-get': strategyGet,
     'strategy-refresh': strategyRefresh,
@@ -650,6 +785,10 @@ export function createStrategyHandlers({
     'strategy-chat-history': strategyChatHistory,
     'strategy-proposal-decide': strategyProposalDecide,
     'strategy-profile-save': strategyProfileSave,
+    'strategy-doc-get': strategyDocGet,
+    'strategy-doc-save': strategyDocSave,
+    'strategy-doc-revert': strategyDocRevert,
+    'strategy-review': strategyReview,
   };
 
   /** @returns {Promise<object>} result; failures carry {ok:false,status}. Auth is the caller's job. */
@@ -660,6 +799,13 @@ export function createStrategyHandlers({
       return await fn(body || {}, context, auth);
     } catch (err) {
       if (err instanceof StrategyPlanError) {
+        return fail(err.status, err.message, {
+          code: err.code,
+          ...(err.currentVersion !== undefined ? { currentVersion: err.currentVersion } : {}),
+          ...(err.errors ? { errors: err.errors } : {}),
+        });
+      }
+      if (err instanceof StrategyDocError) {
         return fail(err.status, err.message, {
           code: err.code,
           ...(err.currentVersion !== undefined ? { currentVersion: err.currentVersion } : {}),
@@ -705,7 +851,7 @@ export function createStrategyHandlersFromDb(db, {
   readPackages, env = process.env, runDailyAction, runUpdateItemFacets, readTodayRun, readContentContext,
   readQueueSummary, readPost, readOpportunities, readResults,
   saveXGrowthProfile = createXGrowthProfileSaver(db), chatStore = createFirestoreChatStore(db, { env }),
-  agentLoopFactory, callModel, logUsage, loadCommitted,
+  agentLoopFactory, callModel, logUsage, loadCommitted, docStore = createFirestoreStrategyDocStore(db),
 } = {}) {
   // `loadCommitted` (handle -> rows|null) lets a serverless host supply the committed corpora from static imports.
   const corpusStore = createFirestoreCorpusStore(db, loadCommitted ? { loadCommitted } : {});
@@ -715,10 +861,23 @@ export function createStrategyHandlersFromDb(db, {
     queueStore: createFirestoreRefreshQueue(db),
     enabled: () => env.X_STRATEGY_LOCAL_INGEST === '1',
   });
+  // Stored X Monitor data for the own handle (free Firestore reads; never syncs). One monitored account per
+  // install today, so match on the stored profile username.
+  const readAudience = async (ownHandle) => {
+    const roots = await db.collection('x_monitor').limit(10).get();
+    const doc = roots.docs.find((d) => String(d.data()?.profile?.username || '').toLowerCase() === String(ownHandle || '').toLowerCase());
+    if (!doc) return { account: null };
+    const [snaps, events, posts] = await Promise.all([
+      doc.ref.collection('snapshots').orderBy('date', 'desc').limit(120).get(),
+      doc.ref.collection('audience_events').orderBy('detectedAt', 'desc').limit(300).get(),
+      doc.ref.collection('posts').limit(300).get(),
+    ]);
+    return { account: doc.data(), snapshots: snaps.docs.map((d) => d.data()), events: events.docs.map((d) => d.data()), posts: posts.docs.map((d) => d.data()) };
+  };
   return createStrategyHandlers({
-    corpusStore, planStore, refreshService, readPackages,
+    corpusStore, planStore, refreshService, readPackages, readAudience,
     readWorkerHealth: (clientId) => readWorkerHealthFromDb(db, { now: Date.now(), clientId }),
-    chatStore, agentLoopFactory, callModel, logUsage, runDailyAction, runUpdateItemFacets, readTodayRun, readContentContext, saveXGrowthProfile, env,
+    docStore, chatStore, agentLoopFactory, callModel, logUsage, runDailyAction, runUpdateItemFacets, readTodayRun, readContentContext, saveXGrowthProfile, env,
     readQueueSummary, readPost, readOpportunities, readResults,
     readXGrowthConfig: async (clientId) => {
       const snap = await db.collection('client_configs').doc(clientId).get();

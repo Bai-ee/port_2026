@@ -36,6 +36,7 @@ import { createStrategyHandlersFromDb, STRATEGY_ROUTE_ACTIONS } from '../../../.
 import { createContentPlanHandlers } from '../../../../features/x-strategy/content-plan.js';
 import { createFirestoreCorpusStore } from '../../../../features/x-strategy/corpus-store.js';
 import { createFirestorePlanStore } from '../../../../features/x-strategy/plan-store.js';
+import { createFirestoreStrategyDocStore } from '../../../../features/x-strategy/strategy-doc-store.js';
 import { loadContentContext, summarizeContentContext, resolveCalendarEngineConfig } from '../../../../features/content-context/load-content-context.js';
 import { loadLoopCorpora } from '../../../../features/x-strategy/loop-corpora.js';
 import { resolveXGrowthProfile } from '../../../../features/x-benchmark/profile.js';
@@ -715,6 +716,8 @@ async function readContentContext(clientId, { packageIds = dailyLoopDemoSet.ids,
     readRecentPosts: async (id) => recentPostsFromQueue(await readSocialQueue(id)),
     // One plan everywhere: the Strategy plan doc sets the loop's cadence, engine targets, floors and caps.
     readPlanDoc: (id) => createFirestorePlanStore(fb.adminDb).get(id),
+    // The owner's Strategy document: a CONFIRMED doc's Rules + Formats ride along in drafting prompts.
+    readStrategyDoc: (id) => createFirestoreStrategyDocStore(fb.adminDb).get(id),
     loadBrainContext: (id) => loadClientBrainContext(id, { useFor: 'socialPosts', requireApproved: true }),
   }, { clientId, now, packageIds, corpora: loopCorpora });
 }

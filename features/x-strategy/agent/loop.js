@@ -4,7 +4,8 @@
 // The agent only PROPOSES; nothing here writes to plans, suggestions or inventory.
 
 import { createRequire } from 'node:module';
-import { STRATEGY_AGENT_MODEL, buildSystemPrompt } from './prompt.js';
+import { STRATEGY_AGENT_MODEL, STRATEGY_DOC_MAX_CHARS, buildSystemPrompt } from './prompt.js';
+import { renderDocText, describeDocChange } from '../strategy-doc.js';
 import {
   TOOL_SCHEMAS, READ_TOOL_NAMES, KIND_BY_PROPOSE_TOOL, runReadTool, prepareProposal, serializeResult,
 } from './tools.js';
@@ -43,9 +44,7 @@ export function createAnthropicCaller({ apiKey, fetchImpl } = {}) {
     const key = apiKey || process.env.ANTHROPIC_API_KEY;
     if (!key) throw new AgentError('The strategy agent is not configured (ANTHROPIC_API_KEY is missing).', { code: 'missing-api-key' });
     const doFetch = fetchImpl || globalThis.fetch;
-    const body = { model, max_tokens: maxTokens, messages };
-    if (system) body.system = system;
-    if (Array.isArray(tools) && tools.length) body.tools = tools;
+    const body = withPromptCache({ model, max_tokens: maxTokens, messages, system, tools });
     let res;
     try {
       res = await doFetch(ANTHROPIC_URL, {
@@ -70,6 +69,30 @@ export function createAnthropicCaller({ apiKey, fetchImpl } = {}) {
   };
 }
 
+const EPHEMERAL = Object.freeze({ type: 'ephemeral' });
+
+/**
+ * Prompt caching: one breakpoint after the tools, one after the system prompt, one on the newest message. Within a
+ * turn every tool round resends the same prefix (tools + system + strategy doc + earlier rounds), so later rounds read
+ * it from cache at 0.1x instead of paying full input price again. Pure; never mutates its input.
+ */
+export function withPromptCache({ model, max_tokens, messages, system, tools }) {
+  const body = { model, max_tokens };
+  const list = Array.isArray(messages) ? messages.map((m) => ({ ...m })) : [];
+  const last = list[list.length - 1];
+  if (last) {
+    const blocks = typeof last.content === 'string' ? [{ type: 'text', text: last.content }] : Array.isArray(last.content) ? last.content.map((b) => ({ ...b })) : null;
+    if (blocks && blocks.length) {
+      blocks[blocks.length - 1] = { ...blocks[blocks.length - 1], cache_control: EPHEMERAL };
+      last.content = blocks;
+    }
+  }
+  body.messages = list;
+  if (system) body.system = [{ type: 'text', text: String(system), cache_control: EPHEMERAL }];
+  if (Array.isArray(tools) && tools.length) body.tools = tools.map((t, i) => (i === tools.length - 1 ? { ...t, cache_control: EPHEMERAL } : t));
+  return body;
+}
+
 /** Default usage logger: wraps logAnthropicCall (cost is computed by the same RATES table). */
 export function createDefaultLogUsage() {
   let mod;
@@ -77,7 +100,10 @@ export function createDefaultLogUsage() {
   return async function logUsage({ model, usage, clientId, purpose = PURPOSE, threadId }) {
     const u = usage || {};
     const { computeAnthropicCost, logAnthropicCall } = load();
-    const costUsd = computeAnthropicCost({ model, inputTokens: u.input_tokens, outputTokens: u.output_tokens });
+    const costUsd = computeAnthropicCost({
+      model, inputTokens: u.input_tokens, outputTokens: u.output_tokens,
+      cacheWriteTokens: u.cache_creation_input_tokens, cacheReadTokens: u.cache_read_input_tokens,
+    });
     await logAnthropicCall({
       module: 'x-strategy', action: purpose, model, response: { usage: u }, clientId: clientId ?? null,
       metadata: { purpose, threadId: threadId ?? null },
@@ -125,24 +151,42 @@ export function createAgentLoop({
   const call = callModel || createAnthropicCaller();
   const log = logUsage || createDefaultLogUsage();
 
-  async function runTurn({ clientId, threadId, history = [], userText, selectedContext } = {}) {
-    const usage = { calls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 };
+  // `maxRounds` / `maxTokens` may be raised per turn (a strategy Review needs a bigger tool budget).
+  async function runTurn({ clientId, threadId, history = [], userText, selectedContext, maxRounds: roundsCap = maxRounds, maxTokens: tokensCap = maxTokens } = {}) {
+    const usage = { calls: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 };
     const proposals = [];
     const userMessages = [...(Array.isArray(history) ? history : []).filter((m) => m?.role === 'user').map((m) => String(m.text ?? '')), String(userText ?? '')];
     const messages = buildMessages(history, userText);
 
-    // Plan summary is the only data in the system prompt; everything else comes from tools.
+    // The plan summary and the owner's Strategy document (+ its recent change log) are the only data in the system
+    // prompt; every figure comes from tools.
     let planSummary;
     try { planSummary = await toolDeps?.getPlan?.(); } catch { planSummary = null; }
-    const system = buildSystemPrompt({ planSummary: planSummary ?? null, selectedContext: typeof selectedContext === 'string' ? selectedContext : '' });
+    let strategyDocText = '';
+    try {
+      const doc = await toolDeps?.getStrategyDoc?.();
+      if (doc) {
+        const changes = (doc.history || []).slice(-5).map(describeDocChange).filter(Boolean);
+        strategyDocText = renderDocText(doc, { maxChars: STRATEGY_DOC_MAX_CHARS - 600 })
+          + (changes.length ? `\n\nRECENT STRATEGY CHANGES (oldest first):\n${changes.map((c) => `- ${c}`).join('\n')}` : '');
+      }
+    } catch { strategyDocText = ''; }
+    const system = buildSystemPrompt({ planSummary: planSummary ?? null, strategyDocText, selectedContext: typeof selectedContext === 'string' ? selectedContext : '' });
 
     const account = async (resp, ok) => {
       const u = resp?.usage || {};
       usage.calls += 1;
       usage.inputTokens += Number(u.input_tokens) || 0;
       usage.outputTokens += Number(u.output_tokens) || 0;
+      usage.cacheReadTokens += Number(u.cache_read_input_tokens) || 0;
+      usage.cacheWriteTokens += Number(u.cache_creation_input_tokens) || 0;
       try {
-        const r = await log({ model, usage: { input_tokens: Number(u.input_tokens) || 0, output_tokens: Number(u.output_tokens) || 0 }, clientId, purpose: PURPOSE, threadId });
+        const cacheRead = Number(u.cache_read_input_tokens) || 0;
+        const cacheWrite = Number(u.cache_creation_input_tokens) || 0;
+        const r = await log({ model, usage: {
+          input_tokens: Number(u.input_tokens) || 0, output_tokens: Number(u.output_tokens) || 0,
+          ...(cacheRead ? { cache_read_input_tokens: cacheRead } : {}), ...(cacheWrite ? { cache_creation_input_tokens: cacheWrite } : {}),
+        }, clientId, purpose: PURPOSE, threadId });
         if (Number.isFinite(r?.costUsd)) usage.costUsd += r.costUsd;
       } catch { /* cost logging is best-effort and must not break the turn */ }
       return ok;
@@ -153,7 +197,7 @@ export function createAgentLoop({
     for (;;) {
       let resp;
       try {
-        resp = await call({ model, system, messages, tools: TOOL_SCHEMAS, maxTokens });
+        resp = await call({ model, system, messages, tools: TOOL_SCHEMAS, maxTokens: tokensCap });
       } catch (err) {
         const out = err instanceof AgentError ? err : new AgentError(`The model call failed: ${scrub(err?.message).slice(0, 160)}`, { code: 'model-error', cause: err });
         out.usage = { ...usage };
@@ -174,7 +218,7 @@ export function createAgentLoop({
       messages.push({ role: 'assistant', content });
       const results = [];
       for (const tu of toolUses) results.push(await handleToolUse(tu));
-      if (rounds >= maxRounds) {
+      if (rounds >= roundsCap) {
         capped = true;
         results.push({ type: 'text', text: ROUND_CAP_NOTE });
       }

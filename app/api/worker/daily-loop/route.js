@@ -17,7 +17,7 @@ async function buildReadInputsFor() {
   const { loadClientBrainContext } = require('../../../../features/client-brain/store.cjs');
   const [
     { readSocialQueue }, { buildDayPlan }, { recentPostsFromQueue }, { createFirestoreCorpusStore }, { createFirestorePlanStore },
-    { loadContentContext }, { loadLoopCorpora }, { resolveXGrowthProfile },
+    { loadContentContext }, { loadLoopCorpora }, { resolveXGrowthProfile }, { createFirestoreStrategyDocStore },
   ] = await Promise.all([
     import('../../../../features/social-posting/twitter-service.js'),
     import('../../../../features/x-content-inventory/plan-day.js'),
@@ -27,6 +27,7 @@ async function buildReadInputsFor() {
     import('../../../../features/content-context/load-content-context.js'),
     import('../../../../features/x-strategy/loop-corpora.js'),
     import('../../../../features/x-benchmark/profile.js'),
+    import('../../../../features/x-strategy/strategy-doc-store.js'),
   ]);
   const committed = { bai_ee: ownCorpusRows, seb__design: benchmarkCorpusRows };
   const committedCorpusRows = (h) => (Object.hasOwn(committed, h) ? committed[h] : null);
@@ -48,6 +49,7 @@ async function buildReadInputsFor() {
         buildDayPlan,
         readRecentPosts: async (id) => recentPostsFromQueue(await readSocialQueue(id)),
         readPlanDoc: (id) => createFirestorePlanStore(fb.adminDb).get(id),
+        readStrategyDoc: (id) => createFirestoreStrategyDocStore(fb.adminDb).get(id),
         loadBrainContext: (id) => loadClientBrainContext(id, { useFor: 'socialPosts', requireApproved: true }),
       }, { clientId, now: Date.now(), packageIds: null, corpora });
       if (ctx.raw.recentPostsError) {

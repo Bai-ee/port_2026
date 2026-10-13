@@ -7,6 +7,8 @@ import { randomUUID } from 'node:crypto';
 import { PROPOSAL_KINDS, PROPOSAL_STATUSES, PLAN_LIMITS, DEFAULT_PLAN } from '../contracts.js';
 import { normalizePlan, validatePlan, HANDLE_RE } from '../plan-state.js';
 import { StrategyPlanError } from '../plan-store.js';
+import { SECTION_KEYS, SECTION_MAX } from '../strategy-doc.js';
+import { StrategyDocError } from '../strategy-doc-store.js';
 
 export const SUMMARY_MAX = 200;
 export const RATIONALE_MAX = 800;
@@ -135,6 +137,15 @@ export function validateProposal(raw, { currentPlan } = {}) {
       norm = { handles: [...new Set(hs)] };
       break;
     }
+    case 'strategy-doc-edit': {
+      const section = typeof payload.section === 'string' ? payload.section.trim() : '';
+      if (!SECTION_KEYS.includes(section)) errors.push(`section must be one of ${SECTION_KEYS.join(', ')}`);
+      if (typeof payload.text !== 'string') errors.push('text must be a string');
+      else if (payload.text.trim().length > SECTION_MAX) errors.push(`text must be at most ${SECTION_MAX} characters`);
+      if (!Number.isInteger(payload.expectedVersion) || payload.expectedVersion < 0) errors.push('expectedVersion must be a non-negative integer');
+      norm = { section, text: typeof payload.text === 'string' ? payload.text.trim() : '', expectedVersion: payload.expectedVersion };
+      break;
+    }
     default: break;
   }
   if (errors.length) return { ok: false, errors };
@@ -176,8 +187,10 @@ export function compactResult(res) {
  * @param {(context:object, body:object)=>Promise<object>} [deps.runUpdateItemFacets]
  * @param {(clientId:string, profile:object)=>Promise<object>} [deps.saveXGrowthProfile]
  * @param {(args:{clientId:string, handles:string[], context:object, auth:object})=>Promise<object>} [deps.refreshHandles]
+ * @param {{get:Function,apply:Function}} [deps.docStore]  strategy-doc-store.js
+ * @param {object} [deps.docBase]  sections to start from when no doc is saved yet (the seed draft)
  */
-export function buildExecutors({ planStore, runDailyAction, runUpdateItemFacets, saveXGrowthProfile, refreshHandles, clock = Date.now }) {
+export function buildExecutors({ planStore, runDailyAction, runUpdateItemFacets, saveXGrowthProfile, refreshHandles, docStore, docBase, clock = Date.now }) {
   const need = (fn, name) => { if (typeof fn !== 'function') throw new ProposalExecutionError(`${name} is not available on this deployment`); return fn; };
   const daily = (action, body) => async ({ context }) => {
     const res = await need(runDailyAction, 'daily-run actions')(context, action, body);
@@ -221,6 +234,26 @@ export function buildExecutors({ planStore, runDailyAction, runUpdateItemFacets,
     },
     // Model drafting is OFF unless the OWNER ticked it at confirm time (options.useModel); payload.useModel is ignored.
     'regenerate-today': ({ payload, context, options }) => daily('daily-run-generate', { draftWithModel: options?.useModel === true, force: payload.force === true })({ context }),
+    // Writes ONE section of the strategy document, version-checked, recorded as source 'chat' (never confirms a draft).
+    async 'strategy-doc-edit'({ clientId, payload, by, proposalId, proposal }) {
+      if (!docStore || typeof docStore.apply !== 'function') throw new ProposalExecutionError('strategy document is not available on this deployment');
+      const store = docStore;
+      const cur = await store.get(clientId);
+      const currentVersion = cur?.version ?? 0;
+      if (currentVersion !== payload.expectedVersion) throw new ProposalExecutionError('strategy changed since this was proposed', { error: 'stale', currentVersion });
+      try {
+        const out = await store.apply(clientId, {
+          sections: { [payload.section]: payload.text }, expectedVersion: payload.expectedVersion, by, source: 'chat', proposalId,
+          reason: proposal?.summary || '', now: clock(), base: docBase,
+        });
+        return { changed: out.changed, version: out.doc?.version ?? currentVersion, section: payload.section };
+      } catch (err) {
+        if (err instanceof StrategyDocError && err.code === 'version-conflict') {
+          throw new ProposalExecutionError('strategy changed since this was proposed', { error: 'stale', currentVersion: err.currentVersion ?? null });
+        }
+        throw err;
+      }
+    },
     async 'refresh-handles'({ clientId, payload, context, auth }) {
       const res = await need(refreshHandles, 'refresh')({ clientId, handles: payload.handles, context, auth });
       if (res && res.ok === false) throw new ProposalExecutionError(res.error || 'refresh refused');

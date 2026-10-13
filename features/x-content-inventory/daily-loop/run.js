@@ -11,6 +11,7 @@ import { selectSuggestions, selectForSlots } from './select.js';
 import { planSlots } from './slots.js';
 import { tracksOf } from '../../x-strategy/content-tracks.js';
 import { promotionsOf, promotionSelfReply } from '../../x-strategy/promotions.js';
+import { strategyGuidance } from '../../x-strategy/strategy-doc.js';
 import { buildContributionPrompt, fallbackCopy, checkSuggestionText } from './copy.js';
 
 const REVIEWED = new Set(['edited', 'saved', 'dismissed']);
@@ -65,7 +66,7 @@ export function describeInputs(inputs, now) {
   ];
 }
 
-export function inputFingerprint({ scan, search, packages, brain, strategyPlan, strategySource, benchmark, max, contentTracks }) {
+export function inputFingerprint({ scan, search, packages, brain, strategyPlan, strategySource, benchmark, max, contentTracks, strategyDoc }) {
   const pkgSig = packages.map((p) => `${p.id}:${p.updatedAt || ''}:${String(p.story || '').length}:${p.rights}:${p.status}`).sort().join(',');
   return stableHash([
     scan?.generatedAt || 'no-scan',
@@ -81,6 +82,8 @@ export function inputFingerprint({ scan, search, packages, brain, strategyPlan, 
     max,
     // Track shares/promotion links join the hash only when tracks were supplied, so old inputs keep their fingerprint.
     ...(contentTracks ? [stableHash(JSON.stringify(contentTracks.map((t) => [t.id, t.engines, t.share, t.promotions.map((p) => [p.id, p.url])])))] : []),
+    // A CONFIRMED strategy document changes drafting, so its version joins the hash; a draft or no doc adds nothing.
+    ...(strategyDoc?.confirmed ? [`strategy-doc-v${strategyDoc.version}`] : []),
     LOOP_VERSION,
   ].join('|'));
 }
@@ -140,7 +143,12 @@ export async function runDailyLoop(deps, opts = {}) {
   }
   if (!inputs.ownSummary) gaps.push({ code: 'no-own-history', message: 'No own-account history loaded — history evidence is missing.' });
   gaps.push({ code: 'feedback-loop-manual', message: 'Performance feedback is not automated: history comes from saved corpora, not from today’s results.' });
-  const voice = brain.status === 'approved' ? (brain.context || '') : '';
+  // Drafting voice = the approved Brain, plus the Rules + Formats of a CONFIRMED strategy document (none for a draft).
+  const brainVoice = brain.status === 'approved' ? (brain.context || '') : '';
+  const guidance = strategyGuidance(inputs.strategyDoc);
+  const voice = guidance
+    ? `${brainVoice || '(no approved brand voice — write plainly and specifically, first person, lowercase start is fine)'}\n\n${guidance}`
+    : brainVoice;
 
   const run = {
     clientId, localDate, timezone, channel: CHANNEL, version: LOOP_VERSION,
@@ -156,6 +164,8 @@ export async function runDailyLoop(deps, opts = {}) {
     searchGeneratedAt: inputs.search?.generatedAt || null,
     brainVersion: brain.status === 'approved' ? (brain.version ?? null) : null,
     brainStatus: brain.status || 'missing',
+    // Present only when a confirmed strategy document shaped drafting (absent keeps old run docs byte-identical).
+    ...(inputs.strategyDoc?.confirmed ? { strategyDocVersion: inputs.strategyDoc.version ?? null } : {}),
     strategy: { decisions: strategy.decisions, notes: strategy.notes, plan: strategy.plan },
     brandProfile: selection.brandProfile,
     shortlist: selection.shortlist,

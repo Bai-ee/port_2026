@@ -20,9 +20,13 @@ test('posts the Messages API shape with headers, model, tools, max_tokens', asyn
   const body = JSON.parse(cap.init.body);
   assert.equal(body.model, 'claude-sonnet-4-6');
   assert.equal(body.max_tokens, 321);
-  assert.equal(body.system, 'sys');
+  // Prompt caching: system as a cached text block, last tool and newest message carry the breakpoint.
+  assert.deepEqual(body.system, [{ type: 'text', text: 'sys', cache_control: { type: 'ephemeral' } }]);
   assert.equal(body.tools[0].name, 't');
-  assert.deepEqual(body.messages, args.messages);
+  assert.deepEqual(body.tools.at(-1).cache_control, { type: 'ephemeral' });
+  assert.equal(body.messages.length, args.messages.length);
+  assert.deepEqual(body.messages.at(-1).content.at(-1).cache_control, { type: 'ephemeral' });
+  assert.ok(!JSON.stringify(args.messages).includes('cache_control'), 'input not mutated');
   assert.equal(out.content[0].text, 'hi');
 });
 

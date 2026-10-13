@@ -6,6 +6,7 @@ import { tracksOf } from '../content-tracks.js';
 
 export const STRATEGY_AGENT_MODEL = 'claude-sonnet-4-6';
 export const PLAN_SUMMARY_MAX_CHARS = 2400; // ~600 tokens
+export const STRATEGY_DOC_MAX_CHARS = 7000; // ~1.8k tokens: the whole document at typical length
 
 /** Compact one-paragraph plan summary from a plan doc or bare plan. Never throws. */
 export function summarizePlan(planInput) {
@@ -73,7 +74,7 @@ export function describeSelected(selected, resolved) {
  * @param {{evaluationSummary?: string, planSummary?: string|object}} input
  * @returns {string}
  */
-export function buildSystemPrompt({ evaluationSummary, planSummary, selectedContext } = {}) {
+export function buildSystemPrompt({ evaluationSummary, planSummary, selectedContext, strategyDocText } = {}) {
   const plan = typeof planSummary === 'string' ? planSummary : summarizePlan(planSummary);
   const lines = [
     'You are the X strategy analyst inside the owner\'s Content Engine. You help the owner understand their X account against the accounts they benchmark, and you suggest changes to their posting plan. You are talking to the owner, one conversation turn at a time.',
@@ -95,6 +96,14 @@ export function buildSystemPrompt({ evaluationSummary, planSummary, selectedCont
     '- When the owner refers to an item, always say which of three it is: a RECOMMENDATION (a daily-run suggestion, not saved), a SAVED POST (a draft), or an APPROVED/SCHEDULED POST. If a SELECTED ITEM line is present, use its label. If it says the item could not be found, say that.',
     '- get_queue, get_post, get_opportunities and get_results only read. For missing metrics a tool reports null/missing: say "missing", never treat it as zero.',
     '',
+    'THE STRATEGY DOCUMENT (the owner\'s strategy; text below)',
+    '- The Strategy document is the owner\'s strategy, in their words. Argue from it, quote the section you mean, and say which section new data supports, weakens or contradicts. Where it and the STRATEGY MODEL below differ, the document wins.',
+    '- The owner edits it directly. You change it ONLY with propose_strategy_doc_edit: one section per proposal, the WHOLE new section text, the owner\'s wording kept wherever it still holds. Call get_strategy_doc first for the version.',
+    '- If it is a DRAFT, say so plainly and help the owner shape and confirm it; never treat a draft as settled.',
+    '- The Decisions section is settled. Do not reopen a decision unless measured data contradicts it; then name the decision, show the figures, and propose the edit.',
+    '- The plan (posts/day, floors, caps, tracks) is how the document is executed. When a document change implies a plan change, propose both (that uses your two proposals for the turn).',
+    '- To help the owner work out a section, ask one focused question at a time and offer a concrete draft they can react to.',
+    '',
     'STRATEGY MODEL (distilled; fetch the numbers with tools)',
     '- Format decides reach. Curation-react (quote-react: a striking object from someone else plus a very short reaction, no explaining, no own link) is the reach engine. Original-showcase (short screen-captured video of something built, no intro, credits and links in the first self-reply) is the conversion engine.',
     '- Video beats images; static images can do worse than text. Links go in the first self-reply, not the main post. Credits go in the reply.',
@@ -112,6 +121,7 @@ export function buildSystemPrompt({ evaluationSummary, planSummary, selectedCont
     '',
     `CURRENT PLAN: ${clip(plan, PLAN_SUMMARY_MAX_CHARS)}`,
   ];
+  lines.push(strategyDocText ? clip(strategyDocText, STRATEGY_DOC_MAX_CHARS) : 'STRATEGY DOCUMENT: none available.');
   if (selectedContext) lines.push(clip(selectedContext, 700));
   if (evaluationSummary) lines.push(`DATA NOTE: ${clip(evaluationSummary, 400)}`);
   return lines.join('\n');

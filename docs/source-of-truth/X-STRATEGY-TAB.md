@@ -200,3 +200,34 @@ Run: `node --test features/x-strategy/__tests__/*.test.js` (targeted) and `npm t
 
 ## Content tracks (2026-10-11)
 `plan.contentTracks`, per-track benchmarks/profiles and the "Content tracks" panel: see [`CONTENT-TRACKS.md`](CONTENT-TRACKS.md).
+
+## Strategy document (2026-10-12)
+
+The owner's strategy in words, above the plan knobs: doc (why/what) → plan (how much) → daily loop. Plan of record:
+[`docs/plans/X-STRATEGY-DOCUMENT-MASTER-PLAN.md`](../plans/X-STRATEGY-DOCUMENT-MASTER-PLAN.md).
+
+- **Store:** `x_strategy_docs/{clientId}` `{version, updatedAt, updatedBy, confirmed, sections{thesis, audience, tracks,
+  formats, rules, algorithm, decisions, open}, lastReview, history[≤25]}`. Pure logic `features/x-strategy/strategy-doc.js`,
+  store `strategy-doc-store.js` (version-checked transactions), seed draft `strategy-doc-seed.js`. Section cap 2,000 chars.
+  History keeps only changed sections' before/after; restore writes a NEW version.
+- **Draft vs confirmed:** no doc ⇒ the seed draft (version 0, never persisted by a read). The owner's first manual save
+  confirms it. A chat edit never confirms. Only a confirmed doc reaches drafting.
+- **Actions:** `strategy-doc-get` / `strategy-doc-save` (sections + expectedVersion) / `strategy-doc-revert` /
+  `strategy-review` (one agent turn with a fixed brief, 6 rounds / 2,500 tokens, stamps `lastReview` with doc + plan
+  version and the newest corpus `pulledAt`). Same daily turn cap as chat.
+- **Agent:** the doc (+ last 5 changes) is in the system prompt (capped 7k chars). New proposal kind `strategy-doc-edit`
+  `{section, text, expectedVersion}` → executor writes source `chat` (stale ⇒ `failed/stale`). New read tools:
+  `get_strategy_doc`, `get_algorithm` (active ranking profile), `score_posts` (scoreXPost, originals only),
+  `get_rule_check` (guardXPost over own last N days), `get_audience` (stored X Monitor data, never syncs).
+  Pure shapers in `features/x-strategy/insights.js`; scorer/guard/profile injected by `route-handlers.js`.
+- **Daily loop:** `loadContentContext` reads the doc when `readStrategyDoc` is wired (dashboard route + worker cron) and
+  lists it as input `strategy-doc`. A CONFIRMED doc's Rules + Formats (`strategyGuidance`, ≤1,800 chars) join the
+  drafting voice; its version joins the run fingerprint and the run doc (`strategyDocVersion`). Draft/absent ⇒ no change
+  (t5 golden stays byte-identical).
+- **UI:** Details sub-tab **Strategy** (`StrategyDocPanel.jsx`, `#strategy-doc-panel`, `#strategy-doc-section-<key>`);
+  header row `#x-strategy-actions-row` (Refresh data = `strategy-refresh` for own + benchmarks; Review strategy);
+  `#x-strategy-review-due-banner` when corpora are newer than `lastReview.dataAsOf`; chat shows manual doc edits as
+  `doc-history` rows and doc-edit cards with the current section text; empty chat offers "Start strategy session".
+- **Cost:** prompt caching on tools + system + newest message (`withPromptCache` in `agent/loop.js`); cache-aware cost
+  in `usage-logger.cjs` (write 1.25×, read 0.1×). Measured review: ~$0.40 before caching, ~$0.17 after (5 calls).
+- **Not yet:** Strategy Builder does not read the doc; chat cannot edit queued/scheduled posts (planned follow-up).

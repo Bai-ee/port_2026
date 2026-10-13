@@ -61,11 +61,18 @@ function rateFor(model) {
 
 // ─── COST HELPERS ────────────────────────────────────────────────────────────
 
-function computeAnthropicCost({ model, inputTokens = 0, outputTokens = 0 } = {}) {
+// Prompt caching (Anthropic): a cache WRITE bills 1.25x the input rate, a cache READ 0.1x. Both default to 0, so
+// callers that never cache get exactly the old figure.
+const CACHE_WRITE_MULTIPLIER = 1.25;
+const CACHE_READ_MULTIPLIER = 0.1;
+function computeAnthropicCost({ model, inputTokens = 0, outputTokens = 0, cacheWriteTokens = 0, cacheReadTokens = 0 } = {}) {
   const r = rateFor(model);
   if (!r) return 0;
-  return ((Number(inputTokens)  || 0) * (r.inputPerToken  || 0))
-       + ((Number(outputTokens) || 0) * (r.outputPerToken || 0));
+  const inRate = r.inputPerToken || 0;
+  return ((Number(inputTokens)  || 0) * inRate)
+       + ((Number(outputTokens) || 0) * (r.outputPerToken || 0))
+       + ((Number(cacheWriteTokens) || 0) * inRate * CACHE_WRITE_MULTIPLIER)
+       + ((Number(cacheReadTokens) || 0) * inRate * CACHE_READ_MULTIPLIER);
 }
 
 function computeOpenAiTextCost(args) {
@@ -176,9 +183,11 @@ async function logAnthropicCall({ module: moduleName, action = null, model, resp
   const usage = response?.usage || {};
   const inputTokens = Number(usage.input_tokens) || 0;
   const outputTokens = Number(usage.output_tokens) || 0;
+  const cacheWriteTokens = Number(usage.cache_creation_input_tokens) || 0;
+  const cacheReadTokens = Number(usage.cache_read_input_tokens) || 0;
   const searches = webSearchRequests(response);
   const searchCost = searches * WEB_SEARCH_USD_PER_REQUEST;
-  const costUsd = computeAnthropicCost({ model, inputTokens, outputTokens }) + searchCost;
+  const costUsd = computeAnthropicCost({ model, inputTokens, outputTokens, cacheWriteTokens, cacheReadTokens }) + searchCost;
   return logUsage({
     module: moduleName,
     action,
@@ -189,9 +198,11 @@ async function logAnthropicCall({ module: moduleName, action = null, model, resp
     costUsd,
     clientId,
     runId,
-    metadata: searches
-      ? { ...metadata, webSearchRequests: searches, webSearchSurchargeUsd: round4(searchCost) }
-      : metadata,
+    metadata: {
+      ...metadata,
+      ...(searches ? { webSearchRequests: searches, webSearchSurchargeUsd: round4(searchCost) } : {}),
+      ...(cacheWriteTokens || cacheReadTokens ? { cacheWriteTokens, cacheReadTokens } : {}),
+    },
   });
 }
 

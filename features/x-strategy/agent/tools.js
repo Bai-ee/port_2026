@@ -5,6 +5,7 @@
 import { PROPOSAL_KINDS, PLAN_LIMITS, KNOWN_SLOT_TYPES } from '../contracts.js';
 import { PLAN_FIELDS, HANDLE_RE, applyChange } from '../plan-state.js';
 import { tracksOf } from '../content-tracks.js';
+import { SECTION_KEYS, SECTION_MAX, STRATEGY_DOC_SECTIONS, applyDocEdit, normalizeSections } from '../strategy-doc.js';
 
 export const LIMITS = Object.freeze({
   inventoryMax: 20,
@@ -50,6 +51,7 @@ export const PROPOSE_TOOL_BY_KIND = Object.freeze({
   'item-story': 'propose_item_story',
   'regenerate-today': 'propose_regenerate_today',
   'refresh-handles': 'propose_refresh_handles',
+  'strategy-doc-edit': 'propose_strategy_doc_edit',
 });
 export const KIND_BY_PROPOSE_TOOL = Object.freeze(
   Object.fromEntries(Object.entries(PROPOSE_TOOL_BY_KIND).map(([k, v]) => [v, k])),
@@ -100,6 +102,38 @@ const planChangeProps = {
 };
 
 export const READ_TOOLS = Object.freeze([
+  {
+    name: 'get_strategy_doc',
+    description: `The owner's Strategy document: version, whether the owner has confirmed it (a draft is not settled strategy), the text of each section (${SECTION_KEYS.join(', ')}), the last review, and the recent change log (who changed which section, manual or chat). Call it before proposing a strategy edit and pass its version as expectedVersion.`,
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'get_algorithm',
+    description: 'The active X ranking profile: published per-action weights (reply, quote, share, follow, like, negatives like report/mute), boosts (mutual-follow reply), multipliers (out-of-network, author diversity), cold-start and video thresholds, plus the reviewed assumptions with confidence. Use it to explain WHY a format or rule works.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'score_posts',
+    description: 'Score the original posts (showcase, text, self-quote) of the owner or a benchmark with the post scorer built on the active algorithm profile: best and worst by score, median, and whether high-scoring posts actually got more views. Quote-reacts are skipped (the scorer has no borrowed-reach term). Read-only, free.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        handle: str('Own or benchmark handle, no @. Omit for the owner.'),
+        days: int('Only posts from the last N days', { minimum: 1, maximum: 365 }),
+        limit: int('How many best posts to list', { minimum: 1, maximum: 15 }),
+      },
+    },
+  },
+  {
+    name: 'get_rule_check',
+    description: "Run the content guard (work-vs-casino lanes, hashtags, inline links, image-instead-of-video, retweets) over the owner's own recent posts: hard blocks, flag counts, lane mix, worst offenders. Read-only, free.",
+    input_schema: { type: 'object', properties: { days: int('Look-back window in days (default 30)', { minimum: 1, maximum: 180 }) } },
+  },
+  {
+    name: 'get_audience',
+    description: "The owner's stored X Monitor data: followers now, follower trend (needs two snapshots), gained/lost followers, and per-post impressions (real views, not likes) for recent posts. Reads stored data only; never syncs or spends.",
+    input_schema: { type: 'object', properties: { days: int('Impressions window in days (default 30)', { minimum: 1, maximum: 120 }) } },
+  },
   {
     name: 'get_evaluation',
     description: 'The current evaluation: own vs benchmark cadence, type mix, lift, top gaps, recommended tier, and caveats (likes-only, few rows, stale). Every figure has a row count and date range.',
@@ -187,6 +221,11 @@ export const PROPOSE_TOOLS = Object.freeze([
   propose('refresh-handles', `Propose refreshing the data for up to ${PLAN_LIMITS.maxHandlesPerRefreshRequest} handles (free local read).`, {
     handles: { type: 'array', minItems: 1, maxItems: PLAN_LIMITS.maxHandlesPerRefreshRequest, items: str('Handle, no @') },
   }, ['handles']),
+  propose('strategy-doc-edit', `Propose new text for ONE section of the owner's Strategy document. Send the WHOLE new section text (it replaces the section), keep the owner's own wording wherever it still holds, and change only what the conversation or the data supports. Call get_strategy_doc first and pass its version as expectedVersion. Sections: ${STRATEGY_DOC_SECTIONS.map((x) => `${x.key} (${x.hint})`).join('; ')}`, {
+    section: { type: 'string', enum: [...SECTION_KEYS], description: 'Which section to replace' },
+    text: str('The complete new text of that section', { maxLength: SECTION_MAX }),
+    expectedVersion: int('The document version from get_strategy_doc (0 when it is still the unsaved draft).', { minimum: 0 }),
+  }, ['section', 'text', 'expectedVersion']),
 ]);
 
 export const TOOL_SCHEMAS = Object.freeze([...READ_TOOLS, ...PROPOSE_TOOLS]);
@@ -284,7 +323,24 @@ export async function runReadTool(name, input, toolDeps) {
   const deps = toolDeps ?? {};
   const need = (fn) => { if (typeof deps[fn] !== 'function') throw new Error(`${fn} is not available`); return deps[fn]; };
   switch (name) {
+    case 'get_strategy_doc': {
+      const doc = await need('getStrategyDoc')();
+      if (!doc) return { error: 'no strategy document' };
+      return {
+        version: doc.version ?? 0, confirmed: !!doc.confirmed, sections: normalizeSections(doc.sections),
+        lastReview: doc.lastReview ?? null, updatedAt: doc.updatedAt ?? null,
+        recentChanges: (doc.history || []).slice(-8).map((h) => ({ version: h.version, at: h.at, source: h.source, changed: h.changed, reason: h.reason || '' })),
+      };
+    }
     case 'get_evaluation': return need('getEvaluation')();
+    case 'get_algorithm': return need('getAlgorithm')();
+    case 'score_posts': return need('scorePosts')({
+      handle: input?.handle ? cleanHandle(input.handle) : undefined,
+      days: Number.isInteger(input?.days) ? input.days : undefined,
+      limit: clampLimit(input?.limit, 15),
+    });
+    case 'get_rule_check': return need('getRuleCheck')({ days: Number.isInteger(input?.days) ? Math.min(Math.max(input.days, 1), 180) : 30 });
+    case 'get_audience': return need('getAudience')({ days: Number.isInteger(input?.days) ? Math.min(Math.max(input.days, 1), 120) : 30 });
     case 'get_plan': return { plan: await need('getPlan')() };
     case 'get_tracks': {
       if (typeof deps.getTracks === 'function') return deps.getTracks();
@@ -458,6 +514,22 @@ export async function prepareProposal(toolName, input, { toolDeps, userMessages 
         const unknown = r.handles.filter((h) => !known.has(h.toLowerCase()) && !said.some((m) => m.split(/[^a-z0-9_]+/).includes(h.toLowerCase())));
         if (unknown.length) return fail(`not in the profile (own + benchmarks) and not named by the owner in this conversation: ${unknown.join(', ')}. Ask the owner before proposing a refresh.`);
         payload = { handles: r.handles };
+        break;
+      }
+      case 'strategy-doc-edit': {
+        const section = cleanText(input.section, 40);
+        if (!SECTION_KEYS.includes(section)) return fail(`section must be one of ${SECTION_KEYS.join(', ')}`);
+        if (typeof input.text !== 'string' || !input.text.trim()) return fail('text is required (the whole new section)');
+        if (input.text.trim().length > SECTION_MAX) return fail(`text must be at most ${SECTION_MAX} characters`);
+        if (!Number.isInteger(input.expectedVersion) || input.expectedVersion < 0) return fail('expectedVersion must be a non-negative integer (use the version from get_strategy_doc)');
+        if (typeof toolDeps?.getStrategyDoc !== 'function') return fail('the strategy document is not available');
+        const doc = await toolDeps.getStrategyDoc();
+        const stored = doc && doc.version ? doc : null; // a version-0 doc is the unsaved draft: dry-run from its sections
+        const res = applyDocEdit(stored, { sections: { [section]: input.text }, by: 'agent-dry-run', source: 'chat', expectedVersion: input.expectedVersion, base: doc?.sections });
+        if (res.error === 'version-conflict') return fail(`the strategy is at version ${res.currentVersion}, not ${input.expectedVersion}; call get_strategy_doc and retry`);
+        if (res.error === 'noop') return fail('that text is already the current section');
+        if (res.error) return fail(`invalid strategy edit: ${(res.errors ?? []).join('; ')}`);
+        payload = { section, text: input.text.trim(), expectedVersion: input.expectedVersion };
         break;
       }
       default: return fail(`unsupported kind: ${kind}`);

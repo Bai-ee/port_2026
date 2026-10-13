@@ -27,8 +27,23 @@ const entry = (id, label, { source, asOf = null, usable, caveats = [], version =
 );
 
 /** Pure: turn the loader output into the status list. Exported for tests. */
-export function describeContentInputs({ raw, planDoc, planInputs, brainError = null, now }) {
+export function describeContentInputs({ raw, planDoc, planInputs, brainError = null, now, strategyDoc }) {
   const out = [];
+
+  // Strategy document: listed only when the caller wires readStrategyDoc (undefined = not wired, unchanged hash).
+  if (strategyDoc !== undefined) {
+    const confirmed = !!strategyDoc?.confirmed;
+    out.push(entry('strategy-doc', 'Strategy document', {
+      source: 'x_strategy_docs',
+      asOf: strategyDoc?.updatedAt || null,
+      usable: confirmed,
+      version: strategyDoc?.version ?? null,
+      caveats: [
+        !strategyDoc ? 'No strategy document saved: drafts follow the measured rules only.' : '',
+        strategyDoc && !confirmed ? 'Strategy document is a draft: not used until the owner confirms it.' : '',
+      ],
+    }));
+  }
 
   // Executable plan
   const planCaveats = [];
@@ -144,6 +159,8 @@ export async function loadContentContext(deps, { clientId, now = Date.now(), pac
   if (!clientId) throw new Error('loadContentContext requires clientId');
   // The plan doc is read once and shared by the runner input and the status list.
   const planDoc = deps.readPlanDoc ? await deps.readPlanDoc(clientId) : null;
+  // Strategy document (x_strategy_docs): undefined when not wired, so older callers see no change.
+  const strategyDoc = deps.readStrategyDoc ? (await deps.readStrategyDoc(clientId)) ?? null : undefined;
   let brainError = null;
   const raw = await loadDailyLoopInputs({
     ...deps,
@@ -154,8 +171,9 @@ export async function loadContentContext(deps, { clientId, now = Date.now(), pac
       }
       : undefined,
   }, { clientId, now, packageIds, corpora });
+  if (strategyDoc !== undefined) raw.strategyDoc = strategyDoc;
   const planInputs = resolvePlanInputs(planDoc);
-  const inputs = describeContentInputs({ raw, planDoc, planInputs, brainError, now });
+  const inputs = describeContentInputs({ raw, planDoc, planInputs, brainError, now, strategyDoc });
   return {
     clientId,
     now,

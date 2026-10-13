@@ -2,7 +2,7 @@
 
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import {
-  ArrowUpRight, BarChart3, ChevronDown, Database, FileText, MessagesSquare, Pencil, Plus, Quote, RefreshCw, RotateCcw, Trash2,
+  ArrowUpRight, BarChart3, ChevronDown, Database, FileText, MessagesSquare, Pencil, Plus, Quote, RefreshCw, RotateCcw, Sparkles, Trash2,
 } from 'lucide-react';
 import { DEFAULT_PLAN, PLAN_LIMITS } from '../../../features/x-strategy/index.js';
 import {
@@ -12,6 +12,7 @@ import {
   todayPlanLine, planErrorView, workerHealthLine, trackDraftFromPlan, trackChangesFromDraft, tracksSavedText, trackInsightsView,
 } from '../../../features/x-strategy/ui-model.js';
 import ContentTracksPanel from './ContentTracksPanel.jsx';
+import StrategyDocPanel from './StrategyDocPanel.jsx';
 import { profileBenchmarksFromPlan } from '../../../features/x-strategy/track-profile.js';
 import StrategyChat, { formatDayTime } from './StrategyChat.jsx';
 import { XCE_COLORS, XCE_RADII } from './xce-tokens';
@@ -29,7 +30,8 @@ import WarnRow from './ui/WarnRow';
 //   >=900px  two columns (chat left, Details right)
 //   481-899  one column, Details below the chat
 //   <=480    a Chat | Details toggle shows one pane at a time (both stay mounted, so the chat keeps its state)
-// Details has four sub-tabs: Plan . Accounts . Insights . History. All of it is the SAME data and handlers as
+// Details has five sub-tabs: Strategy (the owner's Strategy document, StrategyDocPanel.jsx) . Plan . Accounts .
+// Insights . History. All of it is the SAME data and handlers as
 // before (strategy-get / strategy-plan-apply / strategy-plan-revert / strategy-refresh / strategy-profile-save /
 // strategy-evaluate-handle); this file only arranges them. The "Ask in chat" buttons switch to the chat and
 // FILL its composer; they never send.
@@ -71,6 +73,8 @@ const S = {
 const LAYOUT_CSS = `
   #x-strategy-root { min-width: 0; }
   #x-strategy-header-chips-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  #x-strategy-actions-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  #x-strategy-actions-row .xce-btn { min-height: 40px; display: inline-flex; align-items: center; gap: 6px; }
   #x-strategy-layout { display: grid; gap: 12px; min-width: 0; }
   #x-strategy-chat-column, #x-strategy-details-column { display: grid; gap: 12px; min-width: 0; align-content: start; }
   #x-strategy-details-panel { display: grid; gap: 12px; min-width: 0; align-content: start; }
@@ -85,6 +89,7 @@ const LAYOUT_CSS = `
 `;
 
 const DETAIL_TABS = [
+  { value: 'strategy', label: 'Strategy' },
   { value: 'plan', label: 'Plan' },
   { value: 'accounts', label: 'Accounts' },
   { value: 'insights', label: 'Insights' },
@@ -311,7 +316,10 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
 
   // presentation state (no data flow): which pane / Details sub-tab is showing, composer prefill, history UI
   const [view, setView] = useState('chat');
-  const [detailTab, setDetailTab] = useState('plan');
+  const [detailTab, setDetailTab] = useState('strategy');
+  // The owner's Strategy document (strategy-doc-get), owned here so the chat timeline can show its changes.
+  const [stratDoc, setStratDoc] = useState({ doc: null, meta: [], loading: true, error: '' });
+  const [reviewRequest, setReviewRequest] = useState(null); // {nonce}: asks the chat to run a strategy review
   const [prefill, setPrefill] = useState(null);
   const [historyFilter, setHistoryFilter] = useState('all');
   const [expandedVersion, setExpandedVersion] = useState(0);
@@ -350,8 +358,19 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
     }
   }, [call, clientId, baseBody]);
 
+  const loadDoc = useCallback(async () => {
+    if (!clientId || typeof call !== 'function') return;
+    setStratDoc((d) => ({ ...d, loading: true, error: '' }));
+    try {
+      const res = await call('strategy-doc-get', baseBody());
+      if (mounted.current) setStratDoc({ doc: res.doc, meta: res.sections || [], loading: false, error: '' });
+    } catch (err) {
+      if (mounted.current) setStratDoc((d) => ({ ...d, loading: false, error: errText(err, 'Could not load the strategy document.') }));
+    }
+  }, [call, clientId, baseBody]);
+
   useImperativeHandle(ref, () => ({ reload }), [reload]);
-  useEffect(() => { reload(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [clientId]);
+  useEffect(() => { reload(); loadDoc(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [clientId]);
 
   // ---- refresh + polling ---------------------------------------------------------------------------------
   const startRefresh = useCallback(async (handleList) => {
@@ -562,6 +581,12 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
 
   const shownHistory = history.filter((h) => historyFilter === 'all' || (h.source || 'manual') === historyFilter);
 
+  // "New data since the last review": the newest corpus pull is later than what the last review looked at.
+  const latestDataAt = (data?.rowsMeta || []).map((r) => r?.freshness?.pulledAt).filter(Boolean).sort().pop() || null;
+  const lastReview = stratDoc.doc?.lastReview || null;
+  const reviewDue = !!latestDataAt && !!stratDoc.doc && (!lastReview || !lastReview.dataAsOf || latestDataAt > lastReview.dataAsOf);
+  const askReview = () => { setReviewRequest({ nonce: Date.now() }); setView('chat'); };
+
   const detailTabsBar = (
     <SegmentedControl
       id="x-strategy-details-tabs"
@@ -601,7 +626,28 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
         {clientName ? <Badge id="x-strategy-chip-client" tone="grey">{clientName}</Badge> : null}
         {chipHandle ? <Badge id="x-strategy-chip-handle" tone="grey">@{chipHandle}</Badge> : null}
         <Badge id="x-strategy-chip-plan-version" tone="grey">{planVersion ? `Plan v${planVersion}` : 'Plan default'}</Badge>
+        <Badge id="x-strategy-chip-doc-version" tone={stratDoc.doc?.confirmed ? 'grey' : 'amber'}>{stratDoc.doc?.version ? `Strategy v${stratDoc.doc.version}${stratDoc.doc.confirmed ? '' : ' · draft'}` : 'Strategy draft'}</Badge>
       </div>
+
+      {/* Refresh pulls fresh posts for you + every benchmark (free, via the Mac worker); Review asks the agent
+          to check the strategy against them and say in the chat what, if anything, should change. */}
+      <div id="x-strategy-actions-row">
+        <button type="button" id="x-strategy-refresh-all-button" className="xce-btn xce-btn-ghost" disabled={refreshing || !profile} onClick={() => startRefresh()}>
+          <RefreshCw size={15} /> {refreshing ? 'Refreshing…' : 'Refresh data'}
+        </button>
+        <button type="button" id="x-strategy-review-button" className="xce-btn" disabled={!stratDoc.doc} onClick={askReview}>
+          <Sparkles size={15} /> Review strategy
+        </button>
+        <span id="x-strategy-review-status" style={S.muted}>
+          {refreshView?.active ? refreshView.headline : lastReview?.at ? `Last review ${formatDayTime(lastReview.at)}` : 'Not reviewed yet'}
+        </span>
+      </div>
+      {refresh.error ? <Msg id="x-strategy-refresh-all-error" kind="err">{refresh.error}</Msg> : null}
+      {reviewDue && !refreshing ? (
+        <WarnRow id="x-strategy-review-due-banner" actionLabel="Review now" onAction={askReview}>
+          {lastReview ? 'New data since your last review.' : 'Your strategy has not been reviewed against the data yet.'}
+        </WarnRow>
+      ) : null}
 
       <div id="x-strategy-layout" data-view={view}>
         <div id="x-strategy-chat-column">
@@ -619,6 +665,12 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
             onViewChange={(version) => goDetails('history', version)}
             onUndo={undoFromChat}
             undoNote={undoVersion ? { version: undoVersion, busy: planBusy, text: planMsg.text, kind: planMsg.kind } : null}
+            docHistory={stratDoc.doc?.history}
+            docSections={stratDoc.doc?.sections}
+            reviewRequest={reviewRequest}
+            onDocChanged={loadDoc}
+            onReviewed={loadDoc}
+            onViewDoc={() => goDetails('strategy')}
           />
         </div>
 
@@ -626,6 +678,21 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
           <section id="x-strategy-details-panel" className="xce-panel" data-section="details">
             <SectionLabel id="x-strategy-details-header">Details</SectionLabel>
             {detailTabsBar}
+
+            {/* ---------------- STRATEGY DOCUMENT ---------------- */}
+            {detailTab === 'strategy' ? (
+              <StrategyDocPanel
+                clientId={clientId}
+                call={call}
+                doc={stratDoc.doc}
+                meta={stratDoc.meta}
+                loading={stratDoc.loading}
+                loadError={stratDoc.error}
+                onReload={loadDoc}
+                onSaved={(doc) => setStratDoc((d) => ({ ...d, doc }))}
+                onAskInChat={askInChat}
+              />
+            ) : null}
 
             {/* ---------------- PLAN ---------------- */}
             {detailTab === 'plan' ? (

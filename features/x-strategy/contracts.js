@@ -81,6 +81,7 @@ export const PROPOSAL_KINDS = Object.freeze([
   'item-story',
   'regenerate-today',
   'refresh-handles',
+  'strategy-doc-edit',
 ]);
 
 /**
@@ -97,6 +98,7 @@ export const PROPOSAL_KIND_ACTIONS = Object.freeze({
   'item-story': 'update-item-facets',
   'regenerate-today': 'daily-run-generate',
   'refresh-handles': 'strategy-refresh',
+  'strategy-doc-edit': 'strategy-doc-save',
 });
 
 export const PROPOSAL_STATUSES = Object.freeze(['pending', 'deciding', 'confirmed', 'rejected', 'failed']);
@@ -120,11 +122,16 @@ export const ROUTE_ACTIONS = Object.freeze([
   'strategy-chat-history',
   'strategy-proposal-decide',
   'strategy-profile-save',
+  'strategy-doc-get',
+  'strategy-doc-save',
+  'strategy-doc-revert',
+  'strategy-review',
 ]);
 
 export const STRATEGY_COLLECTIONS = Object.freeze({
   corpora: 'x_corpora',
   plans: 'x_strategy_plans',
+  docs: 'x_strategy_docs',
   chats: 'x_strategy_chats',
   refreshRequests: 'x_strategy_refresh_requests',
 });

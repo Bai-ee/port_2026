@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUp, ArrowUpRight, Check, FileText, Plus } from 'lucide-react';
+import { ArrowUp, ArrowUpRight, BookOpen, Check, FileText, Plus, Sparkles } from 'lucide-react';
 import {
   proposalKindLabel, proposalPayloadPreview, proposalStatusText, chatErrorText, costFooterText, plainChatText,
   historyDiffSummary,
 } from '../../../features/x-strategy/ui-model.js';
+import { describeDocChange, sectionTitle } from '../../../features/x-strategy/strategy-doc.js';
 import { XCE_COLORS, XCE_RADII } from './xce-tokens';
 import Accordion from './ui/Accordion';
 import Badge from './ui/Badge';
@@ -24,6 +25,11 @@ import SectionLabel from './ui/SectionLabel';
 // to interleave manual-edit rows into the timeline; `prefill` = {text, nonce} fills the composer WITHOUT
 // sending; `onViewPlan` / `onViewChange(version)` switch the Details pane; `onUndo(version)` = the panel's
 // existing strategy-plan-revert to the prior version; `undoNote` = {version, busy, text, kind} feedback.
+//
+// Strategy document props (optional, owned by StrategyPanel): `docHistory` = doc history (oldest first), manual
+// entries are interleaved like plan edits; `docSections` = current section text (shown on a doc-edit card);
+// `reviewRequest` = {nonce} runs a strategy review (strategy-review) in the current thread; `onReviewed` /
+// `onDocChanged` let the panel re-read the doc; `onViewDoc` opens the Strategy sub-tab.
 //
 // `call(action, body)` is the card's quote-targets POST helper (throws errors with .status / .data).
 // One request per turn (non-streaming). The agent only PROPOSES; nothing runs until the owner presses
@@ -74,7 +80,8 @@ const CHAT_CSS = `
   }
 `;
 
-const PROMPT_CHIPS = ['Review my mix', 'Compare accounts'];
+const PROMPT_CHIPS = ['Help me shape my strategy', 'Compare me to my benchmarks', 'What does the algorithm reward?'];
+const REVIEW_TEXT = 'Review my strategy against the latest data.';
 
 const toMs = (at) => { const ms = Date.parse(at || ''); return Number.isFinite(ms) ? ms : null; };
 
@@ -95,7 +102,8 @@ export function formatDayTime(at) {
 
 const TONE_BY_STATUS = { pending: 'amber', ok: 'green', muted: 'grey', error: 'red' };
 
-function ProposalCard({ proposal, currentPlan, history, planVersion, deciding, onDecide, useModel, onUseModel, onViewPlan, onUndo, undoNote }) {
+function ProposalCard({ proposal, currentPlan, history, planVersion, deciding, onDecide, useModel, onUseModel, onViewPlan, onUndo, undoNote, docSections, onViewDoc }) {
+  const isDocEdit = proposal.kind === 'strategy-doc-edit';
   const id = proposal.id;
   const st = proposalStatusText(proposal);
   const evidence = Array.isArray(proposal.evidence) ? proposal.evidence : [];
@@ -132,7 +140,7 @@ function ProposalCard({ proposal, currentPlan, history, planVersion, deciding, o
         {confirmed ? <span id={`x-strategy-proposal-check-${id}`} style={S.checkDisc}><Check size={18} /></span> : null}
         <div id={`x-strategy-proposal-main-${id}`} style={{ display: 'grid', gap: 6, flex: 1, minWidth: 0 }}>
           <div id={`x-strategy-proposal-header-${id}`} style={S.cardHead}>
-            <span style={S.kind}>{confirmed && isPlanChange ? 'Plan updated' : proposalKindLabel(proposal.kind)}</span>
+            <span style={S.kind}>{confirmed && isPlanChange ? 'Plan updated' : confirmed && isDocEdit ? 'Strategy updated' : proposalKindLabel(proposal.kind)}</span>
             <Badge id={`x-strategy-proposal-status-${id}`} tone={TONE_BY_STATUS[st.tone] || 'grey'}>{badgeLabel}</Badge>
           </div>
           {proposal.summary ? <div id={`x-strategy-proposal-summary-${id}`} style={S.summary}>{proposal.summary}</div> : null}
@@ -153,6 +161,16 @@ function ProposalCard({ proposal, currentPlan, history, planVersion, deciding, o
           ) : null}
           {st.detail ? (
             <p id={`x-strategy-proposal-result-${id}`} role="status" style={st.tone === 'error' ? { ...S.err, margin: 0 } : st.tone === 'ok' ? S.ok : S.note}>{st.detail}</p>
+          ) : null}
+          {isDocEdit && pending && docSections ? (
+            <Accordion id={`x-strategy-proposal-current-text-${id}`} title={`Current ${sectionTitle(proposal.payload?.section)} text`}>
+              <p style={{ ...S.rationale, whiteSpace: 'pre-wrap' }}>{docSections[proposal.payload?.section] || 'Empty.'}</p>
+            </Accordion>
+          ) : null}
+          {isDocEdit && confirmed && typeof onViewDoc === 'function' ? (
+            <div style={{ ...S.row, justifyContent: 'flex-end' }}>
+              <button type="button" id={`x-strategy-proposal-view-doc-${id}`} style={S.textLink} onClick={onViewDoc}>View strategy <ArrowUpRight size={14} /></button>
+            </div>
           ) : null}
           {proposal.kind === 'item-story' && proposal.payload?.sourceQuote ? (
             <p id={`x-strategy-proposal-source-quote-${id}`} style={S.rationale}>Your words: {'“'}{proposal.payload.sourceQuote}{'”'}</p>
@@ -197,7 +215,10 @@ function ProposalCard({ proposal, currentPlan, history, planVersion, deciding, o
   );
 }
 
-export default function StrategyChat({ clientId, call, onPlanChanged, onRefreshed, currentPlan, planVersion, history, prefill, onViewPlan, onViewChange, onUndo, undoNote, selected }) {
+export default function StrategyChat({
+  clientId, call, onPlanChanged, onRefreshed, currentPlan, planVersion, history, prefill, onViewPlan, onViewChange, onUndo, undoNote, selected,
+  docHistory, docSections, reviewRequest, onReviewed, onDocChanged, onViewDoc,
+}) {
   const [threadId, setThreadId] = useState('');
   const [messages, setMessages] = useState([]);      // {role, text, proposalIds?}
   const [proposals, setProposals] = useState({});    // id -> proposal
@@ -266,31 +287,37 @@ export default function StrategyChat({ clientId, call, onPlanChanged, onRefreshe
   const timeline = useMemo(() => {
     const msgs = messages.map((m, n) => ({ kind: 'msg', m, n, ms: toMs(m.at) }));
     const firstMs = msgs.map((x) => x.ms).find((v) => v !== null);
-    const manual = firstMs === undefined ? [] : (Array.isArray(history) ? history : [])
+    // Manual plan edits AND manual strategy-document edits, oldest first (chat-made changes show on their cards).
+    const manualOf = (list, kind) => (firstMs === undefined ? [] : (Array.isArray(list) ? list : [])
       .filter((h) => (h.source || 'manual') === 'manual' && toMs(h.at) !== null && toMs(h.at) >= firstMs)
-      .sort((x, y) => toMs(x.at) - toMs(y.at));
+      .map((h) => ({ kind, h })));
+    const manual = [...manualOf(history, 'plan'), ...manualOf(docHistory, 'doc')].sort((x, y) => toMs(x.h.at) - toMs(y.h.at));
     const out = [];
     let i = 0;
-    const flush = (limit) => { while (i < manual.length && (limit === undefined || toMs(manual[i].at) <= limit)) { out.push({ kind: 'plan', h: manual[i] }); i += 1; } };
+    const flush = (limit) => { while (i < manual.length && (limit === undefined || toMs(manual[i].h.at) <= limit)) { out.push(manual[i]); i += 1; } };
     for (const item of msgs) {
       if (item.ms === null) flush(); else flush(item.ms);
       out.push(item);
     }
     flush();
     return out;
-  }, [messages, history]);
+  }, [messages, history, docHistory]);
 
-  const send = useCallback(async () => {
-    const body = text.trim();
+  // One turn: a typed message (strategy-chat-send) or a strategy review (strategy-review, fixed brief server-side).
+  const runTurn = useCallback(async ({ review = false } = {}) => {
+    const body = review ? REVIEW_TEXT : text.trim();
     if (!body || sending || typeof call !== 'function') return;
     const startedFor = clientId; // a response for a client that is no longer shown must not touch state
     const sel = selected && typeof selected === 'object' && typeof selected.kind === 'string' && typeof selected.id === 'string' && selected.id ? { kind: selected.kind, id: selected.id } : null;
     setSending(true);
     setError('');
     setMessages((m) => [...m, { role: 'user', text: body, pending: true }]);
-    setText('');
+    if (!review) setText('');
     try {
-      const res = await call('strategy-chat-send', { clientId, text: body, ...(threadId ? { threadId } : {}), ...(sel ? { selected: sel } : {}) });
+      const res = review
+        ? await call('strategy-review', { clientId, ...(threadId ? { threadId } : {}) })
+        : await call('strategy-chat-send', { clientId, text: body, ...(threadId ? { threadId } : {}), ...(sel ? { selected: sel } : {}) });
+      if (review && mounted.current && typeof onReviewed === 'function') onReviewed();
       if (!mounted.current || clientIdRef.current !== startedFor) return;
       const fresh = Array.isArray(res.proposals) ? res.proposals : [];
       setThreadId(res.threadId || threadId);
@@ -304,7 +331,7 @@ export default function StrategyChat({ clientId, call, onPlanChanged, onRefreshe
       if (!mounted.current || clientIdRef.current !== startedFor) return;
       // The turn was not recorded: take the optimistic message back and restore the draft.
       setMessages((m) => m.filter((x) => !x.pending));
-      setText(body);
+      if (!review) setText(body);
       setError(chatErrorText(err));
       const d = err?.data;
       if (d?.turnsUsedToday !== undefined) setUsed(d.turnsUsedToday);
@@ -313,7 +340,17 @@ export default function StrategyChat({ clientId, call, onPlanChanged, onRefreshe
     } finally {
       if (mounted.current) setSending(false); // always release the busy flag (it is not client-specific data)
     }
-  }, [text, sending, call, clientId, threadId, selected]);
+  }, [text, sending, call, clientId, threadId, selected, onReviewed]);
+  const send = useCallback(() => runTurn(), [runTurn]);
+
+  // The panel's "Review strategy" button: one review turn per nonce.
+  const lastReviewNonce = useRef(0);
+  useEffect(() => {
+    if (!reviewRequest?.nonce || reviewRequest.nonce === lastReviewNonce.current || loading) return;
+    lastReviewNonce.current = reviewRequest.nonce;
+    runTurn({ review: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviewRequest?.nonce, loading]);
 
   const decide = useCallback(async (proposal, decision) => {
     if (decidingId || typeof call !== 'function') return;
@@ -329,6 +366,7 @@ export default function StrategyChat({ clientId, call, onPlanChanged, onRefreshe
       if (next.status === 'confirmed') {
         if (next.kind === 'plan-change' && typeof onPlanChanged === 'function') onPlanChanged();
         if (next.kind === 'refresh-handles' && typeof onRefreshed === 'function') onRefreshed();
+        if (next.kind === 'strategy-doc-edit' && typeof onDocChanged === 'function') onDocChanged();
       }
     } catch (err) {
       if (!mounted.current || clientIdRef.current !== startedFor) return;
@@ -337,7 +375,7 @@ export default function StrategyChat({ clientId, call, onPlanChanged, onRefreshe
     } finally {
       if (mounted.current) setDecidingId('');
     }
-  }, [decidingId, call, clientId, threadId, useModelIds, onPlanChanged, onRefreshed]);
+  }, [decidingId, call, clientId, threadId, useModelIds, onPlanChanged, onRefreshed, onDocChanged]);
 
   const newThread = () => {
     if (sending) return;
@@ -373,11 +411,31 @@ export default function StrategyChat({ clientId, call, onPlanChanged, onRefreshe
       <div id="x-strategy-chat-messages" ref={listRef} role="log" aria-live="polite" style={S.list}>
         {loading ? <div id="x-strategy-chat-loading" className="xce-empty">Loading chat…</div> : null}
         {!loading && !messages.length ? (
-          <div id="x-strategy-chat-empty" className="xce-empty">
-            Ask about your numbers or the plan. The agent can suggest changes; nothing happens until you confirm a card.
+          <div id="x-strategy-chat-empty" className="xce-empty" style={{ display: 'grid', gap: 10, justifyItems: 'start' }}>
+            <span>Talk through your strategy: your account against your benchmarks, read against the X algorithm. The agent can propose edits to your strategy and plan; nothing changes until you confirm a card.</span>
+            <button type="button" id="x-strategy-chat-start-session-button" className="xce-btn" disabled={sending} onClick={() => runTurn({ review: true })}>
+              <Sparkles size={15} /> Start strategy session
+            </button>
           </div>
         ) : null}
         {timeline.map((item) => {
+          if (item.kind === 'doc') {
+            const h = item.h;
+            const clock = formatClock(h.at);
+            return (
+              <div key={`doc-${h.version}`} id={`x-strategy-chat-doc-history-row-${h.version}`} data-role="doc-history" style={S.historyRow}>
+                <BookOpen size={16} style={{ flex: '0 0 auto' }} />
+                <span id={`x-strategy-chat-doc-history-text-${h.version}`} style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>
+                  <b style={{ color: XCE_COLORS.ink }}>You edited the strategy</b> {'·'} {describeDocChange(h).replace(/^Strategy v\d+ - /, '')}{clock ? ` · ${clock}` : ''}
+                </span>
+                {typeof onViewDoc === 'function' ? (
+                  <button type="button" id={`x-strategy-chat-doc-history-view-${h.version}`} style={S.textLink} onClick={onViewDoc}>
+                    View <ArrowUpRight size={14} />
+                  </button>
+                ) : null}
+              </div>
+            );
+          }
           if (item.kind === 'plan') {
             const h = item.h;
             const clock = formatClock(h.at);
@@ -418,6 +476,8 @@ export default function StrategyChat({ clientId, call, onPlanChanged, onRefreshe
                         onViewPlan={onViewPlan}
                         onUndo={onUndo}
                         undoNote={undoNote}
+                        docSections={docSections}
+                        onViewDoc={onViewDoc}
                       />
                       {decideErrors[pid] ? <div id={`x-strategy-proposal-error-${pid}`} role="alert" style={{ ...S.err, margin: 0 }}>{decideErrors[pid]}</div> : null}
                     </div>

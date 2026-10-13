@@ -3,6 +3,7 @@
 // request bodies StrategyPanel renders. Keep wording here so it is unit-testable.
 
 import { tracksOf, normalizeContentTracks, MAX_BENCHMARKS_PER_TRACK, MAX_DISTINCT_BENCHMARKS } from './content-tracks.js';
+import { sectionTitle } from './strategy-doc.js';
 import { PLAN_LIMITS, KNOWN_SLOT_TYPES, EVALUATION_CAVEAT, tierForAuthoredPerDay, isValidAuthoredPerDay } from './contracts.js';
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -378,6 +379,7 @@ const PROPOSAL_KIND_LABELS = Object.freeze({
   'item-story': 'Write an item story',
   'regenerate-today': "Regenerate today's suggestions",
   'refresh-handles': 'Refresh account data',
+  'strategy-doc-edit': 'Edit the strategy',
 });
 
 /** Plain-words label for a proposal kind. Unknown kinds fall back to a readable form, never throw. */
@@ -418,6 +420,7 @@ export function proposalPayloadPreview(kind, payload, currentPlan) {
       return lines;
     }
     case 'refresh-handles': return [`Pull fresh posts for: ${atHandles(p.handles)}`];
+    case 'strategy-doc-edit': return [`Section: ${sectionTitle(p.section)}`, `New text:\n${showVal(p.text)}`];
     case 'regenerate-today': return [`Model drafting: ${p.useModel === true ? 'on' : 'off'}`, ...(p.force === true ? ['Replaces the existing run.'] : [])];
     default: return [];
   }
@@ -432,6 +435,7 @@ const RESULT_LINES = {
   'regenerate-today': () => "Today's suggestions regenerated — open the Today tab.",
   'item-story': () => 'Story saved.',
   'refresh-handles': () => 'Refresh started.',
+  'strategy-doc-edit': (r) => (r?.version ? `Strategy updated to v${r.version}.` : 'Strategy updated.'),
 };
 
 /**
@@ -446,8 +450,9 @@ export function proposalStatusText(proposal) {
   if (status === 'failed') {
     let detail;
     if (result?.error === 'stale') {
+      const what = proposal?.kind === 'strategy-doc-edit' ? 'strategy' : 'plan';
       detail = result.currentVersion !== undefined && result.currentVersion !== null
-        ? `stale: plan is now v${result.currentVersion}, ask again` : 'stale: the plan changed, ask again';
+        ? `stale: ${what} is now v${result.currentVersion}, ask again` : `stale: the ${what} changed, ask again`;
     } else detail = result?.message || (typeof result?.error === 'string' && result.error !== 'failed' ? result.error : '') || 'The change could not be applied.';
     return { label: 'failed', tone: 'error', detail };
   }
