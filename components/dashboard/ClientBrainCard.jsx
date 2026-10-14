@@ -500,6 +500,19 @@ export default function ClientBrainCard({ getIdToken, onSaved, onOpenCard }) {
         <div>
           <h3>{text(brain?.identity?.name, 'Company Brain')}</h3>
         </div>
+        <a
+          id="client-brain-open-builder-link"
+          className="cb-edit-link"
+          href="/dashboard/brain"
+          onClick={(e) => {
+            // Preserve admin ?as=<clientId> when present.
+            e.preventDefault();
+            const as = new URLSearchParams(window.location.search).get('as');
+            window.location.assign(as ? `/dashboard/brain?as=${encodeURIComponent(as)}` : '/dashboard/brain');
+          }}
+        >
+          Open Brain Builder ↗
+        </a>
       </div>
 
       {error ? <p className="sg-notice sg-notice-danger">{error}</p> : null}
