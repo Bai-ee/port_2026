@@ -10,8 +10,8 @@
 // Reads Hitloop Firestore (packages). --write also reads/writes EditVideos Storage.
 //
 // Usage:
-//   node scripts/x-content/rendered-video-posters.mjs [--limit N]
-//   node scripts/x-content/rendered-video-posters.mjs --write [--limit N]   # OWNER ONLY
+//   node scripts/x-content/rendered-video-posters.mjs --client <id> [--limit N]
+//   node scripts/x-content/rendered-video-posters.mjs --client <id> --write [--limit N]   # OWNER ONLY
 
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -20,8 +20,10 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { evObjectPath } from '../../features/rendered-videos/media-url.js';
+import { requireClientArg } from './_client-arg.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const clientId = requireClientArg();
 const write = process.argv.includes('--write');
 const li = process.argv.indexOf('--limit');
 const limit = li > -1 ? Number(process.argv[li + 1]) || Infinity : Infinity;
@@ -32,7 +34,7 @@ const fb = require(path.join(REPO, 'api/_lib/firebase-admin.cjs'));
 void fb.adminDb; // Hitloop app first, THEN the named bridge app.
 const { readInventory, upsertPackage } = await import('../../features/x-content-inventory/store.js');
 
-const { packages } = await readInventory();
+const { packages } = await readInventory({ clientId });
 const todo = packages
   .filter((p) => /^rv-/.test(p.id) && !p.posterRef && (p.assetRefs || []).some((r) => evObjectPath(r)))
   .slice(0, limit);
@@ -56,7 +58,7 @@ for (const p of todo) {
     if (r.status !== 0) throw new Error(`ffmpeg exit ${r.status}: ${String(r.stderr).slice(-200)}`);
     const dest = `posters/${jobId}.jpg`;
     await bucket.file(dest).save(readFileSync(jpg), { contentType: 'image/jpeg', resumable: false });
-    await upsertPackage({ ...p, posterRef: `ev:${dest}` }, { returnPackages: false });
+    await upsertPackage({ ...p, posterRef: `ev:${dest}` }, { returnPackages: false, clientId });
     ok++;
     console.log(`  done ${p.id} -> ev:${dest}`);
   } catch (err) {

@@ -18,17 +18,17 @@ test('planBackfill: batches never exceed BATCH_MAX; an already-backfilled set pl
   assert.equal(done.batches.length, 0);
 });
 
-test('applyBackfill writes one merged clientId field per planned id, batch by batch', async () => {
+test('applyBackfill updates (never creates) one clientId field per planned id, batch by batch', async () => {
   const commits = [];
   const db = {
     collection: (c) => ({ doc: (id) => ({ c, id }) }),
-    batch: () => { const ops = []; return { set: (ref, data, opts) => ops.push({ ref, data, opts }), commit: async () => commits.push(ops) }; },
+    batch: () => { const ops = []; return { update: (ref, data) => ops.push({ ref, data }), commit: async () => commits.push(ops) }; },
   };
   const n = await applyBackfill(db, planBackfill([{ id: 'a' }, { id: 'b', clientId: 'z' }, { id: 'c' }]), 'home');
   assert.equal(n, 2);
   assert.equal(commits.length, 1);
-  assert.deepEqual(commits[0].map((o) => [o.ref.c, o.ref.id, o.data, o.opts]), [
-    ['x_content_packages', 'a', { clientId: 'home' }, { merge: true }],
-    ['x_content_packages', 'c', { clientId: 'home' }, { merge: true }],
+  assert.deepEqual(commits[0].map((o) => [o.ref.c, o.ref.id, o.data]), [
+    ['x_content_packages', 'a', { clientId: 'home' }],
+    ['x_content_packages', 'c', { clientId: 'home' }],
   ]);
 });

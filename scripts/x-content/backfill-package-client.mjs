@@ -51,12 +51,14 @@ export async function readAllRows(db) {
   return rows;
 }
 
-/** Writes `clientId` onto the planned rows only. Returns the number of docs written. */
+/** Writes `clientId` onto the planned rows only. Returns the number of docs written.
+ * `update` (not set+merge): a row deleted between the read and the write fails its batch instead of coming back as
+ * a field-less ghost; re-running reads fresh and is idempotent. */
 export async function applyBackfill(db, plan, clientId) {
   let written = 0;
   for (const ids of plan.batches) {
     const batch = db.batch();
-    for (const id of ids) batch.set(db.collection(COLLECTION).doc(id), { clientId }, { merge: true });
+    for (const id of ids) batch.update(db.collection(COLLECTION).doc(id), { clientId });
     await batch.commit();
     written += ids.length;
   }

@@ -66,6 +66,7 @@ Owner-driven. You only verify.
 **Does not** make other clients useful yet: their inventory is still empty and global (3a).
 
 ### Phase 3a — Scope the content inventory (M, prod data write)
+**Status: code BUILT on branch `feat/multi-client-3a-inventory` (stacked on PR #9), NOT pushed/merged/deployed (2026-10-14).** Pre-write export taken (6,276 docs, scratchpad only). Owner still runs: index deploy → backfill `--write` → set `NAS_INVENTORY_CLIENT_ID` → then the code PR. Dry run: 6,276 rows, 0 with clientId. New env `NAS_INVENTORY_CLIENT_ID` (NAS/archive owner; fail closed when unset). See `CONTENT-PILOT-OPERATIONS.md` §1c.
 | Item | Files | Change |
 |---|---|---|
 | 3a.1 Schema | `features/x-content-inventory/store.js:5-19,151` | `clientId` field on `x_content_packages`; `readInventory({ clientId })` required (throw without it); query `where('clientId','==',id)`. |

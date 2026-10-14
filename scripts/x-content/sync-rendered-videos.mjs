@@ -6,7 +6,7 @@
 // UE artists.json, which the server cannot read. Machine fields only — never
 // overwrites story, edits, approval, status, rights set by a human, or posting history.
 //
-// Usage: node scripts/x-content/sync-rendered-videos.mjs [--client <id>] [--artists <path>]
+// Usage: node scripts/x-content/sync-rendered-videos.mjs --client <id> [--artists <path>]   (--client required)
 // WRITES to production Firestore (x_content_packages). No X / LLM / paid calls.
 
 import path from 'node:path';
@@ -15,6 +15,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { syncRenderedVideos } from '../../features/rendered-videos/sync.js';
 import { upsertPackage } from '../../features/x-content-inventory/store.js';
+import { requireClientArg } from './_client-arg.mjs';
 
 const require = createRequire(import.meta.url);
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -28,7 +29,13 @@ const fb = require(path.join(REPO, 'api/_lib/firebase-admin.cjs'));
 void fb.adminDb; // init Hitloop app BEFORE the named EditVideos bridge app
 const bridge = require(path.join(REPO, 'api/_lib/editvideos-bridge.cjs'));
 
-const clientId = arg('--client', process.env.DISCOGS_X_CLIENT_ID || 'bryan-balli-WUoltG84');
+const clientId = requireClientArg();
+// The EditVideos feed is one shared feed owned by the NAS/archive client; syncing it under anyone else would create
+// that client's copies of the owner's renders (or 409 on the owner's rows).
+if (clientId !== process.env.NAS_INVENTORY_CLIENT_ID) {
+  console.error(`Refusing: rendered videos belong to NAS_INVENTORY_CLIENT_ID (${process.env.NAS_INVENTORY_CLIENT_ID || 'unset'}), not ${clientId}.`);
+  process.exit(1);
+}
 const artistsPath = arg('--artists', path.join(REPO, '../EditVideos/arweave-video-generator/website/artists.json'));
 const ueArtists = existsSync(artistsPath) ? JSON.parse(readFileSync(artistsPath, 'utf8')) : [];
 
@@ -48,7 +55,7 @@ const result = await syncRenderedVideos({
     return { videos, complete }; // complete only when the cursor ran out (enables retire-on-missing)
   },
   async listStored() {
-    const snap = await fb.adminDb.collection('x_content_packages').where('source.kind', '==', 'rendered-video').get();
+    const snap = await fb.adminDb.collection('x_content_packages').where('clientId', '==', clientId).where('source.kind', '==', 'rendered-video').get();
     return snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
   },
   async listMediaJobs(jobIds) {
@@ -68,7 +75,7 @@ const result = await syncRenderedVideos({
     }
     return out;
   },
-  upsert: (pkg) => upsertPackage(pkg, { returnPackages: false }),
+  upsert: (pkg) => upsertPackage(pkg, { returnPackages: false, clientId }),
   readMeta: async () => (await metaRef.get()).data() || null,
   writeMeta: (obj) => metaRef.set(obj, { merge: true }),
   now: () => Date.now(),

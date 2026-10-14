@@ -93,3 +93,20 @@ test('a pilot client that is not set up is denied by the readiness gate with the
   assert.equal(r.body.code, 'client-brain-not-approved');
   assert.ok(!written().some((c) => /daily|social_posts/i.test(c)));
 });
+
+test('Phase 3a: rendered-video sync is a no-op for a client that does not own the shared feed', async () => {
+  process.env.NAS_INVENTORY_CLIENT_ID = 'the-media-owner';
+  const r = await post({ action: 'sync-rendered-videos' });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.skipped, 'not-owner');
+  assert.ok(!written().includes('x_content_packages'));
+});
+
+test('Phase 3a: item actions on another client\'s package id are 404, nothing written', async () => {
+  await ctx.adminDb.collection('x_content_packages').doc('foreign-1').set({ clientId: 'someone-else', title: 'theirs', series: 'C2', status: 'idea' });
+  const r = await post({ action: 'update-item-facets', id: 'foreign-1', story: 'hijack' });
+  assert.equal(r.status, 404, JSON.stringify(r.body));
+  const doc = (await ctx.adminDb.collection('x_content_packages').doc('foreign-1').get()).data();
+  assert.equal(doc.story, undefined);
+  assert.equal(doc.clientId, 'someone-else');
+});

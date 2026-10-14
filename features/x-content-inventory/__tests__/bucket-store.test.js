@@ -83,13 +83,16 @@ test('upsertBucket rename of an existing id keeps it and checks name clashes', a
 test('deleteBucket refuses with items, reassigns when asked, folders follow', async () => {
   const db = makeDb();
   await upsertBucket(C, { name: 'Temp', sourceKind: 'manual' }, { db });
-  await upsertPackage(pkg({ id: 'x1', bucketId: 'temp' }), { db, returnPackages: false });
+  await upsertPackage(pkg({ id: 'x1', bucketId: 'temp' }), { db, returnPackages: false, clientId: C });
+  // Another client's row in a same-named bucket is never counted or moved.
+  await upsertPackage(pkg({ id: 'other-1', bucketId: 'temp' }), { db, returnPackages: false, clientId: 'client-b' });
   await upsertFolder(C, { bucketId: 'temp', name: 'acid' }, { db });
   await assert.rejects(() => deleteBucket(C, 'temp', { db }), { status: 409 });
   await assert.rejects(() => deleteBucket(C, 'temp', { db, reassignTo: 'nope' }), { status: 400 });
   const r = await deleteBucket(C, 'temp', { db, reassignTo: 'client' });
   assert.deepEqual([r.removed, r.reassigned], [true, 1]);
   assert.equal((await getPackage('x1', { db })).bucketId, 'client');
+  assert.equal((await getPackage('other-1', { db })).bucketId, 'temp');
   assert.equal((await listFolders(C, { db, bucketId: 'client' })).length, 1);
   assert.ok(!(await listBuckets(C, { db })).some((b) => b.id === 'temp'));
 });
@@ -146,7 +149,7 @@ test('bucketsToEngineConfig: defaults reproduce DEFAULT_ENGINE_CONFIG; shares fl
 
 test('package writes stamp searchTokens + facetVersion; bucketId validated', async () => {
   const db = makeDb();
-  const r = await upsertPackage(pkg({ facets: { gear: ['909'], people: ['Jev'] }, humanEdits: { venues: ['The Pit'] }, bucketId: 'record' }), { db, returnPackages: false });
+  const r = await upsertPackage(pkg({ facets: { gear: ['909'], people: ['Jev'] }, humanEdits: { venues: ['The Pit'] }, bucketId: 'record' }), { db, returnPackages: false, clientId: C });
   assert.equal(r.pkg.facetVersion, 1);
   assert.deepEqual(r.pkg.searchTokens.sort(), buildSearchTokens(r.pkg).sort());
   assert.ok(r.pkg.searchTokens.includes('tr-909'));

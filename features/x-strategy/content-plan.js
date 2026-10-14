@@ -63,12 +63,12 @@ export function createContentPlanHandlers({
   }
 
   /** PRE-T5 content-plan, verbatim: committed corpora, no lanes, request posts, no plan fields. */
-  async function legacyContentPlan(body) {
+  async function legacyContentPlan(context, body) {
     if (!legacyRows?.own || !legacyRows?.benchmark) throw new Error('createContentPlanHandlers: legacyRows {own, benchmark} are required for the no-plan path');
     const requested = Number(body?.posts);
     const posts = Number.isFinite(requested) && requested >= 1 ? Math.min(Math.floor(requested), MAX_PLAN_POSTS) : DEFAULT_REQUEST_POSTS;
     const date = typeof body?.date === 'string' && DATE_RE.test(body.date.trim()) ? body.date.trim() : new Date(clock()).toISOString().slice(0, 10);
-    const { packages, seeded } = await readInventory();
+    const { packages, seeded } = await readInventory({ clientId: context.clientId });
     // The committed corpus labels itself (its post URLs name the account); plan-day has no owner default.
     // This legacy no-plan-doc path still reads the owner's committed corpora (COMMITTED_CORPORA, multi-client Phase 4).
     const handle = /(?:x|twitter)\.com\/([^/]+)\/status\//i.exec(legacyRows.own.find((r) => r?.url)?.url || '')?.[1] || null;
@@ -112,7 +112,7 @@ export function createContentPlanHandlers({
   /** One day of authored posts for the Plan tab. With a plan doc: same shape plus planSource / planVersion. */
   async function contentPlan(context, body) {
     const planDoc = await planStore.get(context.clientId);
-    if (!planDoc) return legacyContentPlan(body);
+    if (!planDoc) return legacyContentPlan(context, body);
     const { profile, resolved } = await load(context.clientId, planDoc);
     const requested = Number(body?.posts);
     const requestedPosts = Number.isFinite(requested) && requested >= 1
@@ -130,7 +130,7 @@ export function createContentPlanHandlers({
     const own = await corpusStore.readRows(ownHandle);
     if (!own.rows.length) throw httpError(409, `No corpus rows for @${ownHandle} yet - run Refresh in the Strategy tab first.`);
     const bench = benchHandle ? await corpusStore.readRows(benchHandle) : null;
-    const { packages, seeded } = await readInventory();
+    const { packages, seeded } = await readInventory({ clientId: context.clientId });
     // Content tracks (opt-in): track shares raise per-engine minimums; a plan without contentTracks is untouched.
     const engineConfig = applyTrackAllocation(planDoc, resolved.engineConfig);
 

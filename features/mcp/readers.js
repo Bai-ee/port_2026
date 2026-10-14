@@ -162,7 +162,7 @@ export function createReaders(db) {
       onBrainOwnedSaved: (clientId, target, prior, next) => require('../client-brain/brain-sync.cjs').recordCardEdits(clientId, target, prior, next),
       readBrainTrackTargets: (clientId) => require('../client-brain/brain-sync.cjs').readApprovedTrackTargets(clientId),
       loadCommitted: committedCorpusRows,
-      readPackages: async () => (await readInventory()).packages,
+      readPackages: async (clientId) => (await readInventory({ clientId })).packages,
       readTodayRun: (clientId) => latestDailyRun(createFirestoreRunStore(db), clientId),
       readContentContext: async (clientId) => summarizeContentContext(await readContentContext(clientId)),
       readQueueSummary, readPost, readOpportunities, readResults, readMarketSignals,

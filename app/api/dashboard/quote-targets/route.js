@@ -14,7 +14,7 @@ import { readCorpus, readCorpora, saveGapReport } from '../../../../features/x-b
 // a day of authored posts out of the content inventory.
 import { buildDayPlan as buildContentDayPlan } from '../../../../features/x-content-inventory/plan-day.js';
 import { validateInventory } from '../../../../features/x-content-inventory/schema.js';
-import { readInventory, upsertPackage, deletePackage, getPackage } from '../../../../features/x-content-inventory/store.js';
+import { readInventory, upsertPackage, deletePackage, packageGetterFor } from '../../../../features/x-content-inventory/store.js';
 import { buildClientPackage, applyApproval } from '../../../../features/x-content-inventory/client-capture.js';
 import { ageHoursOf, DEFAULT_WINDOW_HOURS } from '../../../../features/x-quote-targets/rank.js';
 import { buildPostResults } from '../../../../features/x-content-inventory/results.js';
@@ -364,20 +364,29 @@ function getContentPlanHandlers() {
 
 const handleContentPlan = (context, body) => getContentPlanHandlers().contentPlan(context, body);
 
+// ---- Inventory is per client (multi-client Phase 3a) ----
+// Writes go through upsertFor(clientId): a new row is stamped with the client, an existing row of another
+// client is refused (409). Item actions resolve by id through getPackageFor, which hides a foreign row (404).
+const upsertFor = (clientId) => (pkg) => upsertPackage(pkg, { returnPackages: false, clientId });
+const getPackageFor = (clientId) => packageGetterFor(clientId);
+// Rendered videos come from ONE shared EditVideos feed, owned by the NAS/archive client. Any other client's sync is a
+// no-op (it would otherwise create home's renders under that client, or 409 on home's rows).
+const mediaOwnerClientId = () => process.env.NAS_INVENTORY_CLIENT_ID || null;
+
 async function handleInventoryList(context) {
-  const { packages, updatedAt, seeded } = await readInventory();
+  const { packages, updatedAt, seeded } = await readInventory({ clientId: context.clientId });
   return { ok: true, packages, updatedAt, seeded, audit: validateInventory(packages) };
 }
 
 async function handleInventorySave(context, body) {
-  const { pkg, packages, warnings, created } = await upsertPackage(body?.pkg);
+  const { pkg, packages, warnings, created } = await upsertPackage(body?.pkg, { clientId: context.clientId });
   // The whole-inventory audit, not just this row's: duplicate ids and series
   // coverage only exist as properties of the set.
   return { ok: true, pkg, created, warnings, audit: validateInventory(packages) };
 }
 
 async function handleInventoryDelete(context, body) {
-  const { removed } = await deletePackage(body?.id);
+  const { removed } = await deletePackage(body?.id, { clientId: context.clientId });
   return { ok: true, removed };
 }
 
@@ -415,7 +424,7 @@ const postStatusRow = (p) => ({
 
 /** Post-level results for THIS client: posted / waiting / needs attention, joined to package, run and plan version. Read-only. */
 async function handlePostResults(context) {
-  const [posts, inventory] = await Promise.all([readSocialQueue(context.clientId), readInventory().catch(() => ({ packages: [] }))]);
+  const [posts, inventory] = await Promise.all([readSocialQueue(context.clientId), readInventory({ clientId: context.clientId }).catch(() => ({ packages: [] }))]);
   return { ok: true, results: buildPostResults({ posts, packages: inventory?.packages || [], now: Date.now() }) };
 }
 
@@ -542,26 +551,26 @@ async function handleCaptureClientStory(context, body) {
     err.status = 400;
     throw err;
   }
-  const { pkg, created, warnings } = await upsertPackage(built.pkg, { returnPackages: false });
+  const { pkg, created, warnings } = await upsertFor(context.clientId)(built.pkg);
   return { ok: true, pkg, created, warnings: warnings ?? built.warnings };
 }
 
 /** Admin-only (the whole route is): record an approve/reject decision. */
-async function handleDecidePackage(decoded, body, state) {
+async function handleDecidePackage(context, decoded, body, state) {
   const id = typeof body?.id === 'string' ? body.id.trim() : '';
   if (!id) {
     const err = new Error('id is required.');
     err.status = 400;
     throw err;
   }
-  const existing = await getPackage(id);
+  const existing = await getPackageFor(context.clientId)(id);
   if (!existing) {
     const err = new Error(`No package ${id}.`);
     err.status = 404;
     throw err;
   }
   const next = applyApproval(existing, state, decoded?.email || decoded?.uid || null);
-  const { pkg } = await upsertPackage(next, { returnPackages: false });
+  const { pkg } = await upsertFor(context.clientId)(next);
   return { ok: true, pkg };
 }
 
@@ -579,7 +588,7 @@ async function handleUpdateItemFacets(context, body) {
   const hasEdits = body?.humanEdits && typeof body.humanEdits === 'object' && !Array.isArray(body.humanEdits);
   const hasStory = typeof body?.story === 'string';
   if (!hasEdits && !hasStory) throw badRequest('humanEdits or story is required.');
-  const existing = await getPackage(id);
+  const existing = await getPackageFor(context.clientId)(id);
   if (!existing) throw badRequest(`No package ${id}.`, 404);
 
   // Writes ONLY humanEdits + story; extracted `facets` is never touched. A null
@@ -594,7 +603,7 @@ async function handleUpdateItemFacets(context, body) {
     next.humanEdits = merged;
   }
   if (hasStory) next.story = body.story;
-  const { pkg } = await upsertPackage(next, { returnPackages: false });
+  const { pkg } = await upsertFor(context.clientId)(next);
   return { ok: true, pkg: { id: pkg.id, bucketId: pkg.bucketId ?? null, story: pkg.story, humanEdits: pkg.humanEdits || {}, facets: pkg.facets || {}, searchTokens: pkg.searchTokens || [] } };
 }
 
@@ -604,19 +613,19 @@ async function handleMoveItem(context, body) {
   if (!id || !bucketId) throw badRequest('id and bucketId are required.');
   const buckets = await bucketStore.listBuckets(context.clientId);
   if (!buckets.some((b) => b.id === bucketId)) throw badRequest(`Unknown bucket: ${bucketId}`);
-  const existing = await getPackage(id);
+  const existing = await getPackageFor(context.clientId)(id);
   if (!existing) throw badRequest(`No package ${id}.`, 404);
-  const { pkg } = await upsertPackage({ ...existing, bucketId }, { returnPackages: false });
+  const { pkg } = await upsertFor(context.clientId)({ ...existing, bucketId });
   return { ok: true, id: pkg.id, bucketId: pkg.bucketId };
 }
 
 /** Fresh 1h signed URL(s) for a rendered-video package's stored ev: object path.
  * Admin-only (the POST gate). Paths are stored, never URLs, so this is the only
  * place a signed URL is minted for the Studio. */
-async function handleMediaUrl(body) {
+async function handleMediaUrl(context, body) {
   const id = String(body?.id || '').trim();
   if (!id) throw badRequest('id is required.');
-  const pkg = await getPackage(id); // initializes the Hitloop adminDb BEFORE the bridge (named app)
+  const pkg = await getPackageFor(context.clientId)(id); // initializes the Hitloop adminDb BEFORE the bridge (named app)
   const bridge = require('../../../../api/_lib/editvideos-bridge.cjs');
   return resolveMediaUrls(pkg, (p) => bridge.signReadUrl(p));
 }
@@ -647,8 +656,11 @@ async function readStoredPackages(ids) {
 const rvMetaRef = (clientId) => fb.adminDb.collection('content_buckets').doc(clientId).collection('meta').doc('rendered-videos');
 
 async function handleSyncRenderedVideos(context, body) {
-  const bridge = loadBridge();
   const clientId = context.clientId;
+  if (clientId !== mediaOwnerClientId()) {
+    return { ok: true, skipped: 'not-owner', created: 0, updated: 0, unchanged: 0, total: 0, lastSyncAt: null };
+  }
+  const bridge = loadBridge();
   return syncRenderedVideos({
     async listVideos() {
       const videos = [];
@@ -663,7 +675,7 @@ async function handleSyncRenderedVideos(context, body) {
       return { videos, complete }; // complete only when the cursor ran out (enables retire-on-missing)
     },
     async listStored() {
-      const snap = await fb.adminDb.collection('x_content_packages').where('source.kind', '==', 'rendered-video').get();
+      const snap = await fb.adminDb.collection('x_content_packages').where('clientId', '==', clientId).where('source.kind', '==', 'rendered-video').get();
       return snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
     },
     async listMediaJobs(jobIds) {
@@ -675,7 +687,7 @@ async function handleSyncRenderedVideos(context, body) {
       return map;
     },
     readExisting: readStoredPackages,
-    upsert: (pkg) => upsertPackage(pkg, { returnPackages: false }),
+    upsert: upsertFor(clientId),
     async readMeta() { const s = await rvMetaRef(clientId).get(); return s.exists ? s.data() : null; },
     async writeMeta(m) { await rvMetaRef(clientId).set(m, { merge: true }); },
     now: () => Date.now(),
@@ -691,7 +703,8 @@ async function handleMediaUrls(context, body) {
   if (!kinds.every((k) => MEDIA_KINDS.includes(k))) throw badRequest(`kinds must be among ${MEDIA_KINDS.join(', ')}.`);
   const stored = await readStoredPackages(ids);
   const bridge = loadBridge();
-  const urls = await resolveMediaUrlsBatch([...stored.values()], kinds, {
+  // Another client's id is simply absent (no URL minted for it).
+  const urls = await resolveMediaUrlsBatch([...stored.values()].filter((p) => p.clientId === context.clientId), kinds, {
     hitloopBucket: fb.adminStorage.bucket(),
     signEv: (p) => bridge.signReadUrl(p),
   });
@@ -700,14 +713,14 @@ async function handleMediaUrls(context, body) {
 
 async function handleSaveThumb(context, body) {
   return saveThumb({
-    getPackage,
-    upsertPackage: (pkg) => upsertPackage(pkg, { returnPackages: false }),
+    getPackage: getPackageFor(context.clientId),
+    upsertPackage: upsertFor(context.clientId),
     bucket: fb.adminStorage.bucket(),
   }, { clientId: context.clientId, id: String(body?.id || '').trim(), dataUrl: body?.dataUrl });
 }
 
-async function handleSetRights(body) {
-  return setRights({ getPackage, upsertPackage: (pkg) => upsertPackage(pkg, { returnPackages: false }) },
+async function handleSetRights(context, body) {
+  return setRights({ getPackage: getPackageFor(context.clientId), upsertPackage: upsertFor(context.clientId) },
     { id: String(body?.id || '').trim(), rights: body?.rights });
 }
 
@@ -727,7 +740,7 @@ function mediaSigners(bridge = loadBridge()) {
 async function handleCreateDraftFromItem(context, body) {
   const bridge = loadBridge();
   return createDraftFromItem({
-    getPackage,
+    getPackage: getPackageFor(context.clientId),
     // Client-scoped, any open status (draft/approved/scheduled/queued/...): one package, one open post.
     findDraft: (packageId) => findOpenPostForPackage(context.clientId, packageId),
     ensureDraft: (clientId, payload) => ensureDraftPost(clientId, payload),
@@ -777,7 +790,7 @@ async function handleDailyRun(context, action, body) {
   // Fails closed with a code naming the missing input (approved Brain / plan doc / connected X, or contentLoop.enabled).
   await assertClientReady(fb.adminDb, context.clientId);
   const store = createFirestoreRunStore(fb.adminDb);
-  if (action === 'daily-run-latest') return { ok: true, run: await overlayStagedMedia(await latestDailyRun(store, context.clientId), getPackage) };
+  if (action === 'daily-run-latest') return { ok: true, run: await overlayStagedMedia(await latestDailyRun(store, context.clientId), getPackageFor(context.clientId)) };
 
   if (action === 'daily-run-generate') {
     let draft;
@@ -822,7 +835,7 @@ async function handleDailyRun(context, action, body) {
     const text = typeof body?.text === 'string' ? body.text : undefined;
     const postExists = async (id) => (await fb.adminDb.collection('social_posts').doc(String(id)).get()).exists;
     try {
-      const saved = await saveSuggestionDraft({ store, getPackage, createDraftPostOnce, postExists, ...mediaSigners() }, { key, suggestionId, text });
+      const saved = await saveSuggestionDraft({ store, getPackage: getPackageFor(context.clientId), createDraftPostOnce, postExists, ...mediaSigners() }, { key, suggestionId, text });
       return { ok: true, ...saved, run: await store.read(key) };
     } catch (err) {
       if (err.checks) return { ok: false, error: err.message, checks: err.checks, status: err.status };
@@ -849,12 +862,12 @@ async function handleBucketAction(context, action, body) {
   return { ok: true, ...(await bucketStore.deleteFolder(cid, body?.folderId ?? body?.id)) };
 }
 
-function nasDeps() {
+function nasDeps(clientId) {
   return {
     db: fb.adminDb,
     fieldValue: fb.FieldValue,
-    getPackage,
-    upsertPackage: (pkg) => upsertPackage(pkg, { returnPackages: false }),
+    getPackage: getPackageFor(clientId),
+    upsertPackage: upsertFor(clientId),
     now: () => Date.now(),
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
     randomId: () => randomUUID(),
@@ -870,7 +883,7 @@ function getStrategyHandlers() {
       onBrainOwnedSaved: (clientId, target, prior, next) => require('../../../../features/client-brain/brain-sync.cjs').recordCardEdits(clientId, target, prior, next),
       readBrainTrackTargets: (clientId) => require('../../../../features/client-brain/brain-sync.cjs').readApprovedTrackTargets(clientId),
       loadCommitted: committedCorpusRows,
-      readPackages: async () => (await readInventory()).packages,
+      readPackages: async (clientId) => (await readInventory({ clientId })).packages,
       runDailyAction: (context, action, body) => handleDailyRun(context, action, body),
       runUpdateItemFacets: (context, body) => handleUpdateItemFacets(context, body),
       readTodayRun: (clientId) => latestDailyRun(createFirestoreRunStore(fb.adminDb), clientId),
@@ -892,7 +905,7 @@ function getStrategyHandlers() {
             xMonitor: loadXMonitorService,
             counters: () => createFirestoreCounters(fb.adminDb),
             nas: async (action, body, email) => {
-              try { return await handleNasAction(nasDeps(), action, body, { ...(auth?.decoded || {}), email }); } catch (err) {
+              try { return await handleNasAction(nasDeps(clientId), action, body, { ...(auth?.decoded || {}), email }); } catch (err) {
                 if (err?.status && err.status < 500) return { ok: false, error: err.message, status: err.status };
                 throw err;
               }
@@ -968,10 +981,10 @@ export async function POST(request) {
       return json(await handleCaptureClientStory(context, body));
     }
     if (action === 'approve-package') {
-      return json(await handleDecidePackage(decoded, body, 'approved'));
+      return json(await handleDecidePackage(context, decoded, body, 'approved'));
     }
     if (action === 'reject-package') {
-      return json(await handleDecidePackage(decoded, body, 'rejected'));
+      return json(await handleDecidePackage(context, decoded, body, 'rejected'));
     }
     if (STRATEGY_ROUTE_ACTIONS.includes(action)) {
       const result = await getStrategyHandlers().handle(action, body, context, { decoded });
@@ -980,18 +993,18 @@ export async function POST(request) {
     if (BUCKET_ACTIONS.has(action)) return json(await handleBucketAction(context, action, body));
     if (action === 'update-item-facets') return json(await handleUpdateItemFacets(context, body));
     if (action === 'move-item') return json(await handleMoveItem(context, body));
-    if (action === 'media-url') return json(await handleMediaUrl(body));
+    if (action === 'media-url') return json(await handleMediaUrl(context, body));
     if (action === 'sync-rendered-videos') return json(await handleSyncRenderedVideos(context, body));
     if (action === 'media-urls') return json(await handleMediaUrls(context, body));
     if (action === 'save-thumb') return json(await handleSaveThumb(context, body));
-    if (action === 'set-rights') return json(await handleSetRights(body));
+    if (action === 'set-rights') return json(await handleSetRights(context, body));
     if (action === 'create-draft-from-item') return json(await handleCreateDraftFromItem(context, body));
-    if (NAS_ACTIONS.includes(action)) return json(await handleNasAction(nasDeps(), action, body, decoded));
+    if (NAS_ACTIONS.includes(action)) return json(await handleNasAction(nasDeps(context.clientId), action, body, decoded));
     if (DAILY_RUN_ACTIONS.includes(action)) {
       const result = await handleDailyRun(context, action, body);
       return json(result, result.ok === false ? (result.status || 422) : 200);
     }
-    if (DISCOGS_ACTIONS.includes(action)) return json(await handleDiscogsAction(nasDeps(), action, body, decoded));
+    if (DISCOGS_ACTIONS.includes(action)) return json(await handleDiscogsAction(nasDeps(context.clientId), action, body, decoded));
     if (TIMELINE_ACTIONS.includes(action)) return json(await handleTimelineAction({ db: fb.adminDb, clientId: context.clientId, store: timelineStore }, action, body));
     return json({ error: `Unknown action: ${action}`, supportedActions: SUPPORTED_ACTIONS }, 400);
   } catch (err) {

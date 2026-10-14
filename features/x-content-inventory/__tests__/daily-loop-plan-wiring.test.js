@@ -81,7 +81,7 @@ test('an edit survives regeneration after a plan change (suggestion ids are slot
 function fakeDb() {
   const none = { exists: false, data: () => ({}) };
   const doc = () => ({ get: async () => none, collection: () => ({ doc }) });
-  return { collection: (name) => ({ doc, select: () => ({ get: async () => ({ docs: [] }) }), name }) };
+  return { collection: (name) => ({ doc, select: () => ({ get: async () => ({ docs: [] }) }), where: () => ({ select: () => ({ get: async () => ({ docs: [] }) }) }), name }) };
 }
 
 test('loadDailyLoopInputs attaches planInputs only when readPlanDoc returns a doc', async () => {

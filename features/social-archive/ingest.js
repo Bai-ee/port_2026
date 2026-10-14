@@ -12,8 +12,8 @@ export const ADAPTERS = {
 
 /** NAS packages (`nas-<sha16>` docs in x_content_packages) as { id, nas:{ relativePath, sha256 } }. */
 export async function loadNasPackages(db, clientId) {
-  void clientId; // x_content_packages is a single global collection (not per-client)
-  const snap = await db.collection('x_content_packages').where('bucketId', '==', 'nas').get();
+  // Only this client's NAS packages (multi-client Phase 3a).
+  const snap = await db.collection('x_content_packages').where('clientId', '==', clientId).where('bucketId', '==', 'nas').get();
   return snap.docs
     .filter((d) => d.id.startsWith('nas-') && d.data()?.nas?.relativePath)
     .map((d) => ({ id: d.id, nas: { relativePath: d.data().nas.relativePath, sha256: d.data().nas.sha256 } }));

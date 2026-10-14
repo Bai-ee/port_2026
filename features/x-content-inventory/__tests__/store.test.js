@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  upsertPackage, deletePackage, readInventory, readCandidates, getPackage,
+  upsertPackage, deletePackage, readInventory, readCandidates, getPackage, packageGetterFor,
   backfillIndexFields, PACKAGE_CAP, READ_LIMIT, NAS_ID_END,
 } from '../store.js';
 import { nasPackageId } from '../nas.js';
 import seedRows from '../content-packages.json' with { type: 'json' };
+
+const C = 'fixture-client-a';
 
 // ---- in-memory Firestore fake -------------------------------------------
 // Counts document reads (a get() = 1, each doc a query returns = 1) so tests can
@@ -86,9 +88,9 @@ const meta = (db) => db.cols.get('x_content_inventory_meta')?.get('state');
 
 test('upsert reads only the target doc + meta, never the collection', async () => {
   const db = makeDb();
-  for (let i = 0; i < 300; i += 1) await upsertPackage(row({ id: `bulk-${i}` }), { db, returnPackages: false });
+  for (let i = 0; i < 300; i += 1) await upsertPackage(row({ id: `bulk-${i}` }), { clientId: C, db, returnPackages: false });
   db.stats.reads = 0; db.stats.queries.length = 0;
-  await upsertPackage(row({ id: 'bulk-7', title: 'edited' }), { db, returnPackages: false });
+  await upsertPackage(row({ id: 'bulk-7', title: 'edited' }), { clientId: C, db, returnPackages: false });
   assert.equal(db.stats.reads, 2);
   assert.equal(db.stats.queries.length, 0);
   assert.equal(stored(db).get('bulk-7').title, 'edited');
@@ -96,7 +98,7 @@ test('upsert reads only the target doc + meta, never the collection', async () =
 
 test('minting an id checks single docs, not the collection', async () => {
   const db = makeDb();
-  const r = await upsertPackage(row({ id: undefined, title: 'Brand New' }), { db, returnPackages: false });
+  const r = await upsertPackage(row({ id: undefined, title: 'Brand New' }), { clientId: C, db, returnPackages: false });
   assert.match(r.pkg.id, /^brand-new-/);
   assert.equal(r.created, true);
   assert.equal(db.stats.queries.length, 0);
@@ -104,38 +106,38 @@ test('minting an id checks single docs, not the collection', async () => {
 
 test('delete reads only target + meta and decrements the count', async () => {
   const db = makeDb();
-  await upsertPackage(row({ id: 'a' }), { db, returnPackages: false });
-  await upsertPackage(row({ id: 'b' }), { db, returnPackages: false });
+  await upsertPackage(row({ id: 'a' }), { clientId: C, db, returnPackages: false });
+  await upsertPackage(row({ id: 'b' }), { clientId: C, db, returnPackages: false });
   const count = meta(db).count;
   db.stats.reads = 0; db.stats.queries.length = 0;
-  const r = await deletePackage('a', { db, returnPackages: false });
+  const r = await deletePackage('a', { clientId: C, db, returnPackages: false });
   assert.equal(r.removed, true);
   assert.equal(db.stats.reads, 2);
   assert.equal(db.stats.queries.length, 0);
   assert.equal(meta(db).count, count - 1);
-  assert.equal((await deletePackage('a', { db, returnPackages: false })).removed, false);
+  assert.equal((await deletePackage('a', { clientId: C, db, returnPackages: false })).removed, false);
 });
 
 test('seed-once: first write materializes seed; emptied inventory does not resurrect it', async () => {
   const db = makeDb();
-  assert.equal((await readInventory({ db })).seeded, true);
+  assert.equal((await readInventory({ clientId: C, db })).seeded, true);
   assert.equal(stored(db).size, 0, 'read never writes');
-  await upsertPackage(row({ id: 'mine' }), { db, returnPackages: false });
+  await upsertPackage(row({ id: 'mine' }), { clientId: C, db, returnPackages: false });
   assert.equal(stored(db).size, 4, '3 seed rows + mine');
   assert.equal(meta(db).count, 4);
-  for (const id of [...stored(db).keys()]) await deletePackage(id, { db, returnPackages: false });
+  for (const id of [...stored(db).keys()]) await deletePackage(id, { clientId: C, db, returnPackages: false });
   assert.equal(stored(db).size, 0);
-  const after = await readInventory({ db });
+  const after = await readInventory({ clientId: C, db });
   assert.equal(after.seeded, false);
   assert.deepEqual(after.packages, []);
   // A later upsert must not re-seed either.
-  await upsertPackage(row({ id: 'again' }), { db, returnPackages: false });
+  await upsertPackage(row({ id: 'again' }), { clientId: C, db, returnPackages: false });
   assert.equal(stored(db).size, 1);
 });
 
 test('deleting a seed row on a never-written inventory keeps the other seed rows', async () => {
   const db = makeDb();
-  const r = await deletePackage('holopaper-cloth-grab', { db, returnPackages: false });
+  const r = await deletePackage('holopaper-cloth-grab', { clientId: C, db, returnPackages: false });
   assert.equal(r.removed, true);
   assert.equal(stored(db).has('holopaper-cloth-grab'), false);
   assert.equal(stored(db).size, 2);
@@ -143,23 +145,23 @@ test('deleting a seed row on a never-written inventory keeps the other seed rows
 
 test('engine is stamped on legacy rows; lastPostedAt defaults to null only when absent', async () => {
   const db = makeDb();
-  await upsertPackage(row({ id: 'c1' }), { db, returnPackages: false });
+  await upsertPackage(row({ id: 'c1' }), { clientId: C, db, returnPackages: false });
   assert.equal(stored(db).get('c1').engine, 'record');
   assert.equal(stored(db).get('c1').lastPostedAt, null);
-  await upsertPackage(row({ id: 'c6', series: 'C6', pillar: seedRows[0].pillar }), { db, returnPackages: false });
+  await upsertPackage(row({ id: 'c6', series: 'C6', pillar: seedRows[0].pillar }), { clientId: C, db, returnPackages: false });
   assert.equal(stored(db).get('c6').engine, 'client');
-  await upsertPackage(row({ id: 'own', engine: 'ue' }), { db, returnPackages: false });
+  await upsertPackage(row({ id: 'own', engine: 'ue' }), { clientId: C, db, returnPackages: false });
   assert.equal(stored(db).get('own').engine, 'ue');
   // A write-back's lastPostedAt must survive an edit that does not carry the field.
   stored(db).get('c1').lastPostedAt = 1700000000000;
-  await upsertPackage(row({ id: 'c1', title: 'edited again', lastPostedAt: undefined }), { db, returnPackages: false });
+  await upsertPackage(row({ id: 'c1', title: 'edited again', lastPostedAt: undefined }), { clientId: C, db, returnPackages: false });
   assert.equal(stored(db).get('c1').lastPostedAt, 1700000000000);
 });
 
 test('readCandidates: engine + status filter, never-posted first, then oldest posted', async () => {
   const db = makeDb();
-  await upsertPackage(row({ id: 'seed-anchor', series: 'C4', engine: 'ue' }), { db, returnPackages: false });
-  const put = (id, extra) => upsertPackage(row({ id, ...extra }), { db, returnPackages: false });
+  await upsertPackage(row({ id: 'seed-anchor', series: 'C4', engine: 'ue' }), { clientId: C, db, returnPackages: false });
+  const put = (id, extra) => upsertPackage(row({ id, ...extra }), { clientId: C, db, returnPackages: false });
   await put('posted-new', { lastPostedAt: 3000 });
   await put('posted-old', { lastPostedAt: 1000 });
   await put('never-a', {});
@@ -167,48 +169,48 @@ test('readCandidates: engine + status filter, never-posted first, then oldest po
   await put('wrong-status', { status: 'retired' });
   await put('wrong-engine', { series: 'C6', pillar: seedRows[0].pillar });
   db.stats.queries.length = 0;
-  const out = await readCandidates({ engine: 'record', statuses: ['idea', 'ready'], db });
+  const out = await readCandidates({ clientId: C, engine: 'record', statuses: ['idea', 'ready'], db });
   const ids = out.map((r) => r.id).filter((i) => !i.startsWith('EXAMPLE'));
   assert.deepEqual(ids.slice(0, 2).sort(), ['never-a', 'never-b']);
   assert.deepEqual(ids.slice(2), ['posted-old', 'posted-new']);
   assert.ok(!out.some((r) => ['wrong-status', 'wrong-engine'].includes(r.id)));
   const q = db.stats.queries[0];
-  assert.deepEqual(q.wheres, [['engine', '==', 'record'], ['status', 'in', ['idea', 'ready']]]);
+  assert.deepEqual(q.wheres, [['clientId', '==', C], ['engine', '==', 'record'], ['status', 'in', ['idea', 'ready']]]);
   assert.deepEqual(q.order, ['lastPostedAt', 'asc']);
   assert.equal(q.lim, 50);
-  const limited = await readCandidates({ engine: 'record', statuses: ['idea'], limit: 2, db });
+  const limited = await readCandidates({ clientId: C, engine: 'record', statuses: ['idea'], limit: 2, db });
   assert.equal(limited.length, 2);
 });
 
 test('readCandidates validates input and falls back to filtered seed when never written', async () => {
   const db = makeDb();
-  await assert.rejects(() => readCandidates({ engine: 'nope', statuses: ['idea'], db }), { status: 400 });
-  await assert.rejects(() => readCandidates({ engine: 'record', statuses: [], db }), { status: 400 });
-  const seedOut = await readCandidates({ engine: 'client', statuses: ['idea'], db });
+  await assert.rejects(() => readCandidates({ clientId: C, engine: 'nope', statuses: ['idea'], db }), { status: 400 });
+  await assert.rejects(() => readCandidates({ clientId: C, engine: 'record', statuses: [], db }), { status: 400 });
+  const seedOut = await readCandidates({ clientId: C, engine: 'client', statuses: ['idea'], db });
   assert.deepEqual(seedOut.map((r) => r.id), ['holopaper-cloth-grab']);
 });
 
 test('backfillIndexFields stamps legacy docs missing engine/lastPostedAt', async () => {
   const db = makeDb();
-  await upsertPackage(row({ id: 'seeded' }), { db, returnPackages: false });
-  db.cols.get('x_content_packages').set('legacy', { series: 'C2', status: 'idea', title: 'x' });
-  assert.deepEqual(await readCandidates({ engine: 'record', statuses: ['idea'], db }).then((r) => r.map((x) => x.id).includes('legacy')), false);
+  await upsertPackage(row({ id: 'seeded' }), { clientId: C, db, returnPackages: false });
+  db.cols.get('x_content_packages').set('legacy', { clientId: C, series: 'C2', status: 'idea', title: 'x' });
+  assert.deepEqual(await readCandidates({ clientId: C, engine: 'record', statuses: ['idea'], db }).then((r) => r.map((x) => x.id).includes('legacy')), false);
   const res = await backfillIndexFields({ pageSize: 2, db });
   assert.equal(res.updated, 1);
   assert.equal(stored(db).get('legacy').engine, 'record');
-  assert.ok((await readCandidates({ engine: 'record', statuses: ['idea'], db })).some((r) => r.id === 'legacy'));
+  assert.ok((await readCandidates({ clientId: C, engine: 'record', statuses: ['idea'], db })).some((r) => r.id === 'legacy'));
 });
 
 test('readInventory paginates by id; default shape unchanged', async () => {
   const db = makeDb();
-  for (const id of ['p1', 'p2', 'p3', 'p4', 'p5']) await upsertPackage(row({ id }), { db, returnPackages: false });
-  const all = await readInventory({ db });
+  for (const id of ['p1', 'p2', 'p3', 'p4', 'p5']) await upsertPackage(row({ id }), { clientId: C, db, returnPackages: false });
+  const all = await readInventory({ clientId: C, db });
   assert.deepEqual(Object.keys(all).sort(), ['packages', 'seeded', 'updatedAt']);
   const seen = [];
   let cursor;
   let pages = 0;
   do {
-    const page = await readInventory({ db, pageSize: 3, startAfter: cursor });
+    const page = await readInventory({ clientId: C, db, pageSize: 3, startAfter: cursor });
     seen.push(...page.packages.map((p) => p.id));
     cursor = page.nextCursor;
     pages += 1;
@@ -219,12 +221,13 @@ test('readInventory paginates by id; default shape unchanged', async () => {
 
 test('readInventory: a NAS archive past READ_LIMIT never crowds out later sources (rv-)', async () => {
   const db = makeDb();
-  await upsertPackage(row({ id: 'discogs-1' }), { db, returnPackages: false }); // writes meta.updatedAt
+  await upsertPackage(row({ id: 'discogs-1' }), { clientId: C, db, returnPackages: false }); // writes meta.updatedAt
   const col = db.cols.get('x_content_packages');
-  const { id: _drop, ...body } = row();
+  const { id: _drop, ...rest } = row();
+  const body = { ...rest, clientId: C };
   for (let i = 0; i < READ_LIMIT + 50; i += 1) col.set(`nas-${String(i).padStart(16, '0')}`, body);
   for (const id of ['rv-a', 'rv-b', 'zz-other']) col.set(id, body);
-  const { packages } = await readInventory({ db });
+  const { packages } = await readInventory({ clientId: C, db });
   const ids = new Set(packages.map((p) => p.id));
   for (const id of ['discogs-1', 'rv-a', 'rv-b', 'zz-other']) assert.ok(ids.has(id), `${id} is in the default view`);
   assert.equal(packages.length, ids.size, 'no duplicate rows');
@@ -234,7 +237,7 @@ test('readInventory: a NAS archive past READ_LIMIT never crowds out later source
 
 test('getPackage is a single doc read', async () => {
   const db = makeDb();
-  await upsertPackage(row({ id: 'solo' }), { db, returnPackages: false });
+  await upsertPackage(row({ id: 'solo' }), { clientId: C, db, returnPackages: false });
   db.stats.reads = 0;
   assert.equal((await getPackage('solo', { db })).id, 'solo');
   assert.equal(db.stats.reads, 1);
@@ -243,25 +246,59 @@ test('getPackage is a single doc read', async () => {
 
 test('create past the guard is refused with 409', async () => {
   const db = makeDb();
-  await upsertPackage(row({ id: 'x' }), { db, returnPackages: false });
+  await upsertPackage(row({ id: 'x' }), { clientId: C, db, returnPackages: false });
   db.cols.get('x_content_inventory_meta').get('state').count = PACKAGE_CAP;
-  await assert.rejects(() => upsertPackage(row({ id: 'y' }), { db, returnPackages: false }), { status: 409 });
-  await upsertPackage(row({ id: 'x', title: 'edit ok' }), { db, returnPackages: false });
+  await assert.rejects(() => upsertPackage(row({ id: 'y' }), { clientId: C, db, returnPackages: false }), { status: 409 });
+  await upsertPackage(row({ id: 'x', title: 'edit ok' }), { clientId: C, db, returnPackages: false });
 });
 
 test('timeline link fields (post/postIds/dates) round-trip through upsert + read, trimmed', async () => {
   const db = makeDb();
   const post = { platform: 'facebook', account: 'Housepit', entryId: 'e1', postedAt: '2012-05-04T10:00:00Z', text: 'hello '.repeat(100), album: 'Roof' };
   const dates = [{ kind: 'posted', date: '2012-05-04', source: 'facebook-posts-html', platform: 'facebook' }];
-  await upsertPackage(row({ id: 'linked-1', post, postIds: ['e1'], dates }), { db, returnPackages: false });
-  const back = (await readInventory({ db })).packages.find((p) => p.id === 'linked-1');
+  await upsertPackage(row({ id: 'linked-1', post, postIds: ['e1'], dates }), { clientId: C, db, returnPackages: false });
+  const back = (await readInventory({ clientId: C, db })).packages.find((p) => p.id === 'linked-1');
   assert.equal(back.post.text.length, 300);
   assert.equal(back.post.day, '2012-05-04');
   assert.deepEqual(back.postIds, ['e1']);
   assert.deepEqual(back.dates, dates);
   assert.ok(back.searchTokens.includes('hello'));
   // a package without the fields is stored exactly as before
-  await upsertPackage(row({ id: 'plain-1' }), { db, returnPackages: false });
+  await upsertPackage(row({ id: 'plain-1' }), { clientId: C, db, returnPackages: false });
   const plain = stored(db).get('plain-1');
   assert.equal('post' in plain || 'postIds' in plain || 'dates' in plain, false);
+});
+
+test('Phase 3a: two clients\' packages never bleed; reads/deletes need a clientId; rows never change client', async () => {
+  const db = makeDb();
+  const D = 'fixture-client-b';
+  await upsertPackage(row({ id: 'a-1' }), { clientId: C, db, returnPackages: false });
+  await upsertPackage(row({ id: 'b-1' }), { clientId: D, db, returnPackages: false });
+  const a = (await readInventory({ clientId: C, db })).packages.map((p) => p.id).filter((i) => !i.startsWith('EXAMPLE') && i !== 'holopaper-cloth-grab');
+  const b = (await readInventory({ clientId: D, db })).packages.map((p) => p.id).filter((i) => !i.startsWith('EXAMPLE') && i !== 'holopaper-cloth-grab');
+  assert.ok(a.includes('a-1') && !a.includes('b-1'));
+  assert.ok(b.includes('b-1') && !b.includes('a-1'));
+  await assert.rejects(() => readInventory({ db }), { status: 400, code: 'client-id-required' });
+  await assert.rejects(() => readCandidates({ engine: 'record', statuses: ['idea'], db }), { status: 400, code: 'client-id-required' });
+  await assert.rejects(() => deletePackage('a-1', { db }), { status: 400, code: 'client-id-required' });
+  // A new row with no client is refused; an update without one keeps the stored client.
+  await assert.rejects(() => upsertPackage(row({ id: 'orphan' }), { db, returnPackages: false }), { status: 400, code: 'package-client-required' });
+  await upsertPackage({ ...stored(db).get('a-1'), id: 'a-1', title: 'edited' }, { db, returnPackages: false });
+  assert.equal(stored(db).get('a-1').clientId, C);
+  // Naming another client on an existing row (upsert or delete) is refused; nothing moves.
+  await assert.rejects(() => upsertPackage(row({ id: 'a-1' }), { clientId: D, db, returnPackages: false }), { status: 409, code: 'package-client-mismatch' });
+  await assert.rejects(() => deletePackage('a-1', { clientId: D, db, returnPackages: false }), { status: 409, code: 'package-client-mismatch' });
+  assert.equal(stored(db).get('a-1').clientId, C);
+});
+
+test('packageGetterFor: a client sees only its own rows by id; unstamped and foreign rows read as null', async () => {
+  const db = makeDb();
+  await upsertPackage(row({ id: 'mine' }), { clientId: C, db, returnPackages: false });
+  await upsertPackage(row({ id: 'theirs' }), { clientId: 'fixture-client-b', db, returnPackages: false });
+  db.cols.get('x_content_packages').set('legacy-unstamped', { series: 'C2', status: 'idea', title: 'x' });
+  const get = packageGetterFor(C);
+  assert.equal((await get('mine', { db })).id, 'mine');
+  assert.equal(await get('theirs', { db }), null);
+  assert.equal(await get('legacy-unstamped', { db }), null);
+  assert.equal(await packageGetterFor(null)('mine', { db }), null);
 });

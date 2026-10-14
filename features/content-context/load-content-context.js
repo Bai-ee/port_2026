@@ -137,8 +137,8 @@ export function describeContentInputs({ raw, planDoc, planInputs, brainError = n
   out.push(entry('inventory', 'Content inventory', {
     source: 'x_content_packages',
     usable: (raw.packages || []).length > 0,
-    scope: 'global',
-    caveats: [`${raw.libraryNote}; inventory is shared across clients (not client-scoped).`],
+    scope: 'client',
+    caveats: [raw.libraryNote],
   }));
 
   return out;

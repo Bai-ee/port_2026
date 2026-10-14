@@ -359,7 +359,7 @@ export function createStrategyHandlers({
 
     const primary = planDoc?.plan?.benchmarkPrimary;
     const bench = benchmarks.find((b) => b.handle === primary) || benchmarks[0] || null;
-    const packages = own.rows.length ? await readPackages() : [];
+    const packages = own.rows.length ? await readPackages(c.clientId) : [];
     return {
       ok: true,
       clientId: c.clientId,
@@ -504,7 +504,7 @@ export function createStrategyHandlers({
       searchInventory: async ({ query, limit } = {}) => {
         const max = Math.min(Math.max(1, Number(limit) || 10), 20);
         const tokens = String(query ?? '').toLowerCase().split(/\s+/).filter(Boolean).slice(0, 8);
-        const pkgs = await readPackages();
+        const pkgs = await readPackages(clientId);
         const scored = [];
         for (const p of pkgs || []) {
           const hay = `${p.id} ${p.title ?? ''} ${p.story ?? ''} ${(p.searchTokens || []).join(' ')} ${JSON.stringify(p.facets ?? {})} ${JSON.stringify(p.humanEdits ?? {})}`.toLowerCase();

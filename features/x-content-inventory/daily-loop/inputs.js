@@ -38,11 +38,12 @@ export async function loadDailyLoopInputs(deps, { clientId, packageIds = null, c
   const state = stateSnap.exists ? stateSnap.data() : {};
 
   let packages;
+  // Only this client's packages (multi-client Phase 3a): an id list drops another client's rows.
   if (packageIds?.length) {
     const snaps = await db.getAll(...packageIds.map((id) => db.collection('x_content_packages').doc(id)));
-    packages = snaps.filter((s) => s.exists).map((s) => ({ id: s.id, ...s.data() }));
+    packages = snaps.filter((s) => s.exists && s.data()?.clientId === clientId).map((s) => ({ id: s.id, ...s.data() }));
   } else {
-    const snap = await db.collection('x_content_packages').select(...PACKAGE_FIELDS).get();
+    const snap = await db.collection('x_content_packages').where('clientId', '==', clientId).select(...PACKAGE_FIELDS).get();
     packages = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
   }
 

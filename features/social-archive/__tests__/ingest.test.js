@@ -30,8 +30,10 @@ const base = (db, extra = {}) => ({
   archiveRootRel: 'FB/arch', adapter: stub, now: () => Date.parse(NOW), ...extra,
 });
 const seed = (db) => db.cols.set('x_content_packages', new Map([
-  ['nas-aaa', { bucketId: 'nas', nas: { relativePath: 'FB/arch/photos_and_videos/A/a.jpg', sha256: 'a'.repeat(64) }, status: 'idea' }],
-  ['rv-1', { bucketId: 'rendered', status: 'idea' }],
+  ['nas-aaa', { clientId: 'c1', bucketId: 'nas', nas: { relativePath: 'FB/arch/photos_and_videos/A/a.jpg', sha256: 'a'.repeat(64) }, status: 'idea' }],
+  ['rv-1', { clientId: 'c1', bucketId: 'rendered', status: 'idea' }],
+  // Another client's NAS row is never matched or linked (multi-client Phase 3a).
+  ['nas-other', { clientId: 'c2', bucketId: 'nas', nas: { relativePath: 'FB/arch/photos_and_videos/A/a.jpg', sha256: 'b'.repeat(64) }, status: 'idea' }],
 ]));
 
 test('loadNasPackages returns only nas-* packages with nas.relativePath', async () => {

@@ -110,8 +110,11 @@ function fakeDb({ state = {}, brains = {}, packages = {} } = {}) {
   return {
     collection(name) {
       if (name === 'x_content_packages') {
-        const q = { select: () => q, get: async () => ({ docs: Object.entries(packages).map(([id, d]) => snap(id, d)) }) };
-        return { ...q, doc: (id) => ({ id, get: async () => snap(id, packages[id]) }) };
+        // Fixture rows default to the test client; where('clientId', ...) filters like Firestore.
+        const own = (d) => d && { clientId: OWNER, ...d };
+        const mk = (rows) => { const q = { where: (f, _op, v) => mk(rows.filter(([, d]) => d[f] === v)), select: () => q, get: async () => ({ docs: rows.map(([id, d]) => snap(id, d)) }) }; return q; };
+        const q = mk(Object.entries(packages).map(([id, d]) => [id, own(d)]));
+        return { ...q, doc: (id) => ({ id, get: async () => snap(id, own(packages[id])) }) };
       }
       return {
         doc(id) {
@@ -261,7 +264,7 @@ test('ACCEPT 5: regeneration/re-save never overwrites the saved row; revoked cle
   const { run, key, deps, store } = await dailyLoop();
   const s = packaged(run);
   assert.ok(s, 'fixture run has a packaged suggestion');
-  await upsertPackage(PKG(s.package.id), { returnPackages: false });
+  await upsertPackage(PKG(s.package.id), { returnPackages: false, clientId: OWNER });
 
   const { postId } = await saveSuggestionDraft(deps, { key, suggestionId: s.id, text: 'saved wording' });
   await svc.updateSocialPost(OWNER, postId, { content: 'operator edited wording' });
@@ -288,7 +291,7 @@ test('ACCEPT 5: regeneration/re-save never overwrites the saved row; revoked cle
 
   // Clearance revoked: approval alone does not let it be scheduled.
   await svc.approveDraft(OWNER, postId);
-  await upsertPackage(PKG(s.package.id, { approval: { state: 'rejected' } }), { returnPackages: false });
+  await upsertPackage(PKG(s.package.id, { approval: { state: 'rejected' } }), { returnPackages: false, clientId: OWNER });
   await assert.rejects(svc.updateSocialPost(OWNER, postId, { scheduledAt: FUTURE() }), { code: 'clearance-revoked', status: 409 });
   await assert.rejects(svc.approveAndSchedule(OWNER, postId, { scheduledAt: FUTURE() }), { code: 'clearance-revoked' });
   assert.notEqual(raw(postId).status, 'scheduled');
@@ -328,7 +331,7 @@ test('ACCEPT 6: next-week view keeps unscheduled approved work and shows schedul
 test('ACCEPT 7: a due v2 post publishes once via the mock client; package usage written back; results show the join', async () => {
   const { run, key, deps } = await dailyLoop();
   const s = packaged(run);
-  await upsertPackage(PKG(s.package.id, { postCount: 0 }), { returnPackages: false });
+  await upsertPackage(PKG(s.package.id, { postCount: 0 }), { returnPackages: false, clientId: OWNER });
   const { postId } = await saveSuggestionDraft(deps, { key, suggestionId: s.id, text: 'Going out for real (mock).' });
   await svc.approveAndSchedule(OWNER, postId, { scheduledAt: FUTURE() });
   assert.equal(raw(postId).status, 'scheduled');

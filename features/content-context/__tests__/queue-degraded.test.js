@@ -11,8 +11,11 @@ function fakeDb({ state = {}, brains = {}, packages = {} } = {}) {
   return {
     collection(name) {
       if (name === 'x_content_packages') {
-        const q = { select: () => q, get: async () => ({ docs: Object.entries(packages).map(([id, d]) => snap(id, d)) }) };
-        return { ...q, doc: (id) => ({ id, get: async () => snap(id, packages[id]) }) };
+        // Fixture rows default to the test client; where('clientId', ...) filters like Firestore.
+        const own = (d) => d && { clientId: 'A', ...d };
+        const mk = (rows) => { const q = { where: (f, _op, v) => mk(rows.filter(([, d]) => d[f] === v)), select: () => q, get: async () => ({ docs: rows.map(([id, d]) => snap(id, d)) }) }; return q; };
+        const q = mk(Object.entries(packages).map(([id, d]) => [id, own(d)]));
+        return { ...q, doc: (id) => ({ id, get: async () => snap(id, own(packages[id])) }) };
       }
       return {
         doc(id) {

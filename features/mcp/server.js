@@ -30,9 +30,13 @@ export function getServices() {
   let handlers = null;
   let instructions = null;
 
+  // The NAS belongs to one client (NAS_INVENTORY_CLIENT_ID, same as the worker results route). Unset => NAS rows are
+  // invisible here and new ones are refused (package-client-required).
+  const nasClientId = () => process.env.NAS_INVENTORY_CLIENT_ID || null;
   const nasDeps = () => ({
-    db, fieldValue: fb.FieldValue, getPackage,
-    upsertPackage: (pkg) => upsertPackage(pkg, { returnPackages: false }),
+    db, fieldValue: fb.FieldValue,
+    getPackage: async (id) => { const p = await getPackage(id); return p && p.clientId === nasClientId() ? p : null; },
+    upsertPackage: (pkg) => upsertPackage(pkg, { returnPackages: false, clientId: nasClientId() }),
     now: () => Date.now(),
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
     randomId: () => randomUUID(),

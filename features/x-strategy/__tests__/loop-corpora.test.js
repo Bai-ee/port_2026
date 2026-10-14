@@ -59,7 +59,7 @@ test('handle with no committed file and no rows: empty rows, "no stored rows"', 
 test('inputs.js prints the labels verbatim in the inputs summaries', async () => {
   const none = { exists: false, data: () => ({}) };
   const doc = () => ({ get: async () => none, collection: () => ({ doc }) });
-  const db = { collection: (name) => ({ doc, select: () => ({ get: async () => ({ docs: [] }) }), name }) };
+  const db = { collection: (name) => ({ doc, select: () => ({ get: async () => ({ docs: [] }) }), where: () => ({ select: () => ({ get: async () => ({ docs: [] }) }) }), name }) };
   const store = createMemoryCorpusStore({ loadCommitted });
   await store.writeMergedRows('bai_ee', rows(5), { pulledAt: PULLED });
   const corpora = await loadLoopCorpora({ corpusStore: store });
@@ -71,7 +71,7 @@ test('inputs.js prints the labels verbatim in the inputs summaries', async () =>
 const noneSnap = { exists: false, data: () => ({}) };
 const fakeDb = () => {
   const doc = () => ({ get: async () => noneSnap, collection: () => ({ doc }) });
-  return { collection: (name) => ({ doc, select: () => ({ get: async () => ({ docs: [] }) }), name }) };
+  return { collection: (name) => ({ doc, select: () => ({ get: async () => ({ docs: [] }) }), where: () => ({ select: () => ({ get: async () => ({ docs: [] }) }) }), name }) };
 };
 
 test('inputs.js uses corpora.ownHandle for strategyInputs; absent => null (never the owner)', async () => {

@@ -88,7 +88,8 @@ export async function deleteBucket(clientId, bucketId, { db, reassignTo } = {}) 
     if (!buckets.some((b) => b.id === target)) throw fail(`Unknown reassignTo bucket: ${target}`);
   }
 
-  const items = await d.collection(PACKAGES).where('bucketId', '==', id).get();
+  // Only this client's packages: another client's rows in a same-named bucket are not ours to count or move.
+  const items = await d.collection(PACKAGES).where('clientId', '==', clientKey(clientId)).where('bucketId', '==', id).get();
   const refs = items.docs.map((x) => x.id);
   if (refs.length && !target) {
     throw fail(`Bucket has ${refs.length}+ items; pass reassignTo to move them.`, 409, { itemCount: refs.length });
