@@ -1,10 +1,13 @@
 # Telegram command center — as-built SSOT
 
+> **Multi-client (2026-10-14):** bindings are per client (one active binding per `clientId`) and every read, card and intake write is keyed to the bound client; there is no home default. Access is still `requirePilotOwner` (`PILOT_OWNER_UIDS`/`PILOT_CLIENT_IDS`; prod = home, UE, NTR). The Library is client-scoped (`x_content_packages.clientId`), so uploads land in the bound client's inventory only. Still inactive until the owner creates the bot/env/webhook. See [`CONTENT-PILOT-OPERATIONS.md`](CONTENT-PILOT-OPERATIONS.md) §1b–1f.
+
 Status (2026-10-11): built and tested locally on `feat/telegram-command-center` (from `main` @ b3978fca). **Not activated**: no bot exists yet, no webhook is registered, and no Telegram message or live X post has been sent. Contracts: [`docs/plans/TELEGRAM-COMMAND-CENTER-CONTRACTS.md`](../plans/TELEGRAM-COMMAND-CENTER-CONTRACTS.md). Plan and intent: [`TELEGRAM-CONTENT-UX-MASTER-PLAN.md`](../plans/TELEGRAM-CONTENT-UX-MASTER-PLAN.md), [`TELEGRAM-DAILY-COMMAND-CENTER-CLAUDE-PROMPT.md`](../plans/TELEGRAM-DAILY-COMMAND-CENTER-CLAUDE-PROMPT.md).
 
 Telegram is a second interface to the same HITLOOP records. It has no strategy engine, post queue, approval policy or publisher of its own. It reads the same brief data the email uses, shows the same calendar, and changes posts only through `features/social-posting/twitter-service.js`, the same functions the web calendar calls.
 
 ## What the owner gets
+(Per bound client; the admin links each client's chat from the dashboard switcher.)
 Main menu: **What's happening?** · **Today's posts** · **Calendar** · **Upload content** · **Settings**.
 
 - **What's happening?** An overview, then four sections: Market insights / Conversations to join / Needs review / More detail.
@@ -110,7 +113,7 @@ Without the token, the webhook returns 503, dispatch reports `skipped: telegram-
 5. **Large-file uploads only:** allow browser PUT from `https://hitloop.agency` in the default storage bucket's CORS.
 6. **Link.** Content Engine → More → Telegram → Connect Telegram → Open bot → Start → back in HITLOOP, Confirm.
 7. **Pilot gate 1 (messaging only):** check What's happening? / Today's posts / Calendar, and a `[CM test]` handoff card ≥30 days out using Post myself, then release or reject it.
-8. **Pilot gate 2 (separate authorization):** Approve & post now / Approve & schedule on real posts publish to @bai_ee through the existing publisher.
+8. **Pilot gate 2 (separate authorization):** Approve & post now / Approve & schedule on real posts publish to the bound client's connected X account (home: see CONTENT-PILOT-OPERATIONS §1d) through the existing publisher.
 
 ## Tests (2026-10-11)
 - 366 Telegram and social-posting tests: `node --test features/telegram/__tests__/*.test.js features/social-posting/__tests__/*.test.js`.
@@ -133,8 +136,8 @@ Without the token, the webhook returns 503, dispatch reports `skipped: telegram-
   - browser walkthrough of the settings tab
 
 ## Known limits
-- **Owner pilot only.**
-  - The Library (`x_content_packages`) is global, so customer access needs client-scoped Library reads first.
+- **Pilot-allowlisted clients only** (`PILOT_CLIENT_IDS`); clients do not operate Telegram themselves (Phase 5, not built).
+  - The Library is client-scoped since 2026-10-14 (the old "global Library" blocker is resolved).
   - One private chat per client.
   - No groups, voice or Mini App.
 - **Intake.** There is no lease on intake docs: overlapping dispatch runs could double-send an intake message, but never double-store. A late album item after Split is refused with a message. `intake.finalizeDue` doesn't re-check binding access; it only messages the chat that uploaded.

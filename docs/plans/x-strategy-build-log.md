@@ -1,5 +1,7 @@
 # X Strategy Tab — build log
 
+> **Superseded 2026-10-14 (multi-client):** owner-only gates, the global content inventory, the single @bai_ee account and Seb/Hitloop defaults described below were replaced; as-built = docs/source-of-truth/CONTENT-PILOT-OPERATIONS.md §1b–1f and docs/plans/MULTI-CLIENT-FINAL-PASS.md.
+
 Autonomous run 2026-10-11. Branch feat/daily-content-loop. Model budget: 30 calls / $2.00 (tally below).
 
 Baseline (09be36e8): full suite 4208 tests, 4206 pass, 2 fail (vendor-api-lib, known).

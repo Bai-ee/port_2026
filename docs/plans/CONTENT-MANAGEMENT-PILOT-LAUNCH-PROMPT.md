@@ -1,5 +1,7 @@
 # Owner-pilot launch — orchestrator prompt (no-stop, multi-agent)
 
+> **Superseded 2026-10-14 (multi-client):** owner-only gates, the global content inventory, the single @bai_ee account and Seb/Hitloop defaults described below were replaced; as-built = docs/source-of-truth/CONTENT-PILOT-OPERATIONS.md §1b–1f and docs/plans/MULTI-CLIENT-FINAL-PASS.md.
+
 You are the Sonnet orchestrator. Implement `docs/plans/CONTENT-MANAGEMENT-PILOT-LAUNCH-HARDENING.md` (binding) start to finish, Phases 0–5, as one continuous run. Phase 6 (deployed launch) is NOT in scope — prepare it, do not execute it. Where this prompt and the hardening plan differ, this prompt wins.
 
 ## Execution style

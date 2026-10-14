@@ -9,6 +9,8 @@ Two things make this surface different from everything else in the codebase:
 
 Because of that, this doc opens with a hard gate.
 
+> **Multi-client (2026-10-14):** `@bai_ee` is the *home* client's account and the only one the global `TWITTER_*` env / `system_flags/x_oauth_tokens` serve. Every other client publishes and reads through its own connected X account (§2e); the spend gate applies per client per batch (the owner's click names the client). Nothing in code defaults to `@bai_ee` any more (own/benchmark handles live in `client_configs.marketingBriefConfig.xGrowth`). Home's `social_accounts` X record currently points at @UGExistence for posting tests while its X Monitor history stays on the global @bai_ee connection. See [`CONTENT-PILOT-OPERATIONS.md`](CONTENT-PILOT-OPERATIONS.md) §1d.
+
 ---
 
 ## 0. THE SPEND GATE (read before any execution)
@@ -39,6 +41,7 @@ Reading this doc is not authorization. A task that merely *mentions* X is not au
 ---
 
 ## 1. Account & credentials
+(The values below are the home/global credential only; other clients connect their own via the Social Accounts card.)
 
 | Thing | Value |
 |---|---|
@@ -111,7 +114,7 @@ longer accepts the newest refresh token, the operation stops before upload with
 generate a new approval email. Never retry a failed email approval link because
 redemption burns it before publishing.
 
-**Multi-client Phase 4 (2026-10-14, branch `feat/multi-client-3a-inventory`, not yet deployed):** `getXOAuth2Client(clientId)` serves the global `system_flags/x_oauth_tokens` token ONLY to the home client (`resolveDigestClientId()`); any other client without its own token gets `409 account-not-connected`, and a refresh of a globally served token writes back to the global doc, never into `social_accounts`. The **X Monitor** metered reads (`users/me`, user tweets, followers — same call counts as before, still each behind the card's confirm row) now run per client: `syncProfile/syncPosts/syncAudience({ clientId })` use `getPlatformClient(clientId,'x')` and that client's own X account id (home keeps the global @bai_ee connection while it exists); `x_monitor/{xUserId}` root docs carry `clientIds` (arrayUnion) + `lastSyncedBy`; `usage_events` rows carry `clientId`. No new metered call site was added; the MCP `x_monitor_sync` paid sync prices and runs the request's client.
+**Multi-client Phase 4 (SHIPPED to production 2026-10-14, PR #10):** `getXOAuth2Client(clientId)` serves the global `system_flags/x_oauth_tokens` token ONLY to the home client (`resolveDigestClientId()`); any other client without its own token gets `409 account-not-connected`, and a refresh of a globally served token writes back to the global doc, never into `social_accounts`. The **X Monitor** metered reads (`users/me`, user tweets, followers — same call counts as before, still each behind the card's confirm row) now run per client: `syncProfile/syncPosts/syncAudience({ clientId })` use `getPlatformClient(clientId,'x')` and that client's own X account id (home keeps the global @bai_ee connection while it exists); `x_monitor/{xUserId}` root docs carry `clientIds` (arrayUnion) + `lastSyncedBy`; `usage_events` rows carry `clientId`. No new metered call site was added; the MCP `x_monitor_sync` paid sync prices and runs the request's client.
 
 Full data model, the three publish modes, the approval-token contract, and the roll-up double-send guard: [`SOCIAL-AUTO-PUBLISH.md`](./SOCIAL-AUTO-PUBLISH.md). Every write here (this surface AND the legacy §2a path) is logged to `usage_events` with `provider:'x-api'` — call counts only, no dollar rate (see §3's blind-spot note, which now applies to a second account per client, not just @bai_ee).
 

@@ -1,5 +1,7 @@
 # Content Management - customer access checklist
 
+> **Superseded 2026-10-14 (multi-client):** owner-only gates, the global content inventory, the single @bai_ee account and Seb/Hitloop defaults described below were replaced; as-built = docs/source-of-truth/CONTENT-PILOT-OPERATIONS.md §1b–1f and docs/plans/MULTI-CLIENT-FINAL-PASS.md.
+
 Status: customer access is DISABLED. The pilot is owner-only (`PILOT_OWNER_UIDS` + `PILOT_CLIENT_IDS`, `api/_lib/pilot-access.cjs`).
 The pilot is NOT multi-tenant ready. Do not enable any customer until every item below is closed. Each item: current state -> required -> verification.
 

@@ -22,6 +22,7 @@ Anything here not linked from [`source-of-truth/SOURCE-OF-TRUTH.md`](source-of-t
 
 ## Common Entry Points
 
+- Multi-client content system (2026-10-14, agency-operated; readiness gate, per-client inventory/NAS/X identity/priors, signup → Brain draft): [`source-of-truth/CONTENT-PILOT-OPERATIONS.md`](source-of-truth/CONTENT-PILOT-OPERATIONS.md) §1b–1f; owner checklist [`plans/MULTI-CLIENT-FINAL-PASS.md`](plans/MULTI-CLIENT-FINAL-PASS.md)
 - Client Brain / Company Brain: [`company-brain/README.md`](company-brain/README.md)
 - Studio Intelligence Standard: [`company-brain/STUDIO_INTELLIGENCE_STANDARD.md`](company-brain/STUDIO_INTELLIGENCE_STANDARD.md)
 - Company Brain Document Standard: [`company-brain/COMPANY_BRAIN_DOCUMENT_STANDARD.md`](company-brain/COMPANY_BRAIN_DOCUMENT_STANDARD.md)

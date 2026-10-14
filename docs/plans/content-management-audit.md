@@ -1,5 +1,7 @@
 # Content Management — Phase 0 ownership audit (2026-10-11)
 
+> **Superseded 2026-10-14 (multi-client):** owner-only gates, the global content inventory, the single @bai_ee account and Seb/Hitloop defaults described below were replaced; as-built = docs/source-of-truth/CONTENT-PILOT-OPERATIONS.md §1b–1f and docs/plans/MULTI-CLIENT-FINAL-PASS.md.
+
 Base: `feat/content-management` @ 882d5582. Baseline `npm test`: 4522 tests / 2 known failures (vendor-api-lib); after Stage B merge 4621 (social-archive +99). Two load-flaky tests (`ffprobe validation…`, `proof-render-worker`) pass in isolation.
 
 ## Ownership table

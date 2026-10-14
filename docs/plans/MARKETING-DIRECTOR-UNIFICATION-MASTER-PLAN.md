@@ -1,5 +1,7 @@
 # Marketing Director Unification — master plan (2026-10-13)
 
+> **Superseded 2026-10-14 (multi-client):** owner-only gates, the global content inventory, the single @bai_ee account and Seb/Hitloop defaults described below were replaced; as-built = docs/source-of-truth/CONTENT-PILOT-OPERATIONS.md §1b–1f and docs/plans/MULTI-CLIENT-FINAL-PASS.md.
+
 Status: **APPROVED (Fable review 2026-10-13, owner scope: POC, admin account first, ASAP).** Stop for approval after every phase.
 Base: production `main` `e4bce520`. Owner: bryanballi@gmail.com. Pilot client: `bryan-balli-WUoltG84`.
 

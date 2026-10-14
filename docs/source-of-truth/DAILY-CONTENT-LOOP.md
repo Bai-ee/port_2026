@@ -1,12 +1,14 @@
 # Daily Content Loop — runbook (as-built)
 
-Status: prototype, owner account only. Build plan: `docs/plans/DAILY-CONTENT-LOOP-PROTOTYPE-BUILD-PLAN.md`; product intent: `docs/plans/DAILY-CONTENT-LOOP-MASTER-PLAN.md`. Where this file and the plans disagree about what exists today, this file wins.
+Status: prototype; per-client since 2026-10-14 (see Multi-client note below). Build plan: `docs/plans/DAILY-CONTENT-LOOP-PROTOTYPE-BUILD-PLAN.md`; product intent: `docs/plans/DAILY-CONTENT-LOOP-MASTER-PLAN.md`. Where this file and the plans disagree about what exists today, this file wins.
+
+> **Multi-client (2026-10-14):** the owner-only gate is gone. Every entry point (dashboard `daily-run-*`, MCP, `/api/worker/daily-loop` cron, `daily-run.mjs`) calls `assertClientReady` (`features/client-readiness/`): approved Brain + plan doc + connected X username, or `clients/{id}.contentLoop.enabled`; denied ⇒ 403 with the first missing input. The loop's own handle is the client's (`social_accounts` → `xGrowth.ownHandle` → Brain `identity.xHandle`); none ⇒ self-quote is a named gap, never `@bai_ee`. Library and inputs are read for the request's client. See [`CONTENT-PILOT-OPERATIONS.md`](CONTENT-PILOT-OPERATIONS.md) §1b–1f.
 
 ## What it does
 
 Answers one question: which current X conversations are gaining momentum, which fit the brand, and what content already owned can contribute something useful. Flow: inputs → conversation shortlist → momentum + brand-fit → owned-content match → grounded draft → checks → human review → **save once as an unscheduled draft**.
 
-Up to 3 suggestions per run (`MAX_SUGGESTIONS`) is a review limit, not a quota; fewer is a valid result. **The loop cannot post or schedule.** The only queue write is Save Draft: one `social_posts` row (`status:'draft'`, `scheduledAt:null`, `sourceRef.kind:'daily-loop'`) via `createDraftPostOnce` (derived id + `ref.create`, so a double save yields one row). Gated to `OWNER_CLIENT_IDS` (`bryan-balli-WUoltG84`); any other client gets 403.
+Up to 5 suggestions per run (`MAX_SUGGESTIONS`) is a review limit, not a quota; fewer is a valid result. **The loop cannot post or schedule.** The only queue write is Save Draft: one `social_posts` row (`status:'draft'`, `scheduledAt:null`, `sourceRef.kind:'daily-loop'`) via `createDraftPostOnce` (derived id + `ref.create`, so a double save yields one row). Gated by `assertClientReady` (not-ready clients get 403).
 
 ## Inputs (every run lists each with status and age, first in the output)
 
@@ -14,16 +16,16 @@ Up to 3 suggestions per run (`MAX_SUGGESTIONS`) is a review limit, not a quota; 
 |---|---|---|
 | Watchlist scan | `dashboard_state/{client}.marketingBrief.quoteTargets` | `scripts/x-content/scan-quote-targets.mjs` (local `bird`) |
 | Brand-topic search | `dashboard_state/{client}.marketingBrief.conversationSearch` | `daily-run.mjs --discover --write` (local `bird`) |
-| Content library | `x_content_packages` (global). Default = verified demo set `features/x-content-inventory/daily-loop-demo-set.json` (31 items) | the content inventory |
+| Content library | `x_content_packages` (client-scoped by `clientId`). Default = verified demo set `features/x-content-inventory/daily-loop-demo-set.json` (31 items) | the content inventory |
 | Client Brain | `clients/{client}/client_brain/current` | Client Brain card; **only `status:'approved'` is used** |
 | Strategy Builder plan | `dashboard_state/{client}.strategyBuilder.lastPlan` | Strategy Builder; excluded with a reason when it does not cover today |
-| Own history / benchmark | `docs/audits/bai-ee-x-corpus.json`, `seb-design-x-corpus.json` | committed corpora; benchmark is computed on the fly and labelled so |
+| Own history / benchmark | the client's own handle + `xGrowth.benchmarkHandles` corpora (`x_corpora`, pulled by `pull-corpora.mjs --client`); committed `bai-ee`/`seb-design` corpora are the home-only seed | benchmark is computed on the fly and labelled so; no benchmark ⇒ `no-benchmark` gap |
 
 Runs are stored in `x_content_daily_runs/{client}__{localDate}__x__v{LOOP_VERSION}` — one doc per local day (America/Chicago).
 
 ## Commands
 
-All from the repo root. `--client` must be the owner id except for `--replay`.
+All from the repo root. `--client` is required (except `--replay`) and must pass `assertClientReady`.
 
 ```text
 node scripts/x-content/daily-run.mjs --replay features/x-content-inventory/__tests__/fixtures/daily-loop-replay.json
@@ -78,6 +80,8 @@ scripts/x-content/install-scan-schedule.sh install-daily-loop <id> [--install]  
 
 ## Strategy spine (slots)
 
+> Superseded 2026-10-14 by multi-client (see CONTENT-PILOT-OPERATIONS.md §1b–1f) for the "Seb rules" wording: slot/strategy inputs now come from the client's own plan and Brain; the Seb model is only what home's stored plan was seeded from.
+
 Each run carries `strategySource` (`mixSource`, `date`, `tier`, `authoredPerDay`, `slotLetters`) and per-suggestion `slot` (`letter`, `timeCT`, `type`, `lane`, `pillar`, `fillReason`). Slots that could not be filled become `slot-unfilled:<letter>` gaps with the reason. Strategy is Seb rules from `docs/plans/X-STRATEGY-SEB-MODEL.md`; the Brain is not used for voice.
 
 - Dashboard: cards show `D · 15:00 CT · quote-react · P1`; the reply slot reads "anytime today"; an empty self-quote draft reads "write this one yourself" and cannot be saved empty. The inputs panel leads with the strategy source + slot list; slot gaps list first under Gaps.
@@ -97,7 +101,7 @@ Each run carries `strategySource` (`mixSource`, `date`, `tier`, `authoredPerDay`
 
 | Module | Role |
 |---|---|
-| `config.js` | version, caps, thresholds, owner allowlist |
+| `config.js` | version, caps, thresholds (readiness is decided by `features/client-readiness`) |
 | `text.js`, `time-ids.js` | tokenizing/phrases; local date, stable ids |
 | `content-basis.js` | story / facts / none tiers; eligibility |
 | `brand.js` | brand profile, brand fit, discovery queries |
@@ -111,4 +115,4 @@ Each run carries `strategySource` (`mixSource`, `date`, `tier`, `authoredPerDay`
 
 ## Not built
 
-Approved-Brain-as-brand-fit, momentum over time, conversation depth, image-only post vision, full-library default, scheduling/approval, performance feedback, second client. See plan §9.
+Approved-Brain-as-brand-fit, momentum over time, conversation depth, image-only post vision, full-library default, scheduling/approval, performance feedback. (A second client is now supported via `assertClientReady`; daily-loop conversation momentum has no per-client watchlist input and scores every author as untracked.) See plan §9.

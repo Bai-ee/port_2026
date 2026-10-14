@@ -1,5 +1,7 @@
 # Content Management — owner-pilot hardening build log
 
+> **Superseded 2026-10-14 (multi-client):** owner-only gates, the global content inventory, the single @bai_ee account and Seb/Hitloop defaults described below were replaced; as-built = docs/source-of-truth/CONTENT-PILOT-OPERATIONS.md §1b–1f and docs/plans/MULTI-CLIENT-FINAL-PASS.md.
+
 Worktree `~/Documents/Repos/Bballi_Portfolio-pilot`, branch `feat/content-pilot` from `feat/content-management` @ `da811b6b` (normalization complete). Dev server (when needed): `npm run dev -- -p 3006`. Plan: `docs/plans/CONTENT-MANAGEMENT-PILOT-LAUNCH-HARDENING.md`; orchestrator rules: `...-PILOT-LAUNCH-PROMPT.md` (wins on conflict). Owner client `bryan-balli-WUoltG84`.
 
 ## Phase 0 — base pinned

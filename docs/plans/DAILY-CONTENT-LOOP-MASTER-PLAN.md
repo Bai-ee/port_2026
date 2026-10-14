@@ -1,5 +1,7 @@
 # Daily Content Loop — POC and rollout master plan
 
+> **Superseded 2026-10-14 (multi-client):** owner-only gates, the global content inventory, the single @bai_ee account and Seb/Hitloop defaults described below were replaced; as-built = docs/source-of-truth/CONTENT-PILOT-OPERATIONS.md §1b–1f and docs/plans/MULTI-CLIENT-FINAL-PASS.md.
+
 Date: 2026-10-10
 Status: implementation-ready plan; POC not yet implemented.
 Owner account: Bryan / @bai_ee. First channel: X.

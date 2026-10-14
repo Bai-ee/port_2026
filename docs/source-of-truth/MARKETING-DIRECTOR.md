@@ -1,5 +1,7 @@
 # Marketing Director unification — as built (POC)
 
+> **Shipped + multi-client (2026-10-14):** shipped to production 2026-10-13 (PR #4, `7ef8d210`), admin only. Since 2026-10-14 every card and the header Refresh operate on the **dashboard-switcher client** (`?as=`) — Brain, Strategy doc, plan + tracks, Today, Queue/Compose, Results/X Monitor, Email Digest, Social Accounts; Refresh group 6 syncs that client's own X account and every paid run is the owner's click per client per batch. Today/daily-run require `assertClientReady`; the server `pilotAccess` gate noted in §7 exists as `PILOT_OWNER_UIDS`/`PILOT_CLIENT_IDS` (prod = home, UE, NTR). Clients do not use these cards themselves (Phase 5, not built). The "branch/uncommitted" wording below is historical. See [`CONTENT-PILOT-OPERATIONS.md`](CONTENT-PILOT-OPERATIONS.md) §1b–1f.
+
 Status: **POC, admin only (`isAdmin` is the sole gate), built 2026-10-13 on branch `feat/marketing-director-poc`, uncommitted until the owner commits.** Non-admin card lists and behavior are unchanged. Plan (approved, 5 phases): [`docs/plans/MARKETING-DIRECTOR-UNIFICATION-MASTER-PLAN.md`](../plans/MARKETING-DIRECTOR-UNIFICATION-MASTER-PLAN.md). Phases P1-P4 are code-complete; P5 is this doc. No deploy, no cron change, no server/api/features/scripts file changed.
 
 Verification so far: `npm test` 5453/5455 (the 2 failures are the known `vendor/api-lib/firebase-admin.cjs` byte-identity checks, pre-existing on clean `main`); `next build --webpack` passes (Turbopack panics only because this worktree's `node_modules` is a symlink); P2 cards, Content Center and the PostSheet portal were smoke-tested read-only in a browser; the P4 confirm row was reached and cancelled behind a page-level fetch guard (0 paid calls); an independent review found no paid path that bypasses the confirm row.
@@ -79,6 +81,8 @@ Rules (the confirm rule):
 - The hidden `social-media-posting` modal has no remaining programmatic entry since the Strategy Builder redirect; verify.
 
 ## 7. Post-POC (deferred)
+> Superseded 2026-10-14 by multi-client (see CONTENT-PILOT-OPERATIONS.md §1b–1f) for the pilot-client gate: `PILOT_CLIENT_IDS` + `assertClientReady` now gate server-side.
+
 Server `pilotAccess` flag and pilot-client gate (Q4, revisit after about 2 weeks of admin use); Listening "X Accounts" section in Watchlist; "Previous 30-day plan" disclosure and import-to-queue; token de-dup and restyle of untouched Marketing cards; characterization tests; Email Digest Generate & Send stays out of unified Refresh.
 
 ## CLAUDE.md map entry (paste)

@@ -6,6 +6,8 @@ Market Signals; **Instagram is the fully-worked second example** (rows 1–14 be
 `tiktok`, `hackernews` (already valid last30days sources). Read before touching any
 per-platform source test, analysis, or the digest's per-platform "Happening on …" sections.
 
+> **Multi-client (2026-10-14):** platform search config is per client (`client_configs/{id}.marketingBriefConfig`), operated through the dashboard switcher. A new signup now seeds `brandXHandle`, `instagramHandles` and `xGrowth.ownHandle` from the optional signup fields (only what was typed) and runs no X, ScrapeCreators or market-signals call at signup; searches still run only from the owner's Refresh/Generate click or an enrolled client's daily cron. X search remains dashboard-triggered only (`allowX`). See [`CONTENT-PILOT-OPERATIONS.md`](CONTENT-PILOT-OPERATIONS.md) §1e.
+
 Related: [`MARKET-SIGNALS-AND-SCOUT-PROJECTION.md`](./MARKET-SIGNALS-AND-SCOUT-PROJECTION.md),
 [`EMAIL-DIGEST-CARD.md`](./EMAIL-DIGEST-CARD.md).
 
