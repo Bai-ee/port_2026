@@ -95,7 +95,7 @@ test('linkEntriesToPackages merges post/postIds/dates/linked only; skips missing
   const a = mk('a', '2010-05-01T10:00:00Z', { text: 't'.repeat(500), album: 'Alb' });
   const b = mk('b', '2011-01-01T10:00:00Z', { tsKind: 'taken', tsSource: 'facebook-album-html' });
   await upsertEntries(db, C, [a, b]);
-  const owner = { status: 'drafted', story: 'mine', lastPostedAt: '2020-01-01', title: 'T', postIds: ['old'], dates: [{ kind: 'event', date: '1999-01-01', source: 'x', platform: 'facebook' }] };
+  const owner = { clientId: C, status: 'drafted', story: 'mine', lastPostedAt: '2020-01-01', title: 'T', postIds: ['old'], dates: [{ kind: 'event', date: '1999-01-01', source: 'x', platform: 'facebook' }] };
   db.cols.set('x_content_packages', new Map([['nas-1', structuredClone(owner)]]));
   const byId = { [a.id]: a, [b.id]: b };
   const links = [
@@ -121,7 +121,16 @@ test('linkEntriesToPackages merges post/postIds/dates/linked only; skips missing
 test('postIds cap at 20', async () => {
   const db = makeDb();
   const es = Array.from({ length: 30 }, (_, i) => mk(`e${i}`, `2010-05-${String(i + 1).padStart(2, '0')}T10:00:00Z`));
-  db.cols.set('x_content_packages', new Map([['nas-1', {}]]));
+  db.cols.set('x_content_packages', new Map([['nas-1', { clientId: C }]]));
   await linkEntriesToPackages(db, C, es.map((e) => ({ entryId: e.id, packageId: 'nas-1', relPath: 'p' })), Object.fromEntries(es.map((e) => [e.id, e])));
   assert.equal(db.cols.get('x_content_packages').get('nas-1').postIds.length, 20);
+});
+
+test('linkEntriesToPackages never writes into another client\'s package', async () => {
+  const db = makeDb();
+  const e = mk('x', '2010-05-01T10:00:00Z');
+  await upsertEntries(db, C, [e]);
+  db.cols.set('x_content_packages', new Map([['nas-9', { clientId: 'someone-else', title: 'theirs' }]]));
+  await linkEntriesToPackages(db, C, [{ entryId: e.id, packageId: 'nas-9', relPath: 'p' }], { [e.id]: e });
+  assert.deepEqual(db.cols.get('x_content_packages').get('nas-9'), { clientId: 'someone-else', title: 'theirs' });
 });

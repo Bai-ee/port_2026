@@ -267,7 +267,116 @@ async function queueInitialBriefRun({ clientId, uid, websiteUrl, usesFallbackSit
   return { ...payload, created: true };
 }
 
-async function provisionClientForUser({ uid, email, displayName, companyName, websiteUrl, ideaDescription }) {
+// ── Optional signup brand fields (Phase 2b) ──────────────────────────────────
+// Signup never writes Brain Markdown. The optional form fields land as SOURCES
+// (client_configs.onboardingAnswers, dashboard_state.snapshot.brandOverview)
+// and SETTINGS (client_configs.marketingBriefConfig) only; the Client Brain is
+// drafted from them later and an approved Brain still wins via adoption.
+
+const SIGNUP_COMPETITOR_MAX = 3;
+const SIGNUP_GOAL_MAX = 200;
+
+// Accepts @handle, handle, or a profile/post URL with or without a scheme; keeps only the account segment.
+function cleanSignupXHandle(raw) {
+  return String(raw || '').trim()
+    .replace(/^(https?:\/\/)?(www\.|mobile\.)?(x|twitter)\.com\//i, '')
+    .replace(/^@+/, '')
+    .replace(/[/?#].*$/, '')
+    .replace(/[^A-Za-z0-9_]/g, '')
+    .slice(0, 15); // X's own username limit
+}
+
+function cleanSignupInstagramHandle(raw) {
+  return String(raw || '').trim()
+    .replace(/^(https?:\/\/)?(www\.)?instagram\.com\//i, '')
+    .replace(/^@+/, '')
+    .replace(/[/?#].*$/, '')
+    .replace(/[^A-Za-z0-9_.]/g, '')
+    .slice(0, 60);
+}
+
+// Competitor "URL or @handle" → the survey's `competitors` pairs shape
+// [{ name, handle }], normalized by the survey config's own validateAnswer.
+function signupCompetitorPairs(list) {
+  const { validateAnswer } = require('../../onboarding/questions.config.cjs');
+  const raw = (Array.isArray(list) ? list : [])
+    .map((v) => String(v || '').trim())
+    .filter(Boolean)
+    .slice(0, SIGNUP_COMPETITOR_MAX)
+    .map((entry) => {
+      let name = entry.replace(/^@+/, '');
+      if (/^https?:\/\//i.test(entry) || /^[a-z0-9-]+(\.[a-z0-9-]+)+(\/.*)?$/i.test(entry)) {
+        try {
+          const url = new URL(/^https?:\/\//i.test(entry) ? entry : `https://${entry}`);
+          name = url.hostname.replace(/^www\./, '');
+          return { name, handle: url.toString() };
+        } catch { /* fall through to handle */ }
+      }
+      return { name, handle: entry };
+    });
+  if (!raw.length) return [];
+  const result = validateAnswer('competitors', raw);
+  return result.ok ? result.value : [];
+}
+
+/**
+ * Pure: map the optional signup fields onto the docs provisioning writes.
+ * Every output is null when the user filled nothing for it, so a URL-only
+ * signup writes exactly what it always did.
+ *
+ * @returns {{ onboardingAnswers: object|null, marketingBriefConfig: object|null, brandOverviewSeed: object|null }}
+ */
+function buildSignupProfile({ xHandle, instagramHandle, competitors, goal } = {}, { now = null } = {}) {
+  const x = cleanSignupXHandle(xHandle);
+  const ig = cleanSignupInstagramHandle(instagramHandle);
+  const pairs = signupCompetitorPairs(competitors);
+  const goalText = String(goal || '').replace(/\s+/g, ' ').trim().slice(0, SIGNUP_GOAL_MAX);
+
+  const answers = {};
+  if (pairs.length) answers.competitors = { value: pairs, skipped: false, answeredAt: now, source: 'signup' };
+  if (x) answers.xHandle = { value: `@${x}`, skipped: false, answeredAt: now, source: 'signup' };
+  if (ig) answers.instagramHandle = { value: `@${ig}`, skipped: false, answeredAt: now, source: 'signup' };
+  if (goalText) answers.goal = { value: goalText, skipped: false, answeredAt: now, source: 'signup' };
+
+  const marketingBriefConfig = {};
+  if (x) {
+    marketingBriefConfig.brandXHandle = x;
+    marketingBriefConfig.xGrowth = { ownHandle: x };
+  }
+  if (ig) marketingBriefConfig.instagramHandles = [ig];
+
+  // A starting overview only (`source:'signup'`, not 'user'): mergeBrandOverview's 'user' rule would freeze every
+  // crawled field it later fills as permanent user data. The goal itself is kept in onboardingAnswers.answers.goal
+  // and reaches the Brain's Positioning through the normal adoption (empty sections only).
+  const brandOverviewSeed = goalText
+    ? { headline: '', summary: '', industry: '', businessModel: '', targetAudience: '', positioning: goalText, source: 'signup', seededFrom: 'signup' }
+    : null;
+
+  return {
+    onboardingAnswers: Object.keys(answers).length ? { answers, updatedAt: now } : null,
+    marketingBriefConfig: Object.keys(marketingBriefConfig).length ? marketingBriefConfig : null,
+    brandOverviewSeed,
+  };
+}
+
+// Per-client digest_config written at signup: schedule OFF (opt-in only), the
+// signup email as recipient, no home client. Direct set — NOT saveDigestConfig,
+// which runs brain-sync write-back. Every other field resolves from the
+// read-side defaults in getDigestConfig.
+function buildSignupDigestConfig({ email, now }) {
+  const { DEFAULTS } = require('../../features/intelligence/_digest-config.js');
+  return {
+    schedule: { ...DEFAULTS.schedule },
+    nextRunAt: null,
+    homeClientId: null,
+    recipientEmail: String(email || '').trim().slice(0, 200),
+    createdFrom: 'signup',
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+async function provisionClientForUser({ uid, email, displayName, companyName, websiteUrl, ideaDescription, xHandle, instagramHandle, competitors, goal }) {
   const normalized = normalizeOptionalUrl(websiteUrl);
   const trimmedIdeaDescription = String(ideaDescription || '').trim();
 
@@ -335,7 +444,9 @@ async function provisionClientForUser({ uid, email, displayName, companyName, we
   const onboardingRef = clientRef.collection('system').doc('onboarding');
   const clientConfigRef = fb.adminDb.collection('client_configs').doc(clientId);
   const dashboardStateRef = fb.adminDb.collection('dashboard_state').doc(clientId);
+  const digestConfigRef = fb.adminDb.collection('digest_config').doc(clientId);
   const now = fb.FieldValue.serverTimestamp();
+  const signupProfile = buildSignupProfile({ xHandle, instagramHandle, competitors, goal }, { now });
 
   const clientPayload = {
     clientId,
@@ -361,6 +472,8 @@ async function provisionClientForUser({ uid, email, displayName, companyName, we
     active: true,
     latestRunId: null,
     latestRunStatus: null,
+    // Daily content loop stays OFF until the owner turns it on explicitly.
+    contentLoop: { enabled: false },
     createdAt: now,
     updatedAt: now,
   };
@@ -394,7 +507,7 @@ async function provisionClientForUser({ uid, email, displayName, companyName, we
       ideaDescription: trimmedIdeaDescription,
       uploadedImageRefs: [],
     },
-    onboardingAnswers: null,
+    onboardingAnswers: signupProfile.onboardingAnswers,
     ingestionConfig: null,
     briefConfig: null,
     dashboardConfig: null,
@@ -403,6 +516,7 @@ async function provisionClientForUser({ uid, email, displayName, companyName, we
     },
     moduleFlags: {},
     moduleConfig: getDefaultModuleConfig(),
+    ...(signupProfile.marketingBriefConfig ? { marketingBriefConfig: signupProfile.marketingBriefConfig } : {}),
     createdAt: now,
     updatedAt: now,
   };
@@ -424,6 +538,7 @@ async function provisionClientForUser({ uid, email, displayName, companyName, we
         : 'Your request has been received and dashboard setup is pending review.',
     },
     errorState: null,
+    ...(signupProfile.brandOverviewSeed ? { snapshot: { brandOverview: signupProfile.brandOverviewSeed } } : {}),
   };
 
   await Promise.all([
@@ -432,6 +547,7 @@ async function provisionClientForUser({ uid, email, displayName, companyName, we
     onboardingRef.set(onboardingPayload),
     clientConfigRef.set(clientConfigPayload),
     dashboardStateRef.set(dashboardStatePayload),
+    digestConfigRef.set(buildSignupDigestConfig({ email, now })),
     userRef.set(
       {
         uid,
@@ -1149,4 +1265,6 @@ module.exports = {
   reseedIntakeForClient,
   loadAdminAccess,
   buildCreationFailureProjection,
+  buildSignupProfile,
+  buildSignupDigestConfig,
 };

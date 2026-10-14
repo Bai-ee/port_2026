@@ -58,7 +58,8 @@ test('bad engineTargets', () => {
 });
 
 test('benchmarkPrimary and notes', () => {
-  for (const h of ['', '@seb__design', 'has space', 'x'.repeat(16), 5]) assert.equal(validatePlan({ ...base(), benchmarkPrimary: h }).ok, false, String(h));
+  for (const h of ['@seb__design', 'has space', 'x'.repeat(16), 5, null]) assert.equal(validatePlan({ ...base(), benchmarkPrimary: h }).ok, false, String(h));
+  for (const h of ['', 'seb__design']) assert.equal(validatePlan({ ...base(), benchmarkPrimary: h }).ok, true, `'${h}' (empty = no benchmark set)`);
   assert.equal(validatePlan({ ...base(), notes: 'x'.repeat(1001) }).ok, false);
   assert.equal(validatePlan({ ...base(), notes: 'x'.repeat(1000) }).ok, true);
   assert.equal(validatePlan({ ...base(), extra: 1 }).ok, false);
@@ -151,4 +152,18 @@ test('revertTo errors: dropped version, out of range, current (noop), no doc', (
   assert.equal(revertTo(doc, 35, { by: 'o' }).error, 'noop');
   assert.equal(revertTo(null, 1, { by: 'o' }).error, 'invalid');
   assert.ok(!revertTo(doc, 6, { by: 'o' }).error);
+});
+
+test('no inherited priors: a fresh plan has no benchmark and no tracks, and validates', async () => {
+  const { tracksOf } = await import('../content-tracks.js');
+  const fresh = defaultPlanDoc();
+  assert.equal(fresh.plan.benchmarkPrimary, '');
+  assert.equal('contentTracks' in fresh.plan, false);
+  assert.deepEqual(tracksOf(fresh), []);
+  assert.equal(validatePlan(normalizePlan({})).ok, true, validatePlan(normalizePlan({})).errors.join('; '));
+  assert.doesNotMatch(JSON.stringify(fresh), /seb__design/);
+  // An explicit empty list is valid and stays empty.
+  const empty = normalizePlan({ contentTracks: [] });
+  assert.deepEqual(empty.contentTracks, []);
+  assert.equal(validatePlan(empty).ok, true);
 });

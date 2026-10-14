@@ -13,7 +13,7 @@ test('DEFAULT_PLAN derives from engine config, tiers, and S6 floors', () => {
   assert.deepEqual({ ...C.DEFAULT_PLAN.typeFloors }, { ...DEFAULT_TYPE_FLOORS });
   assert.deepEqual({ ...C.DEFAULT_PLAN.typeCaps }, {});
   assert.deepEqual({ ...C.DEFAULT_PLAN.engineTargets }, {});
-  assert.equal(C.DEFAULT_PLAN.benchmarkPrimary, 'seb__design');
+  assert.equal(C.DEFAULT_PLAN.benchmarkPrimary, '', 'no inherited benchmark');
   assert.equal(C.DEFAULT_PLAN.notes, '');
 });
 
@@ -60,7 +60,7 @@ test('proposal kinds, statuses, actions, collections', () => {
   assert.equal(C.PROPOSAL_KIND_ACTIONS['refresh-handles'], 'strategy-refresh');
   assert.deepEqual(Object.values(C.STRATEGY_COLLECTIONS).sort(),
     ['x_corpora', 'x_strategy_chats', 'x_strategy_docs', 'x_strategy_plans', 'x_strategy_refresh_requests']);
-  assert.deepEqual(Object.values(C.EVALUATION_CAVEAT), ['likes-only', 'few-rows', 'stale']);
+  assert.deepEqual(Object.values(C.EVALUATION_CAVEAT), ['likes-only', 'few-rows', 'stale', 'no-benchmark']);
   assert.deepEqual({ ...C.EVALUATION_THRESHOLDS }, { viewsCoverageMin: 0.5, minRows: 60, staleDays: 7 });
 });
 

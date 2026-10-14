@@ -137,22 +137,22 @@ test('wrong client cannot edit or approve another client post', async () => {
 // --- clearance --------------------------------------------------------------
 
 test('clearance revoked BEFORE schedule: an approved row cannot be scheduled once the package is rejected', async () => {
-  await upsertPackage(PKG('pkg-c'), { returnPackages: false });
+  await upsertPackage(PKG('pkg-c'), { returnPackages: false, clientId: 'fixture-pkg-client' });
   const p = await v2('Cleared once.', { status: 'approved', reviewedAt: new Date().toISOString(), packageId: 'pkg-c' });
-  await upsertPackage(PKG('pkg-c', { approval: { state: 'rejected' } }), { returnPackages: false });
+  await upsertPackage(PKG('pkg-c', { approval: { state: 'rejected' } }), { returnPackages: false, clientId: 'fixture-pkg-client' });
   await assert.rejects(svc.updateSocialPost('c1', p.id, { scheduledAt: FUTURE() }), { code: 'clearance-revoked', status: 409 });
   assert.equal(raw(p.id).status, 'approved');
 });
 
 test('never-public package is refused at schedule even for a brand-new post', async () => {
-  await upsertPackage(PKG('pkg-n', { rights: 'never-public' }), { returnPackages: false });
+  await upsertPackage(PKG('pkg-n', { rights: 'never-public' }), { returnPackages: false, clientId: 'fixture-pkg-client' });
   await assert.rejects(svc.schedulePost('c1', { content: 'No.', packageId: 'pkg-n', scheduledAt: FUTURE() }), { code: 'clearance-revoked' });
 });
 
 test('clearance revoked AFTER scheduling: v2 row is parked needs_review at delivery and never published', async () => {
-  await upsertPackage(PKG('pkg-d'), { returnPackages: false });
+  await upsertPackage(PKG('pkg-d'), { returnPackages: false, clientId: 'fixture-pkg-client' });
   const p = await v2('Scheduled then revoked.', { status: 'scheduled', scheduledAt: PAST(), packageId: 'pkg-d' });
-  await upsertPackage(PKG('pkg-d', { approval: { state: 'rejected' } }), { returnPackages: false });
+  await upsertPackage(PKG('pkg-d', { approval: { state: 'rejected' } }), { returnPackages: false, clientId: 'fixture-pkg-client' });
   await svc.processDuePosts('c1');
   assert.equal(tweets.length, 0);
   assert.equal(raw(p.id).status, 'needs_review');
@@ -160,7 +160,7 @@ test('clearance revoked AFTER scheduling: v2 row is parked needs_review at deliv
 });
 
 test('legacy due row still publishes (delivery recheck is v2-only)', async () => {
-  await upsertPackage(PKG('pkg-l', { approval: { state: 'rejected' } }), { returnPackages: false });
+  await upsertPackage(PKG('pkg-l', { approval: { state: 'rejected' } }), { returnPackages: false, clientId: 'fixture-pkg-client' });
   const p = await svc.createSocialPost('c1', { content: 'Legacy goes out.', status: 'scheduled', scheduledAt: PAST(), packageId: 'pkg-l' });
   await svc.processDuePosts('c1');
   assert.equal(raw(p.id).status, 'posted');
@@ -190,7 +190,7 @@ test('v2 reply row that reached the queue is parked at delivery, not posted stan
 // --- double booking ---------------------------------------------------------
 
 test('two producers cannot double-book one package: second schedule is refused, same row may reschedule', async () => {
-  await upsertPackage(PKG('pkg-dup'), { returnPackages: false });
+  await upsertPackage(PKG('pkg-dup'), { returnPackages: false, clientId: 'fixture-pkg-client' });
   const a = await v2('Copy A.', { packageId: 'pkg-dup' });
   await svc.approveDraft('c1', a.id);
   const b = await svc.createSocialPost('c1', { content: 'Copy B.', packageId: 'pkg-dup' });
@@ -203,7 +203,7 @@ test('two producers cannot double-book one package: second schedule is refused, 
 });
 
 test('collision is per client: another client scheduling the same package id is not blocked', async () => {
-  await upsertPackage(PKG('pkg-shared'), { returnPackages: false });
+  await upsertPackage(PKG('pkg-shared'), { returnPackages: false, clientId: 'fixture-pkg-client' });
   await svc.schedulePost('c1', { content: 'Client one.', packageId: 'pkg-shared', scheduledAt: FUTURE() });
   const other = await svc.schedulePost('c2', { content: 'Client two.', packageId: 'pkg-shared', scheduledAt: FUTURE() });
   assert.equal(other.status, 'scheduled');
@@ -276,7 +276,7 @@ test('editing a scheduled v2 post while re-sending its schedule time stays a dra
 });
 
 test('package with approval.state needed does not block an already-approved post (post approval is that gate)', async () => {
-  await upsertPackage(PKG('pkg-need', { rights: 'client-approval-needed', approval: { state: 'needed' } }), { returnPackages: false });
+  await upsertPackage(PKG('pkg-need', { rights: 'client-approval-needed', approval: { state: 'needed' } }), { returnPackages: false, clientId: 'fixture-pkg-client' });
   const p = await v2('Approved by the owner.', { packageId: 'pkg-need' });
   await svc.approveDraft('c1', p.id);
   const u = await svc.updateSocialPost('c1', p.id, { scheduledAt: FUTURE() });
@@ -284,14 +284,14 @@ test('package with approval.state needed does not block an already-approved post
 });
 
 test('a needs_review row does not wedge its package: another copy can be scheduled', async () => {
-  await upsertPackage(PKG('pkg-nr'), { returnPackages: false });
+  await upsertPackage(PKG('pkg-nr'), { returnPackages: false, clientId: 'fixture-pkg-client' });
   await v2('Parked.', { packageId: 'pkg-nr', status: 'needs_review' });
   const next = await svc.schedulePost('c1', { content: 'Fresh copy.', packageId: 'pkg-nr', scheduledAt: FUTURE() });
   assert.equal(next.status, 'scheduled');
 });
 
 test('getPackage sanity: fixtures used above are real store rows', async () => {
-  await upsertPackage(PKG('pkg-z'), { returnPackages: false });
+  await upsertPackage(PKG('pkg-z'), { returnPackages: false, clientId: 'fixture-pkg-client' });
   assert.equal((await getPackage('pkg-z')).id, 'pkg-z');
 });
 
@@ -316,7 +316,7 @@ test('approveAndSchedule: past/missing time is 400; wrong client is 404; nothing
 });
 
 test('approveAndSchedule: a refused schedule (clearance revoked) rolls the approval back to draft', async () => {
-  await upsertPackage(PKG('pkg-rb', { approval: { state: 'rejected' } }), { returnPackages: false });
+  await upsertPackage(PKG('pkg-rb', { approval: { state: 'rejected' } }), { returnPackages: false, clientId: 'fixture-pkg-client' });
   const p = await v2('Blocked.', { packageId: 'pkg-rb' });
   await assert.rejects(svc.approveAndSchedule('c1', p.id, { scheduledAt: FUTURE() }), { code: 'clearance-revoked' });
   assert.equal(raw(p.id).status, 'draft');
@@ -339,11 +339,11 @@ test('rejectDraft: draft -> rejected (idempotent); scheduled/posted rows are ref
 });
 
 test('timely window (v2): expired package refuses scheduling; a slot after the window is refused; inside the window is fine', async () => {
-  await upsertPackage(PKG('pkg-gone', { expiresAt: new Date(Date.now() - 60_000).toISOString() }), { returnPackages: false });
+  await upsertPackage(PKG('pkg-gone', { expiresAt: new Date(Date.now() - 60_000).toISOString() }), { returnPackages: false, clientId: 'fixture-pkg-client' });
   const gone = await v2('Too late.', { packageId: 'pkg-gone' });
   await svc.approveDraft('c1', gone.id);
   await assert.rejects(svc.updateSocialPost('c1', gone.id, { scheduledAt: FUTURE(1) }), { code: 'opportunity-expired' });
-  await upsertPackage(PKG('pkg-soon', { expiresAt: FUTURE(2) }), { returnPackages: false });
+  await upsertPackage(PKG('pkg-soon', { expiresAt: FUTURE(2) }), { returnPackages: false, clientId: 'fixture-pkg-client' });
   const soon = await v2('Windowed.', { packageId: 'pkg-soon' });
   await svc.approveDraft('c1', soon.id);
   await assert.rejects(svc.updateSocialPost('c1', soon.id, { scheduledAt: FUTURE(5) }), { code: 'opportunity-expired' });
@@ -351,7 +351,7 @@ test('timely window (v2): expired package refuses scheduling; a slot after the w
 });
 
 test('timely window is v2-only: a legacy Schedule Posts flow with an expired package still schedules (compat)', async () => {
-  await upsertPackage(PKG('pkg-old', { expiresAt: new Date(Date.now() - 60_000).toISOString() }), { returnPackages: false });
+  await upsertPackage(PKG('pkg-old', { expiresAt: new Date(Date.now() - 60_000).toISOString() }), { returnPackages: false, clientId: 'fixture-pkg-client' });
   const row = await svc.schedulePost('c1', { content: 'Legacy flow.', packageId: 'pkg-old', scheduledAt: FUTURE(1) });
   assert.equal(row.status, 'scheduled');
 });

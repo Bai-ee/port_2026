@@ -5,12 +5,14 @@
 // - Rows come from corpusStore.readRows(handle) (Firestore rows, committed-JSON fallback inside), not static imports.
 //   ⚠️ Live output therefore uses the FRESHER Firestore rows; only the committed-json source is byte-identical to the
 //   pre-T5 output (t5-golden.test.js pins that case).
-// - Handles come from the client's xGrowth profile with the shared default-pair fallback (withDefaultPair).
+// - Handles come from the client's xGrowth profile (withProfileDefaults): no handle defaults; a missing own handle is a 409.
 // - Owner contract: NO plan doc (planStore.get -> null) => the pre-T5 route logic runs UNCHANGED (legacyContentPlan /
 //   legacyRefreshAnalysis below): the two static committed corpora handed in as `legacyRows`, no profile-derived handles,
 //   no lanes, the 400 for an incomplete profile, stat-block (readCorpus/readCorpora) based refresh-analysis, no 409 for
 //   missing rows, and no planSource/planVersion fields. t5-golden.test.js pins this against output captured from git 5cfce1e9.
-// - ONLY when a plan doc exists the new behaviour applies: rows store + profile/default-pair handles + lanes,
+//   Exception (multi-client Phase 4.4): legacy content-plan only serves the client whose saved own handle matches the
+//   committed own corpus; any other client gets a 409 "No Strategy plan yet".
+// - ONLY when a plan doc exists the new behaviour applies: rows store + profile handles (no defaults) + lanes,
 //   authoredPerDay -> posts, engineTargets -> engineConfig, benchmarkPrimary picks the benchmark, the request's `posts`
 //   is ignored (the plan is the answer), and a missing corpus is a 409 pointing at Refresh.
 
@@ -21,7 +23,7 @@ import { buildCalendar } from '../x-benchmark/build-calendar.js';
 import { buildDayPlan as buildContentDayPlan } from '../x-content-inventory/plan-day.js';
 import { projectDayPlan } from '../x-content-inventory/day-plan-projection.js';
 import { resolvePlanInputs } from './plan-inputs.js';
-import { withDefaultPair } from './route-handlers.js';
+import { withProfileDefaults } from './route-handlers.js';
 import { normalizeHandle } from './corpus-store.js';
 import { tierForAuthoredPerDay } from './contracts.js';
 import { tracksOf } from './content-tracks.js';
@@ -32,6 +34,7 @@ export const DEFAULT_REQUEST_POSTS = 5;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const httpError = (status, message) => Object.assign(new Error(message), { status });
+const safeNormalize = (h) => { try { return h ? normalizeHandle(h) : null; } catch { return null; } };
 
 /** Primary benchmark first: the plan's `benchmarkPrimary` when it is one of the profile's handles, else profile order. */
 function orderBenchmarks(handles, primary) {
@@ -63,15 +66,20 @@ export function createContentPlanHandlers({
   }
 
   /** PRE-T5 content-plan, verbatim: committed corpora, no lanes, request posts, no plan fields. */
-  async function legacyContentPlan(body) {
+  async function legacyContentPlan(context, body) {
     if (!legacyRows?.own || !legacyRows?.benchmark) throw new Error('createContentPlanHandlers: legacyRows {own, benchmark} are required for the no-plan path');
+    // The committed corpus labels itself (its post URLs name the account); plan-day has no owner default.
+    // Those rows are one account's history: only the client whose own handle IS that account gets this path
+    // (multi-client Phase 4.4). Everyone else needs their own Strategy plan.
+    const handle = /(?:x|twitter)\.com\/([^/]+)\/status\//i.exec(legacyRows.own.find((r) => r?.url)?.url || '')?.[1] || null;
+    const ownHandle = safeNormalize(withProfileDefaults(resolveProfile({ config: await readXGrowthConfig(context.clientId) })).ownHandle);
+    if (!handle || !ownHandle || ownHandle !== safeNormalize(handle)) {
+      throw httpError(409, 'No Strategy plan yet for this client - set your X handle and save a plan in the Strategy tab.');
+    }
     const requested = Number(body?.posts);
     const posts = Number.isFinite(requested) && requested >= 1 ? Math.min(Math.floor(requested), MAX_PLAN_POSTS) : DEFAULT_REQUEST_POSTS;
     const date = typeof body?.date === 'string' && DATE_RE.test(body.date.trim()) ? body.date.trim() : new Date(clock()).toISOString().slice(0, 10);
-    const { packages, seeded } = await readInventory();
-    // The committed corpus labels itself (its post URLs name the account); plan-day has no owner default.
-    // This legacy no-plan-doc path still reads the owner's committed corpora (COMMITTED_CORPORA, multi-client Phase 4).
-    const handle = /(?:x|twitter)\.com\/([^/]+)\/status\//i.exec(legacyRows.own.find((r) => r?.url)?.url || '')?.[1] || null;
+    const { packages, seeded } = await readInventory({ clientId: context.clientId });
     const plan = buildPlan({ corpusRows: legacyRows.own, benchmarkRows: legacyRows.benchmark, packages, date, posts, handle });
     return { ok: true, plan, seeded, summary: projectDayPlan(plan, { posts }).summary };
   }
@@ -105,14 +113,21 @@ export function createContentPlanHandlers({
 
   async function load(clientId, planDoc) {
     const rawProfile = resolveProfile({ config: await readXGrowthConfig(clientId) });
-    const profile = withDefaultPair(rawProfile);
+    const profile = withProfileDefaults(rawProfile);
     return { rawProfile, profile, resolved: resolvePlanInputs(planDoc) };
+  }
+
+  /** The client's own handle, or a 409 asking for it (never a default account). */
+  function requireOwnHandle(profile) {
+    const h = safeNormalize(profile.ownHandle);
+    if (!h) throw httpError(409, 'No X handle saved for this client - set your X profile in the Strategy tab first.');
+    return h;
   }
 
   /** One day of authored posts for the Plan tab. With a plan doc: same shape plus planSource / planVersion. */
   async function contentPlan(context, body) {
     const planDoc = await planStore.get(context.clientId);
-    if (!planDoc) return legacyContentPlan(body);
+    if (!planDoc) return legacyContentPlan(context, body);
     const { profile, resolved } = await load(context.clientId, planDoc);
     const requested = Number(body?.posts);
     const requestedPosts = Number.isFinite(requested) && requested >= 1
@@ -125,12 +140,12 @@ export function createContentPlanHandlers({
       ? body.date.trim()
       : new Date(now).toISOString().slice(0, 10);
 
-    const ownHandle = normalizeHandle(profile.ownHandle);
+    const ownHandle = requireOwnHandle(profile);
     const benchHandle = orderBenchmarks(profile.benchmarkHandles, resolved.benchmarkPrimary)[0] ?? null;
     const own = await corpusStore.readRows(ownHandle);
     if (!own.rows.length) throw httpError(409, `No corpus rows for @${ownHandle} yet - run Refresh in the Strategy tab first.`);
     const bench = benchHandle ? await corpusStore.readRows(benchHandle) : null;
-    const { packages, seeded } = await readInventory();
+    const { packages, seeded } = await readInventory({ clientId: context.clientId });
     // Content tracks (opt-in): track shares raise per-engine minimums; a plan without contentTracks is untouched.
     const engineConfig = applyTrackAllocation(planDoc, resolved.engineConfig);
 
@@ -165,7 +180,7 @@ export function createContentPlanHandlers({
     const planDoc = await planStore.get(context.clientId);
     if (!planDoc) return legacyRefreshAnalysis(context);
     const { rawProfile, profile, resolved } = await load(context.clientId, planDoc);
-    const ownHandle = normalizeHandle(profile.ownHandle);
+    const ownHandle = requireOwnHandle(profile);
     const own = await statsFor(ownHandle);
     if (!own?.stats) throw httpError(409, `No corpus for @${ownHandle}. Run Refresh in the Strategy tab (or scripts/x-content/ingest-corpus.mjs).`);
 
@@ -174,6 +189,7 @@ export function createContentPlanHandlers({
       const b = await statsFor(h);
       if (b?.stats) benchmarks.push(b);
     }
+    if (!profile.benchmarkHandles.length) throw httpError(409, 'No benchmark accounts saved for this client - add one in the Strategy tab first.');
     if (!benchmarks.length) throw httpError(409, `No corpus for any benchmark account (${profile.benchmarkHandles.join(', ')}).`);
 
     // One report per benchmark, kept separate (not averaged). The first - the plan's primary when set - drives the calendar.

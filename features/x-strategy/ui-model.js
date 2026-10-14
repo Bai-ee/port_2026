@@ -578,7 +578,7 @@ export function percentsFromWeights(weights) {
   return out;
 }
 
-/** Editable draft from the saved plan (or plan doc); absent/invalid contentTracks => the contract defaults. */
+/** Editable draft from the saved plan (or plan doc); absent/invalid contentTracks => [] (no tracks). */
 export function trackDraftFromPlan(planOrDoc) {
   const tracks = tracksOf(planOrDoc);
   const pct = percentsFromWeights(tracks.map((t) => t.share));

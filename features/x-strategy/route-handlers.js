@@ -87,27 +87,28 @@ const MAX_EXTERNAL_PROPOSALS = 5; // createProposalInThread (MCP) per call
 const HISTORY_MESSAGES_TO_MODEL = 60;
 
 const DAY_MS = 86400000;
-const DEFAULT_PROFILE = Object.freeze({ ownHandle: 'bai_ee', benchmarkHandles: Object.freeze(['seb__design']), timezone: 'America/Chicago' });
+// Only the timezone has a neutral default. Handles never do: no client inherits @bai_ee / @seb__design
+// (multi-client Phase 4.4); the home client carries those as its own stored config (scripts/x-content/seed-home-priors.mjs).
+const DEFAULT_TIMEZONE = 'America/Chicago';
 const REQUEST_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 /**
- * Until a client saves an xGrowth profile, the tab runs on the engine's existing hard-wired pair
- * (@bai_ee vs @seb__design, Chicago) so it works without a client_configs write. `defaulted` names
- * the fields filled in, so the UI can say so instead of passing them off as saved settings.
- * Shared with content-plan.js so the Plan tab and the Strategy tab resolve the same handles.
+ * Resolved xGrowth profile with honest gaps: a missing own handle stays null and missing benchmarks stay [].
+ * `unset` names the handle fields the client has not saved (the UI asks for them); `defaulted` names fields filled
+ * with a neutral default (timezone only). Shared with content-plan.js and loop-corpora.js so every surface
+ * resolves the same handles.
  * @param {object} p  resolveXGrowthProfile() output
  */
-export function withDefaultPair(p) {
+export function withProfileDefaults(p = {}) {
+  const unset = [];
   const defaulted = [];
-  const fill = (field, value, fallback) => {
-    if (value && (!Array.isArray(value) || value.length)) return value;
-    defaulted.push(field);
-    return fallback;
-  };
-  const ownHandle = fill('ownHandle', p.ownHandle, DEFAULT_PROFILE.ownHandle);
-  const benchmarkHandles = fill('benchmarkHandles', p.benchmarkHandles, DEFAULT_PROFILE.benchmarkHandles);
-  const timezone = fill('timezone', p.timezone, DEFAULT_PROFILE.timezone);
-  return { ownHandle, benchmarkHandles, timezone, lanes: p.lanes || [], defaulted };
+  const ownHandle = p.ownHandle || null;
+  if (!ownHandle) unset.push('ownHandle');
+  const benchmarkHandles = Array.isArray(p.benchmarkHandles) ? p.benchmarkHandles.filter(Boolean) : [];
+  if (!benchmarkHandles.length) unset.push('benchmarkHandles');
+  const timezone = p.timezone || DEFAULT_TIMEZONE;
+  if (!p.timezone) defaulted.push('timezone');
+  return { ownHandle, benchmarkHandles, timezone, lanes: p.lanes || [], unset, defaulted };
 }
 
 /** Daily-run doc -> the compact shape the agent's get_today_run tool and suggestion-id checks expect. */
@@ -185,7 +186,7 @@ export function createStrategyHandlers({
   readMarketSignals = null, // (clientId) -> projected brief (features/intelligence/_brief-intel.js projectBrief) | null
   editPost = null, // ({clientId, postId, content?, scheduledAt?}) -> saved post; the existing updateSocialPost path
   runPaidSync = null, // ({clientId, kind, params, by, auth, context}) -> result; the `paid-sync` proposal executor (features/mcp/paid-syncs.js). Absent => confirming one fails with a clear message
-  readAudience = null, // (ownHandle) -> {account, snapshots, events, posts} from stored X Monitor data; null => tool says unavailable
+  readAudience = null, // (clientId) -> {account, snapshots, events, posts} from THIS client's stored X Monitor account ({account:null} when none); null => tool says unavailable
   env = {}, // explicit on purpose: only createStrategyHandlersFromDb passes process.env, so a bare handler can never reach a real model
 } = {}) {
   if (!corpusStore || !basePlanStore || !refreshService || typeof readXGrowthConfig !== 'function') {
@@ -263,10 +264,10 @@ export function createStrategyHandlers({
     return { clientId: id };
   }
 
-  // Default-pair fallback + `defaulted` live in withDefaultPair (shared with content-plan.js).
+  // Null handle / [] benchmarks / `unset` + `defaulted` live in withProfileDefaults (shared with content-plan.js).
   async function loadProfile(clientId) {
     const config = await readXGrowthConfig(clientId);
-    return withDefaultPair(resolveProfile({ config }));
+    return withProfileDefaults(resolveProfile({ config }));
   }
 
   /** Never fails a read path: a health lookup error just omits the field. */
@@ -359,7 +360,7 @@ export function createStrategyHandlers({
 
     const primary = planDoc?.plan?.benchmarkPrimary;
     const bench = benchmarks.find((b) => b.handle === primary) || benchmarks[0] || null;
-    const packages = own.rows.length ? await readPackages() : [];
+    const packages = own.rows.length ? await readPackages(c.clientId) : [];
     return {
       ok: true,
       clientId: c.clientId,
@@ -504,7 +505,7 @@ export function createStrategyHandlers({
       searchInventory: async ({ query, limit } = {}) => {
         const max = Math.min(Math.max(1, Number(limit) || 10), 20);
         const tokens = String(query ?? '').toLowerCase().split(/\s+/).filter(Boolean).slice(0, 8);
-        const pkgs = await readPackages();
+        const pkgs = await readPackages(clientId);
         const scored = [];
         for (const p of pkgs || []) {
           const hay = `${p.id} ${p.title ?? ''} ${p.story ?? ''} ${(p.searchTokens || []).join(' ')} ${JSON.stringify(p.facets ?? {})} ${JSON.stringify(p.humanEdits ?? {})}`.toLowerCase();
@@ -535,8 +536,8 @@ export function createStrategyHandlers({
       },
       getAudience: async ({ days } = {}) => {
         if (typeof readAudience !== 'function') return { available: false, reason: 'X Monitor data is not available on this deployment.' };
-        const profile = preloaded.profile ?? (preloaded.profile = await loadProfile(clientId));
-        return summarizeAudience(await readAudience(safeHandle(profile.ownHandle)), { days, nowMs: clock() });
+        // Resolved by the client's X account id, never by a handle match: no other client's account can answer.
+        return summarizeAudience(await readAudience(clientId), { days, nowMs: clock() });
       },
       topPosts: async ({ handle, type, topic, limit } = {}) => {
         const profile = preloaded.profile ?? (preloaded.profile = await loadProfile(clientId));
@@ -970,19 +971,10 @@ export function createStrategyHandlersFromDb(db, {
     queueStore: createFirestoreRefreshQueue(db),
     enabled: () => env.X_STRATEGY_LOCAL_INGEST === '1',
   });
-  // Stored X Monitor data for the own handle (free Firestore reads; never syncs). One monitored account per
-  // install today, so match on the stored profile username.
-  const readAudience = async (ownHandle) => {
-    const roots = await db.collection('x_monitor').limit(10).get();
-    const doc = roots.docs.find((d) => String(d.data()?.profile?.username || '').toLowerCase() === String(ownHandle || '').toLowerCase());
-    if (!doc) return { account: null };
-    const [snaps, events, posts] = await Promise.all([
-      doc.ref.collection('snapshots').orderBy('date', 'desc').limit(120).get(),
-      doc.ref.collection('audience_events').orderBy('detectedAt', 'desc').limit(300).get(),
-      doc.ref.collection('posts').limit(300).get(),
-    ]);
-    return { account: doc.data(), snapshots: snaps.docs.map((d) => d.data()), events: events.docs.map((d) => d.data()), posts: posts.docs.map((d) => d.data()) };
-  };
+  // Same account resolver as the X Monitor card (home keeps its global-connection history); lazy so tests stay pure.
+  const readAudience = async (clientId) => readClientAudience(db, clientId, {
+    resolveAccountId: async (id) => (await import('../x-monitor/sync.js')).resolveAccountId(id),
+  });
   return createStrategyHandlers({
     corpusStore, planStore, refreshService, readPackages, readAudience,
     readWorkerHealth: (clientId) => readWorkerHealthFromDb(db, { now: Date.now(), clientId }),
@@ -993,4 +985,39 @@ export function createStrategyHandlersFromDb(db, {
       return snap.exists ? snap.data()?.marketingBriefConfig?.xGrowth ?? null : null;
     },
   });
+}
+
+/**
+ * Stored X Monitor data for ONE client (free Firestore reads; never syncs). The account is resolved by id:
+ * social_accounts/{clientId}.platforms.x.userId -> x_monitor/{userId}; else the x_monitor root whose `clientIds`
+ * contains this client. Neither => {account:null} ("not available"), never another client's account.
+ */
+export async function readClientAudience(db, clientId, { resolveAccountId } = {}) {
+  if (!clientId || typeof clientId !== 'string') return { account: null };
+  let doc = null;
+  if (resolveAccountId) {
+    // The X Monitor resolver (free reads): the account this client's card shows. A resolver failure falls through.
+    const resolved = await resolveAccountId(clientId).catch(() => null);
+    if (resolved?.accountId) {
+      const snap = await db.collection('x_monitor').doc(String(resolved.accountId)).get();
+      if (snap.exists) doc = snap;
+    }
+  }
+  const social = doc ? null : await db.collection('social_accounts').doc(clientId).get();
+  const userId = social?.exists ? social.data()?.platforms?.x?.userId : null;
+  if (userId) {
+    const snap = await db.collection('x_monitor').doc(String(userId)).get();
+    if (snap.exists) doc = snap;
+  }
+  if (!doc) {
+    const q = await db.collection('x_monitor').where('clientIds', 'array-contains', clientId).limit(1).get();
+    doc = q.docs[0] ?? null;
+  }
+  if (!doc) return { account: null };
+  const [snaps, events, posts] = await Promise.all([
+    doc.ref.collection('snapshots').orderBy('date', 'desc').limit(120).get(),
+    doc.ref.collection('audience_events').orderBy('detectedAt', 'desc').limit(300).get(),
+    doc.ref.collection('posts').limit(300).get(),
+  ]);
+  return { account: doc.data(), snapshots: snaps.docs.map((d) => d.data()), events: events.docs.map((d) => d.data()), posts: posts.docs.map((d) => d.data()) };
 }

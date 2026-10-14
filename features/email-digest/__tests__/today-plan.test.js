@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { shapeTodayPlan } from '../today-plan.js';
+import { twoTracks } from '../../x-strategy/__tests__/fixtures/two-tracks.js';
 
 const NOW = Date.parse('2026-10-13T12:00:00.000Z');
-const planDoc = { version: 3, plan: { authoredPerDay: 4 } };
+const planDoc = { version: 3, plan: { authoredPerDay: 4, contentTracks: twoTracks() } };
 const post = (over) => ({ status: 'scheduled', engine: 'client', content: 'hello', scheduledAt: '2026-10-13T15:00:00.000Z', ...over });
 
 test('shapeTodayPlan: per-track target = authoredPerDay * share; scheduledToday counts that track only', () => {
@@ -32,4 +33,6 @@ test('shapeTodayPlan: missing inputs degrade to empty/null, never throw', () => 
   assert.equal(out.pendingProposals, null);
   const noPosts = shapeTodayPlan({ planDoc, now: NOW });
   assert.equal(noPosts.tracks[0].scheduledToday, null);
+  // A plan with no stored tracks has no track rows (no inherited defaults).
+  assert.deepEqual(shapeTodayPlan({ planDoc: { version: 1, plan: { authoredPerDay: 4 } }, now: NOW }).tracks, []);
 });

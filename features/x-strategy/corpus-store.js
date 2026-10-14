@@ -12,6 +12,7 @@ const ROWS = 'rows';
 const MAX_BATCH_OPS = 400;
 const HANDLE_RE = /^[a-z0-9_]{1,15}$/;
 
+// Handle-keyed cache for @bai_ee / @seb__design only (not a default): a client reaches these rows only when its own resolved handle is one of them.
 const COMMITTED_FILES = Object.freeze({
   bai_ee: '../../docs/audits/bai-ee-x-corpus.json',
   seb__design: '../../docs/audits/seb-design-x-corpus.json',

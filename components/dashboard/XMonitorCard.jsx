@@ -11,7 +11,8 @@ import {
   snapshotSeries,
 } from '../../features/x-monitor/audience-diff.js';
 
-// X Monitor — read-only performance dashboard for the connected @bai_ee account.
+// X Monitor — read-only performance dashboard for the active client's connected X account
+// (optional `clientId` prop → `?as=<clientId>`; omitted = the caller's own workspace).
 // Renders entirely from stored Firestore snapshots (free); every button that
 // reaches X arms a confirm row naming the exact metered call count first, per
 // docs/source-of-truth/X-API-AND-PROFILE-OPERATIONS.md §0. X spend is invisible
@@ -152,7 +153,7 @@ function AudienceRow({ event }) {
   );
 }
 
-export default function XMonitorCard({ getIdToken, hideRefresh = false }) {
+export default function XMonitorCard({ getIdToken, hideRefresh = false, clientId = null }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
@@ -172,7 +173,8 @@ export default function XMonitorCard({ getIdToken, hideRefresh = false }) {
           body: JSON.stringify(body),
         }
       : { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' };
-    const res = await fetch('/api/dashboard/x-monitor', options);
+    const endpoint = clientId ? `/api/dashboard/x-monitor?as=${encodeURIComponent(clientId)}` : '/api/dashboard/x-monitor';
+    const res = await fetch(endpoint, options);
     const payload = await res.json().catch(() => ({}));
     if (!res.ok) {
       const err = new Error(payload?.error || `HTTP ${res.status}`);
@@ -180,7 +182,7 @@ export default function XMonitorCard({ getIdToken, hideRefresh = false }) {
       throw err;
     }
     return payload;
-  }, [getIdToken]);
+  }, [getIdToken, clientId]);
 
   const load = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setLoading(true);
@@ -303,7 +305,7 @@ export default function XMonitorCard({ getIdToken, hideRefresh = false }) {
       {adminBlocked ? (
         <section id="x-monitor-admin-gate-panel" className="xm-panel">
           <div className="xm-head"><span className="xm-kicker">X Monitor</span></div>
-          <div className="xm-empty">Admin only — this card reads the live @bai_ee X account.</div>
+          <div className="xm-empty">Admin only — this card reads this client's live X account.</div>
         </section>
       ) : (
       <>

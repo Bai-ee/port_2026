@@ -9,7 +9,11 @@
 # slot, so the day's candidates are waiting when you open the card.
 #
 # Usage:
-#   scripts/x-content/install-scan-schedule.sh install <clientId>
+#   scripts/x-content/install-scan-schedule.sh install <clientId>          # one client
+#   scripts/x-content/install-scan-schedule.sh install <id1,id2,id3>      # several, scanned sequentially
+#   scripts/x-content/install-scan-schedule.sh install --pilot            # PILOT_CLIENT_IDS from .env.local at run time
+#   (ONE launchd job either way: label com.hitloop.x-quote-scan. Each client scans its own stored
+#    watchlist and writes only its own quoteTargets; a client with no watchlist is skipped.)
 #   scripts/x-content/install-scan-schedule.sh uninstall
 #   scripts/x-content/install-scan-schedule.sh status
 #
@@ -75,8 +79,19 @@ case "$cmd" in
   install)
     CLIENT_ID="${2:-}"
     if [ -z "$CLIENT_ID" ]; then
-      echo "ERROR: a clientId is required." >&2
-      echo "  scripts/x-content/install-scan-schedule.sh install bryan-balli-WUoltG84" >&2
+      echo "ERROR: a clientId, a comma list of clientIds, or --pilot is required." >&2
+      echo "  scripts/x-content/install-scan-schedule.sh install <clientId>[,<clientId>...]" >&2
+      echo "  scripts/x-content/install-scan-schedule.sh install --pilot" >&2
+      exit 1
+    fi
+    if [ "$CLIENT_ID" = "--pilot" ]; then
+      SCAN_SCOPE_ARGS="<string>--pilot</string>"
+      SCAN_SCOPE_LABEL="the clients in PILOT_CLIENT_IDS (read from .env.local at run time)"
+    elif [[ "$CLIENT_ID" =~ ^[A-Za-z0-9_-]+(,[A-Za-z0-9_-]+)*$ ]]; then
+      SCAN_SCOPE_ARGS="<string>--clients</string><string>${CLIENT_ID}</string>"
+      SCAN_SCOPE_LABEL="client(s) ${CLIENT_ID}"
+    else
+      echo "ERROR: invalid client list '${CLIENT_ID}' (comma-separated ids, letters/digits/_/- only)." >&2
       exit 1
     fi
     if [ -z "$NODE_BIN" ]; then
@@ -103,7 +118,7 @@ case "$cmd" in
   <array>
     <string>${NODE_BIN}</string>
     <string>${REPO}/scripts/x-content/scan-quote-targets.mjs</string>
-    <string>--client</string><string>${CLIENT_ID}</string>
+    ${SCAN_SCOPE_ARGS}
     <string>--write</string>
   </array>
   <key>EnvironmentVariables</key>
@@ -132,7 +147,7 @@ PLIST_EOF
     launchctl unload "$PLIST" 2>/dev/null || true
     launchctl load "$PLIST"
     echo "installed ${LABEL}"
-    echo "  runs 06:30 daily for client ${CLIENT_ID}"
+    echo "  runs 06:30 daily for ${SCAN_SCOPE_LABEL}"
     echo "  logs  ${LOG_DIR}/x-quote-scan.log"
     echo ""
     echo "⚠️  The scan only runs while this Mac is awake. If it sleeps through 06:30,"
@@ -208,7 +223,7 @@ PLIST_EOF
     ;;
 
   *)
-    echo "usage: $0 {install <clientId>|uninstall|status|install-daily-loop <clientId> [--install]|uninstall-daily-loop|status-daily-loop}" >&2
+    echo "usage: $0 {install <clientId>[,<clientId>...] | install --pilot|uninstall|status|install-daily-loop <clientId> [--install]|uninstall-daily-loop|status-daily-loop}" >&2
     exit 1
     ;;
 esac

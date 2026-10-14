@@ -11,9 +11,10 @@
 //
 //   node scripts/x-content/seed-ideas.mjs
 //   node scripts/x-content/seed-ideas.mjs --existing ids.json
-//   node scripts/x-content/seed-ideas.mjs --write        # owner only
+//   node scripts/x-content/seed-ideas.mjs --write --client <id>        # owner only
 
 import { readFileSync } from 'node:fs';
+import { requireClientArg } from './_client-arg.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { toIdeaPackage } from '../../features/x-content-inventory/ideas.js';
@@ -46,9 +47,10 @@ async function main() {
 
   const packages = buildSeed();
   let store = null;
+  const clientId = write ? requireClientArg(argv) : null;
   if (write) {
     store = await import('../../features/x-content-inventory/store.js');
-    const inv = await store.readInventory();
+    const inv = await store.readInventory({ clientId });
     existing = new Set(inv.packages.map((p) => p.id));
   }
   const plan = planSeed(packages, existing);
@@ -61,7 +63,7 @@ async function main() {
   console.log(`total ${plan.length} · new ${fresh.length} · skipped ${plan.filter((p) => p.exists).length} · invalid ${plan.filter((p) => !p.ok).length}`);
 
   if (write) {
-    for (const p of fresh) await store.upsertPackage(p.pkg, { returnPackages: false });
+    for (const p of fresh) await store.upsertPackage(p.pkg, { returnPackages: false, clientId });
     console.log(`wrote ${fresh.length}`);
   } else {
     console.log('dry run — nothing written. Re-run with --write (owner only) to upsert.');

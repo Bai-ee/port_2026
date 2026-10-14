@@ -25,7 +25,7 @@ const ENV_KEYS = ['PILOT_CLIENT_IDS', 'PILOT_OWNER_UIDS'];
 
 const raw = (id) => ctx.adminDb._raw('social_posts', id);
 const PKG = (id, extra = {}) => ({ ...seedRows[1], id, status: 'idea', rights: 'owned', ...extra });
-const mkPkg = (id) => upsertPackage(PKG(id), { returnPackages: false });
+const mkPkg = (id) => upsertPackage(PKG(id), { returnPackages: false, clientId: 'fixture-pkg-client' });
 const MIN = 60_000;
 const HOUR = 60 * MIN;
 const PAST = (h = 1) => new Date(Date.now() - h * HOUR).toISOString();

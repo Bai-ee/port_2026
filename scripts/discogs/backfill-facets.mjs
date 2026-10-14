@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // Backfill facets onto existing discogs-* packages.
+//   (every mode needs --client <id>: the inventory is per client)
 //   node scripts/discogs/backfill-facets.mjs                 DRY RUN, offline (derives from fields already on the package)
 //   node scripts/discogs/backfill-facets.mjs --discogs       OWNER ONLY: also GET api.discogs.com/releases/<id> for genres/styles
 //   node scripts/discogs/backfill-facets.mjs --write         OWNER ONLY: upsert (needs Firestore creds); default is print-only
@@ -48,7 +49,9 @@ async function main() {
   const { createRequire } = await import('node:module');
   createRequire(import.meta.url)('../../features/not-the-rug-brief/load-env');
   const { readInventory, upsertPackage } = await import('../../features/x-content-inventory/store.js');
-  const { packages } = await readInventory({});
+  const { requireClientArg } = await import('../x-content/_client-arg.mjs');
+  const clientId = requireClientArg();
+  const { packages } = await readInventory({ clientId });
   const rows = packages.filter((p) => String(p.id).startsWith('discogs-'));
   console.log(`${rows.length} discogs packages | mode: ${useDiscogs ? 'discogs-api' : 'offline'} | ${write ? 'WRITE' : 'dry run'}`);
   console.log('id\tpeople\tlabels\teraYear\tgenres');
@@ -60,7 +63,7 @@ async function main() {
     }
     const facets = { ...(pkg.facets || {}), ...deriveFacets(pkg, release) };
     console.log([pkg.id, (facets.people || []).join('|'), (facets.labels || []).join('|'), facets.eraYear ?? '', (facets.genres || []).join('|')].join('\t'));
-    if (write) await upsertPackage({ ...pkg, facets }, { returnPackages: false });
+    if (write) await upsertPackage({ ...pkg, facets }, { returnPackages: false, clientId });
   }
 }
 

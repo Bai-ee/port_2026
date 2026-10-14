@@ -8,9 +8,10 @@
 // Usage:
 //   node scripts/x-content/ue-ingest.mjs
 //   node scripts/x-content/ue-ingest.mjs --artists <path> --videos <dir> --out <file>
-//   node scripts/x-content/ue-ingest.mjs --write        # OWNER ONLY: upserts packages (+ build stories)
+//   node scripts/x-content/ue-ingest.mjs --write --client <id>        # OWNER ONLY: upserts packages (+ build stories)
 
 import { readFileSync, readdirSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { requireClientArg } from './_client-arg.mjs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -27,6 +28,7 @@ function arg(name, fallback) {
   return i > -1 && process.argv[i + 1] && !process.argv[i + 1].startsWith('--') ? process.argv[i + 1] : fallback;
 }
 const write = process.argv.includes('--write');
+const clientId = write ? requireClientArg() : null;
 const artistsPath = arg('artists', DEFAULT_ARTISTS);
 const videosDir = arg('videos', DEFAULT_VIDEOS);
 const outPath = arg('out', path.join(os.tmpdir(), 'ue-ingest-preview.json'));
@@ -58,7 +60,7 @@ console.log(`\npreview written: ${outPath}`);
 if (write) {
   const { upsertPackage } = await import('../../features/x-content-inventory/store.js');
   for (const pkg of [...packages, ...buildStories]) {
-    await upsertPackage(pkg, { returnPackages: false });
+    await upsertPackage(pkg, { returnPackages: false, clientId });
   }
   console.log(`wrote ${packages.length + buildStories.length} packages`);
 } else {

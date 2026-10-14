@@ -149,10 +149,18 @@ async function mergeMarketingBriefConfig(clientId, scoutConfig) {
 
     const patch = {};
 
-    if (!existing) {
-      // First run — seed the whole layer from the audit.
+    // First run: no config yet, OR only the settings signup provisioning wrote
+    // (brandXHandle / instagramHandles / xGrowth — never an audit group, no
+    // auditSeed, no acknowledged card). Seed the whole layer from the audit
+    // while keeping those signup fields.
+    const signupOnly = existing
+      && !existing.auditSeed
+      && !existing.acknowledgedCards
+      && GROUPS.every((g) => g.fields.every((f) => isEmptyValue(f, existing[f])));
+    if (!existing || signupOnly) {
       patch['marketingBriefConfig'] = {
-        enabled: true,
+        ...(existing || {}),
+        enabled: existing?.enabled ?? true,
         ...audit,
         auditSeed: { ...audit, seededAtIso: new Date().toISOString() },
         updatedAtIso: new Date().toISOString(),

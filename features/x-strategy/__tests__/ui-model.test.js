@@ -8,6 +8,7 @@ import {
   proposalKindLabel, proposalPayloadPreview, proposalStatusText, chatErrorText, costFooterText,
 } from '../ui-model.js';
 import { DEFAULT_PLAN } from '../contracts.js';
+import { twoTrackPlan } from './fixtures/two-tracks.js';
 
 const meta = (over) => ({ handle: 'a', source: 'bird', rowsMeta: { rowCount: 100 }, freshness: { pulledAt: '2026-10-09T00:00:00Z', ageDays: 2, stale: false }, ...over });
 
@@ -301,15 +302,23 @@ test('percentsFromWeights always sums to 100', () => {
   assert.deepEqual(percentsFromWeights([]), []);
 });
 
-test('track draft defaults when plan has no contentTracks', () => {
-  const d = trackDraftFromPlan({});
+test('track draft is empty when plan has no contentTracks (no inherited defaults)', () => {
+  assert.deepEqual(trackDraftFromPlan({}), []);
+  assert.deepEqual(trackDraftFromPlan(DEFAULT_PLAN), []);
+  const empty = trackChangesFromDraft({}, []);
+  assert.equal(empty.dirty, false);
+  assert.deepEqual(empty.errors, []);
+});
+
+test('track draft from a saved two-track plan', () => {
+  const d = trackDraftFromPlan(twoTrackPlan());
   assert.deepEqual(d.map((t) => [t.id, t.share]), [['design', 50], ['music', 50]]);
   assert.equal(d[1].benchmarks.length, 0);
   assert.equal(d[1].promotions[0].url, '');
 });
 
 test('setTrackShare rebalances the others to total 100', () => {
-  const d = setTrackShare(trackDraftFromPlan({}), 'design', 70);
+  const d = setTrackShare(trackDraftFromPlan(twoTrackPlan()), 'design', 70);
   assert.deepEqual(d.map((t) => t.share), [70, 30]);
   assert.deepEqual(setTrackShare(d, 'music', 120).map((t) => t.share), [0, 100]);
   const three = [{ id: 'a', share: 50 }, { id: 'b', share: 30 }, { id: 'c', share: 20 }];
@@ -319,7 +328,7 @@ test('setTrackShare rebalances the others to total 100', () => {
 });
 
 test('benchmark validation: format, duplicates, per-track and distinct caps', () => {
-  let d = trackDraftFromPlan({});
+  let d = trackDraftFromPlan(twoTrackPlan());
   assert.equal(validateTrackBenchmark(d, 'music', ''), 'Enter an X handle.');
   assert.match(validateTrackBenchmark(d, 'music', 'bad handle!'), /not a valid/);
   assert.match(validateTrackBenchmark(d, 'design', '@Seb__Design'), /already/);
@@ -339,12 +348,12 @@ test('promotion url validation: blank ok, https only', () => {
 });
 
 test('trackChangesFromDraft: clean => not dirty; edits => payload with fractions and null links', () => {
-  const clean = trackChangesFromDraft({}, trackDraftFromPlan({}));
+  const clean = trackChangesFromDraft(twoTrackPlan(), trackDraftFromPlan(twoTrackPlan()));
   assert.equal(clean.dirty, false);
   assert.equal(clean.contentTracks, null);
-  let d = setTrackShare(trackDraftFromPlan({}), 'design', 60);
+  let d = setTrackShare(trackDraftFromPlan(twoTrackPlan()), 'design', 60);
   d = setPromotionUrl(d, 'music', 'ue', 'https://ue.example.com');
-  const r = trackChangesFromDraft({}, d);
+  const r = trackChangesFromDraft(twoTrackPlan(), d);
   assert.equal(r.dirty, true);
   assert.deepEqual(r.errors, []);
   assert.equal(r.contentTracks[0].share, 0.6);
@@ -353,10 +362,10 @@ test('trackChangesFromDraft: clean => not dirty; edits => payload with fractions
 });
 
 test('trackChangesFromDraft: bad link blocks the payload; re-opening saved tracks is not dirty', () => {
-  const bad = trackChangesFromDraft({}, setPromotionUrl(trackDraftFromPlan({}), 'music', 'ue', 'http://x.com'));
+  const bad = trackChangesFromDraft(twoTrackPlan(), setPromotionUrl(trackDraftFromPlan(twoTrackPlan()), 'music', 'ue', 'http://x.com'));
   assert.equal(bad.contentTracks, null);
   assert.equal(bad.errors.length, 1);
-  const saved = { contentTracks: trackPayloadFromDraft(setTrackShare(trackDraftFromPlan({}), 'design', 70)) };
+  const saved = { contentTracks: trackPayloadFromDraft(setTrackShare(trackDraftFromPlan(twoTrackPlan()), 'design', 70)) };
   assert.equal(trackChangesFromDraft(saved, trackDraftFromPlan(saved)).dirty, false);
 });
 

@@ -17,10 +17,15 @@
 // in the model's corpus — they are the lanes only this account can credibly
 // occupy, and they are unproven, marked accordingly.
 
+// ⚠️ HOME SEED DATA, not a runtime default (multi-client Phase 4.4). Each client's
+// watchlist lives at client_configs/{clientId}.marketingBriefConfig.xGrowth.watchlist
+// (read via ./client-watchlist.js). This list is written into the home client's
+// config once by scripts/x-content/seed-home-priors.mjs; no other client inherits it.
+
 /** @typedef {{handle:string, vein:string, note?:string, unproven?:boolean}} WatchedAccount */
 
 /** @type {WatchedAccount[]} */
-export const WATCHLIST = [
+export const HOME_SEED_WATCHLIST = [
   // --- proven: highest value in the model's corpus -------------------------
   { handle: 'rare_jpg', vein: 'japanese-asian-design', note: 'source of the model account\'s single best post (1,585 likes)' },
   { handle: 'interiorsuckerr', vein: 'retro-analog-preinternet', note: 'most-quoted account, 7 quotes / 1,420 likes' },
@@ -67,7 +72,10 @@ export const WATCHLIST = [
   { handle: 'crittersquest', vein: 'work-adjacent', unproven: true, note: '⚠️ client account — quote the DESIGN, never a token announcement' },
 ];
 
-/** Veins ranked by measured average likes on the model account. */
+/** Seed-data alias kept for research scripts/tests; never a per-client runtime default. */
+export const WATCHLIST = HOME_SEED_WATCHLIST;
+
+/** Vein vocabulary, ranked by measured average likes on the model account (weights are per vein, not per handle). */
 export const VEIN_WEIGHTS = {
   'japanese-asian-design': 1.0,
   'retro-analog-preinternet': 0.75,
@@ -77,10 +85,12 @@ export const VEIN_WEIGHTS = {
   'work-adjacent': 0.5,
 };
 
-export const HANDLES = WATCHLIST.map((a) => a.handle);
-
-export function veinOf(handle) {
+/**
+ * The vein of `handle` on the given (client's) watchlist; null when the author is not on it.
+ * No list => null for everyone (untracked), never the home seed.
+ */
+export function veinOf(handle, watchlist = []) {
   const h = String(handle || '').replace(/^@/, '').toLowerCase();
-  const hit = WATCHLIST.find((a) => a.handle.toLowerCase() === h);
-  return hit ? hit.vein : null;
+  const hit = (Array.isArray(watchlist) ? watchlist : []).find((a) => String(a?.handle || '').toLowerCase() === h);
+  return hit ? hit.vein || null : null;
 }

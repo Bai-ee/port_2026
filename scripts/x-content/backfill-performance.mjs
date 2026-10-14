@@ -99,7 +99,7 @@ async function main() {
     const { readSocialQueue } = await import('../../features/social-posting/twitter-service.js');
     const { readInventory } = await import('../../features/x-content-inventory/store.js');
     posts = await readSocialQueue(clientId);
-    packages = (await readInventory())?.packages ?? [];
+    packages = (await readInventory({ clientId }))?.packages ?? [];
   } else {
     const p = arg('posts');
     if (!p) { console.error('--posts <fixture.json> required (offline). Real Firestore needs --firestore.'); process.exit(1); }
@@ -137,7 +137,7 @@ async function main() {
   const byId = new Map(packages.map((p) => [p.id, p]));
   for (const [id, { perf }] of latestByPkg) {
     const pkg = byId.get(id);
-    if (pkg) await upsertPackage({ ...pkg, metrics: { ...(pkg.metrics || {}), x: perf } }, { returnPackages: false });
+    if (pkg) await upsertPackage({ ...pkg, metrics: { ...(pkg.metrics || {}), x: perf } }, { returnPackages: false, clientId: pkg.clientId });
   }
   console.log(`\nWROTE performance on ${n} posts, metrics.x on ${latestByPkg.size} packages.`);
 }

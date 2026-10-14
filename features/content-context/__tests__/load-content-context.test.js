@@ -17,8 +17,11 @@ function fakeDb({ state = {}, brains = {}, packages = {} } = {}) {
   return {
     collection(name) {
       if (name === 'x_content_packages') {
-        const q = { select: () => q, get: async () => ({ docs: Object.entries(packages).map(([id, d]) => snap(id, d)) }) };
-        return { ...q, doc: (id) => ({ id, get: async () => snap(id, packages[id]) }) };
+        // Fixture rows default to the test client; where('clientId', ...) filters like Firestore.
+        const own = (d) => d && { clientId: 'A', ...d };
+        const mk = (rows) => { const q = { where: (f, _op, v) => mk(rows.filter(([, d]) => d[f] === v)), select: () => q, get: async () => ({ docs: rows.map(([id, d]) => snap(id, d)) }) }; return q; };
+        const q = mk(Object.entries(packages).map(([id, d]) => [id, own(d)]));
+        return { ...q, doc: (id) => ({ id, get: async () => snap(id, own(packages[id])) }) };
       }
       return {
         doc(id) {
@@ -177,7 +180,7 @@ test('8. authoredPerDay 8 notes the runner cap of 7', async () => {
   assert.deepEqual(byId(ok, 'plan').caveats, []);
 });
 
-test('9. stale scan, stale own corpus, global inventory scope', async () => {
+test('9. stale scan, stale own corpus, client inventory scope', async () => {
   const db = fakeDb({
     state: { A: { marketingBrief: { quoteTargets: { generatedAt: iso(NOW - 49 * HOUR) } } } },
     brains: { A: approvedBrain() },
@@ -188,8 +191,8 @@ test('9. stale scan, stale own corpus, global inventory scope', async () => {
   assert.equal(scan.usable, false);
   assert.match(scan.caveats.join(' '), /49h old/);
   assert.match(byId(ctx, 'corpora').caveats.join(' '), /stale after 7d/);
-  assert.equal(byId(ctx, 'inventory').scope, 'global');
-  assert.match(byId(ctx, 'inventory').caveats.join(' '), /not client-scoped/);
+  assert.equal(byId(ctx, 'inventory').scope, 'client');
+  assert.doesNotMatch(byId(ctx, 'inventory').caveats.join(' '), /not client-scoped/);
 
   const fresh = fakeDb({ state: { A: { marketingBrief: { quoteTargets: { generatedAt: iso(NOW - 47 * HOUR) } } } }, brains: { A: approvedBrain() } });
   const ctx2 = await loadContentContext(mkDeps({ db: fresh }).deps, { clientId: 'A', now: NOW, corpora: { own: [{ utc: iso(NOW - 6 * DAY), text: 'new', type: 'original' }] } });

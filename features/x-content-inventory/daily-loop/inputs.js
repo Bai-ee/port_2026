@@ -22,7 +22,7 @@ function corpusRange(rows) {
 /**
  * Load every input the loop reads, from the stores that already hold them.
  * Read-only. `corpora` is the loadLoopCorpora result (stored rows with committed-JSON
- * fallback): rows + source labels + ownHandle/benchmarkHandle. The benchmark handle defaults to seb__design when absent (replay); the own handle never defaults.
+ * fallback): rows + source labels + ownHandle/benchmarkHandle. Neither handle defaults (no owner priors).
  *
  * deps: { db, loadBrainContext(clientId) -> string, buildDayPlan?, readPlanDoc?(clientId) -> Strategy plan doc|null }
  *   buildDayPlan (plan-day.js, injected) + both corpora => the result carries `strategyInputs`,
@@ -38,11 +38,12 @@ export async function loadDailyLoopInputs(deps, { clientId, packageIds = null, c
   const state = stateSnap.exists ? stateSnap.data() : {};
 
   let packages;
+  // Only this client's packages (multi-client Phase 3a): an id list drops another client's rows.
   if (packageIds?.length) {
     const snaps = await db.getAll(...packageIds.map((id) => db.collection('x_content_packages').doc(id)));
-    packages = snaps.filter((s) => s.exists).map((s) => ({ id: s.id, ...s.data() }));
+    packages = snaps.filter((s) => s.exists && s.data()?.clientId === clientId).map((s) => ({ id: s.id, ...s.data() }));
   } else {
-    const snap = await db.collection('x_content_packages').select(...PACKAGE_FIELDS).get();
+    const snap = await db.collection('x_content_packages').where('clientId', '==', clientId).select(...PACKAGE_FIELDS).get();
     packages = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
   }
 
@@ -79,7 +80,7 @@ export async function loadDailyLoopInputs(deps, { clientId, packageIds = null, c
 
   // No owner default: a client without its own handle gets no self-quote (a named gap), never @bai_ee's posts.
   const ownHandle = corpora.ownHandle || null;
-  const benchmarkHandle = corpora.benchmarkHandle || 'seb__design';
+  const benchmarkHandle = corpora.benchmarkHandle || null;
   const own = Array.isArray(corpora.own) ? corpora.own : null;
   const bench = Array.isArray(corpora.benchmark) ? corpora.benchmark : null;
   let ownSummary = null;
@@ -110,7 +111,7 @@ export async function loadDailyLoopInputs(deps, { clientId, packageIds = null, c
 
   const contentTracks = tracksOf(planDoc);
   return {
-    // Tracks + promotions from the Strategy plan doc (defaults when absent): run.js threads them into selection.
+    // Tracks + promotions from the Strategy plan doc (none when absent): run.js threads them into selection.
     contentTracks,
     promotions: promotionsOf({ contentTracks }),
     scan: state.marketingBrief?.quoteTargets || null,

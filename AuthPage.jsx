@@ -38,6 +38,13 @@ const AuthPageInner = () => {
     ideaDescription: '',
     email: '',
     password: '',
+    // Optional brand details (create mode only) — see SignupOptionalBrandFields.
+    xHandle: '',
+    instagramHandle: '',
+    competitor1: '',
+    competitor2: '',
+    competitor3: '',
+    goal: '',
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -144,6 +151,15 @@ const AuthPageInner = () => {
     }
   };
 
+  // Optional signup brand fields, shaped for the provision body. Blank values
+  // are dropped by AuthContext, so a URL-only signup is unchanged.
+  const signupBrandFields = () => ({
+    xHandle: form.xHandle.trim(),
+    instagramHandle: form.instagramHandle.trim(),
+    competitors: [form.competitor1, form.competitor2, form.competitor3].map((c) => c.trim()).filter(Boolean),
+    goal: form.goal.trim(),
+  });
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     setSubmitting(true);
@@ -159,12 +175,14 @@ const AuthPageInner = () => {
         persistPendingDashboardSignup({
           websiteUrl: form.websiteUrl.trim(),
           ideaDescription: form.ideaDescription.trim(),
+          ...signupBrandFields(),
         });
         await signUp({
           websiteUrl: form.websiteUrl.trim(),
           ideaDescription: form.ideaDescription.trim(),
           email: form.email,
           password: form.password,
+          ...signupBrandFields(),
         });
         trackSignUp('email');
       }
@@ -187,11 +205,13 @@ const AuthPageInner = () => {
         persistPendingDashboardSignup({
           websiteUrl: form.websiteUrl.trim(),
           ideaDescription: form.ideaDescription.trim(),
+          ...signupBrandFields(),
         });
         await signInWithGoogle({
           provisioningPayload: {
             websiteUrl: form.websiteUrl.trim(),
             ideaDescription: form.ideaDescription.trim(),
+            ...signupBrandFields(),
           },
         });
         trackSignUp('google');
@@ -279,8 +299,22 @@ const AuthPageInner = () => {
           gap: 0.9rem;
         }
 
+        #signup-optional-brand-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 0.9rem;
+        }
+        #signup-optional-brand-fields > summary {
+          cursor: pointer;
+          list-style: none;
+        }
+        #signup-optional-brand-fields > summary::-webkit-details-marker {
+          display: none;
+        }
+
         @media (max-width: 560px) {
-          #auth-create-columns {
+          #auth-create-columns,
+          #signup-optional-brand-grid {
             grid-template-columns: 1fr;
           }
           #auth-form input,
@@ -365,6 +399,8 @@ const AuthPageInner = () => {
             )}
 
             <form id="auth-form" style={formStyle} onSubmit={handleSubmit}>
+              <SignupOptionalBrandFields form={form} onChange={handleChange} />
+
               <button
                 type="button"
                 id="auth-google-btn"
@@ -435,6 +471,10 @@ const AuthPageInner = () => {
             ) : null}
 
             <form id="auth-form" style={formStyle} onSubmit={handleSubmit}>
+              {mode === 'create' ? (
+                <SignupOptionalBrandFields form={form} onChange={handleChange} />
+              ) : null}
+
               <button
                 type="button"
                 id="auth-google-btn"
@@ -815,6 +855,87 @@ const googleButtonStyle = {
 };
 
 // ── Shared sub-components ─────────────────────────────────────────────────────
+
+// Optional brand details on the create forms (collapsed by default). Feeds
+// client_configs.onboardingAnswers + marketingBriefConfig settings at
+// provisioning; never required, never blocks a URL-only signup.
+const SignupOptionalBrandFields = ({ form, onChange }) => (
+  <details id="signup-optional-brand-fields">
+    <summary id="signup-optional-brand-summary" style={labelTextStyle}>
+      + Add brand details (optional)
+    </summary>
+    <div id="signup-optional-brand-content" style={optionalBrandContentStyle}>
+      <div id="signup-optional-brand-grid">
+        <label style={labelStyle}>
+          <span style={labelTextStyle}>X handle</span>
+          <input
+            id="signup-optional-x-handle"
+            name="xHandle"
+            type="text"
+            value={form.xHandle}
+            onChange={onChange}
+            style={inputStyle}
+            placeholder="@yourbrand"
+            autoComplete="off"
+            maxLength={60}
+          />
+        </label>
+        <label style={labelStyle}>
+          <span style={labelTextStyle}>Instagram handle</span>
+          <input
+            id="signup-optional-instagram-handle"
+            name="instagramHandle"
+            type="text"
+            value={form.instagramHandle}
+            onChange={onChange}
+            style={inputStyle}
+            placeholder="@yourbrand"
+            autoComplete="off"
+            maxLength={80}
+          />
+        </label>
+      </div>
+      <div id="signup-optional-competitors-row" style={labelStyle}>
+        <span style={labelTextStyle}>Competitors (URL or @handle, up to 3)</span>
+        {['competitor1', 'competitor2', 'competitor3'].map((name, i) => (
+          <input
+            key={name}
+            id={`signup-optional-${name}`}
+            name={name}
+            type="text"
+            value={form[name]}
+            onChange={onChange}
+            style={inputStyle}
+            placeholder={i === 0 ? 'competitor.com or @competitor' : 'Another competitor (optional)'}
+            autoComplete="off"
+            maxLength={200}
+          />
+        ))}
+      </div>
+      <label style={labelStyle}>
+        <span style={labelTextStyle}>Goal / positioning (one line)</span>
+        <input
+          id="signup-optional-goal"
+          name="goal"
+          type="text"
+          value={form.goal}
+          onChange={onChange}
+          style={inputStyle}
+          placeholder="e.g. The go-to vegan meal prep in Austin"
+          autoComplete="off"
+          maxLength={200}
+        />
+      </label>
+    </div>
+  </details>
+);
+
+const optionalBrandContentStyle = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.9rem',
+  marginTop: '0.9rem',
+};
 
 const GoogleLogo = () => (
   <svg width="18" height="18" viewBox="0 0 48 48" style={{ flexShrink: 0 }} aria-hidden="true">

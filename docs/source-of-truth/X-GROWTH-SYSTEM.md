@@ -258,6 +258,17 @@ Config lives at `client_configs/{clientId}.marketingBriefConfig.xGrowth` and is 
 `app/api/dashboard/marketing-brief/config/route.js` — ⚠️ a block that route does not explicitly
 name is dropped on every save.
 
+**No home priors (multi-client Phase 4.4).** No client defaults to `@bai_ee` / `@seb__design` any more: a
+missing own handle resolves to `null` and missing benchmarks to `[]` (`withProfileDefaults` in
+`features/x-strategy/route-handlers.js`; only the timezone has a neutral default). The quote-target watchlist is per
+client at `xGrowth.watchlist` (`features/x-quote-targets/client-watchlist.js`); the 39-handle list in `watchlist.js`
+is `HOME_SEED_WATCHLIST`, seed data written into the home client's own config once by
+`scripts/x-content/seed-home-priors.mjs` (dry run by default).
+
+**Not yet per client:** the `scoreXPost` weights (`features/x-growth/`) and the content-guard rules
+(`features/x-content-guard/`) were measured on @bai_ee (and the @seb__design study) and apply unchanged to every
+client. Treat their scores and lanes as that account's model until they are re-measured per client.
+
 ### ⚠️ Things that will bite
 
 - **A share delta is not a recommendation.** Copying the benchmark's raw type mix scored **0.84×** on

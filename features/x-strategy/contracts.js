@@ -23,9 +23,9 @@ import { STRATEGY_PRIORITY, DEFAULT_TYPE_FLOORS } from '../x-content-inventory/d
  * @property {Record<string,number>} typeFloors
  * @property {Record<string,number>} typeCaps
  * @property {Object} engineTargets  mergeEngineConfig overrides
- * @property {string} benchmarkPrimary
+ * @property {string} benchmarkPrimary  '' = no benchmark set
  * @property {string} notes
- * @property {import('./content-tracks.js').ContentTrack[]} [contentTracks]  optional; absent => DEFAULT_TRACKS (old plans unchanged)
+ * @property {import('./content-tracks.js').ContentTrack[]} [contentTracks]  optional; absent => [] (no tracks, no track targets)
  */
 
 /**
@@ -124,6 +124,7 @@ export const EVALUATION_CAVEAT = Object.freeze({
   LIKES_ONLY: 'likes-only',   // views coverage < viewsCoverageMin
   FEW_ROWS: 'few-rows',       // rows < minRows
   STALE: 'stale',             // data older than staleDays
+  NO_BENCHMARK: 'no-benchmark', // no benchmark handle set for this client
 });
 export const EVALUATION_THRESHOLDS = Object.freeze({ viewsCoverageMin: 0.5, minRows: 60, staleDays: 7 });
 
@@ -171,7 +172,8 @@ export const DEFAULT_PLAN = Object.freeze({
   typeFloors: Object.freeze({ ...DEFAULT_TYPE_FLOORS }),
   typeCaps: Object.freeze({}),
   engineTargets: Object.freeze({}),
-  benchmarkPrimary: 'seb__design',
+  // '' = no pace benchmark set. No client inherits a benchmark from code; a client's own plan doc sets it.
+  benchmarkPrimary: '',
   notes: '',
 });
 

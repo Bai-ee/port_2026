@@ -31,6 +31,7 @@ async function buildReadInputsFor() {
     import('../../../../features/x-strategy/strategy-doc-store.js'),
     import('../../../../features/client-readiness/index.js'),
   ]);
+  // Handle-keyed cache for @bai_ee / @seb__design only (not a default): a client reaches these rows only when its own resolved handle is one of them.
   const committed = { bai_ee: ownCorpusRows, seb__design: benchmarkCorpusRows };
   const committedCorpusRows = (h) => (Object.hasOwn(committed, h) ? committed[h] : null);
   const corpusStore = createFirestoreCorpusStore(fb.adminDb, { loadCommitted: committedCorpusRows });

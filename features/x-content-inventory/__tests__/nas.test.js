@@ -62,7 +62,7 @@ function setup() {
   const deps = {
     db, fieldValue: FieldValue(db),
     getPackage: (id) => getPackage(id, { db }),
-    upsertPackage: (pkg) => upsertPackage(pkg, { db, returnPackages: false }),
+    upsertPackage: (pkg) => upsertPackage(pkg, { db, returnPackages: false, clientId: 'fixture-client-a' }),
     now: () => 1_700_000_000_000, sleep: async () => {}, randomId: (() => { let i = 0; return () => `cmd-${++i}`; })(),
     signUpload: async ({ storagePath }) => `https://signed/${storagePath}`,
     browseWaitMs: 0,

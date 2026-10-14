@@ -131,6 +131,7 @@ export default function ContentTracksPanel({ draft, setDraft, savedHandles = [],
       </div>
       <p id="x-strategy-content-tracks-intro" style={{ ...S.note, margin: '0 0 8px' }}>Each track has its own benchmarks and share of your authored posts. Pace still follows the primary benchmark. Shares always total {total}%.</p>
       <div id="x-strategy-content-tracks-list" style={S.stack}>
+        {draft.length === 0 ? <p id="x-strategy-content-tracks-empty" style={S.note}>No content tracks set for this client. Without tracks there are no per-track targets.</p> : null}
         {draft.map((t) => (
           <TrackRow key={t.id} track={t} draft={draft} setDraft={setDraft} savedHandles={savedHandles} rowsMeta={rowsMeta} request={request} refreshing={refreshing}
             profile={(profiles || []).find((p) => p?.trackId === t.id) || null} onRefreshHandle={onRefreshHandle} hideRefresh={hideRefresh} />

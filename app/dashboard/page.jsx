@@ -27,7 +27,19 @@ function readPendingSignup() {
     const websiteUrl = String(parsed?.websiteUrl || '').trim();
     const ideaDescription = String(parsed?.ideaDescription || '').trim();
     if (!websiteUrl && !ideaDescription) return null;
-    return { websiteUrl, ideaDescription };
+    // Optional signup brand fields ride along so a re-POST from here keeps
+    // them (absent = URL-only signup, unchanged). Server re-normalizes.
+    const out = { websiteUrl, ideaDescription };
+    for (const key of ['xHandle', 'instagramHandle', 'goal']) {
+      const v = String(parsed?.[key] || '').trim();
+      if (v) out[key] = v;
+    }
+    const competitors = (Array.isArray(parsed?.competitors) ? parsed.competitors : [])
+      .map((c) => String(c || '').trim())
+      .filter(Boolean)
+      .slice(0, 3);
+    if (competitors.length) out.competitors = competitors;
+    return out;
   } catch {
     return null;
   }

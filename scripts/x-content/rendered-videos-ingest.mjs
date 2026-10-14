@@ -12,9 +12,10 @@
 // Usage:
 //   node scripts/x-content/rendered-videos-ingest.mjs
 //   node scripts/x-content/rendered-videos-ingest.mjs --fixture f.json --artists artists.json --out /private/tmp/x.json
-//   node scripts/x-content/rendered-videos-ingest.mjs --write   # OWNER ONLY
+//   node scripts/x-content/rendered-videos-ingest.mjs --write --client <id>   # OWNER ONLY
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { requireClientArg } from './_client-arg.mjs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -29,6 +30,7 @@ function arg(name, fallback) {
   return i > -1 && process.argv[i + 1] && !process.argv[i + 1].startsWith('--') ? process.argv[i + 1] : fallback;
 }
 const write = process.argv.includes('--write');
+const clientId = write ? requireClientArg() : null;
 const fixture = arg('fixture', null);
 const artistsPath = arg('artists', DEFAULT_ARTISTS);
 const outPath = arg('out', '/private/tmp/rendered-videos-ingest-preview.json');
@@ -81,7 +83,7 @@ console.log(`preview written: ${outPath}`);
 
 if (write) {
   const { upsertPackage } = await import('../../features/x-content-inventory/store.js');
-  for (const pkg of packages) await upsertPackage(pkg, { returnPackages: false });
+  for (const pkg of packages) await upsertPackage(pkg, { returnPackages: false, clientId });
   console.log(`wrote ${packages.length} packages`);
 } else {
   console.log('dry run: nothing written. Re-run with --write (owner only) to upsert.');

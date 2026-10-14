@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { applyChange, normalizePlan, validatePlan, revertTo } from '../plan-state.js';
-import { DEFAULT_TRACKS } from '../content-tracks.js';
+import { twoTracks } from './fixtures/two-tracks.js';
 import { PLAN_LIMITS } from '../contracts.js';
 import { evaluate } from '../evaluate.js';
 import { createMemoryCorpusStore } from '../corpus-store.js';
@@ -14,7 +14,7 @@ import { createContentPlanHandlers } from '../content-plan.js';
 import { createMemoryPlanStore } from '../plan-store.js';
 import { mergeEngineConfig, raiseEngineMinimums } from '../../x-content-inventory/engine-quota.js';
 
-const tracks = () => JSON.parse(JSON.stringify(DEFAULT_TRACKS));
+const tracks = twoTracks;
 const req = (over = {}) => ({ changes: {}, by: 'owner', source: 'manual', reason: 'r', expectedVersion: 0, now: 1_000, ...over });
 const row = (i, over = {}) => ({
   id: String(i), utc: '2026-09-01T10:00:00.000Z', dateLocal: `2026-09-${String(1 + (i % 25)).padStart(2, '0')}`, hourLocal: 10 + (i % 8),
@@ -102,7 +102,7 @@ test('agent: get_tracks tool + prompt/summary describe tracks only when set', as
   assert.ok(TOOL_SCHEMAS.some((s) => s.name === 'get_tracks'));
   const none = await runReadTool('get_tracks', {}, { getPlan: async () => null });
   assert.equal(none.explicit, false);
-  assert.deepEqual(none.tracks.map((x) => x.id), ['design', 'music']);
+  assert.deepEqual(none.tracks, [], 'no plan => no tracks (no inherited defaults)');
   const injected = await runReadTool('get_tracks', {}, { getTracks: async () => ({ tracks: [], profiles: [] }) });
   assert.deepEqual(injected, { tracks: [], profiles: [] });
   assert.match(buildSystemPrompt({}), /CONTENT TRACKS/);

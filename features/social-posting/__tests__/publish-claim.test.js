@@ -221,7 +221,7 @@ test('a draft can still be scheduled directly (backward compatible) when no appr
 });
 
 test('a post whose package needs client approval cannot be scheduled until approved', async () => {
-  await upsertPackage(pkgRow({ id: 'pkg-client', rights: 'client-approval-needed' }), { returnPackages: false });
+  await upsertPackage(pkgRow({ id: 'pkg-client', rights: 'client-approval-needed' }), { returnPackages: false, clientId: 'fixture-pkg-client' });
   const d = await svc.createSocialPost('c1', { content: 'Client story.', status: 'draft', packageId: 'pkg-client' });
   await assert.rejects(svc.updateSocialPost('c1', d.id, { scheduledAt: FUTURE() }), { status: 409, code: 'approval-required' });
   await assert.rejects(svc.schedulePost('c1', { content: 'Direct.', packageId: 'pkg-client', scheduledAt: FUTURE() }), { code: 'approval-required' });
@@ -245,14 +245,14 @@ test('post-level needsApproval blocks scheduling the same way', async () => {
 });
 
 test('an approved package (approval.state) no longer blocks scheduling', async () => {
-  await upsertPackage(pkgRow({ id: 'pkg-ok', rights: 'client-approval-needed', approval: { state: 'approved' } }), { returnPackages: false });
+  await upsertPackage(pkgRow({ id: 'pkg-ok', rights: 'client-approval-needed', approval: { state: 'approved' } }), { returnPackages: false, clientId: 'fixture-pkg-client' });
   const d = await svc.createSocialPost('c1', { content: 'Cleared.', status: 'draft', packageId: 'pkg-ok' });
   const u = await svc.updateSocialPost('c1', d.id, { scheduledAt: FUTURE() });
   assert.equal(u.status, 'scheduled');
 });
 
 test('publishing stamps the linked package (lastPostedAt, postCount, lastTwitterId, status)', async () => {
-  await upsertPackage(pkgRow({ id: 'pkg-wb' }), { returnPackages: false });
+  await upsertPackage(pkgRow({ id: 'pkg-wb' }), { returnPackages: false, clientId: 'fixture-pkg-client' });
   const post = await due('Write-back.', { packageId: 'pkg-wb' });
   await svc.processDuePostsForAllClients();
   const pkg = ctx.adminDb._raw('x_content_packages', 'pkg-wb');

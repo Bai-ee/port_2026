@@ -9,6 +9,7 @@
 //   recommendedTier = resolveTier(own authored/day)               the NEXT step up (a recommendation)
 // Benchmarks: each is summarized individually; gaps are computed against ONE benchmark
 // (plan.benchmarkPrimary if it has rows, else the first benchmark with rows) - never averaged.
+// No benchmark at all ('' benchmarkPrimary, no handles): gaps [] and a NO_BENCHMARK caveat.
 
 import { summarizeCorpus } from '../x-benchmark/summarize.js';
 import { compareToBenchmark } from '../x-benchmark/compare.js';
@@ -192,6 +193,8 @@ export function evaluate(input = {}) {
   }
 
   const caveats = [...entryCaveats(own.entry, 'own'), ...bench.flatMap((b) => entryCaveats(b.entry, 'benchmark'))];
+  // No benchmark handle at all: say so instead of showing an empty comparison (no client inherits one from code).
+  if (!bench.length) caveats.push({ code: EVALUATION_CAVEAT.NO_BENCHMARK, handle: '', message: 'No benchmark set. Add one in Content tracks or the Client Brain to see gaps.' });
   const quoteReactSeen = gaps.some((g) => String(g.id).includes('quote-react'))
     || bench.some((b) => (b.entry.byType?.['quote-react']?.n ?? 0) > 0);
   if (quoteReactSeen) {

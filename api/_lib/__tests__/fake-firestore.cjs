@@ -22,10 +22,20 @@ function resolveValue(value, prevValue) {
   return value;
 }
 
-function applyWrite(prev, incoming, merge) {
+function isPlainMap(v) {
+  return v && typeof v === 'object' && !Array.isArray(v) && !v.__sentinel && !v.__ts;
+}
+
+// deep=true (opt-in via makeFakeContext({ deepMerge: true })) mirrors real
+// Firestore set(..., {merge:true}), which merges nested maps field-by-field.
+// The default (deep=false) keeps the original shallow behavior every existing
+// test was written against.
+function applyWrite(prev, incoming, merge, deep = false) {
   const base = merge ? { ...(prev || {}) } : {};
   for (const [k, v] of Object.entries(incoming)) {
-    base[k] = resolveValue(v, base[k]);
+    base[k] = merge && deep && isPlainMap(v) && isPlainMap(base[k])
+      ? applyWrite(base[k], v, true, true)
+      : resolveValue(v, base[k]);
   }
   return base;
 }
@@ -40,10 +50,45 @@ class DocRef {
   }
   async set(data, opts = {}) {
     const prev = this._map.get(this.id);
-    this._map.set(this.id, applyWrite(prev, data, !!opts.merge));
+    this._map.set(this.id, applyWrite(prev, data, !!opts.merge, !!this._store._deepMerge));
   }
   async get() { return snapshot(this, this._map.get(this.id)); }
   async delete() { this._map.delete(this.id); }
+  // create(): mirrors real Firestore — rejects with ALREADY_EXISTS (gRPC
+  // code 6) when the doc is already there. Added for client-provisioning's
+  // queueInitialBriefRun (deterministic run id + atomic create).
+  async create(data) {
+    if (this._map.has(this.id)) {
+      const err = new Error(`6 ALREADY_EXISTS: Document already exists: ${this._collection}/${this.id}`);
+      err.code = 6;
+      throw err;
+    }
+    this._map.set(this.id, applyWrite(undefined, data, false));
+  }
+  // update(): mirrors real Firestore — rejects with NOT_FOUND (gRPC code 5)
+  // when the doc is missing, and treats a dotted key ('snapshot.brandOverview')
+  // as a nested field path that replaces only that leaf. Added for the signup
+  // source steps (run-brief) and marketing-brief-config-merger.
+  async update(data) {
+    const prev = this._map.get(this.id);
+    if (prev === undefined) {
+      const err = new Error(`5 NOT_FOUND: No document to update: ${this._collection}/${this.id}`);
+      err.code = 5;
+      throw err;
+    }
+    const next = { ...prev };
+    for (const [key, value] of Object.entries(data)) {
+      const parts = key.split('.');
+      let node = next;
+      for (const part of parts.slice(0, -1)) {
+        node[part] = node[part] && typeof node[part] === 'object' ? { ...node[part] } : {};
+        node = node[part];
+      }
+      const leaf = parts[parts.length - 1];
+      node[leaf] = resolveValue(value, node[leaf]);
+    }
+    this._map.set(this.id, next);
+  }
   // Subcollection support (e.g. clients/{clientId}/brief_runs/{runId}) —
   // added for run-lifecycle.cjs tests. Composes a path-keyed collection in
   // the same flat `_store` Map, mirroring how real Firestore addresses a
@@ -140,7 +185,9 @@ class Query {
     // Real Firestore's QuerySnapshot exposes both .docs and .forEach() —
     // added here for _digest-config.js's collection-scan helpers
     // (listCronEnrolledClientIds-style), which call snap.forEach directly.
-    return { docs, forEach: (fn) => docs.forEach(fn) };
+    // .empty/.size added (additively) for client-provisioning's owned-client
+    // lookup, which branches on snapshot.empty.
+    return { docs, forEach: (fn) => docs.forEach(fn), empty: docs.length === 0, size: docs.length };
   }
 }
 
@@ -155,7 +202,11 @@ class Collection extends Query {
 }
 
 class FakeDb {
-  constructor() { this._store = new Map(); this._txChain = Promise.resolve(); }
+  constructor({ deepMerge = false } = {}) {
+    this._store = new Map();
+    this._store._deepMerge = deepMerge;
+    this._txChain = Promise.resolve();
+  }
   collection(name) { return new Collection(this._store, name); }
   async runTransaction(fn) {
     const tx = {
@@ -271,9 +322,9 @@ class FakeStorageBucket {
   _raw(path) { return this._store.get(path); }
 }
 
-function makeFakeContext() {
+function makeFakeContext({ deepMerge = false } = {}) {
   const bucket = new FakeStorageBucket();
-  return { adminDb: new FakeDb(), FieldValue, adminStorage: { bucket: () => bucket } };
+  return { adminDb: new FakeDb({ deepMerge }), FieldValue, adminStorage: { bucket: () => bucket } };
 }
 
 module.exports = { makeFakeContext, timestamp, FieldValue };

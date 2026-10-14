@@ -100,7 +100,7 @@ export async function ingestDiscogsDraft(req) {
 
   // Keep any story/status/effort/rights a human already set on an existing row.
   const existingPkg = await getPackage(packageId(req.releaseId));
-  await upsertPackage(buildContentPackage(req, existingPkg), { returnPackages: false });
+  await upsertPackage(buildContentPackage(req, existingPkg), { returnPackages: false, clientId: discogsClientId() });
 
   return {
     postId: post.id,

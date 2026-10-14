@@ -49,25 +49,13 @@ function getIntakePipeline() {
   return require('../../../../features/scout-intake/runner');
 }
 
-// Lazy-loaded: brand identity generation utils (Phase 2)
-function getScoutConfigUtils() {
-  return {
-    fetchSiteEvidence: require('../../../../features/scout-intake/site-fetcher').fetchSiteEvidence,
-    ensureScoutConfig: require('../../../../features/scout-intake/scout-config-generator').ensureScoutConfig,
-    buildUserContext: require('../../../../features/scout-intake/user-context').buildUserContext,
-  };
+// Lazy-loaded: brand/scout source steps + signup Client Brain draft
+function getSiteSourceSteps() {
+  return require('../../../../features/scout-intake/site-source-steps');
 }
 
 function getMerger() {
   return require('../../../../features/scout-intake/brand-overview-merger');
-}
-
-function getBrandOverviewSynthesizer() {
-  return require('../../../../features/scout-intake/brand-overview-synthesizer');
-}
-
-function getMarketingBriefConfigMerger() {
-  return require('../../../../features/scout-intake/marketing-brief-config-merger');
 }
 
 function getModuleBriefBuilder() {
@@ -288,9 +276,10 @@ async function handleRunBrief(request, { parseBody = true, source = 'worker' } =
         // Narrow Creative Brief run — only the deliverable asset modules. No
         // SEO / agent-readiness / design-eval, no brand/scout synthesis, and no
         // scout-brief chain. The studio video renders and the onboarding summary
-        // is regenerated below. Signup uses this same minimal scope: a new client
-        // only needs the Creative Brief deliverables; the heavier audit modules,
-        // brand/scout synthesis, and the Daily Brief defer to a later run.
+        // is regenerated below. Signup uses this same minimal module scope (the
+        // heavier audit modules and the Daily Brief defer to a later run), but
+        // unlike creative-brief it also runs the brand/scout source steps below
+        // and ends with a Client Brain draft.
         moduleIdsToRun = ['multi-device-view', 'social-preview'];
       } else if (claimedRun.trigger === 'brief-refresh') {
         let storedModules = {};
@@ -362,85 +351,26 @@ async function handleRunBrief(request, { parseBody = true, source = 'worker' } =
         console.warn(`[WORKER] moduleBriefs build non-fatal failure for ${clientId}: ${mbErr?.message}`);
       }
 
-      // Generate brand identity + snapshot.brandOverview after modules complete
-      // (non-fatal). Gated on the client's OWN site — website-less signups skip
-      // this so the templated fallback site never seeds their brand data. The
-      // narrow Creative Brief run AND signup also skip it: the Creative Brief is
-      // the only deliverable on first run, so brand/scout synthesis (which feeds
-      // the Daily Brief) defers to the first brief-refresh/reseed.
-      if (ownSiteUrl && claimedRun.trigger !== 'creative-brief' && claimedRun.trigger !== 'signup') {
-        let evidence = null;
-        let scoutConfigResult = null;
-        try {
-          await onProgress('search-terms', 'Generating search terms + scout configuration…');
-          const { fetchSiteEvidence, ensureScoutConfig, buildUserContext } = getScoutConfigUtils();
-          evidence = await fetchSiteEvidence(websiteUrl);
-          const userContext = buildUserContext(clientConfig);
-          const clientName = clientConfig?.clientName || clientConfig?.sourceInputs?.clientName || null;
-          scoutConfigResult = await ensureScoutConfig({
-            clientId,
-            clientName,
-            intakeResult: { websiteUrl },
-            userContext,
-            evidence,
-            websiteUrl,
-            force: claimedRun.trigger === 'reseed',
-          });
-          console.log(`[WORKER] scoutConfig ensured for ${clientId}`);
-          if (scoutConfigResult?.cost) {
-            runStageCosts.push({ stage: 'scout-config', ...scoutConfigResult.cost });
-          }
-
-          // Flow the fresh audit into marketingBriefConfig (the card layer):
-          // untouched groups refresh, user-touched groups merge-append.
-          if (scoutConfigResult?.scoutConfig) {
-            const { mergeMarketingBriefConfig } = getMarketingBriefConfigMerger();
-            await mergeMarketingBriefConfig(clientId, scoutConfigResult.scoutConfig);
-          }
-          const capCount = scoutConfigResult?.scoutConfig?._meta?.capabilitiesActive?.length ?? 0;
-          await onProgress('search-terms', `Search terms ready — ${capCount} capabilit${capCount === 1 ? 'y' : 'ies'} active.`);
-        } catch (scoutErr) {
-          console.warn(`[WORKER] scoutConfig generation non-fatal failure for ${clientId}: ${scoutErr?.message}`);
-          await onProgress('search-terms', 'Search terms generation hit an issue — will refresh on next run.');
-        }
-
-        // Persist trimmed crawl evidence so Data Quality / Trust / Platform
-        // Coverage cards refresh on recurring runs, not just first intake.
-        if (evidence) {
-          try {
-            const { summarizeEvidencePages } = require('../../../../features/scout-intake/normalize');
-            const evidenceSummary = summarizeEvidencePages(evidence);
-            if (evidenceSummary) {
-              await _fb.adminDb.collection('dashboard_state').doc(clientId).set(
-                { evidence: evidenceSummary },
-                { merge: true }
-              );
-            }
-          } catch (evErr) {
-            console.warn(`[WORKER] evidence summary write non-fatal failure for ${clientId}: ${evErr?.message}`);
-          }
-        }
-
-        // Synthesize snapshot.brandOverview from site evidence (OG meta + page content).
-        // Then merge with any user-saved content so manual edits are never overwritten.
-        if (evidence) {
-          try {
-            const { synthesizeBrandOverview } = getBrandOverviewSynthesizer();
-            const { mergeBrandOverview } = getMerger();
-            const crawled = await synthesizeBrandOverview(evidence, scoutConfigResult?.scoutConfig || null);
-            if (crawled) {
-              const merged = await mergeBrandOverview(clientId, crawled);
-              if (merged) {
-                await _fb.adminDb.collection('dashboard_state').doc(clientId).update({
-                  'snapshot.brandOverview': merged,
-                });
-                console.log(`[WORKER] snapshot.brandOverview written for ${clientId}: source=${merged.source}`);
-              }
-            }
-          } catch (boErr) {
-            console.warn(`[WORKER] brandOverview synthesis non-fatal failure for ${clientId}: ${boErr?.message}`);
-          }
-        }
+      // Brand/scout sources after modules complete (non-fatal): site evidence →
+      // scoutConfig (+ onboarding seeds on creation) → marketingBriefConfig →
+      // dashboard_state.evidence → snapshot.brandOverview. Gated on the
+      // client's OWN site — website-less signups skip this so the templated
+      // fallback site never seeds their brand data. The narrow Creative Brief
+      // run skips it. Signup runs it so the Client Brain draft below has
+      // sources, with the brand overview kept DETERMINISTIC (no model call):
+      // signup's Anthropic budget is ≤2 calls (scout-config + onboarding
+      // summary). No market signals / X / ScrapeCreators here.
+      if (ownSiteUrl && claimedRun.trigger !== 'creative-brief') {
+        const { runSiteSourceSteps } = getSiteSourceSteps();
+        const sourceSteps = await runSiteSourceSteps({
+          clientId,
+          clientConfig,
+          websiteUrl,
+          force: claimedRun.trigger === 'reseed',
+          brandOverviewUseModel: claimedRun.trigger !== 'signup',
+          onProgress,
+        });
+        runStageCosts.push(...sourceSteps.stageCosts);
       }
 
       // Studio motion mockup — render one cloud GPU video on onboarding so the
@@ -562,8 +492,20 @@ async function handleRunBrief(request, { parseBody = true, source = 'worker' } =
     }
   }
 
+  // Signup: generate a Client Brain DRAFT from the sources written by this run
+  // (deterministic, no LLM, no Markdown). Skipped when a Brain already exists;
+  // never approved by code; never fails the signup run. Called on the failed
+  // path below too, so a signup whose modules failed still gets its draft.
+  const ensureSignupDraft = async () => {
+    if (claimedRun.trigger !== 'signup') return;
+    const { ensureSignupBrainDraft } = getSiteSourceSteps();
+    const draft = await ensureSignupBrainDraft(clientId);
+    console.log(`[WORKER] signup Brain draft for ${clientId}: ${draft.created ? `created (${draft.status})` : (draft.skipped || `failed: ${draft.error}`)}`);
+  };
+
   // Step 8 — Write result
   if (pipelineResult.status === 'failed') {
+    await ensureSignupDraft();
     const stageErr = new Error(pipelineResult.error || 'Pipeline returned failed status.');
     stageErr.stage = pipelineResult.failedStage || 'pipeline';
     await failRun(runId, clientId, stageErr, attempts, {
@@ -676,10 +618,11 @@ async function handleRunBrief(request, { parseBody = true, source = 'worker' } =
   // INLINE (awaited) before the run completes, so the cover paragraph is present
   // the moment the brief becomes viewable — not a deferred after() that lands
   // after the dashboard already rendered the brief (which then falls back to the
-  // run headline). Evidence is available: moduleBriefs are written above and the
-  // brand overview persists from the onboarding run. Signup runs this inline too
-  // now that it no longer chains the scout-brief (whose deferred pass previously
-  // generated this summary).
+  // run headline). Evidence is available: moduleBriefs are written above. A
+  // signup with its own site also has a (deterministic) brand overview from the
+  // source steps above; a creative-brief run reads whatever brand overview an
+  // earlier run left. Signup runs this inline (1 Anthropic call) now that it no
+  // longer chains the scout-brief (whose deferred pass previously generated it).
   if (claimedRun.trigger === 'creative-brief' || claimedRun.trigger === 'signup') {
     try {
       const { generateBriefSummaries } = await import('../../../../features/scout-intake/brief-summary-runner.mjs');
@@ -688,6 +631,9 @@ async function handleRunBrief(request, { parseBody = true, source = 'worker' } =
       console.warn(`[WORKER] creative-brief summary non-fatal failure for ${clientId}: ${err?.message}`);
     }
   }
+
+  // Success path: after the onboarding summary, so the draft includes it as a source.
+  await ensureSignupDraft();
 
   await completeRun(runId, clientId, pipelineResult);
   console.log(`[${new Date().toISOString()}] WORKER: run ${runId} succeeded for ${clientId}`);

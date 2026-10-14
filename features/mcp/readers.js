@@ -28,6 +28,7 @@ import dailyLoopDemoSet from '../x-content-inventory/daily-loop-demo-set.json' w
 
 const require = createRequire(import.meta.url);
 
+// Handle-keyed cache for @bai_ee / @seb__design only (not a default): a client reaches these rows only when its own resolved handle is one of them.
 const COMMITTED_CORPORA = { bai_ee: ownCorpusRows, seb__design: benchmarkCorpusRows };
 export const committedCorpusRows = (handle) => (Object.hasOwn(COMMITTED_CORPORA, handle) ? COMMITTED_CORPORA[handle] : null);
 
@@ -162,7 +163,7 @@ export function createReaders(db) {
       onBrainOwnedSaved: (clientId, target, prior, next) => require('../client-brain/brain-sync.cjs').recordCardEdits(clientId, target, prior, next),
       readBrainTrackTargets: (clientId) => require('../client-brain/brain-sync.cjs').readApprovedTrackTargets(clientId),
       loadCommitted: committedCorpusRows,
-      readPackages: async () => (await readInventory()).packages,
+      readPackages: async (clientId) => (await readInventory({ clientId })).packages,
       readTodayRun: (clientId) => latestDailyRun(createFirestoreRunStore(db), clientId),
       readContentContext: async (clientId) => summarizeContentContext(await readContentContext(clientId)),
       readQueueSummary, readPost, readOpportunities, readResults, readMarketSignals,

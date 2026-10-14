@@ -271,24 +271,67 @@ function invalidRefreshError(error) {
   return err;
 }
 
+// Home-client resolver for the one documented global-token exception below.
+// Lazily required (the digest config module pulls Firestore helpers) and
+// injectable so tests never need Firestore to answer "who is home".
+let resolveHomeClientIdImpl = null;
+
+async function resolveHomeClientId() {
+  if (resolveHomeClientIdImpl) return resolveHomeClientIdImpl();
+  const { resolveDigestClientId } = require('../intelligence/_digest-config.js');
+  return resolveDigestClientId();
+}
+
+async function isHomeClient(clientId) {
+  if (!clientId) return false;
+  try {
+    const home = await resolveHomeClientId();
+    return Boolean(home) && home === clientId;
+  } catch {
+    return false; // fail closed: an unresolvable home means no global fallback
+  }
+}
+
+/** Test-only: swap the home-client resolver. Returns a restore function. */
+export function __setXOAuthDepsForTest({ resolveHomeClientId: impl } = {}) {
+  const prev = resolveHomeClientIdImpl;
+  if (impl !== undefined) resolveHomeClientIdImpl = impl;
+  return () => { resolveHomeClientIdImpl = prev; };
+}
+
+function accountNotConnectedError() {
+  const err = new Error('This client has no connected X account — connect one in the Social Accounts card.');
+  err.status = 409;
+  err.code = 'account-not-connected';
+  return err;
+}
+
 // Returns a user-context OAuth2 client, refreshing the (single-use, rotating)
 // refresh token when the access token is near expiry. Single-admin usage —
 // concurrent refreshes are not guarded against.
 //
 // clientId omitted (default): exact legacy behavior — the global @bai_ee
 // singleton in system_flags/x_oauth_tokens, used by the X Command Center.
-// clientId given: reads social_accounts/{clientId}.platforms.x, falling back
-// to the legacy global doc so an already-connected @bai_ee keeps working
-// before that client's first explicit per-client Connect.
+// clientId given: reads social_accounts/{clientId}.platforms.x. Only the home
+// client (resolveDigestClientId) may fall back to the legacy global doc when it
+// has no per-client doc; every other client fails closed with 409
+// `account-not-connected` (never silently served the global @bai_ee token).
+// A refresh of a globally-served token writes back to the global doc, never
+// into social_accounts (that used to clone @bai_ee into the client's doc).
 export async function getXOAuth2Client(clientId = null) {
-  let sourceClientId = clientId;
-  let resolved = clientId ? await readClientTokens(clientId) : { doc: await readTokens(), sourceClientId: null };
-  let doc = resolved.doc || (clientId ? await readTokens() : null);
-  sourceClientId = resolved.doc ? resolved.sourceClientId : null;
+  const resolved = clientId ? await readClientTokens(clientId) : { doc: await readTokens(), sourceClientId: null };
+  let doc = resolved.doc;
+  let sourceClientId = resolved.doc ? resolved.sourceClientId : null;
+  let servedGlobal = !clientId;
+  if (clientId && !resolved.doc) {
+    if (!(await isHomeClient(clientId))) throw accountNotConnectedError();
+    doc = await readTokens();
+    sourceClientId = null;
+    servedGlobal = true;
+  }
   if (!doc?.accessToken) {
-    const err = new Error(clientId
-      ? 'This client has no connected X account — connect one in the Social Accounts card.'
-      : 'The X account is not connected yet — run Connect in the X Command Center card.');
+    if (clientId) throw accountNotConnectedError();
+    const err = new Error('The X account is not connected yet — run Connect in the X Command Center card.');
     err.status = 409;
     throw err;
   }
@@ -306,7 +349,7 @@ export async function getXOAuth2Client(clientId = null) {
       // Rotating-token race: another invocation may have refreshed the shared
       // alias milliseconds earlier. Re-read once and use the newer record if
       // it changed; otherwise this authorization genuinely needs reconnecting.
-      if (clientId) {
+      if (clientId && !servedGlobal) {
         await new Promise((resolve) => setTimeout(resolve, 300));
         const latest = await readClientTokens(clientId);
         if (
@@ -328,10 +371,10 @@ export async function getXOAuth2Client(clientId = null) {
       expiresAt: Date.now() + (expiresIn || 7200) * 1000,
       updatedAt: Date.now(),
     };
-    if (clientId) await saveSocialAccount(sourceClientId || clientId, 'x', { ...doc, authMode: 'oauth2' });
-    else await tokensRef().set(doc);
+    if (servedGlobal) await tokensRef().set(doc);
+    else await saveSocialAccount(sourceClientId || clientId, 'x', { ...doc, authMode: 'oauth2' });
   }
-  return { client: new TwitterApi(doc.accessToken), tokens: doc, sourceClientId };
+  return { client: new TwitterApi(doc.accessToken), tokens: doc, sourceClientId, tokenSource: servedGlobal ? 'global' : 'client' };
 }
 
 export async function getXOAuthStatus() {

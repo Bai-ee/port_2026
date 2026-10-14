@@ -8,7 +8,6 @@ import { createStrategyHandlersFromDb } from '../x-strategy/route-handlers.js';
 import * as timelineStore from '../social-archive/timeline-store.js';
 import { handleNasAction } from '../x-content-inventory/nas.js';
 import { getPackage, upsertPackage } from '../x-content-inventory/store.js';
-import { getXOAuthStatus } from '../social-posting/x-oauth.js';
 import * as xSync from '../x-monitor/sync.js';
 import * as xStore from '../x-monitor/store.js';
 import { createReaders } from './readers.js';
@@ -30,9 +29,13 @@ export function getServices() {
   let handlers = null;
   let instructions = null;
 
+  // The NAS belongs to one client (NAS_INVENTORY_CLIENT_ID, same as the worker results route). Unset => NAS rows are
+  // invisible here and new ones are refused (package-client-required).
+  const nasClientId = () => process.env.NAS_INVENTORY_CLIENT_ID || null;
   const nasDeps = () => ({
-    db, fieldValue: fb.FieldValue, getPackage,
-    upsertPackage: (pkg) => upsertPackage(pkg, { returnPackages: false }),
+    db, fieldValue: fb.FieldValue,
+    getPackage: async (id) => { const p = await getPackage(id); return p && p.clientId === nasClientId() ? p : null; },
+    upsertPackage: (pkg) => upsertPackage(pkg, { returnPackages: false, clientId: nasClientId() }),
     now: () => Date.now(),
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
     randomId: () => randomUUID(),
@@ -50,8 +53,14 @@ export function getServices() {
       treeCache: { tree: null, at: 0 },
       strategyHandlers: () => (handlers ||= createStrategyHandlersFromDb(db, readers.strategyExtras)),
       timeline: () => timelineStore,
-      xMonitor: () => ({
-        status: async () => { const s = await getXOAuthStatus(); return { accountId: s.userId ? String(s.userId) : null, username: s.username || null }; },
+      // Per client: status() resolves THAT client's X account id from stored data (free); never the global token for a
+      // non-home client (features/x-monitor/sync.js resolveAccountId).
+      xMonitor: (clientId) => ({
+        status: async () => {
+          if (!clientId) return { accountId: null, username: null };
+          const s = await xSync.resolveAccountId(clientId);
+          return { accountId: s.accountId, username: s.username || null };
+        },
         readAccount: xStore.readAccount, listSnapshots: xStore.listSnapshots, listPosts: xStore.listPosts, listAudienceEvents: xStore.listAudienceEvents,
         estimateAudienceCalls: xSync.estimateAudienceCalls, // pricing only: the MCP server has NO sync functions; paid syncs run from a confirmed card
       }),

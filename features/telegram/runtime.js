@@ -24,7 +24,7 @@ import {
 import { buildMonthCalendar } from '../x-content-inventory/month-calendar.js';
 import { resolveCalendarEngineConfig } from '../content-context/load-content-context.js';
 import { createFirestorePlanStore } from '../x-strategy/plan-store.js';
-import { upsertPackage, getPackage } from '../x-content-inventory/store.js';
+import { upsertPackage, packageGetterFor } from '../x-content-inventory/store.js';
 import { createFirestoreRunStore } from '../x-content-inventory/daily-loop/run-store.js';
 import { saveSuggestionDraft, dismissSuggestion as dismissDailySuggestion, overlayStagedMedia } from '../x-content-inventory/daily-loop/review.js';
 import { handleNasAction } from '../x-content-inventory/nas.js';
@@ -60,7 +60,8 @@ function mediaSigners() {
 
 // Resolve a suggestion's storage-path media ref to a sendable URL (read side only; saves keep the raw object ref).
 async function withMediaUrls(rawRun) {
-  const run = await overlayStagedMedia(rawRun, getPackage); // a card staged since the run was written shows its media + Save
+  // A card staged since the run was written shows its media + Save; only the run's own client's packages.
+  const run = await overlayStagedMedia(rawRun, packageGetterFor(rawRun?.clientId));
   if (!run?.suggestions?.length) return run;
   const signers = mediaSigners();
   const suggestions = await Promise.all(run.suggestions.map(async (s) => {
@@ -101,10 +102,12 @@ export function createTelegramRuntime({ env = process.env, db = fb.adminDb, tran
     if (!key || key.clientId !== clientId) throw Object.assign(new Error('Suggestion run not found.'), { status: 404 });
     return key;
   };
-  const nasDeps = {
-    db, fieldValue: fb.FieldValue, getPackage, upsertPackage: (pkg) => upsertPackage(pkg, { returnPackages: false }),
+  // Bound to the chat's client: a Telegram user bound to one client can never stage another client's package.
+  const nasDepsFor = (clientId) => ({
+    db, fieldValue: fb.FieldValue, getPackage: packageGetterFor(clientId),
+    upsertPackage: (pkg) => upsertPackage(pkg, { returnPackages: false, clientId }),
     now, sleep: (ms) => new Promise((r) => setTimeout(r, ms)), randomId: () => crypto.randomUUID(),
-  };
+  });
 
   const services = {
     // Suggestions (daily loop). All writes reuse the web Save/Dismiss functions, so Telegram and the dashboard cannot diverge.
@@ -112,7 +115,7 @@ export function createTelegramRuntime({ env = process.env, db = fb.adminDb, tran
       const key = keyFor(clientId, runKey);
       const postExists = async (id) => (await db.collection('social_posts').doc(String(id)).get()).exists;
       const saved = await saveSuggestionDraft(
-        { store: runStore, getPackage, createDraftPostOnce, postExists, ...mediaSigners() },
+        { store: runStore, getPackage: packageGetterFor(clientId), createDraftPostOnce, postExists, ...mediaSigners() },
         { key, suggestionId },
       );
       return { draftId: saved.postId, post: await getSocialPost(clientId, saved.postId) };
@@ -128,6 +131,7 @@ export function createTelegramRuntime({ env = process.env, db = fb.adminDb, tran
       const packageId = s?.package?.id;
       if (!packageId) return { ok: false, status: 'error', message: 'This suggestion has no library item to stage.' };
       try {
+        const nasDeps = nasDepsFor(clientId);
         const online = (await handleNasAction(nasDeps, 'nas-status', {}, null)).online === true;
         await handleNasAction(nasDeps, 'nas-stage', { id: packageId }, { email: 'telegram-owner' });
         return online

@@ -105,7 +105,7 @@ test('a changed slot plan regenerates; the same plan is skipped as unchanged', a
 test('loadDailyLoopInputs hands back strategyInputs only with an injected buildDayPlan and both corpora', async () => {
   const doc = (data) => ({ exists: !!data, data: () => data, id: 'x' });
   const db = {
-    collection: () => ({ doc: () => ({ get: async () => doc({}), collection: () => ({ doc: () => ({ get: async () => doc(null) }) }) }), select: () => ({ get: async () => ({ docs: [] }) }), get: async () => ({ docs: [] }) }),
+    collection: () => ({ doc: () => ({ get: async () => doc({}), collection: () => ({ doc: () => ({ get: async () => doc(null) }) }) }), select: () => ({ get: async () => ({ docs: [] }) }), where: () => ({ select: () => ({ get: async () => ({ docs: [] }) }) }), get: async () => ({ docs: [] }) }),
     getAll: async () => [],
   };
   const row = { id: '1', utc: '2026-09-01T00:00:00.000Z', text: 'hello', type: 'original-text', topics: [], handle: 'bai_ee' };

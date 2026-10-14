@@ -147,7 +147,7 @@ export async function linkEntriesToPackages(db, clientId, links, entriesById) {
   for (const [packageId, emap] of [...byPkg.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
     const ref = db.collection(PACKAGES).doc(packageId);
     const snap = await ref.get();
-    if (!snap.exists) continue;
+    if (!snap.exists || snap.data()?.clientId !== clientId) continue; // never link into another client's package
     existing.add(packageId);
     const prev = snap.data();
     const es = [...emap.values()].sort(byTs);

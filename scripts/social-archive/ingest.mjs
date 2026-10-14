@@ -4,7 +4,7 @@
 //
 // Usage: node scripts/social-archive/ingest.mjs --platform facebook --account "Housepit CHI" \
 //   --dir "/Volumes/Public/Bryan/Facebook Downloads/facebook-HousepitCHI" \
-//   --archive-root-rel "Facebook Downloads/facebook-HousepitCHI" [--archive-name <n>] [--client <id>] [--media-only] [--write]
+//   --archive-root-rel "Facebook Downloads/facebook-HousepitCHI" [--archive-name <n>] --client <id> [--media-only] [--write]   (--client required)
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -32,7 +32,8 @@ const archiveName = arg('--archive-name', path.basename(path.resolve(dir)));
 
 require(path.join(REPO, 'features/not-the-rug-brief/load-env'));
 const fb = require(path.join(REPO, 'api/_lib/firebase-admin.cjs'));
-const clientId = arg('--client', process.env.DISCOGS_X_CLIENT_ID || 'bryan-balli-WUoltG84');
+const { requireClientArg } = await import('../x-content/_client-arg.mjs');
+const clientId = requireClientArg(); // per-client timeline + inventory links; no owner default
 
 const report = await ingestArchive({
   db: fb.adminDb, clientId, platform, account, archiveName, archiveRootRel,

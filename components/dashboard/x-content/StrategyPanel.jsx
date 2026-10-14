@@ -819,9 +819,9 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
 
                 {profile ? (
                   <div id="x-strategy-accounts-content" style={S.stack}>
-                    {profile.defaulted?.length ? (
+                    {profile.unset?.length ? (
                       <div id="x-strategy-profile-defaulted-notice" style={S.warn}>
-                        Showing default handles @bai_ee vs @seb__design — save to make them yours.
+                        {profile.unset.includes('ownHandle') ? 'No X handle saved for this client yet' : 'No benchmark accounts saved yet'} — add them below and save.
                       </div>
                     ) : null}
 

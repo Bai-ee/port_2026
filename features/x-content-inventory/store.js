@@ -13,10 +13,9 @@
 // 1MB document with a 200-row cap fails exactly when the archive starts
 // delivering, and it fails by refusing saves.
 //
-// It is also no longer per-client. The inventory feeds ONE account's posting
-// plan; `buildDayPlan` is @bai_ee's regardless of which dashboard is open, so
-// scoping the rows by clientId while the plan ignored it was an inconsistency,
-// not a feature.
+// Per client (multi-client Phase 3a): every row carries `clientId`; reads are
+// `where('clientId','==',id)` and REQUIRE a clientId (they throw without one);
+// a new row must be given its client, an existing row keeps its own.
 //
 // One document per package also means the Archive Inbox can write a single
 // story without reading, rewriting and re-saving the whole array.
@@ -76,6 +75,15 @@ const ID_SLUG_MAX = 48;
 const BATCH_CHUNK = 400;
 
 const database = (db) => db || fb.adminDb;
+
+const CLIENT_ID_RE = /^[A-Za-z0-9_-]{3,80}$/;
+/** Required clientId for every inventory read; throws 400 without a valid one (never a default client). */
+function requireClientId(clientId, what) {
+  const id = typeof clientId === 'string' ? clientId.trim() : '';
+  if (!CLIENT_ID_RE.test(id)) throw Object.assign(new Error(`${what}: clientId is required.`), { status: 400, code: 'client-id-required' });
+  return id;
+}
+const cleanClientId = (v) => (typeof v === 'string' && CLIENT_ID_RE.test(v.trim()) ? v.trim() : null);
 const fieldValue = (db) => db?.FieldValue || fb.FieldValue;
 
 /** The bundled JSON is a module singleton. Handing it out by reference means the
@@ -145,21 +153,23 @@ function withIndexFields(row, existing) {
  * `nextCursor` is the last id (pass it as `startAfter`; null = no more). With no
  * options the call and return shape are unchanged, bounded by READ_LIMIT.
  *
- * @param {{ pageSize?: number, startAfter?: string, db?: object }} [opts]
+ * @param {{ clientId: string, pageSize?: number, startAfter?: string, db?: object }} opts  clientId REQUIRED
  * @returns {Promise<{ packages: object[], updatedAt: number|null, seeded: boolean, nextCursor?: string|null }>}
  */
 export async function readInventory(opts = {}) {
+  const clientId = requireClientId(opts.clientId, 'readInventory');
   const db = database(opts.db);
   const paged = Number.isInteger(opts.pageSize) && opts.pageSize > 0;
   const limit = paged ? opts.pageSize : READ_LIMIT;
+  const scoped = () => db.collection(COLLECTION).where('clientId', '==', clientId);
 
-  let query = db.collection(COLLECTION);
+  let query = scoped();
   if (paged) {
     query = query.orderBy('__name__');
     if (opts.startAfter) query = query.startAfter(opts.startAfter);
   }
   // Un-paginated: also read the ids after the NAS range, so only NAS rows absorb the bound.
-  const tail = paged ? null : db.collection(COLLECTION).orderBy('__name__').startAfter(NAS_ID_END).limit(READ_LIMIT).get();
+  const tail = paged ? null : scoped().orderBy('__name__').startAfter(NAS_ID_END).limit(READ_LIMIT).get();
   const [snap, meta, tailSnap] = await Promise.all([query.limit(limit).get(), readMeta(opts.db), tail]);
   const byId = new Map();
   for (const d of [...snap.docs, ...(tailSnap?.docs || [])]) byId.set(d.id, { id: d.id, ...(d.data() || {}) });
@@ -201,6 +211,15 @@ export async function getPackage(id, opts = {}) {
   return null;
 }
 
+/** getPackage bound to one client: another client's row (or an unstamped one) reads as null, so a caller acting for
+ * `clientId` can never see or act on a foreign package by guessing its id. */
+export function packageGetterFor(clientId) {
+  return async (id, opts = {}) => {
+    const pkg = await getPackage(id, opts);
+    return pkg && clientId && pkg.clientId === clientId ? pkg : null;
+  };
+}
+
 /**
  * Bounded candidate pool for one engine — the planner's read path.
  *
@@ -216,16 +235,18 @@ export async function getPackage(id, opts = {}) {
  * If the inventory was never written, the repo seed is filtered the same way
  * (in memory) so a fresh environment behaves like readInventory.
  *
- * @param {{ engine: string, statuses: string[], limit?: number, db?: object }} opts
+ * @param {{ clientId: string, engine: string, statuses: string[], limit?: number, db?: object }} opts  clientId REQUIRED
  * @returns {Promise<object[]>}
  */
-export async function readCandidates({ engine, statuses, limit = CANDIDATE_LIMIT, db } = {}) {
+export async function readCandidates({ clientId, engine, statuses, limit = CANDIDATE_LIMIT, db } = {}) {
+  const owner = requireClientId(clientId, 'readCandidates');
   if (!isEngine(engine)) throw Object.assign(new Error('engine is required.'), { status: 400 });
   const wanted = Array.isArray(statuses) ? statuses.filter(Boolean) : [];
   if (!wanted.length) throw Object.assign(new Error('statuses must be a non-empty array.'), { status: 400 });
   const cap = Number.isInteger(limit) && limit > 0 ? limit : CANDIDATE_LIMIT;
 
   const snap = await database(db).collection(COLLECTION)
+    .where('clientId', '==', owner)
     .where('engine', '==', engine)
     .where('status', 'in', wanted)
     .orderBy('lastPostedAt', 'asc')
@@ -336,8 +357,12 @@ function stripUndefined(obj) {
  * enforced, because a row that will underperform is still a row the owner is
  * allowed to keep. Errors mean the matcher cannot use it at all, so they reject.
  *
+ * Client: a NEW row needs `opts.clientId` (or `pkg.clientId`) or the write is refused (400
+ * `package-client-required`); an existing row keeps its own clientId, and naming a different one is
+ * refused (409 `package-client-mismatch`) — rows never move between clients by an upsert.
+ *
  * @param {object} pkg
- * @param {{ db?: object, returnPackages?: boolean }} [opts]
+ * @param {{ db?: object, returnPackages?: boolean, clientId?: string }} [opts]
  * @returns {Promise<{ pkg, packages?, warnings, created, updatedAt }>}
  */
 export async function upsertPackage(pkg, opts = {}) {
@@ -363,7 +388,15 @@ export async function upsertPackage(pkg, opts = {}) {
   const existing = snap.exists ? (snap.data() || {}) : null;
   const created = !existing && !(seeded && seedIds.has(id));
 
-  const base = sanitizePostFields(stripUndefined({ ...pkg, id, updatedAt: Date.now() }));
+  const requested = cleanClientId(opts.clientId) || cleanClientId(pkg.clientId);
+  const owner = cleanClientId(existing?.clientId);
+  if (owner && requested && owner !== requested) {
+    throw Object.assign(new Error(`Package ${id} belongs to another client.`), { status: 409, code: 'package-client-mismatch' });
+  }
+  const clientId = owner || requested;
+  if (!clientId) throw Object.assign(new Error(`clientId is required to save package ${id}.`), { status: 400, code: 'package-client-required' });
+
+  const base = sanitizePostFields(stripUndefined({ ...pkg, id, clientId, updatedAt: Date.now() }));
   const verdict = validatePackage(base);
   if (!verdict.ok) {
     throw Object.assign(new Error(verdict.errors.join('; ')), { status: 400, errors: verdict.errors });
@@ -389,14 +422,14 @@ export async function upsertPackage(pkg, opts = {}) {
 
   const batch = d.batch();
   for (const row of seedOthers) {
-    batch.set(d.collection(COLLECTION).doc(row.id), withIndexFields(row, null), { merge: true });
+    batch.set(d.collection(COLLECTION).doc(row.id), withIndexFields({ ...row, clientId }, null), { merge: true });
   }
   batch.set(d.collection(COLLECTION).doc(id), candidate, { merge: true });
   const updatedAt = queueMetaTouch(db, batch, newDocs);
   await batch.commit();
 
   const result = { pkg: candidate, warnings: verdict.warnings, created, updatedAt };
-  if (returnPackages) result.packages = (await readInventory({ db })).packages;
+  if (returnPackages) result.packages = (await readInventory({ db, clientId })).packages;
   return result;
 }
 
@@ -414,12 +447,16 @@ export async function deletePackage(id, opts = {}) {
   const key = typeof id === 'string' ? id.trim() : '';
   if (!key) throw Object.assign(new Error('id is required.'), { status: 400 });
   const { db, returnPackages = true } = opts;
+  const clientId = requireClientId(opts.clientId, 'deletePackage');
   const d = database(db);
 
   const [snap, meta] = await Promise.all([
     d.collection(COLLECTION).doc(key).get(),
     readMeta(db),
   ]);
+  if (snap.exists && cleanClientId(snap.data()?.clientId) !== clientId) {
+    throw Object.assign(new Error(`Package ${key} belongs to another client.`), { status: 409, code: 'package-client-mismatch' });
+  }
   const seeded = neverWritten(meta);
   const seed = seeded ? freshSeed().filter((r) => r?.id) : [];
   const existed = snap.exists || seed.some((r) => r.id === key);
@@ -431,13 +468,13 @@ export async function deletePackage(id, opts = {}) {
 
   const batch = d.batch();
   for (const row of seedOthers) {
-    batch.set(d.collection(COLLECTION).doc(row.id), withIndexFields(row, null), { merge: true });
+    batch.set(d.collection(COLLECTION).doc(row.id), withIndexFields({ ...row, clientId }, null), { merge: true });
   }
   batch.delete(d.collection(COLLECTION).doc(key));
   const updatedAt = queueMetaTouch(db, batch, delta);
   await batch.commit();
 
   const result = { removed: existed, updatedAt };
-  if (returnPackages) result.packages = (await readInventory({ db })).packages;
+  if (returnPackages) result.packages = (await readInventory({ db, clientId })).packages;
   return result;
 }

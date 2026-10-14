@@ -103,8 +103,8 @@ export async function runDryRun() {
     const t2Iso = new Date(Date.parse(t1Iso) + 30 * 60_000).toISOString();   // 30 min after t1 (inside plan spacing)
     const t3Iso = new Date(Date.parse(t1Iso) + 2 * DAY).toISOString();
 
-    await upsertPackage(pkgRow('dry-pkg-a'), { returnPackages: false });
-    await upsertPackage(pkgRow('dry-pkg-b'), { returnPackages: false });
+    await upsertPackage(pkgRow('dry-pkg-a'), { returnPackages: false, clientId: OWNER_CLIENT });
+    await upsertPackage(pkgRow('dry-pkg-b'), { returnPackages: false, clientId: OWNER_CLIENT });
 
     await step('Draft via ensureDraftPost (owner client, package A)', async () => {
       const a = await svc.ensureDraftPost(OWNER_CLIENT, { idempotencyKey: 'dry-run:a', content: 'Representative post: first draft.', packageId: 'dry-pkg-a', channel: 'x' });

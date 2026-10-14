@@ -61,12 +61,26 @@ test('refuses to rank an undatable post rather than guessing', () => {
   assert.deepEqual(r.penalties, ['no-timestamp']);
 });
 
-test('a known vein scores above an unknown account', () => {
-  const known = scoreQuoteTarget({ ...base, createdAt: hoursAgo(6) }, { now: NOW });
-  const unknown = scoreQuoteTarget({ ...base, author: { username: 'nobody_at_all' }, createdAt: hoursAgo(6) }, { now: NOW });
+const CLIENT_WATCHLIST = [{ handle: 'rare_jpg', vein: 'japanese-asian-design' }];
+
+test('a known vein (on the CLIENT\'s watchlist) scores above an unknown account', () => {
+  const known = scoreQuoteTarget({ ...base, createdAt: hoursAgo(6) }, { now: NOW, watchlist: CLIENT_WATCHLIST });
+  const unknown = scoreQuoteTarget({ ...base, author: { username: 'nobody_at_all' }, createdAt: hoursAgo(6) }, { now: NOW, watchlist: CLIENT_WATCHLIST });
   assert.ok(known.score > unknown.score);
   assert.equal(known.vein, 'japanese-asian-design');
   assert.equal(unknown.vein, null);
+});
+
+test('no client watchlist: every author is untracked (0.35 vein score), the home seed is never consulted', () => {
+  const none = scoreQuoteTarget({ ...base, createdAt: hoursAgo(6) }, { now: NOW });
+  const empty = scoreQuoteTarget({ ...base, createdAt: hoursAgo(6) }, { now: NOW, watchlist: [] });
+  const stranger = scoreQuoteTarget({ ...base, author: { username: 'nobody_at_all' }, createdAt: hoursAgo(6) }, { now: NOW, watchlist: CLIENT_WATCHLIST });
+  assert.equal(none.vein, null, 'rare_jpg is on the home seed list but not on this (absent) client list');
+  assert.equal(empty.vein, null);
+  assert.equal(none.score, stranger.score, 'same as any untracked author');
+  assert.equal(empty.score, none.score);
+  const ranked = rankQuoteTargets([{ ...base, createdAt: hoursAgo(6) }], { now: NOW, watchlist: [] });
+  assert.equal(ranked[0].vein, null);
 });
 
 test('one hot account cannot fill the slate', () => {

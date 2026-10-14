@@ -14,31 +14,12 @@ const SHARE_EPSILON = 0.001;
 /** @typedef {{id:string,label:string,engine:'ue'|'record'|'client'|'identity',url:string|null,weeklyTarget:number}} Promotion */
 /** @typedef {{id:string,label:string,engines:string[],benchmarks:string[],share:number,promotions:Promotion[],topics:string[]}} ContentTrack */
 
-export const DEFAULT_TRACKS = Object.freeze([
-  Object.freeze({
-    id: 'design', label: 'Design & client work', engines: Object.freeze(['client', 'identity']),
-    benchmarks: Object.freeze(['seb__design']), share: 0.5, topics: Object.freeze([]),
-    promotions: Object.freeze([Object.freeze({ id: 'client', label: 'Client work', engine: 'client', url: null, weeklyTarget: 2 })]),
-  }),
-  Object.freeze({
-    id: 'music', label: 'Music (UE mixes, Discogs)', engines: Object.freeze(['ue', 'record']),
-    benchmarks: Object.freeze([]), share: 0.5, topics: Object.freeze([]),
-    promotions: Object.freeze([
-      Object.freeze({ id: 'ue', label: 'Underground Existence', engine: 'ue', url: null, weeklyTarget: 3 }),
-      Object.freeze({ id: 'discogs', label: 'Discogs store', engine: 'record', url: null, weeklyTarget: 3 }),
-    ]),
-  }),
-]);
+// No code-default tracks: a client with no saved contentTracks has no tracks (and no track targets). The home client's
+// former two tracks live in its own plan doc (seeded by scripts/x-content/seed-home-priors.mjs), never here.
+export const DEFAULT_TRACKS = Object.freeze([]);
 
 function bad(message) {
   return Object.assign(new Error(message), { status: 400 });
-}
-
-function cloneDefaults() {
-  return DEFAULT_TRACKS.map((t) => ({
-    ...t, engines: [...t.engines], benchmarks: [...t.benchmarks], topics: [...t.topics],
-    promotions: t.promotions.map((p) => ({ ...p })),
-  }));
 }
 
 function normalizeUrl(value) {
@@ -77,12 +58,14 @@ function normalizeHandle(h) {
 }
 
 /**
- * Validate a full contentTracks list. Throws 400. Rules: 1..MAX_TRACKS tracks; unique ids; every engine in
- * exactly one track (disjoint + complete); ≤MAX_BENCHMARKS_PER_TRACK handles per track and
- * ≤`maxDistinctBenchmarks` distinct overall; shares ≥0 and normalized to sum 1.
+ * Validate a full contentTracks list. Throws 400. An empty list is valid (no tracks => no track targets) and returns [].
+ * Rules for a non-empty list: ≤MAX_TRACKS tracks; unique ids; every engine in exactly one track (disjoint + complete);
+ * ≤MAX_BENCHMARKS_PER_TRACK handles per track and ≤`maxDistinctBenchmarks` distinct overall; shares ≥0 and
+ * normalized to sum 1.
  */
 export function normalizeContentTracks(input, { maxDistinctBenchmarks = MAX_DISTINCT_BENCHMARKS } = {}) {
-  if (!Array.isArray(input) || input.length === 0) throw bad('contentTracks must be a non-empty array.');
+  if (!Array.isArray(input)) throw bad('contentTracks must be an array.');
+  if (input.length === 0) return [];
   if (input.length > MAX_TRACKS) throw bad(`At most ${MAX_TRACKS} tracks.`);
   const ids = new Set();
   const engineOwner = new Map();
@@ -118,14 +101,14 @@ export function normalizeContentTracks(input, { maxDistinctBenchmarks = MAX_DIST
   return tracks;
 }
 
-/** Tracks from a plan doc or plan; absent or invalid ⇒ the defaults (back-compat: old plans keep working). */
+/** Tracks from a plan doc or plan; absent or invalid ⇒ [] (no tracks). */
 export function tracksOf(planOrDoc, opts) {
   const plan = planOrDoc?.plan && typeof planOrDoc.plan === 'object' ? planOrDoc.plan : planOrDoc;
-  if (!Array.isArray(plan?.contentTracks)) return cloneDefaults();
+  if (!Array.isArray(plan?.contentTracks)) return [];
   try {
     return normalizeContentTracks(plan.contentTracks, opts);
   } catch {
-    return cloneDefaults();
+    return [];
   }
 }
 

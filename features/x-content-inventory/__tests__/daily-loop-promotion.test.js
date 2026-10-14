@@ -9,6 +9,7 @@ import { createMemoryRunStore, saveSuggestionDraft } from '../daily-run-store.js
 import { discoveryQueries } from '../daily-loop/brand.js';
 import { pickMedia } from '../item-actions.js';
 import { tracksOf } from '../../x-strategy/content-tracks.js';
+import { twoTracks } from '../../x-strategy/__tests__/fixtures/two-tracks.js';
 import * as scheduledMod from '../daily-loop/scheduled.js';
 const { pilotClientIds, runScheduledDailyLoop } = scheduledMod;
 
@@ -27,7 +28,7 @@ const nas = {
   source: { kind: 'nas-archive' }, assetRefs: [], nas: { sha256: 'a', relativePath: 'x.mov', sourceId: 's' }, platforms: ['x'],
 };
 const tracksWithUrl = () => {
-  const t = tracksOf(null);
+  const t = twoTracks();
   t.find((x) => x.id === 'music').promotions.find((p) => p.id === 'ue').url = 'https://example.com/ue';
   return t;
 };
@@ -52,10 +53,15 @@ test('run doc: self-reply carries the link; empty when the url is null', async (
   const go = async (contentTracks) => (await runDailyLoop({ now: () => NOW, store: createMemoryRunStore(), readInputs: async () => ({ packages: [mix], contentTracks }) }, { clientId: OWNER })).run;
   const withUrl = await go(tracksWithUrl());
   assert.equal(withUrl.suggestions[0].draft.selfReply, 'Underground Existence: https://example.com/ue');
-  const noUrl = await go(undefined);
+  const noUrl = await go(twoTracks());
   assert.equal(noUrl.suggestions[0].draft.selfReply, '');
   assert.equal(noUrl.suggestions[0].track, 'music');
   assert.equal(noUrl.usage.modelCalls, 0);
+  // No stored tracks (no inherited defaults): no track, no promotion, no self-reply.
+  const none = await go(undefined);
+  assert.equal(none.suggestions[0].track, null);
+  assert.equal(none.suggestions[0].promotion, null);
+  assert.equal(none.suggestions[0].draft.selfReply, '');
 });
 
 test('searchTokens count as match terms', () => {
@@ -71,7 +77,7 @@ test('strong match on a quote slot yields an original with media, related to the
   }, 'watchlist');
   const r = selectForSlots({
     clientId: OWNER, localDate: LOCAL, now: NOW, packages: [mix], conversationPosts: [post], candidates: [{ ...post, vein: 'retro-analog-preinternet', score: 5, hasMedia: true }],
-    slots: [{ ...showcaseSlot, letter: 'B', type: 'quote-react', lane: 'music' }], matchedSlots: [],
+    slots: [{ ...showcaseSlot, letter: 'B', type: 'quote-react', lane: 'music' }], matchedSlots: [], contentTracks: twoTracks(),
   });
   const s = r.suggestions[0];
   assert.ok(s, JSON.stringify(r.gaps));
@@ -85,8 +91,9 @@ test('strong match on a quote slot yields an original with media, related to the
 test('discovery: bai-ee is excluded except for items in the music track', () => {
   const own = { ...mix, id: 'o', facets: { people: ['Bai-Ee'] } };
   const client = { ...mix, id: 'c', engine: 'client', series: 'C6', facets: { people: ['Bai-Ee'] } };
-  assert.ok(discoveryQueries([own]).some((q) => /bai-?ee/i.test(q.term)));
-  assert.ok(!discoveryQueries([client]).some((q) => /bai-?ee/i.test(q.term)));
+  assert.ok(discoveryQueries([own], { contentTracks: twoTracks() }).some((q) => /bai-?ee/i.test(q.term)));
+  assert.ok(!discoveryQueries([client], { contentTracks: twoTracks() }).some((q) => /bai-?ee/i.test(q.term)));
+  assert.ok(!discoveryQueries([own]).some((q) => /bai-?ee/i.test(q.term)), 'no stored tracks => no music-track exception');
 });
 
 // --- Save: media + needs-staging ---

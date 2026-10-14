@@ -8,6 +8,10 @@ import { createRefreshService, createMemoryRefreshQueue } from '../refresh.js';
 import { createMemoryChatStore } from '../agent/chat-store.js';
 import { createMemoryStrategyDocStore } from '../strategy-doc-store.js';
 import { SEED_STRATEGY_SECTIONS } from '../strategy-doc-seed.js';
+import { HOME_STRATEGY_SECTIONS } from '../../../scripts/x-content/seed-home-priors.mjs';
+
+// A client's own stored draft (what the home seed writes): source 'seed' keeps it unconfirmed.
+const seedDoc = (docStore, sections = HOME_STRATEGY_SECTIONS) => docStore.apply('c1', { sections: { ...sections }, by: 'seed', source: 'seed', expectedVersion: 0, now: NOW });
 import { validateProposal } from '../agent/proposals.js';
 
 const NOW = Date.parse('2026-10-12T12:00:00.000Z');
@@ -35,7 +39,7 @@ const row = (i, over = {}) => ({
   media: i % 2 ? 'video' : 'none', text: i % 4 === 1 ? `shipped a new build #design ${i}` : `post ${i} about the work`, likes: i % 5, views: 100 + i * 10, ...over,
 });
 
-async function build({ steps, withDoc = true, audience } = {}) {
+async function build({ steps, withDoc = true, audience, audienceCalls = [] } = {}) {
   const corpusStore = createMemoryCorpusStore({ loadCommitted: () => null });
   await corpusStore.writeMergedRows('me_acct', Array.from({ length: 30 }, (_, i) => row(i)), { pulledAt: '2026-10-11T12:00:00.000Z' });
   await corpusStore.writeMergedRows('bench_a', Array.from({ length: 30 }, (_, i) => row(i + 100)), { pulledAt: '2026-10-12T08:00:00.000Z' });
@@ -46,13 +50,23 @@ async function build({ steps, withDoc = true, audience } = {}) {
     refreshService: createRefreshService({ store: corpusStore, queueStore: createMemoryRefreshQueue(), now: () => NOW, enabled: false, detectBird: async () => ({ available: false }), idGen: () => 'r1', ingest: async () => ({ rows: [], pull: {} }), runBirdFor: () => () => '' }),
     readXGrowthConfig: async () => ({ ownHandle: 'me_acct', benchmarkHandles: ['bench_a'] }),
     callModel: model.callModel, logUsage: async () => ({ costUsd: 0.001 }),
-    ...(audience ? { readAudience: async () => audience } : {}),
+    ...(audience ? { readAudience: async (clientId) => { audienceCalls.push(clientId); return audience; } } : {}),
   });
   return { h, docStore, model, call: (a, b = {}) => h.handle(a, { clientId: 'c1', ...b }, CTX, AUTH) };
 }
 
-test('the system prompt carries the strategy document (draft-labelled) and its rules', async () => {
+test('no stored doc => the prompt carries no inherited strategy text', async () => {
   const { call, model } = await build({ steps: [say('ok')] });
+  const r = await call('strategy-chat-send', { text: 'what is my strategy?' });
+  assert.equal(r.ok, true);
+  const sys = model.requests[0].system;
+  assert.doesNotMatch(sys, /Show the work, not the casino|seb__design/);
+  assert.doesNotMatch(sys, /STRATEGY DOCUMENT \(DRAFT/);
+});
+
+test('the system prompt carries the client\'s stored strategy document (draft-labelled) and its rules', async () => {
+  const { call, model, docStore } = await build({ steps: [say('ok')] });
+  await seedDoc(docStore);
   const r = await call('strategy-chat-send', { text: 'what is my strategy?' });
   assert.equal(r.ok, true);
   const sys = model.requests[0].system;
@@ -110,7 +124,7 @@ test('a doc-edit proposal goes stale when the owner edits the doc first', async 
 });
 
 test('propose_strategy_doc_edit rejects bad sections, wrong versions and no-op text', async () => {
-  const { call, model } = await build({
+  const { call, model, docStore } = await build({
     steps: [
       useTools(
         ['propose_strategy_doc_edit', { section: 'vibes', text: 'x', expectedVersion: 0, summary: 's', rationale: 'r', evidence: [] }],
@@ -119,12 +133,13 @@ test('propose_strategy_doc_edit rejects bad sections, wrong versions and no-op t
       (req) => {
         const [a, b] = toolResults(req);
         assert.match(a.content, /section must be one of/);
-        assert.match(b.content, /version 0, not 3/);
-        return useTools(['propose_strategy_doc_edit', { section: 'thesis', text: SEED_STRATEGY_SECTIONS.thesis, expectedVersion: 0, summary: 's', rationale: 'r', evidence: [] }]);
+        assert.match(b.content, /version 1, not 3/);
+        return useTools(['propose_strategy_doc_edit', { section: 'thesis', text: HOME_STRATEGY_SECTIONS.thesis, expectedVersion: 1, summary: 's', rationale: 'r', evidence: [] }]);
       },
       (req) => { assert.match(toolResults(req)[0].content, /already the current section/); return say('nothing to change'); },
     ],
   });
+  await seedDoc(docStore);
   const r = await call('strategy-chat-send', { text: 'edit' });
   assert.equal(r.proposals.length, 0);
   assert.equal(model.requests.length, 3);
@@ -143,8 +158,9 @@ test('algorithm, score, rule-check and audience tools return shaped data', async
     events: [{ type: 'gained' }, { type: 'gained' }, { type: 'lost' }],
     posts: [{ id: 'p1', createdAt: new Date(NOW - 86400000).toISOString(), text: 'hello', metrics: { impressions: 300, likes: 2 } }],
   };
+  const audienceCalls = [];
   const { call } = await build({
-    audience,
+    audience, audienceCalls,
     steps: [
       useTools(['get_algorithm', {}], ['score_posts', {}], ['get_rule_check', { days: 30 }], ['get_audience', {}], ['score_posts', { handle: 'stranger' }]),
       (req) => {
@@ -167,6 +183,7 @@ test('algorithm, score, rule-check and audience tools return shaped data', async
     ],
   });
   assert.equal((await call('strategy-chat-send', { text: 'read it all' })).ok, true);
+  assert.deepEqual(audienceCalls, ['c1'], 'audience is resolved by the request\'s clientId, never by a handle');
 });
 
 test('get_audience without X Monitor data says so instead of inventing numbers', async () => {

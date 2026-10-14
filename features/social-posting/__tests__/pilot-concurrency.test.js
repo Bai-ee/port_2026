@@ -26,7 +26,7 @@ const ENV_KEYS = ['PILOT_CLIENT_IDS', 'PILOT_OWNER_UIDS'];
 
 const raw = (id) => ctx.adminDb._raw('social_posts', id);
 const PKG = (id, extra = {}) => ({ ...seedRows[1], id, status: 'idea', rights: 'owned', ...extra });
-const mkPkg = (id) => upsertPackage(PKG(id), { returnPackages: false });
+const mkPkg = (id) => upsertPackage(PKG(id), { returnPackages: false, clientId: 'fixture-pkg-client' });
 const MIN = 60_000;
 const HOUR = 60 * MIN;
 const PAST = (h = 1) => new Date(Date.now() - h * HOUR).toISOString();
@@ -849,7 +849,7 @@ test('12.4 approval remix writers on a claimed (posting) row return 409 and leav
 test('12.5 publishApprovedPost: package approval rejected after creation => clearance-revoked, needs_review, 0 tweets, second call not-pending', async () => {
   await mkPkg('pkg-revoke');
   const p = await v2('c1', 'Approval email copy.', { status: 'awaiting_approval', packageId: 'pkg-revoke' });
-  await upsertPackage(PKG('pkg-revoke', { approval: { state: 'rejected' } }), { returnPackages: false });
+  await upsertPackage(PKG('pkg-revoke', { approval: { state: 'rejected' } }), { returnPackages: false, clientId: 'fixture-pkg-client' });
   await assert.rejects(svc.publishApprovedPost('c1', p.id), { code: 'clearance-revoked', status: 409 });
   assert.equal(tweets.length, 0);
   assert.equal(raw(p.id).status, 'needs_review');

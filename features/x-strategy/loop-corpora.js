@@ -1,6 +1,6 @@
 // Server-only: the corpora the daily loop reads, from the stored rows (x_corpora) with committed-JSON fallback.
 // The loop must never fail because the rows store is down: a throwing store falls back to the committed loader.
-import { withDefaultPair } from './route-handlers.js';
+import { withProfileDefaults } from './route-handlers.js';
 import { normalizeHandle, defaultLoadCommitted } from './corpus-store.js';
 
 const COMMITTED_LABELS = Object.freeze({
@@ -9,6 +9,8 @@ const COMMITTED_LABELS = Object.freeze({
 });
 
 const NO_ROWS = 'no stored rows';
+const NO_OWN = 'no own X handle on record for this client';
+const NO_BENCH = 'no benchmark handle on record for this client';
 
 function pulledDate(meta) {
   const t = meta?.pulledAt ? new Date(meta.pulledAt) : null;
@@ -46,18 +48,22 @@ async function readOne(handle, { corpusStore, loadCommitted }) {
 /**
  * @param {object} p
  * @param {{readRows:(h:string)=>Promise<{rows:object[],meta:object|null,source:string}>}} p.corpusStore
- * @param {{ownHandle?:string, benchmarkHandles?:string[]}} [p.profileHandles]  resolved xGrowth profile; missing fields default to bai_ee / seb__design
+ * @param {{ownHandle?:string, benchmarkHandles?:string[]}} [p.profileHandles]  resolved xGrowth profile. No handle defaults:
+ *   a missing own handle => own [] + ownHandle null; no benchmark => benchmark null + benchmarkHandle null (no report).
  * @param {(handle:string)=>object[]|null} [p.loadCommitted]  committed loader used only when the store throws
- * @returns {Promise<{own:object[],benchmark:object[],ownSource:string,benchmarkSource:string,ownHandle:string,benchmarkHandle:string}>}
+ * @returns {Promise<{own:object[],benchmark:object[]|null,ownSource:string,benchmarkSource:string,ownHandle:string|null,benchmarkHandle:string|null}>}
  */
 export async function loadLoopCorpora({ corpusStore, profileHandles, loadCommitted = defaultLoadCommitted } = {}) {
   if (!corpusStore || typeof corpusStore.readRows !== 'function') throw new Error('loadLoopCorpora: corpusStore is required');
-  const profile = withDefaultPair(profileHandles || {});
-  const safe = (h) => { try { return normalizeHandle(h); } catch { return null; } };
-  const ownHandle = safe(profile.ownHandle) || 'bai_ee';
-  const benchmarkHandle = safe(profile.benchmarkHandles[0]) || 'seb__design';
+  const profile = withProfileDefaults(profileHandles || {});
+  const safe = (h) => { try { return h ? normalizeHandle(h) : null; } catch { return null; } };
+  const ownHandle = safe(profile.ownHandle);
+  const benchmarkHandle = safe(profile.benchmarkHandles[0]);
   const deps = { corpusStore, loadCommitted };
-  const [own, bench] = await Promise.all([readOne(ownHandle, deps), readOne(benchmarkHandle, deps)]);
+  const [own, bench] = await Promise.all([
+    ownHandle ? readOne(ownHandle, deps) : { rows: [], source: NO_OWN },
+    benchmarkHandle ? readOne(benchmarkHandle, deps) : { rows: null, source: NO_BENCH },
+  ]);
   return {
     own: own.rows, benchmark: bench.rows, ownSource: own.source, benchmarkSource: bench.source, ownHandle, benchmarkHandle,
   };
@@ -65,19 +71,19 @@ export async function loadLoopCorpora({ corpusStore, profileHandles, loadCommitt
 
 /**
  * The loop's corpora for ONE client, keyed on that client's own X handle (resolveClientXHandle). With no handle on
- * record the own corpus is EMPTY and ownHandle null: loadLoopCorpora's default pair would otherwise hand any
- * client the owner's rows. The benchmark side still uses the profile/default pair (per-client priors are Phase 4).
+ * record the own corpus is EMPTY and ownHandle null (the saved profile's ownHandle is not consulted: the resolved
+ * account handle decides). The benchmark side uses the client's saved profile only; none => no benchmark.
  * @param {object} p  loadLoopCorpora's args plus `ownHandle` (string|null)
  */
 export async function loadClientLoopCorpora({ ownHandle, profileHandles, ...rest } = {}) {
-  const corpora = await loadLoopCorpora({ ...rest, profileHandles: { ...(profileHandles || {}), ...(ownHandle ? { ownHandle } : {}) } });
+  const corpora = await loadLoopCorpora({ ...rest, profileHandles: { ...(profileHandles || {}), ownHandle: ownHandle || null } });
   if (ownHandle) return corpora;
-  return { ...corpora, own: [], ownHandle: null, ownSource: 'no own X handle on record for this client' };
+  return { ...corpora, own: [], ownHandle: null, ownSource: NO_OWN };
 }
 
 /**
- * Profile handles for the loop, never throwing: a failed config read/resolve yields {} so loadLoopCorpora uses the
- * default pair (the rows store is still used). Only a failing STORE read falls back to committed files, per handle.
+ * Profile handles for the loop, never throwing: a failed config read/resolve yields {} (no handles => no corpora,
+ * never another account's). Only a failing STORE read falls back to committed files, per handle.
  * @param {()=>Promise<object|null>|object|null} readConfig  reads the client's xGrowth config
  * @param {(arg:{config:object|null})=>object} resolveProfile  e.g. resolveXGrowthProfile
  */

@@ -176,18 +176,19 @@ const operatingCostsTool = defTool({
 const xMonitorTool = defTool({
   name: 'get_x_monitor',
   title: 'X Monitor stored data',
-  description: 'The X Monitor card\'s STORED data for the connected X account: profile counters, daily follower snapshots, recent posts with metrics, and follower gain/loss events. Reads Firestore only; it never calls the X API. To refresh it, use request_sync kind "x_monitor_sync" (metered; creates a card the owner confirms in HITLOOP). Missing metrics are null (missing), not zero. Read-only.',
-  inputSchema: { type: 'object', properties: { snapshots: int('Snapshots to return (default 30, max 120)', { minimum: 1, maximum: 120 }), posts: int('Posts (default 30, max 100)', { minimum: 1, maximum: 100 }), events: int('Audience events (default 30, max 100)', { minimum: 1, maximum: 100 }) } },
+  description: 'The X Monitor card\'s STORED data for the client\'s connected X account: profile counters, daily follower snapshots, recent posts with metrics, and follower gain/loss events. Reads Firestore only; it never calls the X API. To refresh it, use request_sync kind "x_monitor_sync" (metered; creates a card the owner confirms in HITLOOP). Missing metrics are null (missing), not zero. Read-only.',
+  inputSchema: { type: 'object', properties: { clientId: CLIENT_ID_PROP, snapshots: int('Snapshots to return (default 30, max 120)', { minimum: 1, maximum: 120 }), posts: int('Posts (default 30, max 100)', { minimum: 1, maximum: 100 }), events: int('Audience events (default 30, max 100)', { minimum: 1, maximum: 100 }) } },
   handler: async ({ args, ctx }) => {
-    const x = ctx.services.xMonitor();
+    const clientId = await resolveClientId(ctx, args);
+    const x = ctx.services.xMonitor(clientId);
     const status = await x.status();
-    if (!status.accountId) return { connected: false, note: 'No X account is connected for X Monitor.' };
+    if (!status.accountId) return { clientId, connected: false, note: 'No X account is connected for X Monitor for this client.' };
     const [account, snapshots, posts, events] = await Promise.all([
       x.readAccount(status.accountId), x.listSnapshots(status.accountId, args.snapshots || 30),
       x.listPosts(status.accountId, args.posts || 30), x.listAudienceEvents(status.accountId, args.events || 30),
     ]);
     return {
-      connected: true, username: status.username, account,
+      clientId, connected: true, username: status.username, account,
       snapshots: (snapshots || []).slice(-(args.snapshots || 30)),
       posts: (posts || []).slice(0, args.posts || 30).map((p) => ({ ...p, history: (p.history || []).slice(-4) })),
       events: (events || []).slice(0, args.events || 30),

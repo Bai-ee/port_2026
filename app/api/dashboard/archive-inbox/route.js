@@ -83,10 +83,16 @@ async function readConfirmedRecords() {
   });
 }
 
+// The archive inventory belongs to one client (NAS_INVENTORY_CLIENT_ID, same as the NAS worker routes).
+// Unset => no stored stories are shown and saves are refused (fail closed, multi-client Phase 3a).
+const archiveClientId = () => process.env.NAS_INVENTORY_CLIENT_ID || null;
+
 /** The stories this side has written, keyed by package id. */
 async function readStoredPackages() {
+  const clientId = archiveClientId();
+  if (!clientId) return [];
   try {
-    const snap = await fb.adminDb.collection(PACKAGES_COLLECTION).limit(MAX_RECORDS * 2).get();
+    const snap = await fb.adminDb.collection(PACKAGES_COLLECTION).where('clientId', '==', clientId).limit(MAX_RECORDS * 2).get();
     return snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
   } catch {
     return [];
@@ -182,9 +188,18 @@ export async function POST(request) {
     const story = typeof body?.story === 'string' ? body.story : '';
     const title = typeof body?.title === 'string' ? body.title : '';
 
+    const clientId = archiveClientId();
+    if (!clientId) return json({ error: 'NAS_INVENTORY_CLIENT_ID is not set; archive stories cannot be saved.', code: 'package-client-required' }, 503);
+    const ref = fb.adminDb.collection(PACKAGES_COLLECTION).doc(id);
+    const prior = await ref.get();
+    if (prior.exists && prior.data()?.clientId && prior.data().clientId !== clientId) {
+      return json({ error: `Package ${id} belongs to another client.`, code: 'package-client-mismatch' }, 409);
+    }
+
     // Merge, never replace: this document may already carry fields written by
     // the ingest, and a story edit must not drop them.
-    await fb.adminDb.collection(PACKAGES_COLLECTION).doc(id).set({
+    await ref.set({
+      clientId,
       story,
       title,
       sha256: typeof body?.sha256 === 'string' ? body.sha256 : null,

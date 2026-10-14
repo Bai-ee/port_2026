@@ -1,6 +1,7 @@
 // Scan veins -> strategy pillar and the calendar lanes that prefer them.
 // Decides which vein a quote-react slot favours; never judges a post or picks one.
-// Pure; every vein in x-quote-targets/watchlist.js must appear here (a test enforces it).
+// Pure; every vein in x-quote-targets/watchlist.js (VEIN_WEIGHTS + the home seed list) must appear here (a test enforces it).
+// Works on the vein vocabulary only, never on handles, so it is the same for every client's watchlist.
 
 import { VEIN_WEIGHTS } from '../../x-quote-targets/watchlist.js';
 

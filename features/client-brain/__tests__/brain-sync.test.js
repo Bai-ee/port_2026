@@ -291,6 +291,7 @@ test('X profile handles share the X Handle home and normalize like the profile',
 const sync = await import('../brain-sync.cjs');
 const { STRATEGY_DOC_SECTIONS } = await import('../../x-strategy/strategy-doc.js');
 const { createMemoryPlanStore } = await import('../../x-strategy/plan-store.js');
+const { twoTracks } = await import('../../x-strategy/__tests__/fixtures/two-tracks.js');
 const { tracksOf } = await import('../../x-strategy/content-tracks.js');
 const { mergeEngineConfig } = await import('../../x-content-inventory/engine-quota.js');
 const mods = { tracksOf, mergeEngineConfig };
@@ -341,8 +342,23 @@ test('track write-back round-trips and keeps Brain-only target shares', () => {
   assert.deepEqual(sync.applyCardEditsToMarkdown(BRAIN_X, { trackTargets: [{ track: 'design & client work', postsPerDay: 2 }] }, sync.TRACK_TARGETS_FIELDS).changed, []);
 });
 
-test('writeBrainTracksToPlan merges by label, keeps engines/promotions, versions with the actor', async () => {
+// The client's own stored tracks (code has no default tracks since multi-client 4.7).
+async function storeWithTracks() {
   const store = createMemoryPlanStore();
+  await store.apply('c1', { changes: { contentTracks: twoTracks() }, by: 'owner', source: 'manual', reason: 'fixture', expectedVersion: 0 });
+  return store;
+}
+
+test('writeBrainTracksToPlan with no stored tracks: nothing written, warned (Brain rows carry no engines)', async () => {
+  const store = createMemoryPlanStore();
+  const rows = sync.projectFields(BRAIN_X, sync.CONTENT_TRACKS_FIELDS).values.contentTracks;
+  const res = await sync.writeBrainTracksToPlan(store, 'c1', rows, mods);
+  assert.equal(res.warnings.some((w) => /Every engine must belong to a track/.test(w)), true);
+  assert.equal(await store.get('c1'), null);
+});
+
+test('writeBrainTracksToPlan merges by label, keeps engines/promotions, versions with the actor', async () => {
+  const store = await storeWithTracks();
   const rows = sync.projectFields(BRAIN_X, sync.CONTENT_TRACKS_FIELDS).values.contentTracks;
   const res = await sync.writeBrainTracksToPlan(store, 'c1', rows, mods);
   assert.deepEqual(res.warnings, []);
@@ -362,7 +378,7 @@ test('writeBrainTracksToPlan keeps the plan and warns when the result is invalid
 });
 
 test('writeBrainTargetsToPlan maps postsPerDay onto engines and the daily total', async () => {
-  const store = createMemoryPlanStore();
+  const store = await storeWithTracks();
   await sync.writeBrainTracksToPlan(store, 'c1', sync.projectFields(BRAIN_X, sync.CONTENT_TRACKS_FIELDS).values.contentTracks, mods);
   const rows = [{ track: 'Design & client work', postsPerDay: 2 }, { track: 'Music (UE mixes, Discogs)', postsPerDay: 2 }, { track: 'Nope', postsPerDay: 1 }];
   const res = await sync.writeBrainTargetsToPlan(store, 'c1', rows, mods);

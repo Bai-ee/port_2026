@@ -65,6 +65,16 @@
         { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "lastPostedAt", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "x_content_packages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clientId", "order": "ASCENDING" },
+        { "fieldPath": "engine", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "lastPostedAt", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

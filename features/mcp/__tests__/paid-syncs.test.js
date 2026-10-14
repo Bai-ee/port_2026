@@ -192,3 +192,33 @@ test('ui-model: label, result lines and preview for paid-sync', () => {
   assert.ok(lines[0].match(/Strategy review/));
   assert.ok(lines.some((l) => l === 'Estimated cost: ~$0.17 Anthropic'));
 });
+
+test('x_monitor_sync is per client: the service and every sync get ctx.clientId; no clientId is refused before any spend', async () => {
+  const seen = [];
+  const services = {
+    counters: () => createMemoryCounters(),
+    xMonitor: async (clientId) => {
+      seen.push(['service', clientId]);
+      return {
+        status: async () => ({ accountId: '7' }), estimateAudienceCalls: async () => ({ pages: 1 }),
+        syncProfile: async (o) => { seen.push(['profile', o]); return { callsMade: 1 }; },
+        syncPosts: async (o) => { seen.push(['posts', o]); return { callsMade: 1 }; },
+        syncAudience: async (o) => { seen.push(['audience', o]); return { callsMade: 1 }; },
+      };
+    },
+  };
+  const out = await executePaidSync({ kind: 'x_monitor_sync', params: { include: ['profile', 'posts', 'audience'] }, ctx: { email: 'o@x.test', clientId: 'ue-client', now: () => NOW, services } });
+  assert.equal(out.clientId, 'ue-client');
+  assert.deepEqual(seen, [['service', 'ue-client'], ['profile', { clientId: 'ue-client' }], ['posts', { clientId: 'ue-client' }], ['audience', { clientId: 'ue-client' }]]);
+
+  let reserved = 0;
+  const counters = { reserve: async () => { reserved += 1; return { ok: true, count: reserved }; } };
+  await assert.rejects(
+    executePaidSync({ kind: 'x_monitor_sync', params: {}, ctx: { email: 'o@x.test', clientId: null, now: () => NOW, services: { ...services, counters: () => counters } } }),
+    (err) => err instanceof PaidSyncError && err.code === 'client-required',
+  );
+  assert.equal(reserved, 0, 'no daily paid slot taken by the refused run');
+  const d = await describePaidSync('x_monitor_sync', { include: ['audience'] }, { clientId: 'ue-client', services });
+  assert.match(d.estimate, /1 metered X API READ call/);
+  assert.equal(seen.at(-1)[1], 'ue-client', 'the estimate prices THIS client\'s account');
+});

@@ -6,7 +6,7 @@
 // decode one frame at ~1s (HTTP range reads), so this does not download whole files.
 // New renders should get a thumb at render time (EditVideos worker; master plan §5b).
 //
-// Usage: node scripts/x-content/backfill-rendered-thumbs.mjs [--client <id>] [--limit N] [--concurrency 6] [--write]
+// Usage: node scripts/x-content/backfill-rendered-thumbs.mjs --client <id> [--limit N] [--concurrency 6] [--write]
 // Default is a DRY RUN (lists what would be made). --write uploads to Hitloop Storage
 // content-thumbs/<client>/<id>.jpg and sets package.thumbRef. No X / LLM / paid calls.
 
@@ -15,6 +15,7 @@ import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { makeThumbJpeg, thumbPathFor, uploadThumb } from '../../features/x-content-inventory/thumbs.js';
+import { requireClientArg } from './_client-arg.mjs';
 
 const require = createRequire(import.meta.url);
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -30,7 +31,7 @@ require(path.join(REPO, 'features/not-the-rug-brief/load-env'));
 const fb = require(path.join(REPO, 'api/_lib/firebase-admin.cjs'));
 void fb.adminDb; // init Hitloop app BEFORE the named EditVideos bridge app
 const bridge = require(path.join(REPO, 'api/_lib/editvideos-bridge.cjs'));
-const clientId = arg('--client', process.env.DISCOGS_X_CLIENT_ID || 'bryan-balli-WUoltG84');
+const clientId = requireClientArg();
 const col = fb.adminDb.collection('x_content_packages');
 
 function grabFrame(url) {
@@ -52,7 +53,7 @@ function grabFrame(url) {
 
 const snap = await col.where('__name__', '>=', 'rv-').where('__name__', '<', 'rv.').get();
 const todo = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-  .filter((p) => !p.thumbRef)
+  .filter((p) => p.clientId === clientId && !p.thumbRef)
   .map((p) => ({ id: p.id, path: (p.assetRefs || []).map(String).find((r) => r.startsWith('ev:'))?.slice(3) }))
   .filter((p) => p.path)
   .slice(0, limit);

@@ -18,10 +18,9 @@ import { thumbPathFor, makeThumbJpeg, uploadThumb } from '../../features/x-conte
 const here = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(here, '../..');
 const require = createRequire(import.meta.url);
-const arg = (n, d) => { const i = process.argv.indexOf(`--${n}`); return i > -1 && process.argv[i + 1] && !process.argv[i + 1].startsWith('--') ? process.argv[i + 1] : d; };
 const write = process.argv.includes('--write');
-const clientId = arg('client', process.env.HITLOOP_CLIENT_ID || '');
-if (!clientId) { console.error('--client <clientId> is required (thumbs live under content-thumbs/<clientId>/).'); process.exit(2); }
+const { requireClientArg } = await import('./_client-arg.mjs');
+const clientId = requireClientArg(); // thumbs live under content-thumbs/<clientId>/; no env default
 
 require(path.join(REPO, 'features/not-the-rug-brief/load-env'));
 const fb = require(path.join(REPO, 'api/_lib/firebase-admin.cjs'));
@@ -29,7 +28,7 @@ const { upsertPackage } = await import('../../features/x-content-inventory/store
 
 const bucket = fb.adminStorage.bucket();
 const snap = await fb.adminDb.collection('x_content_packages').orderBy('__name__').startAt('discogs-').endAt('discogs-').get();
-const todo = snap.docs.filter((d) => !d.data().thumbRef);
+const todo = snap.docs.filter((d) => d.data().clientId === clientId && !d.data().thumbRef);
 console.log(`Discogs thumb backfill (${write ? 'WRITE' : 'DRY RUN'}) | discogs packages: ${snap.size} | missing thumbRef: ${todo.length}`);
 
 let ok = 0; let missing = 0; let failed = 0;
@@ -44,7 +43,7 @@ for (const d of todo) {
     const jpeg = await makeThumbJpeg(buf, { enforceMaxInput: false });
     const ref = thumbPathFor(clientId, d.id);
     await uploadThumb(bucket, ref, jpeg);
-    await upsertPackage({ id: d.id, ...d.data(), thumbRef: ref }, { returnPackages: false });
+    await upsertPackage({ id: d.id, ...d.data(), thumbRef: ref }, { returnPackages: false, clientId });
     ok += 1;
   } catch (e) { failed += 1; console.log(`  ! ${d.id}: ${e.message}`); }
 }

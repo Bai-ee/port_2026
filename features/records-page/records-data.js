@@ -1,6 +1,7 @@
 // Firestore reads for the public /records endpoints (server only).
 import { createRequire } from 'module';
 import { PACKAGE_PREFIX, DISCOGS_SOURCE } from './records-helpers.js';
+import { discogsClientId } from '../discogs-ingest/service.js';
 
 const require = createRequire(import.meta.url);
 const fb = require('../../api/_lib/firebase-admin.cjs');
@@ -19,9 +20,11 @@ export async function loadRecordsSource() {
       .limit(2000).get(),
     db.collection('social_posts').where('source', '==', DISCOGS_SOURCE).limit(2000).get(),
   ]);
+  // The public records page is the Discogs client's catalog only (filtered in memory: no extra index).
+  const owner = discogsClientId();
   const data = {
-    packages: pkgSnap.docs.map((d) => ({ ...d.data(), id: d.id })),
-    posts: postSnap.docs.map((d) => d.data()),
+    packages: pkgSnap.docs.map((d) => ({ ...d.data(), id: d.id })).filter((p) => p.clientId === owner),
+    posts: postSnap.docs.map((d) => d.data()).filter((p) => p.clientId === owner),
   };
   cache = { at: Date.now(), data };
   return data;
