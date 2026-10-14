@@ -272,10 +272,11 @@ test('FIELD_PATHS covers every path family named in the §4.1 grammar', () => {
     'recommendation.name', 'recommendation.body', 'recommendation.chips[]',
     'flowSteps[].platform', 'flowSteps[].color', 'flowSteps[].label', 'flowSteps[].tech',
     'terms[]', 'payment.method', 'payment.instructions', 'payment.link',
+    'payment.bank.bankName', 'payment.bank.accountNumber', 'payment.bank.routingAch', 'payment.bank.routingWire',
   ]) {
     assert.ok(paths.includes(expected), `FIELD_PATHS missing "${expected}"`);
   }
-  assert.equal(paths.length, 63);
+  assert.equal(paths.length, 67);
   assert.ok(FIELD_PATHS.every((e) => e.editable === true));
 });
 

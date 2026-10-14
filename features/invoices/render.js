@@ -539,7 +539,20 @@ function buildPayment(invoice, options) {
   // this file — see the module header and renderInvoiceDocument()'s
   // options.paymentQr doc comment.
   const qr = options.paymentQr || null;
-  if (!payment.method && !payment.instructions && !payment.link && !payment.handle && !qr) return '';
+  const bank = payment.bank || {};
+  const hasBank = Boolean(bank.bankName || bank.accountNumber || bank.routingAch || bank.routingWire);
+  if (!hasBank && !payment.method && !payment.instructions && !payment.link && !payment.handle && !qr) return '';
+  // Bank transfer sits ABOVE the method/QR rows; omitted entirely when no
+  // bank field is set, so an invoice without one renders byte-identically.
+  const bankRow = (label, path, value) => (value ? stat(label, editableField(path, 'text', value, esc(value), editable)) : '');
+  const bankCard = hasBank
+    ? `<div id="invoice-payment-bank" class="card" style="margin-bottom:12px">
+    ${bankRow('Bank', 'payment.bank.bankName', bank.bankName)}
+    ${bankRow('Account number', 'payment.bank.accountNumber', bank.accountNumber)}
+    ${bankRow('Routing (ACH / direct deposit)', 'payment.bank.routingAch', bank.routingAch)}
+    ${bankRow('Routing (wire)', 'payment.bank.routingWire', bank.routingWire)}
+  </div>`
+    : '';
   // payment.handle is rendered but is NOT in the §4.1 path grammar
   // (payment.{method,instructions,link} only) — left unannotated; see this
   // lane's handoff report for other lanes to confirm intent.
@@ -564,9 +577,11 @@ function buildPayment(invoice, options) {
         <img src="${qr.dataUri}" alt="${esc(qr.label)} payment QR code for ${esc(qr.handle || payment.handle || '')}" width="150" height="150" />
       </figure>`
     : '';
-  const body = qrBlock
+  const hasMethod = Boolean(payment.method || payment.instructions || payment.link || payment.handle);
+  const methodBody = qrBlock
     ? `<div class="invoice-payment-split">${rows}${qrBlock}</div>`
-    : rows;
+    : (hasMethod || !hasBank ? rows : '');
+  const body = `${bankCard}${methodBody}`;
   return block('invoice-payment-section', labels.paymentLabel || 'Payment', body, 'payment', editable);
 }
 

@@ -514,7 +514,19 @@ export function InvoiceBuilderCard({ user, apiPath }) {
               : publishedAt ? `Published ✓ ${publishedAt}`
               : savedSlug ? 'Loaded — saved' : 'New invoice'}
           </span>
-          <button type="button" className="btn btn-outline" onClick={startNewInvoice}>+ New Invoice</button>
+          <div id="invoice-builder-toolbar-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <a
+              id="invoice-builder-open-studio-link"
+              className="btn btn-outline"
+              href="/dashboard/studio?tool=invoice"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}
+            >
+              Open Studio ↗
+            </a>
+            <button type="button" className="btn btn-outline" onClick={startNewInvoice}>+ New Invoice</button>
+          </div>
         </div>
 
         {/* 01 — Invoice details: meta, from, bill to, project summary */}
@@ -781,6 +793,19 @@ export function InvoiceBuilderCard({ user, apiPath }) {
               </div>
             ))}
             <button type="button" className="btn btn-outline" style={{ justifySelf: 'start' }} onClick={addTerm}>+ Add term</button>
+          </div>
+
+          {/* Bank transfer — renders above the method/QR rows when any field is set. */}
+          <span className="label">Bank transfer</span>
+          <div className="field-grid" id="invoice-builder-bank-panel">
+            {[
+              ['bankName', 'Bank name'],
+              ['accountNumber', 'Account number'],
+              ['routingAch', 'Routing (ACH / direct deposit)'],
+              ['routingWire', 'Routing (wire)'],
+            ].map(([key, label]) => (
+              <label key={key} className="field"><span className="label">{label}</span><input value={invoice.payment.bank?.[key] || ''} onChange={(e) => updatePayment({ bank: { ...(invoice.payment.bank || {}), [key]: e.target.value } })} /></label>
+            ))}
           </div>
 
           <div className="field-grid" id="invoice-builder-payment-panel">
