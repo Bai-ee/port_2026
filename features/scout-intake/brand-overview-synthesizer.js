@@ -171,16 +171,22 @@ Call fill_brand_overview with your findings.`;
  *
  * @param {object} evidence   - From fetchSiteEvidence()
  * @param {object} scoutConfig - From ensureScoutConfig() (may be null)
+ * @param {object} [opts]
+ * @param {boolean} [opts.useModel=true] - false returns the deterministic
+ *   fallback without any model call (signup keeps its Anthropic budget ≤2).
+ * @param {string|null} [opts.clientId] - attributed on the usage_events row.
  * @returns {Promise<object>} brandOverview with source: 'crawl'
  */
-async function synthesizeBrandOverview(evidence, scoutConfig) {
-  const ctx = buildEvidenceContext(evidence, scoutConfig);
+async function synthesizeBrandOverview(evidence, scoutConfig, { useModel = true, clientId = null } = {}) {
+  const ctx = { ...buildEvidenceContext(evidence, scoutConfig), clientId: clientId || null };
 
   // If there's no usable evidence at all, return minimal stub
   const hasAnyContent = ctx.ogTitle || ctx.ogDescription || ctx.pageTitle || ctx.h1s || ctx.bodyParas;
   if (!hasAnyContent) {
     return { headline: '', summary: '', industry: str(ctx.scoutIndustry), businessModel: '', targetAudience: '', positioning: '', source: 'crawl' };
   }
+
+  if (!useModel) return deterministicFallback(ctx);
 
   try {
     const fields = await synthesizeWithAI(ctx);

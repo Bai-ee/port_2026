@@ -553,17 +553,41 @@ async function generateScoutConfig({ clientId, clientName, intakeResult, userCon
   return { ok: true, scoutConfig, runCostData, error: null };
 }
 
+// Pure: union verbatim onboarding search seeds (seed-extractor buildSearchSeeds
+// shape) into a freshly generated scoutConfig — seeds first, then the model's
+// terms, through each capability's own normalizer + cap. Competitor seeds are
+// `{ name, handle }` pairs; the search term is the name (same shape the model
+// emits). Returns a new object; the input is not mutated.
+function applySearchSeedsToScoutConfig(scoutConfig, seeds) {
+  if (!scoutConfig || !seeds || typeof seeds !== 'object') return scoutConfig;
+  const out = { ...scoutConfig };
+  const competitorSeeds = arr(seeds.competitors)
+    .map((c) => (c && typeof c === 'object' ? str(c.name) || str(c.handle).replace(/^@+/, '') : str(c)))
+    .filter(Boolean);
+  const keywordSeeds = arr(seeds.brandKeywords).map((k) => str(k)).filter(Boolean);
+  const categorySeeds = [str(seeds.marketCategory)].filter(Boolean);
+  if (competitorSeeds.length) out.competitors = normalizeSearchTerms([...competitorSeeds, ...arr(scoutConfig.competitors)], { max: 8 });
+  if (keywordSeeds.length) out.brandKeywords = normalizeSearchTerms([...keywordSeeds, ...arr(scoutConfig.brandKeywords)], { max: 8 });
+  if (categorySeeds.length) out.categoryTerms = normalizeSearchTerms([...categorySeeds, ...arr(scoutConfig.categoryTerms)], { max: 10 });
+  return out;
+}
+
 /**
  * Read the cached scoutConfig; if absent, generate + save. When `force` is
  * true, regenerates and overwrites. Returns { scoutConfig, created, cost }.
+ *
+ * `searchSeeds` (onboarding answers → buildSearchSeeds) are unioned into the
+ * generated config ONLY when no scoutConfig existed yet (creation). A
+ * regeneration over an existing config (URL change / force) never applies
+ * them, so an existing scoutConfig is never rewritten from seeds.
  */
-async function ensureScoutConfig({ clientId, clientName, intakeResult, userContext, evidence, websiteUrl: websiteUrlArg = null, force = false }) {
+async function ensureScoutConfig({ clientId, clientName, intakeResult, userContext, evidence, websiteUrl: websiteUrlArg = null, force = false, searchSeeds = null }) {
   if (!clientId) throw new Error('ensureScoutConfig: clientId required');
 
   const currentUrl = str(websiteUrlArg) || str(intakeResult?.websiteUrl) || str(evidence?.url) || null;
 
+  const existing = await getScoutConfig(clientId);
   if (!force) {
-    const existing = await getScoutConfig(clientId);
     if (existing) {
       // Serve the cache ONLY when we can PROVE it was generated for the same
       // site. Missing cachedUrl = config from before the URL-stamp patch →
@@ -584,17 +608,20 @@ async function ensureScoutConfig({ clientId, clientName, intakeResult, userConte
     return { scoutConfig: null, created: false, cost: result.runCostData, error: result.error };
   }
 
+  const scoutConfig = existing ? result.scoutConfig : applySearchSeedsToScoutConfig(result.scoutConfig, searchSeeds);
+
   try {
-    await saveScoutConfig(clientId, result.scoutConfig);
+    await saveScoutConfig(clientId, scoutConfig);
   } catch (err) {
-    return { scoutConfig: result.scoutConfig, created: false, cost: result.runCostData, error: `persist_failed: ${err.message}` };
+    return { scoutConfig, created: false, cost: result.runCostData, error: `persist_failed: ${err.message}` };
   }
 
-  return { scoutConfig: result.scoutConfig, created: true, cost: result.runCostData, error: null };
+  return { scoutConfig, created: true, cost: result.runCostData, error: null };
 }
 
 module.exports = {
   CAPABILITIES,
   generateScoutConfig,
   ensureScoutConfig,
+  applySearchSeedsToScoutConfig,
 };

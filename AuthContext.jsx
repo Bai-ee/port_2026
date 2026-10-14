@@ -53,6 +53,25 @@ const persistPendingDashboardSignup = (payload = {}) => {
   );
 };
 
+// Optional signup brand fields (X / Instagram handles, up to 3 competitors,
+// one-line goal). All optional — blank values are dropped so a URL-only signup
+// sends exactly what it always did. The server normalizes + caps them again.
+const pickSignupBrandFields = (src = {}) => {
+  const out = {};
+  const xHandle = String(src.xHandle || '').trim();
+  const instagramHandle = String(src.instagramHandle || '').trim();
+  const goal = String(src.goal || '').trim();
+  const competitors = (Array.isArray(src.competitors) ? src.competitors : [])
+    .map((c) => String(c || '').trim())
+    .filter(Boolean)
+    .slice(0, 3);
+  if (xHandle) out.xHandle = xHandle;
+  if (instagramHandle) out.instagramHandle = instagramHandle;
+  if (competitors.length) out.competitors = competitors;
+  if (goal) out.goal = goal;
+  return out;
+};
+
 const clearPendingDashboardSignup = () => {
   if (typeof window === 'undefined') return;
   window.sessionStorage.removeItem(PENDING_DASHBOARD_SIGNUP_KEY);
@@ -187,7 +206,7 @@ export const AuthProvider = ({ children }) => {
     isFirebaseConfigured,
     isAdmin,
     adminReady,
-    signUp: async ({ email, password, displayName, companyName, websiteUrl, ideaDescription }) => {
+    signUp: async ({ email, password, displayName, companyName, websiteUrl, ideaDescription, ...brandFields }) => {
       if (!auth) {
         throw new Error('Firebase is not configured.');
       }
@@ -222,11 +241,13 @@ export const AuthProvider = ({ children }) => {
           dashboardDescription: 'Your client workspace is being provisioned.',
         });
 
+        const signupBrandFields = pickSignupBrandFields(brandFields);
         await provisionClientForSignup(credential.user, {
           displayName: displayName || credential.user.displayName || '',
           companyName: companyName || '',
           websiteUrl: websiteUrl || '',
           ideaDescription: ideaDescription || '',
+          ...signupBrandFields,
         });
 
         persistPendingDashboardSignup({
@@ -234,6 +255,7 @@ export const AuthProvider = ({ children }) => {
           companyName: companyName || '',
           websiteUrl: websiteUrl || '',
           ideaDescription: ideaDescription || '',
+          ...signupBrandFields,
         });
 
         return credential.user;
@@ -289,17 +311,20 @@ export const AuthProvider = ({ children }) => {
         });
 
         if (provisioningPayload) {
+          const signupBrandFields = pickSignupBrandFields(provisioningPayload);
           await provisionClientForSignup(credential.user, {
             displayName: resolvedDisplayName,
             companyName: provisioningPayload.companyName || '',
             websiteUrl: provisioningPayload.websiteUrl || '',
             ideaDescription: provisioningPayload.ideaDescription || '',
+            ...signupBrandFields,
           });
           persistPendingDashboardSignup({
             displayName: resolvedDisplayName,
             companyName: provisioningPayload.companyName || '',
             websiteUrl: provisioningPayload.websiteUrl || '',
             ideaDescription: provisioningPayload.ideaDescription || '',
+            ...signupBrandFields,
           });
         } else {
           clearPendingDashboardSignup();

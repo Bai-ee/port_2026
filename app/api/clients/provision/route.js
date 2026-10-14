@@ -58,6 +58,12 @@ export async function POST(request) {
       companyName: body.companyName || '',
       websiteUrl: body.websiteUrl || '',
       ideaDescription: body.ideaDescription || '',
+      // Optional signup brand fields — all normalized/capped in
+      // buildSignupProfile; absent = URL-only signup, unchanged.
+      xHandle: typeof body.xHandle === 'string' ? body.xHandle : '',
+      instagramHandle: typeof body.instagramHandle === 'string' ? body.instagramHandle : '',
+      competitors: Array.isArray(body.competitors) ? body.competitors.filter((c) => typeof c === 'string').slice(0, 3) : [],
+      goal: typeof body.goal === 'string' ? body.goal : '',
     });
   } catch (error) {
     return json(
