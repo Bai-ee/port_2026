@@ -12,6 +12,7 @@ import { needsApproval } from '../x-content-inventory/schema.js';
 import { reserveInTx, releaseReservations } from './reservations.js';
 import { toMs, contentHash, LIFECYCLE_VERSION, OPEN_STATUSES, MANUAL_CLAIMABLE_STATUSES, APPROVAL_VOID_STATUSES, isV2, packageClearance, replyBlock, findPackageCollision, isMaterialEdit, deliveryBlock } from './lifecycle.js';
 import { assertNoMemoryPlaceholder, hasMemoryPlaceholder, sanitizeMediaVariants, sanitizeSelfReply, sanitizeSourceRef } from './self-reply.js';
+import { sanitizeRepostOf, repostLabel } from './repost.js';
 
 const require = createRequire(import.meta.url);
 const fb = require('../../api/_lib/firebase-admin.cjs');
@@ -754,6 +755,15 @@ function selfReplyFields(post, result, now) {
 // twitterId (reply-only in that case, if a reply is still owed).
 async function publishStoredPost(post, now) {
   const platform = post.platform || 'x';
+  // A repost never creates a tweet: one retweet call on the target. twitterId
+  // = the target id (X mints none), which also makes a second publish a no-op.
+  if (post.kind === 'repost') {
+    if (post.twitterId) return { twitterId: post.twitterId, apiVersion: post.apiVersion || 'v2' };
+    const adapter = getAdapter(platform);
+    if (typeof adapter.repost !== 'function') throw Object.assign(new Error(`Reposts are not supported on ${platform}.`), { status: 400 });
+    const out = await adapter.repost({ clientId: post.clientId, targetTweetId: post.repostOf?.tweetId });
+    return { twitterId: out.twitterId, apiVersion: out.apiVersion || 'v2' };
+  }
   if (post.twitterId) {
     const owed = post.selfReply && !post.selfReplyTwitterId;
     const result = { twitterId: post.twitterId, apiVersion: post.apiVersion || 'v2' };
@@ -915,7 +925,16 @@ async function deliveryHold(post) {
 
 function buildSocialPostRecord(clientId, payload, id) {
   const now = new Date().toISOString();
-  const content = normalizePostText(payload.content);
+  // kind:'repost' rows carry the target tweet; their content is a display label
+  // (never sent to X) so every content rule below still applies unchanged.
+  const kind = payload.kind === 'repost' ? 'repost' : null;
+  const repostOf = kind ? sanitizeRepostOf(payload.repostOf) : null;
+  if (kind && !repostOf) {
+    const err = new Error('A repost needs the X post URL or id to repost.');
+    err.status = 400;
+    throw err;
+  }
+  const content = kind ? repostLabel(repostOf) : normalizePostText(payload.content);
   if (!content) {
     const err = new Error('Post content is required.');
     err.status = 400;
@@ -978,6 +997,8 @@ function buildSocialPostRecord(clientId, payload, id) {
     priority: cleanStr(payload.priority, 20),
     needsApproval: payload.needsApproval === true,
     attempts: 0,
+    // Repost rows only (legacy rows keep their exact shape).
+    ...(kind ? { kind, repostOf } : {}),
     // Additive provenance (only present when the producer supplies it, so legacy rows keep their exact shape).
     // lifecycleVersion 2 opts the row into the stricter edit/delivery rules in ./lifecycle.js.
     ...(payload.lifecycleVersion === LIFECYCLE_VERSION ? { lifecycleVersion: LIFECYCLE_VERSION } : {}),

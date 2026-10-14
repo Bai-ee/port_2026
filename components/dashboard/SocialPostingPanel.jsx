@@ -59,8 +59,17 @@ export default function SocialPostingPanel({ getIdToken, sourceDraft, sourceLabe
     if (activeSourceDraft && !content.trim()) setContent(activeSourceDraft);
   }, [activeSourceDraft]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Composer mode: 'post' writes a tweet; 'repost' retweets an existing one
+  // (kind:'repost' row, one metered X write when it publishes).
+  const [mode, setMode] = useState('post');
+  const [repostRef, setRepostRef] = useState('');
+  const isRepost = mode === 'repost';
+  const repostRefValid = /(?:twitter\.com|x\.com)\/[A-Za-z0-9_]{1,15}\/status(?:es)?\/\d{5,25}/i.test(repostRef.trim()) || /^\d{5,25}$/.test(repostRef.trim());
+
   const charCount = content.length;
-  const canSubmit = content.trim().length > 0 && charCount <= 280;
+  const canSubmit = isRepost ? repostRefValid : (content.trim().length > 0 && charCount <= 280);
+  // What every save/schedule/post action sends: the text, or the repost target.
+  const composePayload = () => (isRepost ? { kind: 'repost', repostOf: { url: repostRef.trim() }, content: '' } : { content });
 
   const apiFetch = useCallback(async (body = null) => {
     const token = await getIdToken();
@@ -147,29 +156,30 @@ export default function SocialPostingPanel({ getIdToken, sourceDraft, sourceLabe
       }
 
       if (action === 'post-now') {
-        const data = await apiFetch({ action, content, source: activeSourceLabel, agents });
+        const data = await apiFetch({ action, ...composePayload(), source: activeSourceLabel, agents });
         setPosts((prev) => [data.post, ...prev.filter((post) => post.id !== data.post.id)]);
         setContent('');
+        setRepostRef('');
         setAgents(null);
-        setNotice({ kind: 'ok', text: data.post?.twitterId ? `Posted to X: ${data.post.twitterId}` : 'Posted to X.' });
+        setNotice({ kind: 'ok', text: isRepost ? 'Reposted on X.' : (data.post?.twitterId ? `Posted to X: ${data.post.twitterId}` : 'Posted to X.') });
         return;
       }
 
       if (action === 'schedule') {
         const data = await apiFetch({
           action,
-          content,
+          ...composePayload(),
           source: activeSourceLabel,
           scheduledAt: new Date(scheduledAt).toISOString(),
           agents,
         });
         setPosts((prev) => [data.post, ...prev.filter((post) => post.id !== data.post.id)]);
-        setNotice({ kind: 'ok', text: `Scheduled for ${formatDate(data.post.scheduledAt)}.` });
+        setNotice({ kind: 'ok', text: `${isRepost ? 'Repost scheduled' : 'Scheduled'} for ${formatDate(data.post.scheduledAt)}.` });
         return;
       }
 
       if (action === 'draft') {
-        const data = await apiFetch({ action, content, source: activeSourceLabel, agents });
+        const data = await apiFetch({ action, ...composePayload(), source: activeSourceLabel, agents });
         setPosts((prev) => [data.post, ...prev.filter((post) => post.id !== data.post.id)]);
         setNotice({ kind: 'ok', text: 'Saved as a draft.' });
         return;
@@ -212,15 +222,37 @@ export default function SocialPostingPanel({ getIdToken, sourceDraft, sourceLabe
         <section className="sp-compose">
           <div className="sp-section-head">
             <span>Composer</span>
-            <small className={charCount > 280 ? 'sp-over' : ''}>{charCount}/280</small>
+            {isRepost ? <small>repost</small> : <small className={charCount > 280 ? 'sp-over' : ''}>{charCount}/280</small>}
           </div>
-          <textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="Write the X post you want published..."
-            rows={7}
-          />
-          {selectedStrategyPost ? (
+          <div id="social-posting-mode-row" className="sp-mode-row" role="tablist" aria-label="Composer mode">
+            <button type="button" role="tab" aria-selected={!isRepost} className={!isRepost ? 'sp-mode-on' : ''} onClick={() => setMode('post')}>Post</button>
+            <button type="button" role="tab" aria-selected={isRepost} className={isRepost ? 'sp-mode-on' : ''} onClick={() => setMode('repost')}>Repost</button>
+          </div>
+          {isRepost ? (
+            <div id="social-posting-repost-shell" className="sp-repost-shell">
+              <label>
+                <span>X post to repost</span>
+                <input
+                  id="social-posting-repost-ref-input"
+                  type="text"
+                  value={repostRef}
+                  onChange={(e) => setRepostRef(e.target.value)}
+                  placeholder="https://x.com/handle/status/1234567890 or the post id"
+                />
+              </label>
+              <small id="social-posting-repost-spend-note" className="sp-repost-note">
+                Publishing a repost is 1 metered X API write on the connected account. It cannot be undone from here.
+              </small>
+            </div>
+          ) : (
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="Write the X post you want published..."
+              rows={7}
+            />
+          )}
+          {isRepost ? null : selectedStrategyPost ? (
             <div className="sp-strategy-card">
               <div className="sp-strategy-head">
                 <span>30-day strategy draft</span>
@@ -248,14 +280,14 @@ export default function SocialPostingPanel({ getIdToken, sourceDraft, sourceLabe
             </button>
           ) : null}
           <div className="sp-actions">
-            <button type="button" onClick={() => runAction('optimize')} disabled={!canSubmit || !!busy}>
+            <button type="button" onClick={() => runAction('optimize')} disabled={!canSubmit || !!busy || isRepost}>
               {busy === 'optimize' ? <span className="comet-spinner" style={{ width: 15, height: 15, ['--comet-ring']: '2px' }} aria-hidden="true" /> : <Wand2 size={15} />} Optimize
             </button>
             <button type="button" onClick={() => runAction('draft')} disabled={!canSubmit || !!busy}>
               Save Draft
             </button>
             <button type="button" className="sp-primary" onClick={() => runAction('post-now')} disabled={!canSubmit || !!busy || !credentialReady}>
-              {busy === 'post-now' ? <span className="comet-spinner" style={{ width: 15, height: 15, ['--comet-ring']: '2px' }} aria-hidden="true" /> : <Send size={15} />} Post Now
+              {busy === 'post-now' ? <span className="comet-spinner" style={{ width: 15, height: 15, ['--comet-ring']: '2px' }} aria-hidden="true" /> : <Send size={15} />} {isRepost ? 'Repost Now' : 'Post Now'}
             </button>
           </div>
           <div className="sp-schedule-row">
@@ -318,7 +350,7 @@ export default function SocialPostingPanel({ getIdToken, sourceDraft, sourceLabe
           {recent.length ? recent.map((post) => (
             <article key={post.id} className={`sp-post sp-post-${post.status}`}>
               <div>
-                <strong>{post.status}</strong>
+                <strong>{post.status}{post.kind === 'repost' ? ' · repost' : ''}</strong>
                 <span>{post.twitterId ? `#${post.twitterId}` : formatDate(post.scheduledAt || post.postedAt || post.createdAt)}</span>
               </div>
               <p>{post.content}</p>
@@ -352,6 +384,12 @@ export default function SocialPostingPanel({ getIdToken, sourceDraft, sourceLabe
         textarea { width: 100%; resize: vertical; min-height: 150px; border: 1px solid rgba(42,36,32,0.16); border-radius: 8px; padding: 12px; background: rgba(255,252,244,0.94); color: #211d1a; font: inherit; line-height: 1.45; outline: none; }
         textarea:focus, input:focus { border-color: rgba(42,36,32,0.48); }
         .sp-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+        .sp-mode-row { display: inline-flex; gap: 4px; margin-bottom: 8px; padding: 3px; border: 1px solid rgba(42,36,32,0.12); border-radius: 8px; background: rgba(250,247,242,0.78); }
+        .sp-mode-row button { min-height: 26px; padding: 0 10px; border: 0; background: transparent; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(42,36,32,0.6); }
+        .sp-mode-row button.sp-mode-on { background: #24211e; color: #f7f4ef; }
+        .sp-repost-shell { display: grid; gap: 8px; min-height: 150px; padding: 12px; border: 1px solid rgba(42,36,32,0.16); border-radius: 8px; background: rgba(255,252,244,0.94); }
+        .sp-repost-shell input { width: 100%; font: inherit; font-size: 13px; }
+        .sp-repost-note { font-size: 11px; line-height: 1.35; color: #8a5a10; }
         button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid rgba(42,36,32,0.12); border-radius: 8px; background: #e6ded3; color: #211d1a; min-height: 36px; padding: 0 12px; font-weight: 800; cursor: pointer; }
         button:disabled { opacity: 0.48; cursor: not-allowed; }
         .sp-primary { background: #24211e; color: #f7f4ef; }
