@@ -12,7 +12,8 @@ import { planSlots } from './slots.js';
 import { tracksOf } from '../../x-strategy/content-tracks.js';
 import { promotionsOf, promotionSelfReply } from '../../x-strategy/promotions.js';
 import { strategyGuidance } from '../../x-strategy/strategy-doc.js';
-import { buildContributionPrompt, fallbackCopy, checkSuggestionText } from './copy.js';
+import { buildContributionPrompt, fallbackCopy, checkSuggestionText, marketHookTopic } from './copy.js';
+import { matchMarketTopic, textUsesTopic } from '../../content-context/market-signals.js';
 
 const REVIEWED = new Set(['edited', 'saved', 'dismissed']);
 // Fallback sources all start with "fallback"; anything else names the model.
@@ -191,15 +192,22 @@ export async function runDailyLoop(deps, opts = {}) {
         continue;
       }
       const built = buildContributionPrompt({ suggestion: s, voice });
-      let text = fallbackCopy(s, { usedLines });
+      // Market Signals: the topic (if any) that fits this slot's track topics. Context only; never auto-posted content.
+      const marketSignals = inputs.marketSignals || null;
+      const trackId = typeof s.track === 'string' ? s.track : s.track?.id;
+      const trackTopics = contentTracks.find((t) => t.id === trackId)?.topics || [];
+      const marketTopic = marketSignals ? matchMarketTopic(marketSignals, trackTopics) : null;
+      const quoteSlot = s.type === 'quote' || s.slot?.type === 'quote-react' || s.slot?.type === 'quote-commentary';
+      let text = fallbackCopy(s, { usedLines, marketSignals, trackTopics });
+      let marketUsed = !!marketHookTopic(s, { marketSignals, trackTopics }) && !!text;
       usedLines.add(text);
       let source = 'fallback (item text, cut to fit)';
       let fromModel = false;
       if (deps.draft && built.ok) {
         try {
-          const res = await deps.draft(built, { suggestionId: s.id });
+          const res = await deps.draft(built, { suggestionId: s.id, ...(marketSignals && !quoteSlot ? { marketSignals } : {}) });
           run.usage.modelCalls += 1;
-          if (res?.post) { text = res.post; source = res.model || 'model'; fromModel = true; }
+          if (res?.post) { text = res.post; source = res.model || 'model'; fromModel = true; marketUsed = !!marketTopic && !quoteSlot && textUsesTopic(text, marketTopic); }
         } catch (err) {
           run.usage.failures += 1;
           source = `fallback — model call failed: ${String(err?.message || err).slice(0, 120)}`;
@@ -208,7 +216,7 @@ export async function runDailyLoop(deps, opts = {}) {
         source = `fallback — ${built.reason}`;
       }
       modelFlags.push(fromModel);
-      run.suggestions.push({ ...s, slot: s.slot ?? null, package: s.package ?? null, draft: { text, selfReply: promotionSelfReply(s.promotion), source }, checks: checkSuggestionText(text, s), edit: null, reviewState: 'pending', socialPostId: null });
+      run.suggestions.push({ ...s, ...(marketUsed && marketTopic ? { trigger: { kind: 'market', reason: marketTopic } } : {}), slot: s.slot ?? null, package: s.package ?? null, draft: { text, selfReply: promotionSelfReply(s.promotion), source }, checks: checkSuggestionText(text, s), edit: null, reviewState: 'pending', socialPostId: null });
     }
     run.copySource = modelFlags.length && modelFlags.every(Boolean) ? 'model' : modelFlags.some(Boolean) ? 'mixed' : 'fallback';
     run.status = 'complete';

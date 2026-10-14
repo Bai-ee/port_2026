@@ -89,3 +89,30 @@ No `CLAUDE.md` exists in this worktree (it is local/untracked in the main checko
 ## Client Brain as source of truth (2026-10-13)
 
 The strategy cards (Strategy doc, tracks, Today, Results) follow the approved Client Brain; see the SSOT below. New in the agent: `propose_post_approve`, `propose_post_schedule`, `propose_post_unschedule` (each a card the owner confirms; the agent never publishes). Today suggestions carry an act-now trigger (`suggestionTrigger`: opportunity-signal, archive-throwback, hot-narrative, benchmark-gap) with the matched inventory item and Save draft / Schedule. Results and `get_evaluation` show per-track benchmark profile vs Brain target vs actual. SSOT: [`CLIENT-BRAIN-SOURCE-OF-TRUTH.md`](CLIENT-BRAIN-SOURCE-OF-TRUTH.md)
+
+## Cost model: config vs run (2026-10-13)
+
+Two axes, kept separate:
+- **Config (what to search)** lives in each card's toggles (sources, handles, skills, opportunity query rows, `maxQueriesPerRun`). Toggles are the cost controls.
+- **Run (when to spend)** is the header **Refresh** for admins. Other run surfaces: the digest send, the per-source Market Signals spot-check, and owner-confirmed agent proposal cards. Footer `#marketing-refresh-footer-note`: "Toggles in each card decide what a group searches. Refresh only runs it." Each row's "What runs →" link (`marketing-refresh-config-link-<group>`) opens the config card (market-signals → Market Signals, x-monitor → Results › X Monitor, today-queue → Publishing settings).
+
+Estimates: `estimateFor(groupId, ctx)` in `components/dashboard/marketing/refresh-groups.js`, ctx `{marketingBriefConfig, analysisRecipes, xMonitorState, todayWithModel, todaySlots}` returns `{text, usd|null, calls?}`. Row meta is `<last refreshed> · <estimate>`. The confirm row sums known `usd` + `calls` and appends "+ items without a dollar figure".
+
+| Group | Estimate | usd |
+|---|---|---|
+| 1 Market signals | sources (sourcePlatforms minus x) · handles (kols minus kolsOff) · skills (analysisRecipes); "≥~$0.10" | floor only: Scout $0.10 (MARKET-SIGNALS-AND-SCOUT-PROJECTION §1b) is the only documented unit; ScrapeCreators credits, per-skill model calls and handles have no documented $ |
+| 2 Opportunity | min(enabled query rows, maxQueriesPerRun, default 4) "paid X calls" | null |
+| 3 Analysis skills | "Model calls · N skills on" | null |
+| 4 Strategy data | free | 0 |
+| 5 Today | free; with model: 1 Claude call per slot · N slots | null |
+| 6 X Monitor | 2 + max(1, ceil(followers/1000)) metered X calls (X-MONITOR-CARD §4; mirrors `estimateAudienceCalls` minus page cap) | null |
+| 7 Publishing | static cost string | null |
+
+### Straggler table (button to fate)
+- Generate Report / Update report only / Pull timelines / Opportunity Refresh Now / Sources-tab Run: already admin-hidden; covered by groups 1 / 1·3 / 1 / 2 / 1.
+- Market Signals platform-row Run: kept as per-source spot-check. Build proof: kept (per-item). Header Refresh: is the Refresh. Generate & Send: digest send.
+- Email Digest per-client Run brief + Create-client Run brief: kept (per-client operator actions).
+- Market Brief card RUN BRIEF (`brief-marketing`): HIDDEN for admins (status: "Run from the header Refresh (group 1)."). Executive / Strategy Brief RUN BRIEF, Website Developer brief: kept (full pipeline, wider than any group).
+- Client Brief, Market Category analysis, Search Events, video/remix/render buttons, module re-run: kept (single-asset or per-query).
+- X Monitor Sync (Results sub-tab), X Calendar Recompute: already hidden via `hideRefresh`; legacy X Monitor + X Calendar modals now `hideRefresh={isAdmin}`. Strategy Refresh data: hidden (group 4). Today Generate: hidden (group 5).
+- Review strategy, chat send, Draft quote, Copywriter Enhance, Client Brain Generate: kept (owner-initiated per-item/conversational). Agent proposal cards: owner-confirmed.

@@ -7,6 +7,7 @@ import { buildDraftPrompt, validateDraft } from '../draft.js';
 import { guardXPost } from '../../x-content-guard/index.js';
 import { scoreXPost } from '../../x-growth/index.js';
 import { MAX_LEN } from './config.js';
+import { matchMarketTopic } from '../../content-context/market-signals.js';
 
 // --- copy + checks -----------------------------------------------------------------
 
@@ -250,13 +251,17 @@ function buildPackagelessReplyPrompt(suggestion) {
 
 /** Deterministic copy for replay and failed model calls: the item's own
  * words or its verifiable ID line, cut to fit — never paraphrased. */
-export function fallbackCopy(suggestion, { usedLines } = {}) {
+export function fallbackCopy(suggestion, { usedLines, marketSignals, trackTopics } = {}) {
   if (isQuoteReact(suggestion)) return quoteReactFallback({ post: quoteReactPost(suggestion), slot: suggestion.slot, usedLines });
   if (isQuoteCommentary(suggestion)) return quoteCommentaryFallback({ post: quoteReactPost(suggestion), slot: suggestion.slot, usedLines });
   const pkg = suggestion.package || {};
   // A slot with no owned item (self-quote, package-less reply) has nothing to quote from, and a
   // reply must not invent experience; the reviewer writes it.
-  if (!pkg.title && !pkg.story) return '';
+  if (!pkg.title && !pkg.story) {
+    // The one exception: an original with no inventory match whose track topics overlap a market topic names it as the hook.
+    const topic = marketHookTopic(suggestion, { marketSignals, trackTopics });
+    return topic ? marketHookLine(topic) : '';
+  }
   const max = MAX_LEN[suggestion.type] || MAX_LEN.original;
   let base;
   if (pkg.basis === 'story') base = pkg.story.split(/(?<=[.!?])\s/)[0] || pkg.story;
@@ -266,6 +271,19 @@ export function fallbackCopy(suggestion, { usedLines } = {}) {
   }
   base = String(base).trim();
   return base.length <= max ? base : `${base.slice(0, max - 1).replace(/\s+\S*$/, '')}…`;
+}
+
+/** Market topic that can hook a package-less ORIGINAL (never a reply, reaction or self-quote). null otherwise. */
+export function marketHookTopic(suggestion, { marketSignals, trackTopics } = {}) {
+  if (suggestion?.type !== 'original' || isQuoteReact(suggestion) || isQuoteCommentary(suggestion) || suggestion?.slot?.type === 'self-quote') return null;
+  return matchMarketTopic(marketSignals, trackTopics);
+}
+
+/** Claim-free hook: names the topic, asserts nothing about the author or the topic. */
+function marketHookLine(topic) {
+  const max = MAX_LEN.original;
+  const line = `${String(topic).trim()}: worth watching today.`;
+  return line.length <= max ? line : `${line.slice(0, max - 1).replace(/\s+\S*$/, '')}…`;
 }
 
 export function guardTypeFor(suggestion) {

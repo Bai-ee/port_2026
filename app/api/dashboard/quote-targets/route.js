@@ -444,13 +444,30 @@ async function readPostForChat(clientId, postId) {
 }
 
 // Latest Market Signals report (the canonical brief projection). Read-only Firestore read; null when none exists.
-async function readMarketSignals(clientId) {
+async function readMarketSignalsUncached(clientId) {
   const snap = await fb.adminDb.collection('dashboard_state').doc(clientId).get();
   if (!snap.exists) return null;
   const state = snap.data();
   const { projectBrief } = require('../../../../features/intelligence/_brief-intel.js');
   return projectBrief(state?.marketingBrief, state);
 }
+
+// Memo: the Today card fires two parallel HTTP calls (content-context + daily-run-generate) that cannot share a
+// "request" in a Next route module, so we dedupe per client with a short-TTL promise cache (module-level; evicted on rejection).
+const memoByClient = (ttlMs, load) => {
+  const cache = new Map();
+  return (clientId) => {
+    const hit = cache.get(clientId);
+    if (hit && Date.now() - hit.at < ttlMs) return hit.promise;
+    const promise = load(clientId);
+    cache.set(clientId, { at: Date.now(), promise });
+    promise.catch(() => { if (cache.get(clientId)?.promise === promise) cache.delete(clientId); });
+    return promise;
+  };
+};
+const MARKET_SIGNALS_MEMO_MS = 12_000;
+const LOOP_CORPORA_MEMO_MS = 60_000;
+const readMarketSignals = memoByClient(MARKET_SIGNALS_MEMO_MS, readMarketSignalsUncached);
 
 // Chat/MCP post edit: the SAME update path the Queue tab uses (social-posting `update` -> updateSocialPost), with a
 // fresh posting-agents score like that route does. Text/time only; approval stays with the owner's buttons.
@@ -723,14 +740,17 @@ async function latestDailyRun(store, clientId) {
   return store.latest({ clientId, localDate: localDateOf(Date.now()), channel: 'x', version: LOOP_VERSION });
 }
 
+// loadLoopCorpora is the known Today slowness; cache per client for 60s (same memo helper).
+const readLoopCorpora = memoByClient(LOOP_CORPORA_MEMO_MS, async (clientId) => loadLoopCorpora({
+  corpusStore: getCorpusStore(),
+  profileHandles: resolveXGrowthProfile({ config: await readXGrowthConfigFor(clientId).catch(() => null) }),
+  loadCommitted: committedCorpusRows,
+}));
+
 /** One loader for the runner and the chat: same plan read, same Brain gating, same freshness rules. */
 async function readContentContext(clientId, { packageIds = dailyLoopDemoSet.ids, now = Date.now() } = {}) {
   const { loadClientBrainContext } = require('../../../../features/client-brain/store.cjs');
-  const loopCorpora = await loadLoopCorpora({
-    corpusStore: getCorpusStore(),
-    profileHandles: resolveXGrowthProfile({ config: await readXGrowthConfigFor(clientId).catch(() => null) }),
-    loadCommitted: committedCorpusRows,
-  });
+  const loopCorpora = await readLoopCorpora(clientId);
   return loadContentContext({
     db: fb.adminDb,
     buildDayPlan: buildContentDayPlan,
@@ -741,6 +761,8 @@ async function readContentContext(clientId, { packageIds = dailyLoopDemoSet.ids,
     // The owner's Strategy document: a CONFIRMED doc's Rules + Formats ride along in drafting prompts.
     readStrategyDoc: (id) => createFirestoreStrategyDocStore(fb.adminDb).get(id),
     loadBrainContext: (id) => loadClientBrainContext(id, { useFor: 'socialPosts', requireApproved: true }),
+    // Compact Market Signals block (headline/topics/opportunities/mentions) -> ctx.raw.marketSignals for both drafters.
+    readMarketSignals,
   }, { clientId, now, packageIds, corpora: loopCorpora });
 }
 

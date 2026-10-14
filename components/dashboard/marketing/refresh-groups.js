@@ -13,7 +13,8 @@ export const REFRESH_GROUPS = [
 
 // selection = { ids: string[], todayWithModel: boolean } -> [{ id, label, cost }] for the paid groups selected.
 // Group 5 counts as paid only when its "with model copy" option is on.
-export function paidGroupsFor(selection) {
+// Optional ctx attaches `estimate` (see estimateFor) to each row; without it the output is unchanged.
+export function paidGroupsFor(selection, ctx) {
   const ids = Array.isArray(selection?.ids) ? selection.ids : [];
   const withModel = !!selection?.todayWithModel;
   return REFRESH_GROUPS
@@ -23,7 +24,95 @@ export function paidGroupsFor(selection) {
       id: g.id,
       label: g.label,
       cost: g.id === 'today-queue' ? 'Model calls for draft copy' : g.cost,
+      ...(ctx ? { estimate: estimateFor(g.id, { ...ctx, todayWithModel: withModel }) } : {}),
     }));
+}
+
+// ---------------------------------------------------------------------------
+// Live cost estimate per group. Pure; DISPLAY ONLY (never gates or triggers a spend).
+// ctx (every field optional) = { marketingBriefConfig, analysisRecipes, xMonitorState, todayWithModel, todaySlots }.
+// Returns { text, usd: number|null, calls?: number }.
+//
+// Dollar rule: usd is set ONLY from documented unit costs. If a group has any cost component
+// with no documented dollar figure, usd is the partial known figure and the text is prefixed
+// "≥~$" (a floor, never a guess); if nothing is documented usd is null and no dollars are shown.
+//   - Scout run ~ $0.10 flat per run (MARKET-SIGNALS-AND-SCOUT-PROJECTION.md section 1b).
+//   - NOT documented (count only, no dollars): ScrapeCreators credits, per-skill model calls
+//     (only one validated recipe run ~ $0.019 is recorded, not a per-skill rate), X API per-call
+//     price (X-API-AND-PROFILE-OPERATIONS.md / X-MONITOR-CARD.md give call counts only), Claude
+//     per-slot copy cost, render cost.
+// ---------------------------------------------------------------------------
+const SCOUT_RUN_USD = 0.1;
+const money = (n) => `$${n.toFixed(2)}`;
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+function listOf(v) {
+  const arr = Array.isArray(v) ? v : typeof v === 'string' ? v.split(/[\s,]+/) : [];
+  return arr.map((x) => String(x || '').replace(/^@/, '').trim()).filter(Boolean);
+}
+
+function countSkills(ctx) {
+  const list = Array.isArray(ctx?.analysisRecipes) ? ctx.analysisRecipes : ctx?.marketingBriefConfig?.analysisRecipes;
+  return Array.isArray(list) ? list.filter(Boolean).length : null;
+}
+
+export function estimateFor(groupId, ctx = {}) {
+  const c = ctx && typeof ctx === 'object' ? ctx : {};
+  const cfg = c.marketingBriefConfig && typeof c.marketingBriefConfig === 'object' ? c.marketingBriefConfig : null;
+  const group = REFRESH_GROUPS.find((g) => g.id === groupId);
+  const fallback = { text: group?.cost || '', usd: null };
+
+  switch (groupId) {
+    case 'market-signals': {
+      if (!cfg) return fallback;
+      // Group 1 runs no paid X search, so the X platform is not counted as a source here.
+      const sources = Array.isArray(cfg.sourcePlatforms) ? cfg.sourcePlatforms.filter((p) => p && p !== 'x').length : null;
+      const parked = new Set(listOf(cfg.kolsOff).map((h) => h.toLowerCase()));
+      const handles = listOf(cfg.kols).filter((h) => !parked.has(h.toLowerCase())).length;
+      const skills = countSkills(c);
+      const parts = [];
+      if (sources !== null) parts.push(plural(sources, 'source', 'sources'));
+      parts.push(plural(handles, 'handle', 'handles'));
+      if (skills !== null) parts.push(plural(skills, 'skill', 'skills'));
+      // Scout $0.10 is documented; ScrapeCreators credits and skill model calls are not -> floor.
+      parts.push(`≥~${money(SCOUT_RUN_USD)}`);
+      return { text: parts.join(' · '), usd: SCOUT_RUN_USD };
+    }
+    case 'x-search': {
+      const os = cfg?.opportunitySignals;
+      if (!os || !Array.isArray(os.queries)) return fallback;
+      const enabled = os.queries.filter((q) => q && q.enabled !== false && q.query).length;
+      const cap = Number(os.maxQueriesPerRun) > 0 ? Number(os.maxQueriesPerRun) : 4;
+      const calls = Math.min(enabled, cap);
+      return { text: `about ${plural(calls, 'paid X call', 'paid X calls')}`, usd: null, calls };
+    }
+    case 'analysis': {
+      const skills = countSkills(c);
+      if (skills === null) return fallback;
+      return { text: `Model calls · ${plural(skills, 'skill', 'skills')} on`, usd: null };
+    }
+    case 'strategy-accounts':
+      return { text: 'free', usd: 0 };
+    case 'today-queue': {
+      if (!c.todayWithModel) return { text: 'free', usd: 0 };
+      const n = Number(c.todaySlots);
+      return {
+        text: Number.isFinite(n) && n >= 0 ? `1 Claude call per slot · ${plural(n, 'slot', 'slots')}` : '1 Claude call per slot',
+        usd: null,
+        ...(Number.isFinite(n) && n >= 0 ? { calls: n } : {}),
+      };
+    }
+    case 'x-monitor': {
+      // sync-all = profile (1) + posts (1) + audience (1 per 1,000 followers, min 1) per X-MONITOR-CARD.md.
+      const st = c.xMonitorState;
+      const followers = Number(st?.profile?.followers ?? st?.followers ?? st?.account?.profile?.followers);
+      const pages = Math.max(1, Math.ceil((Number.isFinite(followers) ? followers : 0) / 1000));
+      const calls = 2 + pages;
+      return { text: `${calls} metered X calls`, usd: null, calls };
+    }
+    default:
+      return fallback;
+  }
 }
 
 const LAST_KEY = 'marketing-refresh-last-v1';

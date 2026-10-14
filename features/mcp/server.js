@@ -56,6 +56,7 @@ export function getServices() {
         estimateAudienceCalls: xSync.estimateAudienceCalls, // pricing only: the MCP server has NO sync functions; paid syncs run from a confirmed card
       }),
       regenerateToday: readers.regenerateToday,
+      todayPlan: readers.readTodayPlan,
       nas: async (action, body, email) => {
         try {
           return await handleNasAction(nasDeps(), action, body, { email });
