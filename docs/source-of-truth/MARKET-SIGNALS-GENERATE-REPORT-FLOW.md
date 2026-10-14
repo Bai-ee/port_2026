@@ -184,3 +184,7 @@ Bootstrap env via `require('features/not-the-rug-brief/load-env')` then `require
 - **Production mentions** — wire X search access so mentions work outside dev (§6).
 - **Config bootstrap** — the discover/validate/recommender flow that auto-fills category/competitors/handles (see the bootstrap plan); the current bridge only surfaces what the brain already extracted.
 - **Async run option** — the run route is inline (~3 min). A dispatch+poll variant would free the request, but the current decoupling already keeps the report from being stranded.
+
+## 13. Brief feeds Today context (2026-10-13)
+
+The saved brief now also feeds the X Strategy Today run. Pure `features/content-context/market-signals.js` `shapeMarketSignals(brief)` returns `{headline, generatedAt, topics[{topic,detail}]<=6, opportunities[{topic,angle}]<=5, brandMentions[{source,text}]<=5}` or null, serialized cap 1,500 chars (drop order brandMentions, opportunities, topic detail, topics). `loadContentContext` takes an optional `readMarketSignals` dep and sets `raw.marketSignals` (non-fatal). It is not part of the input fingerprint, so a new brief alone does not regenerate today's run; use force. Consumers: see X-STRATEGY-TAB.md "Market context in Today".

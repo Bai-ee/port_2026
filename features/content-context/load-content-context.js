@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import { loadDailyLoopInputs } from '../x-content-inventory/daily-loop/inputs.js';
 import { resolvePlanInputs } from '../x-strategy/plan-inputs.js';
 import { mergeEngineConfig } from '../x-content-inventory/engine-quota.js';
+import { shapeMarketSignals } from './market-signals.js';
 
 // Same thresholds the Strategy tab already uses for "stale" (contracts.js: 7 days) and the scan banner.
 export const CORPUS_STALE_DAYS = 7;
@@ -151,7 +152,7 @@ export function contentVersions({ inputs, now }) {
 }
 
 /**
- * deps: loadDailyLoopInputs deps ({db, loadBrainContext, buildDayPlan?, readPlanDoc?}).
+ * deps: loadDailyLoopInputs deps ({db, loadBrainContext, buildDayPlan?, readPlanDoc?}) + optional readMarketSignals(clientId) -> projectBrief result.
  * opts: { clientId, now?, packageIds?, corpora? } as loadDailyLoopInputs.
  * Returns { clientId, now, raw, plan, inputs, versions }. `raw` is exactly the runner's legacy input shape.
  */
@@ -172,6 +173,10 @@ export async function loadContentContext(deps, { clientId, now = Date.now(), pac
       : undefined,
   }, { clientId, now, packageIds, corpora });
   if (strategyDoc !== undefined) raw.strategyDoc = strategyDoc;
+  // Market Signals brief -> compact drafting context. Optional dep; a failed read just means no block (never blocks the loop).
+  if (deps.readMarketSignals) {
+    try { raw.marketSignals = shapeMarketSignals(await deps.readMarketSignals(clientId)); } catch { raw.marketSignals = null; }
+  }
   const planInputs = resolvePlanInputs(planDoc);
   const inputs = describeContentInputs({ raw, planDoc, planInputs, brainError, now, strategyDoc });
   return {

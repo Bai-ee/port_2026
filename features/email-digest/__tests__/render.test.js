@@ -80,11 +80,12 @@ function render(overrides = {}) {
     freshnessToken = FRESHNESS_TOKEN,
     videoStatus = {},
     videoPublishCtx = {},
+    todayPlanData = null,
   } = overrides;
   return buildEmailHtml(
     firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs,
     include, creative, briefUrl, contactUrl, videoItems, order, postPlatforms,
-    freshnessToken, videoStatus, videoPublishCtx,
+    freshnessToken, videoStatus, videoPublishCtx, todayPlanData,
   );
 }
 
@@ -99,7 +100,9 @@ function checkFixture(name, html) {
   }
 }
 
-const allIncludeOn = () => Object.fromEntries(digestConfig.INCLUDE_KEYS.map((k) => [k, true]));
+// todayPlan (opt-in, added after these fixtures were recorded) stays OFF here so the saved fixtures stay byte-identical;
+// it has its own tests at the bottom of this file.
+const allIncludeOn = () => ({ ...Object.fromEntries(digestConfig.INCLUDE_KEYS.map((k) => [k, true])), todayPlan: false });
 const allIncludeOff = () => Object.fromEntries(digestConfig.INCLUDE_KEYS.map((k) => [k, false]));
 
 // ── Variant 1: default config ───────────────────────────────────────────────
@@ -114,7 +117,7 @@ test('variant 1: DEFAULT_INCLUDE + DEFAULT_ORDER renders a well-formed, determin
 });
 
 // ── Variant 2: every INCLUDE_KEY on ─────────────────────────────────────────
-test('variant 2: all 33 INCLUDE_KEYS on renders every gated section', () => {
+test('variant 2: all INCLUDE_KEYS on (except todayPlan) renders every gated section', () => {
   const html = render({ include: allIncludeOn() });
   for (const title of [
     'Happening on Reddit', 'Happening on Instagram', 'Market Talk on X',
@@ -126,7 +129,7 @@ test('variant 2: all 33 INCLUDE_KEYS on renders every gated section', () => {
 });
 
 // ── Variant 3: every INCLUDE_KEY off ────────────────────────────────────────
-test('variant 3: all 33 INCLUDE_KEYS off renders neither CTA', () => {
+test('variant 3: all INCLUDE_KEYS off renders neither CTA', () => {
   const html = render({ include: allIncludeOff() });
   // Match the rendered button/link text, not the always-present HTML comment
   // `<!-- Top CTA row (Brief + Contact Your Human) -->` that documents the
@@ -208,4 +211,32 @@ test('variant 7: summary.staleNote renders the honest staleness disclaimer', () 
   const html = render({ summary: staleSummary });
   assert.ok(html.includes('Refresh failed at 08:00'));
   checkFixture('07-stale-summary', html);
+});
+
+// ── Today's plan (opt-in; gated ONLY by include.todayPlan === true) ──────────
+test('todayPlan: off renders nothing, even when data is supplied', () => {
+  const html = render({ include: { ...digestConfig.DEFAULT_INCLUDE }, todayPlanData: { tracks: [], next: [], pendingProposals: 3 } });
+  assert.ok(!html.includes("Today's plan"));
+});
+
+test('todayPlan: on with no data renders explicit empty states and the Marketing Director link', () => {
+  const html = render({ include: { ...digestConfig.DEFAULT_INCLUDE, todayPlan: true } });
+  assert.ok(html.includes("Today's plan"));
+  assert.ok(html.includes('Nothing scheduled today.'));
+  assert.ok(html.includes('Open Marketing Director'));
+});
+
+test('todayPlan: on with data renders tracks, next posts (escaped, clipped) and the proposal count', () => {
+  const html = render({
+    include: { ...digestConfig.DEFAULT_INCLUDE, todayPlan: true },
+    todayPlanData: {
+      tracks: [{ label: 'Design <b>', targetPerDay: 2, scheduledToday: 1 }],
+      next: [{ scheduledAt: '2025-08-19T15:00:00.000Z', type: 'client', excerpt: '<script>x</script>', status: 'scheduled' }],
+      pendingProposals: 2,
+    },
+  });
+  assert.ok(html.includes('Design &lt;b&gt;'));
+  assert.ok(html.includes('&lt;script&gt;x&lt;/script&gt;'));
+  assert.ok(!html.includes('<script>x</script>'));
+  assert.ok(html.includes('2 pending proposal cards'));
 });

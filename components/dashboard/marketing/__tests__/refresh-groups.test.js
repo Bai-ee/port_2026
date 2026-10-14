@@ -1,0 +1,42 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { estimateFor, paidGroupsFor } from '../refresh-groups.js';
+
+test('empty ctx falls back to the static cost string with no dollars', () => {
+  const e = estimateFor('market-signals', {});
+  assert.equal(e.usd, null);
+  assert.match(e.text, /Scout/);
+  assert.equal(estimateFor('renders').usd, null);
+});
+
+test('market-signals counts sources (excl. X), un-parked handles, skills; dollars are a floor', () => {
+  const e = estimateFor('market-signals', {
+    marketingBriefConfig: { sourcePlatforms: ['web', 'x', 'reddit'], kols: ['@a', 'b', 'c'], kolsOff: ['c'], analysisRecipes: ['r1'] },
+  });
+  assert.equal(e.text, '2 sources · 2 handles · 1 skill · ≥~$0.10');
+  assert.equal(e.usd, 0.1);
+});
+
+test('free groups say free', () => {
+  assert.deepEqual(estimateFor('strategy-accounts'), { text: 'free', usd: 0 });
+  assert.equal(estimateFor('today-queue', {}).text, 'free');
+});
+
+test('today-queue with model: per-slot text, no dollars', () => {
+  assert.equal(estimateFor('today-queue', { todayWithModel: true, todaySlots: 3 }).text, '1 Claude call per slot · 3 slots');
+  assert.equal(estimateFor('today-queue', { todayWithModel: true }).text, '1 Claude call per slot');
+  assert.equal(estimateFor('today-queue', { todayWithModel: true }).usd, null);
+});
+
+test('x-monitor: 2 + 1 per 1,000 followers; x-search caps at maxQueriesPerRun', () => {
+  assert.equal(estimateFor('x-monitor', {}).calls, 3);
+  assert.equal(estimateFor('x-monitor', { xMonitorState: { profile: { followers: 2500 } } }).text, '5 metered X calls');
+  const q = (n) => Array.from({ length: n }, (_, i) => ({ query: `q${i}`, enabled: true }));
+  assert.equal(estimateFor('x-search', { marketingBriefConfig: { opportunitySignals: { queries: q(6), maxQueriesPerRun: 4 } } }).calls, 4);
+});
+
+test('paidGroupsFor stays backward compatible and attaches estimates only with ctx', () => {
+  const sel = { ids: ['x-monitor'], todayWithModel: false };
+  assert.equal(paidGroupsFor(sel)[0].estimate, undefined);
+  assert.equal(paidGroupsFor(sel, {})[0].estimate.calls, 3);
+});

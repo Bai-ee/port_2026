@@ -10,9 +10,9 @@ import XMonitorCard from '../XMonitorCard';
 // PerformancePanel renders ResultsPostList (Posted / Waiting / Needs attention) itself.
 const PerformancePanel = dynamic(() => import('../x-content/PerformancePanel'), { ssr: false });
 
-export default function StrategyResultsCard({ getIdToken, activeClientId, onOpenCard }) {
+export default function StrategyResultsCard({ getIdToken, activeClientId, onOpenCard, initialTab = 'results' }) {
   const { call } = useMarketingContentCall(getIdToken);
-  const [view, setView] = useState('results');
+  const [view, setView] = useState(initialTab === 'x-monitor' ? 'x-monitor' : 'results');
   const onNavigate = makeNavigate(onOpenCard, 'strategy-results');
   return (
     <div id="strategy-results-root" className="xce-scope">

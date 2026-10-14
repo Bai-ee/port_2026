@@ -145,6 +145,46 @@ function dDataTable(headers, bodyRows) {
   </table>`;
 }
 
+/** "Today's plan" body: per-track posts/day vs scheduled today, next queued posts, pending proposal cards, CTA.
+ *  Gated by the caller on include.todayPlan === true; always renders an explicit empty state (SSOT §9). */
+function buildTodayPlanSection(plan) {
+  const card = (inner) => `<div style="background:${DT.card};border:1px solid ${DT.line};border-radius:14px;padding:14px 16px;font-family:${DT.fBody};font-size:13px;line-height:1.55;color:${DT.ink};">${inner}</div>`;
+  const muted = (t) => `<div style="color:${DT.light};">${escapeHtml(t)}</div>`;
+  const tracks = Array.isArray(plan?.tracks) ? plan.tracks : [];
+  const next = Array.isArray(plan?.next) ? plan.next : [];
+  const pending = Number.isFinite(plan?.pendingProposals) ? plan.pendingProposals : null;
+  const num = (v) => (Number.isFinite(v) ? String(v) : '—');
+
+  const trackRows = tracks.map((t) => `<tr>
+      <td style="${TD}">${escapeHtml(t.label)}</td>
+      <td style="${TD}text-align:right;">${escapeHtml(num(t.targetPerDay))}</td>
+      <td style="${TD}text-align:right;">${escapeHtml(num(t.scheduledToday))}</td>
+    </tr>`).join('');
+  const trackBlock = tracks.length
+    ? dDataTable([{ label: 'Track' }, { label: 'Target / day', right: true }, { label: 'Scheduled today', right: true }], trackRows)
+    : card(muted('No strategy plan found for this client yet.'));
+
+  const nextRows = next.map((n) => {
+    const when = String(n.scheduledAt || '').slice(0, 16).replace('T', ' ');
+    return `<tr>
+      <td style="${TD}white-space:nowrap;">${escapeHtml(when)} UTC</td>
+      <td style="${TD}">${escapeHtml(n.type)}</td>
+      <td style="${TD}">${escapeHtml(String(n.excerpt || '').slice(0, 120))}</td>
+      <td style="${TD}">${escapeHtml(n.status)}</td>
+    </tr>`;
+  }).join('');
+  const nextBlock = next.length
+    ? dDataTable([{ label: 'When' }, { label: 'Type' }, { label: 'Post' }, { label: 'Status' }], nextRows)
+    : card(muted('Nothing scheduled today.'));
+
+  const pendingText = pending == null
+    ? 'Pending proposal cards: unavailable.'
+    : `${pending} pending proposal card${pending === 1 ? '' : 's'} waiting in Marketing Director.`;
+  const cta = `<div style="margin:12px 0 0;"><a class="cta-btn" href="${escapeHtml(appUrl('/dashboard'))}" style="display:inline-block;text-align:center;background:${DT.ink};color:${DT.card};font-family:${DT.fMono};font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border-radius:999px;padding:13px 18px;border:1px solid ${DT.ink};">Open Marketing Director</a></div>`;
+
+  return `${trackBlock}<div style="height:12px;"></div>${nextBlock}<div style="margin:12px 0 0;font-family:${DT.fBody};font-size:13px;color:${DT.soft};">${escapeHtml(pendingText)}</div>${cta}`;
+}
+
 function buildAgendaSection(agenda) {
   // Visibility is toggle-gated by the caller (include.agenda). This builder
   // always renders a section so preview and live stay in sync.
@@ -891,7 +931,7 @@ function buildCreativeBriefSection(creative) {
   return `${img}${generatedAt}<p style="font-family:${DT.fBody};font-size:14px;line-height:1.62;color:${DT.ink};margin:0;">${text}</p>`;
 }
 
-export function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, include = {}, creative = null, briefUrl = null, contactUrl = '', videoItems = [], order = [], postPlatforms = {}, freshnessToken = '', videoStatus = {}, videoPublishCtx = {}) {
+export function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, include = {}, creative = null, briefUrl = null, contactUrl = '', videoItems = [], order = [], postPlatforms = {}, freshnessToken = '', videoStatus = {}, videoPublishCtx = {}, todayPlanData = null) {
   // Fallback target when no hosted brief is resolved (briefLinkMode 'off' /
   // 'latest' with nothing published / 'fresh' run failed): the dashboard modal.
   const executiveBriefUrl = appUrl('/dashboard?open=brief');
@@ -1069,6 +1109,8 @@ export function buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestam
     weather: () => buildWeatherSection(briefs),
     // Executive Summary / TODAY
     execSummary: () => section('Executive Summary', 'Today', buildSummaryBody(summary)),
+    // Today's plan: opt-in only (=== true, unlike the !== false sections) so a bare include object never renders it.
+    todayPlan: () => (include.todayPlan === true ? section('Executive Summary', 'Today\'s plan', buildTodayPlanSection(todayPlanData)) : ''),
     // Post Content
     videoPosts: () => section('Post Content', 'Video Remix', buildVideoPostRow(videoItems?.remix, 'Remix', videoPublishCtx?.x) || noDataBlock(videoStatus?.remix || 'Video Remix is enabled, but no fresh completed video was ready when this email rendered.')),
     videoPromo: () => section('Post Content', 'Video Promo', buildVideoPostRow(videoItems?.promo, 'Promo') || noDataBlock(videoStatus?.promo || 'Video Promo is enabled, but no fresh completed video was ready when this email rendered.')),

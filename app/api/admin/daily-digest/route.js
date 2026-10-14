@@ -25,6 +25,7 @@ import {
   buildPlaceholderData,
 } from '../../../../features/email-digest/render.js';
 import { SECTIONS } from '../../../../features/email-digest/sections.registry.cjs';
+import { readTodayPlan } from '../../../../features/email-digest/today-plan.js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -2203,7 +2204,12 @@ export async function GET(request) {
     if (isRealSend) step('info', `Executive Brief · ${briefUrl || 'dashboard fallback'}`);
     const sectionOrder = orderOverride || digestCfg?.order || digestConfig.DEFAULT_ORDER;
     const postPlatforms = postsOverride || digestCfg?.postPlatforms || {};
-    const html = buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, renderInclude, creative, briefUrl, contactUrl, videoItems, sectionOrder, postPlatforms, freshnessToken, videoStatus, videoPublishCtx);
+    // Today's plan: read-only, LLM-free, non-fatal (readTodayPlan never throws). Same path for preview and send so
+    // the two match; only read when the toggle is on (opt-in key, so strictly === true).
+    const todayPlanData = renderInclude.todayPlan === true && homeClientId
+      ? await readTodayPlan({ db: fb.adminDb, clientId: homeClientId, now: timestamp })
+      : null;
+    const html = buildEmailHtml(firebase, vercel, ga4, agenda, homepage, timestamp, summary, briefs, renderInclude, creative, briefUrl, contactUrl, videoItems, sectionOrder, postPlatforms, freshnessToken, videoStatus, videoPublishCtx, todayPlanData);
     // Gmail clips messages past ~102KB of ENCODED body and hides the rest behind
     // "View entire message" — quoted-printable inflation means ~80KB of raw HTML
     // is the practical ceiling. Warn in the send terminal + prod logs when over.

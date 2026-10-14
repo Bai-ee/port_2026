@@ -3709,6 +3709,13 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     'market-signals': 'Market Signals report', 'x-search': 'X search', analysis: 'Analysis',
     'strategy-accounts': 'Strategy accounts', 'today-queue': 'Today queue', 'x-monitor': 'X monitor', renders: 'Renders',
   };
+  // Cost-estimate context for the Refresh control. No X Monitor data is preloaded in
+  // this component (XMonitorCard fetches its own), so xMonitorState stays null.
+  const marketingEstimateCtx = useMemo(() => ({
+    marketingBriefConfig,
+    analysisRecipes: marketingBriefConfig?.analysisRecipes,
+    xMonitorState: null,
+  }), [marketingBriefConfig]);
   const runMarketingRefresh = useCallback(async ({ ids, todayWithModel } = {}) => {
     if (!isAdmin || !user || marketingRefreshRunningRef.current || marketingBriefRunning) return;
     const list = Array.isArray(ids) ? ids : [];
@@ -6989,6 +6996,17 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       readinessBadge: c.readinessBadge || null,
     });
   };
+  // "What runs ->" targets from the unified Refresh control.
+  const [strategyResultsInitialTab, setStrategyResultsInitialTab] = useState('results');
+  // One-shot: once the Results modal closes, later opens land on Results again.
+  useEffect(() => {
+    if (activeTileModal?.cardId !== 'strategy-results') setStrategyResultsInitialTab('results');
+  }, [activeTileModal?.cardId]);
+  const openMarketingRefreshConfig = (groupId) => {
+    if (groupId === 'market-signals') { desiredModalTabRef.current = 'sources'; openCapabilityCardById('signals'); }
+    else if (groupId === 'x-monitor') { setStrategyResultsInitialTab('x-monitor'); openCapabilityCardById('strategy-results'); }
+    else if (groupId === 'today-queue') openCapabilityCardById('strategy-publishing-settings');
+  };
   const hasContentAngleData = Boolean(resolvedContentAngle);
   const hasOpportunitiesData = resolvedOpportunities.length > 0;
   const hasSeoAuditData = Boolean((seoAudit?.status === 'ok' || seoAudit?.status === 'partial') && seoAudit?.scores);
@@ -9446,12 +9464,12 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       title: 'Market Brief',
       description: 'Acts like a marketing director: explains market shifts, competitor moves, and where the brand should enter the conversation.',
       placeholderLabel: briefCardLocked('brief-marketing') ? 'LOCK' : 'VIEW\nBRIEF',
-      rows: [{ key: 'status', label: 'Status', value: briefCardLocked('brief-marketing') ? 'Coming soon' : 'Included in your plan — click to preview, Run to refresh signals.' }],
+      rows: [{ key: 'status', label: 'Status', value: briefCardLocked('brief-marketing') ? 'Coming soon' : (isAdmin ? 'Included in your plan — click to preview. Run from the header Refresh (group 1).' : 'Included in your plan — click to preview, Run to refresh signals.') }],
       footerLeft: briefCardLocked('brief-marketing') ? 'Locked' : 'Live',
       footerRight: '',
       // Scoped run — fresh Scout sweep only (signals, competitors, viral
       // windows); today's post + 30-day campaign keep their stored values.
-      ...(briefCardLocked('brief-marketing') ? {} : {
+      ...(briefCardLocked('brief-marketing') || isAdmin ? {} : {
         footerAction: {
           label: marketingBriefRunning ? '…' : 'RUN BRIEF',
           loading: marketingBriefRunning || marketingBriefSaving,
@@ -12420,7 +12438,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 <React.Fragment>
                   {isAdmin && activeCapabilityFilter === 'growth' && (
                     <div id="marketing-director-refresh-shell" style={{ margin: '0 0 8px', maxWidth: '100%' }}>
-                      <MarketingRefreshControl running={marketingRefreshRunning || marketingBriefRunning} onRun={runMarketingRefresh} />
+                      <MarketingRefreshControl running={marketingRefreshRunning || marketingBriefRunning} onRun={runMarketingRefresh} estimateCtx={marketingEstimateCtx} onOpenConfig={openMarketingRefreshConfig} />
                     </div>
                   )}
                   <div className={`segmented cap-step-seg cap-step-seg--top${_forceList ? ' cap-step-seg--tabs' : ''}`} role="tablist" aria-label="Workflow steps" data-tooltip-disabled="true">
@@ -16282,7 +16300,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     </div>
                     <div className="tile-detail-tab-content">
                       <div className="tile-detail-tab-pane">
-                        <XMonitorCard getIdToken={brandSystemGetIdToken} />
+                        <XMonitorCard getIdToken={brandSystemGetIdToken} hideRefresh={isAdmin} />
                       </div>
                     </div>
                   </div>
@@ -16311,6 +16329,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     <div className="tile-detail-tab-content">
                       <div className="tile-detail-tab-pane">
                         <XCalendarCard
+                          hideRefresh={isAdmin}
                           getIdToken={brandSystemGetIdToken}
                           activeClientId={client?.clientId || client?.id || bootstrap?.effectiveClientId}
                           clientName={client?.companyName || client?.name || client?.dashboardTitle || null}
@@ -16409,6 +16428,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                           getIdToken={brandSystemGetIdToken}
                           activeClientId={client?.clientId || client?.id || bootstrap?.effectiveClientId}
                           clientName={client?.companyName || client?.name || client?.dashboardTitle || null}
+                          initialTab={strategyResultsInitialTab}
                           onOpenCard={openCapabilityCardById}
                         />
                       </div>

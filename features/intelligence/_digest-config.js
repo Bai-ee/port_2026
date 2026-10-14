@@ -249,8 +249,13 @@ function cleanIdList(value) {
   return [...new Set(value.map((v) => String(v || '').trim()).filter(Boolean))].slice(0, 25);
 }
 
-function normalizeInclude(value) {
+// Home-client-only default for `todayPlan` ("Today's plan"). The registry keeps defaultOn:false so every other
+// client and the golden fixtures are unchanged; the home/admin client (resolveDigestClientId) resolves to ON
+// when its stored include has no explicit todayPlan boolean. An explicit saved true/false always wins.
+// `opts.isHome` is supplied by getDigestConfig (async lookup); callers without it get the plain registry default.
+function normalizeInclude(value, opts = {}) {
   const out = { ...DEFAULT_INCLUDE };
+  if (opts && opts.isHome === true) out.todayPlan = true;
   if (value && typeof value === 'object') {
     // 1) Expand any legacy coarse keys first (a granular key below overrides).
     for (const [legacy, targets] of Object.entries(LEGACY_INCLUDE_EXPANSION)) {
@@ -437,10 +442,19 @@ function configDocRef(clientId) {
   return fb.adminDb.collection('digest_config').doc(clientId);
 }
 
+// True when `clientId` is the home/admin digest client AND the stored include has no explicit todayPlan.
+// Skips the (Firestore) home lookup entirely when the key is already saved.
+async function isHomeForTodayPlan(clientId, storedInclude) {
+  if (storedInclude && typeof storedInclude.todayPlan === 'boolean') return false;
+  try { return Boolean(clientId) && clientId === (await resolveDigestClientId()); } catch { return false; }
+}
+
 async function getDigestConfig(clientId) {
   if (!clientId) return { ...DEFAULTS };
   const snap = await configDocRef(clientId).get();
-  if (!snap.exists) return { ...DEFAULTS };
+  if (!snap.exists) {
+    return { ...DEFAULTS, include: normalizeInclude(null, { isHome: await isHomeForTodayPlan(clientId, null) }) };
+  }
   const data = snap.data() || {};
   return {
     summaryEnabled: data.summaryEnabled !== false,
@@ -450,7 +464,7 @@ async function getDigestConfig(clientId) {
     extraInstructions: typeof data.extraInstructions === 'string' ? data.extraInstructions : '',
     homeClientId: data.homeClientId || null,
     includeClientIds: cleanIdList(data.includeClientIds),
-    include: normalizeInclude(data.include),
+    include: normalizeInclude(data.include, { isHome: await isHomeForTodayPlan(clientId, data.include) }),
     demoMetrics: normalizeDemoMetrics(data.demoMetrics),
     order: normalizeOrder(data.order),
     postPlatforms: normalizePostPlatforms(data.postPlatforms),
@@ -477,7 +491,12 @@ async function saveDigestConfig(clientId, patch = {}) {
   if (typeof patch.extraInstructions === 'string') next.extraInstructions = patch.extraInstructions.slice(0, 2000);
   if ('homeClientId' in patch) next.homeClientId = patch.homeClientId ? String(patch.homeClientId).trim() : null;
   if ('includeClientIds' in patch) next.includeClientIds = cleanIdList(patch.includeClientIds);
-  if ('include' in patch) next.include = normalizeInclude(patch.include);
+  if ('include' in patch) {
+    next.include = normalizeInclude(patch.include);
+    // A patch that never mentioned todayPlan must not freeze the registry default (false) into storage — that would
+    // switch off the home client's default-ON. Leave the key unwritten so the read-side home default still applies.
+    if (!(patch.include && typeof patch.include.todayPlan === 'boolean')) delete next.include.todayPlan;
+  }
   if ('demoMetrics' in patch) next.demoMetrics = normalizeDemoMetrics(patch.demoMetrics);
   if ('order' in patch) next.order = normalizeOrder(patch.order);
   if ('postPlatforms' in patch) next.postPlatforms = normalizePostPlatforms(patch.postPlatforms);

@@ -58,8 +58,13 @@ export async function buildDailyBrief({ ctx, clientId }) {
     return { count: threads.reduce((n, t) => n + (t.pendingProposals || 0), 0), threadsChecked: threads.length };
   });
 
+  const todayPlan = await section(async () => {
+    if (typeof ctx.services.todayPlan !== 'function') return { available: false };
+    return ctx.services.todayPlan(clientId, { now: nowMs });
+  });
+
   return {
-    clientId, asOf: new Date(nowMs).toISOString(), today, queue, inputs, lastResults: results,
+    clientId, asOf: new Date(nowMs).toISOString(), today, todayPlan, queue, inputs, lastResults: results,
     // The UI keeps per-group "last refreshed" times in the owner's browser only; the server has no record, so they are omitted on purpose.
     refreshFreshness: { contextAsOf: inputs?.asOf ?? null, quoteScan: opportunities, note: 'Per-group Refresh times live only in the dashboard (browser); not available here.' },
     pendingProposalCards: pendingProposals,
@@ -70,7 +75,7 @@ export async function buildDailyBrief({ ctx, clientId }) {
 const dailyBrief = defTool({
   name: 'get_daily_brief',
   title: 'Daily brief',
-  description: 'One-call day-to-day snapshot for the owner: today\'s suggestions, the post queue for the next 7 days (counts + next 10 scheduled items), input status (Brain, plan, corpora, scan, queue freshness), last results summary, what freshness is known, and how many pending proposal cards wait in Marketing Director > Strategy (chat). Free, read-only. Start a day-to-day strategy conversation with this.',
+  description: 'One-call day-to-day snapshot for the owner: today\'s suggestions, the post queue for the next 7 days (counts + next 10 scheduled items), input status (Brain, plan, corpora, scan, queue freshness), today\'s plan (per-track target vs scheduled, next 5 queued, pending proposal cards - same block as the daily email), last results summary, what freshness is known, and how many pending proposal cards wait in Marketing Director > Strategy (chat). Free, read-only. Start a day-to-day strategy conversation with this.',
   inputSchema: { type: 'object', properties: { clientId: CLIENT_ID_PROP } },
   kind: 'read',
   redactKeys: false,

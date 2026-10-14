@@ -111,7 +111,7 @@ const DEMO_METRIC_GROUP_BY_LABEL = {
 // toggling, before anything is sent.
 const EMAIL_BASE_KB = 4; // hero + CTA rows + footer + styles
 const EST_SECTION_KB = {
-  agenda: 8, weather: 2, execSummary: 5, videoPosts: 4, videoPromo: 4,
+  agenda: 8, weather: 2, execSummary: 5, todayPlan: 2, videoPosts: 4, videoPromo: 4,
   execBriefLink: 1, contactHuman: 1,
   humanBrief: 2, opportunities: 7, suggestedReplies: 9, signals: 14,
   watchlistAccounts: 9, suggestedPosts: 5, planPreview: 3, watchlist: 7,

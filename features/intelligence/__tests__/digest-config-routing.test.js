@@ -74,3 +74,12 @@ test('selected video source is the only publish owner even with a legacy account
     'undergroundexistence-0CsKkpaq',
   );
 });
+
+test('normalizeInclude: todayPlan is OFF by default and ON only for the home client (explicit saved value always wins)', () => {
+  const cfg = require('../_digest-config.js');
+  assert.equal(cfg.normalizeInclude({}).todayPlan, false);
+  assert.equal(cfg.normalizeInclude({ calendar: true }).todayPlan, false); // legacy configs: unchanged
+  assert.equal(cfg.normalizeInclude({}, { isHome: true }).todayPlan, true);
+  assert.equal(cfg.normalizeInclude({ todayPlan: false }, { isHome: true }).todayPlan, false);
+  assert.equal(cfg.normalizeInclude({ todayPlan: true }).todayPlan, true);
+});

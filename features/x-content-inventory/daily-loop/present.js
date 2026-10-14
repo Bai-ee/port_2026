@@ -37,6 +37,7 @@ export function slotStatuses(run) {
 
 export const TRIGGER_LABEL = {
   'hot-narrative': 'Hot narrative',
+  market: 'Hot narrative', // Market Signals topic shaped this draft (trigger.reason = the topic)
   'opportunity-signal': 'Opportunity signal',
   'benchmark-gap': 'Benchmark gap',
   'archive-throwback': 'Archive throwback',

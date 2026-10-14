@@ -15,6 +15,7 @@ import { recentPostsFromQueue } from '../x-content-inventory/allocate-slot.js';
 import { createFirestoreRunStore } from '../x-content-inventory/daily-run-store.js';
 import { runDailyLoop, assertOwnerClient, localDateOf, LOOP_VERSION } from '../x-content-inventory/daily-loop.js';
 import { loadContentContext, summarizeContentContext } from '../content-context/load-content-context.js';
+import { readTodayPlan as readTodayPlanShared } from '../email-digest/today-plan.js';
 import { loadLoopCorpora } from '../x-strategy/loop-corpora.js';
 import { resolveXGrowthProfile } from '../x-benchmark/profile.js';
 import { createFirestoreCorpusStore } from '../x-strategy/corpus-store.js';
@@ -163,5 +164,7 @@ export function createReaders(db) {
       readQueueSummary, readPost, readOpportunities, readResults, readMarketSignals,
     },
     regenerateToday,
+    // Same "Today's plan" block the daily email renders (shared reader; never throws).
+    readTodayPlan: (clientId, opts = {}) => readTodayPlanShared({ db, clientId, ...opts }),
   };
 }
