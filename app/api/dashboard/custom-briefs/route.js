@@ -453,6 +453,10 @@ export async function POST(request) {
     let renderInvoiceHtmlFn = null;
     let skippedSections = [];
     let invoicePdfHeightPx = null;
+    // Declared here (not inside the first invoice block) because the second
+    // `kind === 'invoice'` block below — the render call — reads both.
+    let DEFAULT_FROM;
+    let resolvePaymentQr;
 
     if (kind === 'invoice') {
       // Structured-invoice path: build the complete HTML document
@@ -472,8 +476,6 @@ export async function POST(request) {
       // of whether this server-only route ever runs. This route is
       // server-only, so the dynamic import costs nothing but keeps the
       // pattern consistent with the client-side callers.
-      let DEFAULT_FROM;
-      let resolvePaymentQr;
       try {
         ({ normalizeInvoice } = await import('../../../../features/invoices/model.js'));
         ({ normalizeInvoiceSectionConfig } = await import('../../../../features/invoices/registry.js'));
