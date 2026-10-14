@@ -3,6 +3,7 @@
 //
 //   node scripts/client-readiness/content-loop.mjs                       # report every client (reads only)
 //   node scripts/client-readiness/content-loop.mjs --client <id>         # report one client (reads only)
+//   node scripts/client-readiness/content-loop.mjs --client <id> --detail  # + every handle source and gate input (reads only)
 //   node scripts/client-readiness/content-loop.mjs --client <id> --enable-loop           # DRY RUN: prints the write
 //   node scripts/client-readiness/content-loop.mjs --client <id> --enable-loop --write   # sets clients/{id}.contentLoop.enabled = true
 //   node scripts/client-readiness/content-loop.mjs --client <id> --disable-loop --write  # sets it back to false
@@ -25,6 +26,25 @@ function line(r, h) {
   return `${r.clientId.padEnd(36)} ${(r.ready ? 'READY' : 'not ready').padEnd(10)} override=${r.override} brain=${r.brainStatus || 'none'} missing=${missing} handle=${h.handle ? `@${h.handle} (${h.source})` : 'none'}`;
 }
 
+// Every input the gate and the handle resolver look at, each read on its own (reads only).
+async function detail(db, id) {
+  const get = async (ref) => { const s = await ref.get(); return s.exists ? s.data() || {} : null; };
+  const [client, brain, plan, social, cfg, state] = await Promise.all([
+    get(db.collection('clients').doc(id)),
+    get(db.collection('clients').doc(id).collection('client_brain').doc('current')),
+    get(db.collection('x_strategy_plans').doc(id)),
+    get(db.collection('social_accounts').doc(id)),
+    get(db.collection('client_configs').doc(id)),
+    get(db.collection('dashboard_state').doc(id)),
+  ]);
+  const x = social?.platforms?.x || null;
+  return [
+    `  gate  brain.status=${brain?.status ?? 'no doc'}  plan=${plan ? 'doc exists' : 'no doc'}  social.x.username=${x?.username ?? (social ? 'unset' : 'no doc')}  override=${client?.contentLoop?.enabled === true}`,
+    `  x     userId=${x?.userId ?? '-'} connectedAt=${x?.connectedAt ?? x?.updatedAt ?? '-'} authMode=${x?.authMode ?? '-'}`,
+    `  handle sources: social_accounts=${x?.username ?? 'none'} | client_configs.xGrowth.ownHandle=${cfg?.marketingBriefConfig?.xGrowth?.ownHandle || 'none'} | dashboard_state.marketingBrief.xGrowth.ownHandle=${state?.marketingBrief?.xGrowth?.ownHandle || 'none'} | brain.identity.xHandle=${brain?.identity?.xHandle || 'none'}`,
+  ].join('\n');
+}
+
 async function main() {
   require(path.join(REPO, 'features/not-the-rug-brief/load-env'));
   const db = require(path.join(REPO, 'api/_lib/firebase-admin.cjs')).adminDb;
@@ -34,7 +54,10 @@ async function main() {
   if (enable && disable) throw new Error('Pick one of --enable-loop / --disable-loop.');
 
   const ids = clientArg ? [clientArg] : (await db.collection('clients').select().get()).docs.map((d) => d.id);
-  for (const id of ids) console.log(line(await readClientReadiness(db, id), await resolveClientXHandle(db, id)));
+  for (const id of ids) {
+    console.log(line(await readClientReadiness(db, id), await resolveClientXHandle(db, id)));
+    if (flag('--detail')) console.log(await detail(db, id));
+  }
 
   if (!enable && !disable) return;
   const r = await readClientReadiness(db, clientArg);
