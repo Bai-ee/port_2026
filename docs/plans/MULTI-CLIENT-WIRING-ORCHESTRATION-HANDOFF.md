@@ -66,7 +66,7 @@ Owner-driven. You only verify.
 **Does not** make other clients useful yet: their inventory is still empty and global (3a).
 
 ### Phase 3a — Scope the content inventory (M, prod data write)
-**Status: code BUILT on branch `feat/multi-client-3a-inventory` (stacked on PR #9), NOT pushed/merged/deployed (2026-10-14).** Pre-write export taken (6,276 docs, scratchpad only). Owner still runs: index deploy → backfill `--write` → set `NAS_INVENTORY_CLIENT_ID` → then the code PR. Dry run: 6,276 rows, 0 with clientId. New env `NAS_INVENTORY_CLIENT_ID` (NAS/archive owner; fail closed when unset). See `CONTENT-PILOT-OPERATIONS.md` §1c.
+**Status: code BUILT on branch `feat/multi-client-3a-inventory` (stacked on PR #9), NOT pushed/merged/deployed (2026-10-14).** **Prod data steps DONE 2026-10-14:** export at `~/Documents/backups/x_content_packages-pre-backfill-2026-10-14.json`; indexes deployed, `clientId+engine+status+lastPostedAt` READY; backfill `--write` stamped 6,276 rows, 0 left. Owner still owes: `NAS_INVENTORY_CLIENT_ID` env, home readiness override, merge PR #9 + 3a PR, then the post-deploy backfill re-run. Dry run: 6,276 rows, 0 with clientId. New env `NAS_INVENTORY_CLIENT_ID` (NAS/archive owner; fail closed when unset). See `CONTENT-PILOT-OPERATIONS.md` §1c.
 | Item | Files | Change |
 |---|---|---|
 | 3a.1 Schema | `features/x-content-inventory/store.js:5-19,151` | `clientId` field on `x_content_packages`; `readInventory({ clientId })` required (throw without it); query `where('clientId','==',id)`. |
@@ -81,6 +81,7 @@ Owner-driven. You only verify.
 **Accept:** home Today/Queue identical before/after (compare `get_daily_brief` output or the Today card for the same day); NTR/UE show empty inventory, not an error; backfill report attached to the PR (counts only).
 
 ### Phase 4 — Per-client X identity and priors (M)
+**Status: GO (owner, 2026-10-14). Build on the current branch (`feat/multi-client-3a-inventory`), stacked. Run Phase 2b in the same pass, after 4.**
 | Item | Files | Change |
 |---|---|---|
 | 4.1 X Monitor | `features/x-monitor/sync.js:83,97,147,250`, `store.js:3-27`, `app/api/dashboard/x-monitor/route.js:23,39-51,127`, `components/dashboard/XMonitorCard.jsx` | `sync(clientId)` → `getPlatformClient(clientId,'x')`; store rows carry `clientId`; card reads by the active client's account id. Every POST still metered and still behind the confirm row naming the call count. |
@@ -91,6 +92,24 @@ Owner-driven. You only verify.
 | 4.6 Score weights | `features/x-growth/score-draft.js`, `features/x-content-guard/rules.js` | No code. Add a note in the X growth SSOT that weights were measured on `@bai_ee`. |
 
 **Accept:** X Monitor sync for UE (after the owner connects UE's X and confirms the call count) writes rows with `clientId: undergroundexistence-…` and the home card is unchanged. `scoreXPost` untouched (replay harness `scripts/x-content/research/replay-guard.mjs` still passes).
+
+### Phase 2b — Onboarding feeds the Client Brain (M, GO 2026-10-14, run after Phase 4)
+
+**Problem.** Signup (`/login` → `AuthPage.jsx` → `POST /api/clients/provision` → worker `run-brief`) collects only website URL / idea text + email, forces two modules (`run-brief/route.js:287-294`), and skips `synthesizeBrandOverview`, `ensureScoutConfig`, `mergeMarketingBriefConfig` on `trigger === 'signup'` (`:371`). The Brain reads 9 auto sources (`store.cjs:381-532`); signup fills 4 (`client-record`, `website-source-input`, `site-meta`, `creative-brief-summary`). Brain is never generated. Survey that captures competitors/keywords/influencers is hidden (`HIDE_INTAKE_CHAT`, `lib/dashboard/tier-access-config.js:105`). `snapshot.searchSeeds` is written, never read. A fresh signup can never pass `assertClientReady`.
+
+**Design rule (must hold).** Signup never writes the Brain Markdown. It writes **sources and settings** (`dashboard_state.brandOverview`, `client_configs.scoutConfig`, `marketingBriefConfig`, `onboardingAnswers`) and then generates a Brain **draft** from them. When the owner later uploads/injects Brain Markdown and approves, the existing adoption rule applies unchanged: **Brain wins**, and settings adopt only into EMPTY Brain sections (`brain-sync.cjs` field map, lines ~129-205: `brandName`, `brandXHandle`, `brandKeywords`, `categoryTerms`, `competitors`, `kols`, `instagramHandles`, `sourcePlatforms`, `searches`, `positioning`, `targetAudience`, `industry`, `businessModel`, `campaign.*`, `xGrowth.ownHandle`, `xGrowth.benchmarkHandles`, …). So signup-derived data survives only where the uploaded Brain is silent. No new merge logic; do not touch `brain-sync.cjs` adoption semantics.
+
+| Item | Files | Change |
+|---|---|---|
+| 2b.1 Capture | `AuthPage.jsx:36-41,455-510`, `AuthContext.jsx` (`pending-dashboard-signup`), `app/api/clients/provision/route.js`, `api/_lib/client-provisioning.cjs:270-518` | Add optional fields: X handle, Instagram handle, up to 3 competitors (URL or @handle), one-line goal/positioning. Persist to `client_configs.onboardingAnswers` using the existing survey keys (`features/scout-intake/onboarding/questions.config.cjs:124-200`) so `user-context` / `qa-synthesizer` consume them unchanged. Keep URL-only signup working. |
+| 2b.2 Signup run | `app/api/worker/run-brief/route.js:287-294,371,678-680` | On `trigger==='signup'` with a real site: also run `synthesizeBrandOverview` + `ensureScoutConfig` + `mergeMarketingBriefConfig`. Market signals, X, ScrapeCreators stay OFF. Fix the stale comment at `:678`. Instrument any new Anthropic call with `logAnthropicCall`. |
+| 2b.3 Seeds | `features/scout-intake/seed-extractor.js:105` (`snapshot.searchSeeds`) | Feed into `ensureScoutConfig` as keyword candidates (only when `scoutConfig` is empty). |
+| 2b.4 Brain draft | end of signup run (`run-brief`), `features/client-brain/store.cjs:1452` | Call `generateAndSaveClientBrain(clientId, { mode: 'deterministic' })` → status `draft`, never approved by code. Idempotent: skip if a Brain doc already exists. |
+| 2b.5 Per-client docs | `api/_lib/client-provisioning.cjs:429-452` | Create `digest_config/{id}` (schedule OFF, `recipientEmail` = signup email, no `homeClientId`) and `clients/{id}.contentLoop.enabled=false`. Nothing else. |
+| 2b.6 Upload path | `app/api/dashboard/client-brain/{route,approve}` | Verify (test, not code): upload Markdown over a signup draft → approve → adopted settings only fill empty sections; non-empty uploaded sections override signup-derived values; a second approve is a no-op. Approve stays as-is (owner/admin); do not widen. |
+| 2b.7 Tests | new `api/_lib/__tests__/client-provisioning.test.js`, `app/api/worker/__tests__/run-brief-signup.test.js`, `features/client-brain/__tests__/signup-draft-then-upload.test.js` | Provision writes the 2 new docs; signup run populates 7 of 9 sources; draft generated once; Brain-wins merge per 2b.6. Use `fake-firestore.cjs`. |
+
+**Accept:** fresh signup (localhost, test client, then delete) ends with Brain `draft` whose Gaps panel lists only voice/examples; `client_configs.scoutConfig` has competitors/keywords from the form + site; `digest_config` exists OFF; no X/ScrapeCreators call logged; `usage_events` shows ≤2 Anthropic calls for the run. Paywall untouched (separate work; still cosmetic).
 
 ### Phase 3b — Per-client content sources (M, after 4)
 Non-home clients have no NAS. Verify/build the three writers per client: Telegram intake, Timeline/social-archive ingest of the client's own X/IG, Brain `Content Library`. Decision for owner first: does any other client get a NAS collection (worker repo `~/Documents/Repos/assetManager`, PUBLIC)?
