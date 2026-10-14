@@ -39,6 +39,8 @@ Owner-approved target for this round. Supersedes the open-items lists in `MULTI-
 
 ## 4. Final pass — build scope (one PR, branch `feat/multi-client-3a-inventory` reset onto `main`)
 
+> **SHIPPED to production 2026-10-14:** PR #11 squash `aab5edaf`, deploy `dpl_HUs95qCGvtu7qrVzFeZQxFiNWhb5` (hitloop.agency), rollback `dpl_2GjpiSoiT96ukt83qs8teubhB6R8`. Worker: `assetManager` `58aaf34` on `analyzer-fast-rerun` (pushed; owner restarts the worker). Verified: suite 5,614 / 5,612 / 2 baseline; build ok; worker 210/210. Owner testing (§5) is next.
+
 | Item | Scope | Files (start here) |
 |---|---|---|
 | F1 NAS per client | Folder convention `HITLOOP-ARCHIVE/<client-slug>/<collection>/<pillar>/` (legacy top-level collections = home). Worker (`~/Documents/Repos/assetManager`, PUBLIC repo, branch `analyzer-fast-rerun`) maps top folder → `clientId` via a committed `clients.map.json` (slug → id; no secrets) and sends `clientId` per item. Hitloop NAS stage/archive-inbox/rendered-sync accept the worker's `clientId`, with `NAS_INVENTORY_CLIENT_ID` as fallback only for items that carry none. Archive Inbox + Buckets filter by active client. Existing home files: no move required (legacy = home). | Hitloop: `features/x-content-inventory/nas.js`, `app/api/dashboard/archive-inbox/route.js`, `scripts/x-content/sync-rendered-videos.mjs`, `features/x-content-inventory/store.js` (`upsertPackage` owner rules unchanged). Worker: `assetManager` organizer/analyzer item payload. |
