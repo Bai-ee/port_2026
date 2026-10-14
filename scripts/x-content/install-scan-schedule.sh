@@ -13,7 +13,9 @@
 #   scripts/x-content/install-scan-schedule.sh install <id1,id2,id3>      # several, scanned sequentially
 #   scripts/x-content/install-scan-schedule.sh install --pilot            # PILOT_CLIENT_IDS from .env.local at run time
 #   (ONE launchd job either way: label com.hitloop.x-quote-scan. Each client scans its own stored
-#    watchlist and writes only its own quoteTargets; a client with no watchlist is skipped.)
+#    watchlist and writes only its own quoteTargets; a client with no watchlist is skipped.
+#    The job runs scripts/x-content/scan-and-pull.sh: the scan, then pull-corpora.mjs with the same scope,
+#    which refreshes each client's xGrowth ownHandle + benchmarkHandles corpora in x_corpora/{handle}.)
 #   scripts/x-content/install-scan-schedule.sh uninstall
 #   scripts/x-content/install-scan-schedule.sh status
 #
@@ -116,8 +118,10 @@ case "$cmd" in
   <key>Label</key><string>${LABEL}</string>
   <key>ProgramArguments</key>
   <array>
-    <string>${NODE_BIN}</string>
-    <string>${REPO}/scripts/x-content/scan-quote-targets.mjs</string>
+    <!-- scan-and-pull.sh runs the quote-target scan, then the per-client corpus pull (pull-corpora.mjs),
+         with the same scope args; exit is non-zero when either failed. -->
+    <string>/bin/bash</string>
+    <string>${REPO}/scripts/x-content/scan-and-pull.sh</string>
     ${SCAN_SCOPE_ARGS}
     <string>--write</string>
   </array>
@@ -125,6 +129,7 @@ case "$cmd" in
   <dict>
     <key>BIRD</key><string>${BIRD_PATH}</string>
     <key>HOME</key><string>${HOME}</string>
+    <key>NODE_BIN</key><string>${NODE_BIN}</string>
     <!-- ⚠️ Required, and the reason this job silently produced empty scans for
          weeks. launchd runs with PATH=/usr/bin:/bin:/usr/sbin:/sbin, and
          \`bird\` is a \`#!/usr/bin/env node\` script — so it died with
@@ -147,7 +152,7 @@ PLIST_EOF
     launchctl unload "$PLIST" 2>/dev/null || true
     launchctl load "$PLIST"
     echo "installed ${LABEL}"
-    echo "  runs 06:30 daily for ${SCAN_SCOPE_LABEL}"
+    echo "  runs 06:30 daily for ${SCAN_SCOPE_LABEL}: quote-target scan, then own + benchmark corpus pull"
     echo "  logs  ${LOG_DIR}/x-quote-scan.log"
     echo ""
     echo "⚠️  The scan only runs while this Mac is awake. If it sleeps through 06:30,"

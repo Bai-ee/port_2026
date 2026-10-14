@@ -10,8 +10,11 @@ import { runReadTool, prepareProposal, shapeMarketSignals } from '../agent/tools
 import { proposalPayloadPreview, proposalKindLabel, proposalStatusText } from '../ui-model.js';
 import { PROPOSAL_KINDS, PROPOSAL_KIND_ACTIONS } from '../contracts.js';
 
-const NOW = Date.parse('2026-10-12T12:00:00.000Z');
-const FUTURE = '2026-10-14T15:00:00.000Z';
+// Fixture times are relative to the real clock: some code under test compares
+// scheduledAt against Date.now(), so a fixed FUTURE date eventually expires.
+const NOW = Math.floor(Date.now() / 3_600_000) * 3_600_000;
+const FUTURE = new Date(NOW + 51 * 3_600_000).toISOString();
+const MCP_THREAD = `t_mcp_${new Date(NOW).toISOString().slice(0, 10).replace(/-/g, '')}`;
 const CTX = { clientId: 'c1' };
 const AUTH = { decoded: { email: 'owner@example.com' } };
 
@@ -52,7 +55,7 @@ function setup(extra = {}) {
       posts.rows.set(`${a.clientId}/${a.postId}`, next);
       return next;
     },
-    readMarketSignals: async (clientId) => (clientId === 'c1' ? { headline: 'H', humanBrief: 'Brief', generatedAt: '2026-10-12T06:00:00.000Z', narratives: [{ trend: 'T', detail: 'D' }] } : null),
+    readMarketSignals: async (clientId) => (clientId === 'c1' ? { headline: 'H', humanBrief: 'Brief', generatedAt: new Date(NOW - 6 * 3_600_000).toISOString(), narratives: [{ trend: 'T', detail: 'D' }] } : null),
     ...extra,
   });
   return { h, posts, edits, chatStore };
@@ -72,7 +75,7 @@ test('post-edit is a registered kind with an action, label, preview and result l
 // ---- get_market_signals ----
 test('get_market_signals: shapes, caps, flags stale, marks third-party text', async () => {
   const big = {
-    headline: 'h'.repeat(500), humanBrief: 'b'.repeat(5000), delta: 'd'.repeat(900), generatedAt: '2026-10-12T06:00:00.000Z',
+    headline: 'h'.repeat(500), humanBrief: 'b'.repeat(5000), delta: 'd'.repeat(900), generatedAt: new Date(NOW - 6 * 3_600_000).toISOString(),
     narratives: Array.from({ length: 20 }, (_, i) => ({ trend: `t${i}`, detail: 'x'.repeat(500) })),
     opportunities: Array.from({ length: 20 }, () => ({ topic: 'o', angle: 'a'.repeat(500), url: 'https://e.x' })),
     kols: Array.from({ length: 20 }, () => ({ name: 'k', platform: 'x', detail: 'd'.repeat(500) })),
@@ -218,19 +221,19 @@ test('createProposalInThread: persists pending cards in t_mcp_<date>, drops inva
     { kind: 'nope', payload: {} },
   ] });
   assert.equal(r.ok, true);
-  assert.equal(r.threadId, 't_mcp_20261012');
+  assert.equal(r.threadId, MCP_THREAD);
   assert.equal(r.proposals.length, 1);
   assert.equal(r.proposals[0].status, 'pending');
   assert.equal(r.proposals[0].payload.currentText, 'Draft text');
   assert.equal(r.dropped.length, 2);
-  const th = await chatStore.getThread('c1', 't_mcp_20261012');
+  const th = await chatStore.getThread('c1', MCP_THREAD);
   assert.equal(Object.keys(th.proposals).length, 1);
-  assert.equal(await chatStore.getThread('c2', 't_mcp_20261012'), null);
+  assert.equal(await chatStore.getThread('c2', MCP_THREAD), null);
   assert.equal(edits.length, 0);
   // same day, same thread: appended
   const r2 = await h.createProposalInThread({ clientId: 'c1', proposals: [{ kind: 'regenerate-today', payload: {}, summary: 's', rationale: 'r' }] });
-  assert.equal(r2.threadId, 't_mcp_20261012');
-  assert.equal(Object.keys((await chatStore.getThread('c1', 't_mcp_20261012')).proposals).length, 2);
+  assert.equal(r2.threadId, MCP_THREAD);
+  assert.equal(Object.keys((await chatStore.getThread('c1', MCP_THREAD)).proposals).length, 2);
   // cross-client post: dropped
   const x = await h.createProposalInThread({ clientId: 'c1', proposals: [{ kind: 'post-edit', payload: { postId: 'p-other', text: 'New', expectedUpdatedAt: '2026-10-12T10:00:00.000Z' }, summary: 's', rationale: 'r' }] });
   assert.equal(x.ok, false);

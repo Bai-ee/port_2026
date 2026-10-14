@@ -9,7 +9,10 @@
 // All I/O is injected (`deps`) so tests run on fakes. Route files stay thin.
 //   deps.db                      Firestore-compatible (archive_workers / archive_commands)
 //   deps.getPackage(id)          store.getPackage
-//   deps.upsertPackage(pkg)      store.upsertPackage (returnPackages:false)
+//   deps.upsertPackage(pkg, {clientId}) store.upsertPackage (returnPackages:false); ingest passes the
+//                                per-item resolved client as the 2nd arg (older deps may ignore it)
+//   deps.defaultClientId         optional; when the key is PRESENT, ingest runs in per-item client mode
+//                                (item.clientId || defaultClientId; neither => item skipped client-required)
 //   deps.signUpload({storagePath, contentType}) -> url
 //   deps.fieldValue              { serverTimestamp() }
 //   deps.now() / deps.sleep(ms) / deps.randomId()
@@ -32,6 +35,21 @@ export const NAS_JOB_TYPES = ['ANALYZE_FACETS', 'STAGE_FOR_PUBLISH', 'CANCEL_JOB
 export const BROWSE_WAIT_MS = 6000;
 
 const SHA_RE = /^[0-9a-f]{64}$/;
+// Same shape as store.js CLIENT_ID_RE (kept local: store.js does not export it).
+export const CLIENT_ID_RE = /^[A-Za-z0-9_-]{3,80}$/;
+export const cleanClientId = (v) => (typeof v === 'string' && CLIENT_ID_RE.test(v.trim()) ? v.trim() : null);
+
+/**
+ * Does an archive_review record belong to client C? A record carrying a clientId belongs to that
+ * client only; a legacy record with none belongs to the home NAS client (homeClientId) only.
+ */
+export function archiveRecordBelongsTo(record, clientId, homeClientId) {
+  const c = cleanClientId(clientId);
+  if (!c) return false;
+  const own = cleanClientId(record?.clientId);
+  if (own) return own === c;
+  return c === cleanClientId(homeClientId);
+}
 const FLYER_KINDS = new Set(['flyer', 'party-photo', 'crowd', 'performance']);
 const UPLOAD_EXT = {
   'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif',
@@ -76,6 +94,7 @@ function itemError(it) {
   if (!SHA_RE.test(String(it.sha256 || ''))) return 'sha256 must be 64 lowercase hex chars';
   if (!cleanRelPath(it.relativePath)) return 'relativePath invalid';
   if (!it.facets || typeof it.facets !== 'object' || Array.isArray(it.facets)) return 'facets must be an object';
+  if (it.clientId != null && it.clientId !== '' && !cleanClientId(it.clientId)) return 'clientId invalid';
   return null;
 }
 
@@ -122,6 +141,10 @@ export async function ingestNasResults(deps, body) {
   if (!Array.isArray(items) || !items.length) throw bad('items[] is required.');
   if (items.length > MAX_RESULT_ITEMS) throw bad(`At most ${MAX_RESULT_ITEMS} items per call.`);
   const nowIso = new Date(deps.now ? deps.now() : Date.now()).toISOString();
+  // Per-item client mode (worker sends optional item.clientId; env home is the fallback for items
+  // that carry none). Deps without the key keep the legacy behavior: their upsertPackage binds the client.
+  const perItemClient = Object.prototype.hasOwnProperty.call(deps, 'defaultClientId');
+  const fallbackClient = perItemClient ? cleanClientId(deps.defaultClientId) : null;
 
   let created = 0; let updated = 0;
   const skipped = [];
@@ -131,8 +154,17 @@ export async function ingestNasResults(deps, body) {
     if (err) { skipped.push({ index: i, error: err }); continue; }
     const id = nasPackageId(it.sha256);
     const m = machineFields(it, sourceId, nowIso);
+    const itemClient = cleanClientId(it.clientId);
     try {
       const existing = await deps.getPackage(id);
+      const owner = cleanClientId(existing?.clientId);
+      // Rows never move between clients: an explicit different client on an owned row is skipped.
+      if (owner && itemClient && owner !== itemClient) {
+        skipped.push({ index: i, error: 'package-client-mismatch' }); continue;
+      }
+      // Owned rows keep their owner (the env fallback never re-assigns them).
+      const clientId = itemClient || owner || fallbackClient;
+      if (perItemClient && !clientId) { skipped.push({ index: i, error: 'client-required' }); continue; }
       let pkg;
       if (existing && existing.source?.kind === 'nas-archive') {
         pkg = {
@@ -154,7 +186,7 @@ export async function ingestNasResults(deps, body) {
           ...m,
         };
       }
-      const r = await deps.upsertPackage(pkg);
+      const r = await deps.upsertPackage(pkg, { clientId: clientId || undefined });
       if (r?.created) created += 1; else updated += 1;
     } catch (e) {
       skipped.push({ index: i, error: e?.message || 'upsert failed' });

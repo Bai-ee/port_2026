@@ -27,14 +27,14 @@ Owner-approved target for this round. Supersedes the open-items lists in `MULTI-
 
 | # | Gap | Why it matters | Resolved by |
 |---|---|---|---|
-| A | NAS is single-owner (`NAS_INVENTORY_CLIENT_ID`) | No per-client hard-asset analysis | Final pass item F1 |
-| B | Brain tracks cannot be adopted by a client with no tracks (every engine must belong to a track; adoption refused) | A fresh client never gets tracks from its Brain → no track targets, no Today plan | F2 |
-| C | Benchmark corpora: committed corpora are Bryan's; per-client benchmark pulls have no path | Other clients' Strategy evaluation has no benchmark rows | F3 |
-| D | Non-home clients have no content writers proven live (Timeline/social-archive ingest, Telegram intake) | Empty inventory → empty Today | F4 |
-| E | `DashboardPage.jsx` X Monitor tile ignores the switcher (card inside Results follows it) | Confusing while testing | F5 |
+| A | NAS is single-owner (`NAS_INVENTORY_CLIENT_ID`) | No per-client hard-asset analysis | **Resolved** (F1, built 2026-10-14) |
+| B | Brain tracks cannot be adopted by a client with no tracks (every engine must belong to a track; adoption refused) | A fresh client never gets tracks from its Brain → no track targets, no Today plan | **Resolved** (F2) |
+| C | Benchmark corpora: committed corpora are Bryan's; per-client benchmark pulls have no path | Other clients' Strategy evaluation has no benchmark rows | **Resolved** (F3) |
+| D | Non-home clients have no content writers proven live (Timeline/social-archive ingest, Telegram intake) | Empty inventory → empty Today | **Resolved** (F4: proven client-keyed, no code change needed beyond a test) |
+| E | `DashboardPage.jsx` X Monitor tile ignores the switcher (card inside Results follows it) | Confusing while testing | **Resolved** (F5) |
 | F | Each client must be added by hand to `PILOT_CLIENT_IDS` and the scan job `--clients` | Manual step per client | Accepted; documented in §5 checklist |
 | G | Home's `social_accounts` X record is @UGExistence while `xGrowth.ownHandle` is `bai_ee` | Home publishes/resolves own handle as UGExistence | Owner data decision (disconnect from home, connect on UE) |
-| H | `chat-queue.test.js` 2 date-bomb failures | Noise in every test run | F6 (one-line fixture fix) |
+| H | `chat-queue.test.js` 2 date-bomb failures | Noise in every test run | **Resolved** (F6) |
 | I | Self-serve client access, MCP user→client map, paywall | Not this round | Phase 5, separate |
 
 ## 4. Final pass — build scope (one PR, branch `feat/multi-client-3a-inventory` reset onto `main`)
@@ -48,6 +48,8 @@ Owner-approved target for this round. Supersedes the open-items lists in `MULTI-
 | F5 X Monitor tile | Tile reads the active client (`activeClientId`), same as the Results card. Do not edit during a running local run. | `DashboardPage.jsx` x-monitor tile only (do-not-touch list lifted for this one site). |
 | F6 Test hygiene | `chat-queue.test.js` fixture dates relative to `NOW`. | `features/x-strategy/__tests__/chat-queue.test.js:13-14`. |
 | Docs | `CONTENT-PILOT-OPERATIONS.md` §1f (NAS per client, clients.map, pull-corpora), handoff Phase 3b row → built, this doc §3 rows → resolved. | |
+
+**As built (2026-10-14):** rendered-sync and MCP NAS stay home-only (`NAS_INVENTORY_CLIENT_ID`), deliberately: rendered videos are home's, and both fail closed. Engine reassignment between tracks is not in the UI yet (first track owns all engines after adoption).
 
 Constraints unchanged: no prod writes, no X API calls, no paywall changes, worker repo is PUBLIC (no LAN secrets beyond what HEAD already has), one PR, stop after the report. Worker changes: commit on `analyzer-fast-rerun`, push, do not restart the owner's worker.
 

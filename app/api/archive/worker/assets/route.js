@@ -48,6 +48,16 @@ export async function POST(request){
  if(asset.organized&&typeof asset.organized==='object'&&asset.organized.path){
    patch.organized={path:String(asset.organized.path),appliedAt:asset.organized.appliedAt||null};
  }
+ // Client ownership (multi-client F1): the worker may send asset.clientId. Validated (same shape as the
+ // inventory CLIENT_ID_RE); merge-set only when present so a resync without it never clears a prior stamp.
+ // Records with no clientId are legacy = the home NAS client (NAS_INVENTORY_CLIENT_ID) in the Archive Inbox.
+ if(asset.clientId!=null&&asset.clientId!==''){
+   const cid=typeof asset.clientId==='string'?asset.clientId.trim():'';
+   if(!/^[A-Za-z0-9_-]{3,80}$/.test(cid))return NextResponse.json({error:'asset.clientId invalid'},{status:400});
+   // Records never move between clients by a resync.
+   if(prior?.clientId&&prior.clientId!==cid)return NextResponse.json({error:`Asset ${reviewId} belongs to another client.`,code:'asset-client-mismatch'},{status:409});
+   patch.clientId=cid;
+ }
  await ref.set(patch,{merge:true});
 
  // Auto-enqueue the permanent Arweave upload once this asset is "documented"
