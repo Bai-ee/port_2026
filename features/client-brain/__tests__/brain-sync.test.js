@@ -349,12 +349,32 @@ async function storeWithTracks() {
   return store;
 }
 
-test('writeBrainTracksToPlan with no stored tracks: nothing written, warned (Brain rows carry no engines)', async () => {
+test('writeBrainTracksToPlan with no stored tracks: adopts Brain tracks, first track owns every engine', async () => {
+  const { ENGINE_IDS } = await import('../../x-content-inventory/engines.js');
   const store = createMemoryPlanStore();
   const rows = sync.projectFields(BRAIN_X, sync.CONTENT_TRACKS_FIELDS).values.contentTracks;
   const res = await sync.writeBrainTracksToPlan(store, 'c1', rows, mods);
-  assert.equal(res.warnings.some((w) => /Every engine must belong to a track/.test(w)), true);
-  assert.equal(await store.get('c1'), null);
+  assert.deepEqual(res.warnings, []);
+  const doc = await store.get('c1');
+  const tracks = doc.plan.contentTracks;
+  assert.deepEqual(tracks.map((t) => t.label), ['Design & client work', 'Music (UE mixes, Discogs)']);
+  assert.deepEqual(tracks[0].engines, ENGINE_IDS);
+  assert.deepEqual(tracks[1].engines, []);
+  assert.equal(tracks[0].share, 0.6);
+  assert.equal(tracks[1].share, 0.4);
+  assert.deepEqual(tracks[0].benchmarks, ['seb__design']);
+  assert.equal(doc.updatedBy, 'client-brain');
+  assert.equal(tracksOf(doc).length, 2);
+});
+
+test('writeBrainTracksToPlan with stored tracks: a new Brain label joins with no engines and stays valid', async () => {
+  const store = await storeWithTracks();
+  const before = (await store.get('c1')).plan.contentTracks.map((t) => [t.id, t.engines]);
+  const res = await sync.writeBrainTracksToPlan(store, 'c1', [{ label: 'Writing', share: 0.2, topics: [], benchmarks: [] }], mods);
+  assert.deepEqual(res.warnings, []);
+  const tracks = (await store.get('c1')).plan.contentTracks;
+  assert.deepEqual(tracks.find((t) => t.label === 'Writing').engines, []);
+  for (const [id, engines] of before) assert.deepEqual(tracks.find((t) => t.id === id).engines, engines);
 });
 
 test('writeBrainTracksToPlan merges by label, keeps engines/promotions, versions with the actor', async () => {

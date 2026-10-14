@@ -4,6 +4,7 @@
 
 import { tracksOf, normalizeContentTracks, MAX_BENCHMARKS_PER_TRACK, MAX_DISTINCT_BENCHMARKS } from './content-tracks.js';
 import { sectionTitle } from './strategy-doc.js';
+import { ENGINE_IDS } from '../x-content-inventory/engines.js';
 import { PLAN_LIMITS, KNOWN_SLOT_TYPES, EVALUATION_CAVEAT, tierForAuthoredPerDay, isValidAuthoredPerDay } from './contracts.js';
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -602,6 +603,25 @@ export function setTrackShare(draft, trackId, value) {
   if (drift && scaled.length) scaled[scaled.indexOf(Math.max(...scaled))] += drift;
   let k = 0;
   return list.map((t) => (t.id === trackId ? { ...t, share: v } : { ...t, share: scaled[k++] }));
+}
+
+/**
+ * Append a new unsaved track. The first track gets share 100 and every engine (tracks must cover all engines);
+ * later ones start at share 0 with no engines. Ids are a unique slug of the label; `isNew` marks the label editable.
+ */
+export function addDraftTrack(draft, label = 'New track') {
+  const list = Array.isArray(draft) ? draft : [];
+  const base = String(label).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 28) || 'track';
+  const ids = new Set(list.map((t) => t.id));
+  let id = base;
+  for (let n = 2; ids.has(id); n += 1) id = `${base}-${n}`;
+  const first = list.length === 0;
+  return [...list, { id, label, engines: first ? [...ENGINE_IDS] : [], benchmarks: [], topics: [], share: first ? 100 : 0, promotions: [], isNew: true }];
+}
+
+/** Rename one draft track (the id stays as created). */
+export function setTrackLabel(draft, trackId, label) {
+  return (draft || []).map((t) => (t.id === trackId ? { ...t, label: String(label ?? '').slice(0, 60) } : t));
 }
 
 /** @returns {string|null} first problem with a handle about to be added to a track. */

@@ -293,6 +293,7 @@ import {
   percentsFromWeights, trackDraftFromPlan, setTrackShare, validateTrackBenchmark, addTrackBenchmark, removeTrackBenchmark,
   validatePromotionUrl, setPromotionUrl, trackPayloadFromDraft, trackChangesFromDraft, trackBenchmarkRow, trackProfileSummary,
   rightsLabel, storyStateLabel, suggestionTrackChip, suggestionLinkLine,
+  addDraftTrack, setTrackLabel,
 } from '../ui-model.js';
 
 test('percentsFromWeights always sums to 100', () => {
@@ -308,6 +309,19 @@ test('track draft is empty when plan has no contentTracks (no inherited defaults
   const empty = trackChangesFromDraft({}, []);
   assert.equal(empty.dirty, false);
   assert.deepEqual(empty.errors, []);
+});
+
+test('addDraftTrack: first track owns every engine at 100%, saves through trackChangesFromDraft', async () => {
+  const { ENGINE_IDS } = await import('../../x-content-inventory/engines.js');
+  const one = addDraftTrack([]);
+  assert.deepEqual(one[0], { id: 'new-track', label: 'New track', engines: [...ENGINE_IDS], benchmarks: [], topics: [], share: 100, promotions: [], isNew: true });
+  const two = setTrackLabel(addDraftTrack(one), 'new-track-2', 'Music');
+  assert.deepEqual(two.map((t) => [t.id, t.label, t.share, t.engines.length]), [['new-track', 'New track', 100, ENGINE_IDS.length], ['new-track-2', 'Music', 0, 0]]);
+  const res = trackChangesFromDraft({}, two);
+  assert.equal(res.dirty, true);
+  assert.deepEqual(res.errors, []);
+  assert.equal(res.contentTracks.length, 2);
+  assert.equal('isNew' in res.contentTracks[0], false);
 });
 
 test('track draft from a saved two-track plan', () => {

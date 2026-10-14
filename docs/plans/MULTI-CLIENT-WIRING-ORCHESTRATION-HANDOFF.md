@@ -43,6 +43,8 @@ Sub-agent briefs must include the file list and the acceptance checks verbatim; 
 
 ## 4. Phases
 
+> **SHIPPED to production 2026-10-14:** Phase 2 = PR #9 squash `909a1509` (deploy `port-2026-aqoefe8zx`); Phases 3a + 4 + 2b + 4.7 = PR #10 squash `a588baca`, deploy `dpl_dxk3LPKZEvggH1SN7hyNUVf3p1B4` (hitloop.agency), **rollback target `dpl_2GjpiSoiT96ukt83qs8teubhB6R8`** (6d, pre-multi-client; backfilled `clientId` data is compatible with it). Prod steps done: index READY, 6,276 rows backfilled (post-deploy re-run: 0 left), `NAS_INVENTORY_CLIENT_ID` set, home priors seeded, home `contentLoop.enabled=true`. Per-phase status lines below predate the merge. Open: home's `social_accounts` X record is @UGExistence (owner decision), Phase 3b, Phase 5 (decision-gated), paywall still cosmetic, chat-queue date-bomb tests.
+
 ### Phase 1 — Config only (no code, no deploy)
 Owner-driven. You only verify.
 - Owner sets Vercel prod env `PILOT_CLIENT_IDS` = target list (assumed home + `nottherug-ten-QSMYxuuv` + `undergroundexistence-0CsKkpaq`; confirm with owner).
@@ -114,6 +116,7 @@ Owner-driven. You only verify.
 **Accept:** fresh signup (localhost, test client, then delete) ends with Brain `draft` whose Gaps panel lists only voice/examples; `client_configs.scoutConfig` has competitors/keywords from the form + site; `digest_config` exists OFF; no X/ScrapeCreators call logged; `usage_events` shows ≤2 Anthropic calls for the run. Paywall untouched (separate work; still cosmetic).
 
 ### Phase 3b — Per-client content sources (M, after 4)
+> **BUILT 2026-10-14 (final pass, `docs/plans/MULTI-CLIENT-FINAL-PASS.md` §4 F1–F6):** NAS per client via worker `clients.map.json` + per-item `clientId`; social-archive + Telegram writers proven client-keyed; tracks adoption for track-less clients; `pull-corpora --client`. SSOT `CONTENT-PILOT-OPERATIONS.md` §1f. PR/deploy ids: pending owner merge.
 Non-home clients have no NAS. Verify/build the three writers per client: Telegram intake, Timeline/social-archive ingest of the client's own X/IG, Brain `Content Library`. Decision for owner first: does any other client get a NAS collection (worker repo `~/Documents/Repos/assetManager`, PUBLIC)?
 
 ### Phase 5 — Client-role access (L, decision-gated)

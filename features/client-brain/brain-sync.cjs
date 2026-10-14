@@ -560,13 +560,16 @@ const errorWarnings = (err, prefix) => (err.errors?.length ? err.errors : [err.m
 // Merge Brain track rows into the plan's existing tracks (matched by label,
 // case-insensitive; id slug as fallback). Engines and promotions always stay as
 // they are; tracks the Brain doesn't list are kept (their engines must have an owner).
-function mergeBrainTracks(existing, rows) {
+// Brain rows carry no engines, so when the client has NO stored tracks every engine
+// (`engineIds`) goes to the first Brain track; the owner reassigns them in the panel.
+function mergeBrainTracks(existing, rows, engineIds = []) {
   const tracks = (existing || []).map((t) => ({ ...t }));
+  const adoptEngines = tracks.length === 0;
   for (const row of rows || []) {
     const hit = tracks.find((t) => lower(t.label) === lower(row.label)) || tracks.find((t) => t.id === slugId(row.label));
     const patch = { label: row.label, topics: row.topics, benchmarks: row.benchmarks, ...(row.share != null ? { share: row.share } : {}) };
     if (hit) Object.assign(hit, patch);
-    else tracks.push({ id: slugId(row.label), engines: [], promotions: [], share: 0, ...patch });
+    else tracks.push({ id: slugId(row.label), engines: adoptEngines && tracks.length === 0 ? [...engineIds] : [], promotions: [], share: 0, ...patch });
   }
   return tracks;
 }
@@ -576,7 +579,8 @@ function mergeBrainTracks(existing, rows) {
 async function writeBrainTracksToPlan(planStore, clientId, rows, { tracksOf }) {
   const doc = await planStore.get(clientId);
   const existing = Array.isArray(doc?.plan?.contentTracks) ? doc.plan.contentTracks : tracksOf(doc);
-  const contentTracks = mergeBrainTracks(existing, rows);
+  const { ENGINE_IDS } = await import('../x-content-inventory/engines.js');
+  const contentTracks = mergeBrainTracks(existing, rows, ENGINE_IDS);
   try {
     // 'client-brain' is not in plan-state's source enum, so it is recorded as the actor + reason.
     await planStore.apply(clientId, {

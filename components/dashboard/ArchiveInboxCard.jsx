@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Archive, CheckCircle2, Lock, PenSquare, RefreshCw, Video } from 'lucide-react';
+import { readImpersonateClientId } from '../../lib/dashboard/bootstrap-session.js';
 
 // Archive Inbox — assets the Archive has confirmed, becoming things you can post.
 //
@@ -28,7 +29,16 @@ function rightsLabel(rights) {
   return { text: 'needs client clearance', tone: 'stop' };
 }
 
-export default function ArchiveInboxCard({ getIdToken }) {
+// Client scoping (multi-client F1): the inbox follows the active dashboard client. An explicit
+// `clientId` prop wins; otherwise the dashboard switcher's impersonation id is read at fetch time
+// (null = no ?as= = the caller's own client). The server resolves + gates it (?as=).
+function inboxUrl(action, clientId) {
+  const as = clientId || readImpersonateClientId();
+  const base = `/api/dashboard/archive-inbox?action=${action}`;
+  return as ? `${base}&as=${encodeURIComponent(as)}` : base;
+}
+
+export default function ArchiveInboxCard({ getIdToken, clientId = null }) {
   const [rows, setRows] = useState([]);
   const [counts, setCounts] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -43,7 +53,7 @@ export default function ArchiveInboxCard({ getIdToken }) {
     setError('');
     try {
       const token = await getIdToken();
-      const res = await fetch('/api/dashboard/archive-inbox?action=inbox', {
+      const res = await fetch(inboxUrl('inbox', clientId), {
         headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
       });
@@ -58,7 +68,7 @@ export default function ArchiveInboxCard({ getIdToken }) {
     } finally {
       setLoading(false);
     }
-  }, [getIdToken]);
+  }, [getIdToken, clientId]);
 
   useEffect(() => { load().catch(() => {}); }, [load]);
 
@@ -70,7 +80,7 @@ export default function ArchiveInboxCard({ getIdToken }) {
     setError('');
     try {
       const token = await getIdToken();
-      const res = await fetch('/api/dashboard/archive-inbox?action=save-story', {
+      const res = await fetch(inboxUrl('save-story', clientId), {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -90,7 +100,7 @@ export default function ArchiveInboxCard({ getIdToken }) {
     } finally {
       setSavingId(null);
     }
-  }, [getIdToken, drafts, load]);
+  }, [getIdToken, clientId, drafts, load]);
 
   const setDraft = useCallback((id, patch) => {
     setDrafts((prev) => ({ ...prev, [id]: { ...(prev[id] || {}), ...patch } }));

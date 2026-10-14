@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getPackage, upsertPackage } from '../store.js';
 import {
-  ingestNasResults, nasUploadUrl, applyStageComplete, handleNasAction, nasPackageId,
+  ingestNasResults, nasUploadUrl, applyStageComplete, handleNasAction, nasPackageId, archiveRecordBelongsTo,
 } from '../nas.js';
 
 // Minimal Firestore fake: docs, subcollections, where('==')+limit queries, batch.
@@ -132,6 +132,55 @@ test('results: validation (sha, cap, sourceId, empty) and per-item skips', async
   await assert.rejects(() => ingestNasResults(deps, { sourceId: 's', items: [item({ sha256: 'xyz' })] }), { status: 400 });
   const r = await ingestNasResults(deps, { sourceId: 's', items: [item({ sha256: 'bad' }), item({ sha256: SHA2 })] });
   assert.equal(r.created, 1); assert.equal(r.skipped[0].index, 0);
+});
+
+// Per-item client mode, wired like app/api/archive/worker/nas/results/route.js.
+function perItemDeps(db, defaultClientId) {
+  return {
+    getPackage: (id) => getPackage(id, { db }),
+    upsertPackage: (pkg, opts = {}) => upsertPackage(pkg, { db, returnPackages: false, clientId: opts.clientId }),
+    defaultClientId,
+    now: () => 1_700_000_000_000,
+  };
+}
+
+test('results (per-item client): item.clientId wins; legacy item falls back to env home', async () => {
+  const db = makeDb();
+  const r = await ingestNasResults(perItemDeps(db, 'home-client'), { sourceId: 's1', items: [item({ clientId: 'other-client' }), item({ sha256: SHA2 })] });
+  assert.equal(r.created, 2);
+  assert.equal(pkgs(db).get(nasPackageId(SHA)).clientId, 'other-client');
+  assert.equal(pkgs(db).get(nasPackageId(SHA2)).clientId, 'home-client');
+});
+
+test('results (per-item client): no item client and no env -> skipped client-required; invalid clientId skipped', async () => {
+  const db = makeDb();
+  await assert.rejects(() => ingestNasResults(perItemDeps(db, null), { sourceId: 's1', items: [item()] }),
+    (e) => e.status === 400 && e.skipped[0].error === 'client-required');
+  const r = await ingestNasResults(perItemDeps(db, null), { sourceId: 's1', items: [item({ clientId: 'bad id!' }), item({ sha256: SHA2, clientId: 'ok-client' })] });
+  assert.equal(r.created, 1); assert.deepEqual(r.skipped, [{ index: 0, error: 'clientId invalid' }]);
+  assert.equal(pkgs(db).get(nasPackageId(SHA2)).clientId, 'ok-client');
+});
+
+test('results (per-item client): mismatch on an existing row is skipped, not thrown; owner kept on re-analysis', async () => {
+  const db = makeDb();
+  await ingestNasResults(perItemDeps(db, 'home-client'), { sourceId: 's1', items: [item({ clientId: 'client-a' })] });
+  const r = await ingestNasResults(perItemDeps(db, 'home-client'), { sourceId: 's1', items: [item({ clientId: 'client-b', summary: 'x' }), item({ sha256: SHA2 })] });
+  assert.equal(r.created, 1); assert.deepEqual(r.skipped, [{ index: 0, error: 'package-client-mismatch' }]);
+  assert.equal(pkgs(db).get(nasPackageId(SHA)).summary, 'A 1998 Housepit flyer.');
+  // No item client: env home fallback never re-assigns an owned row.
+  const u = await ingestNasResults(perItemDeps(db, 'home-client'), { sourceId: 's1', items: [item({ summary: 'again' })] });
+  assert.equal(u.updated, 1);
+  const p = pkgs(db).get(nasPackageId(SHA));
+  assert.equal(p.clientId, 'client-a'); assert.equal(p.summary, 'again');
+});
+
+test('archive inbox ownership: stamped records belong to their client; legacy only to home', () => {
+  assert.equal(archiveRecordBelongsTo({ clientId: 'client-a' }, 'client-a', 'home-client'), true);
+  assert.equal(archiveRecordBelongsTo({ clientId: 'client-a' }, 'home-client', 'home-client'), false);
+  assert.equal(archiveRecordBelongsTo({}, 'home-client', 'home-client'), true);
+  assert.equal(archiveRecordBelongsTo({}, 'client-a', 'home-client'), false);
+  assert.equal(archiveRecordBelongsTo({}, 'home-client', null), false);
+  assert.equal(archiveRecordBelongsTo({ clientId: 'client-a' }, null, 'home-client'), false);
 });
 
 test('upload-url: constraints and path', async () => {

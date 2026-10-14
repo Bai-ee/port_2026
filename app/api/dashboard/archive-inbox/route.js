@@ -3,13 +3,15 @@ import { createRequire } from 'module';
 import { ingestArchiveRecords } from '../../../../features/x-content-inventory/archive-ingest.js';
 import { SERIES, PILLARS } from '../../../../features/x-content-inventory/categories.js';
 import { validatePackage } from '../../../../features/x-content-inventory/schema.js';
+import { archiveRecordBelongsTo } from '../../../../features/x-content-inventory/nas.js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const require = createRequire(import.meta.url);
 const { verifyRequestUser, isAdminEmail } = require('../../../../api/_lib/auth.cjs');
-const { requirePilotOwnerUid } = require('../../../../api/_lib/pilot-access.cjs');
+const { getEffectiveClientContext } = require('../../../../api/_lib/client-provisioning.cjs');
+const { requirePilotOwner } = require('../../../../api/_lib/pilot-access.cjs');
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
 
 // Archive inbox — the seam between the Archive POC and the posting engine.
@@ -36,7 +38,9 @@ function json(body, status = 200) {
   return NextResponse.json(body, { status, headers: { 'cache-control': 'no-store' } });
 }
 
-async function requireAdmin(request) {
+// Admin + client context, mirroring quote-targets requireAdminContext: the effective client comes from
+// ?as= (dashboard switcher) via getEffectiveClientContext, then the owner-pilot gate (uid + client).
+async function requireAdminContext(request) {
   const decoded = await verifyRequestUser({
     headers: {
       authorization: request.headers.get('authorization'),
@@ -48,18 +52,26 @@ async function requireAdmin(request) {
     err.status = 403;
     throw err;
   }
-  // Writes the global x_content_packages store: owner-pilot boundary (uid allowlist; no client context here).
-  requirePilotOwnerUid(decoded);
-  return decoded;
+  const context = await getEffectiveClientContext({ uid: decoded.uid, email: decoded.email, request });
+  if (!context.clientId) {
+    const err = new Error('No client workspace was found.');
+    err.status = 404;
+    throw err;
+  }
+  requirePilotOwner(context, decoded);
+  return { decoded, clientId: context.clientId };
 }
 
-/** Confirmed archive records, joined to whatever is already permanent. */
-async function readConfirmedRecords() {
-  const snap = await fb.adminDb
-    .collection(REVIEW_COLLECTION)
-    .where('state', '==', 'CONFIRMED')
-    .limit(MAX_RECORDS)
-    .get();
+/** Confirmed archive records for `clientId`, joined to whatever is already permanent. */
+async function readConfirmedRecords(clientId) {
+  // Home reads by state (its legacy records carry no clientId); any other client reads only its own
+  // stamped records, so home's legacy backlog can never fill a non-home client's page. Single-field
+  // equality queries only (no composite index); the remaining condition is filtered in memory.
+  const home = homeClientId();
+  const query = clientId === home
+    ? fb.adminDb.collection(REVIEW_COLLECTION).where('state', '==', 'CONFIRMED')
+    : fb.adminDb.collection(REVIEW_COLLECTION).where('clientId', '==', clientId);
+  const snap = await query.limit(MAX_RECORDS).get();
   if (snap.empty) return [];
 
   // One read for the whole upload set rather than per-asset: the join is on
@@ -76,20 +88,23 @@ async function readConfirmedRecords() {
     // packages simply reference the SHA-256 until a transaction exists.
   }
 
-  return snap.docs.map((d) => {
-    const x = d.data() || {};
-    const permanent = permanentByAsset.get(d.id) || {};
-    return { id: d.id, ...x, ...permanent };
-  });
+  // Ownership filter in memory (no composite index): a record with a clientId belongs to that client;
+  // a legacy record without one belongs to the home NAS client only (NAS_INVENTORY_CLIENT_ID).
+  return snap.docs
+    .filter((d) => (d.data() || {}).state === 'CONFIRMED' && archiveRecordBelongsTo(d.data() || {}, clientId, home))
+    .map((d) => {
+      const x = d.data() || {};
+      const permanent = permanentByAsset.get(d.id) || {};
+      return { id: d.id, ...x, ...permanent };
+    });
 }
 
-// The archive inventory belongs to one client (NAS_INVENTORY_CLIENT_ID, same as the NAS worker routes).
-// Unset => no stored stories are shown and saves are refused (fail closed, multi-client Phase 3a).
-const archiveClientId = () => process.env.NAS_INVENTORY_CLIENT_ID || null;
+// Home NAS client: owner of LEGACY archive_review records (no clientId stamped). Unset => legacy
+// records are visible to no one (fail closed). It is never a fallback for another requested client.
+const homeClientId = () => process.env.NAS_INVENTORY_CLIENT_ID || null;
 
-/** The stories this side has written, keyed by package id. */
-async function readStoredPackages() {
-  const clientId = archiveClientId();
+/** The stories this side has written for `clientId`, keyed by package id. */
+async function readStoredPackages(clientId) {
   if (!clientId) return [];
   try {
     const snap = await fb.adminDb.collection(PACKAGES_COLLECTION).where('clientId', '==', clientId).limit(MAX_RECORDS * 2).get();
@@ -100,8 +115,9 @@ async function readStoredPackages() {
 }
 
 export async function GET(request) {
+  let clientId;
   try {
-    await requireAdmin(request);
+    ({ clientId } = await requireAdminContext(request));
   } catch (err) {
     return json({ error: err?.message || 'Unauthorized.' }, err?.status || 401);
   }
@@ -111,7 +127,7 @@ export async function GET(request) {
     const action = url.searchParams.get('action') || 'inbox';
     if (action !== 'inbox') return json({ error: `Unknown action: ${action}` }, 400);
 
-    const [records, stored] = await Promise.all([readConfirmedRecords(), readStoredPackages()]);
+    const [records, stored] = await Promise.all([readConfirmedRecords(clientId), readStoredPackages(clientId)]);
 
     // `existing` is passed so a package a human has already written a story
     // into is reported as present rather than regenerated over the top of it.
@@ -170,8 +186,9 @@ export async function GET(request) {
 
 export async function POST(request) {
   let decoded;
+  let clientId;
   try {
-    decoded = await requireAdmin(request);
+    ({ decoded, clientId } = await requireAdminContext(request));
   } catch (err) {
     return json({ error: err?.message || 'Unauthorized.' }, err?.status || 401);
   }
@@ -188,12 +205,22 @@ export async function POST(request) {
     const story = typeof body?.story === 'string' ? body.story : '';
     const title = typeof body?.title === 'string' ? body.title : '';
 
-    const clientId = archiveClientId();
-    if (!clientId) return json({ error: 'NAS_INVENTORY_CLIENT_ID is not set; archive stories cannot be saved.', code: 'package-client-required' }, 503);
+    if (!clientId) return json({ error: 'No client workspace; archive stories cannot be saved.', code: 'package-client-required' }, 400);
     const ref = fb.adminDb.collection(PACKAGES_COLLECTION).doc(id);
     const prior = await ref.get();
     if (prior.exists && prior.data()?.clientId && prior.data().clientId !== clientId) {
       return json({ error: `Package ${id} belongs to another client.`, code: 'package-client-mismatch' }, 409);
+    }
+    // A package this client does not own yet may only be created for an archive record that belongs
+    // to this client (stamped for it, or legacy and this is the home NAS client).
+    if (!(prior.exists && prior.data()?.clientId === clientId)) {
+      const sha = typeof body?.sha256 === 'string' ? body.sha256.trim() : '';
+      if (!sha) return json({ error: 'sha256 required for a new archive story.', code: 'archive-record-required' }, 400);
+      const recs = await fb.adminDb.collection(REVIEW_COLLECTION).where('sha256', '==', sha).limit(10).get();
+      const home = homeClientId();
+      if (!recs.docs.some((d) => archiveRecordBelongsTo(d.data() || {}, clientId, home))) {
+        return json({ error: 'That archive record does not belong to this client.', code: 'archive-record-client-mismatch' }, 403);
+      }
     }
 
     // Merge, never replace: this document may already carry fields written by

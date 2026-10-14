@@ -7,8 +7,9 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 // NAS analyzer -> HITLOOP: upsert analyzed items as `nas-<sha16>` packages.
-// The NAS belongs to one client: NAS_INVENTORY_CLIENT_ID. Unset => new NAS rows are refused per item
-// (package-client-required, reported in `skipped`); re-analysis of existing rows keeps their own client.
+// Client per item: the worker may send `items[].clientId`; NAS_INVENTORY_CLIENT_ID (home) is the fallback
+// ONLY for items that carry none. Neither => that item is skipped ('client-required'). Existing rows keep
+// their own client; an item naming a different client is skipped ('package-client-mismatch').
 export async function POST(request) {
   const auth = workerAuthStatus(request);
   if (auth === 503) return NextResponse.json({ error: 'Worker token not configured' }, { status: 503 });
@@ -17,7 +18,8 @@ export async function POST(request) {
   try {
     const out = await ingestNasResults({
       getPackage,
-      upsertPackage: (pkg) => upsertPackage(pkg, { returnPackages: false, clientId: process.env.NAS_INVENTORY_CLIENT_ID }),
+      upsertPackage: (pkg, opts = {}) => upsertPackage(pkg, { returnPackages: false, clientId: opts.clientId }),
+      defaultClientId: process.env.NAS_INVENTORY_CLIENT_ID || null,
       now: () => Date.now(),
     }, body);
     return NextResponse.json(out);

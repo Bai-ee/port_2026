@@ -3,10 +3,10 @@
 import React, { useState } from 'react';
 import { Plus, RefreshCw, X } from 'lucide-react';
 import {
-  setTrackShare, validateTrackBenchmark, addTrackBenchmark, removeTrackBenchmark, validatePromotionUrl, setPromotionUrl,
+  addDraftTrack, setTrackLabel, setTrackShare, validateTrackBenchmark, addTrackBenchmark, removeTrackBenchmark, validatePromotionUrl, setPromotionUrl,
   trackBenchmarkRow, trackProfileSummary,
 } from '../../../features/x-strategy/ui-model.js';
-import { MAX_BENCHMARKS_PER_TRACK } from '../../../features/x-strategy/content-tracks.js';
+import { MAX_BENCHMARKS_PER_TRACK, MAX_TRACKS } from '../../../features/x-strategy/content-tracks.js';
 import { XCE_COLORS } from '../content-ui/xce-tokens';
 import Badge from '../content-ui/ui/Badge';
 import Card from '../content-ui/ui/Card';
@@ -63,7 +63,10 @@ function TrackRow({ track, draft, setDraft, savedHandles, rowsMeta, request, ref
   return (
     <div id={`${id}-row`} data-section="content-track" style={S.trackBox}>
       <div id={`${id}-header`} style={{ ...S.row, justifyContent: 'space-between' }}>
-        <strong id={`${id}-label`} style={{ fontSize: 15 }}>{track.label}</strong>
+        {track.isNew ? (
+          <input id={`${id}-label-input`} aria-label="Track name" className="xce-input" style={{ flex: 1, minWidth: 0, fontSize: 15 }} value={track.label} placeholder="Track name"
+            onChange={(e) => setDraft(setTrackLabel(draft, track.id, e.target.value))} />
+        ) : <strong id={`${id}-label`} style={{ fontSize: 15 }}>{track.label}</strong>}
         <Badge id={`${id}-share-badge`} tone="grey">{track.share}%</Badge>
       </div>
 
@@ -136,6 +139,9 @@ export default function ContentTracksPanel({ draft, setDraft, savedHandles = [],
           <TrackRow key={t.id} track={t} draft={draft} setDraft={setDraft} savedHandles={savedHandles} rowsMeta={rowsMeta} request={request} refreshing={refreshing}
             profile={(profiles || []).find((p) => p?.trackId === t.id) || null} onRefreshHandle={onRefreshHandle} hideRefresh={hideRefresh} />
         ))}
+      </div>
+      <div id="x-strategy-content-tracks-add-row" style={{ ...S.row, marginTop: 10 }}>
+        <button type="button" id="x-strategy-content-tracks-add-btn" className="xce-btn xce-btn-ghost" style={{ minHeight: 40 }} disabled={busy || draft.length >= MAX_TRACKS} onClick={() => setDraft(addDraftTrack(draft))}><Plus size={14} /> Add track</button>
       </div>
       {check.dirty && check.errors.length ? <div id="x-strategy-content-tracks-errors" role="alert" style={S.err}>{check.errors.join(' ')}</div> : null}
       <div id="x-strategy-content-tracks-actions-row" style={{ ...S.row, marginTop: 10 }}>

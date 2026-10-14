@@ -16304,7 +16304,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     </div>
                     <div className="tile-detail-tab-content">
                       <div className="tile-detail-tab-pane">
-                        <XMonitorCard getIdToken={brandSystemGetIdToken} hideRefresh={isAdmin} />
+                        <XMonitorCard getIdToken={brandSystemGetIdToken} hideRefresh={isAdmin} clientId={client?.clientId || client?.id || bootstrap?.effectiveClientId || null} />
                       </div>
                     </div>
                   </div>
