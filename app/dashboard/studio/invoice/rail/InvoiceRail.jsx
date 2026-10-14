@@ -159,6 +159,19 @@ const CARD_DOM_ID_TO_KEY = {
   'invoice-rail-saved-invoices-card': 'savedInvoices',
 };
 
+// Browser-local marker of the last saved invoice auto-loaded as the default
+// document (`<slug>@<updatedAt>`) — best-effort, never throws.
+const AUTO_LOAD_KEY = 'invoice-studio-autoload-v1';
+function readAutoLoadMarker() {
+  try { return window.localStorage.getItem(AUTO_LOAD_KEY) || ''; } catch { return ''; }
+}
+function writeAutoLoadMarker(marker) {
+  try { window.localStorage.setItem(AUTO_LOAD_KEY, marker); } catch { /* blocked storage — no-op */ }
+}
+function autoLoadMarkerFor(brief) {
+  return `${brief?.briefSlug || brief?.id || ''}@${brief?.updatedAt || brief?.importedAt || ''}`;
+}
+
 const InvoiceRail = forwardRef(function InvoiceRail({
   isNarrow = false, railW = 336, isAdmin = false, authedFetch = null, user = null, draft,
   // HoloPaper presentation state (docs/plans/INVOICE-STUDIO-HOLOPAPER-HANDOFF.md
@@ -168,7 +181,10 @@ const InvoiceRail = forwardRef(function InvoiceRail({
   // this rail shape (none do today) keeps working without it.
   presentation = null,
 }, ref) {
-  void user; // accepted for prop-shape parity with the rest of Studio; authedFetch already encodes whether a session exists
+  // Saved invoices (list + auto-load) only need a signed-in session — the
+  // GET is verifyRequestUser-gated and scoped to the caller's own client.
+  // Publish stays admin-only (the POST is verifyAdminRequest-gated).
+  const isSignedIn = Boolean(user);
 
   const railInnerRef = useRailReveal();
 
@@ -214,7 +230,7 @@ const InvoiceRail = forwardRef(function InvoiceRail({
   const [publishedAt, setPublishedAt] = useState('');
   const [copiedLink, setCopiedLink] = useState(false);
 
-  // ── Admin-only: saved invoices list ─────────────────────────────────────
+  // ── Signed-in: saved invoices list ──────────────────────────────────────
   const [savedInvoices, setSavedInvoices] = useState([]);
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState('');
@@ -239,12 +255,12 @@ const InvoiceRail = forwardRef(function InvoiceRail({
   }, [authedFetch]);
 
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!isSignedIn) return;
     loadSavedInvoices();
-    // Deliberately only on isAdmin flipping true / mount — same "load once,
-    // Refresh button for anything after" contract the admin card used.
+    // Deliberately only on sign-in / mount — same "load once, Refresh button
+    // for anything after" contract the admin card used.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin]);
+  }, [isSignedIn]);
 
   // POST /api/dashboard/custom-briefs — same endpoint, payload shape
   // ({kind:'invoice', invoice, sections, title, briefSlug, public}) and
@@ -268,6 +284,8 @@ const InvoiceRail = forwardRef(function InvoiceRail({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || `Publish failed (HTTP ${res.status}).`);
       const brief = data.brief || data;
+      // This session's own publish must not trigger an auto-load revert.
+      if (brief?.updatedAt) writeAutoLoadMarker(autoLoadMarkerFor(brief));
       if (!cancelledRef.current) {
         setPublishedBrief(brief);
         setSavedSlug(brief?.briefSlug || briefSlug);
@@ -298,7 +316,7 @@ const InvoiceRail = forwardRef(function InvoiceRail({
   // openSavedInvoice() did in one file (see PublishCard.jsx's header comment
   // for why the state had to move up here once Publish/SavedInvoices split
   // into two components).
-  const openSavedInvoiceIntoEditor = useCallback((brief) => {
+  const openSavedInvoiceIntoEditor = useCallback((brief, { quiet = false } = {}) => {
     if (!brief) return;
     draft.openSavedInvoice(brief);
     setSavedSlug(brief.briefSlug || brief.id || '');
@@ -308,9 +326,32 @@ const InvoiceRail = forwardRef(function InvoiceRail({
     setPublishedBrief(brief);
     setPublishError('');
     setPublishedAt('');
-    openSection('publish');
+    if (!quiet) openSection(isAdmin ? 'publish' : 'savedInvoices');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft, openSection]);
+  }, [draft, openSection, isAdmin]);
+
+  // Auto-load the newest saved invoice as the default document. Runs once
+  // per page load, after the local draft restore has settled (draft.ready),
+  // and only when that newest invoice (id + updatedAt) differs from the one
+  // last auto-loaded in this browser — so a reload keeps in-progress local
+  // edits (and a New invoice) instead of clobbering them, while a newly
+  // published/updated invoice still becomes the default.
+  const autoLoadDoneRef = useRef(false);
+  useEffect(() => {
+    if (autoLoadDoneRef.current || !draft.ready || listLoading) return;
+    const newest = savedInvoices[0];
+    if (!newest) return;
+    autoLoadDoneRef.current = true;
+    if (draft.dirty) return;
+    const marker = autoLoadMarkerFor(newest);
+    if (readAutoLoadMarker() === marker) return;
+    writeAutoLoadMarker(marker);
+    // The local draft is already this invoice (possibly with newer,
+    // unpublished edits) — keep it rather than reverting to the saved copy.
+    const localNumber = draft.invoice?.invoiceNumber;
+    if (localNumber && localNumber === newest.invoice?.invoiceNumber) return;
+    openSavedInvoiceIntoEditor(newest, { quiet: true });
+  }, [draft.ready, draft.dirty, draft.invoice, listLoading, savedInvoices, openSavedInvoiceIntoEditor]);
 
   const resetPublishIdentity = useCallback(() => {
     setSavedSlug('');
@@ -484,19 +525,21 @@ const InvoiceRail = forwardRef(function InvoiceRail({
           );
         })}
 
-        {isAdmin ? (
+        {isSignedIn ? (
           <>
             <div
               id="invoice-rail-admin-divider"
               role="separator"
-              aria-label="Admin-only tools"
+              aria-label={isAdmin ? 'Admin-only tools' : 'Account tools'}
               style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 2px' }}
             >
               <span style={{ flex: 1, height: 1, background: GLASS.hair }} />
-              <span style={{ ...ui.label, color: GLASS.inkMute }}>Admin</span>
+              <span style={{ ...ui.label, color: GLASS.inkMute }}>{isAdmin ? 'Admin' : 'Saved'}</span>
               <span style={{ flex: 1, height: 1, background: GLASS.hair }} />
             </div>
-            <PublishCard draft={draft} publish={publish} open={openCardId === 'publish'} onToggle={() => toggleCard('publish')} />
+            {isAdmin ? (
+              <PublishCard draft={draft} publish={publish} open={openCardId === 'publish'} onToggle={() => toggleCard('publish')} />
+            ) : null}
             <SavedInvoicesCard savedList={savedList} open={openCardId === 'savedInvoices'} onToggle={() => toggleCard('savedInvoices')} />
           </>
         ) : null}

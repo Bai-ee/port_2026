@@ -254,6 +254,7 @@ export function useInvoiceDraft({ isAdmin = false } = {}) {
   // shape) — normalizeInvoiceShape() backfills against this, so a restored
   // partial/legacy draft's missing fields come from the right identity.
   const baseRef = useRef(null);
+  const openedSavedRef = useRef(false);
 
   const patchInvoice = useCallback((updater) => { setInvoiceRaw((prev) => updater(prev)); setDirty(true); }, []);
   const patchSections = useCallback((updater) => { setSectionsRaw((prev) => updater(prev)); setDirty(true); }, []);
@@ -265,6 +266,9 @@ export function useInvoiceDraft({ isAdmin = false } = {}) {
       const base = isAdmin ? await adminSeed().catch(() => publicSeed()) : publicSeed();
       if (cancelled || cancelledRef.current || dirtyRef.current) return;
       baseRef.current = base;
+      // A saved invoice already opened (e.g. the rail's auto-load) wins over
+      // a late re-run of this load (isAdmin resolves after sign-in).
+      if (openedSavedRef.current) { setReady(true); return; }
       const stored = readStoredDraft();
       if (stored) {
         setInvoiceRaw(normalizeInvoiceShape(stored.invoice, base));
@@ -498,6 +502,7 @@ export function useInvoiceDraft({ isAdmin = false } = {}) {
   const openSavedInvoice = useCallback((brief) => {
     if (!brief) return;
     const base = baseRef.current || publicSeed();
+    openedSavedRef.current = true;
     setInvoiceRaw(normalizeInvoiceShape(brief.invoice, base));
     setSectionsRaw(normalizeSectionsShape(brief.sections));
     setDirty(false);
