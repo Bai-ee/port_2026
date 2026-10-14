@@ -367,3 +367,11 @@ tree. The pinned byte-identity test
 `features/invoices/__tests__/invoices.test.js`) passes unmodified — every new option
 (`docKind`/`labels`/`locale`/`numberPattern`/`logoDataUrl`/`theme`) defaults to producing the exact
 pre-Studio HTML bytes.
+
+## 14. 2026-10-13 session (shipped with the publish fix)
+
+- **Publish fix.** `POST /api/dashboard/custom-briefs` (kind `invoice`) 500'd with `resolvePaymentQr is not defined` since `15f04a56`: `DEFAULT_FROM` / `resolvePaymentQr` were declared inside one `if (kind === 'invoice')` block and read in a sibling block. Declarations now sit at route level. No regression test exists for this path yet; a `kind:'invoice', preview:true` POST would catch it.
+- **Auto-load + Saved invoices for signed-in users** (`rail/InvoiceRail.jsx`, `useInvoiceDraft.js`): the Saved list is gated on signed-in (own client only; publish stays admin, divider reads "Admin"/"Saved"). The newest saved invoice auto-loads once per page load unless the draft is dirty, localStorage `invoice-studio-autoload-v1` already equals `<briefSlug>@<updatedAt>`, or the local `invoiceNumber` equals the newest. A successful publish writes the marker so the user's own publish never reverts local edits. `openedSavedRef` guards the `adminReady` re-run of `load()`. Only `public: true` briefs are listed.
+- **Bank transfer** (§2 shape gains `payment.bank = { bankName, accountNumber, routingAch, routingWire }`, free text so leading zeros survive): rendered as `#invoice-payment-bank` above the method/QR rows, omitted when all four are empty (byte-identical for existing invoices). Four `payment.bank.*` editable canvas fields (catalog 63 → 67); `structureKey()` carries a `bank=` presence bitmask. Rail: "Add bank transfer" / "Remove bank transfer". Legacy `InvoiceBuilderCard` has the same inputs (`#invoice-builder-bank-panel`). No on/off toggle (owner decision pending). The owner's real bank details are never in source.
+- **Launchers:** `invoice-builder` card `footerAction` OPEN STUDIO + `#invoice-builder-open-studio-link` in the legacy toolbar. Legacy card and Studio keep separate drafts; they converge only through publish → Saved invoices.
+- Open owner decisions unchanged: bank toggle, legacy card retirement.
