@@ -152,3 +152,7 @@ Source/runtime:
 - Add import flow for `.hitloop-client.json` / `.hitloop-client.zip`.
 - Extend structured defaults beyond Marketing Brief / Market Signals into Strategy Builder, Post Me, Email Digest, and Lead Gen.
 - Add guided interview/research UIs that write suggested decisions into the acquisition queue before approval.
+
+## Client Brain as source of truth (2026-10-13)
+
+The approved Client Brain now owns every strategy field (Market Signals and Listening, voice and guard, Email Digest tone, Brand Overview, Strategy Builder, Strategy Document, Content Tracks, Track Targets). Approve, inject or the Re-sync button push Brain values into the cards; card edits write the changed field back into the Brain Markdown. First approve adopts current settings once, only into empty Brain sections (Brain wins). Every Markdown write is versioned in `clients/{id}/client_brain_versions` (last 50). This reverses the old "manual card setting > approved Brain decision" rule. SSOT: [`docs/source-of-truth/CLIENT-BRAIN-SOURCE-OF-TRUTH.md`](../source-of-truth/CLIENT-BRAIN-SOURCE-OF-TRUTH.md)

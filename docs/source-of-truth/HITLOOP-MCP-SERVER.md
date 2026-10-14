@@ -113,3 +113,7 @@ Connect steps are unchanged (see Connect ChatGPT / Connect Claude above).
 - The strategy-chat daily turn cap applies to `strategy_review` (it runs through the same chat turn).
 - `readers.js` re-states the chat readers from `app/api/dashboard/quote-targets/route.js` (route files cannot export helpers). Keep them in step.
 - `chat-queue` (WS-C) also adds `toolDepsFor` to `createStrategyHandlers`; this branch adds the same one-line export, so the merge is trivial (keep one).
+
+## Client Brain as source of truth (2026-10-13)
+
+Three new generated tools: `strategy_propose_post_approve`, `strategy_propose_post_schedule`, `strategy_propose_post_unschedule` (pending cards in the "MCP" thread; the owner confirms in HITLOOP; nothing publishes). Registry count is now 51 tools (the 46 stated above plus the new ones and later additions; the pinned count lives in `features/mcp/__tests__`). Re-add the connector in ChatGPT/Claude to pick them up. SSOT: [`CLIENT-BRAIN-SOURCE-OF-TRUTH.md`](CLIENT-BRAIN-SOURCE-OF-TRUTH.md)

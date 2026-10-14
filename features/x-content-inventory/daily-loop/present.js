@@ -34,3 +34,30 @@ export function slotStatuses(run) {
     .map(([letter, s]) => ({ letter, timeCT: s.timeCT ?? null, type: s.type, pillar: s.pillar ?? null, filled: filled.has(letter), reason: filled.has(letter) ? null : s.reason }))
     .sort((a, b) => a.letter.localeCompare(b.letter));
 }
+
+export const TRIGGER_LABEL = {
+  'hot-narrative': 'Hot narrative',
+  'opportunity-signal': 'Opportunity signal',
+  'benchmark-gap': 'Benchmark gap',
+  'archive-throwback': 'Archive throwback',
+};
+
+const oneLine = (t, n = 160) => String(t ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
+
+/**
+ * Why this suggestion is "act now": { kind, label, reason, track }. Deterministic, derived from fields the
+ * run already stores (an explicit s.trigger.kind wins), so old saved runs show it too. null when nothing applies.
+ */
+export function suggestionTrigger(s) {
+  if (!s) return null;
+  const track = s.track ? (typeof s.track === 'string' ? s.track : s.track.label || s.track.id || null) : null;
+  const done = (kind, reason) => ({ kind, label: TRIGGER_LABEL[kind], reason: oneLine(reason) || TRIGGER_LABEL[kind], track });
+  const now = s.why?.now || '';
+  const slot = s.slot || {};
+  if (s.trigger?.kind && TRIGGER_LABEL[s.trigger.kind]) return done(s.trigger.kind, s.trigger.reason || now);
+  if (s.opportunity?.kind === 'opportunity-signal' || s.opportunity?.source === 'opportunity-signals') return done('opportunity-signal', now);
+  if (slot.type === 'self-quote' || /^own post from/.test(now)) return done('archive-throwback', now);
+  if (s.conversation || (s.opportunity && s.opportunity.url)) return done('hot-narrative', now);
+  if (s.package) return done('benchmark-gap', slot.floor || slot.fillReason ? (slot.fillReason || now) : now);
+  return null;
+}

@@ -109,8 +109,11 @@ export const PLAYBOOK = Object.freeze([
   chat('chat-regenerate-today', 'Regenerate today\'s suggestions', 'model', 'Regenerate today\'s suggestions.', 'strategy_propose_regenerate_today'),
   chat('chat-refresh-handles', 'Refresh data for specific handles (free local read)', 'free', 'Refresh the data for <handle1>, <handle2>.', 'strategy_propose_refresh_handles'),
   chat('chat-edit-queued-post', 'Edit one queued post (text and/or time of a scheduled one)', 'model', 'Edit queued post <post id>: change the text to "<new text>"<, and move it to <date and time> if it is scheduled>.', 'strategy_propose_post_edit'),
+  chat('chat-approve-queued-post', 'Approve one queued post (owner confirms in HITLOOP)', 'free', 'Approve queued post <post id>. Show me the proposal card.', 'strategy_propose_post_approve'),
+  chat('chat-schedule-queued-post', 'Schedule one queued post for a future time (owner confirms in HITLOOP)', 'free', 'Schedule queued post <post id> for <date and time, with timezone>. Show me the proposal card.', 'strategy_propose_post_schedule'),
+  chat('chat-unschedule-queued-post', 'Unschedule one scheduled post (owner confirms in HITLOOP)', 'free', 'Unschedule post <post id>. Show me the proposal card.', 'strategy_propose_post_unschedule'),
 
-  // Queue & Calendar (buttons only; MCP can never post, schedule, approve or delete)
+  // Queue & Calendar (buttons, or a proposal card the owner confirms in HITLOOP; MCP can PROPOSE approve/schedule/unschedule but never post, delete, or confirm)
   e('queue-compose', 'Compose a post', `${MD} > Queue & Calendar > Compose`, 'click', 'free', null),
   e('queue-schedule', 'Schedule or approve a post', `${MD} > Queue & Calendar > Calendar (open the post sheet)`, 'click', 'free', null),
   e('queue-post-sheet-edit', 'Edit, reschedule or release a post in the post sheet', `${MD} > Queue & Calendar > Calendar > post sheet`, 'click', 'free', null),

@@ -6,6 +6,7 @@ const require = createRequire(import.meta.url);
 const fb = require('../../../../../api/_lib/firebase-admin.cjs');
 const { verifyRequestUser } = require('../../../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../../../api/_lib/client-provisioning.cjs');
+const { recordCardEdits } = require('../../../../../features/client-brain/brain-sync.cjs');
 
 function makeReqShim(request) {
   return {
@@ -57,10 +58,12 @@ export async function POST(request) {
   }
 
   let priorEditorial = null;
+  let priorConfig = {};
   try {
     const priorSnap = await fb.adminDb.collection('dashboard_state').doc(context.clientId).get();
     const prior = priorSnap.exists ? (priorSnap.data() || {}) : {};
     priorEditorial = prior.strategyBuilder?.config?.editorial || null;
+    priorConfig = prior.strategyBuilder?.config || {};
   } catch {
     priorEditorial = null;
   }
@@ -136,5 +139,9 @@ export async function POST(request) {
     { merge: true }
   );
 
-  return json({ ok: true, clientId: context.clientId });
+  // The Client Brain owns the strategy fields here (vertical, CTA, guardrails,
+  // topics to avoid, narratives): write the operator's changes into it.
+  const brainSync = await recordCardEdits(context.clientId, 'strategyBuilder', priorConfig, safeConfig);
+
+  return json({ ok: true, clientId: context.clientId, brainSync });
 }

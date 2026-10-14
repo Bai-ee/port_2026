@@ -6,6 +6,7 @@ const fb = require('../../../../../api/_lib/firebase-admin.cjs');
 const { verifyRequestUser } = require('../../../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../../../api/_lib/client-provisioning.cjs');
 const { applyPositioningBridge } = require('../../../../../features/scout-intake/brand-positioning-bridge');
+const { recordCardEdits } = require('../../../../../features/client-brain/brain-sync.cjs');
 
 function makeReqShim(request) {
   return {
@@ -56,6 +57,11 @@ export async function POST(request) {
   brandOverview.source = 'user';
   brandOverview.updatedAtIso = new Date().toISOString();
 
+  let priorOverview = {};
+  try {
+    priorOverview = (await fb.adminDb.collection('dashboard_state').doc(context.clientId).get()).data()?.snapshot?.brandOverview || {};
+  } catch { /* no prior */ }
+
   try {
     // Use dot-notation update to avoid Firestore shallow-merge replacing the
     // entire snapshot map and wiping unrelated sub-fields (e.g. visualIdentity).
@@ -82,5 +88,8 @@ export async function POST(request) {
   // to scoutConfig.positioningContext so the next brief run gets better queries.
   applyPositioningBridge(context.clientId, brandOverview).catch(() => {});
 
-  return json({ ok: true, brandOverview });
+  // The Client Brain owns these fields: write the operator's changes into it.
+  const brainSync = await recordCardEdits(context.clientId, 'brandOverview', priorOverview, brandOverview);
+
+  return json({ ok: true, brandOverview, brainSync });
 }

@@ -10,6 +10,7 @@ import { MAX_BENCHMARKS_PER_TRACK } from '../../../features/x-strategy/content-t
 import { XCE_COLORS } from '../content-ui/xce-tokens';
 import Badge from '../content-ui/ui/Badge';
 import Card from '../content-ui/ui/Card';
+import ClientBrainOwnedTag from '../ClientBrainOwnedTag';
 import SectionLabel from '../content-ui/ui/SectionLabel';
 
 // ContentTracksPanel - X Strategy > Plan tab. Thin view over the pure helpers in features/x-strategy/ui-model.js.
@@ -125,7 +126,7 @@ export default function ContentTracksPanel({ draft, setDraft, savedHandles = [],
   return (
     <Card id="x-strategy-content-tracks-panel" data-section="content-tracks" padding={14}>
       <div id="x-strategy-content-tracks-header" style={{ ...S.row, justifyContent: 'space-between', marginBottom: 6 }}>
-        <SectionLabel id="x-strategy-content-tracks-title">Content tracks</SectionLabel>
+        <SectionLabel id="x-strategy-content-tracks-title">Content tracks<ClientBrainOwnedTag /></SectionLabel>
         {check.dirty ? <Badge id="x-strategy-content-tracks-saved-badge" tone="amber">Unsaved</Badge> : <Badge id="x-strategy-content-tracks-saved-badge" tone="green">Saved</Badge>}
       </div>
       <p id="x-strategy-content-tracks-intro" style={{ ...S.note, margin: '0 0 8px' }}>Each track has its own benchmarks and share of your authored posts. Pace still follows the primary benchmark. Shares always total {total}%.</p>

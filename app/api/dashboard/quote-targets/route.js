@@ -836,6 +836,9 @@ let strategyHandlers = null;
 function getStrategyHandlers() {
   if (!strategyHandlers) {
     strategyHandlers = createStrategyHandlersFromDb(fb.adminDb, {
+      onXGrowthSaved: (clientId, prior, next) => require('../../../../features/client-brain/brain-sync.cjs').recordXGrowthEdits(clientId, prior, next),
+      onBrainOwnedSaved: (clientId, target, prior, next) => require('../../../../features/client-brain/brain-sync.cjs').recordCardEdits(clientId, target, prior, next),
+      readBrainTrackTargets: (clientId) => require('../../../../features/client-brain/brain-sync.cjs').readApprovedTrackTargets(clientId),
       loadCommitted: committedCorpusRows,
       readPackages: async () => (await readInventory()).packages,
       runDailyAction: (context, action, body) => handleDailyRun(context, action, body),

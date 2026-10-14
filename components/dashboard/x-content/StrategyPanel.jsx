@@ -14,6 +14,7 @@ import {
 import ContentTracksPanel from './ContentTracksPanel.jsx';
 import StrategyDocPanel from './StrategyDocPanel.jsx';
 import { profileBenchmarksFromPlan } from '../../../features/x-strategy/track-profile.js';
+import { trackEvalLines } from '../../../features/x-strategy/insights.js';
 import StrategyChat, { formatDayTime } from './StrategyChat.jsx';
 import { XCE_COLORS, XCE_RADII } from '../content-ui/xce-tokens';
 import Accordion from '../content-ui/ui/Accordion';
@@ -256,6 +257,7 @@ function EvaluationView({ evaluation, idPrefix }) {
 function TrackInsights({ evaluation, onEditTracks }) {
   const tracks = trackInsightsView(evaluation);
   if (!tracks.length) return null;
+  const byTrackId = new Map((evaluation.byTrack || []).map((x) => [x.trackId, x]));
   return (
     <section id="x-strategy-track-insights-panel" data-section="track-insights" style={S.stack}>
       <div style={{ ...S.label, fontSize: 11, letterSpacing: '0.08em', color: XCE_COLORS.inkSoft }}>By content track</div>
@@ -276,6 +278,11 @@ function TrackInsights({ evaluation, onEditTracks }) {
           ) : (
             <button type="button" id={`x-strategy-track-insights-${t.trackId}-add-benchmark-button`} className="xce-btn xce-btn-ghost" style={{ marginTop: 6, minHeight: 36 }} onClick={onEditTracks}>Add a benchmark</button>
           )}
+          {trackEvalLines(byTrackId.get(t.trackId)) ? (
+            <ul id={`results-track-evaluation-panel-${t.trackId}`} style={S.list}>
+              {Object.values(trackEvalLines(byTrackId.get(t.trackId))).map((line) => <li key={line}>{line}</li>)}
+            </ul>
+          ) : null}
           {t.gaps.length > 1 ? (
             <ol id={`x-strategy-track-insights-${t.trackId}-gaps`} style={S.list}>{t.gaps.slice(1).map((g) => <li key={g}>{g}</li>)}</ol>
           ) : null}

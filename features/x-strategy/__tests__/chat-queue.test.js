@@ -237,3 +237,18 @@ test('createProposalInThread: persists pending cards in t_mcp_<date>, drops inva
   assert.equal(x.status, 400);
   assert.equal((await h.createProposalInThread({ clientId: 'c1', threadId: 'bad id!', proposals: [] })).status, 400);
 });
+
+test('validateProposal post-approve / post-schedule / post-unschedule: postId + expectedUpdatedAt; schedule needs a future ISO time', () => {
+  const ok = validateProposal({ kind: 'post-approve', payload: { postId: 'p', expectedUpdatedAt: 'u', junk: 1 } });
+  assert.equal(ok.ok, true);
+  assert.deepEqual(ok.proposal.payload, { postId: 'p', expectedUpdatedAt: 'u' });
+  assert.equal(validateProposal({ kind: 'post-unschedule', payload: { postId: 'p', expectedUpdatedAt: 'u' } }).ok, true);
+  assert.equal(validateProposal({ kind: 'post-schedule', payload: { postId: 'p', scheduledAt: FUTURE, expectedUpdatedAt: 'u' } }).ok, true);
+  for (const [kind, payload] of [
+    ['post-approve', { expectedUpdatedAt: 'u' }],
+    ['post-approve', { postId: 'p' }],
+    ['post-schedule', { postId: 'p', expectedUpdatedAt: 'u' }],
+    ['post-schedule', { postId: 'p', scheduledAt: '2020-01-01T00:00:00.000Z', expectedUpdatedAt: 'u' }],
+    ['post-schedule', { postId: 'p', scheduledAt: 'nope', expectedUpdatedAt: 'u' }],
+  ]) assert.equal(validateProposal({ kind, payload }).ok, false, kind + JSON.stringify(payload));
+});

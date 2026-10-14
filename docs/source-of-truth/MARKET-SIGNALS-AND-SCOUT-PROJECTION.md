@@ -308,3 +308,7 @@ Each adds cost on every run, so promote deliberately. Maps to existing `agentDat
 | Recipe run endpoint | `app/api/dashboard/recipe-run/route.js` (`GET` catalog · `POST` run over stored `scoutBrief.agentData`) |
 | REPORT tab render | `DashboardPage.jsx` `renderSignalsBriefMock` → `renderRecipeBriefBlock` (synthesis) + `renderWatchlistAnalysisBlock` (Happening on X); `.brief-kit` scope at end of `dashboardCss` |
 | Visual · analysis recipes flow | `docs/dashboard-ui/analysis-recipes-flow.html` (§8) |
+
+## Client Brain as source of truth (2026-10-13)
+
+The Market Signals / Listening config fields (brand name, X handle, keywords, topics, competitors, watchlist, Instagram handles, platforms, searches, source focus, scout instructions, Scribe tone, hard constraints, Guardian reviewer context and prohibited claims, opportunity queries, benchmark accounts) are now owned by the approved Client Brain. `marketing-brief/config` GET returns the Brain projection as the "From Client Brain" defaults; saves write only the changed fields back to the Brain. Fields are tagged "From Client Brain" in the UI. SSOT: [`CLIENT-BRAIN-SOURCE-OF-TRUTH.md`](CLIENT-BRAIN-SOURCE-OF-TRUTH.md)

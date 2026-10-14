@@ -163,6 +163,42 @@ function SourceRow({ source, onToggle, onUseForToggle, onOpenCard }) {
   );
 }
 
+function BrainSyncResult({ brainSync }) {
+  if (!brainSync) return null;
+  const targets = brainSync.targets && typeof brainSync.targets === 'object' ? Object.entries(brainSync.targets) : [];
+  const adoption = brainSync.adoption?.changes || [];
+  const show = (v) => (typeof v === 'string' ? v : JSON.stringify(v));
+  return (
+    <div id="client-brain-sync-result" className="cb-field-block" style={{ fontSize: 12 }}>
+      <span className="mu-label">Sync result</span>
+      {brainSync.skipped ? <p className="cb-muted">Skipped: {show(brainSync.skipped)}</p> : null}
+      {brainSync.error ? <p className="cb-muted">Error: {show(brainSync.error)}</p> : null}
+      {targets.map(([name, t]) => (
+        <div key={name} style={{ marginTop: 6 }}>
+          <strong>{name}</strong>
+          {(t?.diff || []).length === 0 && !(t?.warnings || []).length ? <span className="cb-muted"> — no changes</span> : null}
+          <ul style={{ margin: '2px 0 0 16px', padding: 0 }}>
+            {(t?.diff || []).map((d, i) => (
+              <li key={`${d.field}-${i}`}>
+                {d.field}: {show(d.from)} → {show(d.to)}{d.origin === 'derived' ? ' (fills empty)' : ''}
+              </li>
+            ))}
+            {(t?.warnings || []).map((w, i) => <li key={`w${i}`} className="cb-muted">Warning: {show(w)}</li>)}
+          </ul>
+        </div>
+      ))}
+      {adoption.length ? (
+        <div style={{ marginTop: 8 }}>
+          <strong>Adopted from current settings (one time)</strong>
+          <ul style={{ margin: '2px 0 0 16px', padding: 0 }}>
+            {adoption.map((c, i) => <li key={`${c.target}-${c.field}-${i}`}>{c.target}.{c.field}</li>)}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function ClientBrainCard({ getIdToken, onSaved, onOpenCard }) {
   const [tab, setTab] = useState('source');
   const [brain, setBrain] = useState(null);
@@ -177,6 +213,45 @@ export default function ClientBrainCard({ getIdToken, onSaved, onOpenCard }) {
   const [voiceDraft, setVoiceDraft] = useState({ toneSummary: '', scribeInstructions: '', avoidText: '' });
   const [voiceDirty, setVoiceDirty] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [brainSync, setBrainSync] = useState(null);
+  const [versions, setVersions] = useState([]);
+  const [versionBusy, setVersionBusy] = useState('');
+
+  const loadVersions = useCallback(async () => {
+    try {
+      const token = await getIdToken();
+      const res = await fetch('/api/dashboard/client-brain?action=versions', {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) setVersions(Array.isArray(data.versions) ? data.versions : []);
+    } catch { /* version list is best-effort */ }
+  }, [getIdToken]);
+
+  useEffect(() => { loadVersions(); }, [loadVersions]);
+
+  async function loadVersionIntoEditor(id) {
+    setVersionBusy(id);
+    setError('');
+    try {
+      const token = await getIdToken();
+      const res = await fetch(`/api/dashboard/client-brain?action=version&ts=${encodeURIComponent(id)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      const source = data.version?.markdownSource || '';
+      setMarkdownSource(source);
+      setSourceDirty(source !== markdownBaseline);
+      setSourceFileName('');
+    } catch (err) {
+      setError(err.message || 'Could not load that version.');
+    } finally {
+      setVersionBusy('');
+    }
+  }
 
   const loadBrain = useCallback(async () => {
     setLoading(true);
@@ -296,6 +371,8 @@ export default function ClientBrainCard({ getIdToken, onSaved, onOpenCard }) {
         setBrain(data.brain);
         onSaved?.(data.brain);
       }
+      if (data.brainSync) setBrainSync(data.brainSync);
+      if (action === 'approve') loadVersions();
       if (data.CLIENT_CONTEXT) {
         await navigator.clipboard?.writeText(data.CLIENT_CONTEXT);
         setCopied('Copied CLIENT_CONTEXT.');
@@ -352,6 +429,8 @@ export default function ClientBrainCard({ getIdToken, onSaved, onOpenCard }) {
       setMarkdownBaseline(savedSource);
       setSourceDirty(false);
       setSourceFileName('');
+      if (data.brainSync) setBrainSync(data.brainSync);
+      loadVersions();
       onSaved?.(data.brain);
       setCopied('Injected CLIENT_BRAIN.md.');
       setTab('approved');
@@ -453,6 +532,27 @@ export default function ClientBrainCard({ getIdToken, onSaved, onOpenCard }) {
 
       {tab === 'source' && (
         <section id="client-brain-source-editor" className="cb-panel">
+          <div id="client-brain-versions-list" className="cb-field-block">
+            <span className="mu-label">Saved versions</span>
+            {versions.length === 0 ? (
+              <p className="cb-muted">No saved versions yet.</p>
+            ) : (
+              <ul style={{ listStyle: 'none', margin: '6px 0 0', padding: 0, maxHeight: 180, overflowY: 'auto' }}>
+                {versions.map((v) => (
+                  <li key={v.id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '4px 0', fontSize: 12 }}>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      {v.createdAtIso ? new Date(v.createdAtIso).toLocaleString() : v.id}
+                      {' · '}{v.reason || 'save'}{v.status ? ` · ${v.status}` : ''}
+                      {Number.isFinite(Number(v.size)) ? ` · ${Number(v.size).toLocaleString()} chars` : ''}
+                    </span>
+                    <button type="button" className="sg-btn" disabled={Boolean(busy) || versionBusy === v.id} onClick={() => loadVersionIntoEditor(v.id)}>
+                      {versionBusy === v.id ? 'Loading...' : 'Load into editor'}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           <label className="cb-field-block cb-source-field">
             <textarea
               rows={14}
@@ -533,6 +633,24 @@ export default function ClientBrainCard({ getIdToken, onSaved, onOpenCard }) {
           {sourceRefs.length ? sourceRefs.map((source) => (
             <SourceRow key={source.id} source={source} onToggle={toggleSource} onUseForToggle={toggleUseFor} onOpenCard={onOpenCard} />
           )) : <div className="sg-empty">No sources discovered yet.</div>}
+        </section>
+      )}
+
+      {tab === 'approved' && (
+        <section id="client-brain-resync-panel" className="cb-panel">
+          <div className="cb-actions">
+            <button
+              id="client-brain-resync-button"
+              type="button"
+              className="sg-btn"
+              disabled={Boolean(busy) || brain?.status !== 'approved'}
+              title={brain?.status === 'approved' ? 'Push the approved Brain to system settings (no status change)' : 'Approve the Brain first'}
+              onClick={() => runAction('approve', { status: 'approved', resync: true }, 'resync')}
+            >
+              {busy === 'resync' ? 'Re-syncing...' : 'Re-sync to system'}
+            </button>
+          </div>
+          <BrainSyncResult brainSync={brainSync} />
         </section>
       )}
 

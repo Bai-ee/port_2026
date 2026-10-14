@@ -30,3 +30,14 @@ test('slotStatuses merges filled and unfilled slots; old runs give []', () => {
   assert.deepEqual(slotStatuses({ suggestions: [], gaps: [] }), []);
   assert.deepEqual(slotStatuses(null), []);
 });
+
+import { suggestionTrigger } from '../daily-loop/present.js';
+
+test('suggestionTrigger classifies from stored fields and honours explicit trigger', () => {
+  assert.equal(suggestionTrigger(null), null);
+  assert.equal(suggestionTrigger({ conversation: { id: 1 }, why: { now: 'hot' } }).kind, 'hot-narrative');
+  assert.equal(suggestionTrigger({ slot: { type: 'self-quote' }, why: { now: 'own post from 40 days ago' } }).kind, 'archive-throwback');
+  assert.equal(suggestionTrigger({ package: { id: 'p' }, track: 'Design', why: { now: 'slot A' } }).kind, 'benchmark-gap');
+  assert.equal(suggestionTrigger({ package: { id: 'p' }, trigger: { kind: 'opportunity-signal', reason: 'x' } }).kind, 'opportunity-signal');
+  assert.equal(suggestionTrigger({ why: {} }), null);
+});

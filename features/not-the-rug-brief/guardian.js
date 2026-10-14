@@ -181,7 +181,15 @@ function buildVoiceRulesBlock(brandVoice) {
     .map((a) => `- ${a}`)
     .join('\n');
 
-  return `VOICE PILLARS:\n${pillars}\n\nAVOID:\n${avoid}`;
+  // Checkable copy rules from the Client Brain's Formatting Rules. Rendered only
+  // when present, so profiles without them get the exact prompt they had before.
+  const rules = brandVoice.formatting_rules || {};
+  const copyRules = ['punctuation', 'links']
+    .filter((k) => typeof rules[k] === 'string' && rules[k].trim())
+    .map((k) => `- ${k}: ${rules[k].trim()}`)
+    .join('\n');
+
+  return `VOICE PILLARS:\n${pillars}\n\nAVOID:\n${avoid}${copyRules ? `\n\nCOPY RULES:\n${copyRules}` : ''}`;
 }
 
 /**
@@ -389,4 +397,4 @@ async function runGuardian(contentOutput, clientId) {
   }
 }
 
-module.exports = { runGuardian };
+module.exports = { runGuardian, buildVoiceRulesBlock };

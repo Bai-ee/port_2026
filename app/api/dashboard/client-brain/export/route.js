@@ -20,20 +20,22 @@ export async function POST(request) {
 
   try {
     const { brain } = await getClientBrain(context.clientId);
-    const [clientSnap, configSnap, dashSnap] = await Promise.all([
+    const [clientSnap, configSnap, dashSnap, digestSnap] = await Promise.all([
       fb.adminDb.collection('clients').doc(context.clientId).get().catch(() => null),
       fb.adminDb.collection('client_configs').doc(context.clientId).get().catch(() => null),
       fb.adminDb.collection('dashboard_state').doc(context.clientId).get().catch(() => null),
+      fb.adminDb.collection('digest_config').doc(context.clientId).get().catch(() => null),
     ]);
+    const digestConfig = digestSnap?.exists ? (digestSnap.data() || {}) : null;
     const contextPack = brain?.aiContextPack || {};
     const client = clientSnap?.exists ? { id: clientSnap.id, ...(clientSnap.data() || {}) } : { id: context.clientId };
     const clientConfig = configSnap?.exists ? (configSnap.data() || {}) : {};
     const dashboardState = dashSnap?.exists ? (dashSnap.data() || {}) : {};
     const cardConfigs = {
       'marketing-brief': clientConfig.marketingBriefConfig || null,
-      'strategy-builder': clientConfig.strategyBuilder || dashboardState.strategyBuilder?.config || null,
+      'strategy-builder': dashboardState.strategyBuilder?.config || null,
       'post-me': dashboardState.socialPosting || dashboardState.socialQueue || null,
-      'email-digest': clientConfig.digestConfig || dashboardState.digestConfig || null,
+      'email-digest': digestConfig,
       leadgen: dashboardState.leadgen || null,
     };
     const clientPackage = {

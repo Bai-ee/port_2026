@@ -498,7 +498,13 @@ async function saveDigestConfig(clientId, patch = {}) {
   if (typeof patch.dailyXSearch === 'boolean') next.dailyXSearch = patch.dailyXSearch;
   if (typeof patch.recipientEmail === 'string') next.recipientEmail = patch.recipientEmail.trim().slice(0, 200);
   next.updatedAt = fb.FieldValue.serverTimestamp();
+  // Brain-owned fields (tone, extraInstructions, contactUrl) the operator
+  // changed are written into the Client Brain too (brain-sync.cjs).
+  let prior = {};
+  try { prior = (await configDocRef(clientId).get()).data() || {}; } catch { /* no prior */ }
   await configDocRef(clientId).set(next, { merge: true });
+  const { recordCardEdits } = require('../client-brain/brain-sync.cjs');
+  await recordCardEdits(clientId, 'digest', { tone: DEFAULTS.tone, ...prior }, next);
   return getDigestConfig(clientId);
 }
 

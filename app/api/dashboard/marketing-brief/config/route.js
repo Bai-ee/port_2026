@@ -9,7 +9,13 @@ const fb = require('../../../../../api/_lib/firebase-admin.cjs');
 const { verifyRequestUser } = require('../../../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../../../api/_lib/client-provisioning.cjs');
 const { geocodeZip } = require('../../../../../features/intelligence/_weather.js');
-const { loadClientBrainCardDefaults, saveClientBrainCardSettingsSnapshot } = require('../../../../../features/client-brain/store.cjs');
+const { loadClientBrainCardDefaults, saveClientBrainCardSettingsSnapshot, readClientBrainDoc } = require('../../../../../features/client-brain/store.cjs');
+const {
+  projectMarketSignals,
+  changedManifestFields,
+  buildScoutConfigMirror,
+  writeCardEditsToBrain,
+} = require('../../../../../features/client-brain/brain-sync.cjs');
 const { normalizeSearchTerms } = require('../../../../../features/scout-intake/search-term-normalizer.js');
 
 // Normalize + (re)geocode the weather config. Geocodes the zip on save so the
@@ -155,6 +161,25 @@ function normalizeLineList(input, { maxItems = 20, maxLen = 240 } = {}) {
     .slice(0, maxItems);
 }
 
+// Approved Markdown Brain -> its live projection (brain-sync manifest), so the
+// card's "From Client Brain" values always match the Brain. Other brains keep
+// the legacy decision-engine card defaults.
+async function loadBrainDefaults(clientId) {
+  const brain = await readClientBrainDoc(clientId);
+  if (brain?.status === 'approved' && brain.markdownSource) {
+    const { values } = projectMarketSignals(brain.markdownSource);
+    return { fields: Object.fromEntries(Object.entries(values).map(([k, value]) => [k, { value, status: 'approved' }])) };
+  }
+  return loadClientBrainCardDefaults(clientId, { cardId: 'marketing-brief' });
+}
+
+// Parked chips (Market Signals term controls): newline/comma string or array.
+function normalizeParkedList(input, prior) {
+  if (input === undefined) return Array.isArray(prior) ? prior : [];
+  const rows = Array.isArray(input) ? input : String(input || '').split(/[\n,]+/);
+  return rows.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 40);
+}
+
 function defaultValue(item) {
   return item && typeof item === 'object' && Object.prototype.hasOwnProperty.call(item, 'value') ? item.value : item;
 }
@@ -225,7 +250,7 @@ export async function GET(request) {
   const config = data.marketingBriefConfig || null;
   let defaults = { fields: {} };
   try {
-    defaults = await loadClientBrainCardDefaults(context.clientId, { cardId: 'marketing-brief' });
+    defaults = await loadBrainDefaults(context.clientId);
   } catch { /* non-fatal — config works without Client Brain defaults */ }
   const merged = mergeClientBrainDefaults(config, defaults);
   return json({
@@ -277,8 +302,10 @@ export async function POST(request) {
   let priorOpportunitySignals = null;
   let priorXGrowth = null;
   let priorBrandXHandle = '';
+  let priorConfig = {};
   try {
     const priorSnap = await fb.adminDb.collection('client_configs').doc(context.clientId).get();
+    priorConfig = priorSnap.data()?.marketingBriefConfig || {};
     priorWeather = priorSnap.data()?.marketingBriefConfig?.weather || null;
     priorCalendar = priorSnap.data()?.marketingBriefConfig?.calendar || null;
     priorOpportunitySignals = priorSnap.data()?.marketingBriefConfig?.opportunitySignals || null;
@@ -385,6 +412,16 @@ export async function POST(request) {
     // measured against, lanes, cadence tier. Normalized here because a block
     // this route does not name is dropped on every save.
     xGrowth: normalizeXGrowthProfile(body?.xGrowth, priorXGrowth),
+    // Local Reputation toggle + parked term chips. Previously missing from this
+    // whitelist, so they were silently dropped on every save.
+    gbpReputation: {
+      enabled: (body?.gbpReputation?.enabled ?? priorConfig.gbpReputation?.enabled) === true,
+    },
+    kolsOff: normalizeParkedList(body?.kolsOff, priorConfig.kolsOff),
+    brandKeywordsOff: normalizeParkedList(body?.brandKeywordsOff, priorConfig.brandKeywordsOff),
+    categoryTermsOff: normalizeParkedList(body?.categoryTermsOff, priorConfig.categoryTermsOff),
+    // Preserve the Brain-sync provenance marker (server-owned).
+    ...(priorConfig.clientBrainSync ? { clientBrainSync: priorConfig.clientBrainSync } : {}),
     updatedAtIso: new Date().toISOString(),
   };
 
@@ -398,50 +435,34 @@ export async function POST(request) {
     marketingBriefConfig,
     updatedAt: fb.FieldValue.serverTimestamp(),
   };
-  // Re-quote multi-word terms to match the audit's exact-match form
-  // (same rule buildSearchPlan uses for the brand query).
-  const quoteTerm = (t) => (/\s/.test(t) && !/^".*"$/.test(t) ? `"${t}"` : t);
-  const quotedKeywords = marketingBriefConfig.brandKeywords.map(quoteTerm);
-
-  if (priorScoutConfig) {
-    // URL client: mirror card edits back into existing scoutConfig.
-    const scoutConfigMirror = {
-      brandKeywords: quotedKeywords,
-      categoryTerms: marketingBriefConfig.categoryTerms,
-    };
-    if (marketingBriefConfig.brandName) scoutConfigMirror.clientName = marketingBriefConfig.brandName;
-    // reddit.mentionQueries is the brand identity in the shape the reddit
-    // external scout actually queries — refresh it from the edited keywords.
-    if (priorScoutConfig.reddit) {
-      scoutConfigMirror.reddit = { mentionQueries: quotedKeywords };
-    }
-    writePayload.scoutConfig = scoutConfigMirror;
-  } else if (!priorSourceWebsiteUrl) {
-    // Name-only client: no URL means no crawl will ever run — seed store A from
-    // the first card save so external scouts have a canonical identity to read.
-    writePayload.scoutConfig = {
-      clientName: marketingBriefConfig.brandName || '',
-      brandKeywords: quotedKeywords,
-      categoryTerms: marketingBriefConfig.categoryTerms,
-      competitors: [],
-      industry: '',
-      reddit: { subreddits: [], mentionQueries: quotedKeywords },
-    };
-  }
+  const scoutConfigMirror = buildScoutConfigMirror(marketingBriefConfig, { priorScoutConfig, priorSourceWebsiteUrl });
+  if (scoutConfigMirror) writePayload.scoutConfig = scoutConfigMirror;
 
   await fb.adminDb.collection('client_configs').doc(context.clientId).set(
     writePayload,
     { merge: true }
   );
 
+  // The Client Brain owns strategy fields: fields the operator changed in this
+  // save are written into the Brain's Markdown (brain-sync.cjs). Only changed
+  // fields count, so a whole-form save never pushes untouched values back.
+  // Brains without Markdown keep the legacy snapshot promotion.
+  let brainSync = { mode: 'none', changed: [] };
+  try {
+    const edits = changedManifestFields(priorConfig, marketingBriefConfig);
+    if (Object.keys(edits).length) brainSync = await writeCardEditsToBrain(context.clientId, edits);
+  } catch (err) {
+    // Non-fatal — the card save itself already succeeded.
+    brainSync = { mode: 'error', changed: [], error: err.message };
+  }
   try {
     await saveClientBrainCardSettingsSnapshot(context.clientId, {
       cardId: 'marketing-brief',
       config: marketingBriefConfig,
       source: 'card',
-      promote: true,
+      promote: brainSync.mode === 'legacy',
     });
   } catch { /* non-fatal — card config is canonical for its own run state */ }
 
-  return json({ ok: true, clientId: context.clientId, config: marketingBriefConfig });
+  return json({ ok: true, clientId: context.clientId, config: marketingBriefConfig, brainSync });
 }

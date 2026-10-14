@@ -1029,3 +1029,7 @@ committed, pushed, deployed, rotated, or emailed at any point in this pass eithe
 12. (§12d) If `digestBreaker.recordDeliveryOutcome` itself persistently fails to write (e.g. a
     sustained `digest_config` write outage), the breaker would never trip even after repeated real
     delivery failures — flagged, not fixed.
+
+## Client Brain as source of truth (2026-10-13)
+
+Digest `tone`, `extraInstructions` and `contactUrl` are owned by the approved Client Brain (Content > Email Tone / Email Instructions, Identity > Contact Url); `saveDigestConfig` writes changed fields back. Schedule, include toggles, recipients and cost toggles stay owned by this card. SSOT: [`CLIENT-BRAIN-SOURCE-OF-TRUTH.md`](CLIENT-BRAIN-SOURCE-OF-TRUTH.md)

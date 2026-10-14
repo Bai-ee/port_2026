@@ -118,7 +118,9 @@ function ProposalCard({ proposal, currentPlan, history, planVersion, deciding, o
   const savedEntry = savedVersion ? (history || []).find((h) => h.version === savedVersion) : null;
   const rawPreview = confirmed && isPlanChange ? [] : proposalPayloadPreview(proposal.kind, proposal.payload, currentPlan);
   // post-edit shows current vs new text in its own block (below); keep only the time/notes lines here.
-  const preview = proposal.kind === 'post-edit' ? rawPreview.filter((l) => !/^(Current|New) text:/.test(l)) : rawPreview;
+  const isPostAction = ['post-approve', 'post-schedule', 'post-unschedule'].includes(proposal.kind);
+  const preview = proposal.kind === 'post-edit' ? rawPreview.filter((l) => !/^(Current|New) text:/.test(l))
+    : isPostAction ? rawPreview.filter((l) => !/^Post:/.test(l)) : rawPreview;
   const diffLine = savedEntry ? historyDiffSummary(savedEntry) : '';
   // Undo = restore the plan as it stood after the prior version. Only while this is still the newest version
   // (reverting an older change would silently discard later ones) and only when a prior version still exists.
@@ -175,6 +177,12 @@ function ProposalCard({ proposal, currentPlan, history, planVersion, deciding, o
           {isDocEdit && confirmed && typeof onViewDoc === 'function' ? (
             <div style={{ ...S.row, justifyContent: 'flex-end' }}>
               <button type="button" id={`x-strategy-proposal-view-doc-${id}`} style={S.textLink} onClick={onViewDoc}>View strategy <ArrowUpRight size={14} /></button>
+            </div>
+          ) : null}
+          {isPostAction ? (
+            <div id={`strategy-proposal-card-${proposal.kind}`} data-section="chat-proposal-post-action" style={{ display: 'grid', gap: 4 }}>
+              <div style={S.label}>Post</div>
+              <p id={`x-strategy-proposal-post-text-${id}`} style={{ ...S.rationale, whiteSpace: 'pre-wrap' }}>{(rawPreview.find((l) => /^Post:/.test(l)) || '').replace(/^Post:\s*/, '') || 'Not captured.'}</p>
             </div>
           ) : null}
           {proposal.kind === 'post-edit' && pending ? (

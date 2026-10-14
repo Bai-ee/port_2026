@@ -83,6 +83,9 @@ export const PROPOSAL_KINDS = Object.freeze([
   'refresh-handles',
   'strategy-doc-edit',
   'post-edit',
+  'post-approve',
+  'post-schedule',
+  'post-unschedule',
   'paid-sync',
 ]);
 
@@ -108,6 +111,9 @@ export const PROPOSAL_KIND_ACTIONS = Object.freeze({
   'refresh-handles': 'strategy-refresh',
   'strategy-doc-edit': 'strategy-doc-save',
   'post-edit': 'update', // social-posting `update` (updateSocialPost); not a strategy ROUTE_ACTION
+  'post-approve': 'approve-draft', // social-posting `approve-draft` (approveDraft); not a strategy ROUTE_ACTION. Never schedules or publishes
+  'post-schedule': 'approve-and-schedule', // social-posting `approve-and-schedule` (approveAndSchedule, ledger/reservation path); the process-due cron publishes
+  'post-unschedule': 'update', // social-posting `update` with scheduledAt cleared (updateSocialPost); releases the slot
   'paid-sync': 'paid-sync', // features/mcp/paid-syncs.js via the injected runPaidSync; not a strategy ROUTE_ACTION
 });
 

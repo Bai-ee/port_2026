@@ -13,8 +13,9 @@ function json(body, status = 200) {
 
 export async function POST(request) {
   let context;
+  let decoded;
   try {
-    ({ context } = await resolveDashboardClientContext(request));
+    ({ context, decoded } = await resolveDashboardClientContext(request));
   } catch (err) {
     return json({ error: err.message || 'Unauthorized.' }, err.status || 401);
   }
@@ -28,8 +29,9 @@ export async function POST(request) {
   } catch { /* no body — deterministic */ }
 
   try {
-    const brain = await generateAndSaveClientBrain(context.clientId, { mode });
-    return json({ ok: true, clientId: context.clientId, mode, brain });
+    const result = await generateAndSaveClientBrain(context.clientId, { mode, byUid: decoded?.uid || null });
+    // result.mode is 'markdown' when the stored Markdown was recompiled instead of rebuilt.
+    return json({ ok: true, clientId: context.clientId, mode: result.mode, brain: result.brain });
   } catch (err) {
     return json({ error: err.message || 'Could not generate Client Brain.' }, err.status || 500);
   }

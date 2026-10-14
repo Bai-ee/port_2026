@@ -177,7 +177,8 @@ export function createStrategyHandlers({
   corpusStore, planStore: basePlanStore, refreshService, readXGrowthConfig,
   readPackages = async () => [], readWorkerHealth = null, evaluate = defaultEvaluate, clock = Date.now,
   resolveProfile = resolveXGrowthProfile, buildPreviewPlan = buildContentDayPlan,
-  docStore = null, // strategy-doc-store.js; absent => the strategy-doc-* actions answer 503
+  docStore: baseDocStore = null, onBrainOwnedSaved = null, // strategy-doc-store.js; absent => the strategy-doc-* actions answer 503
+  readBrainTrackTargets = null, // clientId -> approved Brain Track Targets rows (per-type shares); absent => postsPerDay only
   chatStore = null, agentLoopFactory = null, callModel = null, logUsage = null,
   runDailyAction = null, runUpdateItemFacets = null, readTodayRun = null, readContentContext = null, saveXGrowthProfile = null,
   readQueueSummary = null, readPost = null, readOpportunities = null, readResults = null, // chat read tools: (clientId[, postId]) -> plain JSON | null
@@ -217,12 +218,42 @@ export function createStrategyHandlers({
     const derived = profileBenchmarksFromPlan(await basePlanStore.get(clientId));
     return saveXGrowthProfile(clientId, derived ? { ...p, benchmarkHandles: derived } : p);
   };
+  // Client Brain write-back: strategy-doc and plan saves (manual card edits AND confirmed chat proposals, which run
+  // through these same stores) tell the Brain via onBrainOwnedSaved(clientId, target, prior, next), where prior/next
+  // are the whole stored docs. Fire-and-forget; a hook failure never fails the save. The Brain's own sync
+  // (source 'client-brain') is skipped so it cannot loop. Absent hook => stores are used as-is.
+  const jsonEq = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  const fromBrain = (opts) => opts?.source === 'client-brain' || opts?.by === 'client-brain';
+  function notifyBrain(clientId, target, prior, next) {
+    try { Promise.resolve(onBrainOwnedSaved(clientId, target, prior, next)).catch((err) => console.warn('[x-strategy] onBrainOwnedSaved failed:', target, err?.message || err)); }
+    catch (err) { console.warn('[x-strategy] onBrainOwnedSaved failed:', target, err?.message || err); }
+  }
+  const notifyPlan = (clientId, prior, out, opts) => {
+    if (!onBrainOwnedSaved || !out?.changed || fromBrain(opts)) return;
+    if (!jsonEq(prior?.plan?.contentTracks, out.doc?.plan?.contentTracks)) notifyBrain(clientId, 'contentTracks', prior, out.doc);
+    if (!jsonEq(prior?.plan?.engineTargets, out.doc?.plan?.engineTargets)) notifyBrain(clientId, 'trackTargets', prior, out.doc);
+  };
+  const withBrainPlan = (write) => async (clientId, ...args) => {
+    const prior = onBrainOwnedSaved ? await basePlanStore.get(clientId) : null;
+    const out = await write(clientId, ...args);
+    notifyPlan(clientId, prior, out, args[0]);
+    return out;
+  };
   const planStore = {
     ...basePlanStore,
     get: (...a) => basePlanStore.get(...a),
-    apply: withMirror((...a) => basePlanStore.apply(...a)),
-    revert: withMirror((...a) => basePlanStore.revert(...a)),
+    apply: withBrainPlan(withMirror((...a) => basePlanStore.apply(...a))),
+    revert: withBrainPlan(withMirror((...a) => basePlanStore.revert(...a))),
   };
+  const withBrainDoc = (write) => async (clientId, ...args) => {
+    const prior = onBrainOwnedSaved ? await baseDocStore.get(clientId) : null;
+    const out = await write(clientId, ...args);
+    if (onBrainOwnedSaved && out?.changed && !fromBrain(args[0])) notifyBrain(clientId, 'strategyDoc', prior, out.doc);
+    return out;
+  };
+  const docStore = baseDocStore && onBrainOwnedSaved
+    ? { ...baseDocStore, get: (...a) => baseDocStore.get(...a), apply: withBrainDoc((...a) => baseDocStore.apply(...a)), revert: withBrainDoc((...a) => baseDocStore.revert(...a)) }
+    : baseDocStore;
 
   /** The admin-selected client only: body.clientId must be present and equal context.clientId. */
   function requireClient(body, context) {
@@ -251,6 +282,15 @@ export function createStrategyHandlers({
     if (!h) return { handle, invalid: true, rows: [], meta: null, source: 'none' };
     const r = await corpusStore.readRows(h);
     return { handle: h, rows: r.rows || [], meta: r.meta ?? null, source: r.source };
+  }
+
+  /** Never fails a read path: no Brain / not approved / error => no Brain shares. */
+  async function brainTargetsFor(clientId) {
+    if (typeof readBrainTrackTargets !== 'function') return {};
+    try {
+      const rows = await readBrainTrackTargets(clientId);
+      return Array.isArray(rows) && rows.length ? { brainTrackTargets: rows } : {};
+    } catch { return {}; }
   }
 
   async function runEvaluate(input) {
@@ -313,6 +353,7 @@ export function createStrategyHandlers({
     const { evaluation, evaluationError } = await runEvaluate({
       ownHandle: own.handle, ownRows: own.rows, ownMeta: own.meta, benchmarks,
       ...(explicitTracks ? { tracks: tracksOf(planDoc) } : {}),
+      ...(await brainTargetsFor(c.clientId)),
       plan: planDoc?.plan ?? DEFAULT_PLAN, now,
     });
 
@@ -895,7 +936,7 @@ export function createStrategyHandlers({
  * NOT called by any code path in the T4b build; reachable only via strategy-profile-save / a confirmed benchmarks-change.
  * @param {object} db firebase-admin Firestore
  */
-export function createXGrowthProfileSaver(db) {
+export function createXGrowthProfileSaver(db, { onSaved } = {}) {
   return async function saveXGrowthProfile(clientId, { ownHandle, benchmarkHandles }) {
     const ref = db.collection('client_configs').doc(clientId);
     const snap = await ref.get();
@@ -903,6 +944,8 @@ export function createXGrowthProfileSaver(db) {
     const incoming = { benchmarkHandles, ...(ownHandle !== undefined ? { ownHandle } : {}) };
     const next = normalizeXGrowthProfile(incoming, prior);
     await ref.set({ marketingBriefConfig: { xGrowth: next } }, { merge: true });
+    // The Client Brain owns the own handle + benchmark accounts (brain-sync.cjs).
+    if (onSaved) { try { await onSaved(clientId, prior, next); } catch { /* non-fatal */ } }
     return next;
   };
 }
@@ -916,7 +959,7 @@ export function createXGrowthProfileSaver(db) {
 export function createStrategyHandlersFromDb(db, {
   readPackages, env = process.env, runDailyAction, runUpdateItemFacets, readTodayRun, readContentContext,
   readQueueSummary, readPost, readOpportunities, readResults, readMarketSignals, editPost, runPaidSync,
-  saveXGrowthProfile = createXGrowthProfileSaver(db), chatStore = createFirestoreChatStore(db, { env }),
+  onXGrowthSaved, onBrainOwnedSaved, readBrainTrackTargets, saveXGrowthProfile = createXGrowthProfileSaver(db, { onSaved: onXGrowthSaved }), chatStore = createFirestoreChatStore(db, { env }),
   agentLoopFactory, callModel, logUsage, loadCommitted, docStore = createFirestoreStrategyDocStore(db),
 } = {}) {
   // `loadCommitted` (handle -> rows|null) lets a serverless host supply the committed corpora from static imports.
@@ -943,7 +986,7 @@ export function createStrategyHandlersFromDb(db, {
   return createStrategyHandlers({
     corpusStore, planStore, refreshService, readPackages, readAudience,
     readWorkerHealth: (clientId) => readWorkerHealthFromDb(db, { now: Date.now(), clientId }),
-    docStore, chatStore, agentLoopFactory, callModel, logUsage, runDailyAction, runUpdateItemFacets, readTodayRun, readContentContext, saveXGrowthProfile, env,
+    docStore, onBrainOwnedSaved, readBrainTrackTargets, chatStore, agentLoopFactory, callModel, logUsage, runDailyAction, runUpdateItemFacets, readTodayRun, readContentContext, saveXGrowthProfile, env,
     readQueueSummary, readPost, readOpportunities, readResults, readMarketSignals, editPost, runPaidSync,
     readXGrowthConfig: async (clientId) => {
       const snap = await db.collection('client_configs').doc(clientId).get();
