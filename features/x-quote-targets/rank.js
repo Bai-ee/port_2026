@@ -33,7 +33,8 @@ export function ageHoursOf(createdAt, now = Date.now()) {
 /**
  * @param {object} post - { id, url, text, createdAt, likeCount, retweetCount,
  *                          replyCount, media[], author:{username}, quotedTweet? , inReplyToStatusId? }
- * @param {object} [opts] - { now, windowHours, minEngagement }
+ * @param {object} [opts] - { now, windowHours, minEngagement, watchlist }
+ *   `watchlist` is the CLIENT's tracked accounts (client-watchlist.js); absent/empty => every author is untracked (0.35).
  * @returns {object} { score, velocity, ageHours, engagement, windowOpen, reasons[], penalties[] }
  */
 export function scoreQuoteTarget(rawPost = {}, opts = {}) {
@@ -88,7 +89,7 @@ export function scoreQuoteTarget(rawPost = {}, opts = {}) {
   else penalties.push('no media — little to react to');
 
   // --- vein ---------------------------------------------------------------
-  const vein = veinOf(post.author?.username);
+  const vein = veinOf(post.author?.username, opts.watchlist);
   const veinScore = vein ? (VEIN_WEIGHTS[vein] ?? 0.5) : 0.35;
   if (vein) reasons.push(vein);
 

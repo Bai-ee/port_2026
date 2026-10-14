@@ -14,10 +14,21 @@
 // WITH impressions — cheaper in calls than ScrapeCreators' 1-credit-per-post
 // view lookup. Reads stay on ScrapeCreators everywhere it can actually answer.
 
+//
+// Per client: every sync takes a required clientId. The X client comes from
+// that client's own Social Accounts connection (getPlatformClient); the X user
+// id from social_accounts/{clientId}.platforms.x.userId (or an x_monitor root
+// doc that already lists the client). The ONE documented exception is the home
+// client (resolveDigestClientId) with no per-client X doc: it keeps the legacy
+// global OAuth2 token and its userId, exactly as before multi-client. Every
+// other client without its own connection fails closed (409) — never @bai_ee.
+
 import { createRequire } from 'node:module';
-import { getXOAuth2Client } from '../social-posting/x-oauth.js';
+import { getXOAuth2Client, getXOAuthConfigStatus, getXOAuthStatus } from '../social-posting/x-oauth.js';
+import { getPlatformClient, getSocialAccount, toPublicAccount } from '../social-posting/social-accounts.js';
 import { compactUser, diffRosters } from './audience-diff.js';
 import {
+  findAccountIdForClient,
   listSnapshots,
   readAccount,
   readRoster,
@@ -30,7 +41,25 @@ import {
 } from './store.js';
 
 const require = createRequire(import.meta.url);
-const { logUsage } = require('../../api/_lib/usage-logger.cjs');
+
+const defaultDeps = {
+  getPlatformClient: (clientId) => getPlatformClient(clientId, 'x'),
+  getSocialAccount: (clientId) => getSocialAccount(clientId, 'x'),
+  getXOAuth2Client,
+  readGlobalStatus: () => getXOAuthStatus(),
+  readConfigStatus: () => getXOAuthConfigStatus(),
+  resolveHomeClientId: () => require('../intelligence/_digest-config.js').resolveDigestClientId(),
+  findAccountIdForClient,
+  logUsage: (entry) => require('../../api/_lib/usage-logger.cjs').logUsage(entry),
+};
+let deps = { ...defaultDeps };
+
+/** Test-only: override collaborators (X client, account lookups, logger). Returns a restore function. */
+export function __setXMonitorDepsForTest(overrides = {}) {
+  const prev = deps;
+  deps = { ...deps, ...overrides };
+  return () => { deps = prev; };
+}
 
 const FOLLOWER_PAGE_SIZE = 1000;
 const DEFAULT_MAX_FOLLOWER_PAGES = 6; // 6000 followers per sync, then truncate.
@@ -44,16 +73,19 @@ const PRIVATE_TWEET_FIELDS = `${PUBLIC_TWEET_FIELDS},non_public_metrics,organic_
 // Call counts are logged (not dollars — X publishes no per-call rate we could
 // apply honestly). This at least makes read volume visible next to the writes
 // social-posting already logs.
-function logCalls(action, calls, metadata = {}) {
-  logUsage({
-    module: 'x-monitor',
-    action,
-    provider: 'x-api',
-    model: 'x-read',
-    calls,
-    costUsd: 0,
-    metadata,
-  }).catch(() => {});
+function logCalls(clientId, action, calls, metadata = {}) {
+  Promise.resolve()
+    .then(() => deps.logUsage({
+      module: 'x-monitor',
+      action,
+      provider: 'x-api',
+      model: 'x-read',
+      calls,
+      costUsd: 0,
+      clientId,
+      metadata,
+    }))
+    .catch(() => {});
 }
 
 // A failed sync used to leave no trace anywhere: syncProfile logged its call
@@ -61,9 +93,10 @@ function logCalls(action, calls, metadata = {}) {
 // usage_events AND nothing to the store — "it didn't work" with no evidence.
 // Every failure now lands on the account doc as sync.lastError, so the card,
 // the logs, and anyone debugging later can all see the same reason.
-async function recordFailure(op, err) {
+async function recordFailure(clientId, op, err, knownAccountId = null) {
   try {
-    const { accountId } = await resolveAccountId();
+    const accountId = knownAccountId || (await resolveAccountId(clientId)).accountId;
+    if (!accountId) return; // nothing to attach the error to; the thrown error still reaches the caller
     await saveSyncMeta(accountId, {
       lastError: {
         op,
@@ -72,40 +105,122 @@ async function recordFailure(op, err) {
         title: err?.data?.title || err?.data?.detail || null,
         message: String(err?.message || 'Unknown error').slice(0, 400),
       },
-    });
+    }, { clientId });
   } catch {
     // Never let the bookkeeping swallow the real error.
   }
 }
 
-/** Resolve the connected account without spending a call (reads stored tokens). */
-export async function resolveAccountId() {
-  const { tokens } = await getXOAuth2Client();
-  const accountId = tokens?.userId ? String(tokens.userId) : null;
-  if (!accountId) {
-    const err = new Error('The connected X token has no stored user id — reconnect the account.');
-    err.status = 409;
+function requireClientId(clientId) {
+  if (!clientId || typeof clientId !== 'string') {
+    const err = new Error('clientId is required for X Monitor syncs.');
+    err.status = 400;
+    err.code = 'client-id-required';
     throw err;
   }
-  return { accountId, username: tokens.username || null };
+  return clientId;
+}
+
+async function isHomeClient(clientId) {
+  try {
+    const home = await deps.resolveHomeClientId();
+    return Boolean(home) && home === clientId;
+  } catch {
+    return false; // fail closed
+  }
+}
+
+/**
+ * The metered X client for this client. Free to resolve (reads stored tokens;
+ * may refresh an expiring OAuth2 token, which is not a metered call).
+ */
+/**
+ * Documented home exception: the home client's X Monitor stays on the legacy global connection (the account its
+ * history lives under) whenever that connection exists, even if home ALSO has a per-client X doc (used for
+ * publishing tests). Without a global connection, home behaves like any other client. Never true for a non-home
+ * client.
+ */
+async function homeUsesGlobal(clientId, account) {
+  if (!(await isHomeClient(clientId))) return false;
+  if (!account) return true;
+  try {
+    const global = await deps.readGlobalStatus();
+    return Boolean(global?.connected && global?.userId);
+  } catch {
+    return false;
+  }
+}
+
+async function getMonitorClient(clientId) {
+  const account = await deps.getSocialAccount(clientId);
+  if (await homeUsesGlobal(clientId, account)) {
+    // No clientId => the legacy global token (x-oauth.js); only ever reached for the home client.
+    const { client } = await deps.getXOAuth2Client(account ? null : clientId);
+    return client;
+  }
+  const { client } = await deps.getPlatformClient(clientId);
+  return client;
+}
+
+/**
+ * Resolve the X user id this client monitors without spending a call.
+ * Order: (home with a global connection) the global token's userId → social_accounts userId → x_monitor doc
+ * listing the client → (home only) the global token's userId. Returns { accountId: null } when unknown.
+ */
+export async function resolveAccountId(clientId) {
+  requireClientId(clientId);
+  const account = await deps.getSocialAccount(clientId);
+  if (account && (await homeUsesGlobal(clientId, account))) {
+    const global = await deps.readGlobalStatus();
+    return { accountId: String(global.userId), username: global.username || null, source: 'global' };
+  }
+  if (account?.userId) return { accountId: String(account.userId), username: account.username || null, source: 'social_accounts' };
+  const stored = await deps.findAccountIdForClient(clientId);
+  if (stored) return { accountId: String(stored), username: account?.username || null, source: 'x_monitor' };
+  if (!account && (await isHomeClient(clientId))) {
+    const global = await deps.readGlobalStatus();
+    if (global?.userId) return { accountId: String(global.userId), username: global.username || null, source: 'global' };
+  }
+  return { accountId: null, username: account?.username || null, source: null };
+}
+
+async function requireAccountId(clientId) {
+  const resolved = await resolveAccountId(clientId);
+  if (!resolved.accountId) {
+    const err = new Error('The X user id for this client is not known yet. Run Sync profile first.');
+    err.status = 409;
+    err.code = 'account-id-unknown';
+    throw err;
+  }
+  return resolved;
+}
+
+function clientIdFrom(opts) {
+  return typeof opts === 'string' ? opts : opts?.clientId;
 }
 
 // ── Profile ──────────────────────────────────────────────────────────────────
 
-/** 1 call. Reads the live profile + counters and writes today's snapshot. */
-export async function syncProfile() {
-  const { client } = await getXOAuth2Client();
+/**
+ * 1 call. Reads the live profile + counters and writes today's snapshot.
+ * The users/me response id is authoritative for where the rows land, so a
+ * client whose stored X doc has no userId still gets a correct account (no
+ * extra call).
+ */
+export async function syncProfile(opts = {}) {
+  const clientId = requireClientId(clientIdFrom(opts));
+  const client = await getMonitorClient(clientId);
   let res;
   try {
     res = await client.v2.get('users/me', { 'user.fields': USER_FIELDS });
   } catch (err) {
-    logCalls('profile-sync', 1, { failed: true });
-    await recordFailure('profile', err);
+    logCalls(clientId, 'profile-sync', 1, { failed: true });
+    await recordFailure(clientId, 'profile', err);
     throw err;
   }
   const user = res?.data;
   if (!user?.id) throw new Error('X returned no profile for the connected account.');
-  logCalls('profile-sync', 1);
+  logCalls(clientId, 'profile-sync', 1);
 
   const metrics = user.public_metrics || {};
   const profile = {
@@ -127,10 +242,10 @@ export async function syncProfile() {
   };
 
   const at = Date.now();
-  await saveProfile(profile.id, profile);
+  await saveProfile(profile.id, profile, { clientId });
   const snapshot = await saveSnapshot(profile.id, { ...profile, source: 'x-api' }, at);
-  await saveSyncMeta(profile.id, { profileAt: at });
-  return { accountId: profile.id, profile, snapshot, callsMade: 1 };
+  await saveSyncMeta(profile.id, { profileAt: at }, { clientId });
+  return { clientId, accountId: profile.id, profile, snapshot, callsMade: 1 };
 }
 
 // ── Posts ────────────────────────────────────────────────────────────────────
@@ -143,9 +258,10 @@ export async function syncProfile() {
  * non_public_metrics/organic_metrics — asking for them on older posts is what
  * makes the whole request fail, so we bound the request instead of hoping.
  */
-export async function syncPosts({ deep = false } = {}) {
-  const { client } = await getXOAuth2Client();
-  const { accountId } = await resolveAccountId();
+export async function syncPosts({ clientId: rawClientId, deep = false } = {}) {
+  const clientId = requireClientId(rawClientId);
+  const client = await getMonitorClient(clientId); // 409 account-not-connected first
+  const { accountId } = await requireAccountId(clientId);
 
   const startTime = new Date(Date.now() - PRIVATE_METRIC_WINDOW_DAYS * 86_400_000).toISOString();
   const base = { max_results: 100, exclude: 'retweets' };
@@ -165,8 +281,8 @@ export async function syncPosts({ deep = false } = {}) {
     // Only a field-authorization refusal is worth a second call. A 429/402/401
     // means the retry would fail identically and just burn another credit.
     if (err?.code !== 400 && err?.code !== 403) {
-      logCalls('posts-sync', callsMade, { failed: true });
-      await recordFailure('posts', err);
+      logCalls(clientId, 'posts-sync', callsMade, { failed: true });
+      await recordFailure(clientId, 'posts', err, accountId);
       throw err;
     }
     metricsSource = 'public';
@@ -195,10 +311,10 @@ export async function syncPosts({ deep = false } = {}) {
   const posts = tweets.map((tweet) => normalizePost(tweet, username, metricsSource));
   const at = Date.now();
   await writePosts(accountId, posts, at);
-  await saveSyncMeta(accountId, { postsAt: at, postsCount: posts.length, metricsSource });
-  logCalls('posts-sync', callsMade, { metricsSource, deep, posts: posts.length });
+  await saveSyncMeta(accountId, { postsAt: at, postsCount: posts.length, metricsSource }, { clientId });
+  logCalls(clientId, 'posts-sync', callsMade, { metricsSource, deep, posts: posts.length });
 
-  return { accountId, count: posts.length, metricsSource, callsMade };
+  return { clientId, accountId, count: posts.length, metricsSource, callsMade };
 }
 
 function normalizePost(tweet, username, metricsSource) {
@@ -246,9 +362,10 @@ export async function estimateAudienceCalls(accountId) {
  * short we still store the partial roster, but mark it incomplete so no diff —
  * this run's or the next one's — can turn "not fetched" into "unfollowed".
  */
-export async function syncAudience({ maxPages = DEFAULT_MAX_FOLLOWER_PAGES } = {}) {
-  const { client } = await getXOAuth2Client();
-  const { accountId } = await resolveAccountId();
+export async function syncAudience({ clientId: rawClientId, maxPages = DEFAULT_MAX_FOLLOWER_PAGES } = {}) {
+  const clientId = requireClientId(rawClientId);
+  const client = await getMonitorClient(clientId); // 409 account-not-connected first
+  const { accountId } = await requireAccountId(clientId);
 
   const users = [];
   let paginationToken = null;
@@ -269,8 +386,8 @@ export async function syncAudience({ maxPages = DEFAULT_MAX_FOLLOWER_PAGES } = {
         rateLimited = true;
         break;
       }
-      logCalls('audience-sync', pages + 1, { failed: true });
-      await recordFailure('audience', err);
+      logCalls(clientId, 'audience-sync', pages + 1, { failed: true });
+      await recordFailure(clientId, 'audience', err, accountId);
       throw err;
     }
     pages += 1;
@@ -280,7 +397,7 @@ export async function syncAudience({ maxPages = DEFAULT_MAX_FOLLOWER_PAGES } = {
 
   const truncated = Boolean(paginationToken) || rateLimited;
   const complete = !truncated;
-  logCalls('audience-sync', pages, { followers: users.length, complete });
+  logCalls(clientId, 'audience-sync', pages, { followers: users.length, complete });
 
   const previous = await readRoster(accountId);
   const nextById = new Map(users.map((u) => [u.id, u]));
@@ -303,9 +420,10 @@ export async function syncAudience({ maxPages = DEFAULT_MAX_FOLLOWER_PAGES } = {
     rosterComplete: complete,
     lastGained: diff.gained.length,
     lastLost: diff.lost.length,
-  });
+  }, { clientId });
 
   return {
+    clientId,
     accountId,
     callsMade: pages,
     rosterSize: users.length,
@@ -321,6 +439,32 @@ export async function syncAudience({ maxPages = DEFAULT_MAX_FOLLOWER_PAGES } = {
 }
 
 // ── Free reads ───────────────────────────────────────────────────────────────
+
+/**
+ * Zero X calls. Connection status for this client's X Monitor, in the shape
+ * the card already reads ({ config, connected, username, userId, ... }).
+ * Home with no per-client doc → the legacy global status (documented exception).
+ */
+export async function readClientConnection(clientId) {
+  requireClientId(clientId);
+  const account = await deps.getSocialAccount(clientId);
+  if (await homeUsesGlobal(clientId, account)) {
+    return { ...(await deps.readGlobalStatus()), clientId, source: 'global' };
+  }
+  const pub = toPublicAccount(account);
+  return {
+    config: deps.readConfigStatus(),
+    connected: pub.connected,
+    username: pub.username,
+    userId: pub.userId,
+    scope: pub.scope,
+    authMode: pub.authMode,
+    expiresAt: account?.expiresAt || null,
+    updatedAt: pub.updatedAt,
+    clientId,
+    source: account ? 'client' : null,
+  };
+}
 
 /** Zero X calls — everything the card renders comes from stored snapshots. */
 export async function readOverview(accountId) {

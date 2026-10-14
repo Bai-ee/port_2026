@@ -85,23 +85,33 @@ test('strategy-get with absent rows falls back to committed json via loadCommitt
   assert.equal(s.evalCalls[0].benchmarks[0].rows.length, 2);
 });
 
-test('strategy-get: no rows anywhere -> preview unavailable, still ok; empty profile falls back to the default pair', async () => {
-  const a = setup({ config: {} });
-  const r = await a.call('strategy-get');
-  assert.equal(r.ok, true);
-  assert.equal(r.todayPlanPreview.available, false);
-  assert.equal(r.profile.ownHandle, 'bai_ee');
-  assert.deepEqual(r.profile.benchmarkHandles, ['seb__design']);
-  assert.deepEqual(r.profile.defaulted, ['ownHandle', 'benchmarkHandles', 'timezone']);
+test('strategy-get: a client with no profile gets null handle / [] benchmarks, never bai_ee / seb__design', async () => {
+  for (const config of [{}, null]) {
+    const a = setup({ config, committed: { bai_ee: rowsFor(4), seb__design: rowsFor(2) } });
+    const r = await a.call('strategy-get');
+    assert.equal(r.ok, true);
+    assert.equal(r.todayPlanPreview.available, false);
+    assert.equal(r.profile.ownHandle, null);
+    assert.deepEqual(r.profile.benchmarkHandles, []);
+    assert.deepEqual(r.profile.unset, ['ownHandle', 'benchmarkHandles']);
+    assert.deepEqual(r.profile.defaulted, ['timezone']);
+    assert.equal(r.profile.timezone, 'America/Chicago');
+    assert.deepEqual(r.rowsMeta, [], 'no handle is read at all');
+    assert.doesNotMatch(JSON.stringify({ profile: r.profile, rowsMeta: r.rowsMeta, evaluation: r.evaluation, preview: r.todayPlanPreview }), /bai_ee|seb__design/);
+    // NOTE: r.trackProfiles still profiles content-tracks.js DEFAULT_TRACKS (design -> @seb__design) for a client with
+    // no plan doc; that default lives outside this phase's files and is flagged for follow-up.
+  }
 });
 
-test('strategy-get: a partial saved profile only has the missing fields defaulted', async () => {
+test('strategy-get: a partial saved profile reports only the unset fields (no benchmark fallback)', async () => {
   const b = setup({ config: { ownHandle: 'me_acct', benchmarkHandles: [] } });
   const r = await b.call('strategy-get');
   assert.equal(r.profile.ownHandle, 'me_acct');
-  assert.deepEqual(r.profile.benchmarkHandles, ['seb__design']);
-  assert.deepEqual(r.profile.defaulted, ['benchmarkHandles', 'timezone']);
+  assert.deepEqual(r.profile.benchmarkHandles, []);
+  assert.deepEqual(r.profile.unset, ['benchmarkHandles']);
+  assert.deepEqual(r.profile.defaulted, ['timezone']);
   assert.equal(b.evalCalls.length, 1);
+  assert.deepEqual(b.evalCalls[0].benchmarks, []);
 });
 
 test('missing clientId -> 400; mismatched client -> 403 (every client-scoped action)', async () => {
@@ -150,11 +160,11 @@ test('strategy-refresh: >6 handles -> 400; bad handle chars -> 400', async () =>
   assert.equal(await s.queueStore.listQueued().then((l) => l.length), 0);
 });
 
-test('strategy-refresh with an empty profile refreshes the default pair', async () => {
+test('strategy-refresh with an empty profile is a 400 (nothing to refresh), never the owner pair', async () => {
   const s = setup({ config: {} });
   const r = await s.call('strategy-refresh');
-  assert.equal(r.ok, true);
-  assert.deepEqual((await s.queueStore.get(r.requestId)).handles, ['bai_ee', 'seb__design']);
+  assert.equal(r.status, 400);
+  assert.match(r.error, /no own or benchmark handle/);
 });
 
 test('strategy-refresh-status: found, 404, bad id', async () => {
@@ -529,14 +539,16 @@ test('createXGrowthProfileSaver: merges into marketingBriefConfig.xGrowth withou
 test('createStrategyHandlersFromDb passes loadCommitted to its corpus store (no fs for committed corpora)', async () => {
   const emptyDoc = { get: async () => ({ exists: false, data: () => undefined }), collection: () => emptyCol };
   const emptyCol = { doc: () => emptyDoc, get: async () => ({ forEach: () => {} }) };
-  const db = { collection: () => emptyCol };
+  // The home client stores its own handle (seed-home-priors.mjs); the committed rows are a handle-keyed cache.
+  const cfgDoc = { get: async () => ({ exists: true, data: () => ({ marketingBriefConfig: { xGrowth: { ownHandle: 'bai_ee' } } }) }), collection: () => emptyCol };
+  const db = { collection: (name) => (name === 'client_configs' ? { doc: () => cfgDoc } : emptyCol) };
   const seen = [];
   const h = createStrategyHandlersFromDb(db, {
     env: {}, readPackages: async () => [],
     loadCommitted: (handle) => { seen.push(handle); return handle === 'bai_ee' ? rowsFor(4) : null; },
   });
   const r = await h.handle('strategy-get', { clientId: 'c1' }, CTX, AUTH);
-  assert.ok(seen.includes('bai_ee'), 'injected loader was consulted for the default own handle');
+  assert.ok(seen.includes('bai_ee'), 'injected loader was consulted for the saved own handle');
   const own = r.rowsMeta.find((m) => m.handle === 'bai_ee');
   assert.equal(own.source, 'committed-json');
   assert.equal(own.rowsMeta.rowCount, 4);
@@ -639,4 +651,66 @@ test('with explicit tracks, a direct profile save keeps the track-derived benchm
   const res = await s.call('strategy-profile-save', { ownHandle: 'new_me', benchmarkHandles: ['someone_else'] });
   assert.equal(res.ok, true, res.error);
   assert.deepEqual(s.saves.at(-1), { clientId: 'c1', ownHandle: 'new_me', benchmarkHandles: ['seb__design', 'dorksirjur'] });
+});
+
+// --- readClientAudience: resolved by account id, never by handle, never another client's account ---------------
+function audienceDb({ social = {}, monitors = {} } = {}) {
+  const sub = (rows) => {
+    const q = { orderBy: () => q, limit: () => q, get: async () => ({ docs: rows.map((r) => ({ data: () => r })) }) };
+    return q;
+  };
+  const monitorSnap = (id) => {
+    const m = monitors[id];
+    return {
+      id, exists: !!m, data: () => m?.root,
+      ref: { collection: (name) => sub(m?.[name] ?? []) },
+    };
+  };
+  const queries = [];
+  return {
+    queries,
+    collection: (name) => {
+      if (name === 'social_accounts') return { doc: (id) => ({ get: async () => ({ exists: !!social[id], data: () => social[id] }) }) };
+      if (name === 'x_monitor') {
+        return {
+          doc: (id) => ({ get: async () => monitorSnap(id) }),
+          where: (field, op, value) => ({
+            limit: () => ({
+              get: async () => {
+                queries.push([field, op, value]);
+                const ids = Object.keys(monitors).filter((id) => field === 'clientIds' && op === 'array-contains' && (monitors[id].root.clientIds || []).includes(value));
+                return { docs: ids.slice(0, 1).map(monitorSnap) };
+              },
+            }),
+          }),
+        };
+      }
+      throw new Error(`unexpected collection ${name}`);
+    },
+  };
+}
+
+test('readClientAudience: social_accounts userId -> x_monitor/{userId}; clientIds fallback; none -> {account:null}', async () => {
+  const { readClientAudience } = await import('../route-handlers.js');
+  const monitors = {
+    111: { root: { profile: { username: 'bai_ee' }, clientIds: ['home'] }, snapshots: [{ date: '2026-10-01' }], audience_events: [], posts: [{ id: 'p' }] },
+    222: { root: { profile: { username: 'client_b' }, clientIds: ['b'] }, snapshots: [], audience_events: [], posts: [] },
+  };
+  const db = audienceDb({ social: { home: { platforms: { x: { userId: '111' } } } }, monitors });
+
+  const home = await readClientAudience(db, 'home');
+  assert.equal(home.account.profile.username, 'bai_ee');
+  assert.equal(home.posts.length, 1);
+  assert.equal(db.queries.length, 0, 'id path wins: no fallback query');
+
+  const b = await readClientAudience(db, 'b');
+  assert.equal(b.account.profile.username, 'client_b', 'fallback by clientIds array-contains');
+
+  const stranger = await readClientAudience(db, 'nobody');
+  assert.deepEqual(stranger, { account: null }, 'no account => not available, never another client\'s (not even the only/home one)');
+
+  // A social account pointing at a userId with no monitor doc falls back to clientIds, still never another client's.
+  const dangling = audienceDb({ social: { c: { platforms: { x: { userId: '999' } } } }, monitors });
+  assert.deepEqual(await readClientAudience(dangling, 'c'), { account: null });
+  assert.deepEqual(await readClientAudience(db, ''), { account: null });
 });

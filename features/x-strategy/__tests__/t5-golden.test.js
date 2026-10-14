@@ -73,16 +73,30 @@ function handlers({ config, planStore = createMemoryPlanStore() } = {}) {
   return { ...h, planStore, saved };
 }
 
-test('content-plan with NO plan doc equals the pre-T5 route output, whatever the profile (lanes / other handles ignored)', async () => {
+// Multi-client Phase 4.4: the legacy no-plan path serves ONLY the client whose own handle is the committed corpus's
+// account (@bai_ee). For that client the output is still byte-identical to the pre-T5 golden (lanes ignored);
+// any other client (no profile, another handle) gets a 409 instead of the owner's corpora.
+const HOME_CONFIG = { ownHandle: 'bai_ee', benchmarkHandles: ['seb__design'] };
+
+test('content-plan with NO plan doc equals the pre-T5 route output for the committed corpus\'s own account', async () => {
   for (const [name, c] of Object.entries(CONTENT_PLAN_CASES)) {
-    const got = await handlers({ config: c.config }).contentPlan({ clientId: 'c1' }, c.body);
+    const home = c.config?.ownHandle === 'bai_ee' ? c.config : { ...HOME_CONFIG, ...(c.config?.lanes ? { lanes: c.config.lanes } : {}) };
+    const got = await handlers({ config: home }).contentPlan({ clientId: 'c1' }, c.body);
     assert.equal('planSource' in got, false, `${name}: no plan fields on the legacy path`);
     assert.equal(pretty(got), pretty(LEGACY.contentPlan[name]), name);
   }
   // and the original committed-corpus goldens (5 default, 8, 3)
   for (const [posts, file] of [[undefined, 'content-plan-posts5.json'], [8, 'content-plan-posts8.json'], [3, 'content-plan-posts3.json']]) {
-    const got = await handlers().contentPlan({ clientId: 'c1' }, { date: DATE, ...(posts ? { posts } : {}) });
+    const got = await handlers({ config: HOME_CONFIG }).contentPlan({ clientId: 'c1' }, { date: DATE, ...(posts ? { posts } : {}) });
     assert.equal(pretty(got), text(file), file);
+  }
+});
+
+test('content-plan with NO plan doc refuses any client whose own handle is not the committed corpus\'s account', async () => {
+  for (const [name, c] of Object.entries(CONTENT_PLAN_CASES)) {
+    if (c.config?.ownHandle === 'bai_ee') continue;
+    await assert.rejects(handlers({ config: c.config }).contentPlan({ clientId: 'c1' }, c.body),
+      (e) => e.status === 409 && /No Strategy plan yet/.test(e.message), name);
   }
 });
 
@@ -107,7 +121,7 @@ test('refresh-analysis with NO plan doc equals the pre-T5 output byte for byte, 
 test('a plan doc switches to the new behaviour (planSource/planVersion present, 409 pointing at Refresh)', async () => {
   const planStore = createMemoryPlanStore();
   await planStore.apply('c1', { changes: { authoredPerDay: 3 }, expectedVersion: 0, by: 'test', source: 'manual', now: FROZEN_NOW });
-  const h = handlers({ config: null, planStore });
+  const h = handlers({ config: HOME_CONFIG, planStore });
   const out = await h.contentPlan({ clientId: 'c1' }, { date: DATE, posts: 8 });
   assert.equal(out.planSource, 'plan-doc');
   assert.equal(out.plan.slots.length, 3);

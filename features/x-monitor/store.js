@@ -11,6 +11,11 @@
 // Every query here is single-field ordered or a plain collection read — no
 // composite indexes, deliberately (they have to be hand-created in the console
 // and a missing one fails in production only).
+//
+// Client attribution: one X user can be shared by several Hitloop clients, so
+// the root doc carries `clientIds` (array, arrayUnion on every sync write) plus
+// `lastSyncedBy`, never a scalar clientId. Posts/snapshots/roster stay keyed
+// under the account.
 
 import { createRequire } from 'node:module';
 import { ROSTER_CHUNK_SIZE, chunkUsers, flattenRoster, snapshotDayKey } from './audience-diff.js';
@@ -42,17 +47,49 @@ export async function readAccount(accountId) {
   return snap.exists ? snap.data() : null;
 }
 
-export async function saveProfile(accountId, profile) {
+function requireClientId(clientId) {
+  if (!clientId || typeof clientId !== 'string') {
+    const err = new Error('clientId is required for X Monitor writes.');
+    err.status = 400;
+    err.code = 'client-id-required';
+    throw err;
+  }
+  return clientId;
+}
+
+/** Root-doc fields that attribute a sync write to the client that ran it. */
+function clientStamp(clientId) {
+  requireClientId(clientId);
+  return { clientIds: fb.FieldValue.arrayUnion(clientId), lastSyncedBy: clientId };
+}
+
+export async function saveProfile(accountId, profile, { clientId } = {}) {
   const now = Date.now();
   await accountRef(accountId).set(
-    { accountId: String(accountId), profile, profileUpdatedAt: now, updatedAt: now },
+    { accountId: String(accountId), profile, profileUpdatedAt: now, updatedAt: now, ...clientStamp(clientId) },
     { merge: true },
   );
   return profile;
 }
 
-export async function saveSyncMeta(accountId, patch = {}) {
-  await accountRef(accountId).set({ sync: patch, updatedAt: Date.now() }, { merge: true });
+export async function saveSyncMeta(accountId, patch = {}, { clientId } = {}) {
+  await accountRef(accountId).set({ sync: patch, updatedAt: Date.now(), ...clientStamp(clientId) }, { merge: true });
+}
+
+/**
+ * Free (Firestore only). The X user id this client monitors:
+ * social_accounts/{clientId}.platforms.x.userId, else an x_monitor root doc
+ * whose clientIds contains the client (written by an earlier sync of that
+ * client, e.g. a profile sync over an OAuth1 override that stores no userId).
+ * Never another client's account; null when neither is known.
+ */
+export async function findAccountIdForClient(clientId) {
+  if (!clientId) return null;
+  const social = await fb.adminDb.collection('social_accounts').doc(String(clientId)).get();
+  const userId = social.exists ? social.data()?.platforms?.x?.userId : null;
+  if (userId) return String(userId);
+  const snap = await fb.adminDb.collection(ROOT).where('clientIds', 'array-contains', String(clientId)).limit(1).get();
+  return snap.docs[0]?.id || null;
 }
 
 /**

@@ -81,7 +81,7 @@ Owner-driven. You only verify.
 **Accept:** home Today/Queue identical before/after (compare `get_daily_brief` output or the Today card for the same day); NTR/UE show empty inventory, not an error; backfill report attached to the PR (counts only).
 
 ### Phase 4 — Per-client X identity and priors (M)
-**Status: GO (owner, 2026-10-14). Build on the current branch (`feat/multi-client-3a-inventory`), stacked. Run Phase 2b in the same pass, after 4.**
+**Status: BUILT on `feat/multi-client-3a-inventory` (2026-10-14), stacked, NOT pushed/merged/deployed.** Full suite 5574 / 5572 pass / 2 baseline fails; build passes; replay-guard FALSE POSITIVES 0. Home X Monitor deliberately stays on the global @bai_ee connection while it exists (home's per-client X doc is @UGExistence for publishing tests). Owner still owes before merge: home priors seed (`node scripts/x-content/seed-home-priors.mjs --client bryan-balli-WUoltG84 --write`; dry run fills timezone + 39-account watchlist, keeps ownHandle/benchmarks), then reinstall the scan schedule (`install-scan-schedule.sh install --pilot` or the home id). Follow-ups: DEFAULT_TRACKS / DEFAULT_PLAN.benchmarkPrimary / strategy-doc-seed priors, DashboardPage X Monitor tile ignores `?as=`. See `CONTENT-PILOT-OPERATIONS.md` §1d.
 | Item | Files | Change |
 |---|---|---|
 | 4.1 X Monitor | `features/x-monitor/sync.js:83,97,147,250`, `store.js:3-27`, `app/api/dashboard/x-monitor/route.js:23,39-51,127`, `components/dashboard/XMonitorCard.jsx` | `sync(clientId)` → `getPlatformClient(clientId,'x')`; store rows carry `clientId`; card reads by the active client's account id. Every POST still metered and still behind the confirm row naming the call count. |

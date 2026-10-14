@@ -101,7 +101,7 @@ const requestSync = defTool({
   handler: async ({ args, ctx }) => {
     if (!PAID_SYNC_KINDS.includes(args.kind)) throw new ToolError(`Unknown kind "${String(args.kind).slice(0, 40)}". Valid: ${PAID_SYNC_KINDS.join(', ')}. (Market Signals refreshes: the owner clicks Refresh in the Marketing Director header, group 1.)`);
     const clientId = await resolveClientId(ctx, { clientId: args.clientId ?? args.params?.clientId });
-    const d = await describePaidSync(args.kind, args.params || {}, ctx);
+    const d = await describePaidSync(args.kind, args.params || {}, { ...ctx, clientId }); // price THIS client's account
     const res = await ctx.services.strategyHandlers().createProposalInThread({
       clientId,
       proposals: [{

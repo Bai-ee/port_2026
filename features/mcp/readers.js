@@ -28,6 +28,7 @@ import dailyLoopDemoSet from '../x-content-inventory/daily-loop-demo-set.json' w
 
 const require = createRequire(import.meta.url);
 
+// Handle-keyed cache for @bai_ee / @seb__design only (not a default): a client reaches these rows only when its own resolved handle is one of them.
 const COMMITTED_CORPORA = { bai_ee: ownCorpusRows, seb__design: benchmarkCorpusRows };
 export const committedCorpusRows = (handle) => (Object.hasOwn(COMMITTED_CORPORA, handle) ? COMMITTED_CORPORA[handle] : null);
 

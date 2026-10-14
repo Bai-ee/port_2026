@@ -10,7 +10,9 @@
 // dailyXSearch override; use the Market Signals card in the dashboard.
 // NEVER here: X API writes, posting, scheduling, approving, deleting, sending email, Telegram sends.
 //
-// ctx for execute: { email, clientId, now(), auth?, services: { strategyHandlers(), xMonitor(), nas(action, body, email), counters() } }
+// ctx for execute: { email, clientId, now(), auth?, services: { strategyHandlers(), xMonitor(clientId), nas(action, body, email), counters() } }
+// x_monitor_sync is per client: ctx.clientId picks the X account (its own Social Accounts connection; the home client
+// with no per-client doc keeps the legacy global token). A missing clientId is refused, never defaulted.
 
 import { PAID_SYNC_KINDS } from '../x-strategy/contracts.js';
 import { reserveDailyPaidSlot } from './limits.js';
@@ -71,10 +73,11 @@ export async function describePaidSync(kind, rawParams, ctx) {
   if (kind === 'strategy_review') {
     estimate = '~$0.17 Anthropic (Sonnet, up to 6 tool rounds). Counts as 1 of the daily strategy-chat turns. Creates a new chat thread; any proposals it makes are pending cards.';
   } else if (kind === 'x_monitor_sync') {
+    const clientId = requireXMonitorClient(ctx);
     let calls = (params.include.includes('profile') ? 1 : 0) + (params.include.includes('posts') ? 2 : 0); // posts: 1, or 2 on the public-metrics fallback
     let audiencePages = 0;
     if (params.include.includes('audience')) {
-      const x = await ctx.services.xMonitor();
+      const x = await ctx.services.xMonitor(clientId);
       const st = await x.status();
       const est = st.accountId ? await x.estimateAudienceCalls(st.accountId) : { pages: 1 };
       audiencePages = est.pages; calls += audiencePages;
@@ -96,6 +99,7 @@ export async function describePaidSync(kind, rawParams, ctx) {
  */
 export async function executePaidSync({ kind, params, ctx }) {
   const clean = normalizeParams(kind, params);
+  if (kind === 'x_monitor_sync') requireXMonitorClient(ctx); // refuse before a daily slot is taken
   await reserveDailyPaidSlot(ctx.services.counters(), { now: ctx.now() });
   if (kind === 'strategy_review') {
     const out = unwrap(await ctx.services.strategyHandlers().handle('strategy-review', { clientId: ctx.clientId }, { clientId: ctx.clientId }, authFor(ctx)), 'Strategy review');
@@ -106,25 +110,36 @@ export async function executePaidSync({ kind, params, ctx }) {
     };
   }
   if (kind === 'x_monitor_sync') {
-    const x = await ctx.services.xMonitor();
-    const out = { kind, calls: 0, synced: [] };
-    if (clean.include.includes('profile')) { const r = await x.syncProfile(); out.calls += r?.callsMade || 0; out.synced.push('profile'); }
-    if (clean.include.includes('posts')) { const r = await x.syncPosts({}); out.calls += r?.callsMade || 0; out.synced.push('posts'); }
-    if (clean.include.includes('audience')) { const r = await x.syncAudience({}); out.calls += r?.callsMade || 0; out.synced.push('audience'); }
+    const clientId = requireXMonitorClient(ctx);
+    const x = await ctx.services.xMonitor(clientId);
+    const out = { kind, clientId, calls: 0, synced: [] };
+    if (clean.include.includes('profile')) { const r = await x.syncProfile({ clientId }); out.calls += r?.callsMade || 0; out.synced.push('profile'); }
+    if (clean.include.includes('posts')) { const r = await x.syncPosts({ clientId }); out.calls += r?.callsMade || 0; out.synced.push('posts'); }
+    if (clean.include.includes('audience')) { const r = await x.syncAudience({ clientId }); out.calls += r?.callsMade || 0; out.synced.push('audience'); }
     return out;
   }
   const res = unwrap(await ctx.services.nas('nas-process', { sourceId: clean.sourceId, paths: clean.paths, capUsd: clean.capUsd, batch: true }, ctx.email), 'NAS analyze');
   return { kind, ...(res && typeof res === 'object' ? res : {}) };
 }
 
-/** Lazy, server-only X Monitor service (same shape as features/mcp/server.js xMonitor()). Dynamic imports keep tests light. */
-export async function loadXMonitorService() {
-  const [{ getXOAuthStatus }, xSync, xStore] = await Promise.all([
-    import('../social-posting/x-oauth.js'), import('../x-monitor/sync.js'), import('../x-monitor/store.js'),
-  ]);
+function requireXMonitorClient(ctx) {
+  const clientId = typeof ctx?.clientId === 'string' ? ctx.clientId.trim() : '';
+  if (!clientId) throw new PaidSyncError('x_monitor_sync needs a clientId (the client whose X account to sync).', 'client-required', 400);
+  return clientId;
+}
+
+/**
+ * Lazy, server-only X Monitor service for ONE client (same shape as features/mcp/server.js xMonitor(clientId)).
+ * status() is free (stored ids only). Dynamic imports keep tests light.
+ */
+export async function loadXMonitorService(clientId) {
+  if (!clientId) throw new PaidSyncError('X Monitor needs a clientId.', 'client-required', 400);
+  const xSync = await import('../x-monitor/sync.js');
   return {
-    status: async () => { const s = await getXOAuthStatus(); return { accountId: s.userId ? String(s.userId) : null, username: s.username || null }; },
+    status: async () => { const s = await xSync.resolveAccountId(clientId); return { accountId: s.accountId, username: s.username || null }; },
     estimateAudienceCalls: xSync.estimateAudienceCalls,
-    syncProfile: xSync.syncProfile, syncPosts: xSync.syncPosts, syncAudience: xSync.syncAudience,
+    syncProfile: (opts = {}) => xSync.syncProfile({ ...opts, clientId }),
+    syncPosts: (opts = {}) => xSync.syncPosts({ ...opts, clientId }),
+    syncAudience: (opts = {}) => xSync.syncAudience({ ...opts, clientId }),
   };
 }

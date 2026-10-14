@@ -35,7 +35,7 @@ const row = (i, over = {}) => ({
   media: i % 2 ? 'video' : 'none', text: i % 4 === 1 ? `shipped a new build #design ${i}` : `post ${i} about the work`, likes: i % 5, views: 100 + i * 10, ...over,
 });
 
-async function build({ steps, withDoc = true, audience } = {}) {
+async function build({ steps, withDoc = true, audience, audienceCalls = [] } = {}) {
   const corpusStore = createMemoryCorpusStore({ loadCommitted: () => null });
   await corpusStore.writeMergedRows('me_acct', Array.from({ length: 30 }, (_, i) => row(i)), { pulledAt: '2026-10-11T12:00:00.000Z' });
   await corpusStore.writeMergedRows('bench_a', Array.from({ length: 30 }, (_, i) => row(i + 100)), { pulledAt: '2026-10-12T08:00:00.000Z' });
@@ -46,7 +46,7 @@ async function build({ steps, withDoc = true, audience } = {}) {
     refreshService: createRefreshService({ store: corpusStore, queueStore: createMemoryRefreshQueue(), now: () => NOW, enabled: false, detectBird: async () => ({ available: false }), idGen: () => 'r1', ingest: async () => ({ rows: [], pull: {} }), runBirdFor: () => () => '' }),
     readXGrowthConfig: async () => ({ ownHandle: 'me_acct', benchmarkHandles: ['bench_a'] }),
     callModel: model.callModel, logUsage: async () => ({ costUsd: 0.001 }),
-    ...(audience ? { readAudience: async () => audience } : {}),
+    ...(audience ? { readAudience: async (clientId) => { audienceCalls.push(clientId); return audience; } } : {}),
   });
   return { h, docStore, model, call: (a, b = {}) => h.handle(a, { clientId: 'c1', ...b }, CTX, AUTH) };
 }
@@ -143,8 +143,9 @@ test('algorithm, score, rule-check and audience tools return shaped data', async
     events: [{ type: 'gained' }, { type: 'gained' }, { type: 'lost' }],
     posts: [{ id: 'p1', createdAt: new Date(NOW - 86400000).toISOString(), text: 'hello', metrics: { impressions: 300, likes: 2 } }],
   };
+  const audienceCalls = [];
   const { call } = await build({
-    audience,
+    audience, audienceCalls,
     steps: [
       useTools(['get_algorithm', {}], ['score_posts', {}], ['get_rule_check', { days: 30 }], ['get_audience', {}], ['score_posts', { handle: 'stranger' }]),
       (req) => {
@@ -167,6 +168,7 @@ test('algorithm, score, rule-check and audience tools return shaped data', async
     ],
   });
   assert.equal((await call('strategy-chat-send', { text: 'read it all' })).ok, true);
+  assert.deepEqual(audienceCalls, ['c1'], 'audience is resolved by the request\'s clientId, never by a handle');
 });
 
 test('get_audience without X Monitor data says so instead of inventing numbers', async () => {

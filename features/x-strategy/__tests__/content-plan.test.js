@@ -85,11 +85,29 @@ test('benchmarkPrimary picks the benchmark when it is one of the profile handles
   assert.ok(unknown.calls[0].benchmarkRows.length > 100, 'falls back to the first profile benchmark (seb__design committed rows)');
 });
 
-test('an empty profile uses the shared default pair (bai_ee vs seb__design)', async () => {
-  const { contentPlan, calls } = await setup({ config: null, plan: PLAN });
+test('an empty profile with a plan is a 409 asking for the X handle, never the bai_ee / seb__design pair', async () => {
+  const { contentPlan, refreshAnalysis, calls } = await setup({ config: null, plan: PLAN });
+  await assert.rejects(contentPlan(CTX, { date: '2026-10-11' }), (e) => e.status === 409 && /No X handle saved/.test(e.message));
+  await assert.rejects(refreshAnalysis(CTX), (e) => e.status === 409 && /No X handle saved/.test(e.message));
+  assert.equal(calls.length, 0, 'no plan was built from anyone\'s corpus');
+});
+
+test('own handle but no benchmarks: content-plan runs without benchmark rows; refresh-analysis 409s (no seb__design fallback)', async () => {
+  const { contentPlan, refreshAnalysis, calls } = await setup({ config: { ownHandle: 'bai_ee' }, plan: PLAN });
   const out = await contentPlan(CTX, { date: '2026-10-11' });
   assert.equal(out.ok, true);
-  assert.equal(calls[0].handle, 'bai_ee');
+  assert.equal(calls[0].benchmarkRows, null);
+  await assert.rejects(refreshAnalysis(CTX), (e) => e.status === 409 && /No benchmark accounts saved/.test(e.message));
+});
+
+test('legacy no-plan path: only the client whose own handle is the committed corpus\'s account gets it', async () => {
+  const home = await setup({ config: { ownHandle: 'bai_ee', benchmarkHandles: ['seb__design'] } });
+  assert.equal((await home.contentPlan(CTX, { date: '2026-10-11' })).ok, true);
+  for (const config of [null, {}, { ownHandle: 'other_acct', benchmarkHandles: ['seb__design'] }, { ownHandle: 'seb__design' }]) {
+    const other = await setup({ config });
+    await assert.rejects(other.contentPlan(CTX, { date: '2026-10-11' }), (e) => e.status === 409 && /No Strategy plan yet/.test(e.message), JSON.stringify(config));
+    assert.equal(other.calls.length, 0, 'the owner corpora were never handed to buildPlan');
+  }
 });
 
 test('no rows for the own handle is a 409 with a pointer to Refresh, not an empty plan', async () => {

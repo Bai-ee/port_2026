@@ -14,7 +14,7 @@ import { fallbackCopy, quoteReactFallback, checkSuggestionText } from '../daily-
 import { FLOOR_REASON } from '../daily-loop/slots.js';
 import { saveSuggestionDraft, editSuggestion } from '../daily-loop/review.js';
 import { createMemoryRunStore } from '../daily-run-store.js';
-import { WATCHLIST } from '../../x-quote-targets/watchlist.js';
+import { HOME_SEED_WATCHLIST, VEIN_WEIGHTS } from '../../x-quote-targets/watchlist.js';
 
 const FX = JSON.parse(readFileSync(new URL('./fixtures/daily-loop-real-shapes.json', import.meta.url), 'utf8'));
 const CORPUS = JSON.parse(readFileSync(new URL('../../../docs/audits/bai-ee-x-corpus.json', import.meta.url), 'utf8'));
@@ -28,8 +28,8 @@ const base = { clientId: OWNER, localDate: LOCAL, now: NOW, packages: FX.package
 
 // --- veins ---
 
-test('every vein in the watchlist is mapped to P1', () => {
-  const veins = [...new Set(WATCHLIST.map((a) => a.vein))];
+test('every vein in the home seed watchlist and the vein vocabulary is mapped to P1', () => {
+  const veins = [...new Set([...HOME_SEED_WATCHLIST.map((a) => a.vein), ...Object.keys(VEIN_WEIGHTS)])];
   assert.ok(veins.length >= 4);
   const unmapped = veins.filter((v) => !VEIN_MAP[v]);
   assert.deepEqual(unmapped, []);

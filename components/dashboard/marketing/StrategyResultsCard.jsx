@@ -31,7 +31,7 @@ export default function StrategyResultsCard({ getIdToken, activeClientId, onOpen
         </div>
       ) : (
         <div id="strategy-results-x-monitor-view">
-          <XMonitorCard getIdToken={getIdToken} hideRefresh />
+          <XMonitorCard getIdToken={getIdToken} clientId={activeClientId} hideRefresh />
         </div>
       )}
       <ContentUiStyles />

@@ -41,7 +41,7 @@ import { normalizeTimeline } from '../../features/x-benchmark/normalize-corpus.j
 import { summarizeCorpus } from '../../features/x-benchmark/summarize.js';
 import { compareToBenchmark } from '../../features/x-benchmark/compare.js';
 import { guardXPost } from '../../features/x-content-guard/index.js';
-import { WATCHLIST } from '../../features/x-quote-targets/watchlist.js';
+import { HOME_SEED_WATCHLIST } from '../../features/x-quote-targets/watchlist.js';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
 
@@ -173,12 +173,14 @@ function ruleCheck(rows) {
 }
 
 function quoteTargetAudit(rows) {
-  const onList = new Set(WATCHLIST.map((a) => a.handle.toLowerCase()));
+  // The home seed list is @bai_ee's curated set; any other handle has no list here (null = not checked).
+  const isHome = String(args.handle || '').replace(/^@/, '').toLowerCase() === 'bai_ee';
+  const onList = new Set(isHome ? HOME_SEED_WATCHLIST.map((a) => a.handle.toLowerCase()) : []);
   const counts = new Map();
   for (const r of rows) {
     if (!r.quotedAuthor) continue;
     const h = r.quotedAuthor.toLowerCase();
-    const cur = counts.get(h) || { handle: r.quotedAuthor, n: 0, likes: 0, onWatchlist: onList.has(h) };
+    const cur = counts.get(h) || { handle: r.quotedAuthor, n: 0, likes: 0, onWatchlist: isHome ? onList.has(h) : null };
     cur.n += 1;
     cur.likes += r.likes || 0;
     counts.set(h, cur);
@@ -309,7 +311,7 @@ out.push('');
 out.push('QUOTE TARGETS — who got quoted, and whether they are on the derived watchlist');
 if (!quotes.length) out.push('  none in this window.');
 for (const q of quotes) {
-  out.push(`  @${q.handle.padEnd(22)} ${String(q.n).padStart(2)}×  ${String(q.likes).padStart(4)} likes earned  ${q.onWatchlist ? 'on watchlist' : '⚠️ OFF watchlist'}`);
+  out.push(`  @${q.handle.padEnd(22)} ${String(q.n).padStart(2)}×  ${String(q.likes).padStart(4)} likes earned  ${q.onWatchlist === null ? '' : q.onWatchlist ? 'on watchlist' : '⚠️ OFF watchlist'}`);
 }
 
 if (comparison) {

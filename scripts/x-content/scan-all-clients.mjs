@@ -26,7 +26,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { rankQuoteTargets } from '../../features/x-quote-targets/rank.js';
 import { buildScanPlan, partitionPool, DEFAULT_BUDGET } from '../../features/x-quote-targets/scan-plan.js';
-import { WATCHLIST } from '../../features/x-quote-targets/watchlist.js';
+import { watchlistFromXGrowth } from '../../features/x-quote-targets/client-watchlist.js';
 import { mergeWatchlist } from '../../features/x-benchmark/derive-watchlist.js';
 import { resolveXGrowthProfile } from '../../features/x-benchmark/profile.js';
 
@@ -83,25 +83,24 @@ async function loadEnrolledClients() {
       process.stderr.write(`  skipping ${doc.id}: profile incomplete (${profile.missing.join(', ')})\n`);
       continue;
     }
-    out.push({ clientId: doc.id, profile });
+    out.push({ clientId: doc.id, profile, watchlist: watchlistFromXGrowth(config) });
   }
   return out;
 }
 
 /**
  * A client's quote targets: the watchlist derived from their benchmark's
- * corpus, plus any curated entries. @bai_ee's hand-written WATCHLIST is used as
- * the curated set only for the client whose benchmark produced it — for
- * everyone else it would be someone else's taste.
+ * corpus, plus the client's OWN curated list
+ * (client_configs/{id}.marketingBriefConfig.xGrowth.watchlist). No client
+ * inherits another's curated list (multi-client Phase 4.4).
  */
-async function loadAccountsFor(profile) {
+async function loadAccountsFor(profile, curated = []) {
   const derived = [];
   for (const handle of profile.benchmarkHandles) {
     const snap = await fb.adminDb.collection('x_corpora').doc(handle.toLowerCase()).get();
     const seed = snap.exists ? snap.data()?.watchlistSeed : null;
     if (Array.isArray(seed)) derived.push(...seed);
   }
-  const curated = profile.benchmarkHandles.some((h) => h.toLowerCase() === 'seb__design') ? WATCHLIST : [];
   return mergeWatchlist(derived, curated);
 }
 
@@ -125,7 +124,7 @@ async function main() {
 
   const withAccounts = [];
   for (const client of clients) {
-    const accounts = await loadAccountsFor(client.profile);
+    const accounts = await loadAccountsFor(client.profile, client.watchlist);
     if (!accounts.length) {
       process.stderr.write(`  ${client.clientId}: no watchlist — has the benchmark corpus been ingested?\n`);
       continue;
@@ -180,7 +179,7 @@ async function main() {
 
   for (const client of withAccounts) {
     const posts = split[client.clientId] ?? [];
-    const ranked = rankQuoteTargets(posts, { limit: args.limit });
+    const ranked = rankQuoteTargets(posts, { limit: args.limit, watchlist: client.accounts });
     const payload = {
       generatedAt,
       method: 'bird user-tweets (local, free, shared sweep)',

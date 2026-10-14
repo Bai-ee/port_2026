@@ -334,6 +334,7 @@ const SUPPORTED_ACTIONS = [
 //
 // Vercel: the corpus store's own default loader reads docs/audits via runtime fs, which the tracer may not bundle.
 // These static JSON imports ARE bundled, so the store is given them as its committed-JSON fallback instead.
+// Handle-keyed cache for @bai_ee / @seb__design only (not a default): a client reaches these rows only when its own resolved handle is one of them.
 const COMMITTED_CORPORA = { bai_ee: ownCorpusRows, seb__design: benchmarkCorpusRows };
 const committedCorpusRows = (handle) => (Object.hasOwn(COMMITTED_CORPORA, handle) ? COMMITTED_CORPORA[handle] : null);
 let corpusStoreSingleton = null;
