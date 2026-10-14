@@ -4,21 +4,28 @@ import {
   DEFAULT_TRACKS, normalizeContentTracks, tracksOf, trackForEngine, allPromotions, normalizePromotions,
 } from '../content-tracks.js';
 import { promotionsOf, promotionFor, promotionSelfReply } from '../promotions.js';
+import { twoTracks, twoTrackPlan } from './fixtures/two-tracks.js';
 
-const clone = () => JSON.parse(JSON.stringify(DEFAULT_TRACKS));
+const clone = twoTracks;
 
-test('absent contentTracks ⇒ defaults (back-compat)', () => {
-  const t = tracksOf({ plan: { authoredPerDay: 4 } });
-  assert.deepEqual(t.map((x) => x.id), ['design', 'music']);
-  assert.deepEqual(t[1].benchmarks, []);
-  assert.equal(tracksOf(null).length, 2);
+test('no code-default tracks: absent contentTracks ⇒ [] (no inherited priors)', () => {
+  assert.deepEqual([...DEFAULT_TRACKS], []);
+  assert.deepEqual(tracksOf({ plan: { authoredPerDay: 4 } }), []);
+  assert.deepEqual(tracksOf(null), []);
+  assert.deepEqual(promotionsOf(null), []);
 });
 
-test('invalid stored tracks fall back to defaults', () => {
-  assert.equal(tracksOf({ plan: { contentTracks: [{ id: 'x' }] } })[0].id, 'design');
+test('invalid stored tracks ⇒ [] (never someone else\'s tracks)', () => {
+  assert.deepEqual(tracksOf({ plan: { contentTracks: [{ id: 'x' }] } }), []);
 });
 
-test('defaults normalize cleanly and shares sum to 1', () => {
+test('an empty track list is valid and stays empty', () => {
+  assert.deepEqual(normalizeContentTracks([]), []);
+  assert.deepEqual(tracksOf({ plan: { contentTracks: [] } }), []);
+  assert.throws(() => normalizeContentTracks(null), /must be an array/);
+});
+
+test('a two-track list normalizes cleanly and shares sum to 1', () => {
   const t = normalizeContentTracks(clone());
   assert.equal(t.reduce((s, x) => s + x.share, 0), 1);
 });
@@ -55,7 +62,9 @@ test('promotion engine must belong to its track; urls https only', () => {
 });
 
 test('trackForEngine + allPromotions', () => {
-  const t = tracksOf(null);
+  assert.equal(trackForEngine([], 'ue'), null);
+  assert.deepEqual(allPromotions([]), []);
+  const t = tracksOf(twoTrackPlan());
   assert.equal(trackForEngine(t, 'ue').id, 'music');
   assert.equal(trackForEngine(t, 'client').id, 'design');
   assert.equal(trackForEngine(t, 'nope'), null);
@@ -65,7 +74,8 @@ test('trackForEngine + allPromotions', () => {
 });
 
 test('promotionFor maps packages to promotions', () => {
-  const p = promotionsOf(null);
+  assert.equal(promotionFor({ series: 'C6' }, promotionsOf(null)), null);
+  const p = promotionsOf(twoTrackPlan());
   assert.equal(promotionFor({ series: 'C4', source: { kind: 'rendered-video' } }, p).id, 'ue');
   assert.equal(promotionFor({ series: 'C4', source: { kind: 'nas' } }, p), null);
   assert.equal(promotionFor({ series: 'C1', source: { kind: 'discogs' } }, p).id, 'discogs');

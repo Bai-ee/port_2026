@@ -170,3 +170,13 @@ test('handle normalization: case, @, duplicates, own dropped from benchmarks', (
   assert.deepEqual(v.benchmarks.map((b) => b.handle), ['seb__design']);
   assert.equal(v.gapsAgainst, 'seb__design');
 });
+
+test('no benchmark set: gaps empty, gapsAgainst null, a no-benchmark caveat (no inherited benchmark)', () => {
+  const rows = Array.from({ length: 5 }, (_, i) => ({ id: String(i), utc: `2026-09-0${i + 1}T10:00:00.000Z`, type: 'original-text', likes: 1, views: 10 }));
+  const v = evaluate({ ownHandle: 'me', ownRows: rows, benchmarks: [], plan: null, now: '2026-09-10T00:00:00Z' });
+  assert.equal(v.baselinePlan.benchmarkPrimary, '');
+  assert.deepEqual(v.gaps, []);
+  assert.equal(v.gapsAgainst, null);
+  assert.ok(v.caveats.some((c) => c.code === 'no-benchmark'));
+  assert.equal('byTrack' in v, false);
+});

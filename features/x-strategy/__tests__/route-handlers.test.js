@@ -98,8 +98,9 @@ test('strategy-get: a client with no profile gets null handle / [] benchmarks, n
     assert.equal(r.profile.timezone, 'America/Chicago');
     assert.deepEqual(r.rowsMeta, [], 'no handle is read at all');
     assert.doesNotMatch(JSON.stringify({ profile: r.profile, rowsMeta: r.rowsMeta, evaluation: r.evaluation, preview: r.todayPlanPreview }), /bai_ee|seb__design/);
-    // NOTE: r.trackProfiles still profiles content-tracks.js DEFAULT_TRACKS (design -> @seb__design) for a client with
-    // no plan doc; that default lives outside this phase's files and is flagged for follow-up.
+    // No code-default tracks (4.7): a client with no plan doc has no tracks, so nothing is profiled.
+    assert.deepEqual(r.trackProfiles, []);
+    assert.doesNotMatch(JSON.stringify(r.trackProfiles), /seb__design/);
   }
 });
 
@@ -641,7 +642,8 @@ test('track save: new handles queue ONE refresh; a second save merges into it', 
   const a = await s.call('strategy-plan-apply', { changes: { contentTracks: musicTracks(['toshioueki']) }, expectedVersion: 0, reason: '' });
   const b = await s.call('strategy-plan-apply', { changes: { contentTracks: musicTracks(['toshioueki', 'dorksirjur', 'discogs']) }, expectedVersion: 1, reason: '' });
   assert.equal(b.refresh.requestId, a.refresh.requestId);
-  assert.deepEqual((await s.queueStore.get(a.refresh.requestId)).handles, ['toshioueki', 'dorksirjur', 'discogs']);
+  // No code-default tracks: the first save's design benchmark is new too, so it is queued with the music ones.
+  assert.deepEqual((await s.queueStore.get(a.refresh.requestId)).handles, ['seb__design', 'toshioueki', 'dorksirjur', 'discogs']);
   assert.equal(await s.queueStore.get('req-2'), null);
 });
 

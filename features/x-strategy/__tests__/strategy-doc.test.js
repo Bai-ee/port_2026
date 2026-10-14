@@ -5,15 +5,22 @@ import {
   sectionsAtVersion, renderDocText, describeDocChange, draftDoc, withLastReview,
 } from '../strategy-doc.js';
 import { SEED_STRATEGY_SECTIONS } from '../strategy-doc-seed.js';
+import { HOME_STRATEGY_SECTIONS } from '../../../scripts/x-content/seed-home-priors.mjs';
 import { createMemoryStrategyDocStore, StrategyDocError } from '../strategy-doc-store.js';
 
 const NOW = '2026-10-12T12:00:00.000Z';
 const edit = (doc, sections, extra = {}) => applyDocEdit(doc, { sections, by: 'owner@x', source: 'manual', expectedVersion: doc?.version ?? 0, now: NOW, ...extra });
 
-test('seed covers every section within the cap', () => {
+test('code seed is blank for every section (no inherited strategy)', () => {
+  assert.deepEqual(Object.keys(SEED_STRATEGY_SECTIONS), [...SECTION_KEYS]);
+  for (const k of SECTION_KEYS) assert.equal(SEED_STRATEGY_SECTIONS[k], '', `seed ${k}`);
+  assert.equal(renderDocText(draftDoc(SEED_STRATEGY_SECTIONS)), '', 'a blank draft renders nothing');
+});
+
+test('home seed text (moved to the seed script) covers every section within the cap', () => {
   for (const k of SECTION_KEYS) {
-    assert.ok(SEED_STRATEGY_SECTIONS[k], `seed ${k}`);
-    assert.ok(SEED_STRATEGY_SECTIONS[k].length <= SECTION_MAX, `seed ${k} length`);
+    assert.ok(HOME_STRATEGY_SECTIONS[k], `home ${k}`);
+    assert.ok(HOME_STRATEGY_SECTIONS[k].length <= SECTION_MAX, `home ${k} length`);
   }
 });
 
@@ -83,7 +90,7 @@ test('history is capped and restore walks back through retained versions', () =>
 });
 
 test('renderDocText labels drafts, skips empty sections and caps length', () => {
-  const draft = draftDoc(SEED_STRATEGY_SECTIONS);
+  const draft = draftDoc(HOME_STRATEGY_SECTIONS);
   assert.match(renderDocText(draft), /^STRATEGY DOCUMENT \(DRAFT/);
   const doc = edit(null, { rules: 'R', thesis: '' }, { base: {} });
   const text = renderDocText(doc);

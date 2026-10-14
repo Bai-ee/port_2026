@@ -8,6 +8,10 @@ import { createRefreshService, createMemoryRefreshQueue } from '../refresh.js';
 import { createMemoryChatStore } from '../agent/chat-store.js';
 import { createMemoryStrategyDocStore } from '../strategy-doc-store.js';
 import { SEED_STRATEGY_SECTIONS } from '../strategy-doc-seed.js';
+import { HOME_STRATEGY_SECTIONS } from '../../../scripts/x-content/seed-home-priors.mjs';
+
+// A client's own stored draft (what the home seed writes): source 'seed' keeps it unconfirmed.
+const seedDoc = (docStore, sections = HOME_STRATEGY_SECTIONS) => docStore.apply('c1', { sections: { ...sections }, by: 'seed', source: 'seed', expectedVersion: 0, now: NOW });
 import { validateProposal } from '../agent/proposals.js';
 
 const NOW = Date.parse('2026-10-12T12:00:00.000Z');
@@ -51,8 +55,18 @@ async function build({ steps, withDoc = true, audience, audienceCalls = [] } = {
   return { h, docStore, model, call: (a, b = {}) => h.handle(a, { clientId: 'c1', ...b }, CTX, AUTH) };
 }
 
-test('the system prompt carries the strategy document (draft-labelled) and its rules', async () => {
+test('no stored doc => the prompt carries no inherited strategy text', async () => {
   const { call, model } = await build({ steps: [say('ok')] });
+  const r = await call('strategy-chat-send', { text: 'what is my strategy?' });
+  assert.equal(r.ok, true);
+  const sys = model.requests[0].system;
+  assert.doesNotMatch(sys, /Show the work, not the casino|seb__design/);
+  assert.doesNotMatch(sys, /STRATEGY DOCUMENT \(DRAFT/);
+});
+
+test('the system prompt carries the client\'s stored strategy document (draft-labelled) and its rules', async () => {
+  const { call, model, docStore } = await build({ steps: [say('ok')] });
+  await seedDoc(docStore);
   const r = await call('strategy-chat-send', { text: 'what is my strategy?' });
   assert.equal(r.ok, true);
   const sys = model.requests[0].system;
@@ -110,7 +124,7 @@ test('a doc-edit proposal goes stale when the owner edits the doc first', async 
 });
 
 test('propose_strategy_doc_edit rejects bad sections, wrong versions and no-op text', async () => {
-  const { call, model } = await build({
+  const { call, model, docStore } = await build({
     steps: [
       useTools(
         ['propose_strategy_doc_edit', { section: 'vibes', text: 'x', expectedVersion: 0, summary: 's', rationale: 'r', evidence: [] }],
@@ -119,12 +133,13 @@ test('propose_strategy_doc_edit rejects bad sections, wrong versions and no-op t
       (req) => {
         const [a, b] = toolResults(req);
         assert.match(a.content, /section must be one of/);
-        assert.match(b.content, /version 0, not 3/);
-        return useTools(['propose_strategy_doc_edit', { section: 'thesis', text: SEED_STRATEGY_SECTIONS.thesis, expectedVersion: 0, summary: 's', rationale: 'r', evidence: [] }]);
+        assert.match(b.content, /version 1, not 3/);
+        return useTools(['propose_strategy_doc_edit', { section: 'thesis', text: HOME_STRATEGY_SECTIONS.thesis, expectedVersion: 1, summary: 's', rationale: 'r', evidence: [] }]);
       },
       (req) => { assert.match(toolResults(req)[0].content, /already the current section/); return say('nothing to change'); },
     ],
   });
+  await seedDoc(docStore);
   const r = await call('strategy-chat-send', { text: 'edit' });
   assert.equal(r.proposals.length, 0);
   assert.equal(model.requests.length, 3);

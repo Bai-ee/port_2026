@@ -4,7 +4,8 @@ import {
   buildTrackProfile, loadTrackProfiles, trackEngineMinimums, applyTrackAllocation, hasExplicitTracks,
   newTrackBenchmarkHandles, computeRowMetrics,
 } from '../track-profile.js';
-import { DEFAULT_TRACKS, normalizeContentTracks, tracksOf } from '../content-tracks.js';
+import { normalizeContentTracks, tracksOf } from '../content-tracks.js';
+import { twoTracks } from './fixtures/two-tracks.js';
 import { mergeEngineConfig, DEFAULT_ENGINE_CONFIG } from '../../x-content-inventory/engine-quota.js';
 import { deriveTrackWatchlists } from '../../x-benchmark/derive-watchlist.js';
 
@@ -19,7 +20,7 @@ function row(handle, over = {}) {
   };
 }
 const corpus = (handle, count, over = {}) => Array.from({ length: count }, () => row(handle, over));
-const tracks = () => DEFAULT_TRACKS.map((t) => ({ ...t, engines: [...t.engines], benchmarks: [...t.benchmarks], topics: [...t.topics], promotions: t.promotions.map((p) => ({ ...p })) }));
+const tracks = twoTracks;
 const withBench = (id, benchmarks) => tracks().map((t) => (t.id === id ? { ...t, benchmarks } : t));
 
 test('acceptance 3: a track profile computes from its own handle only', () => {
@@ -133,13 +134,14 @@ test('back-compat: a plan with no contentTracks is returned untouched', () => {
   assert.equal(applyTrackAllocation({ plan }, undefined), undefined);
   const cfg = mergeEngineConfig({ authored: { targetPerDay: 5 } });
   assert.equal(applyTrackAllocation({ plan }, cfg), cfg);
-  assert.deepEqual(tracksOf({ plan }).map((x) => x.id), ['design', 'music']);
+  assert.deepEqual(tracksOf({ plan }), [], 'no inherited default tracks');
 });
 
 test('newTrackBenchmarkHandles lists handles added by a change (to queue a refresh)', () => {
-  const before = { plan: {} };
+  const before = { plan: { contentTracks: tracks() } };
   const after = { plan: { contentTracks: withBench('music', ['newmusic']) } };
   assert.deepEqual(newTrackBenchmarkHandles(before, after), ['newmusic']);
+  assert.deepEqual(newTrackBenchmarkHandles({ plan: {} }, after), ['seb__design', 'newmusic'], 'no tracks before => every handle is new');
   assert.deepEqual(newTrackBenchmarkHandles(after, after), []);
 });
 

@@ -46,7 +46,7 @@ export function defaultPlanDoc() {
 export function normalizePlan(partial) {
   const plan = { ...defaultPlan(), ...(isPlain(partial) ? clone(partial) : {}) };
   for (const k of Object.keys(plan)) if (!PLAN_FIELDS.includes(k)) delete plan[k];
-  // contentTracks is optional: absent/null => the field stays off the plan (defaults apply, old plans unchanged).
+  // contentTracks is optional: absent/null => the field stays off the plan (no tracks; tracksOf() returns []).
   // A valid list is stored normalized (shares sum to 1); an invalid one is kept raw so validatePlan reports why.
   if (plan.contentTracks == null) delete plan.contentTracks;
   else {
@@ -119,8 +119,9 @@ export function validatePlan(plan) {
     if (merged) collectEngineTargetErrors(known, merged, '', errors);
   }
 
-  if (typeof plan.benchmarkPrimary !== 'string' || !HANDLE_RE.test(plan.benchmarkPrimary)) {
-    errors.push('benchmarkPrimary must be an X handle (1-15 letters, digits, underscore; no @)');
+  // '' = no benchmark set (the default: no client inherits one from code).
+  if (typeof plan.benchmarkPrimary !== 'string' || (plan.benchmarkPrimary !== '' && !HANDLE_RE.test(plan.benchmarkPrimary))) {
+    errors.push('benchmarkPrimary must be empty (no benchmark) or an X handle (1-15 letters, digits, underscore; no @)');
   }
   if (plan.contentTracks !== undefined) {
     try { normalizeContentTracks(plan.contentTracks, { maxDistinctBenchmarks: PLAN_LIMITS.maxBenchmarkHandles }); } catch (err) { errors.push(`contentTracks: ${err.message}`); }

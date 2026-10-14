@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { evaluate } from '../evaluate.js';
 import { trackEvalLines } from '../insights.js';
+import { twoTracks } from './fixtures/two-tracks.js';
 
 const NOW = Date.parse('2026-10-11T12:00:00Z');
 const DAY = 86400000;
@@ -9,7 +10,7 @@ const mk = (n, startMs, over = {}) => Array.from({ length: n }, (_, i) => {
   const ms = startMs + i * 6 * 3600000;
   return { id: `${over.p || 'r'}${i}`, utc: new Date(ms).toISOString(), dateLocal: new Date(ms).toISOString().slice(0, 10), hourLocal: 10, type: i % 2 ? 'original-text' : 'original-showcase', media: i % 2 ? 'none' : 'video', topics: [], chars: 80, likes: 3, reposts: 0, replies: 0, views: 200, ...over };
 });
-const plan = { authoredPerDay: 3, engineTargets: { engines: { client: { targetPerDay: 1.5 }, identity: { targetPerDay: 0.5 } } }, contentTracks: [] }; // [] normalizes to the default two tracks
+const plan = { authoredPerDay: 3, engineTargets: { engines: { client: { targetPerDay: 1.5 }, identity: { targetPerDay: 0.5 } } }, contentTracks: twoTracks() };
 
 test('byTrack carries benchmarkProfile, target and 14-day actual per track without blending', () => {
   const v = evaluate({

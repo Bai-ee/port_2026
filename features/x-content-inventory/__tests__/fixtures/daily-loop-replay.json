@@ -2,6 +2,11 @@
   "_note": "FIXTURE — shapes copied from real saved data (Discogs facets, bird search rows, corpus summary), texts and engagement edited for deterministic tests. Not a real run.",
   "clientId": "bryan-balli-WUoltG84",
   "now": "2026-10-10T16:00:00.000Z",
+  "_contentTracksNote": "The home client's stored plan tracks (x_strategy_plans/{id}.plan.contentTracks, seeded by scripts/x-content/seed-home-priors.mjs). Code has no default tracks.",
+  "contentTracks": [
+    { "id": "design", "label": "Design & client work", "engines": ["client", "identity"], "benchmarks": ["seb__design"], "share": 0.5, "topics": [], "promotions": [{ "id": "client", "label": "Client work", "engine": "client", "url": null, "weeklyTarget": 2 }] },
+    { "id": "music", "label": "Music (UE mixes, Discogs)", "engines": ["ue", "record"], "benchmarks": [], "share": 0.5, "topics": [], "promotions": [{ "id": "ue", "label": "Underground Existence", "engine": "ue", "url": null, "weeklyTarget": 3 }, { "id": "discogs", "label": "Discogs store", "engine": "record", "url": null, "weeklyTarget": 3 }] }
+  ],
   "scan": {
     "generatedAt": "2026-10-10T13:24:55.735Z",
     "candidates": [

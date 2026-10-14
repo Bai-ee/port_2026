@@ -111,7 +111,7 @@ export async function loadDailyLoopInputs(deps, { clientId, packageIds = null, c
 
   const contentTracks = tracksOf(planDoc);
   return {
-    // Tracks + promotions from the Strategy plan doc (defaults when absent): run.js threads them into selection.
+    // Tracks + promotions from the Strategy plan doc (none when absent): run.js threads them into selection.
     contentTracks,
     promotions: promotionsOf({ contentTracks }),
     scan: state.marketingBrief?.quoteTargets || null,

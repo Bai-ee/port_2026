@@ -99,8 +99,8 @@ export default function StrategyDocPanel({ clientId, call, doc, meta = [], loadi
 
       {!confirmed ? (
         <div id="strategy-doc-draft-notice" style={S.warn}>
-          This is a starting draft built from your past strategy sessions. Nothing runs on it until you confirm it.
-          Edit any section, or confirm it as is.
+          This is a draft. Nothing runs on it until you confirm it.
+          Edit any section, approve the Client Brain to fill it, or confirm it as is.
           <div style={{ marginTop: 8 }}>
             <button type="button" id="strategy-doc-confirm-button" className="xce-btn" disabled={busy || !firstKey} onClick={() => save({ [firstKey]: doc.sections[firstKey] || '' }, { reason: 'confirmed draft' })}>
               {busy ? 'Saving…' : 'Confirm this strategy'}
