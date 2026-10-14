@@ -291,6 +291,10 @@ const FIELD_PATHS = [
   { path: 'payment.method', type: 'text', label: 'Payment method', section: 'payment', editable: true },
   { path: 'payment.instructions', type: 'multiline', label: 'Payment instructions', section: 'payment', editable: true },
   { path: 'payment.link', type: 'text', label: 'Payment link', section: 'payment', editable: true },
+  { path: 'payment.bank.bankName', type: 'text', label: 'Bank name', section: 'payment', editable: true },
+  { path: 'payment.bank.accountNumber', type: 'text', label: 'Account number', section: 'payment', editable: true },
+  { path: 'payment.bank.routingAch', type: 'text', label: 'Routing number (ACH / direct deposit)', section: 'payment', editable: true },
+  { path: 'payment.bank.routingWire', type: 'text', label: 'Routing number (wire)', section: 'payment', editable: true },
 ];
 
 const FIELD_META_BY_TEMPLATE = new Map(FIELD_PATHS.map((entry) => [entry.path, entry]));
@@ -367,6 +371,9 @@ export function structureKey(draft, sections, theme = null) {
     `logo=${inv.logoDataUrl ? inv.logoDataUrl.length : 0}`,
     // Theme — id/paper/margins only, see the doc comment above.
     `theme=${theme?.id || ''}:${theme?.paper || ''}:${theme?.margins || ''}`,
+    // Bank-transfer rows are each rendered only when set (render.js
+    // buildPayment), so which ones are non-empty is structural.
+    `bank=${['bankName', 'accountNumber', 'routingAch', 'routingWire'].map((k) => (inv.payment?.bank?.[k] ? 1 : 0)).join('')}`,
   ];
   return parts.join('#');
 }

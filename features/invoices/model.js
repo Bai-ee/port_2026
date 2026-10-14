@@ -294,6 +294,19 @@ function normalizePayment(raw) {
     // embedded image, so the invoice JSON stays readable instead of carrying a
     // 15KB data URI around.
     qr: cleanString(source.qr),
+    bank: normalizeBank(source.bank),
+  };
+}
+
+// Bank-transfer details, rendered above the method/QR rows when any field is
+// set. All free text (account/routing numbers keep their leading zeros).
+function normalizeBank(raw) {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  return {
+    bankName: cleanString(source.bankName),
+    accountNumber: cleanString(source.accountNumber),
+    routingAch: cleanString(source.routingAch),
+    routingWire: cleanString(source.routingWire),
   };
 }
 

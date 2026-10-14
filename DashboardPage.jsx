@@ -9391,6 +9391,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       ],
       footerLeft: 'Live',
       footerRight: 'ADMIN',
+      footerAction: {
+        label: 'OPEN STUDIO',
+        onClick: () => window.open('/dashboard/studio?tool=invoice', '_blank'),
+      },
       readinessBadge: { tone: 'ok', label: 'Live' },
     }, {
       id: 'create-client',
