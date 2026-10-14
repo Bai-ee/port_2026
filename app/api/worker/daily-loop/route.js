@@ -17,7 +17,8 @@ async function buildReadInputsFor() {
   const { loadClientBrainContext } = require('../../../../features/client-brain/store.cjs');
   const [
     { readSocialQueue }, { buildDayPlan }, { recentPostsFromQueue }, { createFirestoreCorpusStore }, { createFirestorePlanStore },
-    { loadContentContext }, { loadLoopCorpora }, { resolveXGrowthProfile }, { createFirestoreStrategyDocStore },
+    { loadContentContext }, { loadClientLoopCorpora }, { resolveXGrowthProfile }, { createFirestoreStrategyDocStore },
+    { assertClientReady, resolveClientXHandle },
   ] = await Promise.all([
     import('../../../../features/social-posting/twitter-service.js'),
     import('../../../../features/x-content-inventory/plan-day.js'),
@@ -28,6 +29,7 @@ async function buildReadInputsFor() {
     import('../../../../features/x-strategy/loop-corpora.js'),
     import('../../../../features/x-benchmark/profile.js'),
     import('../../../../features/x-strategy/strategy-doc-store.js'),
+    import('../../../../features/client-readiness/index.js'),
   ]);
   const committed = { bai_ee: ownCorpusRows, seb__design: benchmarkCorpusRows };
   const committedCorpusRows = (h) => (Object.hasOwn(committed, h) ? committed[h] : null);
@@ -38,10 +40,15 @@ async function buildReadInputsFor() {
   };
   return {
     db: fb.adminDb,
+    assertReady: (clientId) => assertClientReady(fb.adminDb, clientId),
     async readInputsFor(clientId) {
-      const corpora = await loadLoopCorpora({
+      const xGrowth = await readXGrowthConfigFor(clientId).catch(() => null);
+      // The client's own handle (social account → saved profile → Brain); never the owner's.
+      const own = await resolveClientXHandle(fb.adminDb, clientId, { xGrowth });
+      const corpora = await loadClientLoopCorpora({
         corpusStore,
-        profileHandles: resolveXGrowthProfile({ config: await readXGrowthConfigFor(clientId).catch(() => null) }),
+        ownHandle: own.handle,
+        profileHandles: resolveXGrowthProfile({ config: xGrowth }),
         loadCommitted: committedCorpusRows,
       });
       const ctx = await loadContentContext({
@@ -70,8 +77,8 @@ async function run(request) {
     return NextResponse.json({ ok: false, error: err.message }, { status: err.status || 503 });
   }
   const { createFirestoreRunStore } = await import('../../../../features/x-content-inventory/daily-run-store.js');
-  const { db, readInputsFor } = await buildReadInputsFor();
-  const results = await runScheduledDailyLoop({ store: createFirestoreRunStore(db), readInputsFor }, { clientIds });
+  const { db, assertReady, readInputsFor } = await buildReadInputsFor();
+  const results = await runScheduledDailyLoop({ store: createFirestoreRunStore(db), assertReady, readInputsFor }, { clientIds });
   return NextResponse.json({ ok: results.every((r) => r.ok), results });
 }
 

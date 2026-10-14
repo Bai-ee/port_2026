@@ -83,7 +83,6 @@ const DIGEST_EVENT_NAMES = [
 // to this calendar (share it with FIREBASE_ADMIN_CLIENT_EMAIL).
 const DIGEST_CALENDAR_ID = process.env.DIGEST_CALENDAR_ID || DIGEST_TO;
 const DIGEST_TIMEZONE = process.env.DIGEST_TIMEZONE || 'America/Chicago';
-const DIGEST_X_HANDLE = String(process.env.DIGEST_X_HANDLE || 'bai_ee').replace(/^@+/, '');
 const DIGEST_X_POST_DELAY_MINUTES = Math.max(1, Math.min(60, Number(process.env.DIGEST_X_POST_DELAY_MINUTES) || 2));
 const COMPAT_INCLUDE_KEYS = ['redditAnalysis', 'instagramAnalysis', 'xMarketTalk', 'suggestedReplies'];
 const DIGEST_INCLUDE_KEYS = Array.from(new Set([...(digestConfig.INCLUDE_KEYS || []), ...COMPAT_INCLUDE_KEYS]));
@@ -848,6 +847,17 @@ async function enqueueDigestSuggestedPost({ homeClientId, briefs, timestamp, ste
   const selected = selectDigestSuggestedPost(briefs, homeClientId);
   if (!selected?.text) return { ok: false, skipped: 'no-suggested-post' };
 
+  // The client's own handle only; no handle on record => skip the X queue (fail closed), the digest still sends.
+  let xHandle;
+  try {
+    const { requireClientXHandle } = await import('../../../../features/client-readiness/index.js');
+    xHandle = (await requireClientXHandle(fb.adminDb, homeClientId)).handle;
+  } catch (err) {
+    if (err?.code !== 'client-x-handle-missing') logWarn('daily_digest_x_handle_lookup_failed', { clientId: homeClientId, error: err?.message });
+    step?.('info', `X post not queued · no X handle on record for ${homeClientId}`);
+    return { ok: false, skipped: 'no-x-handle' };
+  }
+
   const dateKey = new Date(timestamp).toISOString().slice(0, 10);
   const source = `daily-digest:${dateKey}:suggested-post`;
   let existing = [];
@@ -858,7 +868,7 @@ async function enqueueDigestSuggestedPost({ homeClientId, briefs, timestamp, ste
   }
   const duplicate = existing.find((post) => post?.source === source);
   if (duplicate) {
-    step?.('info', `X post already queued · @${DIGEST_X_HANDLE}`);
+    step?.('info', `X post already queued · @${xHandle}`);
     return { ok: true, skipped: 'duplicate', post: duplicate };
   }
 
@@ -877,17 +887,17 @@ async function enqueueDigestSuggestedPost({ homeClientId, briefs, timestamp, ste
     agents,
     xStrategy: {
       source: 'daily-digest',
-      targetHandle: DIGEST_X_HANDLE,
+      targetHandle: xHandle,
       sourceClientId: selected.clientId || homeClientId,
       sourceClientName: selected.clientName || '',
       dateKey,
       contentHash: shortHash(content),
     },
   });
-  step?.('success', `X post queued · @${DIGEST_X_HANDLE} · ${new Date(scheduledAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`);
+  step?.('success', `X post queued · @${xHandle} · ${new Date(scheduledAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`);
   logInfo('daily_digest_x_post_queued', {
     clientId: homeClientId,
-    targetHandle: DIGEST_X_HANDLE,
+    targetHandle: xHandle,
     source,
     postId: post.id,
     scheduledAt,

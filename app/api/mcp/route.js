@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { createRequire } from 'node:module';
 import { handleRpc, RPC } from '../../../features/mcp/jsonrpc.js';
 import { registry } from '../../../features/mcp/registry.js';
 import { authenticateBearer, McpAuthError, wwwAuthenticate } from '../../../features/mcp/auth.js';
@@ -13,6 +14,13 @@ export const maxDuration = 300;
 // HITLOOP MCP server - Streamable HTTP, stateless JSON-RPC. See docs/source-of-truth/HITLOOP-MCP-SERVER.md.
 // Auth: OAuth 2.1 access token (or a static MCP_OWNER_TOKEN of 32+ chars), admin accounts only. Fails closed (503) without
 // MCP_OAUTH_SECRET. Nothing here posts, schedules, approves, deletes or writes to X.
+
+const require = createRequire(import.meta.url);
+
+// MCP auth is email-only; proposals/records attribute to the admin's Firebase uid. Unknown => null (attribution only).
+async function uidForEmail(email) {
+  try { return (await require('../../../api/_lib/firebase-admin.cjs').adminAuth.getUserByEmail(email)).uid || null; } catch { return null; }
+}
 
 const rpcError = (code, message) => ({ jsonrpc: '2.0', id: null, error: { code, message } });
 
@@ -48,7 +56,7 @@ export async function POST(request) {
   const limit = await checkRateLimit(server.services.counters(), `mcp:${auth.email}`, { now: now(), cost: rpcCost(body) });
   if (!limit.allowed) return json({ error: `Rate limit: ${limit.limit} calls per 10 minutes.` }, 429, { 'retry-after': String(limit.retryAfterSec) });
 
-  const ctx = { db: server.db, email: auth.email, clientId: server.defaultClientId, now, services: server.services };
+  const ctx = { db: server.db, email: auth.email, uid: await uidForEmail(auth.email), clientId: server.defaultClientId, now, services: server.services };
   const out = await handleRpc(body, {
     registry, ctx, instructions: server.getInstructions(),
     onCall: ({ tool, args, ok, ms }) => server.audit.write(auditEntry({ now: now(), email: auth.email, tool, args, ok, ms })),

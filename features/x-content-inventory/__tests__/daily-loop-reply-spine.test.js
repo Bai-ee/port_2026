@@ -6,7 +6,6 @@ import { readFileSync } from 'node:fs';
 import { selectForSlots } from '../daily-loop/select.js';
 import { conversationPostsFrom, normalizeConversationPost } from '../daily-loop/conversations.js';
 import { buildContributionPrompt, fallbackCopy, checkSuggestionText } from '../daily-loop/copy.js';
-import { OWNER_CLIENT_IDS } from '../daily-loop/config.js';
 
 const FX = JSON.parse(readFileSync(new URL('./fixtures/daily-loop-real-shapes.json', import.meta.url), 'utf8'));
 const NOW = Date.parse(FX.now);
@@ -16,7 +15,7 @@ const MODEST_ON_BRAND = normalizeConversationPost({
   createdAt: new Date(NOW - 2 * 3_600_000).toISOString(), likeCount: 60, retweetCount: 5, replyCount: 8,
 }, 'search:glenn');
 const glenn = FX.packages.filter((p) => /Glenn/.test(p.title));
-const run = (over) => selectForSlots({ clientId: OWNER_CLIENT_IDS[0], localDate: '2026-10-10', now: NOW, candidates: [], ...over });
+const run = (over) => selectForSlots({ clientId: 'fixture-client-a', localDate: '2026-10-10', now: NOW, candidates: [], ...over });
 
 // The only matching item is spent on the showcase slot, so the reply has no owned item left.
 const packageless = () => run({

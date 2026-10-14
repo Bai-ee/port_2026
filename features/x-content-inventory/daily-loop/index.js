@@ -2,7 +2,7 @@
 // helpers exported for siblings (STOPWORDS, SLOT_TIMES, arrayValues, …) never leak.
 // Decides nothing; only names what callers may import via ../daily-loop.js.
 
-export { LOOP_VERSION, CHANNEL, DEFAULT_TIMEZONE, MAX_SUGGESTIONS, OWNER_CLIENT_IDS, assertOwnerClient,
+export { LOOP_VERSION, CHANNEL, DEFAULT_TIMEZONE, MAX_SUGGESTIONS,
   CONVERSATION_MAX_AGE_HOURS, REPLY_WINDOW_HOURS, MIN_MATCH_SCORE, MIN_BRAND_FIT, MIN_EVIDENCE_N } from './config.js';
 export { tokenize, packageTerms, packagePhrases, phraseHits, WEAK_TERMS, isRealStory } from './text.js';
 export { contentBasis, packageEligibility, INELIGIBLE_REASONS } from './content-basis.js';

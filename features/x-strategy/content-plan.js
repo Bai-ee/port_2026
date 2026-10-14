@@ -69,7 +69,10 @@ export function createContentPlanHandlers({
     const posts = Number.isFinite(requested) && requested >= 1 ? Math.min(Math.floor(requested), MAX_PLAN_POSTS) : DEFAULT_REQUEST_POSTS;
     const date = typeof body?.date === 'string' && DATE_RE.test(body.date.trim()) ? body.date.trim() : new Date(clock()).toISOString().slice(0, 10);
     const { packages, seeded } = await readInventory();
-    const plan = buildPlan({ corpusRows: legacyRows.own, benchmarkRows: legacyRows.benchmark, packages, date, posts });
+    // The committed corpus labels itself (its post URLs name the account); plan-day has no owner default.
+    // This legacy no-plan-doc path still reads the owner's committed corpora (COMMITTED_CORPORA, multi-client Phase 4).
+    const handle = /(?:x|twitter)\.com\/([^/]+)\/status\//i.exec(legacyRows.own.find((r) => r?.url)?.url || '')?.[1] || null;
+    const plan = buildPlan({ corpusRows: legacyRows.own, benchmarkRows: legacyRows.benchmark, packages, date, posts, handle });
     return { ok: true, plan, seeded, summary: projectDayPlan(plan, { posts }).summary };
   }
 

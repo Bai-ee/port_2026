@@ -24,7 +24,7 @@ export class PaidSyncError extends Error {
   constructor(message, code = 'invalid', status = 400) { super(message); this.name = 'PaidSyncError'; this.code = code; this.status = status; this.expose = true; }
 }
 
-const authFor = (ctx) => ctx.auth || { decoded: { email: ctx.email, uid: null } };
+const authFor = (ctx) => ctx.auth || { decoded: { email: ctx.email, uid: ctx.uid ?? null } };
 
 function unwrap(res, what) {
   if (res && res.ok === false) throw new PaidSyncError(`${what} failed: ${res.error || `status ${res.status || '?'}`}`, 'failed', 502);

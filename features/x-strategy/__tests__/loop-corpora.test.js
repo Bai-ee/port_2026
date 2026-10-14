@@ -4,7 +4,6 @@ import { createMemoryCorpusStore } from '../corpus-store.js';
 import { loadLoopCorpora, safeProfileHandles } from '../loop-corpora.js';
 import { loadDailyLoopInputs } from '../../x-content-inventory/daily-loop/inputs.js';
 import { buildDayPlan } from '../../x-content-inventory/plan-day.js';
-import { OWNER_CLIENT_IDS } from '../../x-content-inventory/daily-loop.js';
 
 const row = (i) => ({ id: String(i), utc: new Date(Date.UTC(2026, 0, 1) + i * 3600e3).toISOString(), text: `t${i}`, likes: 1, reposts: 0, replies: 0, views: null });
 const rows = (n, tag = '') => Array.from({ length: n }, (_, i) => ({ ...row(n - i), text: `${tag}t${i}` }));
@@ -64,7 +63,7 @@ test('inputs.js prints the labels verbatim in the inputs summaries', async () =>
   const store = createMemoryCorpusStore({ loadCommitted });
   await store.writeMergedRows('bai_ee', rows(5), { pulledAt: PULLED });
   const corpora = await loadLoopCorpora({ corpusStore: store });
-  const inputs = await loadDailyLoopInputs({ db, buildDayPlan }, { clientId: OWNER_CLIENT_IDS[0], corpora, now: Date.parse(PULLED) });
+  const inputs = await loadDailyLoopInputs({ db, buildDayPlan }, { clientId: 'fixture-client-a', corpora, now: Date.parse(PULLED) });
   assert.equal(inputs.ownSummary.source, 'rows store, pulled 2026-10-11 (re-tagged with the shared taxonomy)');
   assert.equal(inputs.benchmark.source, 'computed from rows store, pulled 2026-10-11 vs committed file docs/audits/seb-design-x-corpus.json (no saved report exists)');
 });
@@ -75,13 +74,13 @@ const fakeDb = () => {
   return { collection: (name) => ({ doc, select: () => ({ get: async () => ({ docs: [] }) }), name }) };
 };
 
-test('inputs.js uses corpora.ownHandle for strategyInputs; absent => bai_ee', async () => {
-  const mk = (corpora) => loadDailyLoopInputs({ db: fakeDb(), buildDayPlan }, { clientId: OWNER_CLIENT_IDS[0], corpora, now: Date.parse(PULLED) });
+test('inputs.js uses corpora.ownHandle for strategyInputs; absent => null (never the owner)', async () => {
+  const mk = (corpora) => loadDailyLoopInputs({ db: fakeDb(), buildDayPlan }, { clientId: 'fixture-client-a', corpora, now: Date.parse(PULLED) });
   const custom = await mk({ own: rows(5), benchmark: rows(4), ownHandle: 'someone_else', benchmarkHandle: 'rival' });
   assert.equal(custom.strategyInputs.ownHandle, 'someone_else');
   assert.match(JSON.stringify(custom.benchmark), /someone_else/);
   const dflt = await mk({ own: rows(5), benchmark: rows(4) });
-  assert.equal(dflt.strategyInputs.ownHandle, 'bai_ee');
+  assert.equal(dflt.strategyInputs.ownHandle, null);
   assert.doesNotMatch(JSON.stringify(dflt.benchmark), /someone_else/);
 });
 
@@ -116,4 +115,22 @@ test('safeProfileHandles: failing profile read => default pair, rows store still
   assert.deepEqual([c.ownHandle, c.benchmarkHandle, c.own.length, c.ownSource], ['bai_ee', 'seb__design', 5, 'rows store, pulled 2026-10-11']);
   const ok = await safeProfileHandles(async () => ({ a: 1 }), ({ config }) => ({ ownHandle: 'z', config }));
   assert.equal(ok.ownHandle, 'z');
+});
+
+test('loadClientLoopCorpora: no own handle => empty own corpus and null handle, never the default pair\'s owner rows', async () => {
+  const { loadClientLoopCorpora } = await import('../loop-corpora.js');
+  const store = createMemoryCorpusStore({ loadCommitted });
+  await store.writeMergedRows('bai_ee', rows(5, 's-'), { pulledAt: PULLED });
+  await store.writeMergedRows('client_a', rows(3, 'a-'), { pulledAt: PULLED });
+  const none = await loadClientLoopCorpora({ corpusStore: store, ownHandle: null, profileHandles: {} });
+  assert.equal(none.ownHandle, null);
+  assert.deepEqual(none.own, []);
+  assert.match(none.ownSource, /no own X handle/);
+  const mine = await loadClientLoopCorpora({ corpusStore: store, ownHandle: 'client_a', profileHandles: { ownHandle: 'someone_else' } });
+  assert.equal(mine.ownHandle, 'client_a');
+  assert.equal(mine.own.length, 3);
+  // Composed with inputs.js: no handle reaches strategyInputs as null, and no owner rows ride along.
+  const inputs = await loadDailyLoopInputs({ db: fakeDb(), buildDayPlan }, { clientId: 'fixture-client-a', corpora: none, now: Date.parse(PULLED) });
+  assert.equal(inputs.strategyInputs.ownHandle, null);
+  assert.deepEqual(inputs.strategyInputs.ownPosts, []);
 });

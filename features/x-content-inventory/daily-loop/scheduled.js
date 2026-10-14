@@ -29,14 +29,18 @@ export function pilotClientIds(env = process.env) {
 }
 
 /**
- * deps: { store, readInputsFor(clientId) -> inputs, now?(), runLoop?(deps, opts) }
+ * deps: { store, assertReady(clientId) -> throws when the client is not set up (assertClientReady),
+ *         readInputsFor(clientId) -> inputs, now?(), runLoop?(deps, opts) }
  * No `draft` is ever passed to the loop; the model path does not exist here.
+ * A pilot client that is not ready is reported per client (ok:false, its code) and never run.
  */
 export async function runScheduledDailyLoop(deps, { clientIds }) {
+  if (typeof deps.assertReady !== 'function') throw new Error('runScheduledDailyLoop: deps.assertReady is required');
   const runLoop = deps.runLoop || runDailyLoop;
   const results = [];
   for (const clientId of clientIds) {
     try {
+      await deps.assertReady(clientId);
       const res = await runLoop(
         { now: deps.now || (() => Date.now()), store: deps.store, readInputs: () => deps.readInputsFor(clientId) },
         { clientId, inputSource: 'live' },
@@ -46,7 +50,7 @@ export async function runScheduledDailyLoop(deps, { clientIds }) {
         suggestions: res.run?.suggestions?.length ?? 0, modelCalls: res.run?.usage?.modelCalls ?? 0, copySource: res.run?.copySource || null,
       });
     } catch (err) {
-      results.push({ clientId, ok: false, error: String(err?.message || err).slice(0, 200), status: err?.status || 500 });
+      results.push({ clientId, ok: false, error: String(err?.message || err).slice(0, 200), status: err?.status || 500, ...(err?.code ? { code: err.code } : {}) });
     }
   }
   return results;

@@ -64,6 +64,18 @@ export async function loadLoopCorpora({ corpusStore, profileHandles, loadCommitt
 }
 
 /**
+ * The loop's corpora for ONE client, keyed on that client's own X handle (resolveClientXHandle). With no handle on
+ * record the own corpus is EMPTY and ownHandle null: loadLoopCorpora's default pair would otherwise hand any
+ * client the owner's rows. The benchmark side still uses the profile/default pair (per-client priors are Phase 4).
+ * @param {object} p  loadLoopCorpora's args plus `ownHandle` (string|null)
+ */
+export async function loadClientLoopCorpora({ ownHandle, profileHandles, ...rest } = {}) {
+  const corpora = await loadLoopCorpora({ ...rest, profileHandles: { ...(profileHandles || {}), ...(ownHandle ? { ownHandle } : {}) } });
+  if (ownHandle) return corpora;
+  return { ...corpora, own: [], ownHandle: null, ownSource: 'no own X handle on record for this client' };
+}
+
+/**
  * Profile handles for the loop, never throwing: a failed config read/resolve yields {} so loadLoopCorpora uses the
  * default pair (the rows store is still used). Only a failing STORE read falls back to committed files, per handle.
  * @param {()=>Promise<object|null>|object|null} readConfig  reads the client's xGrowth config

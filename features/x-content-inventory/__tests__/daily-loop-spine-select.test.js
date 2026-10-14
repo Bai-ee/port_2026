@@ -14,13 +14,12 @@ import { fallbackCopy, quoteReactFallback, checkSuggestionText } from '../daily-
 import { FLOOR_REASON } from '../daily-loop/slots.js';
 import { saveSuggestionDraft, editSuggestion } from '../daily-loop/review.js';
 import { createMemoryRunStore } from '../daily-run-store.js';
-import { OWNER_CLIENT_IDS } from '../daily-loop/config.js';
 import { WATCHLIST } from '../../x-quote-targets/watchlist.js';
 
 const FX = JSON.parse(readFileSync(new URL('./fixtures/daily-loop-real-shapes.json', import.meta.url), 'utf8'));
 const CORPUS = JSON.parse(readFileSync(new URL('../../../docs/audits/bai-ee-x-corpus.json', import.meta.url), 'utf8'));
 const NOW = Date.parse(FX.now);
-const OWNER = OWNER_CLIENT_IDS[0];
+const OWNER = 'fixture-client-a';
 const LOCAL = '2026-10-10';
 const slot = (letter, type, over = {}) => ({ letter, type, lane: null, pillar: null, timeCT: null, startsAt: null, manual: false, ...over });
 const scanPosts = FX.scan.candidates.map((c) => ({ ...normalizeConversationPost(c, 'watchlist'), score: c.score }));

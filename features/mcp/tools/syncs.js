@@ -14,7 +14,7 @@ export { NAS_ANALYZE_MAX_CAP_USD, NAS_MAX_PATHS };
 
 const COMMAND_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
-const authFor = (ctx) => ({ decoded: { email: ctx.email, uid: null } });
+const authFor = (ctx) => ({ decoded: { email: ctx.email, uid: ctx.uid ?? null } });
 
 function unwrap(res, what) {
   if (res && res.ok === false) throw new ToolError(`${what} failed: ${res.error || `status ${res.status || '?'}`}`);
@@ -37,7 +37,7 @@ const strategyRefresh = defTool({
       // Same rule as the in-app agent: only the own handle and the profile/track benchmark handles. (Over MCP there is no
       // owner message that could name another account.)
       const clean = (h) => String(h ?? '').trim().replace(/^@+/, '').toLowerCase();
-      const known = new Set((await handlers.toolDepsFor(clientId, { clientId, uid: null, email: ctx.email }).getProfileHandles()).map(clean));
+      const known = new Set((await handlers.toolDepsFor(clientId, { clientId, uid: ctx.uid ?? null, email: ctx.email }).getProfileHandles()).map(clean));
       const unknown = asked.filter((h) => !known.has(clean(h)));
       if (unknown.length) throw new ToolError(`Not in the profile (own handle + benchmarks): ${unknown.map((h) => String(h).slice(0, 20)).join(', ')}. Only those can be refreshed over MCP; the owner can add accounts in the Strategy tab.`);
     }
@@ -50,9 +50,9 @@ const regenerateToday = defTool({
   name: 'regenerate_today_suggestions',
   title: 'Regenerate today\'s suggestions',
   kind: 'sync',
-  description: 'Re-run the Content Engine daily loop for today with TEMPLATE drafting only (no AI model call, no cost). Replaces today\'s recommendations with a fresh set; it does not post, schedule or save drafts. Owner workspace only. Read the result with strategy_get_today_run.',
-  inputSchema: { type: 'object', properties: { force: { type: 'boolean', description: 'Regenerate even if a run for today already exists (default false).' } } },
-  handler: async ({ args, ctx }) => ctx.services.regenerateToday(ctx.clientId, { force: args.force === true }),
+  description: 'Re-run the Content Engine daily loop for today with TEMPLATE drafting only (no AI model call, no cost). Replaces today\'s recommendations with a fresh set; it does not post, schedule or save drafts. Only runs for a client whose Brain is approved, plan built and X connected. Read the result with strategy_get_today_run.',
+  inputSchema: { type: 'object', properties: { force: { type: 'boolean', description: 'Regenerate even if a run for today already exists (default false).' }, clientId: CLIENT_ID_PROP } },
+  handler: async ({ args, ctx }) => ctx.services.regenerateToday(await resolveClientId(ctx, args), { force: args.force === true }),
 });
 
 const nasStatus = defTool({
@@ -97,10 +97,10 @@ const requestSync = defTool({
   title: 'Ask the owner to approve a paid sync',
   kind: 'propose',
   description: `Ask for an action that costs money. This validates the request, prices it, and creates a "Run a paid sync" PROPOSAL CARD in HITLOOP Marketing Director > Strategy (chat) (thread "MCP"). NOTHING RUNS and nothing is spent: the owner must press Confirm on the card inside HITLOOP, and you cannot confirm it for them (there is no confirm tool). Tell the owner the estimated cost and where to confirm. Kinds: ${PAID_SYNC_KINDS.join(', ')}. params per kind: strategy_review {clientId?}; x_monitor_sync {include?: ["profile","posts","audience"]} (X API reads, never writes; the card names the metered call count); nas_analyze {sourceId, paths[], capUsd<=${NAS_ANALYZE_MAX_CAP_USD}}. Market Signals refreshes have no kind here: they run from the Refresh button in the Marketing Director header (group 1), so tell the owner to click it. Max ${DAILY_PAID_CAP} paid syncs run per day.`,
-  inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: [...PAID_SYNC_KINDS] }, params: { type: 'object', description: 'Kind-specific parameters (see description).' } }, required: ['kind'] },
+  inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: [...PAID_SYNC_KINDS] }, clientId: CLIENT_ID_PROP, params: { type: 'object', description: 'Kind-specific parameters (see description).' } }, required: ['kind'] },
   handler: async ({ args, ctx }) => {
     if (!PAID_SYNC_KINDS.includes(args.kind)) throw new ToolError(`Unknown kind "${String(args.kind).slice(0, 40)}". Valid: ${PAID_SYNC_KINDS.join(', ')}. (Market Signals refreshes: the owner clicks Refresh in the Marketing Director header, group 1.)`);
-    const clientId = await resolveClientId(ctx, args.params || {});
+    const clientId = await resolveClientId(ctx, { clientId: args.clientId ?? args.params?.clientId });
     const d = await describePaidSync(args.kind, args.params || {}, ctx);
     const res = await ctx.services.strategyHandlers().createProposalInThread({
       clientId,

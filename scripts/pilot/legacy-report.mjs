@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 // READ-ONLY dry-run: finds legacy (non-lifecycleVersion-2) social_posts rows that bypass the new protections.
 // Never writes to Firestore/Storage; never calls X or model APIs. Recommends parking only (never delete).
+// Usage: node scripts/pilot/legacy-report.mjs --client <id>   (required; no owner default)
 import { createRequire } from 'node:module';
 import { existsSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
-const OWNER_CLIENT = 'bryan-balli-WUoltG84';
 const SCOPE = ['scheduled', 'queued', 'awaiting_approval', 'approved', 'failed', 'needs_review'];
 const SCHEDULED = ['scheduled', 'queued'];
 const AMBIGUOUS = ['server-error-ambiguous', 'network-ambiguous', 'unknown'];
@@ -80,7 +80,7 @@ export function classifyLegacyRows(rows, { now = Date.now(), packages = {} } = {
 
 const tableCell = (s) => String(s ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
 
-export function renderReport({ findings, rowCount, legacyCount, label, now }) {
+export function renderReport({ findings, rowCount, legacyCount, label, now, clientId = null }) {
   const counts = {};
   for (const f of findings) counts[f.rule] = (counts[f.rule] || 0) + 1;
   const parkIds = new Set(findings.filter((f) => f.action === 'park for review').map((f) => f.postId));
@@ -88,7 +88,7 @@ export function renderReport({ findings, rowCount, legacyCount, label, now }) {
     '# Content pilot: legacy row report (dry run)',
     '',
     `Generated: ${new Date(now).toISOString()}${label ? ` | ${label}` : ''}`,
-    `Client: ${OWNER_CLIENT} | collection: social_posts | READ-ONLY, nothing applied.`,
+    `Client: ${clientId || '(synthetic)'} | collection: social_posts | READ-ONLY, nothing applied.`,
     '',
     `Rows read: ${rowCount} | legacy rows in scope (no lifecycleVersion 2, relevant status): ${legacyCount} | findings: ${findings.length} | distinct rows recommended to park: ${parkIds.size}`,
     '',
@@ -124,7 +124,15 @@ function syntheticFixture(now) {
   };
 }
 
+function clientArg(argv = process.argv.slice(2)) {
+  const i = argv.indexOf('--client');
+  const id = i > -1 ? String(argv[i + 1] || '').trim() : '';
+  if (!id) throw new Error('--client <id> is required (no owner default).');
+  return id;
+}
+
 async function main() {
+  const clientId = clientArg();
   const now = Date.now();
   let rows, packages = {}, label = '';
   try {
@@ -132,7 +140,7 @@ async function main() {
     require(path.join(REPO, 'features/not-the-rug-brief/load-env'));
     const fb = require(path.join(REPO, 'api/_lib/firebase-admin.cjs'));
     const db = fb.adminDb;
-    const snap = await db.collection('social_posts').where('clientId', '==', OWNER_CLIENT).get();
+    const snap = await db.collection('social_posts').where('clientId', '==', clientId).get();
     rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     const ids = [...new Set(rows.filter((r) => !isV2(r) && r.packageId).map((r) => r.packageId))];
     for (let i = 0; i < ids.length; i += 100) {
@@ -149,7 +157,7 @@ async function main() {
   const findings = classifyLegacyRows(rows, { now, packages });
   const legacyCount = rows.filter((r) => !isV2(r) && SCOPE.includes(r.status)).length;
   const out = path.join(REPO, 'docs/plans/content-pilot-legacy-report.md');
-  writeFileSync(out, renderReport({ findings, rowCount: rows.length, legacyCount, label, now }));
+  writeFileSync(out, renderReport({ findings, rowCount: rows.length, legacyCount, label, now, clientId }));
   const counts = {};
   for (const f of findings) counts[f.rule] = (counts[f.rule] || 0) + 1;
   console.log(JSON.stringify({ label, rows: rows.length, legacyCount, findings: findings.length, counts }));

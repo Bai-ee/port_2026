@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   conversationPostsFrom, normalizeConversationPost, packageEligibility, buildBrandProfile, brandFit, groupNarratives,
-  matchScore, selectSuggestions, OWNER_CLIENT_IDS,
+  matchScore, selectSuggestions,
 } from '../daily-loop.js';
 
 const FX = JSON.parse(readFileSync(new URL('./fixtures/daily-loop-real-shapes.json', import.meta.url), 'utf8'));
@@ -20,7 +20,7 @@ const MODEST_ON_BRAND = normalizeConversationPost({
 }, 'search:glenn underground');
 
 const select = (extraPosts = []) => selectSuggestions({
-  clientId: OWNER_CLIENT_IDS[0], localDate: '2026-10-10', now: NOW, packages: FX.packages,
+  clientId: 'fixture-client-a', localDate: '2026-10-10', now: NOW, packages: FX.packages,
   conversationPosts: [...conversationPostsFrom(FX), ...extraPosts],
   strategy: { gaps: [], decisions: { maxQuotes: 3 } },
 });
@@ -98,7 +98,7 @@ test('every suggestion explains itself: why.now, why.brand, why.content are non-
     }
   }
   // The original fallback (no conversation at all) explains itself too.
-  const none = selectSuggestions({ clientId: OWNER_CLIENT_IDS[0], localDate: '2026-10-10', now: NOW, packages: FX.packages, conversationPosts: [], strategy: { gaps: [] } });
+  const none = selectSuggestions({ clientId: 'fixture-client-a', localDate: '2026-10-10', now: NOW, packages: FX.packages, conversationPosts: [], strategy: { gaps: [] } });
   assert.equal(none.suggestions[0].type, 'original');
   for (const k of ['now', 'brand', 'content']) assert.ok(none.suggestions[0].why[k].trim());
 });

@@ -2,7 +2,7 @@
 // media on Save (incl. NAS needs-staging), strong match => original-with-media, and the scheduled (cron) runner.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { runDailyLoop, OWNER_CLIENT_IDS, MAX_SUGGESTIONS } from '../daily-loop.js';
+import { runDailyLoop, MAX_SUGGESTIONS } from '../daily-loop.js';
 import { selectForSlots, matchScore } from '../daily-loop/select.js';
 import { normalizeConversationPost } from '../daily-loop/conversations.js';
 import { createMemoryRunStore, saveSuggestionDraft } from '../daily-run-store.js';
@@ -12,7 +12,7 @@ import { tracksOf } from '../../x-strategy/content-tracks.js';
 import * as scheduledMod from '../daily-loop/scheduled.js';
 const { pilotClientIds, runScheduledDailyLoop } = scheduledMod;
 
-const OWNER = OWNER_CLIENT_IDS[0];
+const OWNER = 'fixture-client-a';
 const NOW = Date.parse('2026-10-10T15:00:00Z');
 const LOCAL = '2026-10-10';
 const STORY = 'Rendered this mix on the studio pipeline and kept the original room sound on purpose, nothing added.';
@@ -150,13 +150,17 @@ test('scheduled runner: no drafter is ever passed; zero model calls; unset PILOT
   assert.throws(() => pilotClientIds({}), (e) => e.status === 503);
   assert.deepEqual(pilotClientIds({ PILOT_CLIENT_IDS: ' a , b ' }), ['a', 'b']);
   let seen;
-  await runScheduledDailyLoop({ store: {}, readInputsFor: async () => ({}), runLoop: async (d) => { seen = d; return { run: { suggestions: [] } }; } }, { clientIds: [OWNER] });
+  const notReady = Object.assign(new Error('not set up'), { status: 403, code: 'client-plan-missing' });
+  const assertReady = async (id) => { if (id !== OWNER) throw notReady; };
+  await assert.rejects(runScheduledDailyLoop({ store: {}, readInputsFor: async () => ({}) }, { clientIds: [OWNER] }), /assertReady is required/);
+  await runScheduledDailyLoop({ store: {}, assertReady, readInputsFor: async () => ({}), runLoop: async (d) => { seen = d; return { run: { suggestions: [] } }; } }, { clientIds: [OWNER] });
   assert.equal('draft' in seen, false);
-  const out = await runScheduledDailyLoop({ store: createMemoryRunStore(), now: () => NOW, readInputsFor: async () => ({ packages: [mix] }) }, { clientIds: [OWNER, 'someone-else'] });
+  const out = await runScheduledDailyLoop({ store: createMemoryRunStore(), assertReady, now: () => NOW, readInputsFor: async () => ({ packages: [mix] }) }, { clientIds: [OWNER, 'someone-else'] });
   assert.equal(out[0].ok, true);
   assert.equal(out[0].modelCalls, 0);
   assert.equal(out[0].copySource, 'fallback');
-  assert.equal(out[1].ok, false); // non-owner client is refused by the loop's own gate
+  assert.equal(out[1].ok, false); // a client that is not set up is refused by the readiness gate, per client
+  assert.equal(out[1].code, 'client-plan-missing');
 });
 
 test('cron auth: unauthenticated => no; wrong secret => no; production without secret fails closed; dev needs the cron header', () => {

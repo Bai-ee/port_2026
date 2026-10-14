@@ -367,3 +367,41 @@ test('query_collection rejects where/orderBy on credential-looking fields (no or
   const ok = await call('query_collection', { collection: 'social_posts', where: [{ field: 'clientId', value: OWNER }], orderBy: 'status' }, ctx);
   assert.equal(ok.isError, undefined, ok.content?.[0]?.text);
 });
+
+// ---- multi-client: no implicit home-client default for anyone but the owner -----------------------------------
+
+const strategyReadTool = () => registry.find((t) => t.name.startsWith('strategy_') && t.annotations.readOnlyHint).name;
+const otherAdminCtx = (extra = {}) => makeCtx({ email: 'someone-else@example.com', ...extra });
+
+test('clientId: a non-owner caller without clientId is asked for one (no silent home default)', async () => {
+  let reached = false;
+  const services = { strategyHandlers: () => ({ toolDepsFor: () => { reached = true; return {}; } }) };
+  const res = await call(strategyReadTool(), {}, otherAdminCtx({ services }));
+  assert.equal(res.isError, true);
+  assert.match(res.content[0].text, /clientId is required/);
+  assert.equal(reached, false);
+});
+
+test('clientId: the owner without clientId still gets the home workspace; a non-owner can name a real client', async () => {
+  const seen = [];
+  const services = { strategyHandlers: () => ({ toolDepsFor: (id) => { seen.push(id); return {}; } }) };
+  await call(strategyReadTool(), {}, makeCtx({ services }));
+  await call(strategyReadTool(), { clientId: 'other-client-1' }, otherAdminCtx({ services }));
+  assert.deepEqual(seen, [OWNER, 'other-client-1']);
+});
+
+test('regenerate_today_suggestions: resolves the client and surfaces the readiness gate code to the caller', async () => {
+  const asked = [];
+  const regenerateToday = async (id) => {
+    asked.push(id);
+    throw Object.assign(new Error('The content loop is not set up for other-client-1: missing client-brain.'), { status: 403, code: 'client-brain-not-approved' });
+  };
+  const res = await call('regenerate_today_suggestions', { clientId: 'other-client-1' }, makeCtx({ services: { regenerateToday } }));
+  assert.equal(res.isError, true);
+  assert.match(res.content[0].text, /not set up for other-client-1/);
+  assert.deepEqual(asked, ['other-client-1']);
+  const none = await call('regenerate_today_suggestions', {}, otherAdminCtx({ services: { regenerateToday } }));
+  assert.equal(none.isError, true);
+  assert.match(none.content[0].text, /clientId is required/);
+  assert.equal(asked.length, 1);
+});

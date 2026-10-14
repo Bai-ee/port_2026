@@ -7,7 +7,7 @@ import { allocateEngines, mergeEngineConfig, DEFAULT_ENGINE_CONFIG } from '../en
 import { buildDayPlan } from '../plan-day.js';
 import { planSlots, TIER_1_MAX_POSTS } from '../daily-loop/slots.js';
 import { MAX_SUGGESTIONS } from '../daily-loop/config.js';
-import { runDailyLoop, OWNER_CLIENT_IDS } from '../daily-loop.js';
+import { runDailyLoop } from '../daily-loop.js';
 import { createMemoryRunStore } from '../daily-run-store.js';
 import { resolvePlanInputs } from '../../x-strategy/plan-inputs.js';
 import { normalizePlan } from '../../x-strategy/plan-state.js';
@@ -16,7 +16,7 @@ const rd = (rel) => JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf8
 const FX = rd('./fixtures/daily-loop-replay.json');
 const OWN = rd('../../../docs/audits/bai-ee-x-corpus.json');
 const BENCH = rd('../../../docs/audits/seb-design-x-corpus.json');
-const OWNER = OWNER_CLIENT_IDS[0];
+const OWNER = 'fixture-client-a';
 
 const NOW = Date.parse('2026-10-06T06:00:00Z');
 const DATE = '2026-10-06';

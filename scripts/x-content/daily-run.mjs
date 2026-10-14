@@ -29,17 +29,18 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  runDailyLoop, assertOwnerClient, discoveryQueries, packageEligibility, localDateOf, LOOP_VERSION, MAX_SUGGESTIONS,
+  runDailyLoop, discoveryQueries, packageEligibility, localDateOf, LOOP_VERSION, MAX_SUGGESTIONS,
 } from '../../features/x-content-inventory/daily-loop.js';
 import { buildDayPlan } from '../../features/x-content-inventory/plan-day.js';
 import { createFirestorePlanStore } from '../../features/x-strategy/plan-store.js';
 import { createFirestoreCorpusStore } from '../../features/x-strategy/corpus-store.js';
-import { loadLoopCorpora, safeProfileHandles } from '../../features/x-strategy/loop-corpora.js';
+import { loadClientLoopCorpora, safeProfileHandles } from '../../features/x-strategy/loop-corpora.js';
 import { resolveXGrowthProfile } from '../../features/x-benchmark/profile.js';
 import {
   createMemoryRunStore, createFirestoreRunStore, loadDailyLoopInputs, saveSuggestionDraft, editSuggestion, dismissSuggestion, createModelDrafter,
 } from '../../features/x-content-inventory/daily-run-store.js';
 import { slotLabel, strategySourceLine, slotStatuses, VOICE_LINE } from '../../features/x-content-inventory/daily-loop/present.js';
+import { assertClientReady, resolveClientXHandle } from '../../features/client-readiness/index.js';
 
 const require = createRequire(import.meta.url);
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
@@ -135,12 +136,24 @@ async function replay() {
   const store = createMemoryRunStore();
   // The fixture runs on the strategy spine too: same plan builder, the committed corpora, the fixture's own library.
   const own = readJson(OWN_CORPUS);
-  const strategyInputs = { buildDayPlan, planInput: { corpusRows: own, benchmarkRows: readJson(BENCH_CORPUS), packages: fx.packages }, ownPosts: own, ownHandle: 'bai_ee' };
+  const strategyInputs = { buildDayPlan, planInput: { corpusRows: own, benchmarkRows: readJson(BENCH_CORPUS), packages: fx.packages }, ownPosts: own, ownHandle: handleOfRows(own) };
   const res = await runDailyLoop({ now: () => Date.parse(fx.now), store, readInputs: async () => ({ ...fx, strategyInputs }) }, { clientId: fx.clientId, max: args.max, inputSource: 'fixture' });
   const out = args.out || path.join(os.tmpdir(), `daily-run-replay-${res.run.localDate}.json`);
   writeFileSync(out, JSON.stringify(res.run, null, 2));
   process.stdout.write(report(res.run, 'FIXTURE REPLAY — not real data'));
   process.stdout.write(`replay output: ${out}\n`);
+}
+
+// The committed corpus names its own account in its post URLs; there is no owner default.
+// (--replay is a fixture over the owner's committed corpora by design; per-client corpora are multi-client Phase 4.)
+function handleOfRows(rows) {
+  return /(?:x|twitter)\.com\/([^/]+)\/status\//i.exec(rows.find((r) => r?.url)?.url || '')?.[1] || null;
+}
+
+// --client is required for every live mode (no owner default), and the client must pass the readiness gate.
+async function gate(db) {
+  if (!args.client) throw new Error('--client <id> is required.');
+  await assertClientReady(db, args.client);
 }
 
 function resolveBird() {
@@ -149,10 +162,10 @@ function resolveBird() {
 }
 
 async function discover() {
-  assertOwnerClient(args.client);
   const BIRD = resolveBird();
   if (!BIRD) throw new Error('bird not found — see scripts/x-content/scan-quote-targets.mjs for install.');
   const fb = firebase();
+  await gate(fb.adminDb);
   const inputs = await loadDailyLoopInputs({ db: fb.adminDb }, { clientId: args.client, packageIds: packageIdsForRun() });
   const eligible = inputs.packages.filter((p) => packageEligibility(p).ok);
   const sinceDate = new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10);
@@ -202,12 +215,15 @@ async function liveCorpora(db) {
     return snap.exists ? snap.data()?.marketingBriefConfig?.xGrowth ?? null : null;
   };
   // A failed profile read uses the default pair (rows store still used); a failing store read falls back per handle.
-  return loadLoopCorpora({ corpusStore: createFirestoreCorpusStore(db), profileHandles: await safeProfileHandles(readConfig, resolveXGrowthProfile) });
+  // The own handle is the client's (social account → saved profile → Brain), never the owner's.
+  const own = await resolveClientXHandle(db, args.client);
+  const profileHandles = await safeProfileHandles(readConfig, resolveXGrowthProfile);
+  return loadClientLoopCorpora({ corpusStore: createFirestoreCorpusStore(db), ownHandle: own.handle, profileHandles });
 }
 
 async function execute() {
-  assertOwnerClient(args.client);
   const fb = firebase();
+  await gate(fb.adminDb);
   const corpora = await liveCorpora(fb.adminDb);
   const store = createFirestoreRunStore(fb.adminDb);
   const res = await runDailyLoop({
@@ -234,8 +250,8 @@ function runKey() {
 }
 
 async function show() {
-  assertOwnerClient(args.client);
   const fb = firebase();
+  await gate(fb.adminDb);
   const run = await createFirestoreRunStore(fb.adminDb).latest(runKey());
   if (!run) { console.log('No run in the last 7 days.'); return; }
   if (args.json) { process.stdout.write(JSON.stringify(run, null, 2)); return; }
@@ -254,8 +270,8 @@ function showStrategy(run) {
 }
 
 async function review() {
-  assertOwnerClient(args.client);
   const fb = firebase();
+  await gate(fb.adminDb);
   const store = createFirestoreRunStore(fb.adminDb);
   const latest = await store.latest(runKey());
   if (!latest) throw new Error('No run to review.');

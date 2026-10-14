@@ -28,7 +28,8 @@ import { syncRenderedVideos } from '../../../../features/rendered-videos/sync.js
 import { resolveMediaUrlsBatch, MEDIA_URLS_MAX_IDS, MEDIA_KINDS, tokenUrlFor } from '../../../../features/x-content-inventory/thumbs.js';
 import { setRights, saveThumb, createDraftFromItem } from '../../../../features/x-content-inventory/item-actions.js';
 import { NAS_ACTIONS, handleNasAction } from '../../../../features/x-content-inventory/nas.js';
-import { runDailyLoop, assertOwnerClient, localDateOf, LOOP_VERSION } from '../../../../features/x-content-inventory/daily-loop.js';
+import { runDailyLoop, localDateOf, LOOP_VERSION } from '../../../../features/x-content-inventory/daily-loop.js';
+import { assertClientReady, resolveClientXHandle } from '../../../../features/client-readiness/index.js';
 import {
   createFirestoreRunStore, loadDailyLoopInputs, saveSuggestionDraft, editSuggestion, dismissSuggestion, overlayStagedMedia, createModelDrafter,
 } from '../../../../features/x-content-inventory/daily-run-store.js';
@@ -40,7 +41,7 @@ import { createFirestoreCorpusStore } from '../../../../features/x-strategy/corp
 import { createFirestorePlanStore } from '../../../../features/x-strategy/plan-store.js';
 import { createFirestoreStrategyDocStore } from '../../../../features/x-strategy/strategy-doc-store.js';
 import { loadContentContext, summarizeContentContext, resolveCalendarEngineConfig } from '../../../../features/content-context/load-content-context.js';
-import { loadLoopCorpora } from '../../../../features/x-strategy/loop-corpora.js';
+import { loadClientLoopCorpora } from '../../../../features/x-strategy/loop-corpora.js';
 import { resolveXGrowthProfile } from '../../../../features/x-benchmark/profile.js';
 // Committed corpora: bundled here as the fallback for the rows store (getCorpusStore) and the legacy evaluate rows.
 // The daily loop reads them through loadLoopCorpora (rows store first); the plan doc reaches it via `readPlanDoc`.
@@ -741,11 +742,17 @@ async function latestDailyRun(store, clientId) {
 }
 
 // loadLoopCorpora is the known Today slowness; cache per client for 60s (same memo helper).
-const readLoopCorpora = memoByClient(LOOP_CORPORA_MEMO_MS, async (clientId) => loadLoopCorpora({
-  corpusStore: getCorpusStore(),
-  profileHandles: resolveXGrowthProfile({ config: await readXGrowthConfigFor(clientId).catch(() => null) }),
-  loadCommitted: committedCorpusRows,
-}));
+// The own handle is the client's (social account → saved profile → Brain), never the owner's.
+const readLoopCorpora = memoByClient(LOOP_CORPORA_MEMO_MS, async (clientId) => {
+  const xGrowth = await readXGrowthConfigFor(clientId).catch(() => null);
+  const own = await resolveClientXHandle(fb.adminDb, clientId, { xGrowth });
+  return loadClientLoopCorpora({
+    corpusStore: getCorpusStore(),
+    ownHandle: own.handle,
+    profileHandles: resolveXGrowthProfile({ config: xGrowth }),
+    loadCommitted: committedCorpusRows,
+  });
+});
 
 /** One loader for the runner and the chat: same plan read, same Brain gating, same freshness rules. */
 async function readContentContext(clientId, { packageIds = dailyLoopDemoSet.ids, now = Date.now() } = {}) {
@@ -767,7 +774,8 @@ async function readContentContext(clientId, { packageIds = dailyLoopDemoSet.ids,
 }
 
 async function handleDailyRun(context, action, body) {
-  assertOwnerClient(context.clientId);
+  // Fails closed with a code naming the missing input (approved Brain / plan doc / connected X, or contentLoop.enabled).
+  await assertClientReady(fb.adminDb, context.clientId);
   const store = createFirestoreRunStore(fb.adminDb);
   if (action === 'daily-run-latest') return { ok: true, run: await overlayStagedMedia(await latestDailyRun(store, context.clientId), getPackage) };
 
@@ -988,7 +996,7 @@ export async function POST(request) {
     return json({ error: `Unknown action: ${action}`, supportedActions: SUPPORTED_ACTIONS }, 400);
   } catch (err) {
     if (err?.status) {
-      return json({ error: err.message, verdict: err.verdict || undefined }, err.status);
+      return json({ error: err.message, code: err.code || undefined, verdict: err.verdict || undefined }, err.status);
     }
     return json({ error: err.message || 'Quote targets action failed.' }, 500);
   }

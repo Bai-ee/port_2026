@@ -20,7 +20,8 @@ require(path.join(REPO, 'features/not-the-rug-brief/load-env'));
 const fb = require(path.join(REPO, 'api/_lib/firebase-admin.cjs'));
 
 const argAt = process.argv.indexOf('--client');
-const clientId = argAt > -1 ? process.argv[argAt + 1] : 'bryan-balli-WUoltG84';
+const clientId = argAt > -1 ? String(process.argv[argAt + 1] || '').trim() : '';
+if (!clientId) { console.error('--client <id> is required (no owner default).'); process.exit(1); }
 const write = process.argv.includes('--write');
 
 const planSnap = await fb.adminDb.collection('x_strategy_plans').doc(clientId).get();
