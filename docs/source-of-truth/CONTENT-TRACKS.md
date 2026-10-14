@@ -1,17 +1,17 @@
 # Content Tracks + Promotion Loop (SSOT, 2026-10-11)
 
-Plan: `docs/plans/CONTENT-TRACKS-PROMOTION-MASTER-PLAN.md`. Client: `bryan-balli-WUoltG84` (posts as @bai_ee). Owner decisions D1–D5 + the NAS-staging amendment are binding.
+Plan: `docs/plans/CONTENT-TRACKS-PROMOTION-MASTER-PLAN.md`. Client: written for `bryan-balli-WUoltG84` (home, @bai_ee), but multi-client since 2026-10-14: tracks are per client (`x_strategy_plans/{clientId}`). Owner decisions D1–D5 + the NAS-staging amendment are binding.
 
 ## What it is
 - `plan.contentTracks` on `x_strategy_plans/{clientId}` (optional; absent ⇒ defaults, old plans behave exactly as before). Contract: `features/x-strategy/content-tracks.js` (`tracksOf`, `normalizeContentTracks`, `trackForEngine`, `allPromotions`).
-- Defaults: **design** (client+identity engines, benchmark `seb__design`, 50%) and **music** (ue+record engines, **no benchmark yet**, 50%). Every engine belongs to exactly one track; ≤6 tracks, ≤3 benchmarks/track, ≤8 distinct (`PLAN_LIMITS.maxBenchmarkHandles`).
+- Defaults: **none.** `DEFAULT_TRACKS` is `[]` since 2026-10-14 (no inherited tracks); the design (@seb__design) + music tracks below are home's own stored plan, seeded by `seed-home-priors.mjs`. A client with no tracks adopts them from its approved Client Brain `### Content Tracks` (first Brain track owns every engine; later ones start empty) or via **Add track** (`#x-strategy-content-tracks-add-btn`); engine reassignment between tracks is not in the UI yet. Original home tracks: **design** (client+identity engines, benchmark `seb__design`, 50%) and **music** (ue+record engines, **no benchmark yet**, 50%). Every engine belongs to exactly one track; ≤6 tracks, ≤3 benchmarks/track, ≤8 distinct (`PLAN_LIMITS.maxBenchmarkHandles`).
 - **Tracks own the profile's benchmark list.** Any plan write (apply / revert / chat plan-change) that changes tracks or pace mirrors `[benchmarkPrimary, ...track benchmarks]` (≤8) into `client_configs.marketingBriefConfig.xGrowth.benchmarkHandles` (`track-profile.js profileBenchmarksFromPlan`, wrapper in `route-handlers.js`). A mirror failure never fails the save (`profileSync.error`). With tracks, the Accounts benchmark list is read-only (derived, links to Plan → Content tracks) and direct profile saves (Handles editor, chat `benchmarks-change`) keep the derived list — only the own handle changes. Old drift: `scripts/x-content/sync-profile-benchmarks.mjs` (dry-run default, `--write`).
 - Pace stays `plan.benchmarkPrimary`. Track `share` × authored originals raises per-engine minimums (`track-profile.js applyTrackAllocation`, called from `plan-inputs.js`); never lowers a cap/floor.
 - Per-track profile (`track-profile.js`): pools only that track's benchmark corpora. No benchmark ⇒ `status:'no-benchmark'`, fallback own history, surfaced as a gap — never invented numbers.
 - Promotions (`promotions.js`): ue → rendered-video packages, record → Discogs, client → client work. URL starts `null`; the link rides **only in the self-reply** (`promotionSelfReply`, `''` when null).
 
 ## Rights (D1)
-UE-hosted rendered mixes: BAI-EE ⇒ `owned`; others ⇒ `rights:'cleared'`, `approval:{state:'none'}`, `rightsSource:{by:'owner',policy:'ue-hosted-cleared',at:'2026-10-11'}`. `rightsSetBy:'human'` always wins. Applied by sync (`features/rendered-videos/`) and the one-off `scripts/x-content/apply-ue-rights-policy.mjs` (dry-run default, `--write`, counts only, idempotent). Upstream-deleted videos are retired (`retiredReason:'source-missing'`, prior status kept in `retiredFromStatus`) only after a **complete** listing.
+UE-hosted rendered mixes (home-only: rendered sync is skipped for any other client): BAI-EE ⇒ `owned`; others ⇒ `rights:'cleared'`, `approval:{state:'none'}`, `rightsSource:{by:'owner',policy:'ue-hosted-cleared',at:'2026-10-11'}`. `rightsSetBy:'human'` always wins. Applied by sync (`features/rendered-videos/`) and the one-off `scripts/x-content/apply-ue-rights-policy.mjs` (dry-run default, `--write`, counts only, idempotent). Upstream-deleted videos are retired (`retiredReason:'source-missing'`, prior status kept in `retiredFromStatus`) only after a **complete** listing.
 
 ## Daily loop
 - Suggestions carry `track`, `promotion`, `package.media {kind,ref}`, `draft.selfReply`; max 5; default library `full`.
@@ -30,7 +30,7 @@ X Strategy → Plan tab → "Content tracks" (`#x-strategy-content-tracks-panel`
 - Follow-up: the Content Engine library list is ~6.6 MB (≈1980 NAS + 820 rv rows). Loading `rv-` by bucket needs the shared `inventory-list` loader split (BucketsPanel, two other panels and the day-plan slot lookup all read it) — not done.
 - `readInventory()` (un-paginated) reads ids in two bounded queries: the head (READ_LIMIT) and everything after the NAS id range (`NAS_ID_END`), so the NAS archive can't crowd rendered videos out. Sources sorting before `nas-` still share the head budget.
 - Corpus refresh needs the owner's Mac: `node scripts/x-content/strategy-refresh-worker.mjs`.
-- Library is global (owner pilot only). Cron copy is plain fallback copy; regenerate with the model from the dashboard.
+- Library is per client (`clientId`-scoped). The daily-loop cron runs only clients in `PILOT_CLIENT_IDS` that pass `assertClientReady`. Cron copy is plain fallback copy; regenerate with the model from the dashboard.
 - Telegram video by URL caps at 20MB (else poster + link). Staging completion is not pushed — reopen Today's posts.
 - Strategy-chat edits of `contentTracks` are supported by the proposal schema; no dedicated chat UI.
 - Local `npm run build` with the symlinked `node_modules` needs `--webpack` (Turbopack rejects the symlink); Vercel builds normally.

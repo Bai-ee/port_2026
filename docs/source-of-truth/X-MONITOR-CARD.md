@@ -2,7 +2,9 @@
 
 > **Marketing Director unification (2026-10-13, POC, admin only, uncommitted on `feat/marketing-director-poc`):** For admins the X Monitor card tile is hidden; the same `XMonitorCard` mounts unchanged (`#x-monitor-card`) as the **X Monitor** sub-tab of Marketing Director › Results (`strategy-results`). Its own **Sync now / Counters / Posts / Audience** buttons and their per-action confirm rows are hidden for admins; metered syncing now happens only through the header Refresh group 6 (`x-monitor {action:'sync-all'}`), behind the unified confirm row that names the cost (about 2 calls plus 1 per 1,000 followers). Stale for admins: Section 4's manual-per-button cadence and "every credit is spent by clicking the card's confirm row"; the manual-only, no-cron rule still holds. Non-admins are unchanged. See [`MARKETING-DIRECTOR.md`](MARKETING-DIRECTOR.md).
 
-Read-only performance dashboard for the connected X account (`@bai_ee`). Answers
+> **Multi-client (2026-10-14, shipped):** the card now reads and syncs the **active client's** own X account (`?as=` honored; the standalone tile follows the switcher too). Home stays on the global @bai_ee connection while it exists; a client with no connection gets 409, and one whose account id is unknown gets 409 `account-id-unknown` until Sync profile. `x_monitor/{accountId}` carries `clientIds` + `lastSyncedBy`; `usage_events` rows carry `clientId`. Nothing below about `@bai_ee` is hardcoded in code. See [`CONTENT-PILOT-OPERATIONS.md`](CONTENT-PILOT-OPERATIONS.md) §1d.
+
+Read-only performance dashboard for the connected X account (home: `@bai_ee`; other clients: their own). Answers
 three questions the rest of the repo cannot: **is the account growing**, **who
 arrived and who left**, and **which posts actually worked**.
 
@@ -98,7 +100,7 @@ server-side before crossing the wire.
 
 | POST action | Calls | Effect |
 |---|---|---|
-| `connect-start` | 0 | Starts the OAuth 2.0 PKCE flow (delegates to `startXOAuthFlow`, same global `@bai_ee` connection the `x-profile` card owns). |
+| `connect-start` | 0 | Starts the OAuth 2.0 PKCE flow (delegates to `startXOAuthFlow`, the global `@bai_ee` connection the `x-profile` card owns; home only). |
 | `sync-profile` | 1 | Counters + today's snapshot. |
 | `sync-posts` | 1 (2 on fallback or `deep`) | Last 30 days with private metrics. |
 | `sync-audience` | 1 per 1,000 followers | Roster pull + diff + events. |
@@ -171,9 +173,7 @@ that has none, and vice versa. `--views` accepts the output of
 ## 7. Deliberately not built
 
 - **Any automatic cadence.** See §3.
-- **Per-client monitoring.** The store is keyed by X user id, so this is a
-  config change rather than a migration when it is wanted — but nothing in the
-  UI or route exposes a client selector today.
+- ~~Per-client monitoring.~~ Built 2026-10-14: syncs and reads follow the active client (switcher `?as=`); the store stays keyed by X user id.
 - **Writes of any kind.** No posting, following, or profile edits.
 - **A dollar figure for X spend.** There is no rate to apply; the card shows
   call counts and points at console.x.com.

@@ -2,6 +2,8 @@
 
 PR: `release/content-system` -> `main` (squash). Date: 2026-10-11. Release plan: [`docs/plans/CONTENT-SYSTEM-RELEASE-MASTER-PLAN.md`](plans/CONTENT-SYSTEM-RELEASE-MASTER-PLAN.md).
 
+> **Multi-client (2026-10-14, shipped after this release — historical text below is the 2026-10-11 release as reviewed):** the owner-only gates are gone (`OWNER_CLIENT_IDS`/`assertOwnerClient` → `assertClientReady`), `x_content_packages` is client-scoped (`clientId` required; NAS/archive legacy owner = `NAS_INVENTORY_CLIENT_ID`; per-client NAS via the worker's `clients.map.json`), X identity/X Monitor/watchlist/benchmarks are per client, and signup seeds a Brain draft. Start with [`source-of-truth/CONTENT-PILOT-OPERATIONS.md`](source-of-truth/CONTENT-PILOT-OPERATIONS.md) §1b–1f. `PILOT_CLIENT_IDS` prod = home, UE, NTR.
+
 **TL;DR for the reviewer**
 - One workspace, the **Content Engine** card (Social Media Manager bucket, admin), takes X content from find -> draft -> review -> approve -> schedule -> track.
 - Almost everything is **additive**. Legacy `social_posts` rows, Copywriter, Schedule Posts, digest and quote drafts keep their old behavior. New strictness is opt-in per row (`lifecycleVersion: 2`) and per client (pilot allowlist).
@@ -13,7 +15,7 @@ PR: `release/content-system` -> `main` (squash). Date: 2026-10-11. Release plan:
 
 ## 1. What shipped
 
-**Daily content loop.** A slot-based orchestrator (`features/x-content-inventory/daily-loop/*`) turns a fresh saved X scan + the cleared content library + the approved Client Brain into a small review list of suggestions (original / quote-react / reply), grounded in the owner's real material and checked by the content guard. Slots follow the saved strategy plan. Suggestions live in `x_content_daily_runs`, not in `social_posts`. Generate is manual and spends no model by default (a model drafter is opt-in). Saving a suggestion creates one idempotent draft; regenerating never touches a saved post.
+**Daily content loop.** A slot-based orchestrator (`features/x-content-inventory/daily-loop/*`) turns a fresh saved X scan + the cleared content library + the approved Client Brain into a small review list of suggestions (original / quote-react / reply), grounded in the client's real material and checked by the content guard. Slots follow the saved strategy plan. Suggestions live in `x_content_daily_runs`, not in `social_posts`. Generate is manual and spends no model by default (a model drafter is opt-in). Saving a suggestion creates one idempotent draft; regenerating never touches a saved post.
 
 **X Strategy tab.** First tab of the card. (a) **Evaluate handles**: own account vs benchmark accounts from stored corpora (`x_corpora`), with tier and caveats. (b) **Refresh queue**: UI writes `x_strategy_refresh_requests`; a local Mac worker (`bird`, browser cookies, free) drains it; nothing refreshes on Vercel. (c) **Plan**: a versioned, version-checked plan (`x_strategy_plans`: posts/day, type floors/caps, engine targets) that the runner, chat and calendar all read through one function (`resolvePlanInputs`). (d) **Agent chat**: Anthropic-backed, read tools only plus 8 *propose* tools; every write waits for an owner Confirm (`strategy-proposal-decide`). The chat cannot approve, schedule or publish.
 
@@ -43,7 +45,7 @@ Store -> service -> route action -> UI. All dashboard actions are `POST /api/das
 | Store (Firestore) | Service module | Route action(s) | UI |
 |---|---|---|---|
 | `x_content_daily_runs` | `features/x-content-inventory/daily-loop/{run,run-store,slots,select,fill-*}.js`, `daily-run-store.js` | `daily-run-generate/-latest/-edit/-dismiss` (quote-targets) | `x-content/DailySuggestionsPanel.jsx` |
-| `x_content_packages` (global) | `features/x-content-inventory/{store,item-actions,match,draft}.js` | `inventory-list/-save/-delete`, `set-rights`, `approve-package`, `create-draft-from-item` | `InventoryPanel.jsx`, `ItemDrawer.jsx` |
+| `x_content_packages` (per client since 2026-10-14) | `features/x-content-inventory/{store,item-actions,match,draft}.js` | `inventory-list/-save/-delete`, `set-rights`, `approve-package`, `create-draft-from-item` | `InventoryPanel.jsx`, `ItemDrawer.jsx` |
 | `content_buckets/{client}/buckets` | `x-content-inventory/{bucket-store,buckets,folders}.js` | `list-buckets`, `upsert-bucket`, `delete-bucket`, `list-folders` | `BucketsPanel.jsx`, `BucketRail.jsx` |
 | `x_strategy_plans/{client}` | `features/x-strategy/{plan-store,plan-state,plan-inputs,content-plan}.js` | `content-plan`, `strategy-plan-apply/-revert` (via `route-handlers.js`) | `StrategyPanel.jsx`, `PlanPanel.jsx` |
 | `x_corpora/{handle}/rows` | `x-strategy/{corpus-store,corpus-rows,ingest,evaluate}.js` | `strategy-get` | `StrategyPanel.jsx` |
@@ -105,7 +107,7 @@ Scripts:
 
 **Exactly one publisher:** the Vercel `process-due` cron. `.github/workflows/social-publish-sweep.yml` (`*/30`, also schedules Discogs records) is **inert** (`if: vars.SOCIAL_PUBLISH_ENABLED == 'true'`); leave the variable unset. The Mac launchd publish sweep (`scripts/social/`) is retired.
 
-**Local-only `bird` worker: not installed.** Quote scan (`install-scan-schedule.sh install <client>`), strategy refresh and daily-loop schedule are Mac jobs needing browser cookies. Until installed, the refresh worker line reads "never reported" and refresh requests stay queued; the app works on stored data.
+**Local-only `bird` worker: not installed.** Quote scan (`install-scan-schedule.sh install <id1,id2>|--pilot`, now also pulls per-client benchmark corpora), strategy refresh and daily-loop schedule are Mac jobs needing browser cookies. Until installed, the refresh worker line reads "never reported" and refresh requests stay queued; the app works on stored data.
 
 **Other:** timezone is America/Chicago for the owner (other clients unsupported). No new composite indexes. `docs/audits` is not in `.vercelignore` (strategy corpora fall back to static imports).
 
@@ -128,7 +130,7 @@ Limits (from build logs):
 - Weekly engine caps and engine share are not enforced; `post-now` is not plan-checked; replies stay manual.
 - Transaction retry/contention was tested only against a serializing fake Firestore. A real-contention script is part of this release prep (`scripts/pilot/contention-test.mjs`); verify on staging.
 - `x-oauth` body `clientId` and worker routes' env-client remain ungated (documented in the customer-access checklist).
-- `x_content_packages` is global, not client-scoped (flagged `scope:'global'`).
+- ~~`x_content_packages` is global, not client-scoped.~~ Superseded 2026-10-14 by multi-client: rows carry a required `clientId` (CONTENT-PILOT-OPERATIONS §1c).
 - Instagram publishing is a stub behind `live:false`; do not describe it as working.
 - Browser walkthrough did **not** cover: post sheet and Recommendations at phone width, Reconcile controls, plan-override UI, Strategy/Library tabs, chat.
 - A long `bird` scrape (>15 min) can read as "worker not seen". Alert email: a total cron outage produces no alert; watch the cron log (200 every 15 min).

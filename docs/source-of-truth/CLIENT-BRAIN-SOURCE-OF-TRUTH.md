@@ -1,6 +1,8 @@
 # Client Brain as Source of Truth (as-built, 2026-10-13)
 
-Plan and history: `docs/plans/CLIENT-BRAIN-SOURCE-OF-TRUTH-MASTER-PLAN.md`. Brain format: `docs/company-brain/CLIENT_BRAIN_MARKDOWN_STANDARD.md`. Target client: `bryan-balli-WUoltG84` (Hitloop). Admin only.
+Plan and history: `docs/plans/CLIENT-BRAIN-SOURCE-OF-TRUTH-MASTER-PLAN.md`. Brain format: `docs/company-brain/CLIENT_BRAIN_MARKDOWN_STANDARD.md`. Written against `bryan-balli-WUoltG84` (Hitloop, the home client), but the mechanism is per client since 2026-10-14: any onboarded client has its own Brain, and the admin operates it through the dashboard switcher (`?as=`). Admin only; clients do not self-serve (Phase 5, not built).
+
+> **Multi-client (2026-10-14):** signup now writes a deterministic Brain **draft** from the client's own data (site crawl, scout config, brand overview, optional X/IG/competitors/goal); code never approves it. The owner injects/approves it (Brain wins; first approve adopts signup settings only into EMPTY sections). A client with no stored tracks now adopts Brain `### Content Tracks` rows: the first Brain track owns every engine (record/ue/client/identity), later ones start with none; engine reassignment in the UI is not built. Approved Brain is also one of the three `assertClientReady` inputs. See [`CONTENT-PILOT-OPERATIONS.md`](CONTENT-PILOT-OPERATIONS.md) §1b, §1e, §1f.
 
 ## 1. Purpose
 
@@ -46,7 +48,7 @@ Code: `features/client-brain/brain-sync.cjs` (manifest `TARGETS`, `syncBrainToSy
 
 Track notes:
 
-- `contentTracks` is written before `trackTargets` (targets look tracks up by label). Engines and promotions stay with the plan. Every engine must sit in exactly one track; otherwise the current owner is kept and a `warnings[]` entry is returned.
+- `contentTracks` is written before `trackTargets` (targets look tracks up by label). Engines and promotions stay with the plan. Every engine must sit in exactly one track; otherwise the current owner is kept and a `warnings[]` entry is returned. Exception (2026-10-14): a client with zero stored tracks adopts the Brain rows and the first one takes every engine, so the warning no longer blocks a trackless client.
 - **Track Targets mapping.** Only `postsPerDay` maps into the plan: it is split across the track's engines (`engineTargets.engines.*`) and the sum across tracks drives `authoredPerDay`. The per-type shares and the video share have no per-track home in the plan schema, so they stay **Brain-only** and are carried through write-back untouched. They are read via `readApprovedTrackTargets` for evaluation (section 11).
 - Plan writes use the versioned plan save with actor/reason `client-brain`. Strategy Document writes use the doc store's save (its `history` applies).
 - Brain overwrites even a confirmed Strategy Document (owner decision 2026-10-13). The safety net is the version log (section 7).
@@ -146,6 +148,7 @@ Owner creates one in Queue & Calendar › Compose (mode **Repost**, `#social-pos
 `nottherug-ten-QSMYxuuv` has tuned card values that Brain-wins would overwrite on its next approve/inject: sources `web, reddit, instagram` would become `instagram` only, keywords/topics/competitors/KOLs/Scribe tone/Guardian patterns would be replaced, and **"insured and bonded" is not in the NTR Brain's Prohibited Claims and would be dropped.** Nothing happens until NTR is re-approved or re-injected. Before that: add "insured and bonded" under Authority > Prohibited Claims and `web`, `reddit` under Discovery > Primary Platforms in the NTR Brain, then run the preview script.
 
 ## 16. Prod runbook: HITLOOP on `bryan-balli-WUoltG84`
+(Home-client runbook. For any other client use the per-client checklist in `docs/plans/MULTI-CLIENT-FINAL-PASS.md` §5: switcher → inject/approve Brain → connect X → Builder follows doc.)
 
 The live Brain there is Claire Calls (`stale`); the real one is `docs/company-brain/clients/hitloop/CLIENT_BRAIN.md`.
 

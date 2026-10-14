@@ -1,5 +1,7 @@
 # X Strategy tab — SSOT (as built)
 
+> **Multi-client (2026-10-14, shipped):** the tab is per client (admin switcher `?as=`; every action still requires `body.clientId` = the selected client). There are **no code defaults**: no `bai_ee`/`seb__design` fallback pair (`withDefaultPair` is replaced by `withProfileDefaults`: unset own handle ⇒ `null`, benchmarks ⇒ `[]`, listed in `profile.unset[]`; only the timezone has a neutral default, listed in `defaulted[]`), `DEFAULT_PLAN.benchmarkPrimary` is `''` (no benchmark ⇒ no gaps + a `no-benchmark` caveat), `DEFAULT_TRACKS` is `[]`, and the Strategy-document seed is blank. A client with no saved `xGrowth` profile has no own handle/benchmarks and `content-plan`/refresh return 409 naming what is missing; the committed bai-ee/seb-design corpora only serve the client whose own handle matches. Home's values are seeded via `scripts/x-content/seed-home-priors.mjs`; benchmark corpora per client via `pull-corpora.mjs --client`. See [`CONTENT-PILOT-OPERATIONS.md`](CONTENT-PILOT-OPERATIONS.md) §1d, §1f.
+
 > **Marketing Director unification (2026-10-13, POC, admin only, uncommitted on `feat/marketing-director-poc`):** For admins the Strategy panel (chat, document, plan/cadence, content tracks, insights, history, review) is no longer a Content Center tab; it mounts as the **Strategy** card (`strategy-document`) in Marketing Director › WHAT'S OUR STRATEGY, and the Strategy-account refresh and ContentTracks refresh buttons are hidden for admins in favor of the header Refresh (group 4 Strategy accounts, free, Mac worker). Stale for admins: the "Strategy tab inside Content Center" location and any instruction to click a Refresh button in the panel; `StrategyPanel`'s `onNavigate` is inert in the standalone mount. Plan and backend semantics are unchanged. See [`MARKETING-DIRECTOR.md`](MARKETING-DIRECTOR.md).
 
 > **Content Management (2026-10-11):** plan ownership, the shared input context, the single post lifecycle, scheduling and results now follow [`CONTENT-MANAGEMENT.md`](CONTENT-MANAGEMENT.md). Where this doc disagrees about who decides cadence, who creates/approves/schedules a post, or what chat may do, that doc wins.
@@ -70,7 +72,7 @@ All on `POST /api/dashboard/quote-targets` (folded onto the existing route; writ
 
 | Action | Request | Success response | Errors |
 |---|---|---|---|
-| `strategy-get` | `{clientId}` | `{ok, clientId, profile (withDefaultPair; `defaulted[]`), rowsMeta[] (per handle: source, rows, freshness), evaluation, evaluationError?, plan (doc or null), todayPlanPreview {available, date, posts, usedPlan, plan, summary} \| {available:false, reason}}` | 400/403 client |
+| `strategy-get` | `{clientId}` | `{ok, clientId, profile (`withProfileDefaults`; `unset[]`/`defaulted[]`), rowsMeta[] (per handle: source, rows, freshness), evaluation, evaluationError?, plan (doc or null), todayPlanPreview {available, date, posts, usedPlan, plan, summary} \| {available:false, reason}}` | 400/403 client |
 | `strategy-refresh` | `{clientId, handles?}` (default = profile own + benchmarks) | `{ok, requestId, status:'queued'}` (drain, if any, not awaited) | 400 no handles / bad handle / >6 handles; 400/403 client |
 | `strategy-refresh-status` | `{requestId}` | `{ok, request}` | 400 bad id, 404 not found (not client-scoped; admin-only) |
 | `strategy-evaluate-handle` | `{clientId, handle}` | `{ok, handle, needsRefresh, rowsMeta, evaluation?, missingOwn?, ownHandle?}`; no rows -> `needsRefresh:true` | 400 invalid handle |
@@ -126,7 +128,9 @@ If `x_strategy_plans/{clientId}` does not exist, every consumer behaves exactly 
 
 Guarded by golden fixtures in `features/x-strategy/__tests__/fixtures/t5-golden/` (day-view default/4/8 with a frozen clock; content-plan 5/8/3 posts; planSlots undefined/3/5/6/8; daily-run replay; `legacy-golden.json` = the pre-T5 route handlers sliced verbatim from git `5cfce1e9`) and `__tests__/t5-golden.test.js`. Also `fixtures/golden/` (A-F) pins the ingest CLI output.
 
-Default-profile fallback: if the client's `xGrowth` profile is empty, `withDefaultPair` fills **per field** `ownHandle: bai_ee`, `benchmarkHandles: [seb__design]`, `timezone: America/Chicago`, and lists the filled fields in `profile.defaulted` (the UI shows a notice). Reason: the client's profile was empty and writing it was not authorized during the build.
+> Superseded 2026-10-14 by multi-client (see CONTENT-PILOT-OPERATIONS.md §1b–1f). Replaced by `withProfileDefaults`: an empty profile returns a null own handle and no benchmarks (named in `unset[]`); only the timezone is defaulted.
+
+Default-profile fallback (historical): if the client's `xGrowth` profile was empty, `withDefaultPair` filled **per field** `ownHandle: bai_ee`, `benchmarkHandles: [seb__design]`, `timezone: America/Chicago`, and lists the filled fields in `profile.defaulted` (the UI shows a notice). Reason: the client's profile was empty and writing it was not authorized during the build.
 
 With a plan: `authoredPerDay` -> `posts`; non-empty `engineTargets` -> `mergeEngineConfig`; `typeFloors/typeCaps` -> slots; `benchmarkPrimary` picks the benchmark. `refresh-analysis` uses cadence + primary benchmark only (calendar ignores floors/caps).
 
@@ -170,7 +174,7 @@ The UI polls `strategy-refresh-status`. Measured 2026-10-11: bai_ee 1 round + se
 | Item | State |
 |---|---|
 | 1. Streaming chat; multiple named threads | Not built. One non-streaming request per turn; the UI shows the latest thread plus New thread. |
-| 2. Per-client handles/corpora for every client | Not built. Per-client plan and chat docs exist; corpora are per handle and the profile falls back to the bai_ee/seb__design pair. |
+| 2. Per-client handles/corpora for every client | Built 2026-10-14: handles in `xGrowth`, no fallback pair; corpora per handle via `pull-corpora.mjs --client` (launchd scan job runs it after the scan). |
 | 3. Views backfill / views-based lift | Not built. Lift is likes-based. |
 | 4. launchd for the refresh worker | Not built. Run the worker manually. |
 | 5. Agent memory across threads | Not built. |

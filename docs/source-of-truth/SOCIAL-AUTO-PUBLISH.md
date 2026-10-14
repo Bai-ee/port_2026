@@ -2,6 +2,8 @@
 
 **Status:** built (P1–P8 of `docs/plans/SOCIAL-AUTO-PUBLISH-PLAN.md`). Read that plan for the phase history; this doc is the as-built reference going forward.
 
+> **Multi-client (2026-10-14):** the global `system_flags/x_oauth_tokens` token and `TWITTER_*` env are served to the home client only; any other client without its own connection gets 409 `account-not-connected` (nothing falls back to @bai_ee). The Social Accounts card follows the switcher, and the same per-client connection is what `assertClientReady` checks for "X connected" and what scheduled posts (`process-due`), Compose and repost publish through. Note: home's own `social_accounts` X record currently points at @UGExistence (posting tests) while the legacy global panels below remain @bai_ee. See [`CONTENT-PILOT-OPERATIONS.md`](CONTENT-PILOT-OPERATIONS.md) §1b, §1d.
+
 Publishes each client's automatically-generated daily video (Video Remix) to **that client's own social account**, on that client's terms. X is adapter #1; Instagram is a registered stub (not implemented). Read [`X-API-AND-PROFILE-OPERATIONS.md`](./X-API-AND-PROFILE-OPERATIONS.md) §0 (spend gate) and §2e before touching any of this — it writes to accounts **other than @bai_ee**.
 
 ---

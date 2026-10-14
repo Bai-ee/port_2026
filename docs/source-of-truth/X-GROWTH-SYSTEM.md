@@ -5,7 +5,9 @@
 
 How the X work fits together: what measures the account, what decides a post, and what publishes it.
 
-Built 2026-09-10. The account is **@bai_ee** (`bryan-balli-WUoltG84`). The goal is creative enquiries into HITLOOP.
+Built 2026-09-10. The account this doc studies is **@bai_ee** (`bryan-balli-WUoltG84`, the *home* client). The goal is creative enquiries into HITLOOP.
+
+> **Multi-client (2026-10-14, shipped):** the system now runs per client for any onboarded client (admin switcher `?as=`): readiness via `assertClientReady`, inventory/NAS per client, X identity + X Monitor per client, own/benchmark handles + watchlist + timezone in `client_configs.marketingBriefConfig.xGrowth`, benchmark corpora via `pull-corpora.mjs --client`, and the launchd scan loops `--clients`/`--pilot`. Everything in §§1–7 that names @bai_ee / @seb__design is home's seed data and measured evidence, not a default for other clients; §8b is the as-built per-client layer. See [`CONTENT-PILOT-OPERATIONS.md`](CONTENT-PILOT-OPERATIONS.md) §1b–1f.
 
 > Four docs own different slices and none of them repeat each other:
 > - **This doc** — the map, the strategy, the guard, the calendar. Start here.
@@ -211,7 +213,7 @@ One-off, backward-looking. Free except view backfill. Full runbook: [`scripts/x-
 
 ### ⚠️ Auto-posting has two independent blockers
 
-1. **The spend gate.** Writes to @bai_ee are irreversible, credit-metered, and **invisible to the Operating Cost card**. X-API-write trigger points: `twitter-service.js:565,599,608` and `adapters/x.js:45,47,64`.
+1. **The spend gate.** Writes to a client's live X account (home: @bai_ee) are irreversible, credit-metered, and **invisible to the Operating Cost card**. X-API-write trigger points: `twitter-service.js:565,599,608` and `adapters/x.js:45,47,64`.
 2. **Resolved 2026-10-11:** the project moved to Vercel Pro and `process-due` now runs **every 15 minutes** (`vercel.json`) with a **2h** staleness guard, so a multi-post day is schedulable. See [`CONTENT-PILOT-OPERATIONS.md`](CONTENT-PILOT-OPERATIONS.md).
 
 
@@ -251,7 +253,7 @@ second act of authorship. Built 2026-09-12; plan and phase rationale in
 
 **The flow:** `ingest-corpus.mjs --handle X --write` (local, per account, benchmark and client alike)
 → `refresh-analysis` action on `/api/dashboard/quote-targets` (free, offline, pure)
-→ `scan-all-clients.mjs` (one shared, rate-budgeted sweep for every enrolled client)
+→ `scan-quote-targets.mjs --clients a,b|--pilot` via `scan-and-pull.sh` (one launchd job, rate-budgeted, loops clients; an empty watchlist skips that client; then `pull-corpora.mjs` pulls each client's benchmark corpora)
 → the X Calendar card's gap panel and day-plan slot view.
 
 Config lives at `client_configs/{clientId}.marketingBriefConfig.xGrowth` and is normalized in

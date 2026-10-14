@@ -1,5 +1,7 @@
 # Multi-client wiring — master plan (2026-10-14)
 
+> **Status 2026-10-14:** every phase except 5 shipped to production 2026-10-14 (PR/deploy ids in `MULTI-CLIENT-FINAL-PASS.md`).
+
 Status: PLAN ONLY, nothing built. Owner asked: "assess the difficulty and create a plan to wire all clients up to the data and work separately."
 
 ## Objective

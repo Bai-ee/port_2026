@@ -1,5 +1,7 @@
 # Daily Content Loop — Prototype Build Plan (multi-agent)
 
+> **Superseded 2026-10-14 (multi-client):** owner-only gates, the global content inventory, the single @bai_ee account and Seb/Hitloop defaults described below were replaced; as-built = docs/source-of-truth/CONTENT-PILOT-OPERATIONS.md §1b–1f and docs/plans/MULTI-CLIENT-FINAL-PASS.md.
+
 Date: 2026-10-10
 Status: active build plan. Orchestrated by one agent, executed in phases by parallel Sonnet agents.
 Worktree: `~/Documents/Repos/Bballi_Portfolio-daily-loop` · branch `feat/daily-content-loop` · base `4c99ab23` (verified = current Vercel production deployment).

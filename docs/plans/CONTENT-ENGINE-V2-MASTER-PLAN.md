@@ -1,5 +1,7 @@
 # Content Engine v2: Buckets, Signals, Today (master plan)
 
+> **Superseded 2026-10-14 (multi-client):** owner-only gates, the global content inventory, the single @bai_ee account and Seb/Hitloop defaults described below were replaced; as-built = docs/source-of-truth/CONTENT-PILOT-OPERATIONS.md §1b–1f and docs/plans/MULTI-CLIENT-FINAL-PASS.md.
+
 Status: **P1 + P2 built, uncommitted** (2026-10-06). Written after an owner interview and 3 read-only audits. Scoped tests 435/435.
 - **P1:** `buckets.js`, `facets.js`, `bucket-store.js`, `folders.js`, `search-index.js` (~3 ms per query at 10k items). Bucket route actions. Buckets tab UI (rail, folders, search, grid, drawer).
 - **P2:**

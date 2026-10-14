@@ -1,5 +1,7 @@
 # Client Brain — As-Built State
 
+> **Multi-client (2026-10-14):** the Brain is per client (`clients/{clientId}/client_brain/current`), operated by the admin through the dashboard switcher. New signups get a deterministic Brain **draft** from their own data (never approved by code); an approved Brain is one of the three inputs of `assertClientReady` (Brain + plan doc + connected X) that gates the content loop; a client with no tracks adopts Brain `### Content Tracks` (first row owns every engine). See [`../source-of-truth/CLIENT-BRAIN-SOURCE-OF-TRUTH.md`](../source-of-truth/CLIENT-BRAIN-SOURCE-OF-TRUTH.md) and [`../source-of-truth/CONTENT-PILOT-OPERATIONS.md`](../source-of-truth/CONTENT-PILOT-OPERATIONS.md) §1b, §1e, §1f.
+
 > Status: built as a Markdown-source plus compiled-runtime system. Still gated/admin and not launch-certified.
 
 ## Committed Architecture
@@ -146,6 +148,8 @@ Source/runtime:
 `CLIENT_BRAIN.md source > compiled Firestore runtime`
 
 ## Remaining Work
+
+> Superseded 2026-10-13/14 (see CONTENT-PILOT-OPERATIONS.md §1b–1f and CLIENT-BRAIN-SOURCE-OF-TRUTH.md): the first two items below and the Strategy Builder / Post Me / Email Digest part of the fourth are built (card edits write back and recompile; Markdown writes are versioned, last 50). The import-flow and guided-interview items remain open.
 
 - Make dashboard section edits update `markdownSource` and recompile, instead of patching compiled fields.
 - Add version history for `CLIENT_BRAIN.md`.

@@ -1,5 +1,7 @@
 # Content Tracks + Promotion Loop — Master Plan (2026-10-11)
 
+> **Superseded 2026-10-14 (multi-client):** owner-only gates, the global content inventory, the single @bai_ee account and Seb/Hitloop defaults described below were replaced; as-built = docs/source-of-truth/CONTENT-PILOT-OPERATIONS.md §1b–1f and docs/plans/MULTI-CLIENT-FINAL-PASS.md.
+
 Status: approved direction, ready for multi-agent build. Supersedes `CONTENT-PROMOTION-CONTRACTS.md` (folded in here)
 and narrows `VIDEO-REMIX-CONTENT-MANAGEMENT-PROMPT.md` (its Video Remix bucket already exists — extend, don't rebuild).
 

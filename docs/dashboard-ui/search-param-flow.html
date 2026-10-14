@@ -96,7 +96,7 @@
     <span class="badge s1">STEP 1 · SIGNUP</span>
     <h3>User signs up with a website URL</h3>
     <a class="file">api/_lib/client-provisioning.cjs:216, 181</a>
-    <p>provisionClientForUser → queues a <code>brief_run</code> (<code>trigger:'signup'</code>, <code>pipelineType:'free-tier-intake'</code>). <b>No URL → no crawl</b>, cards start on defaults.</p>
+    <p>provisionClientForUser → queues a <code>brief_run</code> (<code>trigger:'signup'</code>, <code>pipelineType:'free-tier-intake'</code>). <b>No URL → no crawl</b>, cards start on defaults. The form also takes optional X handle, Instagram handle, up to 3 competitors and a one-line goal (<code>#signup-optional-brand-fields</code>); <code>digest_config</code> is created OFF and <code>contentLoop.enabled=false</code>.</p>
   </div>
   <div class="vline"></div>
   <div class="arrow-lbl">async — worker picks up the queued run · <b>two separate lanes</b></div>
@@ -133,7 +133,7 @@
       <span class="chip a"><b>reddit{subreddits,mentionQueries…}</b></span>
       <span class="chip a"><b>industry</b></span>
     </div>
-    <p style="margin-top:9px;color:var(--warn)">GAP: the modular signup path (runModules) does NOT call ensureScoutConfig. So store A is populated by the legacy intake path or a manual regenerate — not by the audit fan-out. Until then, the Brand &amp; Keywords card seeds from defaults.</p>
+    <p style="margin-top:9px;color:var(--warn)">As built (multi-client, 2026-10-14): the signup run (<code>site-source-steps.js</code>) calls <code>ensureScoutConfig</code> after the free site crawl (1 Haiku call; optional signup X/IG/competitors/goal are unioned in on creation only), so store A is populated at signup, then a deterministic Brain <b>draft</b> is written. See CONTENT-PILOT-OPERATIONS.md §1e.</p>
   </div>
   <div class="vline"></div>
   <div class="arrow-lbl">dashboard hydrates the cards</div>

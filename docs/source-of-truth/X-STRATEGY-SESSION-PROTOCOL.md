@@ -1,5 +1,7 @@
 # X strategy session — protocol
 
+> **Multi-client (2026-10-14):** this protocol, the committed corpora (`bai-ee`, `seb-design`) and `X-STRATEGY-SEB-MODEL.md` describe the **home** client (@bai_ee) and are its seed only. The product has no @bai_ee/@seb__design defaults: a client's own handle, benchmarks and watchlist live in `client_configs.marketingBriefConfig.xGrowth`, benchmark corpora are pulled per client with `pull-corpora.mjs --client`, and the scan loops clients (`--clients`/`--pilot`). `session-brief.mjs` is a local research script that still defaults `--handle` to `bai_ee`; pass `--handle <client's handle>` (and `--benchmark <their benchmark>`) for any other client. `bird` runs on the owner's Mac cookies, so it reads any public account but writes as the owner's logged-in account only. See [`CONTENT-PILOT-OPERATIONS.md`](CONTENT-PILOT-OPERATIONS.md) §1d, §1f.
+
 How to start a **conversation** about X strategy with an agent: what to load, how to read the account for free, what is already decided, and what costs money.
 
 This doc is the session contract. It owns no findings of its own — the evidence lives in the docs below and the live numbers come from a script. If something here contradicts them, they win.
@@ -126,7 +128,7 @@ If the session produced a decision, write it where the next one will find it:
 
 - a change of **strategy** → [`X-STRATEGY-SEB-MODEL.md`](../plans/X-STRATEGY-SEB-MODEL.md)
 - a change of **rule the guard enforces** → `features/x-content-guard/rules.js`, then re-run `replay-guard.mjs`
-- a change of **watchlist** → `features/x-quote-targets/watchlist.js` (or re-derive it)
+- a change of **watchlist** → the client's `xGrowth.watchlist` (home's seed lives in `features/x-quote-targets/watchlist.js` `HOME_SEED_WATCHLIST`; or re-derive it)
 - a change to **what a session loads** → this doc
 - a fresh **baseline** → re-run `ingest-corpus.mjs --write` and note the date
 
