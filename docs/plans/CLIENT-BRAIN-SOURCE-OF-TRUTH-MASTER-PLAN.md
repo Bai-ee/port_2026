@@ -203,7 +203,7 @@ Write-back hooks:
 | 6a | New proposal kinds `post-approve`, `post-schedule` (`{postId, scheduledAt}`), `post-unschedule`; executed on confirm through the existing `updateSocialPost` / schedule path (ledger + reservation rules unchanged). MCP inherits them automatically. Prompt rule text updated: the agent may *propose* approve/schedule, never publish. | Owner confirm card, no spend |
 | 6b | Per-track **cadence + mix targets** in the Brain (`Content › Track Targets`: posts/day, share per type, video share) → plan `engineTargets` / track share. Benchmark profile vs target vs actual shown in `get_evaluation` and Results. | Part of 3b sync |
 | 6c | Today "act now" suggestions carry the trigger (hot narrative / opportunity / benchmark gap) + the matched inventory item + Save draft / Schedule actions. Verify what `DailySuggestionsPanel` already does; fill gaps only. | Free |
-| 6d | **Repost (retweet) as a post kind** (`kind:'repost'`, `targetPostId`), published by the cron through a new `twitter-service` repost call. It is an X API **write**: spend gate, dry-run, per-batch owner confirm per `X-API-AND-PROFILE-OPERATIONS.md`. | **Owner-gated; build only on explicit go** |
+| 6d | **Repost (retweet) as a post kind** (`kind:'repost'`, `repostOf.tweetId`), published by the cron through the X adapter's `repost` call. It is an X API **write**: the owner's own schedule / Repost Now click per row is the confirm; the agent only proposes. | **Built 2026-10-14 on owner go** (SSOT §13) |
 | 6e | Telegram activation runbook (bot token, env, setWebhook) in the SSOT. Owner task, no code. | — |
 
 ## Known limits / risks

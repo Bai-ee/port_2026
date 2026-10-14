@@ -71,6 +71,7 @@ Backs the **Copywriter** and **Schedule Posts** cards.
 |---|---|
 | `v1.tweet(text)` | post (legacy path) |
 | `v2.tweet(payload)` | post |
+| `v2.retweet(userId, tweetId)` | **repost** — `social_posts` rows with `kind:'repost'` (`features/social-posting/adapters/x.js` `repost`, called only from `publishStoredPost`). One write per row; published by the same owner-scheduled queue/cron path as a post, never by an agent. Added 2026-10-14 (plan 6d). |
 | `v1.uploadMedia(buffer, …)` | chunked media upload |
 | `v1.verifyCredentials()` / `v2.me()` | connection check |
 | `v2.userByUsername()` / `v2.userTimeline()` | watchlist pulls |

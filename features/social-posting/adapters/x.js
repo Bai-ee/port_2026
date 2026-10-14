@@ -53,7 +53,7 @@ async function uploadMedia(client, authMode, file) {
 
 // Test seam: the X client resolver and media fetcher can be swapped so tests
 // never touch the network or X. Production always uses the defaults.
-const defaultDeps = { getClient: getPlatformClient, fetchMedia: fetchAndValidateMedia };
+const defaultDeps = { getClient: getPlatformClient, fetchMedia: fetchAndValidateMedia, getAccount: getSocialAccount };
 let deps = defaultDeps;
 export function __setXAdapterDepsForTest(overrides) {
   deps = overrides ? { ...defaultDeps, ...overrides } : defaultDeps;
@@ -125,6 +125,26 @@ export async function publish({ clientId, text, media, selfReply = null }) {
     let message = error?.message || 'Self-reply failed.';
     try { rethrowMapped(error); } catch (mapped) { message = mapped?.message || message; }
     return { ...result, selfReplyTwitterId: null, selfReplyError: message };
+  }
+}
+
+// Repost (retweet) an existing tweet as the client's connected account. ONE
+// metered X API write (POST /2/users/:id/retweets). X answers {retweeted:true}
+// and mints no new tweet id, so the caller stores the target id as twitterId.
+// Falls back to one v2.me() read only when the stored account has no userId.
+export async function repost({ clientId, targetTweetId }) {
+  try {
+    const tweetId = String(targetTweetId || '').trim();
+    if (!/^\d{5,25}$/.test(tweetId)) throw Object.assign(new Error('A target tweet id is required to repost.'), { status: 400 });
+    const { client, authMode } = await deps.getClient(clientId, 'x');
+    let userId = (await deps.getAccount(clientId, 'x'))?.userId || null;
+    if (!userId) userId = (await client.v2.me())?.data?.id || null;
+    if (!userId) throw Object.assign(new Error('Could not resolve the connected X account id for the repost.'), { status: 409, code: 'x-reconnect-required' });
+    const response = await client.v2.retweet(String(userId), tweetId);
+    logUsage({ module: 'social-posting', action: 'x-write', provider: 'x-api', model: 'x-write', calls: 1, costUsd: 0, metadata: { authMode, apiVersion: 'v2', isRepost: true } }).catch(() => {});
+    return { twitterId: tweetId, retweeted: response?.data?.retweeted !== false, response, apiVersion: 'v2' };
+  } catch (error) {
+    rethrowMapped(error);
   }
 }
 

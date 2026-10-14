@@ -131,9 +131,11 @@ Exact names and steps are in `docs/source-of-truth/TELEGRAM-COMMAND-CENTER.md` (
 4. `setWebhook` with `url=https://hitloop.agency/api/telegram/webhook`, `secret_token=<TELEGRAM_WEBHOOK_SECRET>`, `allowed_updates=["message","callback_query"]`.
 5. Link in Content Engine > More > Telegram > Connect Telegram. Pilot gate 1 is messaging only; gate 2 (publishing) is a separate authorization.
 
-## 13. Not built: 6d repost
+## 13. 6d repost (built 2026-10-14, owner go)
 
-Repost (retweet) as a post kind (`kind:'repost'`, `targetPostId`) is **not built**. It is an X API write, so it needs the spend gate, a dry-run, and a per-batch owner confirm per `X-API-AND-PROFILE-OPERATIONS.md`, and a separate explicit owner go.
+Repost (retweet) is a `social_posts` row with `kind:'repost'` and `repostOf {tweetId, url, author, text}` (`features/social-posting/repost.js` parses an x.com/twitter.com status URL or a bare id). Its `content` is the display label `Repost @author <url>`, never sent to X, so every existing content rule (required, 280, placeholder guard, approval hash, revision) applies unchanged. Publishing goes through the normal `publishStoredPost` path, which calls the X adapter's `repost` (`v2.retweet(userId, tweetId)`, one metered write, counted on the Operating Cost card as `x-write` with `isRepost:true`) instead of creating a tweet; `twitterId` stores the target id, so a second publish is a no-op. Instagram rows reject the kind.
+
+Owner creates one in Queue & Calendar › Compose (mode **Repost**, `#social-posting-repost-ref-input`): Save Draft, Schedule (the `process-due` cron publishes), or Repost Now (immediate write). The composer states the spend (`#social-posting-repost-spend-note`). The agent/MCP can propose approve / schedule / unschedule on an existing repost draft like any other post; it cannot create one and never publishes. The spend gate is the owner's own schedule / Repost Now click per row (`X-API-AND-PROFILE-OPERATIONS.md` §0, §2a).
 
 ## 14. Preview script
 
