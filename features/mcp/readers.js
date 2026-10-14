@@ -13,10 +13,11 @@ import { buildDayPlan as buildContentDayPlan } from '../x-content-inventory/plan
 import { readInventory } from '../x-content-inventory/store.js';
 import { recentPostsFromQueue } from '../x-content-inventory/allocate-slot.js';
 import { createFirestoreRunStore } from '../x-content-inventory/daily-run-store.js';
-import { runDailyLoop, assertOwnerClient, localDateOf, LOOP_VERSION } from '../x-content-inventory/daily-loop.js';
+import { runDailyLoop, localDateOf, LOOP_VERSION } from '../x-content-inventory/daily-loop.js';
+import { assertClientReady, resolveClientXHandle } from '../client-readiness/index.js';
 import { loadContentContext, summarizeContentContext } from '../content-context/load-content-context.js';
 import { readTodayPlan as readTodayPlanShared } from '../email-digest/today-plan.js';
-import { loadLoopCorpora } from '../x-strategy/loop-corpora.js';
+import { loadClientLoopCorpora } from '../x-strategy/loop-corpora.js';
 import { resolveXGrowthProfile } from '../x-benchmark/profile.js';
 import { createFirestoreCorpusStore } from '../x-strategy/corpus-store.js';
 import { createFirestorePlanStore } from '../x-strategy/plan-store.js';
@@ -111,9 +112,12 @@ export function createReaders(db) {
   /** Same loader as the runner and the in-app chat: same plan read, same Brain gating, same freshness rules. */
   async function readContentContext(clientId, { packageIds = dailyLoopDemoSet.ids, now = Date.now() } = {}) {
     const { loadClientBrainContext } = require('../client-brain/store.cjs');
-    const loopCorpora = await loadLoopCorpora({
+    const xGrowth = await readXGrowthConfigFor(clientId).catch(() => null);
+    const own = await resolveClientXHandle(db, clientId, { xGrowth }); // the client's own handle, never a home default
+    const loopCorpora = await loadClientLoopCorpora({
       corpusStore: getCorpusStore(),
-      profileHandles: resolveXGrowthProfile({ config: await readXGrowthConfigFor(clientId).catch(() => null) }),
+      ownHandle: own.handle,
+      profileHandles: resolveXGrowthProfile({ config: xGrowth }),
       loadCommitted: committedCorpusRows,
     });
     return loadContentContext({
@@ -130,7 +134,7 @@ export function createReaders(db) {
 
   /** Template-only daily loop (NO model call): the free path behind regenerate_today_suggestions. */
   async function regenerateToday(clientId, { force = false } = {}) {
-    assertOwnerClient(clientId);
+    await assertClientReady(db, clientId);
     const store = createFirestoreRunStore(db);
     const res = await runDailyLoop({
       now: () => Date.now(),

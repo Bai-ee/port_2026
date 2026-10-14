@@ -22,7 +22,7 @@ function corpusRange(rows) {
 /**
  * Load every input the loop reads, from the stores that already hold them.
  * Read-only. `corpora` is the loadLoopCorpora result (stored rows with committed-JSON
- * fallback): rows + source labels + ownHandle/benchmarkHandle. Handles default to bai_ee / seb__design when absent (replay).
+ * fallback): rows + source labels + ownHandle/benchmarkHandle. The benchmark handle defaults to seb__design when absent (replay); the own handle never defaults.
  *
  * deps: { db, loadBrainContext(clientId) -> string, buildDayPlan?, readPlanDoc?(clientId) -> Strategy plan doc|null }
  *   buildDayPlan (plan-day.js, injected) + both corpora => the result carries `strategyInputs`,
@@ -77,7 +77,8 @@ export async function loadDailyLoopInputs(deps, { clientId, packageIds = null, c
     }
   }
 
-  const ownHandle = corpora.ownHandle || 'bai_ee';
+  // No owner default: a client without its own handle gets no self-quote (a named gap), never @bai_ee's posts.
+  const ownHandle = corpora.ownHandle || null;
   const benchmarkHandle = corpora.benchmarkHandle || 'seb__design';
   const own = Array.isArray(corpora.own) ? corpora.own : null;
   const bench = Array.isArray(corpora.benchmark) ? corpora.benchmark : null;

@@ -1,13 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { runDailyLoop, describeInputs, inputFingerprint, OWNER_CLIENT_IDS } from '../daily-loop.js';
+import { runDailyLoop, describeInputs, inputFingerprint } from '../daily-loop.js';
 import { suggestionIdFor } from '../daily-loop/time-ids.js';
 import { LOOP_VERSION } from '../daily-loop/config.js';
 import { createMemoryRunStore, mergePreserved, editSuggestion, dismissSuggestion } from '../daily-run-store.js';
 
 const FX = JSON.parse(readFileSync(new URL('./fixtures/daily-loop-replay.json', import.meta.url), 'utf8'));
-const OWNER = OWNER_CLIENT_IDS[0];
+const OWNER = 'fixture-client-a';
 const NOW = Date.parse(FX.now);
 const LOCAL = '2026-10-10';
 const SOURCE = { date: LOCAL, tier: 1, authoredPerDay: 4, mixSource: 'gap-report', slotLetters: ['A', 'B', 'R'] };

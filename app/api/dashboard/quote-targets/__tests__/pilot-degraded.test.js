@@ -12,7 +12,7 @@ const fb = require('../../../../../api/_lib/firebase-admin.cjs');
 const { makeFakeContext } = require('../../../../../api/_lib/__tests__/fake-firestore.cjs');
 
 const OWNER_UID = 'owner-uid';
-const OWNER_CLIENT = 'bryan-balli-WUoltG84'; // daily loop is hard-limited to this client (assertOwnerClient)
+const OWNER_CLIENT = 'fixture-client-a'; // made ready for the daily loop in beforeEach (contentLoop.enabled)
 let ctx;
 let queueReads;
 const realEnv = { ...process.env };
@@ -40,12 +40,13 @@ function breakQueueReads(db) {
   };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   queueReads = 0;
   ctx = makeFakeContext();
   // The context loader batches package reads through db.getAll (not provided by the shared fake).
   ctx.adminDb.getAll = async (...refs) => Promise.all(refs.map((r) => r.get()));
   Object.defineProperty(fb, 'adminDb', { configurable: true, get: () => ctx.adminDb });
+  await ctx.adminDb.collection('clients').doc(OWNER_CLIENT).set({ contentLoop: { enabled: true } });
   process.env.PILOT_OWNER_UIDS = OWNER_UID;
   process.env.PILOT_CLIENT_IDS = OWNER_CLIENT;
   process.env.VERCEL_ENV = 'production';
@@ -83,4 +84,12 @@ test('daily-run-generate with an unreadable posting queue => 503 mentioning the 
 test('control: with a healthy (empty) queue the same request is NOT the queue-degraded 503', async () => {
   const r = await post({ action: 'daily-run-generate' });
   assert.ok(!(r.status === 503 && /posting queue/.test(r.body?.error || '')), `unexpected degraded response: ${JSON.stringify(r.body)}`);
+});
+
+test('a pilot client that is not set up is denied by the readiness gate with the named code; nothing written', async () => {
+  await ctx.adminDb.collection('clients').doc(OWNER_CLIENT).set({ contentLoop: { enabled: false } });
+  const r = await post({ action: 'daily-run-generate' });
+  assert.equal(r.status, 403, JSON.stringify(r.body));
+  assert.equal(r.body.code, 'client-brain-not-approved');
+  assert.ok(!written().some((c) => /daily|social_posts/i.test(c)));
 });

@@ -4,12 +4,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { runDailyLoop, OWNER_CLIENT_IDS } from '../daily-loop.js';
+import { runDailyLoop } from '../daily-loop.js';
 import { createMemoryRunStore, dismissSuggestion, editSuggestion } from '../daily-run-store.js';
 import { loadDailyLoopInputs } from '../daily-loop/inputs.js';
 
 const FX = JSON.parse(readFileSync(new URL('./fixtures/daily-loop-real-shapes.json', import.meta.url), 'utf8'));
-const OWNER = OWNER_CLIENT_IDS[0];
+const OWNER = 'fixture-client-a';
 const NOW = Date.parse(FX.now);
 const LOCAL = '2026-10-10';
 
@@ -116,7 +116,7 @@ test('loadDailyLoopInputs hands back strategyInputs only with an injected buildD
   const on = await loadDailyLoopInputs({ db, buildDayPlan: bdp }, { clientId: OWNER, corpora, now: NOW });
   assert.equal(on.strategyInputs.buildDayPlan, bdp);
   assert.equal(on.strategyInputs.planInput.corpusRows.length, 1);
-  assert.equal(on.strategyInputs.ownHandle, 'bai_ee');
+  assert.equal(on.strategyInputs.ownHandle, null); // no handle passed => none, never the owner's
   const noCorpus = await loadDailyLoopInputs({ db, buildDayPlan: bdp }, { clientId: OWNER, now: NOW });
   assert.equal(noCorpus.strategyInputs, null);
 });

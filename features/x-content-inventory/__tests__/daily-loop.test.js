@@ -4,12 +4,12 @@ import { readFileSync } from 'node:fs';
 import {
   tokenize, packageEligibility, contentBasis, buildBrandProfile, groupNarratives, brandFit, selectSuggestions,
   deriveStrategy, zonedTimeToIso, localDateOf, runDailyLoop, checkSuggestionText, buildContributionPrompt,
-  fallbackCopy, conversationPostsFrom, normalizeConversationPost, performanceEvidence, matchScore, OWNER_CLIENT_IDS,
+  fallbackCopy, conversationPostsFrom, normalizeConversationPost, performanceEvidence, matchScore,
 } from '../daily-loop.js';
 import { createMemoryRunStore, saveSuggestionDraft, dismissSuggestion, runDocId } from '../daily-run-store.js';
 
 const FX = JSON.parse(readFileSync(new URL('./fixtures/daily-loop-replay.json', import.meta.url), 'utf8'));
-const OWNER = OWNER_CLIENT_IDS[0];
+const OWNER = 'fixture-client-a';
 const NOW = Date.parse(FX.now);
 const LOCAL = '2026-10-10';
 const pkg = (id) => FX.packages.find((p) => p.id === id);
@@ -165,8 +165,8 @@ test('checks block hashtags, long quotes and long replies', () => {
 
 const deps = (store, inputs = FX) => ({ now: () => NOW, store, readInputs: async () => inputs });
 
-test('runDailyLoop rejects a non-owner client', async () => {
-  await assert.rejects(runDailyLoop(deps(createMemoryRunStore()), { clientId: 'someone-else' }), /limited to the owner/);
+test('runDailyLoop rejects a missing clientId (readiness is the caller\'s gate)', async () => {
+  await assert.rejects(runDailyLoop(deps(createMemoryRunStore()), {}), (e) => e.status === 400 && e.code === 'client-id-required');
 });
 
 test('runDailyLoop replay: inputs listed with freshness; unapproved Brain is a gap', async () => {

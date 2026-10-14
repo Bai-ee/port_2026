@@ -18,7 +18,7 @@ const { loadContentContext, summarizeContentContext, resolveCalendarEngineConfig
 const { buildWeekCalendar, weekDates } = await import('../../x-content-inventory/week-calendar.js');
 const { buildMonthCalendar, ctDate } = await import('../../x-content-inventory/month-calendar.js');
 const { buildPostResults } = await import('../../x-content-inventory/results.js');
-const { runDailyLoop, OWNER_CLIENT_IDS } = await import('../../x-content-inventory/daily-loop.js');
+const { runDailyLoop } = await import('../../x-content-inventory/daily-loop.js');
 const { createMemoryRunStore, saveSuggestionDraft, editSuggestion } = await import('../../x-content-inventory/daily-run-store.js');
 const { buildDayPlan } = await import('../../x-content-inventory/plan-day.js');
 const { normalizePlan } = await import('../../x-strategy/plan-state.js');
@@ -27,7 +27,7 @@ const rd = (rel) => JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf8
 const FX = rd('../../x-content-inventory/__tests__/fixtures/daily-loop-replay.json');
 const OWN = rd('../../../docs/audits/bai-ee-x-corpus.json');
 const BENCH = rd('../../../docs/audits/seb-design-x-corpus.json');
-const OWNER = OWNER_CLIENT_IDS[0];
+const OWNER = 'fixture-client-a';
 const FX_NOW = Date.parse(FX.now);
 const LOCAL = '2026-10-10';
 

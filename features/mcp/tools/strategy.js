@@ -18,7 +18,7 @@ const withClientId = (schema) => ({
 
 const toolDepsFor = (ctx, clientId) => {
   const handlers = ctx.services.strategyHandlers();
-  return handlers.toolDepsFor(clientId, { clientId, uid: null, email: ctx.email });
+  return handlers.toolDepsFor(clientId, { clientId, uid: ctx.uid ?? null, email: ctx.email });
 };
 
 function readTool(t) {

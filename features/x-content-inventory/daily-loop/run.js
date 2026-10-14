@@ -3,7 +3,7 @@
 // Decides the run document; never owns persistence, review, or network clients (all injected).
 // The only module that composes select + copy + conversations + evidence.
 
-import { LOOP_VERSION, CHANNEL, DEFAULT_TIMEZONE, MAX_SUGGESTIONS, assertOwnerClient } from './config.js';
+import { LOOP_VERSION, CHANNEL, DEFAULT_TIMEZONE, MAX_SUGGESTIONS } from './config.js';
 import { stableHash, localDateOf } from './time-ids.js';
 import { conversationPostsFrom } from './conversations.js';
 import { deriveStrategy } from './evidence.js';
@@ -49,7 +49,7 @@ function spineOf(inputs, packages, { localDate, now, timezone }) {
     timezone,
     ...(pi ? { typeFloors: pi.typeFloors, typeCaps: pi.typeCaps, planMeta: { planSource: pi.source, planVersion: pi.planVersion } } : {}),
   });
-  return { ...built, ownPosts: s.ownPosts || s.planInput?.corpusRows || [], ownHandle: s.ownHandle || s.planInput?.handle || 'bai_ee' };
+  return { ...built, ownPosts: s.ownPosts || s.planInput?.corpusRows || [], ownHandle: s.ownHandle || s.planInput?.handle || null };
 }
 
 /** Freshness of every input, shown first in every run. */
@@ -96,7 +96,8 @@ export function inputFingerprint({ scan, search, packages, brain, strategyPlan, 
  */
 export async function runDailyLoop(deps, opts = {}) {
   const clientId = opts.clientId;
-  assertOwnerClient(clientId);
+  // Which clients may run is the caller's gate (assertClientReady); the loop only refuses a missing id.
+  if (!clientId) throw Object.assign(new Error('clientId is required.'), { status: 400, code: 'client-id-required' });
   const now = deps.now ? deps.now() : Date.now();
   const timezone = opts.timezone || DEFAULT_TIMEZONE;
   const localDate = opts.localDate || localDateOf(now, timezone);

@@ -94,7 +94,7 @@ export function buildDayPlan(input = {}) {
     corpusRows = [], benchmarkRows = null, packages = [],
     date = new Date().toISOString().slice(0, 10),
     posts = input.engineConfig?.authored?.targetPerDay ?? DEFAULT_ENGINE_CONFIG.authored.targetPerDay,
-    engineConfig = DEFAULT_ENGINE_CONFIG, recentPosts = [], handle = 'bai_ee', lanes = ['music', 'craft', 'work', 'meta'],
+    engineConfig = DEFAULT_ENGINE_CONFIG, recentPosts = [], handle = null, lanes = ['music', 'craft', 'work', 'meta'],
     now = Date.now(),
   } = input;
 

@@ -10,7 +10,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
 const require = createRequire(import.meta.url);
-const OWNER_CLIENT = 'bryan-balli-WUoltG84';
+const OWNER_CLIENT = 'fixture-client-a'; // in-memory fake only; any pilot client id
 const OWNER_UID = 'dry-run-owner-uid';
 const DAY = 86_400_000;
 const ENV_KEYS = ['PILOT_CLIENT_IDS', 'PILOT_OWNER_UIDS'];

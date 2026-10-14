@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { runDailyLoop, OWNER_CLIENT_IDS } from '../daily-loop.js';
+import { runDailyLoop } from '../daily-loop.js';
 import { createMemoryRunStore, editSuggestion } from '../daily-run-store.js';
 import { buildDayPlan } from '../plan-day.js';
 import { resolvePlanInputs } from '../../x-strategy/plan-inputs.js';
@@ -14,7 +14,7 @@ const rd = (rel) => JSON.parse(readFileSync(new URL(rel, import.meta.url), 'utf8
 const FX = rd('./fixtures/daily-loop-replay.json');
 const OWN = rd('../../../docs/audits/bai-ee-x-corpus.json');
 const BENCH = rd('../../../docs/audits/seb-design-x-corpus.json');
-const OWNER = OWNER_CLIENT_IDS[0];
+const OWNER = 'fixture-client-a';
 const NOW = Date.parse(FX.now);
 
 const planDoc = (plan, version = 1) => ({ version, plan: normalizePlan(plan) });

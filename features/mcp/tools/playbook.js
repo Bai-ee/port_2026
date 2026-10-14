@@ -8,7 +8,7 @@ const MAX_RESULT_CHARS = 38000; // under the server-wide ~40k cap
 
 const DAY_MS = 86_400_000;
 const clip = (v, n) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
-const authFor = (ctx) => ({ decoded: { email: ctx.email, uid: null } });
+const authFor = (ctx) => ({ decoded: { email: ctx.email, uid: ctx.uid ?? null } });
 
 /** Run one section; a failing section reports its error instead of failing the whole brief. */
 async function section(fn) {
@@ -17,7 +17,7 @@ async function section(fn) {
 
 export async function buildDailyBrief({ ctx, clientId }) {
   const handlers = ctx.services.strategyHandlers();
-  const deps = handlers.toolDepsFor(clientId, { clientId, uid: null, email: ctx.email });
+  const deps = handlers.toolDepsFor(clientId, { clientId, uid: ctx.uid ?? null, email: ctx.email });
   const nowMs = Number(ctx.now?.() ?? Date.now());
 
   const today = await section(async () => {

@@ -3,11 +3,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { runDailyLoop, OWNER_CLIENT_IDS } from '../daily-loop.js';
+import { runDailyLoop } from '../daily-loop.js';
 import { createMemoryRunStore, saveSuggestionDraft, editSuggestion, dismissSuggestion } from '../daily-run-store.js';
 
 const FX = JSON.parse(readFileSync(new URL('./fixtures/daily-loop-replay.json', import.meta.url), 'utf8'));
-const OWNER = OWNER_CLIENT_IDS[0];
+const OWNER = 'fixture-client-a';
 const NOW = Date.parse(FX.now);
 const LOCAL = '2026-10-10';
 
