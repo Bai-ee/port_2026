@@ -3,6 +3,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import SignalToggles from './SignalToggles.jsx';
 import UpRightArrow from '../../UpRightArrow';
+import { useAuth } from '../../../AuthContext';
+import ClientBrainOwnedTag from '../ClientBrainOwnedTag';
 import { normalizeVertical } from '../../../features/strategy-builder/normalize-vertical.js';
 
 const VERTICALS = [
@@ -472,6 +474,7 @@ function SourceChip({ active, text }) {
  * }} props
  */
 export default function InputsPane({ bootstrap, config, onConfigChange, onGenerate, onOpenCard, busy }) {
+  const { isAdmin } = useAuth();
   const ds = bootstrap?.dashboardState || {};
   const editorial = coerceEditorialStrategy(config.editorial);
   const editorialSummary = useMemo(
@@ -801,7 +804,7 @@ export default function InputsPane({ bootstrap, config, onConfigChange, onGenera
 
           <div className="sb-field-stack">
             <span className="sb-label" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-              Confirmed Vertical <span style={{ color: 'var(--accent)' }}>Required</span>
+              Confirmed Vertical <span style={{ color: 'var(--accent)' }}>Required</span><ClientBrainOwnedTag isAdmin={isAdmin} />
               <SourceChip active={activeHydration.vertical} text={activeHydration.vertical ? 'JSON' : 'Market / Manual'} />
             </span>
             <input
@@ -836,7 +839,7 @@ export default function InputsPane({ bootstrap, config, onConfigChange, onGenera
 
           <div className="sb-field-stack">
             <span className="sb-label" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-              Primary call-to-action
+              Primary call-to-action<ClientBrainOwnedTag isAdmin={isAdmin} />
               <SourceChip active={activeHydration.cta} />
             </span>
             <input
@@ -932,7 +935,7 @@ export default function InputsPane({ bootstrap, config, onConfigChange, onGenera
 
           <div className="sb-field-stack">
             <span className="sb-label" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-              Content guardrails <span style={{ color: 'var(--text-disabled)' }}>(hard constraints)</span>
+              Content guardrails <span style={{ color: 'var(--text-disabled)' }}>(hard constraints)</span><ClientBrainOwnedTag isAdmin={isAdmin} />
               <SourceChip active={activeHydration.guardrails} />
             </span>
             <textarea

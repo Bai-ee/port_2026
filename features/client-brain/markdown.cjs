@@ -14,12 +14,17 @@ function compact(value, max = 600) {
   return text.length > max ? `${text.slice(0, max - 3).trim()}...` : text;
 }
 
-function cleanList(input, { maxItems = 30, maxLen = 180 } = {}) {
+// keepBullets: a `- ` bullet is one whole value even if it contains commas
+// ("Engagements start at $3,500"). Used by prose-list fields; plain lists keep
+// the comma split so `- a, b, c` still yields three values.
+function cleanList(input, { maxItems = 30, maxLen = 180, keepBullets = false } = {}) {
   const rows = Array.isArray(input)
     ? input
     : String(input || '').split(/\n+/);
   return rows
-    .flatMap((item) => String(item || '').split(/,(?=\s*[^,\s])/))
+    .flatMap((item) => (keepBullets && /^\s*[-*]\s+/.test(String(item || ''))
+      ? [String(item)]
+      : String(item || '').split(/,(?=\s*[^,\s])/)))
     .map((item) => String(item || '').replace(/^[-*]\s+/, '').trim().slice(0, maxLen))
     .filter(Boolean)
     .filter((item, index, arr) => {
@@ -169,8 +174,8 @@ function parseVoicePillars(text, { maxItems = 8 } = {}) {
     .slice(0, maxItems);
 }
 
-// "### Formatting Rules" -> keyed object {short, medium, caps, emojis, ...}.
-// voice-resolver maps these to short_posts/medium_posts/caps_usage/emojis.
+// "### Formatting Rules" -> keyed object {short, medium, long, caps, emojis, punctuation, links}.
+// voice-resolver maps these to short_posts/medium_posts/long_posts/caps_usage/emojis/punctuation/links.
 function parseKeyedRules(text) {
   const out = {};
   String(text || '').split('\n')
@@ -181,6 +186,88 @@ function parseKeyedRules(text) {
       if (m) out[normalizeKey(m[1])] = m[2].trim();
     });
   return out;
+}
+
+// "### Search Queries" -> [{label, query, goal}]. One row per bullet:
+// `- label: BRAND | query: "a" OR "b" | goal: why this search exists`.
+function parseSearchQueryRows(text, { maxItems = 8 } = {}) {
+  return String(text || '').split('\n')
+    .map((l) => l.trim())
+    .filter((l) => /^[-*]\s+/.test(l))
+    .map((line, index) => {
+      // Own parser, not parsePipeFields: that strips quotes, and exact-match
+      // search terms are quoted ("acme widgets").
+      const f = {};
+      line.replace(/^[-*]\s+/, '').split('|').forEach((seg) => {
+        const m = seg.match(/^\s*(label|query|goal|enabled):\s*(.*?)\s*$/i);
+        if (m) f[m[1].toLowerCase()] = m[2];
+      });
+      const structured = f.query != null || f.label != null;
+      return {
+        label: compact(f.label || `SEARCH ${index + 1}`, 60),
+        query: compact(structured ? (f.query || '') : line.replace(/^[-*]\s+/, ''), 600),
+        goal: compact(f.goal || '', 240),
+        ...(f.enabled != null ? { enabled: !/^(false|off|no)$/i.test(f.enabled.trim()) } : {}),
+      };
+    })
+    .filter((row) => row.query)
+    .slice(0, maxItems);
+}
+
+// Replace (or insert) the body of `### <field>` inside `## <section>`. Names
+// match the compiler's aliases via normalizeKey. A missing field is appended
+// to its section; a missing section is inserted before Decision Drivers.
+function setMarkdownField(markdown, { section, sectionAliases = [], field: fieldName, fieldAliases = [] }, body) {
+  const lines = String(markdown || '').replace(/\r\n/g, '\n').split('\n');
+  const sectionKeys = new Set([section, ...sectionAliases].map(normalizeKey));
+  const fieldKeys = new Set([fieldName, ...fieldAliases].map(normalizeKey));
+  const h2At = (i) => (lines[i].match(/^##\s+(.+?)\s*$/) || [])[1];
+  const h3At = (i) => (lines[i].match(/^###\s+(.+?)\s*$/) || [])[1];
+  const block = [`### ${fieldName}`, ...String(body || '').trim().split('\n'), ''];
+
+  let start = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (h2At(i) && sectionKeys.has(normalizeKey(h2At(i)))) { start = i; break; }
+  }
+  if (start === -1) {
+    let insertAt = lines.findIndex((l, i) => h2At(i) && normalizeKey(h2At(i)) === 'decision_drivers');
+    if (insertAt === -1) insertAt = lines.length;
+    lines.splice(insertAt, 0, `## ${section}`, '', ...block);
+    return lines.join('\n');
+  }
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i++) if (h2At(i)) { end = i; break; }
+
+  for (let i = start + 1; i < end; i++) {
+    if (!h3At(i) || !fieldKeys.has(normalizeKey(h3At(i)))) continue;
+    let stop = end;
+    for (let j = i + 1; j < end; j++) if (h3At(j)) { stop = j; break; }
+    lines.splice(i, stop - i, ...block);
+    return lines.join('\n');
+  }
+  // Append inside the section, before trailing blank lines.
+  let insertAt = end;
+  while (insertAt > start + 1 && !lines[insertAt - 1].trim()) insertAt--;
+  lines.splice(insertAt, 0, '', ...block);
+  return lines.join('\n');
+}
+
+// Set frontmatter keys in place (adds missing keys before the closing ---).
+function setFrontmatterValues(markdown, values = {}) {
+  const text = String(markdown || '').replace(/\r\n/g, '\n');
+  if (!text.startsWith('---\n')) {
+    const head = Object.entries(values).map(([k, v]) => `${k}: ${v}`).join('\n');
+    return `---\n${head}\n---\n\n${text}`;
+  }
+  const end = text.indexOf('\n---', 4);
+  if (end === -1) return text;
+  const fm = text.slice(4, end).split('\n');
+  for (const [key, value] of Object.entries(values)) {
+    const idx = fm.findIndex((line) => line.slice(0, line.indexOf(':')).trim() === key);
+    if (idx >= 0) fm[idx] = `${key}: ${value}`;
+    else fm.push(`${key}: ${value}`);
+  }
+  return `---\n${fm.join('\n')}${text.slice(end)}`;
 }
 
 function normalizeAcquisition(meta = {}) {
@@ -317,7 +404,19 @@ function compileClientBrainMarkdown(markdown, { clientId = '' } = {}) {
   const positioningText = compact(field(identitySec, ['Positioning', 'One Liner', 'One-Liner']), 600);
   const primaryAudience = listField(identitySec, ['Primary Audience', 'Audience', 'Who Hires Them'], { maxItems: 20 });
   const offersList = listField(identitySec, ['Offers', 'Services', 'What They Sell'], { maxItems: 20 });
-  const authorityClaims = listField(identitySec, ['Authority', 'Authority Claim', 'Legitimate Authority'], { maxItems: 20 });
+  const authorityClaims = listField(identitySec, ['Authority', 'Authority Claim', 'Legitimate Authority'], { maxItems: 20, keepBullets: true });
+  // Identity narrative fields. Compiled into NEW keys only (never into existing
+  // ones) so brains that already carry them keep identical legacy fields.
+  const differentiators = listField(identitySec, ['Differentiators'], { maxItems: 12, maxLen: 240, keepBullets: true });
+  const mission = compact(field(identitySec, ['Mission']), 600);
+  const longTerm = compact(field(identitySec, ['Long-Term Positioning']), 600);
+  const principles = listField(identitySec, ['Core Philosophy', 'Principles'], { maxItems: 12, maxLen: 240, keepBullets: true });
+  const channelOneLiners = Object.fromEntries([
+    ['strategic', field(identitySec, ['Strategic One-Liner'])],
+    ['safePublic', field(identitySec, ['Safer Public One-Liner', 'Public One-Liner'])],
+    ['linkedin', field(identitySec, ['LinkedIn-Oriented One-Liner', 'LinkedIn One-Liner'])],
+    ['x', field(identitySec, ['X-Oriented One-Liner', 'X One-Liner'])],
+  ].map(([k, v]) => [k, compact(v, 300)]).filter(([, v]) => v));
 
   const searchKeywords = listField(marketSec, ['Search Keywords', 'Keywords'], { maxItems: 40 });
   const competitors = listField(marketSec, ['Competitors', 'Direct Competitors'], { maxItems: 30 });
@@ -339,9 +438,15 @@ function compileClientBrainMarkdown(markdown, { clientId = '' } = {}) {
   const hashtags = listField(discoverySec, ['Hashtags'], { maxItems: 40 });
   const watchLists = listField(discoverySec, ['Watch Lists', 'Watchlists', 'KOL Watchlist', 'KOLs'], { maxItems: 50 });
 
+  // Market Signals / Listening homes (brain-sync.cjs owns the card mapping).
+  const xHandle = compact(field(identitySec, ['X Handle', 'Twitter Handle']), 40).replace(/^@+/, '');
+  const instagramHandles = listField(discoverySec, ['Instagram Handles'], { maxItems: 20 });
+  const searchQueries = parseSearchQueryRows(field(discoverySec, ['Search Queries']));
+  const sourceFocus = compact(field(discoverySec, ['Source Focus']), 1000);
+
   const proofPoints = listField(authoritySec, ['Proof Points', 'Proof'], { maxItems: 40 });
   const workHistory = listField(authoritySec, ['Work History', 'Career'], { maxItems: 40 });
-  const metrics = listField(authoritySec, ['Metrics'], { maxItems: 20 });
+  const metrics = listField(authoritySec, ['Metrics'], { maxItems: 20, keepBullets: true });
   const allowedClaims = listField(authoritySec, ['Allowed Claims', 'Claims Allowed'], { maxItems: 30 });
   const prohibitedClaims = listField(authoritySec, ['Prohibited Claims', 'Claims Prohibited'], { maxItems: 30 });
 
@@ -378,6 +483,8 @@ function compileClientBrainMarkdown(markdown, { clientId = '' } = {}) {
     location: geographies[0] || '',
     primaryUrl: compact(field(identitySec, ['Primary Url', 'Website', 'URL']), 300),
   };
+  if (mission) identity.mission = mission;
+  if (xHandle) identity.xHandle = xHandle;
   const positioning = {
     oneLiner: positioningText,
     authorityPosition: authorityClaims[0] || '',
@@ -385,6 +492,13 @@ function compileClientBrainMarkdown(markdown, { clientId = '' } = {}) {
     valueProps: offersList,
     avoidPositioning: categoryToAvoid,
   };
+  // Added only when present: an absent field adds no key, so existing brains
+  // and the prompts built from them are unchanged.
+  if (authorityClaims.length) positioning.authorityClaims = authorityClaims;
+  if (differentiators.length) positioning.differentiators = differentiators;
+  if (longTerm) positioning.longTerm = longTerm;
+  if (principles.length) positioning.principles = principles;
+  if (Object.keys(channelOneLiners).length) positioning.channelOneLiners = channelOneLiners;
   const audience = {
     primary: primaryAudience,
     secondary: [],
@@ -440,6 +554,9 @@ function compileClientBrainMarkdown(markdown, { clientId = '' } = {}) {
     hashtags,
     watchLists: watchLists.slice(0, 50),
   };
+  if (instagramHandles.length) discovery.instagramHandles = instagramHandles;
+  if (searchQueries.length) discovery.searchQueries = searchQueries;
+  if (sourceFocus) discovery.sourceFocus = sourceFocus;
 
   const intelligence = {
     identity: {
@@ -590,6 +707,7 @@ function compileClientBrainMarkdown(markdown, { clientId = '' } = {}) {
       sourceStatus: frontmatter.status || 'draft',
       compiledAt: generatedAt,
       clientName: frontmatter.clientName || name,
+      ...(frontmatter.sourceStandard ? { sourceStandard: frontmatter.sourceStandard } : {}),
     },
     identity,
     positioning,
@@ -801,4 +919,12 @@ module.exports = {
   createClientBrainMarkdownTemplate,
   parseFrontmatter,
   parseSections,
+  // brain-sync.cjs helpers
+  cleanList,
+  field,
+  firstSection,
+  normalizeKey,
+  parseSearchQueryRows,
+  setMarkdownField,
+  setFrontmatterValues,
 };

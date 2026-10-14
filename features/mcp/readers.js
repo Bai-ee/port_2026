@@ -153,6 +153,9 @@ export function createReaders(db) {
 
   return {
     strategyExtras: {
+      onXGrowthSaved: (clientId, prior, next) => require('../client-brain/brain-sync.cjs').recordXGrowthEdits(clientId, prior, next),
+      onBrainOwnedSaved: (clientId, target, prior, next) => require('../client-brain/brain-sync.cjs').recordCardEdits(clientId, target, prior, next),
+      readBrainTrackTargets: (clientId) => require('../client-brain/brain-sync.cjs').readApprovedTrackTargets(clientId),
       loadCommitted: committedCorpusRows,
       readPackages: async () => (await readInventory()).packages,
       readTodayRun: (clientId) => latestDailyRun(createFirestoreRunStore(db), clientId),

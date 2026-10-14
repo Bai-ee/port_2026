@@ -176,6 +176,26 @@ export function validateProposal(raw, { currentPlan } = {}) {
       if (typeof payload.currentStatus === 'string') norm.currentStatus = payload.currentStatus.slice(0, 20);
       break;
     }
+    case 'post-approve':
+    case 'post-schedule':
+    case 'post-unschedule': {
+      const postId = idField(payload, 'postId', errors);
+      norm = { postId };
+      if (kind === 'post-schedule') {
+        const ms = typeof payload.scheduledAt === 'string' ? Date.parse(payload.scheduledAt) : NaN;
+        if (Number.isNaN(ms)) errors.push('scheduledAt must be an ISO time');
+        else if (ms <= Date.now()) errors.push('scheduledAt must be in the future');
+        else norm.scheduledAt = new Date(ms).toISOString();
+      }
+      const stamp = typeof payload.expectedUpdatedAt === 'string' ? payload.expectedUpdatedAt.trim() : '';
+      if (!stamp) errors.push('expectedUpdatedAt is required (the post updatedAt from get_post)');
+      norm.expectedUpdatedAt = stamp;
+      // Display-only snapshot for the card; never used by the executor.
+      if (typeof payload.currentText === 'string') norm.currentText = payload.currentText.slice(0, POST_TEXT_MAX * 2);
+      if (typeof payload.currentScheduledAt === 'string') norm.currentScheduledAt = payload.currentScheduledAt.slice(0, 40);
+      if (typeof payload.currentStatus === 'string') norm.currentStatus = payload.currentStatus.slice(0, 20);
+      break;
+    }
     // Created ONLY by server code (the MCP server's request_sync, which prices + validates it first). Shape-checked here;
     // the executor (features/mcp/paid-syncs.js) re-validates the params at confirm time.
     case 'paid-sync': {
@@ -233,10 +253,25 @@ export function compactResult(res) {
  * @param {object} [deps.docBase]  sections to start from when no doc is saved yet (the seed draft)
  * @param {(clientId:string, postId:string)=>Promise<object|null>} [deps.readPost]  client-scoped read of the raw post (post-edit)
  * @param {(a:{clientId:string, postId:string, content?:string, scheduledAt?:string})=>Promise<object>} [deps.editPost]  the existing update path (updateSocialPost)
+ * @param {(clientId:string, postId:string, o:{reviewedBy:string, expectedRevision?:number})=>Promise<object>} [deps.approvePost]  existing approveDraft (default: lazy import of twitter-service)
+ * @param {(clientId:string, postId:string, o:{scheduledAt:string, reviewedBy:string, expectedRevision?:number})=>Promise<object>} [deps.approveAndSchedulePost]  existing approveAndSchedule (ledger/reservation path; default: lazy import)
  * @param {(a:{clientId:string, kind:string, params:object, by:string, auth:object, context:object})=>Promise<object>} [deps.runPaidSync]  features/mcp/paid-syncs.js executor (daily cap enforced inside)
  */
-export function buildExecutors({ planStore, runDailyAction, runUpdateItemFacets, saveXGrowthProfile, refreshHandles, docStore, docBase, readPost, editPost, runPaidSync, clock = Date.now }) {
+export function buildExecutors({ planStore, runDailyAction, runUpdateItemFacets, saveXGrowthProfile, refreshHandles, docStore, docBase, readPost, editPost, approvePost, approveAndSchedulePost, runPaidSync, clock = Date.now }) {
   const need = (fn, name) => { if (typeof fn !== 'function') throw new ProposalExecutionError(`${name} is not available on this deployment`); return fn; };
+  const social = () => import('../../social-posting/twitter-service.js');
+  const readOwnedPost = async (clientId, payload) => {
+    const post = await need(readPost, 'post read')(clientId, payload.postId);
+    if (!post || (post.clientId && post.clientId !== clientId)) throw new ProposalExecutionError('post not found for this client', { error: 'not-found' });
+    if ((post.updatedAt || '') !== payload.expectedUpdatedAt) throw new ProposalExecutionError('post changed since this was proposed', { error: 'stale', currentUpdatedAt: post.updatedAt || null });
+    return post;
+  };
+  const mapPostError = (err) => {
+    if (err instanceof ProposalExecutionError) throw err;
+    if (err?.code === 'revision-conflict') throw new ProposalExecutionError('post changed since this was proposed', { error: 'stale' });
+    throw err;
+  };
+  const postResult = (payload, saved) => ({ postId: payload.postId, status: saved?.status ?? null, scheduledAt: saved?.scheduledAt ?? null, updatedAt: saved?.updatedAt ?? null });
   const daily = (action, body) => async ({ context }) => {
     const res = await need(runDailyAction, 'daily-run actions')(context, action, body);
     if (res && res.ok === false) throw new ProposalExecutionError(res.error || 'action refused', { ...compactResult(res), ok: false });
@@ -322,6 +357,32 @@ export function buildExecutors({ planStore, runDailyAction, runUpdateItemFacets,
         throw err;
       }
       return { postId: payload.postId, status: saved?.status ?? null, scheduledAt: saved?.scheduledAt ?? null, updatedAt: saved?.updatedAt ?? null };
+    },
+    // Approve / schedule / unschedule ONE queued post through the EXISTING social-posting paths (same functions as the
+    // Queue & Calendar buttons: approveDraft, approveAndSchedule, updateSocialPost). They only change post state;
+    // the process-due cron is the only publisher. Everything is re-read and re-checked at confirm time.
+    async 'post-approve'({ clientId, payload, by }) {
+      const post = await readOwnedPost(clientId, payload);
+      if (post.status !== 'draft' && post.status !== 'approved') throw new ProposalExecutionError(`post is ${post.status}; only a draft can be approved`, { error: 'not-approvable', status: post.status });
+      const approve = approvePost ?? (await social()).approveDraft;
+      const saved = await approve(clientId, payload.postId, { reviewedBy: by, ...(Number.isInteger(post.revision) ? { expectedRevision: post.revision } : {}) }).catch(mapPostError);
+      return postResult(payload, saved);
+    },
+    async 'post-schedule'({ clientId, payload, by }) {
+      const post = await readOwnedPost(clientId, payload);
+      if (post.status !== 'draft' && post.status !== 'approved') throw new ProposalExecutionError(`post is ${post.status}; only a draft or approved post can be scheduled (edit a scheduled post's time instead)`, { error: 'not-schedulable', status: post.status });
+      if (Date.parse(payload.scheduledAt) <= clock()) throw new ProposalExecutionError('the time must be in the future', { error: 'past-time' });
+      const schedule = approveAndSchedulePost ?? (await social()).approveAndSchedule;
+      const saved = await schedule(clientId, payload.postId, { scheduledAt: payload.scheduledAt, reviewedBy: by, ...(Number.isInteger(post.revision) ? { expectedRevision: post.revision } : {}) }).catch(mapPostError);
+      return postResult(payload, saved);
+    },
+    async 'post-unschedule'({ clientId, payload }) {
+      const post = await readOwnedPost(clientId, payload);
+      if (post.status !== 'scheduled') throw new ProposalExecutionError(`post is ${post.status}; only a scheduled post can be unscheduled`, { error: 'not-scheduled', status: post.status });
+      const edit = need(editPost, 'post edit');
+      // Clearing scheduledAt through the existing update path returns it to approved (or draft) and releases its slot.
+      const saved = await edit({ clientId, postId: payload.postId, scheduledAt: '', ...(Number.isInteger(post.revision) ? { expectedRevision: post.revision } : {}) }).catch(mapPostError);
+      return postResult(payload, saved);
     },
     // The ONLY way a paid sync from MCP ever runs: the owner pressed Confirm on this card in HITLOOP.
     async 'paid-sync'({ clientId, payload, by, context, auth }) {

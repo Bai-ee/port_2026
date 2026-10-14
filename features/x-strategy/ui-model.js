@@ -381,6 +381,9 @@ const PROPOSAL_KIND_LABELS = Object.freeze({
   'refresh-handles': 'Refresh account data',
   'strategy-doc-edit': 'Edit the strategy',
   'post-edit': 'Edit a queued post',
+  'post-approve': 'Approve post',
+  'post-schedule': 'Schedule post',
+  'post-unschedule': 'Unschedule post',
   'paid-sync': 'Run a paid sync',
 });
 
@@ -395,6 +398,26 @@ const showVal = (v) => {
   if (typeof v === 'object') return JSON.stringify(v);
   return String(v);
 };
+const clipPostText = (t) => {
+  const v = typeof t === 'string' ? t.trim() : '';
+  if (!v) return 'Not captured.';
+  return v.length > 560 ? `${v.slice(0, 559)}\u2026` : v;
+};
+/** ISO UTC -> the viewer's local time, same style as the calendar. Falls back to the raw value. */
+const localTime = (iso) => {
+  if (!iso) return 'unset';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso);
+  return d.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+};
+const POST_ACTION_ERRORS = Object.freeze({
+  stale: 'This post changed since the proposal was made. Ask again.',
+  'not-found': 'That post no longer exists.',
+  'not-approvable': 'This post cannot be approved in its current state.',
+  'not-schedulable': 'This post cannot be scheduled in its current state.',
+  'not-scheduled': 'This post is not scheduled, so there is nothing to unschedule.',
+  'past-time': 'That time has already passed. Pick a future time.',
+});
 const atHandles = (list) => (Array.isArray(list) && list.length ? list.map((h) => `@${String(h).replace(/^@+/, '')}`).join(', ') : 'none');
 
 const PAID_SYNC_WHAT = Object.freeze({
@@ -447,6 +470,9 @@ export function proposalPayloadPreview(kind, payload, currentPlan) {
       ...(p.scheduledAt !== undefined ? [`Time: ${showVal(p.currentScheduledAt)} → ${showVal(p.scheduledAt)}`] : []),
       'Edit only: this does not approve, schedule or publish.',
     ];
+    case 'post-approve': return [`Post: ${clipPostText(p.currentText)}`, `Current status: ${showVal(p.currentStatus)}`, 'Approves only: it is not scheduled or published.'];
+    case 'post-schedule': return [`Post: ${clipPostText(p.currentText)}`, `New time: ${localTime(p.scheduledAt)}`, `Current status: ${showVal(p.currentStatus)}`];
+    case 'post-unschedule': return [`Post: ${clipPostText(p.currentText)}`, `Time being removed: ${localTime(p.currentScheduledAt)}`, `Current status: ${showVal(p.currentStatus)}`];
     case 'paid-sync': return paidSyncPreview(p);
     case 'regenerate-today': return [`Model drafting: ${p.useModel === true ? 'on' : 'off'}`, ...(p.force === true ? ['Replaces the existing run.'] : [])];
     default: return [];
@@ -464,6 +490,9 @@ const RESULT_LINES = {
   'refresh-handles': () => 'Refresh started.',
   'strategy-doc-edit': (r) => (r?.version ? `Strategy updated to v${r.version}.` : 'Strategy updated.'),
   'paid-sync': (r) => (r?.kind === 'x_monitor_sync' ? `Done. ${r.calls ?? 0} X API read call${r.calls === 1 ? '' : 's'} made.` : r?.kind === 'strategy_review' ? 'Review done - see the new thread.' : 'Started. Check progress in the matching card.'),
+  'post-approve': () => 'Approved.',
+  'post-schedule': (r) => (r?.scheduledAt ? `Scheduled for ${localTime(r.scheduledAt)}.` : 'Scheduled.'),
+  'post-unschedule': () => 'Unscheduled.',
   'post-edit': (r) => (r?.status ? `Post updated. It is now ${r.status}${r.scheduledAt ? ` for ${r.scheduledAt}` : ''} \u2014 check the Queue tab.` : 'Post updated \u2014 check the Queue tab.'),
 };
 
@@ -478,7 +507,9 @@ export function proposalStatusText(proposal) {
   if (status === 'rejected') return { label: 'rejected', tone: 'muted', detail: 'Nothing was changed.' };
   if (status === 'failed') {
     let detail;
-    if (result?.error === 'stale') {
+    if (['post-approve', 'post-schedule', 'post-unschedule'].includes(proposal?.kind) && POST_ACTION_ERRORS[result?.error]) {
+      detail = POST_ACTION_ERRORS[result.error];
+    } else if (result?.error === 'stale') {
       const what = proposal?.kind === 'strategy-doc-edit' ? 'strategy' : 'plan';
       detail = result.currentVersion !== undefined && result.currentVersion !== null
         ? `stale: ${what} is now v${result.currentVersion}, ask again` : `stale: the ${what} changed, ask again`;

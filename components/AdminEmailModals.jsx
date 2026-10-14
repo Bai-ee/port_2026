@@ -11,6 +11,7 @@
 // the same kit the Video Remix modal uses. See
 // public/docs/dashboard-modal-component-style-guide.html.
 
+import ClientBrainOwnedTag from './dashboard/ClientBrainOwnedTag';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { SECTIONS, UI_GROUP_ORDER } from '../features/email-digest/sections.registry.cjs';
 import { computeNextRunAt } from '../features/email-digest/scheduler.cjs';
@@ -646,11 +647,11 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
                   </label>
                 </div>
                 <label className="field" style={{ display: 'grid', gap: 6 }}>
-                  <span className="label">Tone</span>
+                  <span className="label">Tone<ClientBrainOwnedTag /></span>
                   <input value={form.tone || ''} onChange={(e) => setForm((f) => ({ ...f, tone: e.target.value }))} />
                 </label>
                 <label className="field" style={{ display: 'grid', gap: 6 }}>
-                  <span className="label">Extra instructions</span>
+                  <span className="label">Extra instructions<ClientBrainOwnedTag /></span>
                   <textarea rows={4} placeholder="Optional steering (e.g. flag overdue tasks, highlight revenue)…" value={form.extraInstructions || ''} onChange={(e) => setForm((f) => ({ ...f, extraInstructions: e.target.value }))} />
                 </label>
               </section>
@@ -704,7 +705,7 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
                 </div>
 
                 <div className="field" style={{ display: 'grid', gap: 6 }}>
-                  <span className="label">Contact Your Human link (Calendly)</span>
+                  <span className="label">Contact Your Human link (Calendly)<ClientBrainOwnedTag /></span>
                   <input
                     type="url"
                     placeholder="https://calendly.com/your-human/intro"

@@ -114,19 +114,30 @@ function buildUseForContext(brain, useForInput) {
     return text ? `${label}: ${text}` : '';
   };
 
+  // Rich brains overrun every caller's maxChars, and capText trims from the end,
+  // so long lists are capped and the channel one-liner sits near the top.
+  const head = (val, n) => (Array.isArray(val) ? val.slice(0, n) : val);
+  const one = pos.channelOneLiners || {};
+
   const lines = [
     'CLIENT CONTEXT',
     line('Identity', [id.name, id.category, id.primaryUrl].filter(Boolean).join(' · ')),
     line('About', id.description),
   ];
+  if (allowed.includes('socialPosts')) lines.push(line('X one-liner', one.x));
+  if (want.has('positioning')) lines.push(line('Public one-liner', one.safePublic));
   if (want.has('positioning')) {
-    lines.push(line('Positioning', pos.oneLiner || pos.authorityPosition));
-    lines.push(line('Differentiation', pos.differentiation));
+    // Markdown brains set About and Positioning to the same text; print it once.
+    const positioningLine = pos.oneLiner || pos.authorityPosition;
+    if (String(positioningLine || '').trim() !== String(id.description || '').trim()) {
+      lines.push(line('Positioning', positioningLine));
+    }
+    lines.push(line('Differentiation', head(pos.differentiation, 6)));
   }
   if (want.has('voice')) {
     lines.push(line('Voice', voice.toneSummary || voice.writingRules));
-    lines.push(line('Do', voice.preferredWords));
-    lines.push(line('Do not', [...(voice.bannedWords || []), ...doNot]));
+    lines.push(line('Do', head(voice.preferredWords, 12)));
+    lines.push(line('Do not', [...(head(voice.bannedWords, 24) || []), ...doNot]));
     const fmt = voice.formattingRules && !Array.isArray(voice.formattingRules) && typeof voice.formattingRules === 'object'
       ? Object.entries(voice.formattingRules).map(([k, v]) => `${k}: ${v}`)
       : voice.formattingRules;
@@ -164,6 +175,20 @@ function buildUseForContext(brain, useForInput) {
   }
   if (want.has('content')) {
     lines.push(line('Content pillars', content.pillars));
+  }
+  // Remaining identity narrative fields (optional CLIENT_BRAIN.md sections).
+  // Appended last, so under the maxChars cap they are trimmed first. Absent
+  // fields render nothing.
+  const list = (val, n = 5) => (Array.isArray(val) ? val.slice(0, n).map((v) => compact(v, 200)) : []);
+  if (allowed.includes('strategy')) lines.push(line('Strategic one-liner', one.strategic));
+  if (want.has('positioning')) {
+    lines.push(line('Differentiators', list(pos.differentiators)));
+    lines.push(line('Authority', list(pos.authorityClaims)));
+    lines.push(line('Mission', compact(id.mission, 300)));
+    lines.push(line('Long-term positioning', compact(pos.longTerm, 300)));
+  }
+  if (want.has('positioning') || want.has('content')) {
+    lines.push(line('Principles', list(pos.principles, 6)));
   }
   return lines.filter(Boolean).join('\n');
 }
@@ -1424,7 +1449,14 @@ function mergeVoice(prevVoice = {}, draftVoice = {}) {
   return merged;
 }
 
-async function generateAndSaveClientBrain(clientId, { mode = 'deterministic' } = {}) {
+async function generateAndSaveClientBrain(clientId, { mode = 'deterministic', byUid = null } = {}) {
+  // Markdown is the source of truth: when it exists, Generate only recompiles it
+  // (no source rebuild, no LLM). A version is recorded only if the text changed.
+  const existing = await readClientBrainDoc(clientId);
+  if (existing && typeof existing.markdownSource === 'string' && existing.markdownSource.trim()) {
+    const brain = await compileAndSaveClientBrainMarkdown(clientId, existing.markdownSource, { reason: 'regenerate', byUid });
+    return { mode: 'markdown', brain };
+  }
   const { brain, bundle } = await getClientBrain(clientId);
   const sourceRefs = mergeSourceRefs(buildAutoSourceRefs(bundle), brain.sourceRefs || []);
   const fresh = buildClientBrainDraft({ clientId, bundle, sourceRefs });
@@ -1454,10 +1486,67 @@ async function generateAndSaveClientBrain(clientId, { mode = 'deterministic' } =
     cardDefaults: engine.cardDefaults,
     cardSettingsSnapshot: engine.cardSettingsSnapshot,
   };
-  return saveClientBrain(clientId, draft);
+  const saved = await saveClientBrain(clientId, draft);
+  return { mode, brain: saved };
 }
 
-async function compileAndSaveClientBrainMarkdown(clientId, markdownSource) {
+const BRAIN_VERSIONS_KEEP = 50;
+
+function brainVersionsRef(clientId) {
+  return fb.adminDb.collection('clients').doc(clientId).collection('client_brain_versions');
+}
+
+// Snapshot the PRIOR Markdown before it is overwritten. Best effort: a version
+// failure is logged and swallowed so it can never block the save itself.
+// Returns the version id, or null when skipped (no prior Markdown) or failed.
+async function recordBrainVersion(clientId, { reason = 'save', byUid = null, prior = null } = {}) {
+  try {
+    const source = prior || await readClientBrainDoc(clientId);
+    const markdown = source && typeof source.markdownSource === 'string' ? source.markdownSource : '';
+    if (!markdown) return null;
+    const createdAtIso = nowIso();
+    const id = createdAtIso.replace(/[:.]/g, '-');
+    await brainVersionsRef(clientId).doc(id).set({
+      markdownSource: markdown,
+      status: source.status || 'draft',
+      reason: String(reason || 'save'),
+      byUid: byUid || null,
+      createdAtIso,
+      size: markdown.length,
+    });
+    try {
+      const snap = await brainVersionsRef(clientId).orderBy('createdAtIso', 'desc').get();
+      const extra = snap.docs.slice(BRAIN_VERSIONS_KEEP);
+      await Promise.all(extra.map((d) => d.ref.delete()));
+    } catch (err) {
+      console.warn('[client-brain] version prune failed:', err.message);
+    }
+    return id;
+  } catch (err) {
+    console.warn('[client-brain] version record failed:', err.message);
+    return null;
+  }
+}
+
+async function listBrainVersions(clientId) {
+  const snap = await brainVersionsRef(clientId).orderBy('createdAtIso', 'desc').limit(BRAIN_VERSIONS_KEEP).get();
+  return snap.docs.map((d) => {
+    const v = d.data() || {};
+    return { id: d.id, createdAtIso: v.createdAtIso || null, reason: v.reason || null, status: v.status || null, size: v.size || 0 };
+  });
+}
+
+async function readBrainVersion(clientId, id) {
+  if (!clientId || !id) return null;
+  const snap = await brainVersionsRef(clientId).doc(String(id)).get();
+  return snap.exists ? { id: snap.id, ...(snap.data() || {}) } : null;
+}
+
+async function compileAndSaveClientBrainMarkdown(clientId, markdownSource, { reason = 'save', byUid = null } = {}) {
+  const prior = await readClientBrainDoc(clientId);
+  if (prior && typeof prior.markdownSource === 'string' && prior.markdownSource && prior.markdownSource !== markdownSource) {
+    await recordBrainVersion(clientId, { reason, byUid, prior });
+  }
   const { bundle } = await getClientBrain(clientId);
   const compiled = compileClientBrainMarkdown(markdownSource, { clientId });
   const engine = buildDecisionEngine(compiled, bundle);
@@ -1670,6 +1759,9 @@ module.exports = {
   mergeVoice,
   normalizeSourceRef,
   readClientBrainDoc,
+  recordBrainVersion,
+  listBrainVersions,
+  readBrainVersion,
   saveClientBrainCardSettingsSnapshot,
   saveClientBrain,
   saveSourceRefs,

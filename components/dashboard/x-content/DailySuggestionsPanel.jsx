@@ -9,7 +9,7 @@ import Card from '../content-ui/ui/Card.jsx';
 import { XCE_COLORS, XCE_RADII, XCE_SHADOWS } from '../content-ui/xce-tokens';
 import { Skeleton, RetryError } from '../content-ui/Feedback.jsx';
 import { suggestionTrackChip, suggestionLinkLine, suggestionMediaState, stageErrorText } from '../../../features/x-strategy/ui-model.js';
-import { slotLabel, timingLine, strategySourceLine, slotStatuses, VOICE_LINE } from '../../../features/x-content-inventory/daily-loop/present.js';
+import { slotLabel, timingLine, suggestionTrigger, strategySourceLine, slotStatuses, VOICE_LINE } from '../../../features/x-content-inventory/daily-loop/present.js';
 
 // DailySuggestionsPanel — which X conversations to join today, with what owned
 // content (Daily Content Loop POC, docs/plans/DAILY-CONTENT-LOOP-MASTER-PLAN.md).
@@ -133,6 +133,7 @@ function SuggestionCard({ s, text, thumbUrl, onText, onCommit, onSave, onDismiss
   const media = suggestionMediaState(s, stage);
   const trackChip = suggestionTrackChip(s);
   const linkLine = suggestionLinkLine(s);
+  const trigger = suggestionTrigger(s);
   // Owner click is the approval. Never auto-stages. Same call as ItemDrawer: nas-stage { id } -> { ok, commandId } (queues STAGE_FOR_PUBLISH).
   const stageFromNas = async () => {
     if (stage.queued) { setStage((x) => ({ ...x, busy: true })); try { await onReload?.(); } finally { setStage((x) => ({ ...x, busy: false })); } return; }
@@ -159,6 +160,13 @@ function SuggestionCard({ s, text, thumbUrl, onText, onCommit, onSave, onDismiss
         {trackChip ? <span id={`daily-suggestion-track-chip-${s.id}`} className="xce-chip">{trackChip}</span> : null}
         {media.chip ? <span id={`daily-suggestion-needs-staging-chip-${s.id}`} className="xce-chip xce-chip-warn">{media.chip}</span> : null}
       </header>
+
+      {trigger ? (
+        <div id={`daily-suggestion-trigger-row-${s.id}`} data-trigger={trigger.kind} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 8, margin: '2px 0 6px', minWidth: 0 }}>
+          <span id={`daily-suggestion-trigger-chip-${s.id}`} className="xce-chip" style={{ fontWeight: 700 }}>{trigger.label}{trigger.track ? ` · ${trigger.track}` : ''}</span>
+          <span id={`daily-suggestion-trigger-reason-${s.id}`} className="xce-dl-muted" style={{ overflowWrap: 'anywhere', minWidth: 0 }}>{trigger.reason}</span>
+        </div>
+      ) : null}
 
       {s.conversation ? (
         <div id={`daily-suggestion-conversation-${s.id}`} className="xce-dl-convo">

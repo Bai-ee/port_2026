@@ -35,7 +35,7 @@ test('one propose tool per agent-proposable kind (server-only kinds like paid-sy
   assert.deepEqual(Object.keys(PROPOSE_TOOL_BY_KIND).sort(), PROPOSAL_KINDS.filter((k) => !SERVER_ONLY_PROPOSAL_KINDS.includes(k)).sort());
   assert.ok(PROPOSAL_KINDS.includes('paid-sync') && !('paid-sync' in PROPOSE_TOOL_BY_KIND));
   assert.deepEqual(READ_TOOL_NAMES, ['get_strategy_doc', 'get_algorithm', 'score_posts', 'get_rule_check', 'get_audience', 'get_evaluation', 'get_plan', 'get_tracks', 'get_context', 'get_today_run', 'search_inventory', 'top_posts', 'get_queue', 'get_market_signals', 'get_post', 'get_opportunities', 'get_results']);
-  assert.equal(TOOL_SCHEMAS.length, 27);
+  assert.equal(TOOL_SCHEMAS.length, 30);
   for (const t of TOOL_SCHEMAS) {
     assert.equal(t.input_schema.type, 'object');
     assert.ok(t.description);
@@ -49,7 +49,7 @@ test('one propose tool per agent-proposable kind (server-only kinds like paid-sy
 // ---- Phase 4 chat read tools + selected-item context ----
 
 test('propose-only surface: the strategy-doc edit is the only new propose tool, none can schedule/approve/publish', () => {
-  assert.equal(PROPOSE_TOOLS.length, 10);
+  assert.equal(PROPOSE_TOOLS.length, 13);
   for (const t of TOOL_SCHEMAS) assert.ok(!/schedule|publish|approve_post|approve|post_now/i.test(t.name) || t.name.startsWith('propose_'), t.name);
   assert.ok(!TOOL_SCHEMAS.some((t) => /^(schedule|publish|approve)/.test(t.name)));
   assert.deepEqual(TOOL_SCHEMAS.filter((t) => !t.name.startsWith('propose_')).map((t) => t.name), READ_TOOL_NAMES);
@@ -117,7 +117,7 @@ test('selected context: unknown kind / bad id ignored; three labelled states; un
   assert.match(describeSelected({ kind: 'post', id: 'p1' }, null), /could not be found/);
   const sys = buildSystemPrompt({ planSummary: 'p', selectedContext: describeSelected({ kind: 'post', id: 'p1' }, { status: 'draft' }) });
   assert.match(sys, /SELECTED ITEM: SAVED POST/);
-  assert.match(sys, /buttons in Queue & Calendar, never by chat/);
+  assert.match(sys, /CHAT NEVER PUBLISHES/);
   assert.match(sys, /get_queue, get_post, get_opportunities, get_results/);
 });
 

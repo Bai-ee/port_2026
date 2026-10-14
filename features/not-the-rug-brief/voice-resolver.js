@@ -42,6 +42,8 @@ const FORMATTING_KEY_MAP = {
   long: 'long_posts',
   caps: 'caps_usage',
   emojis: 'emojis',
+  punctuation: 'punctuation',
+  links: 'links',
   threadOpener: 'thread_opener',
 };
 

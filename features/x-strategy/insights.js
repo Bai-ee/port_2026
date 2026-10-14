@@ -158,3 +158,29 @@ export function summarizeAudience({ account = null, snapshots = [], events = [],
     ],
   };
 }
+
+const pctMix = (mix) => {
+  const e = Object.entries(mix || {}).filter(([, v]) => Number.isFinite(v) && v > 0).sort((a, b) => b[1] - a[1]).slice(0, 4);
+  return e.length ? e.map(([k, v]) => `${k} ${Math.round(v)}%`).join(' · ') : 'no mix data';
+};
+const perDay = (v) => (Number.isFinite(v) ? `${v}/day` : 'n/a');
+
+/**
+ * One evaluation.byTrack entry -> three display lines: benchmark profile, Brain/plan target, actual last 14 days.
+ * Pure; tolerates entries from before these fields existed (returns null).
+ */
+export function trackEvalLines(t) {
+  if (!t || (!t.target && !t.actual && !t.benchmarkProfile)) return null;
+  const bp = t.benchmarkProfile;
+  const benchmark = bp
+    ? `Benchmark ${bp.handles.map((h) => `@${h}`).join(' + ')}: ${perDay(bp.postsPerDay)} · types ${pctMix(bp.typeMix)} · media ${pctMix(bp.mediaMix)}`
+    : t.status === 'no-benchmark' ? 'Benchmark: none for this track' : 'Benchmark: no stored posts yet';
+  const tg = t.target;
+  const shares = tg?.brainShares ? Object.entries(tg.brainShares).map(([k, v]) => `${k} ${v}%`).join(' · ') : null;
+  const target = `Target: ${perDay(tg?.postsPerDay)}${shares ? ` · ${shares}` : ' · per-type shares live in the Brain'}`;
+  const a = t.actual;
+  const actual = a && a.rows
+    ? `Actual last ${a.windowDays} days: ${perDay(a.postsPerDay)} · types ${pctMix(a.typeMix)} · media ${pctMix(a.mediaMix)}${a.scope === 'all-own-rows' ? ' (all your posts, not track-specific)' : ''}`
+    : `Actual last ${a?.windowDays ?? 14} days: no posts`;
+  return { benchmark, target, actual };
+}

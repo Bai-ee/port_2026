@@ -9,6 +9,7 @@ import Accordion from '../content-ui/ui/Accordion';
 import Badge from '../content-ui/ui/Badge';
 import Card from '../content-ui/ui/Card';
 import IconButton from '../content-ui/ui/IconButton';
+import ClientBrainOwnedTag from '../ClientBrainOwnedTag';
 
 // StrategyDocPanel - the "Strategy" sub-tab of the Strategy tab's Details pane: the owner's Strategy document.
 // Read view per section, Edit -> textarea -> Save (version-checked), document history with Restore.
@@ -92,7 +93,7 @@ export default function StrategyDocPanel({ clientId, call, doc, meta = [], loadi
   return (
     <section id="strategy-doc-panel" data-section="strategy-doc" style={S.stack}>
       <div id="strategy-doc-status-row" style={{ ...S.row, justifyContent: 'space-between' }}>
-        <span style={S.title}>{doc.version ? `Strategy · v${doc.version}` : 'Strategy · draft'}</span>
+        <span style={S.title}>{doc.version ? `Strategy · v${doc.version}` : 'Strategy · draft'}<ClientBrainOwnedTag /></span>
         <Badge id="strategy-doc-status-badge" tone={confirmed ? 'green' : 'amber'}>{confirmed ? 'Confirmed' : 'Draft'}</Badge>
       </div>
 

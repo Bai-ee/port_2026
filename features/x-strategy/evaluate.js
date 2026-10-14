@@ -17,6 +17,8 @@ import { DEFAULT_PLAN, EVALUATION_CAVEAT, EVALUATION_THRESHOLDS, tierForAuthored
 import { buildRowsMeta, freshness } from './corpus-rows.js';
 import { normalizePlan } from './plan-state.js';
 import { tracksOf } from './content-tracks.js';
+import { computeRowMetrics } from './track-profile.js';
+import { mergeEngineConfig } from '../x-content-inventory/engine-quota.js';
 
 export const QUOTE_REACT_CAVEAT = 'quote-react-undervalued';
 export const MAX_GAPS = 8;
@@ -51,7 +53,7 @@ function buildEntry(handle, rowsIn, meta, nowMs) {
     byType: summary ? clone(summary.byType) : {},
     source: metaObj?.source ?? 'committed-json',
   };
-  return { entry, summary };
+  return { entry, summary, rows };
 }
 
 function entryCaveats(entry, role) {
@@ -73,16 +75,65 @@ function entryCaveats(entry, role) {
   return out;
 }
 
+
+export const ACTUAL_WINDOW_DAYS = 14;
+const DAY_MS = 86400000;
+const round2 = (n) => Math.round(n * 100) / 100;
+
+/** Brain target for a track: postsPerDay = its engines' targets summed (daily target, else weekly minimum / 7). Per-type
+ *  shares are Brain-only (not in the plan): shown only when the caller passes the approved Brain's trackTargets rows. */
+function trackTarget(track, plan, brainRows) {
+  const cfg = mergeEngineConfig(isObj(plan.engineTargets) ? plan.engineTargets : {});
+  const perDay = (track.engines || []).reduce((s, e) => {
+    const c = cfg.engines[e] ?? {};
+    return s + (c.targetPerDay > 0 ? c.targetPerDay : c.weeklyMin > 0 ? c.weeklyMin / 7 : 0);
+  }, 0);
+  const label = String(track.label ?? '').trim().toLowerCase();
+  const row = Array.isArray(brainRows) ? brainRows.find((r) => String(r?.track ?? '').trim().toLowerCase() === label) : null;
+  const shares = row ? Object.fromEntries(Object.entries(row).filter(([k, v]) => k !== 'track' && k !== 'postsPerDay' && Number.isFinite(v))) : null;
+  return { postsPerDay: perDay > 0 ? round2(perDay) : null, source: 'plan-engine-targets', brainShares: shares && Object.keys(shares).length ? shares : null };
+}
+
+/** Own authored posts in the last 14 days. Scoped to the track's topics when enough rows match; otherwise all own rows,
+ *  flagged scope 'all-own-rows' so the UI says it is not track-specific. */
+function trackActual(track, ownRows, nowMs) {
+  const cut = nowMs - ACTUAL_WINDOW_DAYS * DAY_MS;
+  const recent = (Array.isArray(ownRows) ? ownRows : []).filter((r) => { const ms = Date.parse(r?.utc ?? r?.createdAt ?? r?.dateLocal ?? ''); return Number.isFinite(ms) && ms >= cut && ms <= nowMs; });
+  const topics = (track.topics || []).map((x) => String(x).toLowerCase());
+  const hit = (r) => [...(r.topics || []), ...(r.lanes || [])].some((x) => topics.includes(String(x).toLowerCase()));
+  const scoped = topics.length ? recent.filter(hit) : [];
+  const useRows = scoped.length >= 3 ? scoped : recent;
+  const m = computeRowMetrics(useRows);
+  return {
+    windowDays: ACTUAL_WINDOW_DAYS, scope: useRows === scoped ? 'topic-filtered' : 'all-own-rows', rows: useRows.length,
+    postsPerDay: useRows.length ? round2(m.authoredPosts / ACTUAL_WINDOW_DAYS) : null,
+    typeMix: m.postTypeMix, mediaMix: m.formatMix,
+  };
+}
+
+/** Pooled benchmark profile for one track (only this track's handles; never blended with other tracks). */
+function trackBenchmarkProfile(withSummary) {
+  const rows = withSummary.flatMap((b) => b.rows);
+  if (!rows.length) return null;
+  const m = computeRowMetrics(rows);
+  const cadence = summarizeCorpus(rows, { handle: withSummary.map((b) => b.entry.handle).join('+') }).cadence;
+  return { handles: withSummary.map((b) => b.entry.handle), rows: rows.length, postsPerDay: cadence.authoredPerActiveDay ?? null, typeMix: m.postTypeMix, mediaMix: m.formatMix, range: m.range };
+}
+
 /**
  * Per-track evaluation: each track is compared with ITS OWN benchmarks only (never averaged across tracks, and the
  * plan's overall primary is only a tie-break inside a track that contains it). A track without benchmarks reports
  * { status:'no-benchmark', fallback:'own-history' } with no gaps.
  */
-function evaluateTracks(tracks, bench, own, primaryWanted) {
+function evaluateTracks(tracks, bench, own, primaryWanted, ctx = {}) {
   return tracks.map((track) => {
-    const base = { trackId: track.id, label: track.label, engines: [...track.engines], share: track.share, benchmarks: [...track.benchmarks] };
+    const base = {
+      trackId: track.id, label: track.label, engines: [...track.engines], share: track.share, benchmarks: [...track.benchmarks],
+      target: trackTarget(track, ctx.plan ?? {}, ctx.brainTrackTargets),
+      actual: trackActual(track, own.rows, ctx.nowMs ?? Date.now()),
+    };
     if (!track.benchmarks.length) {
-      return { ...base, status: 'no-benchmark', fallback: 'own-history', gapsAgainst: null, gaps: [], perBenchmark: [], needsRefresh: [], caveats: [] };
+      return { ...base, status: 'no-benchmark', fallback: 'own-history', benchmarkProfile: null, gapsAgainst: null, gaps: [], perBenchmark: [], needsRefresh: [], caveats: [] };
     }
     const entries = track.benchmarks.map((h) => ({ handle: h, found: bench.find((b) => b.entry.handle === h) ?? null }));
     const withSummary = entries.map((e) => e.found).filter((f) => f?.summary);
@@ -95,6 +146,7 @@ function evaluateTracks(tracks, bench, own, primaryWanted) {
     return {
       ...base,
       status: withSummary.length ? 'ok' : 'no-rows',
+      benchmarkProfile: trackBenchmarkProfile(withSummary),
       fallback: null,
       gapsAgainst: lead ? lead.entry.handle : null,
       gaps: clone(gaps),
@@ -152,7 +204,7 @@ export function evaluate(input = {}) {
   const trackList = Array.isArray(input.tracks) ? input.tracks : Array.isArray(plan.contentTracks) ? tracksOf(plan) : null;
 
   return {
-    ...(trackList ? { byTrack: evaluateTracks(trackList, bench, own, primaryWanted) } : {}),
+    ...(trackList ? { byTrack: evaluateTracks(trackList, bench, own, primaryWanted, { plan, nowMs, brainTrackTargets: input.brainTrackTargets }) } : {}),
     generatedAt: new Date(nowMs).toISOString(),
     own: own.entry,
     benchmarks: bench.map((b) => b.entry),

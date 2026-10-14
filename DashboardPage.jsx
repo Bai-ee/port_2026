@@ -51,6 +51,7 @@ import { deriveFindings } from './features/scout-intake/derived-findings.mjs';
 import ModuleCardControls from './components/dashboard/ModuleCardControls';
 import SubscribeModal from './components/payments/SubscribeModal';
 import DashboardCreationFailedModal from './components/dashboard/DashboardCreationFailedModal';
+import ClientBrainOwnedTag from './components/dashboard/ClientBrainOwnedTag';
 import { AdminEmailDigestView, AdminCreateClientView } from './components/AdminEmailModals';
 import { CreativeBriefComposerView } from './components/dashboard/CreativeBriefComposerCard';
 import { InvoiceBuilderCard } from './components/dashboard/InvoiceBuilderCard';
@@ -4153,7 +4154,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               merged with the Instagram topic search. Parallel to the X Watchlist. */}
           <article className="sg-list" id="instagram-accounts-input">
             <div className="sg-list-head">
-              <span className="sg-list-title">Instagram Accounts</span>
+              <span className="sg-list-title">Instagram Accounts<ClientBrainOwnedTag isAdmin={isAdmin} /></span>
               <span className="sg-chip">{splitMarketingBriefTerms(marketingBriefConfig?.instagramHandles).length} watched</span>
             </div>
             <input
@@ -4176,7 +4177,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               (last30days --x-handle). Phase 1: raw confirmation, pre-analysis. */}
           <article className="sg-list" id="watchlist-timelines-pull">
             <div className="sg-list-head">
-              <span className="sg-list-title">Watchlist Timelines · X</span>
+              <span className="sg-list-title">Watchlist Timelines · X<ClientBrainOwnedTag isAdmin={isAdmin} /></span>
               <span className="sg-chip">{(watchlistPull.handles || []).filter((h) => h.count > 0).length}/{(watchlistPull.handles || []).length || splitMarketingBriefTerms(marketingBriefConfig?.kols).filter((h) => h.replace(/^@+/, '').length >= 2).length} live</span>
               {!isAdmin && <button type="button" className="sg-btn sg-btn-outline" disabled={watchlistPull.loading || (!wd.tweets && !wd.mentions)} onClick={runWatchlistPullNow}>{watchlistPull.loading ? 'Pulling…' : 'Pull timelines'}</button>}
             </div>
@@ -4323,7 +4324,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           <div className="sg-head">
             <span className="sg-index">06</span>
             <div>
-              <h3>Opportunity Signals</h3>
+              <h3>Opportunity Signals<ClientBrainOwnedTag isAdmin={isAdmin} /></h3>
               <p>Scan public posts for buying-signal opportunities — a launch, an AI-design complaint, a site that isn&apos;t converting, someone hiring, or praise for a competitor. Read-only: finds and scores, never posts or drafts outreach. Renders in the <strong>REPORT</strong> tab.</p>
             </div>
           </div>
@@ -14935,11 +14936,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                             </div>
 
                             <label className="mu-field">
-                              <span className="mu-label">Brand name</span>
+                              <span className="mu-label">Brand name<ClientBrainOwnedTag isAdmin={isAdmin} /></span>
                               <input className="mu-input" value={marketingBriefConfig.brandName || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), brandName: e.target.value }))} placeholder="e.g. your brand name" />
                             </label>
                             <div className="mu-field">
-                              <span className="mu-label">Brand identifiers</span>
+                              <span className="mu-label">Brand identifiers<ClientBrainOwnedTag isAdmin={isAdmin} /></span>
                               <div className="mu-list">
                                 {(() => {
                                   const items = String(marketingBriefConfig.brandKeywords || '').split('\n');
@@ -14958,7 +14959,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                               </div>
                             </div>
                             <div className="mu-field">
-                              <span className="mu-label">Category themes</span>
+                              <span className="mu-label">Category themes<ClientBrainOwnedTag isAdmin={isAdmin} /></span>
                               <div className="mu-list">
                                 {(() => {
                                   const items = String(marketingBriefConfig.categoryTerms || '').split('\n');
@@ -15107,11 +15108,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       ) : (
                         <>
                           <label className="mu-field">
-                            <span className="mu-label">What should Scout care about?</span>
+                            <span className="mu-label">What should Scout care about?<ClientBrainOwnedTag isAdmin={isAdmin} /></span>
                             <textarea className="mu-textarea" value={marketingBriefConfig.sourceFocus || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), sourceFocus: e.target.value }))} rows={4} />
                           </label>
                           <label className="mu-field">
-                            <span className="mu-label">Analysis instructions (how Scout should reason)</span>
+                            <span className="mu-label">Analysis instructions (how Scout should reason)<ClientBrainOwnedTag isAdmin={isAdmin} /></span>
                             <textarea className="mu-textarea" value={marketingBriefConfig.scoutInstructions || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), scoutInstructions: e.target.value }))} rows={6} />
                           </label>
                           <label className="mu-field" style={{ maxWidth: 220 }}>
@@ -15145,7 +15146,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       <div className="mu-tab-pane" style={{ padding: 18 }}>
                         <>
                           <label className="mu-field">
-                            <span className="mu-label">KOLs / handles</span>
+                            <span className="mu-label">KOLs / handles<ClientBrainOwnedTag isAdmin={isAdmin} /></span>
                             <textarea className="mu-textarea" placeholder="@handle or name, one per line" value={marketingBriefConfig.kols || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), kols: e.target.value }))} rows={6} />
                           </label>
                           <label className="mu-field">
@@ -15169,7 +15170,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       <div className="mu-tab-pane" style={{ padding: 18 }}>
                         <>
                           <label className="mu-field">
-                            <span className="mu-label">Competitors</span>
+                            <span className="mu-label">Competitors<ClientBrainOwnedTag isAdmin={isAdmin} /></span>
                             <textarea className="mu-textarea" placeholder="Competitor names, one per line" value={marketingBriefConfig.competitors || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), competitors: e.target.value }))} rows={8} />
                             <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>These competitors help shape the research and final content angle.</span>
                           </label>
@@ -15329,23 +15330,23 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                           </div>
                         </div>
                         <label className="mu-field">
-                          <span className="mu-label">Business model / structure</span>
+                          <span className="mu-label">Business model / structure<ClientBrainOwnedTag isAdmin={isAdmin} /></span>
                           <textarea className="mu-textarea" rows={3} value={businessOverviewDraft.businessModel} placeholder="e.g. subscription SaaS; one-off services; marketplace…" onChange={(e) => setBusinessOverviewDraft((p) => ({ ...p, businessModel: e.target.value }))} />
                         </label>
                         <label className="mu-field">
-                          <span className="mu-label">Target audience</span>
+                          <span className="mu-label">Target audience<ClientBrainOwnedTag isAdmin={isAdmin} /></span>
                           <input className="mu-input" value={businessOverviewDraft.targetAudience} placeholder="Who is this for?" onChange={(e) => setBusinessOverviewDraft((p) => ({ ...p, targetAudience: e.target.value }))} />
                         </label>
                         <label className="mu-field">
-                          <span className="mu-label">Positioning</span>
+                          <span className="mu-label">Positioning<ClientBrainOwnedTag isAdmin={isAdmin} /></span>
                           <input className="mu-input" value={businessOverviewDraft.positioning} placeholder="How you're different / your angle" onChange={(e) => setBusinessOverviewDraft((p) => ({ ...p, positioning: e.target.value }))} />
                         </label>
                         <label className="mu-field">
-                          <span className="mu-label">Headline</span>
+                          <span className="mu-label">Headline<ClientBrainOwnedTag isAdmin={isAdmin} /></span>
                           <input className="mu-input" value={businessOverviewDraft.headline} placeholder="One-line description of the business" onChange={(e) => setBusinessOverviewDraft((p) => ({ ...p, headline: e.target.value }))} />
                         </label>
                         <label className="mu-field">
-                          <span className="mu-label">Summary</span>
+                          <span className="mu-label">Summary<ClientBrainOwnedTag isAdmin={isAdmin} /></span>
                           <textarea className="mu-textarea" rows={3} value={businessOverviewDraft.summary} placeholder="A short paragraph describing the business." onChange={(e) => setBusinessOverviewDraft((p) => ({ ...p, summary: e.target.value }))} />
                         </label>
                         {businessOverviewError ? <p className="mu-notice mu-notice--danger">{businessOverviewError}</p> : null}
@@ -15720,7 +15721,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                   </div>
                                 </div>
                                 <label className="mu-field">
-                                  <span className="mu-label">What should Scout care about?</span>
+                                  <span className="mu-label">What should Scout care about?<ClientBrainOwnedTag isAdmin={isAdmin} /></span>
                                   <textarea className="mu-textarea" value={marketingBriefConfig.sourceFocus || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), sourceFocus: e.target.value }))} rows={4} />
                                 </label>
                               </section>
@@ -15882,11 +15883,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                     </select>
                                   </label>
                                   <label className="mu-field">
-                                    <span className="mu-label">KOLs / handles</span>
+                                    <span className="mu-label">KOLs / handles<ClientBrainOwnedTag isAdmin={isAdmin} /></span>
                                     <textarea className="mu-textarea" placeholder="@handle or name, one per line" value={marketingBriefConfig.kols || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), kols: e.target.value }))} rows={4} />
                                   </label>
                                   <label className="mu-field">
-                                    <span className="mu-label">Competitors</span>
+                                    <span className="mu-label">Competitors<ClientBrainOwnedTag isAdmin={isAdmin} /></span>
                                     <textarea className="mu-textarea" placeholder="Competitor names, one per line" value={marketingBriefConfig.competitors || ''} onChange={(e) => setMarketingBriefConfig((prev) => ({ ...(prev || {}), competitors: e.target.value }))} rows={4} />
                                   </label>
                                 </div>
@@ -15991,7 +15992,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                   >{marketingBriefConfig.includeClientBrain !== false ? 'ON' : 'OFF'}</button>
                                 </label>
                                 <label className="mu-field">
-                                  <span className="mu-label">Brief tone</span>
+                                  <span className="mu-label">Brief tone<ClientBrainOwnedTag isAdmin={isAdmin} /></span>
                                   <textarea
                                     id="mb-config-scribe-tone"
                                     className="mu-textarea"
@@ -16002,7 +16003,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                   />
                                 </label>
                                 <label className="mu-field">
-                                  <span className="mu-label">Hard constraints (one per line)</span>
+                                  <span className="mu-label">Hard constraints (one per line)<ClientBrainOwnedTag isAdmin={isAdmin} /></span>
                                   <textarea
                                     id="mb-config-scribe-hard-constraints"
                                     className="mu-textarea"

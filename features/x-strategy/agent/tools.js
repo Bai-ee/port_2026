@@ -56,6 +56,9 @@ export const PROPOSE_TOOL_BY_KIND = Object.freeze({
   'refresh-handles': 'propose_refresh_handles',
   'strategy-doc-edit': 'propose_strategy_doc_edit',
   'post-edit': 'propose_post_edit',
+  'post-approve': 'propose_post_approve',
+  'post-schedule': 'propose_post_schedule',
+  'post-unschedule': 'propose_post_unschedule',
 });
 export const KIND_BY_PROPOSE_TOOL = Object.freeze(
   Object.fromEntries(Object.entries(PROPOSE_TOOL_BY_KIND).map(([k, v]) => [v, k])),
@@ -234,6 +237,19 @@ export const PROPOSE_TOOLS = Object.freeze([
     postId: str('Post id from get_queue / get_post'),
     text: str('The complete new post text', { maxLength: LIMITS.postTextMax }),
     scheduledAt: str('New ISO time, in the future. Only for a post that is already scheduled.'),
+    expectedUpdatedAt: str('The post updatedAt from get_post'),
+  }, ['postId', 'expectedUpdatedAt']),
+  propose('post-approve', 'Propose APPROVING ONE draft post of this client (draft -> approved). Call get_post first and pass its updatedAt as expectedUpdatedAt. This only marks it approved; it does not schedule or publish.', {
+    postId: str('Post id from get_queue / get_post'),
+    expectedUpdatedAt: str('The post updatedAt from get_post'),
+  }, ['postId', 'expectedUpdatedAt']),
+  propose('post-schedule', 'Propose SCHEDULING ONE draft or approved post at a future time (approves it if still a draft). Call get_post first and pass its updatedAt as expectedUpdatedAt. The owner confirms on the card; the existing cron publishes at that time, chat never publishes. To move an already-scheduled post, use propose_post_edit.', {
+    postId: str('Post id from get_queue / get_post'),
+    scheduledAt: str('ISO time, in the future'),
+    expectedUpdatedAt: str('The post updatedAt from get_post'),
+  }, ['postId', 'scheduledAt', 'expectedUpdatedAt']),
+  propose('post-unschedule', 'Propose UNSCHEDULING ONE scheduled post (back to approved, no time, slot released). Call get_post first and pass its updatedAt as expectedUpdatedAt. It does not delete or publish anything.', {
+    postId: str('Post id from get_queue / get_post'),
     expectedUpdatedAt: str('The post updatedAt from get_post'),
   }, ['postId', 'expectedUpdatedAt']),
   propose('strategy-doc-edit', `Propose new text for ONE section of the owner's Strategy document. Send the WHOLE new section text (it replaces the section), keep the owner's own wording wherever it still holds, and change only what the conversation or the data supports. Call get_strategy_doc first and pass its version as expectedVersion. Sections: ${STRATEGY_DOC_SECTIONS.map((x) => `${x.key} (${x.hint})`).join('; ')}`, {
@@ -613,6 +629,29 @@ export async function prepareProposal(toolName, input, { toolDeps, userMessages 
           if (ms <= Date.now()) return fail('scheduledAt must be in the future');
           payload.scheduledAt = new Date(ms).toISOString();
         }
+        break;
+      }
+      case 'post-approve':
+      case 'post-schedule':
+      case 'post-unschedule': {
+        const postId = cleanText(input.postId, 160);
+        if (!postId) return fail('postId is required');
+        const expectedUpdatedAt = cleanText(input.expectedUpdatedAt, 60);
+        if (!expectedUpdatedAt) return fail('expectedUpdatedAt is required (the updatedAt from get_post)');
+        if (typeof toolDeps?.readPost !== 'function') return fail('post reading is not available');
+        const post = await toolDeps.readPost(postId);
+        if (!isPlain(post)) return fail(`unknown postId ${postId}; ids come from get_queue`);
+        if ((post.updatedAt || '') !== expectedUpdatedAt) return fail(`post changed (updatedAt is ${post.updatedAt || 'unset'}); call get_post and retry`);
+        payload = { postId, expectedUpdatedAt, currentText: String(post.content ?? post.text ?? '').slice(0, LIMITS.postTextMax * 2), currentStatus: post.status, ...(post.scheduledAt ? { currentScheduledAt: String(post.scheduledAt) } : {}) };
+        if (kind === 'post-approve' && post.status !== 'draft') return fail(`post is ${post.status}; only a draft can be approved`);
+        if (kind === 'post-schedule') {
+          if (!['draft', 'approved'].includes(post.status)) return fail(`post is ${post.status}; only a draft or approved post can be scheduled (use propose_post_edit to move a scheduled post)`);
+          const ms = Date.parse(String(input.scheduledAt));
+          if (Number.isNaN(ms)) return fail('scheduledAt must be an ISO time');
+          if (ms <= Date.now()) return fail('scheduledAt must be in the future');
+          payload.scheduledAt = new Date(ms).toISOString();
+        }
+        if (kind === 'post-unschedule' && post.status !== 'scheduled') return fail(`post is ${post.status}; only a scheduled post can be unscheduled`);
         break;
       }
       default: return fail(`unsupported kind: ${kind}`);
