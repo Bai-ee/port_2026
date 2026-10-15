@@ -6,7 +6,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.6);
+    background: color-mix(in srgb, var(--t-text-default) 60%, transparent);
     backdrop-filter: blur(8px);
   }
   #tier-modal-fullscreen {
@@ -24,7 +24,7 @@
     right: 16px;
     z-index: 10;
     background: none;
-    border: 1px solid rgba(42, 36, 32, 0.1);
+    border: 1px solid color-mix(in srgb, var(--t-text) 10%, transparent);
     border-radius: 4px;
     padding: 5px 10px;
     font-family: var(--font-mono);
@@ -60,7 +60,7 @@
     font-size: 0.82rem;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: rgba(42,36,32,0.44);
+    color: color-mix(in srgb, var(--t-text) 44%, transparent);
     font-weight: 700;
     font-family: "Space Mono", monospace;
   }
@@ -71,7 +71,7 @@
   }
   #tier-modal-title {
     margin: 0;
-    color: #2a2420;
+    color: var(--t-text);
     font-size: clamp(2rem, 8.5vw, 4.5rem);
     line-height: 1;
     letter-spacing: -0.04em;
@@ -80,7 +80,7 @@
   }
   #tier-modal-summary {
     margin: 0;
-    color: rgba(42,36,32,0.66);
+    color: color-mix(in srgb, var(--t-text) 66%, transparent);
     line-height: 1.6;
     font-family: "Space Grotesk", system-ui, sans-serif;
   }
@@ -93,9 +93,9 @@
   .tier-option-card {
     padding: 16px;
     border-radius: 1rem;
-    border: 1px solid rgba(212, 196, 171, 0.82);
-    background: rgba(255,255,255,0.52);
-    box-shadow: 0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4);
+    border: 1px solid var(--t-glass-border);
+    background: color-mix(in srgb, var(--t-surface) 52%, transparent);
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--t-surface) 65%, transparent), inset 0 1px 0 color-mix(in srgb, var(--t-surface) 40%, transparent);
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -109,7 +109,7 @@
   .tier-option-label {
     font-size: 1rem;
     font-weight: 700;
-    color: #2a2420;
+    color: var(--t-text);
     letter-spacing: -0.03em;
   }
   .tier-option-price {
@@ -117,22 +117,22 @@
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: rgba(42,36,32,0.56);
+    color: color-mix(in srgb, var(--t-text) 56%, transparent);
   }
   .tier-option-summary {
     margin: 0;
     font-size: 0.92rem;
     line-height: 1.55;
-    color: rgba(42,36,32,0.68);
+    color: color-mix(in srgb, var(--t-text) 68%, transparent);
   }
   #tier-modal-footer {
     font-family: "Space Mono", monospace;
     font-size: 0.65rem;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: rgba(42, 36, 32, 0.32);
+    color: color-mix(in srgb, var(--t-text) 32%, transparent);
     margin-top: 1rem;
-    border-top: 1px solid rgba(212, 196, 171, 0.4);
+    border-top: 1px solid color-mix(in srgb, var(--t-glass-border) 48.78%, transparent);
     padding-top: 0.75rem;
   }
   @media (max-width: 780px) {
@@ -147,7 +147,7 @@
   #client-edit-modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.72);
+    background: color-mix(in srgb, var(--t-text-default) 72%, transparent);
     z-index: 2000;
     display: flex;
     align-items: center;
@@ -157,7 +157,7 @@
   #delete-account-modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.45);
+    background: color-mix(in srgb, var(--t-text-default) 45%, transparent);
     backdrop-filter: blur(4px);
     z-index: 2000;
     display: flex;
@@ -275,12 +275,12 @@
     padding: clamp(1.25rem, 5vw, 2rem);
     border-radius: 1.1rem;
     box-sizing: border-box;
-    background: rgba(255, 252, 248, 0.94);
+    background: color-mix(in srgb, var(--t-raised) 94%, transparent);
     backdrop-filter: blur(28px);
-    border: 1px solid rgba(212, 196, 171, 0.82);
-    box-shadow: 0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4), 0px 5px 10px rgba(0, 0, 0, 0.1), 0px 15px 30px rgba(0, 0, 0, 0.1), 0px 20px 40px rgba(0, 0, 0, 0.15);
+    border: 1px solid var(--t-glass-border);
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--t-surface) 65%, transparent), inset 0 1px 0 color-mix(in srgb, var(--t-surface) 40%, transparent), 0px 5px 10px rgba(0, 0, 0, 0.1), 0px 15px 30px rgba(0, 0, 0, 0.1), 0px 20px 40px rgba(0, 0, 0, 0.15);
     font-family: var(--font-ui, "Space Grotesk", system-ui, sans-serif);
-    color: #2a2420;
+    color: var(--t-text);
   }
   #delete-account-brand-row {
     display: flex;
@@ -294,14 +294,14 @@
     height: 2.75rem;
     border-radius: 50%;
     object-fit: cover;
-    border: 2px solid rgba(255,255,255,0.35);
+    border: 2px solid color-mix(in srgb, var(--t-surface) 35%, transparent);
     display: block;
   }
   #delete-account-eyebrow {
     font-size: 0.82rem;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: rgba(42, 36, 32, 0.44);
+    color: color-mix(in srgb, var(--t-text) 44%, transparent);
     font-weight: 700;
     font-family: var(--font-mono, monospace);
   }
@@ -312,9 +312,9 @@
     align-items: center;
     justify-content: center;
     border-radius: 999px;
-    background: rgba(255,255,255,0.34);
-    border: 1px solid rgba(42, 36, 32, 0.12);
-    color: rgba(42, 36, 32, 0.58);
+    background: color-mix(in srgb, var(--t-surface) 34%, transparent);
+    border: 1px solid var(--t-border-subtle);
+    color: color-mix(in srgb, var(--t-text) 58%, transparent);
     font-size: 1.05rem;
     font-family: var(--font-mono, monospace);
     line-height: 1;
@@ -323,12 +323,12 @@
     flex-shrink: 0;
   }
   #delete-account-modal-close:hover {
-    background: rgba(255,255,255,1);
-    color: #2a2420;
+    background: var(--t-surface);
+    color: var(--t-text);
   }
   #delete-account-modal-headline {
     margin: 0 0 0.7rem;
-    color: #2a2420;
+    color: var(--t-text);
     font-size: clamp(1.4rem, 4.5vw, 2.4rem);
     line-height: 1.05;
     letter-spacing: -0.02em;
@@ -339,7 +339,7 @@
   }
   #delete-account-modal-copy {
     margin: 0 0 1.2rem;
-    color: rgba(42, 36, 32, 0.66);
+    color: color-mix(in srgb, var(--t-text) 66%, transparent);
     line-height: 1.6;
     font-family: var(--font-ui, "Space Grotesk", system-ui, sans-serif);
     text-align: center;
@@ -350,7 +350,7 @@
     font-size: 0.72rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: rgba(42, 36, 32, 0.55);
+    color: color-mix(in srgb, var(--t-text) 55%, transparent);
     font-family: var(--font-mono, monospace);
     margin-bottom: 0.4rem;
   }
@@ -360,15 +360,15 @@
     box-sizing: border-box;
     padding: 0.9rem 1rem;
     border-radius: 0.95rem;
-    border: 1px solid rgba(42, 36, 32, 0.12);
-    background: rgba(255,255,255,0.72);
-    color: #2a2420;
+    border: 1px solid var(--t-border-subtle);
+    background: color-mix(in srgb, var(--t-surface) 72%, transparent);
+    color: var(--t-text);
     font-family: var(--font-ui, "Space Grotesk", system-ui, sans-serif);
     font-size: 1rem;
     outline: none;
     transition: border-color 0.2s ease;
   }
-  #delete-account-confirm-input:focus { border-color: rgba(42, 36, 32, 0.35); }
+  #delete-account-confirm-input:focus { border-color: color-mix(in srgb, var(--t-text) 35%, transparent); }
   #delete-account-modal-error {
     margin: 0.6rem 0 0;
     color: #8b1e1e;
@@ -391,8 +391,8 @@
     width: 100%;
     border: none;
     border-radius: 999px;
-    background: linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
-    color: #fff;
+    background: linear-gradient(135deg, var(--t-accent-bright) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%);
+    color: var(--t-on-solid);
     font-weight: 700;
     font-size: 0.95rem;
     cursor: pointer;
@@ -415,9 +415,9 @@
     min-height: 3rem;
     width: 100%;
     border-radius: 999px;
-    border: 1px solid rgba(42, 36, 32, 0.18);
-    background: rgba(255,255,255,0.92);
-    color: #3c3c3c;
+    border: 1px solid color-mix(in srgb, var(--t-text) 18%, transparent);
+    background: color-mix(in srgb, var(--t-surface) 92%, transparent);
+    color: color-mix(in srgb, var(--t-text-strong) 79.6%, var(--t-surface));
     font-weight: 500;
     font-size: 0.9rem;
     cursor: pointer;
@@ -428,7 +428,7 @@
     transition: background 0.28s ease, box-shadow 0.28s ease, transform 0.28s ease;
   }
   #delete-account-modal-cancel:hover {
-    background: rgba(255,255,255,1);
+    background: var(--t-surface);
     box-shadow: 0px 5px 10px rgba(0,0,0,0.05), 0px 15px 30px rgba(0,0,0,0.05), 0px 20px 40px rgba(0,0,0,0.08);
     transform: scale(1.012);
   }

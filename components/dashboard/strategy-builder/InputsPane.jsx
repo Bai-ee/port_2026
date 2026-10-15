@@ -453,9 +453,9 @@ function SourceChip({ active, text }) {
     <span
       className="sb-chip"
       style={{
-        borderColor: active ? 'rgba(74,222,128,0.55)' : 'rgba(245,158,11,0.45)',
+        borderColor: active ? 'color-mix(in srgb, var(--t-success-solid) 55%, transparent)' : 'color-mix(in srgb, var(--t-warning-solid) 45%, transparent)',
         color: active ? '#86efac' : '#fbbf24',
-        background: active ? 'rgba(74,222,128,0.08)' : 'rgba(245,158,11,0.08)',
+        background: active ? 'var(--t-success-bg)' : 'var(--t-warning-bg)',
       }}
     >
       {text || (active ? 'JSON' : 'Manual')}
@@ -792,7 +792,7 @@ export default function InputsPane({ bootstrap, config, onConfigChange, onGenera
           </div>
         )}
 
-        <div id="strategy-builder-json-hydrated-controls" className="sb-section" style={{ background: 'rgba(74,222,128,0.045)', borderColor: 'rgba(74,222,128,0.22)' }}>
+        <div id="strategy-builder-json-hydrated-controls" className="sb-section" style={{ background: 'var(--t-success-bg)', borderColor: 'var(--t-success-border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
             <span className="sb-label">JSON-Hydrated Controls</span>
             <SourceChip active={activeHydration.fullConfig} text={activeHydration.fullConfig ? 'Full config' : 'Incomplete'} />

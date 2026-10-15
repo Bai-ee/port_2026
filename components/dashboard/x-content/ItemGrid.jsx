@@ -25,8 +25,8 @@ export function storyMissing(item) {
 
 // Status dots — one color per state, explained in the grid legend and on hover.
 const STATUS_DOT = {
-  idea: { color: '#a8a29e', label: 'Idea' },
-  drafted: { color: '#2563eb', label: 'Drafted' },
+  idea: { color: 'var(--t-text-muted)', label: 'Idea' },
+  drafted: { color: 'var(--t-info)', label: 'Drafted' },
   scheduled: { color: '#d97706', label: 'Scheduled' },
   posted: { color: '#16a34a', label: 'Posted' },
 };
@@ -223,7 +223,7 @@ export default function ItemGrid({ items, bucketById, selectedItemId, onOpen, ca
       </ul>
       {items.length > GRID_PAGE ? (
         <div id="x-content-item-grid-footer-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 10 }}>
-          <span id="x-content-item-grid-showing" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'rgba(31,29,27,0.5)' }}>
+          <span id="x-content-item-grid-showing" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'color-mix(in srgb, var(--t-text) 50%, transparent)' }}>
             Showing {shown.length.toLocaleString()} of {items.length.toLocaleString()}
           </span>
           {shown.length < items.length ? (

@@ -41,10 +41,10 @@ const Header = ({ logoRef, onOpenPage, logoSrc = '/img/sig.png', actions = null 
       <header
         id="founders-top-strip"
         style={{
-          background: 'rgba(245, 241, 223, 0.55)',
+          background: 'var(--t-chrome)',
           backdropFilter: 'blur(24px)',
           WebkitBackdropFilter: 'blur(24px)',
-          boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.45), inset 0 -1px 0 rgba(42,36,32,0.08)',
+          boxShadow: 'inset 0 0 0 1px var(--t-glass-highlight), inset 0 -1px 0 var(--t-border-faint)',
         }}
       >
         <div id="founders-top-strip-inner">
@@ -52,7 +52,7 @@ const Header = ({ logoRef, onOpenPage, logoSrc = '/img/sig.png', actions = null 
           <div ref={logoRef} aria-hidden="true" style={{ width: 0, height: 0, pointerEvents: 'none', position: 'absolute' }} />
 
           <a href="/" id="founders-brand" aria-label="Back to homepage">
-            <Image src={logoSrc} alt={isSignatureLogo ? 'Bryan Balli signature' : 'Bryan Balli logo'} width={isSignatureLogo ? 276 : 663} height={isSignatureLogo ? 208 : 552} priority style={{ mixBlendMode: 'darken' }} />
+            <Image src={logoSrc} alt={isSignatureLogo ? 'Bryan Balli signature' : 'Bryan Balli logo'} width={isSignatureLogo ? 276 : 663} height={isSignatureLogo ? 208 : 552} priority id="founders-brand-logo-image" style={{ mixBlendMode: 'var(--t-logo-blend)', filter: isSignatureLogo ? 'var(--t-logo-filter)' : undefined }} />
           </a>
 
           <div id="founders-top-actions">

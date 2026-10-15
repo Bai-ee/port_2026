@@ -259,8 +259,8 @@ export default function VisualDnaModal({ open, prospect, getIdToken, onClose }) 
         }
         #visual-dna-shell {
           width: min(1080px, 96vw); max-height: 88vh; overflow: hidden;
-          background: #f7f4ef; color: #211d1a;
-          border: 1px solid rgba(42, 36, 32, 0.16);
+          background: var(--t-inset); color: var(--t-text);
+          border: 1px solid color-mix(in srgb, var(--t-text) 16%, transparent);
           border-radius: 8px;
           box-shadow: 0 24px 80px rgba(0,0,0,0.34);
           display: flex; flex-direction: column;
@@ -268,19 +268,19 @@ export default function VisualDnaModal({ open, prospect, getIdToken, onClose }) 
         #visual-dna-header {
           display: flex; align-items: center; justify-content: space-between;
           gap: 16px; padding: 18px 20px;
-          border-bottom: 1px solid rgba(42, 36, 32, 0.1);
+          border-bottom: 1px solid color-mix(in srgb, var(--t-text) 10%, transparent);
         }
         #visual-dna-title-wrap { display: flex; align-items: center; gap: 12px; min-width: 0; }
         #visual-dna-icon {
           width: 38px; height: 38px; border-radius: 8px;
           display: inline-flex; align-items: center; justify-content: center;
-          color: #f7f4ef; background: #24211e;
+          color: var(--t-text-inverse); background: var(--t-text);
         }
         #visual-dna-title { margin: 0; font-size: 18px; line-height: 1.1; letter-spacing: 0; }
-        #visual-dna-subtitle { margin: 4px 0 0; font-size: 12px; color: rgba(33,29,26,0.66); }
+        #visual-dna-subtitle { margin: 4px 0 0; font-size: 12px; color: color-mix(in srgb, var(--t-text) 66%, transparent); }
         #visual-dna-close {
-          width: 34px; height: 34px; border-radius: 7px; border: 1px solid rgba(42,36,32,0.12);
-          background: rgba(255,255,255,0.45); color: inherit; cursor: pointer;
+          width: 34px; height: 34px; border-radius: 7px; border: 1px solid var(--t-border-subtle);
+          background: color-mix(in srgb, var(--t-surface) 45%, transparent); color: inherit; cursor: pointer;
           display: inline-flex; align-items: center; justify-content: center;
         }
         #visual-dna-body {
@@ -290,24 +290,24 @@ export default function VisualDnaModal({ open, prospect, getIdToken, onClose }) 
         #visual-dna-builder, #visual-dna-profiles {
           padding: 18px 20px; overflow-y: auto; min-height: 0;
         }
-        #visual-dna-builder { border-right: 1px solid rgba(42,36,32,0.1); }
+        #visual-dna-builder { border-right: 1px solid color-mix(in srgb, var(--t-text) 10%, transparent); }
         .visual-dna-section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin: 4px 0 10px; }
         .visual-dna-section-head span { font-size: 12px; font-weight: 800; text-transform: uppercase; }
-        .visual-dna-section-head small { font-size: 11px; color: rgba(33,29,26,0.58); text-align: right; }
+        .visual-dna-section-head small { font-size: 11px; color: color-mix(in srgb, var(--t-text) 58%, transparent); text-align: right; }
         #visual-dna-domain-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 18px; }
         .visual-dna-domain {
-          text-align: left; border: 1px solid rgba(42,36,32,0.12); border-radius: 7px;
-          background: rgba(255,255,255,0.48); padding: 10px; cursor: pointer;
+          text-align: left; border: 1px solid var(--t-border-subtle); border-radius: 7px;
+          background: color-mix(in srgb, var(--t-surface) 48%, transparent); padding: 10px; cursor: pointer;
           display: flex; flex-direction: column; gap: 3px; min-height: 62px;
         }
-        .visual-dna-domain--active { border-color: #24211e; background: #fff; }
+        .visual-dna-domain--active { border-color: var(--t-text); background: var(--t-surface); }
         .visual-dna-domain span { font-weight: 800; font-size: 13px; }
-        .visual-dna-domain small { color: rgba(33,29,26,0.6); font-size: 11px; line-height: 1.25; }
+        .visual-dna-domain small { color: color-mix(in srgb, var(--t-text) 60%, transparent); font-size: 11px; line-height: 1.25; }
         .visual-dna-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
-        .visual-dna-field span { font-size: 11px; font-weight: 800; text-transform: uppercase; color: rgba(33,29,26,0.68); }
+        .visual-dna-field span { font-size: 11px; font-weight: 800; text-transform: uppercase; color: color-mix(in srgb, var(--t-text) 68%, transparent); }
         .visual-dna-field input, .visual-dna-field textarea {
-          width: 100%; border: 1px solid rgba(42,36,32,0.14); border-radius: 7px;
-          background: rgba(255,255,255,0.72); color: #211d1a; padding: 10px 11px;
+          width: 100%; border: 1px solid color-mix(in srgb, var(--t-text) 14%, transparent); border-radius: 7px;
+          background: color-mix(in srgb, var(--t-surface) 72%, transparent); color: var(--t-text); padding: 10px 11px;
           font: inherit; font-size: 13px; outline: none; resize: vertical;
         }
         #visual-dna-upload-row { display: flex; align-items: center; gap: 10px; margin: 14px 0; }
@@ -315,35 +315,35 @@ export default function VisualDnaModal({ open, prospect, getIdToken, onClose }) 
           border: 0; border-radius: 7px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
           min-height: 34px; padding: 0 12px; font-weight: 800; font-size: 12px;
         }
-        .visual-dna-secondary { background: #e6ded3; color: #211d1a; }
-        #visual-dna-submit { width: 100%; background: #24211e; color: #f7f4ef; min-height: 40px; }
-        #visual-dna-file-count { font-size: 12px; color: rgba(33,29,26,0.64); }
-        #visual-dna-error { margin: 0 0 12px; color: #b42318; font-size: 12px; }
+        .visual-dna-secondary { background: var(--t-border-subtle); color: var(--t-text); }
+        #visual-dna-submit { width: 100%; background: var(--t-text); color: var(--t-text-inverse); min-height: 40px; }
+        #visual-dna-file-count { font-size: 12px; color: color-mix(in srgb, var(--t-text) 64%, transparent); }
+        #visual-dna-error { margin: 0 0 12px; color: var(--t-danger); font-size: 12px; }
         #visual-dna-profile-list { display: flex; flex-direction: column; gap: 12px; }
         .visual-dna-profile {
-          border: 1px solid rgba(42,36,32,0.12); border-radius: 8px;
-          background: rgba(255,255,255,0.56); padding: 12px;
+          border: 1px solid var(--t-border-subtle); border-radius: 8px;
+          background: color-mix(in srgb, var(--t-surface) 56%, transparent); padding: 12px;
         }
         .visual-dna-profile-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 10px; }
         .visual-dna-profile h3 { margin: 0; font-size: 15px; line-height: 1.2; }
-        .visual-dna-profile span { display: block; margin-top: 2px; font-size: 11px; color: rgba(33,29,26,0.58); }
-        .visual-dna-profile strong { font-size: 10px; text-transform: uppercase; border: 1px solid rgba(42,36,32,0.12); border-radius: 999px; padding: 3px 7px; }
+        .visual-dna-profile span { display: block; margin-top: 2px; font-size: 11px; color: color-mix(in srgb, var(--t-text) 58%, transparent); }
+        .visual-dna-profile strong { font-size: 10px; text-transform: uppercase; border: 1px solid var(--t-border-subtle); border-radius: 999px; padding: 3px 7px; }
         .visual-dna-thumbs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-bottom: 10px; }
         .visual-dna-thumbs img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 5px; }
-        .visual-dna-profile p { margin: 0 0 10px; font-size: 12px; line-height: 1.45; color: rgba(33,29,26,0.76); }
+        .visual-dna-profile p { margin: 0 0 10px; font-size: 12px; line-height: 1.45; color: color-mix(in srgb, var(--t-text) 76%, transparent); }
         .visual-dna-profile pre {
           margin: 0; white-space: pre-wrap; font-size: 11px; line-height: 1.45;
-          background: rgba(36,33,30,0.07); border-radius: 6px; padding: 10px;
+          background: color-mix(in srgb, var(--t-text) 7%, transparent); border-radius: 6px; padding: 10px;
         }
         #visual-dna-empty {
-          border: 1px dashed rgba(42,36,32,0.18); border-radius: 8px; padding: 18px;
-          color: rgba(33,29,26,0.62); font-size: 13px; line-height: 1.45;
+          border: 1px dashed color-mix(in srgb, var(--t-text) 18%, transparent); border-radius: 8px; padding: 18px;
+          color: color-mix(in srgb, var(--t-text) 62%, transparent); font-size: 13px; line-height: 1.45;
         }
         @media (max-width: 820px) {
           #visual-dna-overlay { padding: 10px; }
           #visual-dna-shell { max-height: 94vh; }
           #visual-dna-body { grid-template-columns: 1fr; overflow-y: auto; }
-          #visual-dna-builder { border-right: 0; border-bottom: 1px solid rgba(42,36,32,0.1); }
+          #visual-dna-builder { border-right: 0; border-bottom: 1px solid color-mix(in srgb, var(--t-text) 10%, transparent); }
           #visual-dna-builder, #visual-dna-profiles { overflow: visible; }
         }
       `}</style>

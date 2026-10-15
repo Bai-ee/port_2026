@@ -1,4 +1,12 @@
 import * as THREE from 'three';
+import { sceneBridge } from './lib/theme-scene/scene-bridge.js';
+
+// The gallery windows (home slides, 404) keep their per-preset hues; the active theme only rotates
+// them by the scene's hue shift (turns). Baseline shift is 0, so default output is unchanged.
+const readSceneHueShift = () => {
+  const shift = sceneBridge.get('current').hueShift;
+  return Number.isFinite(shift) ? shift : 0;
+};
 
 const DEFAULT_PARAMS = {
   scale: 24,
@@ -387,13 +395,13 @@ export const createSharedParticleGalleryRenderer = ({
     renderer.setSize(displayWidth, displayHeight, false);
   };
 
-  const updateSystem = (system, elapsed) => {
+  const updateSystem = (system, elapsed, sceneHueShift) => {
     const drift = elapsed * baseParams.animationSpeed;
 
     for (let index = 0; index < system.count; index += 1) {
       const target = getTargetPosition(system, index, drift);
       const hue =
-        (system.hueOffset + index / system.count * system.hueRange + elapsed * baseParams.hueSpeed) % 1;
+        (system.hueOffset + sceneHueShift + index / system.count * system.hueRange + elapsed * baseParams.hueSpeed) % 1;
 
       system.color.setHSL(hue, system.saturation, system.lightness);
       system.positions[index].lerp(target, 0.08);
@@ -458,6 +466,7 @@ export const createSharedParticleGalleryRenderer = ({
     }
 
     const containerRect = container.getBoundingClientRect();
+    const sceneHueShift = readSceneHueShift();
 
     systems.forEach((system, index) => {
       const windowElement = windows[index];
@@ -472,7 +481,7 @@ export const createSharedParticleGalleryRenderer = ({
         return;
       }
 
-      updateSystem(system, elapsed + index * 0.17);
+      updateSystem(system, elapsed + index * 0.17, sceneHueShift);
       renderWindow(system, bounds);
     });
   };

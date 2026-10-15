@@ -46,9 +46,9 @@
     flex-direction: column;
     gap: 10px;
     padding: 14px;
-    border: 1px solid rgba(42,36,32,0.12);
+    border: 1px solid var(--t-border-subtle);
     border-radius: 12px;
-    background: #fffdf7;
+    background: var(--t-raised);
   }
   .mu-query-head {
     display: flex;
@@ -60,7 +60,7 @@
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.08em;
-    color: rgba(42,36,32,0.5);
+    color: color-mix(in srgb, var(--t-text) 50%, transparent);
   }
   /* Active-mode badge + activate button (Generated vs Custom) */
   .mu-active-badge {
@@ -82,13 +82,13 @@
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: #fff;
+    color: var(--t-on-solid);
     cursor: pointer;
     border: none;
     border-radius: 7px;
     padding: 6px 14px;
     white-space: nowrap;
-    background: linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+    background: linear-gradient(135deg, var(--t-accent-bright) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%);
     transition: filter 0.15s ease;
   }
   .mu-activate-btn:hover { filter: brightness(1.06); }
@@ -99,36 +99,36 @@
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: rgba(42,36,32,0.62);
+    color: color-mix(in srgb, var(--t-text) 62%, transparent);
   }
   .mu-field-hint {
     font-family: var(--font-mono);
     font-size: 10px;
     letter-spacing: 0.03em;
     line-height: 1.5;
-    color: rgba(42,36,32,0.45);
+    color: color-mix(in srgb, var(--t-text) 45%, transparent);
   }
   .mu-input,
   .mu-select {
     width: 100%;
     min-height: 52px;
-    border: 1px solid rgba(42,36,32,0.12);
+    border: 1px solid var(--t-border-subtle);
     border-radius: 8px;
-    background: rgba(255,255,255,0.96);
-    color: #2a2420;
+    background: color-mix(in srgb, var(--t-surface) 96%, transparent);
+    color: var(--t-text);
     padding: 10px 14px;
     font-family: var(--font-mono);
     font-size: 14px;
     line-height: 1.45;
     outline: none;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.55);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--t-surface) 55%, transparent);
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
     box-sizing: border-box;
   }
   .mu-input:focus,
   .mu-select:focus {
-    border-color: rgba(42,36,32,0.36);
-    box-shadow: 0 0 0 3px rgba(42,36,32,0.08), inset 0 1px 0 rgba(255,255,255,0.65);
+    border-color: color-mix(in srgb, var(--t-text) 36%, transparent);
+    box-shadow: 0 0 0 3px rgba(42,36,32,0.08), inset 0 1px 0 color-mix(in srgb, var(--t-surface) 65%, transparent);
   }
   /* Mockup Studio modal — pill dropdowns to match the Studio rail controls. */
   #mu-studio-settings .mu-input,
@@ -137,16 +137,16 @@
     width: 100%;
     min-height: 120px;
     resize: vertical;
-    border: 1px solid rgba(42,36,32,0.12);
+    border: 1px solid var(--t-border-subtle);
     border-radius: 8px;
-    background: rgba(255,255,255,0.96);
-    color: #2a2420;
+    background: color-mix(in srgb, var(--t-surface) 96%, transparent);
+    color: var(--t-text);
     padding: 10px 14px;
     font-family: var(--font-mono);
     font-size: 14px;
     line-height: 1.5;
     outline: none;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.55);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--t-surface) 55%, transparent);
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
     box-sizing: border-box;
   }
@@ -158,18 +158,18 @@
     line-height: 1.6;
   }
   .mu-textarea:focus {
-    border-color: rgba(42,36,32,0.36);
-    box-shadow: 0 0 0 3px rgba(42,36,32,0.08), inset 0 1px 0 rgba(255,255,255,0.65);
+    border-color: color-mix(in srgb, var(--t-text) 36%, transparent);
+    box-shadow: 0 0 0 3px rgba(42,36,32,0.08), inset 0 1px 0 color-mix(in srgb, var(--t-surface) 65%, transparent);
   }
   .mu-checkbox-row {
     display: flex;
     align-items: center;
     gap: 10px;
     padding: 8px 12px;
-    border: 1px solid rgba(42,36,32,0.12);
+    border: 1px solid var(--t-border-subtle);
     border-radius: 8px;
-    background: rgba(255,255,255,0.72);
-    color: #2a2420;
+    background: color-mix(in srgb, var(--t-surface) 72%, transparent);
+    color: var(--t-text);
     font-family: var(--font-ui);
     font-size: 14px;
     font-weight: 600;
@@ -179,7 +179,7 @@
     width: 16px;
     min-width: 16px;
     height: 16px;
-    accent-color: #2a2420;
+    accent-color: var(--t-text);
     cursor: pointer;
     min-height: unset;
     border: none;
@@ -196,9 +196,9 @@
     gap: 6px;
     min-height: 108px;
     padding: 16px;
-    border: 1px dashed rgba(42,36,32,0.22);
+    border: 1px dashed var(--t-control-border);
     border-radius: 8px;
-    background: rgba(255,255,255,0.62);
+    background: var(--t-glass);
     text-align: center;
     cursor: pointer;
     position: relative;
@@ -211,13 +211,13 @@
     height: 1px;
   }
   .mu-file-drop strong {
-    color: #2a2420;
+    color: var(--t-text);
     font-family: var(--font-ui);
     font-size: 14px;
     font-weight: 700;
   }
   .mu-file-drop span {
-    color: rgba(42,36,32,0.52);
+    color: var(--t-text-muted);
     font-family: var(--font-mono);
     font-size: 11px;
     line-height: 1.4;
@@ -227,10 +227,10 @@
     flex-direction: column;
     gap: 12px;
     padding: 16px;
-    border: 1px solid rgba(42,36,32,0.12);
+    border: 1px solid var(--t-border-subtle);
     border-radius: 8px;
-    background: rgba(255,255,255,0.78);
-    box-shadow: 0 1px 0 rgba(255,255,255,0.72), inset 0 1px 0 rgba(255,255,255,0.35);
+    background: var(--t-glass-strong);
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--t-surface) 72%, transparent), inset 0 1px 0 color-mix(in srgb, var(--t-surface) 35%, transparent);
   }
   .mu-section-head {
     display: grid;
@@ -244,14 +244,14 @@
     font-size: 16px;
     font-weight: 700;
     line-height: 1.25;
-    color: #2a2420;
+    color: var(--t-text);
   }
   .mu-section-head p {
     margin: 5px 0 0;
     font-family: var(--font-ui);
     font-size: 13px;
     line-height: 1.55;
-    color: rgba(42,36,32,0.72);
+    color: var(--t-text-secondary);
   }
   .mu-index {
     display: inline-flex;
@@ -259,12 +259,12 @@
     justify-content: center;
     width: 32px;
     height: 26px;
-    border: 1px solid rgba(42,36,32,0.12);
+    border: 1px solid var(--t-border-subtle);
     border-radius: 6px;
-    background: rgba(255,255,255,0.5);
+    background: var(--t-glass-soft);
     font-family: var(--font-mono);
     font-size: 11px;
-    color: rgba(42,36,32,0.52);
+    color: var(--t-text-muted);
     flex-shrink: 0;
   }
   .mu-chip {
@@ -272,31 +272,31 @@
     align-items: center;
     min-height: 28px;
     padding: 3px 10px;
-    border: 1px solid rgba(42,36,32,0.12);
+    border: 1px solid var(--t-border-subtle);
     border-radius: 999px;
-    background: rgba(255,255,255,0.5);
+    background: var(--t-glass-soft);
     font-family: var(--font-mono);
     font-size: 10px;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: rgba(42,36,32,0.62);
+    color: color-mix(in srgb, var(--t-text) 62%, transparent);
     white-space: nowrap;
     flex-shrink: 0;
   }
   .mu-chip--success {
-    color: #285f3b;
-    border-color: rgba(40,95,59,0.3);
-    background: rgba(40,95,59,0.08);
+    color: var(--t-success);
+    border-color: color-mix(in srgb, var(--t-success) 30%, transparent);
+    background: color-mix(in srgb, var(--t-success) 8%, transparent);
   }
   .mu-chip--warning {
-    color: #67533d;
-    border-color: rgba(103,83,61,0.24);
+    color: var(--t-warning);
+    border-color: color-mix(in srgb, var(--t-warning) 24%, transparent);
     background: rgba(185,167,141,0.14);
   }
   .mu-chip--danger {
-    color: #9f1f17;
-    border-color: rgba(159,31,23,0.24);
-    background: rgba(159,31,23,0.06);
+    color: var(--t-danger);
+    border-color: color-mix(in srgb, var(--t-danger) 24%, transparent);
+    background: color-mix(in srgb, var(--t-danger) 6%, transparent);
   }
   .mu-chip-row {
     display: flex;
@@ -306,24 +306,24 @@
   }
   .mu-notice {
     margin: 0;
-    border: 1px solid rgba(42,36,32,0.12);
+    border: 1px solid var(--t-border-subtle);
     border-radius: 8px;
     padding: 8px 12px;
     font-family: var(--font-ui);
     font-size: 13px;
     line-height: 1.45;
-    color: rgba(42,36,32,0.72);
-    background: rgba(255,255,255,0.72);
+    color: var(--t-text-secondary);
+    background: color-mix(in srgb, var(--t-surface) 72%, transparent);
   }
   .mu-notice--success {
-    border-color: rgba(40,95,59,0.22);
-    background: rgba(40,95,59,0.06);
-    color: #285f3b;
+    border-color: color-mix(in srgb, var(--t-success) 22%, transparent);
+    background: color-mix(in srgb, var(--t-success) 6%, transparent);
+    color: var(--t-success);
   }
   .mu-notice--danger {
-    border-color: rgba(159,31,23,0.22);
-    background: rgba(159,31,23,0.05);
-    color: #9f1f17;
+    border-color: color-mix(in srgb, var(--t-danger) 22%, transparent);
+    background: color-mix(in srgb, var(--t-danger) 5%, transparent);
+    color: var(--t-danger);
   }
   .mu-btn-outline {
     display: inline-flex;
@@ -332,10 +332,10 @@
     gap: 5px;
     min-height: 36px;
     padding: 0 16px;
-    border: 1.5px solid #111;
+    border: 1.5px solid color-mix(in srgb, var(--t-text-strong) 97.1%, var(--t-surface));
     border-radius: 7px;
-    background: #fff;
-    color: #111;
+    background: var(--t-surface);
+    color: color-mix(in srgb, var(--t-text-strong) 97.1%, var(--t-surface));
     font-family: var(--font-mono);
     font-size: 12px;
     font-weight: 700;
@@ -346,14 +346,14 @@
     white-space: nowrap;
     transition: background 0.15s ease;
   }
-  .mu-btn-outline:hover { background: #f7f7f7; }
+  .mu-btn-outline:hover { background: var(--t-inset); }
   .mu-btn-outline:disabled { opacity: 0.45; cursor: not-allowed; }
-  .mu-btn-outline--danger { color: #9f1f17; border-color: rgba(159,31,23,0.5); }
-  .mu-btn-outline--danger:hover { background: rgba(159,31,23,0.04); }
-  .mu-btn-outline--accent { border-color: rgba(0,173,181,0.45); color: rgba(0,150,158,1); }
-  .mu-btn-outline--accent:hover { background: rgba(0,173,181,0.04); }
-  .mu-btn-outline--active { background: #111; color: #fff; border-color: #111; }
-  .mu-btn-outline--active:hover { background: #222; }
+  .mu-btn-outline--danger { color: var(--t-danger); border-color: color-mix(in srgb, var(--t-danger) 50%, transparent); }
+  .mu-btn-outline--danger:hover { background: color-mix(in srgb, var(--t-danger) 4%, transparent); }
+  .mu-btn-outline--accent { border-color: color-mix(in srgb, var(--t-accent) 45%, transparent); color: rgba(0,150,158,1); }
+  .mu-btn-outline--accent:hover { background: color-mix(in srgb, var(--t-accent) 4%, transparent); }
+  .mu-btn-outline--active { background: color-mix(in srgb, var(--t-text-strong) 97.1%, var(--t-surface)); color: var(--t-surface); border-color: color-mix(in srgb, var(--t-text-strong) 97.1%, var(--t-surface)); }
+  .mu-btn-outline--active:hover { background: color-mix(in srgb, var(--t-text-strong) 90.2%, var(--t-surface)); }
   .mu-btn-update {
     position: relative;
     isolation: isolate;
@@ -366,14 +366,14 @@
     padding: 0 20px;
     border: none;
     border-radius: 999px;
-    background: #fff;
-    color: #2a2420;
+    background: var(--t-surface);
+    color: var(--t-text);
     font-family: var(--font-ui);
     font-size: 14px;
     font-weight: 700;
     cursor: pointer;
     white-space: nowrap;
-    box-shadow: 0 4px 14px rgba(42,36,32,0.1), inset 0 1px 0 rgba(255,255,255,0.86);
+    box-shadow: 0 4px 14px rgba(42,36,32,0.1), inset 0 1px 0 color-mix(in srgb, var(--t-surface) 86%, transparent);
     transition: box-shadow 0.15s ease;
   }
   .mu-btn-update::before {
@@ -385,13 +385,13 @@
     background: conic-gradient(
       from var(--cta-angle),
       transparent 0deg, transparent 180deg,
-      hsla(185,100%,58%,0.12) 200deg,
-      hsla(200,100%,62%,0.35) 225deg,
-      hsla(225,100%,64%,0.6) 250deg,
-      hsla(250,100%,66%,0.78) 275deg,
-      hsla(275,100%,66%,0.88) 300deg,
-      hsla(300,100%,68%,0.94) 322deg,
-      hsla(320,80%,80%,0.97) 338deg,
+      color-mix(in srgb, var(--t-comet-1) 12%, transparent) 200deg,
+      color-mix(in srgb, var(--t-comet-2) 35%, transparent) 225deg,
+      color-mix(in srgb, var(--t-comet-3) 60%, transparent) 250deg,
+      color-mix(in srgb, var(--t-comet-4) 78%, transparent) 275deg,
+      color-mix(in srgb, var(--t-comet-5) 88%, transparent) 300deg,
+      color-mix(in srgb, var(--t-comet-6) 94%, transparent) 322deg,
+      color-mix(in srgb, var(--t-comet-7) 97%, transparent) 338deg,
       rgba(255,255,255,1) 350deg,
       transparent 358deg
     );
@@ -417,14 +417,14 @@
     padding: 0 24px;
     border: none;
     border-radius: 999px;
-    color: #fff;
+    color: var(--t-on-solid);
     font-family: var(--font-ui);
     font-size: 15px;
     font-weight: 700;
     cursor: pointer;
     background:
-      linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%),
-      linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+      linear-gradient(175deg, rgba(255,255,255,0.18) 0%, transparent 52%),
+      linear-gradient(135deg, var(--t-accent-bright) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%);
     box-shadow:
       0 0 14px 3px rgba(0,200,228,0.22),
       0 2px 8px rgba(0,0,0,0.2),
@@ -441,13 +441,13 @@
     background: conic-gradient(
       from var(--cta-angle),
       transparent 0deg, transparent 180deg,
-      hsla(185,100%,58%,0.12) 200deg,
-      hsla(200,100%,62%,0.35) 225deg,
-      hsla(225,100%,64%,0.6) 250deg,
-      hsla(250,100%,66%,0.78) 275deg,
-      hsla(275,100%,66%,0.88) 300deg,
-      hsla(300,100%,68%,0.94) 322deg,
-      hsla(320,80%,80%,0.97) 338deg,
+      color-mix(in srgb, var(--t-comet-1) 12%, transparent) 200deg,
+      color-mix(in srgb, var(--t-comet-2) 35%, transparent) 225deg,
+      color-mix(in srgb, var(--t-comet-3) 60%, transparent) 250deg,
+      color-mix(in srgb, var(--t-comet-4) 78%, transparent) 275deg,
+      color-mix(in srgb, var(--t-comet-5) 88%, transparent) 300deg,
+      color-mix(in srgb, var(--t-comet-6) 94%, transparent) 322deg,
+      color-mix(in srgb, var(--t-comet-7) 97%, transparent) 338deg,
       rgba(255,255,255,1) 350deg,
       transparent 358deg
     );
@@ -464,13 +464,13 @@
     box-shadow:
       0 0 18px 5px rgba(0,200,228,0.28),
       0 4px 12px rgba(0,0,0,0.22),
-      inset 0 1px 0 rgba(255,255,255,0.35),
+      inset 0 1px 0 color-mix(in srgb, var(--t-surface) 35%, transparent),
       inset 0 -1px 0 rgba(0,0,0,0.12);
   }
   .mu-cta-primary:disabled {
-    background: rgba(255,255,255,0.38);
-    border: 1px solid rgba(42,36,32,0.12);
-    color: rgba(42,36,32,0.42);
+    background: color-mix(in srgb, var(--t-surface) 38%, transparent);
+    border: 1px solid var(--t-border-subtle);
+    color: color-mix(in srgb, var(--t-text) 42%, transparent);
     box-shadow: none;
     cursor: not-allowed;
   }
@@ -490,13 +490,13 @@
     justify-content: space-between;
     gap: 12px;
     padding: 14px 0 0;
-    background: linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.98) 28%);
+    background: linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--t-surface) 98%, transparent) 28%);
   }
   .mu-footer-note {
     font-family: var(--font-ui);
     font-size: 12px;
     line-height: 1.4;
-    color: rgba(42,36,32,0.52);
+    color: var(--t-text-muted);
   }
   .mu-cards-list {
     display: flex;
@@ -509,17 +509,17 @@
     justify-content: space-between;
     gap: 12px;
     padding-bottom: 12px;
-    border-bottom: 1px solid rgba(42,36,32,0.12);
+    border-bottom: 1px solid var(--t-border-subtle);
   }
   .mu-saved-card {
     display: flex;
     flex-direction: column;
     gap: 10px;
     padding: 14px 16px;
-    border: 1px solid rgba(42,36,32,0.12);
+    border: 1px solid var(--t-border-subtle);
     border-radius: 8px;
-    background: rgba(255,255,255,0.78);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.5);
+    background: var(--t-glass-strong);
+    box-shadow: inset 0 1px 0 var(--t-glass-soft);
   }
   .mu-saved-head {
     display: flex;
@@ -533,7 +533,7 @@
     font-size: 10px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: rgba(42,36,32,0.52);
+    color: var(--t-text-muted);
     margin-bottom: 4px;
   }
   .mu-saved-title {
@@ -542,14 +542,14 @@
     font-size: 15px;
     font-weight: 700;
     line-height: 1.3;
-    color: #2a2420;
+    color: var(--t-text);
   }
   .mu-saved-body {
     margin: 0;
     font-family: var(--font-ui);
     font-size: 13px;
     line-height: 1.5;
-    color: rgba(42,36,32,0.72);
+    color: var(--t-text-secondary);
   }
   .mu-card-actions {
     display: flex;
@@ -562,8 +562,8 @@
     width: 100%;
     margin: 0;
     padding: 14px 16px;
-    background: rgba(255,255,255,0.72);
-    border: 1px solid rgba(42,36,32,0.12);
+    background: color-mix(in srgb, var(--t-surface) 72%, transparent);
+    border: 1px solid var(--t-border-subtle);
     border-radius: 8px;
     font-family: var(--font-mono);
     font-size: 12px;
@@ -579,12 +579,12 @@
     align-items: center;
     justify-content: center;
     min-height: 160px;
-    border: 1px dashed rgba(42,36,32,0.16);
+    border: 1px dashed color-mix(in srgb, var(--t-text) 16%, transparent);
     border-radius: 8px;
-    background: rgba(255,255,255,0.36);
+    background: color-mix(in srgb, var(--t-surface) 36%, transparent);
     font-family: var(--font-ui);
     font-size: 14px;
-    color: rgba(42,36,32,0.52);
+    color: var(--t-text-muted);
     text-align: center;
     padding: 24px;
   }
@@ -604,7 +604,7 @@
     transition: background var(--dur-base) ease, transform var(--dur-spring) var(--ease-spring), box-shadow var(--dur-base) ease;
   }
   #founders-signout:hover {
-    background: rgba(255,255,255,0.72);
+    background: color-mix(in srgb, var(--t-surface) 72%, transparent);
     box-shadow: 0 4px 14px rgba(42,36,32,0.09);
     transform: translateY(-1px);
   }
@@ -616,8 +616,8 @@
     transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
   }
   #theme-toggle button:hover:not(.is-active) {
-    background: rgba(42,36,32,0.08);
-    color: rgba(42,36,32,0.72);
+    background: var(--t-border-faint);
+    color: var(--t-text-secondary);
   }
 
   /* List-view row hover — subtle bg tint on the whole row */
@@ -625,7 +625,7 @@
     transition: background var(--dur-base) ease;
   }
   .cap-list-row-main:hover {
-    background: rgba(42,36,32,0.028);
+    background: color-mix(in srgb, var(--t-text) 2.8%, transparent);
   }
 
   /* List-view run + caret buttons — add spring lift */
@@ -725,7 +725,7 @@
     cursor: pointer;
   }
   .tile-intake-table tbody tr:hover {
-    background: rgba(42,36,32,0.04);
+    background: color-mix(in srgb, var(--t-text) 4%, transparent);
   }
   .tile-intake-table td {
     transition: color var(--dur-fast) ease;
@@ -741,7 +741,7 @@
     border-radius: 4px;
   }
   .tile-detail-audit-row:not(.tile-detail-audit-row--header):hover {
-    background: rgba(42,36,32,0.03);
+    background: color-mix(in srgb, var(--t-text) 3%, transparent);
   }
 
   /* Stat rows in detail modal */
@@ -752,7 +752,7 @@
     padding-right: 4px;
   }
   .tile-detail-stat-row:hover {
-    background: rgba(42,36,32,0.03);
+    background: color-mix(in srgb, var(--t-text) 3%, transparent);
   }
 
   /* Audit upgrade button — add lift */
@@ -796,7 +796,7 @@
   }
   .custom-brief-file-drop:hover {
     border-color: var(--border-visible);
-    background: rgba(255,255,255,0.06);
+    background: color-mix(in srgb, var(--t-surface) 6%, transparent);
   }
 
   /* MB config platform toggle — add lift */
@@ -856,7 +856,7 @@
 
   /* Sub-tab hover — pill style, no gradient underline */
   .tile-detail-tabs--sub .tile-detail-tab:hover:not(.tile-detail-tab--active) {
-    background: rgba(255,255,255,0.55);
+    background: color-mix(in srgb, var(--t-surface) 55%, transparent);
   }
 
   /* Module card action button (Enable/Run/Re-run/Retry) */

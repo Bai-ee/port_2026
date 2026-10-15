@@ -157,8 +157,8 @@ export default function DashboardCreationFailedModal({ creationFailure, websiteU
         .dcf-btn:active { transform: scale(0.97); }
         /* Touch devices fire :hover on tap — gate it. */
         @media (hover: hover) and (pointer: fine) {
-          .dcf-btn--continue:hover { border-color: rgba(42, 36, 32, 0.42); }
-          .dcf-btn--delete:hover { color: #8b1e1e; border-color: rgba(139, 30, 30, 0.28); }
+          .dcf-btn--continue:hover { border-color: color-mix(in srgb, var(--t-text) 42%, transparent); }
+          .dcf-btn--delete:hover { color: var(--t-danger); border-color: var(--t-danger-border); }
         }
         @media (prefers-reduced-motion: reduce) {
           .dcf-btn { transition: border-color 160ms ease, color 160ms ease; }
@@ -274,7 +274,7 @@ const overlayStyle = {
   padding: '1rem',
   backdropFilter: 'blur(18px)',
   WebkitBackdropFilter: 'blur(18px)',
-  background: 'rgba(42, 36, 32, 0.18)',
+  background: 'color-mix(in srgb, var(--t-text) 18%, transparent)',
   fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
 };
 
@@ -282,10 +282,10 @@ const modalStyle = {
   width: 'min(480px, 100%)',
   maxHeight: 'min(88dvh, 720px)',
   overflowY: 'auto',
-  color: '#2a2420',
-  background: '#ffffff',
+  color: 'var(--t-text)',
+  background: 'var(--t-surface)',
   boxShadow: '0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4), 0px 5px 10px rgba(0,0,0,0.1), 0px 15px 30px rgba(0,0,0,0.1), 0px 20px 40px rgba(0,0,0,0.15)',
-  border: '1px solid #E4E4E4',
+  border: '1px solid var(--t-border-subtle)',
   borderRadius: '1.5rem',
   outline: 'none',
 };
@@ -302,7 +302,7 @@ const headerLogoStyle = {
   height: '2.75rem',
   borderRadius: '50%',
   objectFit: 'cover',
-  border: '2px solid rgba(255,255,255,0.35)',
+  border: '2px solid color-mix(in srgb, var(--t-surface) 35%, transparent)',
   display: 'block',
   flexShrink: 0,
 };
@@ -311,7 +311,7 @@ const headerLabelStyle = {
   fontSize: '0.82rem',
   letterSpacing: '0.14em',
   textTransform: 'uppercase',
-  color: 'rgba(42, 36, 32, 0.44)',
+  color: 'color-mix(in srgb, var(--t-text) 44%, transparent)',
   fontWeight: 700,
   fontFamily: '"Space Mono", monospace',
 };
@@ -332,7 +332,7 @@ const headingStyle = {
   lineHeight: 1.05,
   letterSpacing: '-0.02em',
   fontWeight: 700,
-  color: '#2a2420',
+  color: 'var(--t-text)',
   // Marquee viewport: edge fade matches the CONTACT marquee in InnerPageShell.
   overflow: 'hidden',
   maskImage: 'linear-gradient(to right, transparent 0%, black 5%, black 95%, transparent 100%)',
@@ -357,7 +357,7 @@ const headingMarqueeGroupStyle = {
 };
 
 const headingMarqueeDotStyle = {
-  color: 'rgba(42, 36, 32, 0.35)',
+  color: 'color-mix(in srgb, var(--t-text) 35%, transparent)',
 };
 
 // Now the modal's only line of body copy. Styling is unchanged from the old
@@ -367,7 +367,7 @@ const headingMarqueeDotStyle = {
 // everything from the paragraph), only the colour differs. Repo error ink
 // #8b1e1e, same as #delete-account-modal-error and the intake [ERROR: ...] lines.
 const errorLineStyle = {
-  color: '#8b1e1e',
+  color: 'var(--t-danger)',
 };
 
 const referenceStyle = {
@@ -375,16 +375,16 @@ const referenceStyle = {
   fontSize: '0.82rem',
   lineHeight: 1.6,
   fontFamily: '"Space Mono", monospace',
-  color: 'rgba(42, 36, 32, 0.5)',
+  color: 'color-mix(in srgb, var(--t-text) 50%, transparent)',
   textAlign: 'center',
 };
 
 const detailsStyle = {
   margin: '1.25rem 0 0',
   padding: '0.75rem 1rem',
-  border: '1px solid rgba(42, 36, 32, 0.12)',
+  border: '1px solid var(--t-border-subtle)',
   borderRadius: '0.75rem',
-  background: 'rgba(42, 36, 32, 0.03)',
+  background: 'color-mix(in srgb, var(--t-text) 3%, transparent)',
 };
 
 const detailsSummaryStyle = {
@@ -399,14 +399,14 @@ const reportTextStyle = {
   fontSize: '0.8rem',
   lineHeight: 1.6,
   fontFamily: '"Space Mono", monospace',
-  color: '#2a2420',
+  color: 'var(--t-text)',
   margin: '0.75rem 0',
 };
 
 const copyButtonStyle = {
-  border: '1px solid rgba(42, 36, 32, 0.15)',
-  background: '#ffffff',
-  color: '#2a2420',
+  border: '1px solid color-mix(in srgb, var(--t-text) 15%, transparent)',
+  background: 'var(--t-surface)',
+  color: 'var(--t-text)',
   borderRadius: '999px',
   padding: '0.5rem 1rem',
   fontSize: '0.8rem',
@@ -447,7 +447,7 @@ const primaryButtonStyle = {
   boxSizing: 'border-box',
   border: 'none',
   textDecoration: 'none',
-  background: 'linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)',
+  background: 'linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, var(--t-accent-bright) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%)',
   boxShadow: '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1)',
   color: '#ffffff',
   borderRadius: '999px',
@@ -468,9 +468,9 @@ const continueButtonStyle = {
   gap: '0.5rem',
   width: '100%',
   boxSizing: 'border-box',
-  border: '1px solid rgba(42, 36, 32, 0.22)',
-  background: '#ffffff',
-  color: '#2a2420',
+  border: '1px solid var(--t-control-border)',
+  background: 'var(--t-surface)',
+  color: 'var(--t-text)',
   borderRadius: '999px',
   padding: '0.72rem 1rem',
   fontSize: '0.8rem',
@@ -489,9 +489,9 @@ const secondaryButtonStyle = {
   gap: '0.5rem',
   width: '100%',
   boxSizing: 'border-box',
-  border: '1px solid rgba(42, 36, 32, 0.14)',
-  background: '#ffffff',
-  color: 'rgba(42, 36, 32, 0.55)',
+  border: '1px solid color-mix(in srgb, var(--t-text) 14%, transparent)',
+  background: 'var(--t-surface)',
+  color: 'color-mix(in srgb, var(--t-text) 55%, transparent)',
   borderRadius: '999px',
   padding: '0.72rem 1rem',
   fontSize: '0.8rem',

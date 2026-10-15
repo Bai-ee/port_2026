@@ -38,9 +38,9 @@ export default function SignalToggles({ signals, onChange, sourceHydrated = fals
         <span
           className="sb-chip"
           style={{
-            borderColor: sourceHydrated ? 'rgba(74,222,128,0.55)' : 'rgba(245,158,11,0.45)',
+            borderColor: sourceHydrated ? 'color-mix(in srgb, var(--t-success-solid) 55%, transparent)' : 'color-mix(in srgb, var(--t-warning-solid) 45%, transparent)',
             color: sourceHydrated ? '#86efac' : '#fbbf24',
-            background: sourceHydrated ? 'rgba(74,222,128,0.08)' : 'rgba(245,158,11,0.08)',
+            background: sourceHydrated ? 'var(--t-success-bg)' : 'var(--t-warning-bg)',
           }}
         >
           {sourceHydrated ? 'JSON' : 'Manual'}

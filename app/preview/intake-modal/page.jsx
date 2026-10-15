@@ -467,7 +467,7 @@ export default function IntakeModalPreviewPage() {
         }
       `}</style>
 
-      <InternalPageBackground />
+      <InternalPageBackground sceneMode="light" />
 
       <div id="preview-label">Preview — intake modal card</div>
 

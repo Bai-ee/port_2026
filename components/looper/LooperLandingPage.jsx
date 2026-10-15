@@ -396,6 +396,7 @@ export default function LooperLandingPage() {
   return (
     <div
       id="looper-page-shell"
+      data-theme-scope="light"
       style={shellStyle}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -613,6 +614,9 @@ const shellStyle = {
   height: '100dvh',
   overflow: 'hidden',
   boxSizing: 'border-box',
+  // Pinned light (theme exception X8): paint the light page so a dark root theme never shows through.
+  background: 'var(--t-page)',
+  color: 'var(--t-text-default)',
   fontFamily: '"Space Grotesk", system-ui, sans-serif',
 };
 

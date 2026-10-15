@@ -725,7 +725,7 @@ export default function BrandSystemChat({ getIdToken, onComplete, onLog, apiPath
               <img className="chat-avatar-sm" src="/img/profile2_400x400.png" alt="" aria-hidden="true" />
               <div className="chat-bubble chat-bubble-bot">
                 <span className="chat-eyebrow">ERROR</span>
-                <span className="chat-question" style={{ color: '#D71921', fontSize: '1rem' }}>Scan failed</span>
+                <span className="chat-question" style={{ color: 'var(--t-dash-accent)', fontSize: '1rem' }}>Scan failed</span>
                 <span className="chat-helper">{scanError}</span>
               </div>
             </div>
@@ -842,15 +842,15 @@ export default function BrandSystemChat({ getIdToken, onComplete, onLog, apiPath
                     <img
                       src={`data:${msg.mediaType};base64,${msg.b64}`}
                       alt={`Generated — ${msg.templateId}`}
-                      style={{ width: '100%', display: 'block', maxHeight: '280px', objectFit: 'contain', background: '#f5f3f0' }}
+                      style={{ width: '100%', display: 'block', maxHeight: '280px', objectFit: 'contain', background: 'var(--t-inset)' }}
                     />
-                    <div style={{ padding: '0.55rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.65rem', borderTop: '1px solid rgba(42,36,32,0.07)' }}>
+                    <div style={{ padding: '0.55rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.65rem', borderTop: '1px solid color-mix(in srgb, var(--t-text) 7%, transparent)' }}>
                       <a href={`data:${msg.mediaType};base64,${msg.b64}`}
                         download={`brand-${msg.templateId}-${msg.size}.png`}
                         className="chat-confirm-btn" style={{ textDecoration: 'none', fontSize: '0.75rem' }}>
                         Download ↓
                       </a>
-                      <span style={{ fontFamily: '"Space Mono", monospace', fontSize: '0.58rem', color: 'rgba(42,36,32,0.4)' }}>
+                      <span style={{ fontFamily: '"Space Mono", monospace', fontSize: '0.58rem', color: 'color-mix(in srgb, var(--t-text) 40%, transparent)' }}>
                         {msg.size} · {msg.templateId}
                       </span>
                     </div>
@@ -882,18 +882,18 @@ export default function BrandSystemChat({ getIdToken, onComplete, onLog, apiPath
         #bsc-shell {
           display: flex; flex-direction: column;
           width: 100%; min-height: 0; flex: 1 1 auto;
-          background: linear-gradient(180deg, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0.5) 100%);
+          background: linear-gradient(180deg, color-mix(in srgb, var(--t-surface) 60%, transparent) 0%, var(--t-glass-soft) 100%);
           box-shadow: 0 2px 8px rgba(0,0,0,0.08);
           backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-          border-radius: 10px; border: 1px solid rgba(42,36,32,0.1); overflow: hidden;
+          border-radius: 10px; border: 1px solid color-mix(in srgb, var(--t-text) 10%, transparent); overflow: hidden;
         }
 
         /* Header — mirrors #onboarding-chat-header */
         #bsc-header {
           display: flex; align-items: center; gap: 0.65rem;
           padding: 0.75rem 1rem;
-          border-bottom: 1px solid rgba(42,36,32,0.08);
-          background: rgba(255,255,255,0.7); flex-shrink: 0;
+          border-bottom: 1px solid var(--t-border-faint);
+          background: color-mix(in srgb, var(--t-surface) 70%, transparent); flex-shrink: 0;
         }
         #bsc-avatar-wrap { position: relative; flex-shrink: 0; }
         #bsc-avatar-img {
@@ -903,27 +903,27 @@ export default function BrandSystemChat({ getIdToken, onComplete, onLog, apiPath
         #bsc-online-dot {
           position: absolute; bottom: 1px; right: 1px;
           width: 0.55rem; height: 0.55rem; border-radius: 999px;
-          background: #4A9E5C; border: 2px solid rgba(255,252,248,0.92);
+          background: #4A9E5C; border: 2px solid color-mix(in srgb, var(--t-raised) 92%, transparent);
         }
         #bsc-identity { display: flex; flex-direction: column; gap: 0.15rem; flex: 1; min-width: 0; }
         #bsc-name {
           font-family: "Space Grotesk", system-ui, sans-serif;
-          font-weight: 700; font-size: 0.88rem; color: #2a2420; line-height: 1.2;
+          font-weight: 700; font-size: 0.88rem; color: var(--t-text); line-height: 1.2;
         }
         #bsc-step-count {
           font-family: "Space Mono", monospace; font-size: 0.68rem;
-          letter-spacing: 0.1em; color: rgba(42,36,32,0.44);
+          letter-spacing: 0.1em; color: color-mix(in srgb, var(--t-text) 44%, transparent);
           flex-shrink: 0; white-space: nowrap;
         }
 
         /* Progress rail — mirrors #onboarding-chat-progress-rail */
         #bsc-progress-rail {
-          height: 2px; background: rgba(42,36,32,0.08); flex-shrink: 0;
+          height: 2px; background: var(--t-border-faint); flex-shrink: 0;
           position: relative; overflow: hidden;
         }
         #bsc-progress-fill {
           display: block; height: 100%;
-          background: linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+          background: linear-gradient(135deg, var(--t-accent-bright) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%);
           transition: width 0.35s ease;
         }
 
@@ -932,30 +932,30 @@ export default function BrandSystemChat({ getIdToken, onComplete, onLog, apiPath
           flex: 1 1 auto; min-height: 0; overflow-y: auto;
           -webkit-overflow-scrolling: touch;
           padding: 1rem; display: flex; flex-direction: column; gap: 0.65rem;
-          scrollbar-width: thin; scrollbar-color: rgba(42,36,32,0.14) transparent;
+          scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--t-text) 14%, transparent) transparent;
           overscroll-behavior: contain;
         }
         #bsc-messages::-webkit-scrollbar { width: 3px; }
-        #bsc-messages::-webkit-scrollbar-thumb { background: rgba(42,36,32,0.14); border-radius: 2px; }
+        #bsc-messages::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--t-text) 14%, transparent); border-radius: 2px; }
         #bsc-messages::-webkit-scrollbar-track { background: transparent; }
 
         /* Template selector */
         #bsc-complete-opts { display: flex; flex-direction: column; gap: 0.6rem; width: 100%; }
         #bsc-template-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem; }
         .bsc-tcard {
-          background: rgba(255,255,255,0.7); border: 1px solid rgba(42,36,32,0.14);
+          background: color-mix(in srgb, var(--t-surface) 70%, transparent); border: 1px solid color-mix(in srgb, var(--t-text) 14%, transparent);
           border-radius: 8px; padding: 0.5rem 0.65rem; text-align: left; cursor: pointer;
           display: flex; flex-direction: column; gap: 0.18rem; transition: border-color 0.12s;
         }
-        .bsc-tcard:hover { border-color: rgba(42,36,32,0.4); }
-        .bsc-tcard--active { border-color: #2a2420; background: rgba(42,36,32,0.05); }
+        .bsc-tcard:hover { border-color: color-mix(in srgb, var(--t-text) 40%, transparent); }
+        .bsc-tcard--active { border-color: var(--t-text); background: color-mix(in srgb, var(--t-text) 5%, transparent); }
         .bsc-tcard-label {
           font-family: "Space Grotesk", system-ui, sans-serif;
-          font-size: 0.75rem; font-weight: 700; color: #2a2420;
+          font-size: 0.75rem; font-weight: 700; color: var(--t-text);
         }
         .bsc-tcard-desc {
           font-family: "Space Grotesk", system-ui, sans-serif;
-          font-size: 0.65rem; color: rgba(42,36,32,0.5); line-height: 1.35;
+          font-size: 0.65rem; color: color-mix(in srgb, var(--t-text) 50%, transparent); line-height: 1.35;
         }
 
         /* Edit answer button — sits left of user bubble */
@@ -968,22 +968,22 @@ export default function BrandSystemChat({ getIdToken, onComplete, onLog, apiPath
           font-family: "Space Mono", monospace;
           font-size: 0.6rem;
           letter-spacing: 0.08em;
-          color: rgba(42,36,32,0.32);
+          color: color-mix(in srgb, var(--t-text) 32%, transparent);
           cursor: pointer;
           transition: color 0.12s;
           line-height: 1;
           text-transform: uppercase;
         }
-        .bsc-edit-btn:hover { color: rgba(42,36,32,0.72); }
+        .bsc-edit-btn:hover { color: var(--t-text-secondary); }
 
         /* Prompt preview */
         #bsc-prompt-preview {
-          background: rgba(42,36,32,0.03); border: 1px solid rgba(42,36,32,0.08);
+          background: color-mix(in srgb, var(--t-text) 3%, transparent); border: 1px solid var(--t-border-faint);
           border-radius: 6px; padding: 0.55rem 0.7rem; overflow: hidden;
         }
         #bsc-prompt-preview-text {
           margin: 0; font-family: "Space Mono", monospace; font-size: 0.56rem;
-          line-height: 1.6; color: rgba(42,36,32,0.45);
+          line-height: 1.6; color: color-mix(in srgb, var(--t-text) 45%, transparent);
           white-space: pre-wrap; word-break: break-word;
           display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
         }

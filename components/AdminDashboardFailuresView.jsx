@@ -49,30 +49,30 @@ const NOTIFICATION_LABEL = {
 };
 
 const DFI_CSS = `
-#dashboard-failures-view-shell { color: #2a2420; }
-#dashboard-failures-view-shell .dfi-empty { padding: 14px; border: 1px solid rgba(42,36,32,0.12); border-radius: 8px; background: rgba(255,255,255,0.5); font: 600 12px/1.5 "Space Mono", ui-monospace, monospace; color: rgba(42,36,32,0.6); }
-#dashboard-failures-view-shell .dfi-err { padding: 10px 12px; border: 1px solid #9f1f17; border-radius: 8px; background: rgba(159,31,23,0.06); color: #9f1f17; font-size: 12px; }
-#dashboard-failures-view-shell details.dfi-card { border: 1px solid rgba(42,36,32,0.12); border-radius: 8px; background: rgba(255,255,255,0.78); overflow: hidden; }
+#dashboard-failures-view-shell { color: var(--t-text); }
+#dashboard-failures-view-shell .dfi-empty { padding: 14px; border: 1px solid var(--t-border-subtle); border-radius: 8px; background: var(--t-glass-soft); font: 600 12px/1.5 "Space Mono", ui-monospace, monospace; color: color-mix(in srgb, var(--t-text) 60%, transparent); }
+#dashboard-failures-view-shell .dfi-err { padding: 10px 12px; border: 1px solid var(--t-danger); border-radius: 8px; background: var(--t-danger-bg); color: var(--t-danger); font-size: 12px; }
+#dashboard-failures-view-shell details.dfi-card { border: 1px solid var(--t-border-subtle); border-radius: 8px; background: var(--t-glass-strong); overflow: hidden; }
 #dashboard-failures-view-shell details.dfi-card + details.dfi-card { margin-top: 8px; }
 #dashboard-failures-view-shell .dfi-card > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; }
 #dashboard-failures-view-shell .dfi-card > summary::-webkit-details-marker { display: none; }
-#dashboard-failures-view-shell .dfi-card[open] > summary { border-bottom: 1px solid rgba(42,36,32,0.14); background: rgba(255,255,255,0.4); }
+#dashboard-failures-view-shell .dfi-card[open] > summary { border-bottom: 1px solid color-mix(in srgb, var(--t-text) 14%, transparent); background: color-mix(in srgb, var(--t-surface) 40%, transparent); }
 #dashboard-failures-view-shell .dfi-client-name { font: 700 14px/1.3 "Space Grotesk", system-ui, sans-serif; display: flex; align-items: center; gap: 8px; min-width: 0; }
-#dashboard-failures-view-shell .dfi-client-name::before { content: "▸"; color: rgba(42,36,32,0.52); font-size: 10px; transition: transform 160ms ease; }
+#dashboard-failures-view-shell .dfi-client-name::before { content: "▸"; color: var(--t-text-muted); font-size: 10px; transition: transform 160ms ease; }
 #dashboard-failures-view-shell .dfi-card[open] > summary .dfi-client-name::before { transform: rotate(90deg); }
-#dashboard-failures-view-shell .dfi-meta { font: 600 11px/1.4 "Space Mono", ui-monospace, monospace; color: rgba(42,36,32,0.52); }
+#dashboard-failures-view-shell .dfi-meta { font: 600 11px/1.4 "Space Mono", ui-monospace, monospace; color: var(--t-text-muted); }
 #dashboard-failures-view-shell .dfi-body { padding: 12px 14px 14px; display: grid; gap: 10px; }
 #dashboard-failures-view-shell .dfi-row { display: flex; gap: 8px; font-size: 12px; }
-#dashboard-failures-view-shell .dfi-row-label { color: rgba(42,36,32,0.52); min-width: 110px; font-family: "Space Mono", ui-monospace, monospace; }
-#dashboard-failures-view-shell .dfi-diag { font-family: "Space Mono", ui-monospace, monospace; font-size: 11px; white-space: pre-wrap; word-break: break-word; padding: 8px 10px; border: 1px solid rgba(159,31,23,0.25); border-radius: 6px; background: rgba(159,31,23,0.05); color: #6b1610; }
+#dashboard-failures-view-shell .dfi-row-label { color: var(--t-text-muted); min-width: 110px; font-family: "Space Mono", ui-monospace, monospace; }
+#dashboard-failures-view-shell .dfi-diag { font-family: "Space Mono", ui-monospace, monospace; font-size: 11px; white-space: pre-wrap; word-break: break-word; padding: 8px 10px; border: 1px solid var(--t-danger-border); border-radius: 6px; background: var(--t-danger-bg); color: var(--t-danger); }
 #dashboard-failures-view-shell .dfi-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-#dashboard-failures-view-shell .dfi-btn { padding: 8px 13px; border: 1px solid rgba(42,36,32,0.12); border-radius: 8px; background: rgba(255,255,255,0.6); color: #2a2420; font: 700 12px/1 "Space Mono", ui-monospace, monospace; cursor: pointer; }
-#dashboard-failures-view-shell .dfi-btn:hover:not(:disabled) { background: #fff; }
+#dashboard-failures-view-shell .dfi-btn { padding: 8px 13px; border: 1px solid var(--t-border-subtle); border-radius: 8px; background: color-mix(in srgb, var(--t-surface) 60%, transparent); color: var(--t-text); font: 700 12px/1 "Space Mono", ui-monospace, monospace; cursor: pointer; }
+#dashboard-failures-view-shell .dfi-btn:hover:not(:disabled) { background: var(--t-surface); }
 #dashboard-failures-view-shell .dfi-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-#dashboard-failures-view-shell .dfi-note-input { width: 100%; min-height: 60px; padding: 8px; border: 1px solid rgba(42,36,32,0.15); border-radius: 6px; font: 500 12px/1.4 "Space Mono", ui-monospace, monospace; box-sizing: border-box; }
+#dashboard-failures-view-shell .dfi-note-input { width: 100%; min-height: 60px; padding: 8px; border: 1px solid color-mix(in srgb, var(--t-text) 15%, transparent); border-radius: 6px; font: 500 12px/1.4 "Space Mono", ui-monospace, monospace; box-sizing: border-box; }
 #dashboard-failures-view-shell .dfi-status { font-size: 11px; font-weight: 700; }
-#dashboard-failures-view-shell .dfi-status.is-ok { color: #285f3b; }
-#dashboard-failures-view-shell .dfi-status.is-error { color: #9f1f17; }
+#dashboard-failures-view-shell .dfi-status.is-ok { color: var(--t-success); }
+#dashboard-failures-view-shell .dfi-status.is-error { color: var(--t-danger); }
 `;
 
 function IncidentCard({ incident, onRequeue, onResolve, actionStatus }) {

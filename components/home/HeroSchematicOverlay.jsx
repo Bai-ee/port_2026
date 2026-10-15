@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
+import { readToken, onTokensChanged } from '../../lib/theme-runtime/read-token.js';
+import { cssColorToRgbTriplet } from '../../lib/theme-scene/css-color.js';
 
 // Schematic measurement lines between the hero loop and the cursor.
 //
@@ -35,20 +37,25 @@ const FADE_PER_MS = 1 / 180;  // idle fade-out rate
 const easeOutQuint = (t) => 1 - (1 - t) ** 5;
 const easeOutQuart = (t) => 1 - (1 - t) ** 4;
 
-// Hex (#rgb or #rrggbb) to "r, g, b" so alpha can be varied per stroke.
-const toRgbTriplet = (hex) => {
-  const raw = String(hex).replace('#', '');
-  const full = raw.length === 3 ? raw.split('').map((c) => c + c).join('') : raw;
-  const int = Number.parseInt(full, 16);
-  if (!Number.isFinite(int)) return '42, 36, 32';
-  return `${(int >> 16) & 255}, ${(int >> 8) & 255}, ${int & 255}`;
-};
+// Stroke colour: the theme's default text role (`--t-text-default`, baseline #000000 = what HomePage
+// used to pass as `color`), resolved to an "r, g, b" triplet so alpha can be varied per stroke.
+// Re-read on `theme:tokens-changed` (mode switch, preference change, Studio draft), never captured
+// once. '0, 0, 0' is only used if the token is unreadable (SSR / stylesheet missing).
+const STROKE_TOKEN = '--t-text-default';
+const FALLBACK_RGB = '0, 0, 0';
+// An explicit `color` (hex) pins the stroke - pages that are pinned to their own palette (/looper)
+// pass one and are unchanged. Without it the stroke follows the theme token.
+const readStrokeRgb = (explicitColor) => (
+  (explicitColor ? cssColorToRgbTriplet(explicitColor) : null)
+  || cssColorToRgbTriplet(readToken(STROKE_TOKEN))
+  || FALLBACK_RGB
+);
 
 const HeroSchematicOverlay = ({
   silhouetteRef,
   cursorStageRef,
   heroProgressRef = null,
-  color = '#2a2420',
+  color = null,
 }) => {
   const canvasRef = useRef(null);
 
@@ -69,7 +76,8 @@ const HeroSchematicOverlay = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return undefined;
 
-    const rgb = toRgbTriplet(color);
+    let rgb = readStrokeRgb(color);
+    const stopTokenWatch = onTokensChanged(() => { rgb = readStrokeRgb(color); });
     let width = 0;
     let height = 0;
     let dpr = 1;
@@ -137,6 +145,14 @@ const HeroSchematicOverlay = ({
       alpha = targetAlpha > alpha ? targetAlpha : Math.max(targetAlpha, alpha - dt * FADE_PER_MS);
 
       if (alpha <= 0.002) {
+        if (dirty) clear();
+        return;
+      }
+
+      // A fading readout can outlive its inputs (silhouette reset, stage gone):
+      // nothing to draw from, so drop the readout instead of destructuring null.
+      if (!shape || !shape.valid || !stage) {
+        alpha = 0;
         if (dirty) clear();
         return;
       }
@@ -261,6 +277,7 @@ const HeroSchematicOverlay = ({
     return () => {
       cancelAnimationFrame(rafId);
       window.removeEventListener('resize', resize);
+      stopTokenWatch();
     };
   }, [color, cursorStageRef, heroProgressRef, silhouetteRef]);
 

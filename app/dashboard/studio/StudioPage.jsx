@@ -2301,6 +2301,7 @@ export default function StudioPage() {
   return (
     <div
       id="studio-page-shell"
+      data-theme-scope="light"
       style={{
         position: 'fixed', inset: 0,
         background: GLASS.wash + ', ' + GLASS.bg,

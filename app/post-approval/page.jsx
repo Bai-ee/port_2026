@@ -166,7 +166,7 @@ function PostApprovalView() {
   const ready = state === 'ready';
 
   return (
-    <main id="post-approval-page" style={styles.page}>
+    <main id="post-approval-page" data-theme-scope="light" style={styles.page}>
       <div style={styles.card}>
         <p style={styles.kicker}>Social Auto-Publish</p>
 
@@ -271,7 +271,7 @@ function PostApprovalView() {
 // useSearchParams needs a Suspense boundary for the page to prerender.
 export default function PostApprovalPage() {
   return (
-    <Suspense fallback={<main id="post-approval-page" style={styles.page}><div style={styles.card}><p style={styles.body}>Loading…</p></div></main>}>
+    <Suspense fallback={<main id="post-approval-page" data-theme-scope="light" style={styles.page}><div style={styles.card}><p style={styles.body}>Loading…</p></div></main>}>
       <PostApprovalView />
     </Suspense>
   );

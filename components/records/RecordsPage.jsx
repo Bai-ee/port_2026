@@ -8,16 +8,17 @@ import { relativeTime } from '../../features/records-page/records-helpers.js';
 
 const PAD = '0 clamp(1.25rem,max(8vw,calc((100% - 1100px) / 2)),12rem)';
 const MONO = '"Space Mono", monospace';
-const INK = '#1a1a1a';
-const MUTED = 'rgba(42,36,32,0.62)';
+const INK = 'var(--t-text-body)';
+const MUTED = 'color-mix(in srgb, var(--t-text) 62%, transparent)';
+const BODY = 'color-mix(in srgb, var(--t-text) 80%, transparent)';
 
 const cardStyle = { ...internalPageGlassCardStyle, borderRadius: '1rem', padding: 'clamp(1.1rem,2.5vw,1.75rem)', boxSizing: 'border-box' };
-const eyebrowStyle = { fontFamily: MONO, fontSize: 11, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(90,83,70,0.7)', margin: '0 0 0.75rem' };
+const eyebrowStyle = { fontFamily: MONO, fontSize: 11, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'color-mix(in srgb, var(--t-text-eyebrow) 70%, transparent)', margin: '0 0 0.75rem' };
 const h2Style = { fontSize: 'clamp(1.5rem,4vw,2.25rem)', lineHeight: 1.1, margin: '0 0 1.25rem', color: INK, fontWeight: 500 };
 const sectionStyle = { padding: `clamp(2rem,5vh,3.5rem) 0`, maxWidth: '100%' };
-const ctaStyle = { display: 'inline-block', background: INK, color: '#fff', fontFamily: MONO, fontSize: 12, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '0.95rem 1.5rem', borderRadius: 999, textDecoration: 'none', border: 'none', cursor: 'pointer' };
-const inputStyle = { width: '100%', boxSizing: 'border-box', padding: '0.8rem 0.9rem', fontSize: 16, fontFamily: 'inherit', border: '1px solid rgba(212,196,171,0.9)', borderRadius: 10, background: 'rgba(255,255,255,0.8)', color: INK };
-const labelStyle = { display: 'grid', gap: 6, fontFamily: MONO, fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(90,83,70,0.85)' };
+const ctaStyle = { display: 'inline-block', background: INK, color: 'var(--t-surface)', fontFamily: MONO, fontSize: 12, letterSpacing: '0.14em', textTransform: 'uppercase', padding: '0.95rem 1.5rem', borderRadius: 999, textDecoration: 'none', border: 'none', cursor: 'pointer' };
+const inputStyle = { width: '100%', boxSizing: 'border-box', padding: '0.8rem 0.9rem', fontSize: 16, fontFamily: 'inherit', border: '1px solid var(--t-glass-border)', borderRadius: 10, background: 'color-mix(in srgb, var(--t-surface) 80%, transparent)', color: INK };
+const labelStyle = { display: 'grid', gap: 6, fontFamily: MONO, fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'color-mix(in srgb, var(--t-text-eyebrow) 85%, transparent)' };
 
 const STEPS = [
   ['01', 'Shoot', 'Photograph the label and film the record playing. Add a line about why it matters to you.'],
@@ -82,7 +83,7 @@ function ExampleCard({ item }) {
             {item.meta && <div style={{ fontFamily: MONO, fontSize: 11, color: MUTED, overflowWrap: 'anywhere' }}>{item.meta}</div>}
           </div>
         </div>
-        {item.story && <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5, color: 'rgba(42,36,32,0.8)' }}>{item.story}</p>}
+        {item.story && <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5, color: BODY }}>{item.story}</p>}
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
           {item.discogsUrl && <a href={item.discogsUrl} target="_blank" rel="noopener noreferrer" style={linkStyle}>Discogs</a>}
           {item.xUrl && <a href={item.xUrl} target="_blank" rel="noopener noreferrer" style={linkStyle}>Post on X</a>}
@@ -151,7 +152,7 @@ function WaitlistForm() {
         <button id="records-waitlist-submit" type="submit" disabled={status === 'sending'} style={{ ...ctaStyle, opacity: status === 'sending' ? 0.6 : 1 }}>{status === 'sending' ? 'Sending' : 'Join the waitlist'}</button>
         <span style={{ color: MUTED, fontSize: 14 }}>Access opens in batches.</span>
       </div>
-      {status === 'error' && <div id="records-waitlist-error" role="alert" style={{ color: '#9b2c2c', fontSize: 14 }}>{error}</div>}
+      {status === 'error' && <div id="records-waitlist-error" role="alert" style={{ color: 'var(--t-danger)', fontSize: 14 }}>{error}</div>}
     </form>
   );
 }
@@ -177,7 +178,7 @@ export default function RecordsPage() {
         <section id="records-hero-shell" style={{ ...sectionStyle, paddingTop: 'clamp(3rem,8vh,6rem)' }}>
           <div style={eyebrowStyle}>HITLOOP · Records</div>
           <h1 id="records-hero-headline" style={{ fontSize: 'clamp(2.2rem,8vw,4.75rem)', lineHeight: 1.02, margin: '0 0 1.25rem', color: INK, fontWeight: 500, letterSpacing: '-0.02em' }}>Your record collection, archived and posted.</h1>
-          <p id="records-hero-subhead" style={{ maxWidth: '40rem', fontSize: 'clamp(1rem,2.4vw,1.2rem)', lineHeight: 1.55, color: 'rgba(42,36,32,0.8)', margin: '0 0 1.75rem' }}>
+          <p id="records-hero-subhead" style={{ maxWidth: '40rem', fontSize: 'clamp(1rem,2.4vw,1.2rem)', lineHeight: 1.55, color: BODY, margin: '0 0 1.75rem' }}>
             A photo of the label, a video of it playing, and your story. Matched on Discogs, added to your collection, cut into finished 1:1 and 9:16 clips, and scheduled to X.
           </p>
           <div id="records-hero-cta-row" style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -214,9 +215,9 @@ export default function RecordsPage() {
           <div id="records-steps-row" style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,240px),1fr))' }}>
             {STEPS.map(([n, t, d]) => (
               <div key={n} id={`records-step-${t.toLowerCase()}-panel`} style={cardStyle}>
-                <div style={{ fontFamily: '"Doto", monospace', fontWeight: 900, fontSize: 28, color: 'rgba(0,0,0,0.25)' }}>{n}</div>
+                <div style={{ fontFamily: '"Doto", monospace', fontWeight: 900, fontSize: 28, color: 'color-mix(in srgb, var(--t-text-strong) 25%, transparent)' }}>{n}</div>
                 <div style={{ fontSize: '1.25rem', color: INK, margin: '0.25rem 0 0.5rem' }}>{t}</div>
-                <p style={{ margin: 0, lineHeight: 1.5, color: 'rgba(42,36,32,0.8)' }}>{d}</p>
+                <p style={{ margin: 0, lineHeight: 1.5, color: BODY }}>{d}</p>
               </div>
             ))}
           </div>
@@ -230,7 +231,7 @@ export default function RecordsPage() {
             {AUDIENCE.map(([t, d]) => (
               <div key={t} style={cardStyle}>
                 <div style={{ fontSize: '1.15rem', color: INK, marginBottom: 6 }}>{t}</div>
-                <p style={{ margin: 0, lineHeight: 1.5, color: 'rgba(42,36,32,0.8)' }}>{d}</p>
+                <p style={{ margin: 0, lineHeight: 1.5, color: BODY }}>{d}</p>
               </div>
             ))}
           </div>

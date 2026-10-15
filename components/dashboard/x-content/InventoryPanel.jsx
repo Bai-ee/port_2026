@@ -297,20 +297,20 @@ export default function InventoryPanel({ packages, audit, loading, error, saving
     <div id="x-content-inventory-panel" className="xce-inv">
       <style jsx global>{`
 .xce-scope #x-content-inventory-panel .xce-inv-head { gap: 10px; }
-.xce-scope #x-content-inventory-panel .xce-inv-title { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.01em; color: #1f1d1b; }
+.xce-scope #x-content-inventory-panel .xce-inv-title { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -0.01em; color: var(--t-text); }
 .xce-scope #x-content-inventory-panel .xce-inv-count { margin-right: auto; }
 .xce-scope #x-content-inventory-panel .xce-inv-search { position: relative; display: block; }
-.xce-scope #x-content-inventory-panel .xce-inv-search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: rgba(31,29,27,0.5); pointer-events: none; }
+.xce-scope #x-content-inventory-panel .xce-inv-search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: color-mix(in srgb, var(--t-text) 50%, transparent); pointer-events: none; }
 .xce-scope #x-content-inventory-panel .xce-inv-search input { width: 100%; min-height: 44px; padding: 0 12px 0 36px; border-radius: 12px; box-sizing: border-box; }
 .xce-scope #x-content-inventory-panel .xce-inv-filters-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .xce-scope #x-content-inventory-panel .xce-inv-filters-row select { width: 100%; min-height: 44px; border-radius: 12px; box-sizing: border-box; }
 .xce-scope #x-content-inventory-panel .xce-inv-row { grid-template-columns: 40px minmax(0, 1fr) auto 16px; align-items: center; padding: 10px; }
-.xce-scope #x-content-inventory-panel .xce-inv-code { width: 40px; height: 40px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: #f6f5f3; border: 1px solid rgba(31,29,27,0.12); font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: #1f1d1b; }
-.xce-scope #x-content-inventory-panel .xce-inv-row-title { font-size: 14px; font-weight: 600; color: #1f1d1b; overflow-wrap: anywhere; }
+.xce-scope #x-content-inventory-panel .xce-inv-code { width: 40px; height: 40px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: var(--t-inset); border: 1px solid color-mix(in srgb, var(--t-text) 12%, transparent); font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: var(--t-text); }
+.xce-scope #x-content-inventory-panel .xce-inv-row-title { font-size: 14px; font-weight: 600; color: var(--t-text); overflow-wrap: anywhere; }
 .xce-scope #x-content-inventory-panel .xce-inv-row-flags { grid-column: auto; display: grid; gap: 4px; justify-items: end; }
 .xce-scope #x-content-inventory-panel .xce-inv-row { box-sizing: border-box; height: 100%; }
-.xce-scope #x-content-inventory-panel .xce-inv-row.is-active { border-color: #1f1d1b; }
-.xce-scope #x-content-inventory-panel .xce-inv-row-chevron { color: rgba(31,29,27,0.5); }
+.xce-scope #x-content-inventory-panel .xce-inv-row.is-active { border-color: var(--t-text); }
+.xce-scope #x-content-inventory-panel .xce-inv-row-chevron { color: color-mix(in srgb, var(--t-text) 50%, transparent); }
 .xce-scope #x-content-inventory-panel .xce-inv-footer-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .xce-scope #x-content-inventory-panel .xce-inv-editor-slot { order: -1; }
 `}</style>

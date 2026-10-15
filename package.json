@@ -17,7 +17,9 @@
     "smoke:studio": "node scripts/smoke-studio.mjs",
     "teaser": "node scripts/render-ui-teaser.mjs",
     "smoke:preview": "node scripts/smoke-preview.mjs",
-    "smoke:routes": "node scripts/smoke-routes.mjs"
+    "smoke:routes": "node scripts/smoke-routes.mjs",
+    "theme:build": "node scripts/theme/build-theme.mjs",
+    "theme:check": "node scripts/theme/check-theme.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

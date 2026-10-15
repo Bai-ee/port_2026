@@ -372,7 +372,7 @@ const AuthPageInner = () => {
             {form.websiteUrl ? (
               /* Captured website — read-only, locked */
               <div id="auth-captured-url" style={capturedUrlStyle}>
-                <Globe size={14} strokeWidth={1.5} style={{ flexShrink: 0, color: 'rgba(42,36,32,0.45)' }} aria-hidden="true" />
+                <Globe size={14} strokeWidth={1.5} style={{ flexShrink: 0, color: 'color-mix(in srgb, var(--t-text) 45%, transparent)' }} aria-hidden="true" />
                 <span id="auth-captured-url-text" style={capturedUrlTextStyle}>{form.websiteUrl}</span>
                 <span style={capturedUrlBadgeStyle}>
                   <Lock size={10} strokeWidth={2} aria-hidden="true" />
@@ -623,7 +623,7 @@ const shellStyle = {
 const gradientStyle = {
   position: 'absolute',
   inset: 0,
-  background: 'radial-gradient(60% 60% at 10% 15%, rgba(102, 184, 164, 0.12), transparent 60%), radial-gradient(50% 50% at 82% 72%, rgba(171, 148, 218, 0.14), transparent 65%), linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.04))',
+  background: 'radial-gradient(60% 60% at 10% 15%, color-mix(in srgb, var(--t-deco-2) 12%, transparent), transparent 60%), radial-gradient(50% 50% at 82% 72%, color-mix(in srgb, var(--t-deco-4) 14%, transparent), transparent 65%), linear-gradient(180deg, color-mix(in srgb, var(--t-surface) 18%, transparent), color-mix(in srgb, var(--t-surface) 4%, transparent))',
   pointerEvents: 'none',
   zIndex: 1,
 };
@@ -639,7 +639,7 @@ const cardStyle = {
   borderRadius: '1.1rem',
   boxSizing: 'border-box',
   ...internalPageGlassCardStyle,
-  boxShadow: '0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4), 0px 5px 10px rgba(0, 0, 0, 0.1), 0px 15px 30px rgba(0, 0, 0, 0.1), 0px 20px 40px rgba(0, 0, 0, 0.15)',
+  boxShadow: '0 1px 0 color-mix(in srgb, var(--t-surface) 65%, transparent), inset 0 1px 0 color-mix(in srgb, var(--t-glass-highlight) 88.89%, transparent), 0px 5px 10px rgba(0, 0, 0, 0.1), 0px 15px 30px rgba(0, 0, 0, 0.1), 0px 20px 40px rgba(0, 0, 0, 0.15)',
 };
 
 const backBtnStyle = {
@@ -649,9 +649,9 @@ const backBtnStyle = {
   width: '2.4rem',
   height: '2.4rem',
   borderRadius: '999px',
-  background: 'rgba(255,255,255,0.34)',
-  border: '1px solid rgba(42, 36, 32, 0.12)',
-  color: 'rgba(42, 36, 32, 0.58)',
+  background: 'color-mix(in srgb, var(--t-surface) 34%, transparent)',
+  border: '1px solid var(--t-border-subtle)',
+  color: 'color-mix(in srgb, var(--t-text) 58%, transparent)',
   textDecoration: 'none',
   fontSize: '1.05rem',
   fontFamily: '"Space Mono", monospace',
@@ -673,7 +673,7 @@ const sigStyle = {
   height: '2.75rem',
   borderRadius: '50%',
   objectFit: 'cover',
-  border: '2px solid rgba(255,255,255,0.35)',
+  border: '2px solid color-mix(in srgb, var(--t-surface) 35%, transparent)',
   display: 'block',
 };
 
@@ -681,7 +681,7 @@ const eyebrowStyle = {
   fontSize: '0.82rem',
   letterSpacing: '0.14em',
   textTransform: 'uppercase',
-  color: 'rgba(42, 36, 32, 0.44)',
+  color: 'color-mix(in srgb, var(--t-text) 44%, transparent)',
   fontWeight: 700,
   fontFamily: '"Space Mono", monospace',
 };
@@ -704,7 +704,7 @@ const titleTrackStyle = {
 const titleStyle = {
   margin: 0,
   flexShrink: 0,
-  color: '#2a2420',
+  color: 'var(--t-text)',
   fontSize: 'clamp(2rem, 8.5vw, 7rem)',
   lineHeight: 1,
   letterSpacing: '-0.04em',
@@ -717,7 +717,7 @@ const titleStyle = {
 
 const copyStyle = {
   margin: 0,
-  color: 'rgba(42, 36, 32, 0.66)',
+  color: 'color-mix(in srgb, var(--t-text) 66%, transparent)',
   lineHeight: 1.6,
   fontFamily: '"Space Grotesk", system-ui, sans-serif',
   textAlign: 'center',
@@ -727,9 +727,9 @@ const warningStyle = {
   marginTop: '1rem',
   padding: '0.9rem 1rem',
   borderRadius: '1rem',
-  background: 'rgba(255,255,255,0.62)',
-  border: '1px solid rgba(42, 36, 32, 0.08)',
-  color: 'rgba(42, 36, 32, 0.72)',
+  background: 'var(--t-glass)',
+  border: '1px solid var(--t-border-faint)',
+  color: 'var(--t-text-secondary)',
   fontSize: '0.92rem',
   lineHeight: 1.55,
   fontFamily: '"Space Grotesk", system-ui, sans-serif',
@@ -753,7 +753,7 @@ const labelStyle = {
 };
 
 const labelTextStyle = {
-  color: 'rgba(42, 36, 32, 0.55)',
+  color: 'color-mix(in srgb, var(--t-text) 55%, transparent)',
   fontSize: '0.72rem',
   fontWeight: 400,
   fontFamily: '"Space Mono", monospace',
@@ -766,9 +766,9 @@ const inputStyle = {
   boxSizing: 'border-box',
   padding: '0.9rem 1rem',
   borderRadius: '0.95rem',
-  border: '1px solid rgba(42, 36, 32, 0.12)',
-  background: 'rgba(255,255,255,0.72)',
-  color: '#2a2420',
+  border: '1px solid var(--t-border-subtle)',
+  background: 'color-mix(in srgb, var(--t-surface) 72%, transparent)',
+  color: 'var(--t-text)',
   fontSize: '1rem',
   fontFamily: '"Space Grotesk", system-ui, sans-serif',
 };
@@ -782,14 +782,14 @@ const textareaStyle = {
 
 const hintStyle = {
   marginTop: '-0.2rem',
-  color: 'rgba(42, 36, 32, 0.56)',
+  color: 'color-mix(in srgb, var(--t-text) 56%, transparent)',
   fontSize: '0.84rem',
   lineHeight: 1.5,
   fontFamily: '"Space Grotesk", system-ui, sans-serif',
 };
 
 const errorStyle = {
-  color: '#8b1e1e',
+  color: 'var(--t-danger)',
   fontSize: '0.82rem',
   fontFamily: '"Space Mono", monospace',
   letterSpacing: '0.04em',
@@ -804,8 +804,8 @@ const submitStyle = {
   minHeight: '3rem',
   border: 'none',
   borderRadius: '999px',
-  background: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)',
-  color: '#fff',
+  background: 'var(--t-gradient-accent)',
+  color: 'var(--t-on-solid)',
   fontWeight: 700,
   fontSize: '0.95rem',
   cursor: 'pointer',
@@ -825,11 +825,11 @@ const dividerStyle = {
 const dividerLineStyle = {
   flex: 1,
   height: '1px',
-  background: 'rgba(42, 36, 32, 0.12)',
+  background: 'var(--t-border-subtle)',
 };
 
 const dividerLabelStyle = {
-  color: 'rgba(42, 36, 32, 0.5)',
+  color: 'color-mix(in srgb, var(--t-text) 50%, transparent)',
   fontSize: '0.78rem',
   textTransform: 'uppercase',
   letterSpacing: '0.12em',
@@ -843,15 +843,15 @@ const googleButtonStyle = {
   gap: '0.65rem',
   minHeight: '3rem',
   borderRadius: '999px',
-  border: '1px solid rgba(42, 36, 32, 0.18)',
-  background: 'rgba(255,255,255,0.92)',
-  color: '#3c3c3c',
+  border: '1px solid color-mix(in srgb, var(--t-text) 18%, transparent)',
+  background: 'color-mix(in srgb, var(--t-surface) 92%, transparent)',
+  color: 'var(--t-text)',
   fontWeight: 500,
   fontSize: '0.9rem',
   cursor: 'pointer',
   fontFamily: '"Space Grotesk", system-ui, sans-serif',
   letterSpacing: '0.01em',
-  boxShadow: '0 1px 3px rgba(42,36,32,0.08)',
+  boxShadow: '0 1px 3px var(--t-border-faint)',
 };
 
 // ── Shared sub-components ─────────────────────────────────────────────────────
@@ -955,15 +955,15 @@ const capturedUrlStyle = {
   marginTop: '1rem',
   padding: '0.6rem 0.75rem',
   borderRadius: '0.75rem',
-  background: 'rgba(255,255,255,0.55)',
-  border: '1px solid rgba(42, 36, 32, 0.1)',
+  background: 'color-mix(in srgb, var(--t-surface) 55%, transparent)',
+  border: '1px solid color-mix(in srgb, var(--t-text) 10%, transparent)',
   overflow: 'hidden',
 };
 
 const capturedUrlTextStyle = {
   flex: 1,
   fontSize: '0.82rem',
-  color: 'rgba(42, 36, 32, 0.72)',
+  color: 'var(--t-text-secondary)',
   fontFamily: '"Space Grotesk", system-ui, sans-serif',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
@@ -979,8 +979,8 @@ const capturedUrlBadgeStyle = {
   fontFamily: '"Space Mono", monospace',
   letterSpacing: '0.07em',
   textTransform: 'uppercase',
-  color: 'rgba(42, 36, 32, 0.4)',
-  background: 'rgba(42, 36, 32, 0.06)',
+  color: 'color-mix(in srgb, var(--t-text) 40%, transparent)',
+  background: 'color-mix(in srgb, var(--t-text) 6%, transparent)',
   borderRadius: '999px',
   padding: '0.2rem 0.5rem',
 };

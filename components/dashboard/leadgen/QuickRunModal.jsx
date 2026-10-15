@@ -191,7 +191,7 @@ export default function QuickRunModal({ open, onClose, onResult, getIdToken }) {
       <style jsx>{`
         #leadgen-quickrun-backdrop {
           position: fixed; inset: 0;
-          background: rgba(15, 15, 15, 0.42);
+          background: var(--t-overlay);
           backdrop-filter: blur(8px);
           -webkit-backdrop-filter: blur(8px);
           z-index: 1000;
@@ -206,12 +206,12 @@ export default function QuickRunModal({ open, onClose, onResult, getIdToken }) {
           width: min(540px, 96vw);
           max-height: 92vh;
           overflow: auto;
-          background: #fafafa;
-          border: 1px solid rgba(0, 0, 0, 0.08);
+          background: var(--t-surface);
+          border: 1px solid color-mix(in srgb, var(--t-text-strong) 8%, transparent);
           border-radius: 18px;
           box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
           font-family: 'Inter', system-ui, -apple-system, sans-serif;
-          color: #1a1a1a;
+          color: var(--t-text-body);
           --lg-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
         }
         #leadgen-quickrun-head {
@@ -220,7 +220,7 @@ export default function QuickRunModal({ open, onClose, onResult, getIdToken }) {
           align-items: flex-start;
           gap: 12px;
           padding: 18px 22px;
-          border-bottom: 1px dashed rgba(0,0,0,0.10);
+          border-bottom: 1px dashed color-mix(in srgb, var(--t-text-strong) 10%, transparent);
         }
         #leadgen-quickrun-title {
           margin: 0;
@@ -231,7 +231,7 @@ export default function QuickRunModal({ open, onClose, onResult, getIdToken }) {
         #leadgen-quickrun-sub {
           margin: 4px 0 0;
           font-size: 11.5px;
-          color: #777;
+          color: var(--t-text-muted);
           line-height: 1.5;
         }
         #leadgen-quickrun-form {
@@ -242,15 +242,15 @@ export default function QuickRunModal({ open, onClose, onResult, getIdToken }) {
         }
         #leadgen-quickrun-preview {
           padding: 10px 12px;
-          background: rgba(0,0,0,0.03);
-          border: 1px solid rgba(0,0,0,0.08);
+          background: color-mix(in srgb, var(--t-text-strong) 3%, transparent);
+          border: 1px solid color-mix(in srgb, var(--t-text-strong) 8%, transparent);
           border-radius: 10px;
         }
         .leadgen-quickrun-preview-label {
           font-family: var(--lg-mono);
           font-size: 9.5px;
           letter-spacing: 0.16em;
-          color: #888;
+          color: var(--t-text-muted);
           text-transform: uppercase;
           margin-bottom: 6px;
         }
@@ -263,18 +263,18 @@ export default function QuickRunModal({ open, onClose, onResult, getIdToken }) {
           gap: 3px;
           font-family: var(--lg-mono);
           font-size: 12px;
-          color: #1a1a1a;
+          color: var(--t-text-body);
         }
         .leadgen-quickrun-preview-list li::before {
           content: '·';
-          color: #aaa;
+          color: var(--t-text-faint);
           margin-right: 8px;
         }
         #leadgen-quickrun-error {
           font-size: 12px;
           color: #ff3b30;
-          background: rgba(255, 59, 48, 0.06);
-          border: 1px solid rgba(255, 59, 48, 0.22);
+          background: var(--t-danger-bg);
+          border: 1px solid var(--t-danger-border);
           padding: 8px 10px;
           border-radius: 8px;
         }
@@ -283,7 +283,7 @@ export default function QuickRunModal({ open, onClose, onResult, getIdToken }) {
           justify-content: flex-end;
           gap: 8px;
           padding-top: 4px;
-          border-top: 1px dashed rgba(0,0,0,0.10);
+          border-top: 1px dashed color-mix(in srgb, var(--t-text-strong) 10%, transparent);
           margin-top: 4px;
           padding-top: 14px;
         }

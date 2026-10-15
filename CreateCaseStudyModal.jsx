@@ -4,8 +4,8 @@ import Image from 'next/image';
 const CASE_STUDY_TAGS = ['Design', 'Websites', 'Content', 'Video', 'AI Workflows', 'Blockchain'];
 
 const glassPanelStyle = {
-  background: '#ffffff',
-  boxShadow: '0 32px 90px rgba(42,36,32,0.18)',
+  background: 'var(--t-surface)',
+  boxShadow: '0 32px 90px color-mix(in srgb, var(--t-text) 18%, transparent)',
   borderRadius: '1.5rem',
 };
 
@@ -111,7 +111,7 @@ const overlayStyle = {
 const modalStyle = {
   width: 'min(640px, 100%)',
   maxHeight: 'min(88dvh, 900px)',
-  color: '#2a2420',
+  color: 'var(--t-text)',
   display: 'flex',
   flexDirection: 'column',
   overflow: 'hidden',
@@ -122,14 +122,14 @@ const modalTopStyle = {
   justifyContent: 'space-between',
   gap: '1.5rem',
   padding: 'clamp(1.25rem, 2.5vw, 2rem)',
-  borderBottom: '1px solid rgba(42, 36, 32, 0.1)',
+  borderBottom: '1px solid color-mix(in srgb, var(--t-text) 10%, transparent)',
 };
 
 const modalEyebrowStyle = {
   display: 'block',
   fontStyle: 'italic',
   fontSize: 'clamp(0.8rem, 1.1vw, 0.95rem)',
-  color: 'rgba(42, 36, 32, 0.5)',
+  color: 'color-mix(in srgb, var(--t-text) 50%, transparent)',
   marginBottom: '0.45rem',
 };
 
@@ -146,13 +146,13 @@ const modalSummaryStyle = {
   maxWidth: '42ch',
   fontSize: 'clamp(0.85rem, 1.1vw, 0.94rem)',
   lineHeight: 1.6,
-  color: 'rgba(42, 36, 32, 0.7)',
+  color: 'color-mix(in srgb, var(--t-text) 70%, transparent)',
 };
 
 const closeButtonStyle = {
-  border: '1px solid rgba(42, 36, 32, 0.12)',
-  background: 'rgba(255,255,255,0.42)',
-  color: '#2a2420',
+  border: '1px solid var(--t-border-subtle)',
+  background: 'color-mix(in srgb, var(--t-surface) 42%, transparent)',
+  color: 'var(--t-text)',
   borderRadius: '999px',
   padding: '0.7rem 1rem',
   fontSize: '0.78rem',
@@ -179,7 +179,7 @@ const coverPreviewStyle = {
   flexShrink: 0,
   borderRadius: '0.85rem',
   overflow: 'hidden',
-  border: '1px solid rgba(42, 36, 32, 0.1)',
+  border: '1px solid color-mix(in srgb, var(--t-text) 10%, transparent)',
   marginBottom: '0.6rem',
 };
 
@@ -188,7 +188,7 @@ const fieldLabelStyle = {
   fontWeight: 700,
   letterSpacing: '0.08em',
   textTransform: 'uppercase',
-  color: 'rgba(42, 36, 32, 0.48)',
+  color: 'color-mix(in srgb, var(--t-text) 48%, transparent)',
   marginTop: '0.5rem',
 };
 
@@ -196,9 +196,9 @@ const inputStyle = {
   width: '100%',
   boxSizing: 'border-box',
   borderRadius: '0.75rem',
-  border: '1px solid rgba(42, 36, 32, 0.12)',
-  background: 'rgba(255,255,255,0.5)',
-  color: '#2a2420',
+  border: '1px solid var(--t-border-subtle)',
+  background: 'var(--t-glass-soft)',
+  color: 'var(--t-text)',
   padding: '0.75rem 0.9rem',
   fontSize: '0.92rem',
   fontFamily: 'inherit',
@@ -217,9 +217,9 @@ const tagChipsRowStyle = {
 };
 
 const tagChipStyle = {
-  border: '1px solid rgba(42, 36, 32, 0.12)',
-  background: 'rgba(255,255,255,0.32)',
-  color: 'rgba(42, 36, 32, 0.72)',
+  border: '1px solid var(--t-border-subtle)',
+  background: 'color-mix(in srgb, var(--t-surface) 32%, transparent)',
+  color: 'var(--t-text-secondary)',
   borderRadius: '999px',
   padding: '0.5rem 0.85rem',
   fontSize: '0.75rem',
@@ -229,9 +229,9 @@ const tagChipStyle = {
 };
 
 const activeTagChipStyle = {
-  background: '#2a2420',
-  color: '#f5f1df',
-  borderColor: '#2a2420',
+  background: 'var(--t-text)',
+  color: 'var(--t-text-inverse)',
+  borderColor: 'var(--t-text)',
 };
 
 const modalFooterStyle = {
@@ -240,13 +240,13 @@ const modalFooterStyle = {
   justifyContent: 'space-between',
   gap: '1rem',
   padding: 'clamp(1.25rem, 2.5vw, 2rem)',
-  borderTop: '1px solid rgba(42, 36, 32, 0.1)',
+  borderTop: '1px solid color-mix(in srgb, var(--t-text) 10%, transparent)',
   flexWrap: 'wrap',
 };
 
 const placeholderNoteStyle = {
   fontSize: '0.75rem',
-  color: 'rgba(42, 36, 32, 0.45)',
+  color: 'color-mix(in srgb, var(--t-text) 45%, transparent)',
   fontStyle: 'italic',
 };
 
@@ -255,9 +255,9 @@ const primaryButtonStyle = {
   alignItems: 'center',
   gap: '0.5rem',
   border: 'none',
-  background: 'linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)',
-  boxShadow: '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1)',
-  color: '#ffffff',
+  background: 'linear-gradient(175deg, color-mix(in srgb, var(--t-glass-highlight) 40%, transparent) 0%, transparent 52%), var(--t-gradient-accent)',
+  boxShadow: '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 color-mix(in srgb, var(--t-glass-highlight) 62.22%, transparent), inset 0 -1px 0 rgba(0,0,0,0.1)',
+  color: 'var(--t-on-solid)',
   borderRadius: '999px',
   padding: '0.75rem 1.1rem',
   fontSize: '0.85rem',
@@ -270,9 +270,9 @@ const secondaryButtonStyle = {
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
-  border: '1px solid rgba(42, 36, 32, 0.12)',
-  background: 'rgba(255,255,255,0.28)',
-  color: '#2a2420',
+  border: '1px solid var(--t-border-subtle)',
+  background: 'color-mix(in srgb, var(--t-surface) 28%, transparent)',
+  color: 'var(--t-text)',
   borderRadius: '999px',
   padding: '0.75rem 1rem',
   fontSize: '0.78rem',

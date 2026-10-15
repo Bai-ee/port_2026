@@ -193,7 +193,7 @@ function ItemEditor({ item, idPrefix, onChange, onRemove }) {
   const removeSubItem = (idx) => onChange({ subItems: item.subItems.filter((_, i) => i !== idx) });
 
   return (
-    <div id={idPrefix} style={{ display: 'grid', gap: 8, padding: 10, border: '1px solid var(--vrk-line)', borderRadius: 6, background: '#fff' }}>
+    <div id={idPrefix} style={{ display: 'grid', gap: 8, padding: 10, border: '1px solid var(--vrk-line)', borderRadius: 6, background: 'var(--t-surface)' }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         <div className="field" style={{ flex: '2 1 160px', minWidth: 0 }}>
           <span className="label">Item name</span>
@@ -634,7 +634,7 @@ export function InvoiceBuilderCard({ user, apiPath }) {
             </div>
           </div>
           {invoice.categories.map((cat, catIdx) => (
-            <div key={cat.id} id={`invoice-builder-category-${cat.id}`} style={{ display: 'grid', gap: 10, padding: 12, border: '1px solid var(--vrk-line)', borderRadius: 8, background: 'rgba(255,255,255,0.5)' }}>
+            <div key={cat.id} id={`invoice-builder-category-${cat.id}`} style={{ display: 'grid', gap: 10, padding: 12, border: '1px solid var(--vrk-line)', borderRadius: 8, background: 'var(--t-glass-soft)' }}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
                 <label className="field" style={{ flex: 1, minWidth: 0 }}>
                   <span className="label">Category name</span>
@@ -759,7 +759,7 @@ export function InvoiceBuilderCard({ user, apiPath }) {
           <div style={{ display: 'grid', gap: 10 }} id="invoice-builder-flow-panel">
             <span className="label">Flow / stack steps</span>
             {invoice.flowSteps.map((step, idx) => (
-              <div key={idx} id={`invoice-builder-flow-step-${idx}`} style={{ display: 'grid', gap: 8, padding: 10, border: '1px solid var(--vrk-line)', borderRadius: 6, background: '#fff' }}>
+              <div key={idx} id={`invoice-builder-flow-step-${idx}`} style={{ display: 'grid', gap: 8, padding: 10, border: '1px solid var(--vrk-line)', borderRadius: 6, background: 'var(--t-surface)' }}>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                   <input style={{ flex: '1 1 120px', minWidth: 0 }} placeholder="Platform" value={step.platform} onChange={(e) => updateFlowStep(idx, { platform: e.target.value })} />
                   <input style={{ flex: '1 1 90px', minWidth: 0 }} placeholder="Color" value={step.color} onChange={(e) => updateFlowStep(idx, { color: e.target.value })} />
@@ -847,8 +847,8 @@ export function InvoiceBuilderCard({ user, apiPath }) {
                     <span className="toggle-desc">{s.desc}</span>
                   </span>
                   <span style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4 }} onClick={(e) => e.stopPropagation()}>
-                    <button type="button" aria-label={`Move ${s.label} up`} disabled={idx === 0} onClick={(e) => { e.stopPropagation(); moveSection(s.id, -1); }} style={{ width: 22, height: 22, lineHeight: '20px', textAlign: 'center', padding: 0, border: '1px solid rgba(42,36,32,0.18)', borderRadius: 6, background: 'rgba(255,255,255,0.7)', cursor: idx === 0 ? 'not-allowed' : 'pointer', opacity: idx === 0 ? 0.4 : 1, fontSize: 11 }}>↑</button>
-                    <button type="button" aria-label={`Move ${s.label} down`} disabled={idx === orderedSections.length - 1} onClick={(e) => { e.stopPropagation(); moveSection(s.id, 1); }} style={{ width: 22, height: 22, lineHeight: '20px', textAlign: 'center', padding: 0, border: '1px solid rgba(42,36,32,0.18)', borderRadius: 6, background: 'rgba(255,255,255,0.7)', cursor: idx === orderedSections.length - 1 ? 'not-allowed' : 'pointer', opacity: idx === orderedSections.length - 1 ? 0.4 : 1, fontSize: 11 }}>↓</button>
+                    <button type="button" aria-label={`Move ${s.label} up`} disabled={idx === 0} onClick={(e) => { e.stopPropagation(); moveSection(s.id, -1); }} style={{ width: 22, height: 22, lineHeight: '20px', textAlign: 'center', padding: 0, border: '1px solid color-mix(in srgb, var(--t-text) 18%, transparent)', borderRadius: 6, background: 'color-mix(in srgb, var(--t-surface) 70%, transparent)', cursor: idx === 0 ? 'not-allowed' : 'pointer', opacity: idx === 0 ? 0.4 : 1, fontSize: 11 }}>↑</button>
+                    <button type="button" aria-label={`Move ${s.label} down`} disabled={idx === orderedSections.length - 1} onClick={(e) => { e.stopPropagation(); moveSection(s.id, 1); }} style={{ width: 22, height: 22, lineHeight: '20px', textAlign: 'center', padding: 0, border: '1px solid color-mix(in srgb, var(--t-text) 18%, transparent)', borderRadius: 6, background: 'color-mix(in srgb, var(--t-surface) 70%, transparent)', cursor: idx === orderedSections.length - 1 ? 'not-allowed' : 'pointer', opacity: idx === orderedSections.length - 1 ? 0.4 : 1, fontSize: 11 }}>↓</button>
                   </span>
                 </div>
               );
@@ -918,7 +918,7 @@ export function InvoiceBuilderCard({ user, apiPath }) {
           )}
 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
-            <button type="button" className="btn" style={{ background: '#2a2420', color: '#fff', borderColor: '#2a2420' }} onClick={publishInvoice} disabled={publishing}>
+            <button type="button" className="btn" style={{ background: 'var(--t-text)', color: 'var(--t-surface)', borderColor: 'var(--t-text)' }} onClick={publishInvoice} disabled={publishing}>
               {publishing ? 'Publishing…' : savedSlug ? 'Save & Republish' : 'Save & Publish'}
             </button>
             {publishing ? (

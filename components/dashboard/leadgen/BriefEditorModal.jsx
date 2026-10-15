@@ -109,7 +109,7 @@ export default function BriefEditorModal({ open, prospect, onClose, onSaved }) {
       <style jsx>{`
         #lgbe-backdrop {
           position: fixed; inset: 0;
-          background: rgba(15, 15, 15, 0.42);
+          background: var(--t-overlay);
           backdrop-filter: blur(8px);
           -webkit-backdrop-filter: blur(8px);
           z-index: 1000;
@@ -126,12 +126,12 @@ export default function BriefEditorModal({ open, prospect, onClose, onSaved }) {
           height: min(88vh, 900px);
           display: flex;
           flex-direction: column;
-          background: #fafafa;
-          border: 1px solid rgba(0, 0, 0, 0.08);
+          background: var(--t-surface);
+          border: 1px solid color-mix(in srgb, var(--t-text-strong) 8%, transparent);
           border-radius: 8px;
           box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
           font-family: 'Inter', system-ui, -apple-system, sans-serif;
-          color: #1a1a1a;
+          color: var(--t-text-body);
           overflow: hidden;
         }
 
@@ -141,7 +141,7 @@ export default function BriefEditorModal({ open, prospect, onClose, onSaved }) {
           justify-content: space-between;
           align-items: center;
           padding: 16px 22px;
-          border-bottom: 1px dashed rgba(0,0,0,0.10);
+          border-bottom: 1px dashed color-mix(in srgb, var(--t-text-strong) 10%, transparent);
           gap: 12px;
         }
         #lgbe-head-left {
@@ -157,7 +157,7 @@ export default function BriefEditorModal({ open, prospect, onClose, onSaved }) {
         }
         #lgbe-meta {
           font-size: 11px;
-          color: #888;
+          color: var(--t-text-muted);
         }
         #lgbe-head-right {
           display: flex;
@@ -167,7 +167,7 @@ export default function BriefEditorModal({ open, prospect, onClose, onSaved }) {
         #lgbe-char-count {
           font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
           font-size: 10px;
-          color: #aaa;
+          color: var(--t-text-faint);
           letter-spacing: 0.04em;
         }
 
@@ -187,7 +187,7 @@ export default function BriefEditorModal({ open, prospect, onClose, onSaved }) {
           font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
           font-size: 12px;
           line-height: 1.7;
-          color: #1a1a1a;
+          color: var(--t-text-body);
           tab-size: 2;
           box-sizing: border-box;
         }
@@ -201,13 +201,13 @@ export default function BriefEditorModal({ open, prospect, onClose, onSaved }) {
         }
         .lgbe-msg--err {
           color: #ff3b30;
-          background: rgba(255, 59, 48, 0.06);
-          border: 1px solid rgba(255, 59, 48, 0.22);
+          background: var(--t-danger-bg);
+          border: 1px solid var(--t-danger-border);
         }
         .lgbe-msg--ok {
-          color: #166534;
-          background: rgba(22, 101, 52, 0.06);
-          border: 1px solid rgba(22, 101, 52, 0.18);
+          color: var(--t-success);
+          background: var(--t-success-bg);
+          border: 1px solid var(--t-success-border);
         }
 
         #lgbe-foot {
@@ -216,12 +216,12 @@ export default function BriefEditorModal({ open, prospect, onClose, onSaved }) {
           justify-content: space-between;
           align-items: center;
           padding: 14px 22px;
-          border-top: 1px dashed rgba(0,0,0,0.10);
+          border-top: 1px dashed color-mix(in srgb, var(--t-text-strong) 10%, transparent);
           gap: 12px;
         }
         #lgbe-foot-hint {
           font-size: 11px;
-          color: #aaa;
+          color: var(--t-text-faint);
         }
         #lgbe-foot-actions {
           display: flex;

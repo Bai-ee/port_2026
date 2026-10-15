@@ -98,9 +98,9 @@ const HERO_INTRO = {
 const glass = {
   backdropFilter: 'blur(18px)',
   WebkitBackdropFilter: 'blur(18px)',
-  background: 'linear-gradient(160deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.07) 100%) padding-box, linear-gradient(135deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.08) 40%, rgba(255,255,255,0.35) 100%) border-box',
+  background: 'linear-gradient(160deg, color-mix(in srgb, var(--t-surface) 18%, transparent) 0%, color-mix(in srgb, var(--t-surface) 7%, transparent) 100%) padding-box, linear-gradient(135deg, color-mix(in srgb, var(--t-surface) 55%, transparent) 0%, color-mix(in srgb, var(--t-surface) 8%, transparent) 40%, color-mix(in srgb, var(--t-surface) 35%, transparent) 100%) border-box',
   border: '1px solid transparent',
-  boxShadow: '0 8px 40px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.3)',
+  boxShadow: '0 8px 40px rgba(0,0,0,0.08), inset 0 1px 0 color-mix(in srgb, var(--t-glass-highlight) 66.67%, transparent)',
   borderRadius: '1rem',
   padding: 'clamp(1rem, 2vw, 1.5rem)',
   position: 'fixed',
@@ -109,7 +109,7 @@ const glass = {
   visibility: 'hidden',
 };
 
-const HeroHeadline = ({ headerLogoRef, textColor = '#2a2420', cursorStageRef = null }) => {
+const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageRef = null }) => {
   const topLeftRef = useRef(null);
   const headlineContentRef = useRef(null);
   const scrambleTextRef = useRef(null);

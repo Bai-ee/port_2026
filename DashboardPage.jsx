@@ -80,6 +80,7 @@ import MarketingRefreshControl from './components/dashboard/marketing/MarketingR
 import { markGroupRefreshed } from './components/dashboard/marketing/refresh-groups';
 import { GROUP_RUNNERS } from './components/dashboard/marketing/refresh-runners';
 import GlassTooltipLayer from './components/dashboard/GlassTooltipLayer';
+import { useResolvedMode, useThemePreference } from './lib/theme-runtime/hooks';
 
 const LeadGenDashboard = dynamic(() => import('./components/dashboard/LeadGenDashboard'), {
   loading: () => null,
@@ -257,7 +258,12 @@ function initRemixShellVideo(el) {
 // fade — the dashboard entrance timeline holds hidden until it flips true.
 const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) => {
   const { user, userProfile, signOutUser, isAdmin, adminReady } = useAuth();
-  const [theme, setTheme] = useState('light');
+  // Theme state lives in the global runtime (lib/theme-runtime): `theme` is the RESOLVED mode
+  // ('light' | 'dark') that drives [data-dashboard-theme]; `themePreference` is what the
+  // #theme-toggle shows ('light' | 'dark' | 'system'). Persisted by the runtime, not by this page.
+  const theme = useResolvedMode();
+  const { preference: themePreference, setPreference: setThemePreference } = useThemePreference();
+  const setTheme = useCallback((next) => { setThemePreference(next); trackThemeChanged(next); }, [setThemePreference]);
   const [countdownHours, setCountdownHours] = useState(14);
   const [briefCooldownSeconds, setBriefCooldownSeconds] = useState(TIER_BRIEF_COOLDOWN_SECONDS);
   const [showTierModal, setShowTierModal] = useState(false);
@@ -4495,7 +4501,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 
     if (total === 0 && !recipeResults.length && !gbpRep) {
       return (
-        <div className="brief-kit">
+        <div className="brief-kit" id="signals-report-empty-brief-kit-shell" data-theme-scope="light">
           <div className="kit-paper">
             <p className="b-sub">Run <strong>Pull timelines</strong> or an analysis skill on the <strong>SOURCES</strong> tab — the report renders here and stays until your next run.</p>
           </div>
@@ -4512,7 +4518,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     );
 
     return (
-      <div className="brief-kit">
+      <div className="brief-kit" id="signals-report-brief-kit-shell" data-theme-scope="light">
         <div className="b-stack">
           {coverageHasData ? (
             <div className="kit-paper" id="signals-coverage-strip">
@@ -8122,7 +8128,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   height: 14,
                   borderRadius: 3,
                   background: entry.hex,
-                  border: '1px solid rgba(0, 0, 0, 0.18)',
+                  border: '1px solid color-mix(in srgb, var(--t-text-strong) 18%, transparent)',
                   flexShrink: 0,
                 }}
               />
@@ -10758,10 +10764,12 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               <UpRightArrow id="founders-chat-cta-icon" />
             </a>
           </div>
-          <div id="founders-hidden-controls" aria-hidden="true">
+          {/* Visually-hidden power-user controls (theme preference + sign out). `inert` (not aria-hidden) keeps the focusable buttons out of the tab order and the accessibility tree; the Studio preview switch is the supported setter. */}
+          <div id="founders-hidden-controls" inert>
             <div id="theme-toggle" role="group" aria-label="Theme">
-              <button type="button" data-theme="dark" className={theme === 'dark' ? 'is-active' : ''} onClick={() => { setTheme('dark'); trackThemeChanged('dark'); }}>DARK</button>
-              <button type="button" data-theme="light" className={theme === 'light' ? 'is-active' : ''} onClick={() => { setTheme('light'); trackThemeChanged('light'); }}>LIGHT</button>
+              <button type="button" data-theme-option="dark" className={themePreference === 'dark' ? 'is-active' : ''} onClick={() => setTheme('dark')}>DARK</button>
+              <button type="button" data-theme-option="light" className={themePreference === 'light' ? 'is-active' : ''} onClick={() => setTheme('light')}>LIGHT</button>
+              <button type="button" data-theme-option="system" className={themePreference === 'system' ? 'is-active' : ''} onClick={() => setTheme('system')}>SYSTEM</button>
             </div>
             <button type="button" id="founders-signout" onClick={handleSignOut}>Sign Out</button>
           </div>
@@ -10823,26 +10831,26 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               boxShadow: '0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4), 0px 5px 10px rgba(0,0,0,0.1), 0px 15px 30px rgba(0,0,0,0.1), 0px 20px 40px rgba(0,0,0,0.15)',
             }}>
               <div id="dashboard-associate-brand-row" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', justifyContent: 'space-between' }}>
-                <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', display: 'block' }} />
-                <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.44)', fontWeight: 700, fontFamily: '"Space Mono", monospace' }}>Client Access</span>
-                <Link href="/" id="dashboard-associate-back-btn" aria-label="Back to site" data-tooltip-disabled="true" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '2.4rem', height: '2.4rem', borderRadius: '999px', background: 'rgba(255,255,255,0.34)', border: '1px solid rgba(42,36,32,0.12)', color: 'rgba(42,36,32,0.58)', textDecoration: 'none', fontSize: '1.05rem', fontFamily: '"Space Mono", monospace', lineHeight: 1 }}>✕</Link>
+                <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid color-mix(in srgb, var(--t-surface) 35%, transparent)', display: 'block' }} />
+                <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'color-mix(in srgb, var(--t-text) 44%, transparent)', fontWeight: 700, fontFamily: '"Space Mono", monospace' }}>Client Access</span>
+                <Link href="/" id="dashboard-associate-back-btn" aria-label="Back to site" data-tooltip-disabled="true" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '2.4rem', height: '2.4rem', borderRadius: '999px', background: 'color-mix(in srgb, var(--t-surface) 34%, transparent)', border: '1px solid var(--t-border-subtle)', color: 'color-mix(in srgb, var(--t-text) 58%, transparent)', textDecoration: 'none', fontSize: '1.05rem', fontFamily: '"Space Mono", monospace', lineHeight: 1 }}>✕</Link>
               </div>
 
               <div id="dashboard-associate-marquee-viewport" style={{ width: '100%', overflow: 'hidden', margin: '0 0 0.7rem' }}>
                 <div ref={noWorkspaceMarqueeTrackRef} style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform' }}>
-                  <span style={{ margin: 0, flexShrink: 0, color: '#2a2420', fontSize: 'clamp(2rem, 8.5vw, 7rem)', lineHeight: 1, letterSpacing: '-0.04em', fontFamily: '"Doto", "Space Mono", monospace', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                  <span style={{ margin: 0, flexShrink: 0, color: 'var(--t-text)', fontSize: 'clamp(2rem, 8.5vw, 7rem)', lineHeight: 1, letterSpacing: '-0.04em', fontFamily: '"Doto", "Space Mono", monospace', fontWeight: 700, whiteSpace: 'nowrap' }}>
                     LINK YOUR DASHBOARD&nbsp;·&nbsp;ASSOCIATE WEBSITE&nbsp;·&nbsp;
                   </span>
-                  <span aria-hidden="true" style={{ margin: 0, flexShrink: 0, color: '#2a2420', fontSize: 'clamp(2rem, 8.5vw, 7rem)', lineHeight: 1, letterSpacing: '-0.04em', fontFamily: '"Doto", "Space Mono", monospace', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                  <span aria-hidden="true" style={{ margin: 0, flexShrink: 0, color: 'var(--t-text)', fontSize: 'clamp(2rem, 8.5vw, 7rem)', lineHeight: 1, letterSpacing: '-0.04em', fontFamily: '"Doto", "Space Mono", monospace', fontWeight: 700, whiteSpace: 'nowrap' }}>
                     LINK YOUR DASHBOARD&nbsp;·&nbsp;ASSOCIATE WEBSITE&nbsp;·&nbsp;
                   </span>
                 </div>
               </div>
 
-              <div id="dashboard-associate-email-chip" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1rem', padding: '0.6rem 0.75rem', borderRadius: '0.75rem', background: 'rgba(255,255,255,0.55)', border: '1px solid rgba(42,36,32,0.1)', overflow: 'hidden' }}>
-                <Lock size={14} strokeWidth={1.5} style={{ flexShrink: 0, color: 'rgba(42,36,32,0.45)' }} aria-hidden="true" />
-                <span id="dashboard-associate-email-text" style={{ flex: 1, fontSize: '0.82rem', color: 'rgba(42,36,32,0.72)', fontFamily: '"Space Grotesk", system-ui, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.email}</span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', flexShrink: 0, fontSize: '0.6rem', fontFamily: '"Space Mono", monospace', letterSpacing: '0.07em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.4)', background: 'rgba(42,36,32,0.06)', borderRadius: '999px', padding: '0.2rem 0.5rem' }}>
+              <div id="dashboard-associate-email-chip" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1rem', padding: '0.6rem 0.75rem', borderRadius: '0.75rem', background: 'color-mix(in srgb, var(--t-surface) 55%, transparent)', border: '1px solid color-mix(in srgb, var(--t-text) 10%, transparent)', overflow: 'hidden' }}>
+                <Lock size={14} strokeWidth={1.5} style={{ flexShrink: 0, color: 'color-mix(in srgb, var(--t-text) 45%, transparent)' }} aria-hidden="true" />
+                <span id="dashboard-associate-email-text" style={{ flex: 1, fontSize: '0.82rem', color: 'var(--t-text-secondary)', fontFamily: '"Space Grotesk", system-ui, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.email}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', flexShrink: 0, fontSize: '0.6rem', fontFamily: '"Space Mono", monospace', letterSpacing: '0.07em', textTransform: 'uppercase', color: 'color-mix(in srgb, var(--t-text) 40%, transparent)', background: 'color-mix(in srgb, var(--t-text) 6%, transparent)', borderRadius: '999px', padding: '0.2rem 0.5rem' }}>
                   <Lock size={10} strokeWidth={2} aria-hidden="true" />
                   SIGNED IN
                 </span>
@@ -10854,7 +10862,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 onSubmit={(e) => { e.preventDefault(); handleReseed(); }}
               >
                 <label style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                  <span style={{ color: 'rgba(42,36,32,0.55)', fontSize: '0.72rem', fontWeight: 400, fontFamily: '"Space Mono", monospace', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Website URL</span>
+                  <span style={{ color: 'color-mix(in srgb, var(--t-text) 55%, transparent)', fontSize: '0.72rem', fontWeight: 400, fontFamily: '"Space Mono", monospace', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Website URL</span>
                   <input
                     id="dashboard-associate-url"
                     type="url"
@@ -10862,15 +10870,15 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     onChange={(e) => { setReseedUrl(e.target.value); setReseedError(''); setReseedSuccess(false); }}
                     placeholder="yourbusiness.com"
                     spellCheck={false}
-                    style={{ width: '100%', boxSizing: 'border-box', padding: '0.9rem 1rem', borderRadius: '0.95rem', border: '1px solid rgba(42,36,32,0.12)', background: 'rgba(255,255,255,0.72)', color: '#2a2420', fontSize: '1rem', fontFamily: '"Space Grotesk", system-ui, sans-serif' }}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '0.9rem 1rem', borderRadius: '0.95rem', border: '1px solid var(--t-border-subtle)', background: 'color-mix(in srgb, var(--t-surface) 72%, transparent)', color: 'var(--t-text)', fontSize: '1rem', fontFamily: '"Space Grotesk", system-ui, sans-serif' }}
                   />
                 </label>
 
                 {reseedError ? (
-                  <div id="dashboard-associate-error" style={{ color: '#8b1e1e', fontSize: '0.82rem', fontFamily: '"Space Mono", monospace', letterSpacing: '0.04em' }}>[ERROR: {reseedError}]</div>
+                  <div id="dashboard-associate-error" style={{ color: 'var(--t-danger)', fontSize: '0.82rem', fontFamily: '"Space Mono", monospace', letterSpacing: '0.04em' }}>[ERROR: {reseedError}]</div>
                 ) : null}
                 {reseedSuccess ? (
-                  <div id="dashboard-associate-success" style={{ color: '#2d6a4f', fontSize: '0.82rem', fontFamily: '"Space Mono", monospace', letterSpacing: '0.04em' }}>Dashboard creation queued. This page will update when ready.</div>
+                  <div id="dashboard-associate-success" style={{ color: 'var(--t-success)', fontSize: '0.82rem', fontFamily: '"Space Mono", monospace', letterSpacing: '0.04em' }}>Dashboard creation queued. This page will update when ready.</div>
                 ) : null}
 
                 <button
@@ -10878,7 +10886,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   id="dashboard-associate-submit-btn"
                   className="cta-pill-btn"
                   disabled={reseedLoading || !reseedUrl.trim()}
-                  style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minHeight: '3rem', border: 'none', borderRadius: '999px', background: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)', color: '#fff', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer', marginTop: '0.4rem', fontFamily: '"Space Mono", monospace', letterSpacing: '0.05em', textTransform: 'uppercase' }}
+                  style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minHeight: '3rem', border: 'none', borderRadius: '999px', background: 'linear-gradient(135deg, var(--t-accent-bright) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%)', color: '#fff', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer', marginTop: '0.4rem', fontFamily: '"Space Mono", monospace', letterSpacing: '0.05em', textTransform: 'uppercase' }}
                 >
                   {reseedLoading ? 'Connecting…' : 'Connect'}
                 </button>
@@ -10888,14 +10896,14 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     type="button"
                     id="dashboard-associate-signout-btn"
                     onClick={handleSignOut}
-                    style={{ flex: 1, borderRadius: '999px', border: '1px solid rgba(42,36,32,0.14)', padding: '0.75rem 1rem', color: 'rgba(42,36,32,0.65)', background: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontSize: '0.82rem', fontFamily: '"Space Mono", monospace', letterSpacing: '0.04em', textTransform: 'uppercase' }}
+                    style={{ flex: 1, borderRadius: '999px', border: '1px solid color-mix(in srgb, var(--t-text) 14%, transparent)', padding: '0.75rem 1rem', color: 'color-mix(in srgb, var(--t-text) 65%, transparent)', background: 'color-mix(in srgb, var(--t-surface) 60%, transparent)', cursor: 'pointer', fontSize: '0.82rem', fontFamily: '"Space Mono", monospace', letterSpacing: '0.04em', textTransform: 'uppercase' }}
                   >
                     Sign Out
                   </button>
                   <Link
                     href="/"
                     id="dashboard-associate-back-site-link"
-                    style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '999px', border: '1px solid rgba(42,36,32,0.14)', padding: '0.75rem 1rem', textDecoration: 'none', color: 'rgba(42,36,32,0.65)', background: 'rgba(255,255,255,0.6)', fontSize: '0.82rem', fontFamily: '"Space Mono", monospace', letterSpacing: '0.04em', textTransform: 'uppercase' }}
+                    style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '999px', border: '1px solid color-mix(in srgb, var(--t-text) 14%, transparent)', padding: '0.75rem 1rem', textDecoration: 'none', color: 'color-mix(in srgb, var(--t-text) 65%, transparent)', background: 'color-mix(in srgb, var(--t-surface) 60%, transparent)', fontSize: '0.82rem', fontFamily: '"Space Mono", monospace', letterSpacing: '0.04em', textTransform: 'uppercase' }}
                   >
                     Back to Site
                   </Link>
@@ -11109,13 +11117,13 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                 DOWNLOAD text never shifts when the state flips. */}
                             <span aria-hidden="true" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, flexShrink: 0, marginTop: 1 }}>
                               {dlAllBusy ? (
-                                <span style={{ width: 16, height: 16, borderRadius: '50%', background: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)', animation: 'run-indicator-pulse 1.4s ease-in-out infinite', flexShrink: 0 }} />
+                                <span style={{ width: 16, height: 16, borderRadius: '50%', background: 'linear-gradient(135deg, var(--t-accent-bright) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%)', animation: 'run-indicator-pulse 1.4s ease-in-out infinite', flexShrink: 0 }} />
                               ) : (
                                 <DownloadCloud size={22} strokeWidth={2} stroke="url(#coverage-grad)" />
                               )}
                             </span>
-                            <span className="dl-all-text dl-all-text--full" style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>DOWNLOAD</span>
-                            <span className="dl-all-text dl-all-text--short" style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>DL</span>
+                            <span className="dl-all-text dl-all-text--full" style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: 'linear-gradient(135deg, var(--t-accent-bright) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>DOWNLOAD</span>
+                            <span className="dl-all-text dl-all-text--short" style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: 'linear-gradient(135deg, var(--t-accent-bright) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>DL</span>
                           </button>
                         </>
                       );
@@ -11127,7 +11135,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       const auditCard = intakeCapabilityCards.find((c) => c.id === 'audit-summary');
                       const { pct } = computeDataCoverage(auditCard?.rows);
                       // Primary brand gradient for the value text (background-clip).
-                      const GRAD = 'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)';
+                      const GRAD = 'linear-gradient(135deg, var(--t-accent-bright) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%)';
                       return (
                         <button
                           type="button"
@@ -11167,9 +11175,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                           <svg width="0" height="0" aria-hidden="true" style={{ position: 'absolute' }}>
                             <defs>
                               <linearGradient id="coverage-grad" x1="0" y1="0" x2="1" y2="1">
-                                <stop offset="0%" stopColor="hsl(185,100%,45%)" />
-                                <stop offset="52%" stopColor="hsl(262,100%,55%)" />
-                                <stop offset="100%" stopColor="hsl(314,100%,50%)" />
+                                <stop offset="0%" stopColor="var(--t-accent-bright)" />
+                                <stop offset="52%" stopColor="var(--t-support-1)" />
+                                <stop offset="100%" stopColor="var(--t-support-2)" />
                               </linearGradient>
                             </defs>
                           </svg>
@@ -11713,7 +11721,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                             {/* BRAND MARK (top-left) */}
                             <div
                               className="sg-quad sg-q-brand-mark"
-                              style={{ background: sgLogoSrc ? (sgDisplayData?.colors?.neutral?.hex || sgDisplayData?.colors?.primary?.hex || '#f0efed') : 'rgba(255, 255, 255, 0.65)' }}
+                              style={{ background: sgLogoSrc ? (sgDisplayData?.colors?.neutral?.hex || sgDisplayData?.colors?.primary?.hex || 'var(--t-inset)') : 'color-mix(in srgb, var(--t-surface) 65%, transparent)' }}
                             >
                               {sgLogoSrc ? (
                                 <img
@@ -11728,7 +11736,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                             </div>
 
                             {/* COLOR (top-right) */}
-                            <div className="sg-quad sg-q-color" style={!hasSgColors ? { background: 'rgba(255,255,255,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center' } : undefined}>
+                            <div className="sg-quad sg-q-color" style={!hasSgColors ? { background: 'color-mix(in srgb, var(--t-surface) 65%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center' } : undefined}>
                               {hasSgColors ? [
                                 sgDisplayData.colors.primary,
                                 sgDisplayData.colors.secondary,
@@ -11744,7 +11752,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                             {/* TYPE (bottom-left) */}
                             <div
                               className="sg-quad sg-q-type"
-                              style={{ background: hasSgType ? (sgDisplayData?.colors?.neutral?.shades?.[0] || sgDisplayData?.colors?.primary?.shades?.[0] || sgDisplayData?.colors?.neutral?.hex || '#faf8f4') : 'rgba(255,255,255,0.65)' }}
+                              style={{ background: hasSgType ? (sgDisplayData?.colors?.neutral?.shades?.[0] || sgDisplayData?.colors?.primary?.shades?.[0] || sgDisplayData?.colors?.neutral?.hex || 'var(--t-inset)') : 'color-mix(in srgb, var(--t-surface) 65%, transparent)' }}
                             >
                               {hasSgType && headName ? (
                                 <>
@@ -11765,7 +11773,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                               className="sg-quad sg-q-gradient"
                               style={hasSgColors ? {
                                 background: `linear-gradient(135deg, ${sgDisplayData.colors.primary?.hex || '#888'}, ${sgDisplayData.colors.secondary?.hex || sgDisplayData.colors.neutral?.hex || '#ddd'})`,
-                              } : { background: 'rgba(255,255,255,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                              } : { background: 'color-mix(in srgb, var(--t-surface) 65%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                             >
                               {!hasSgColors && <span className="sg-no-data">{"GRADIENT"}</span>}
                             </div>
@@ -12718,7 +12726,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             {[
               // { key: 'onboarding', label: 'Data Visualization',      sub: 'Capture & inspect',       icon: ClipboardList,         color: '#7b5fff' },
               { key: 'deliverables', label: 'Deliverables',          sub: 'What you walk away with',   icon: Images,                 color: '#14b8a6' },
-              { key: 'brief',      label: 'Executive Brief',         sub: 'Daily stand up',          icon: ChartColumnIncreasing, color: '#2a2420' },
+              { key: 'brief',      label: 'Executive Brief',         sub: 'Daily stand up',          icon: ChartColumnIncreasing, color: 'var(--t-text)' },
               { key: 'knowledge',  label: 'Knowledge Officer',       sub: 'Custom data & context',    icon: BrainIcon,             color: '#3b82f6' },
               { key: 'growth',     label: 'Marketing Director',      sub: 'SEO, signals & growth',    icon: Settings2,             color: '#10b981' },
               { key: 'content',    label: 'Creative Team',            sub: 'Design production',        icon: Workflow,               color: '#14b8a6' },
@@ -12797,7 +12805,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   <span className="capability-nav-btn-sub">{sub}</span>
                 </span>
                 {isLocked ? (
-                  <span className="capability-nav-btn-icon-wrap" style={{ color: 'rgba(42,36,32,0.55)' }}>
+                  <span className="capability-nav-btn-icon-wrap" style={{ color: 'color-mix(in srgb, var(--t-text) 55%, transparent)' }}>
                     <Lock size={18} strokeWidth={2} />
                   </span>
                 ) : NavIcon ? (
@@ -12906,16 +12914,16 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               borderRadius: '10px',
               boxSizing: 'border-box',
               ...internalPageGlassCardStyle,
-              background: 'rgba(255, 255, 255, 1)',
+              background: 'var(--t-surface)',
               boxShadow: '0px 5px 10px rgba(0, 0, 0, 0.1), 0px 15px 30px rgba(0, 0, 0, 0.1), 0px 20px 40px rgba(0, 0, 0, 0.15)',
-              border: '1px solid rgba(255, 255, 255, 0.5)',
+              border: '1px solid var(--t-glass-soft)',
             }}
           >
 
             {/* Brand row — exact auth brandStyle */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', justifyContent: 'space-between' }}>
               <img src="/img/circle_logo.png" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', objectFit: 'contain', overflow: 'visible', display: 'block' }} />
-              <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.44)', fontWeight: 700, fontFamily: '"Space Mono", monospace' }}>
+              <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'color-mix(in srgb, var(--t-text) 44%, transparent)', fontWeight: 700, fontFamily: '"Space Mono", monospace' }}>
                 {adhocActive ? (adhocTerminal.brand || 'Working') : activeModuleCard ? 'Updating Dashboard' : 'Client Access'}
               </span>
               {/* Close — matches the payment modal close button */}
@@ -12932,7 +12940,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             <div style={{ width: '100%', overflow: 'hidden', margin: '0 0 0.7rem' }}>
               <div ref={modalMarqueeTrackRef} style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform' }}>
                 {(['a', 'b']).map((k) => (
-                  <span key={k} aria-hidden={k === 'b' ? 'true' : undefined} style={{ margin: 0, flexShrink: 0, color: '#2a2420', fontSize: 'clamp(2rem, 8.5vw, 7rem)', lineHeight: 1, letterSpacing: '-0.04em', fontFamily: '"Doto", "Space Mono", monospace', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                  <span key={k} aria-hidden={k === 'b' ? 'true' : undefined} style={{ margin: 0, flexShrink: 0, color: 'var(--t-text)', fontSize: 'clamp(2rem, 8.5vw, 7rem)', lineHeight: 1, letterSpacing: '-0.04em', fontFamily: '"Doto", "Space Mono", monospace', fontWeight: 700, whiteSpace: 'nowrap' }}>
                     {adhocActive
                       ? `${adhocTerminal.title || 'WORKING'} \u00B7 `
                       : activeModuleCard
@@ -13011,11 +13019,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   <button
                     type="button"
                     onClick={() => downloadBrowserAsset(adhocTerminal.videoUrl, `${safeDownloadName(client?.businessName || 'video')}-render.mp4`, { preferNativeShare: true, mimeType: 'video/mp4' })}
-                    style={{ border: 0, background: 'transparent', padding: 0, textDecoration: 'underline', color: '#2a2420', fontFamily: '"Space Mono", monospace', fontSize: '0.72rem', cursor: 'pointer' }}
+                    style={{ border: 0, background: 'transparent', padding: 0, textDecoration: 'underline', color: 'var(--t-text)', fontFamily: '"Space Mono", monospace', fontSize: '0.72rem', cursor: 'pointer' }}
                   >
                     Save Video
                   </button>
-                  <a href={adhocTerminal.videoUrl} target="_blank" rel="noopener noreferrer" download={`${safeDownloadName(client?.businessName || 'video')}-render.mp4`} style={{ textDecoration: 'underline', color: '#2a2420', fontFamily: '"Space Mono", monospace', fontSize: '0.72rem' }}>Open <UpRightArrow style={{ marginLeft: '0.15rem', opacity: 0.82 }} /></a>
+                  <a href={adhocTerminal.videoUrl} target="_blank" rel="noopener noreferrer" download={`${safeDownloadName(client?.businessName || 'video')}-render.mp4`} style={{ textDecoration: 'underline', color: 'var(--t-text)', fontFamily: '"Space Mono", monospace', fontSize: '0.72rem' }}>Open <UpRightArrow style={{ marginLeft: '0.15rem', opacity: 0.82 }} /></a>
                 </span>
               ) : (
                 <span id="intake-modal-footer-note">
@@ -13430,7 +13438,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               >[ ✕ ]</button>
             </div>
             {namedBriefShareError && (
-              <div id="named-brief-share-error" style={{ position: 'absolute', top: 52, right: 12, maxWidth: 320, padding: '6px 10px', borderRadius: 8, background: 'rgba(180,35,24,0.12)', color: '#b42318', fontFamily: 'var(--font-mono)', fontSize: 11, lineHeight: 1.4, zIndex: 5 }}>
+              <div id="named-brief-share-error" style={{ position: 'absolute', top: 52, right: 12, maxWidth: 320, padding: '6px 10px', borderRadius: 8, background: 'var(--t-danger-bg)', color: 'var(--t-danger)', fontFamily: 'var(--font-mono)', fontSize: 11, lineHeight: 1.4, zIndex: 5 }}>
                 {namedBriefShareError}
               </div>
             )}
@@ -13442,7 +13450,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 sandbox="allow-same-origin allow-scripts allow-popups allow-downloads"
               />
             ) : (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '0 10%', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase', color: namedBriefView.error ? '#b42318' : 'rgba(42,36,32,0.6)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '0 10%', textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase', color: namedBriefView.error ? 'var(--t-danger)' : 'color-mix(in srgb, var(--t-text) 60%, transparent)' }}>
                 {namedBriefView.error || 'Assembling brief…'}
               </div>
             )}
@@ -13532,7 +13540,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     width: 'min(100%, calc((90vh - 88px) * 1536 / 1024))',
                     borderRadius: 16,
                     overflow: 'hidden',
-                    border: '1px solid rgba(42, 36, 32, 0.1)',
+                    border: '1px solid color-mix(in srgb, var(--t-text) 10%, transparent)',
                     boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
                   }}
                 >
@@ -13636,7 +13644,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                             {/* BRAND MARK (top-left) */}
                             <div
                               className="sg-quad sg-q-brand-mark"
-                              style={{ background: sgModalLogoSrc ? (sgModalDisplayData?.colors?.neutral?.hex || sgModalDisplayData?.colors?.primary?.hex || '#f0efed') : 'rgba(255, 255, 255, 0.65)' }}
+                              style={{ background: sgModalLogoSrc ? (sgModalDisplayData?.colors?.neutral?.hex || sgModalDisplayData?.colors?.primary?.hex || 'var(--t-inset)') : 'color-mix(in srgb, var(--t-surface) 65%, transparent)' }}
                             >
                               {sgModalLogoSrc ? (
                                 <img
@@ -13650,7 +13658,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                             </div>
 
                             {/* COLOR (top-right) */}
-                            <div className="sg-quad sg-q-color" style={!hasSgModalColors ? { background: 'rgba(255,255,255,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center' } : undefined}>
+                            <div className="sg-quad sg-q-color" style={!hasSgModalColors ? { background: 'color-mix(in srgb, var(--t-surface) 65%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center' } : undefined}>
                               {hasSgModalColors ? [
                                 sgModalDisplayData.colors.primary,
                                 sgModalDisplayData.colors.secondary,
@@ -13666,7 +13674,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                             {/* TYPE (bottom-left) */}
                             <div
                               className="sg-quad sg-q-type"
-                              style={{ background: hasSgModalType ? (sgModalDisplayData?.colors?.neutral?.shades?.[0] || sgModalDisplayData?.colors?.primary?.shades?.[0] || sgModalDisplayData?.colors?.neutral?.hex || '#faf8f4') : 'rgba(255,255,255,0.65)' }}
+                              style={{ background: hasSgModalType ? (sgModalDisplayData?.colors?.neutral?.shades?.[0] || sgModalDisplayData?.colors?.primary?.shades?.[0] || sgModalDisplayData?.colors?.neutral?.hex || 'var(--t-inset)') : 'color-mix(in srgb, var(--t-surface) 65%, transparent)' }}
                             >
                               {hasSgModalType && headName ? (
                                 <>
@@ -13687,7 +13695,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                               className="sg-quad sg-q-gradient"
                               style={hasSgModalColors ? {
                                 background: `linear-gradient(${sgModalDisplayData.gradient?.angle || '135deg'}, ${sgModalDisplayData.gradient?.from || sgModalDisplayData.colors.primary?.hex || '#888'}, ${sgModalDisplayData.gradient?.to || sgModalDisplayData.colors.secondary?.hex || sgModalDisplayData.colors.neutral?.hex || '#ddd'})`,
-                              } : { background: 'rgba(255,255,255,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                              } : { background: 'color-mix(in srgb, var(--t-surface) 65%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                             >
                               {!hasSgModalColors && <span className="sg-no-data">{"GRADIENT"}</span>}
                             </div>
@@ -13871,11 +13879,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         width: 'fit-content', minHeight: 48, padding: '0 20px', borderRadius: 999,
                         border: 'none', color: '#fff', fontFamily: 'var(--font-ui)', fontSize: 15,
                         fontWeight: 700, textDecoration: 'none', cursor: 'pointer', overflow: 'hidden',
-                        background: 'linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)',
+                        background: 'linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, var(--t-accent-bright) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%)',
                         boxShadow: '0 0 14px 3px rgba(0,200,228,0.22), 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1)',
                       }}
                     >
-                      <img src="/img/profile2_400x400.png" alt="" width={26} height={26} style={{ position: 'relative', zIndex: 1, width: 26, height: 26, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', flexShrink: 0 }} />
+                      <img src="/img/profile2_400x400.png" alt="" width={26} height={26} style={{ position: 'relative', zIndex: 1, width: 26, height: 26, borderRadius: '50%', objectFit: 'cover', border: '2px solid color-mix(in srgb, var(--t-surface) 35%, transparent)', flexShrink: 0 }} />
                       <span style={{ position: 'relative', zIndex: 1 }}>Meet with a Human</span>
                       <UpRightArrow size={14} style={{ position: 'relative', zIndex: 1, opacity: 0.8 }} />
                     </a>
@@ -13996,10 +14004,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 {/* Social Preview — single visual DATA tab: share image, brand
                     assets (favicon · apple icon · theme swatch), and metadata. */}
                 {activeTileModal.cardId === 'social-preview' ? (() => {
-                  const assetCard   = { display: 'grid', gap: 8, justifyItems: 'center', padding: 12, border: '1px solid var(--border)', borderRadius: 10, background: 'rgba(255,255,255,0.6)' };
-                  const swatchFrame = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: 56, borderRadius: 8, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.9)', overflow: 'hidden' };
+                  const assetCard   = { display: 'grid', gap: 8, justifyItems: 'center', padding: 12, border: '1px solid var(--border)', borderRadius: 10, background: 'color-mix(in srgb, var(--t-surface) 60%, transparent)' };
+                  const swatchFrame = { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: 56, borderRadius: 8, border: '1px solid var(--border)', background: 'color-mix(in srgb, var(--t-surface) 90%, transparent)', overflow: 'hidden' };
                   const assetLbl    = { fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)', textAlign: 'center', wordBreak: 'break-all' };
-                  const missing     = { fontFamily: 'var(--font-mono)', fontSize: 12, color: 'rgba(42,36,32,0.4)' };
+                  const missing     = { fontFamily: 'var(--font-mono)', fontSize: 12, color: 'color-mix(in srgb, var(--t-text) 40%, transparent)' };
                   const onImgErr    = (e) => { e.currentTarget.style.display = 'none'; };
                   const cardMax     = 560;
                   const domain = (() => {
@@ -14032,8 +14040,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                               <div style={{ display: 'grid', gap: 8 }}>
                                 <div className="tile-detail-row-section-head">SHARE PREVIEW</div>
                                 {siteMeta.ogImage ? (
-                                  <div style={{ maxWidth: cardMax, border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden', background: 'rgba(255,255,255,0.72)', boxShadow: '0 4px 18px rgba(42,36,32,0.08)' }}>
-                                    <img src={siteMeta.ogImage} alt={siteMeta.ogImageAlt || 'Social share image'} style={{ display: 'block', width: '100%', aspectRatio: '1.91 / 1', objectFit: 'cover', background: 'rgba(0,0,0,0.03)' }} onError={onImgErr} />
+                                  <div style={{ maxWidth: cardMax, border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden', background: 'color-mix(in srgb, var(--t-surface) 72%, transparent)', boxShadow: '0 4px 18px rgba(42,36,32,0.08)' }}>
+                                    <img src={siteMeta.ogImage} alt={siteMeta.ogImageAlt || 'Social share image'} style={{ display: 'block', width: '100%', aspectRatio: '1.91 / 1', objectFit: 'cover', background: 'color-mix(in srgb, var(--t-text-strong) 3%, transparent)' }} onError={onImgErr} />
                                     <div style={{ display: 'grid', gap: 5, padding: '12px 14px' }}>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                                         {siteMeta.favicon && <img src={siteMeta.favicon} alt="" style={{ width: 14, height: 14, borderRadius: 3, objectFit: 'contain', flexShrink: 0 }} onError={onImgErr} />}
@@ -14054,18 +14062,18 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                   faux address bar, showing how it reads in the tab. */}
                               <div style={{ display: 'grid', gap: 8 }}>
                                 <div className="tile-detail-row-section-head">IN A BROWSER TAB</div>
-                                <div style={{ maxWidth: cardMax, border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', background: 'rgba(42,36,32,0.05)' }}>
+                                <div style={{ maxWidth: cardMax, border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', background: 'color-mix(in srgb, var(--t-text) 5%, transparent)' }}>
                                   <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, padding: '10px 10px 0' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, maxWidth: 300, background: '#fff', border: '1px solid var(--border)', borderBottom: 'none', borderRadius: '10px 10px 0 0', padding: '10px 14px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, maxWidth: 300, background: 'var(--t-surface)', border: '1px solid var(--border)', borderBottom: 'none', borderRadius: '10px 10px 0 0', padding: '10px 14px' }}>
                                       {siteMeta.favicon
                                         ? <img src={siteMeta.favicon} alt="" style={{ width: 22, height: 22, borderRadius: 5, objectFit: 'contain', flexShrink: 0 }} onError={onImgErr} />
-                                        : <span style={{ width: 22, height: 22, borderRadius: 5, background: 'rgba(42,36,32,0.12)', flexShrink: 0 }} />}
+                                        : <span style={{ width: 22, height: 22, borderRadius: 5, background: 'var(--t-border-subtle)', flexShrink: 0 }} />}
                                       <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-display)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{siteMeta.title || domain || 'Your site'}</span>
                                       <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-secondary)', flexShrink: 0 }}>×</span>
                                     </div>
-                                    <div style={{ width: 56, height: 22, borderRadius: '8px 8px 0 0', background: 'rgba(255,255,255,0.4)', border: '1px solid var(--border)', borderBottom: 'none', flexShrink: 0 }} />
+                                    <div style={{ width: 56, height: 22, borderRadius: '8px 8px 0 0', background: 'color-mix(in srgb, var(--t-surface) 40%, transparent)', border: '1px solid var(--border)', borderBottom: 'none', flexShrink: 0 }} />
                                   </div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', borderTop: '1px solid var(--border)', padding: '9px 14px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--t-surface)', borderTop: '1px solid var(--border)', padding: '9px 14px' }}>
                                     <span style={{ width: 12, height: 12, borderRadius: 3, border: '1.5px solid var(--text-secondary)', opacity: 0.6, flexShrink: 0 }} />
                                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{domain || 'your-domain.com'}</span>
                                   </div>
@@ -14084,7 +14092,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                     <span style={assetLbl}>Apple Icon</span>
                                   </div>
                                   <div style={assetCard}>
-                                    <div style={{ ...swatchFrame, background: siteMeta.themeColor || 'rgba(255,255,255,0.9)' }}>
+                                    <div style={{ ...swatchFrame, background: siteMeta.themeColor || 'color-mix(in srgb, var(--t-surface) 90%, transparent)' }}>
                                       {!siteMeta.themeColor && <span style={missing}>—</span>}
                                     </div>
                                     <span style={assetLbl}>{siteMeta.themeColor || 'No theme color'}</span>
@@ -14560,7 +14568,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       </div>
                       <div className="tile-detail-tab-content">
                         {modalTab === 'preview' && (
-                          <div className="mu-tab-pane" style={{ padding: 0, overflow: 'auto', background: 'rgba(255,255,255,0.72)', border: '1px solid rgba(42,36,32,0.1)', borderRadius: 8 }}>
+                          <div className="mu-tab-pane" style={{ padding: 0, overflow: 'auto', background: 'color-mix(in srgb, var(--t-surface) 72%, transparent)', border: '1px solid color-mix(in srgb, var(--t-text) 10%, transparent)', borderRadius: 8 }}>
                             {url ? (
                               <img src={url} alt="Generated homepage mockup" style={{ display: 'block', width: '100%', height: 'auto' }} />
                             ) : (
@@ -14622,7 +14630,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                   Open Preview <UpRightArrow size={14} />
                                 </a>
                                 <span className="mu-notice" style={{ wordBreak: 'break-all', fontSize: 11, minHeight: 'unset', padding: '8px 12px' }}>{previewUrl}</span>
-                                <p style={{ fontSize: 11, lineHeight: 1.5, color: 'rgba(42,36,32,0.5)', margin: 0, maxWidth: 360 }}>
+                                <p style={{ fontSize: 11, lineHeight: 1.5, color: 'color-mix(in srgb, var(--t-text) 50%, transparent)', margin: 0, maxWidth: 360 }}>
                                   Vercel preview deployments block iframe embedding. Use the link above to view in a new tab.
                                 </p>
                               </div>
@@ -15951,7 +15959,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                             <td style={{ padding: '6px 0 6px 16px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--text-display)' }}>{usd(li.cost)}</td>
                                           </tr>
                                         ))}
-                                        <tr style={{ borderTop: '1px solid rgba(42,36,32,0.12)' }}>
+                                        <tr style={{ borderTop: '1px solid var(--t-border-subtle)' }}>
                                           <td style={{ padding: '8px 0', fontWeight: 700, color: 'var(--text-display)' }}>Total / run</td>
                                           <td style={{ padding: '8px 0', textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>{totalSearches} searches</td>
                                           <td style={{ padding: '8px 0 8px 16px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text-display)' }}>{usd(total)}</td>
@@ -16751,7 +16759,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                <button type="button" className="mu-cta-primary" style={{ flex: 1 }} onClick={runMockupStudioVideo} disabled={mockupStudioRenderLoading}>
 	                                  <span>{mockupStudioRenderLoading ? 'Rendering…' : 'Run Video'}</span>
 	                                </button>
-	                                <button type="button" className="mu-btn-outline" style={{ flex: 1, minHeight: 52, borderRadius: 999, border: '1px solid transparent', background: 'linear-gradient(#fff,#fff) padding-box, linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box' }} onClick={() => openMockupStudio({ autoVideo: false })}>
+	                                <button type="button" className="mu-btn-outline" style={{ flex: 1, minHeight: 52, borderRadius: 999, border: '1px solid transparent', background: 'linear-gradient(var(--t-surface),var(--t-surface)) padding-box, linear-gradient(135deg, var(--t-accent-bright) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%) border-box' }} onClick={() => openMockupStudio({ autoVideo: false })}>
 	                                  Open Studio
 	                                </button>
 	                              </div>
@@ -18290,7 +18298,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                             knowledge:{ label: 'Knowledge Officer',      sub: 'Knowledge sources powering AI modules', icon: BrainIcon,             color: '#3b82f6' },
                             content:  { label: 'Design Team',            sub: 'Brand voice, identity & systems',       icon: Workflow,              color: '#14b8a6' },
                             website:  { label: 'Website Developer',      sub: 'Speed, SEO & conversion metrics',       icon: LaptopMinimalCheck,    color: '#0ea5e9' },
-                            _system:  { label: 'System',                 sub: 'Pipeline, artifacts & diagnostics',     icon: ClipboardList,         color: '#6b7280' },
+                            _system:  { label: 'System',                 sub: 'Pipeline, artifacts & diagnostics',     icon: ClipboardList,         color: 'var(--t-text-muted)' },
                           };
                           const BUCKET_ORDER = ['growth', 'knowledge', 'content', 'website', '_system'];
 
@@ -18456,7 +18464,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                         <div className="adq-bucket-hdr-right">
                                           <div className="adq-bucket-ring-wrap">
                                             <svg className="adq-bucket-ring-svg" viewBox="0 0 58 58" aria-hidden="true">
-                                              <circle cx="29" cy="29" r="24" fill="none" stroke="rgba(42,36,32,0.08)" strokeWidth="4" />
+                                              <circle cx="29" cy="29" r="24" fill="none" stroke="var(--t-border-faint)" strokeWidth="4" />
                                               <circle
                                                 cx="29" cy="29" r="24"
                                                 fill="none"
@@ -18490,7 +18498,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                   <span>Missing</span>
                                 </span>
                                 <span className="adq-legend-item">
-                                  <Lock size={11} strokeWidth={1.8} style={{ color: '#9ca3af', display: 'inline-flex' }} />
+                                  <Lock size={11} strokeWidth={1.8} style={{ color: 'var(--t-text-muted)', display: 'inline-flex' }} />
                                   <span>Upgrade</span>
                                 </span>
                                 <span className="adq-legend-item adq-legend-item--right">
@@ -18565,7 +18573,7 @@ const renderGaugeViz = ({ score, verdictLabel, rings, gaugePct: gaugePctOverride
       </svg>
       <div id="ar-gauge-wrap">
         <svg id="ar-gauge-svg" viewBox="0 0 100 56" aria-hidden="true">
-          <path d="M 6 52 A 44 44 0 0 1 94 52" fill="none" stroke="rgba(42,36,32,0.1)" strokeWidth="7" strokeLinecap="round" />
+          <path d="M 6 52 A 44 44 0 0 1 94 52" fill="none" stroke="color-mix(in srgb, var(--t-text) 10%, transparent)" strokeWidth="7" strokeLinecap="round" />
           <path
             d="M 6 52 A 44 44 0 0 1 94 52"
             fill="none"
@@ -18592,7 +18600,7 @@ const renderGaugeViz = ({ score, verdictLabel, rings, gaugePct: gaugePctOverride
                     cx="29" cy="29" r="24"
                     fill="none"
                     strokeWidth="4"
-                    stroke={locked ? 'rgba(42,36,32,0.15)' : 'url(#ar-g)'}
+                    stroke={locked ? 'color-mix(in srgb, var(--t-text) 15%, transparent)' : 'url(#ar-g)'}
                     strokeDasharray={ringCirc}
                     strokeDashoffset={locked ? 0 : ringCirc - (ringCirc * Math.max(0, Math.min(p ?? 0, 100)) / 100)}
                     transform="rotate(-90 29 29)"
@@ -18650,7 +18658,7 @@ const renderAuditViz = (auditRows, _moduleState) => {
   const BUCKET_ORDER  = ['brief', 'growth', 'knowledge', 'content', 'website', '_system'];
   const BUCKET_LABELS = { brief: 'Brief', growth: 'Market', knowledge: 'Brain', content: 'Brand', website: 'Web', _system: 'System' };
   const BUCKET_ICONS  = {
-    brief:     { Icon: ChartColumnIncreasing, color: '#2a2420' },
+    brief:     { Icon: ChartColumnIncreasing, color: 'var(--t-text)' },
     growth:    { Icon: Settings2,             color: '#10b981' },
     knowledge: { Icon: Database,              color: '#3b82f6' },
     content:   { Icon: Workflow,              color: '#14b8a6' },

@@ -1,0 +1,42 @@
+/* Theme Studio bridge: legacy root custom properties re-pointed at the --t-* theme tokens.
+   Hand-written (not generated). Import AFTER styles/theme/theme.generated.css.
+
+   Why `:root, [data-theme-scope]`: a custom property whose value is a var() reference to a
+   theme token is resolved where it is declared and then inherited as a computed value.
+   Declaring the aliases on [data-theme-scope] as well makes a pinned subtree
+   (data-theme-scope="light" | "dark") recompute them against its own theme tokens.
+
+   Scoped families (--bb-*, --vrk-*, --sg-*, --pilot-*) and the dashboard shell
+   ([data-dashboard-theme]) are re-pointed in their own stylesheets, where they are declared. */
+
+:root,
+[data-theme-scope] {
+  /* Dashboard brand highlight (open question 5, resolved: NOT a status colour). */
+  --accent: var(--t-dash-accent);
+  --success: var(--t-success-solid);
+  --warning: var(--t-warning-solid);
+
+  /* Terminal / render-console palette (the same names colors.css declares). */
+  --term-bg: var(--t-term-bg);
+  --term-border: var(--t-term-border);
+  --term-border-top: var(--t-term-border-top);
+  --term-shadow: var(--t-term-shadow);
+  --term-titlebar-bg: var(--t-term-titlebar-bg);
+  --term-titlebar-border: var(--t-term-titlebar-border);
+  --term-title-fg: var(--t-term-title-fg);
+  --term-scroll-thumb: var(--t-term-scroll-thumb);
+
+  --term-fg: var(--t-term-fg);
+  --term-dim: var(--t-term-dim);
+  --term-info-pfx: var(--t-term-info-pfx);  --term-info-msg: var(--t-term-info-msg);
+  --term-fetch-pfx: var(--t-term-fetch-pfx);  --term-fetch-msg: var(--t-term-fetch-msg);
+  --term-ok-pfx: var(--t-term-ok-pfx);  --term-ok-msg: var(--t-term-ok-msg);
+  --term-ai-pfx: var(--t-term-ai-pfx);  --term-ai-msg: var(--t-term-ai-msg);
+  --term-build-pfx: var(--t-term-build-pfx);  --term-build-msg: var(--t-term-build-msg);
+  --term-error-pfx: var(--t-term-error-pfx);  --term-error-msg: var(--t-term-error-msg);
+  --term-active-pfx: var(--t-term-active-pfx);  --term-active-msg: var(--t-term-active-msg);
+  --term-screen-pfx: var(--t-term-screen-pfx);  --term-screen-msg: var(--t-term-screen-msg);
+  --term-mock-pfx: var(--t-term-mock-pfx);  --term-mock-msg: var(--t-term-mock-msg);
+  --term-countdown-pfx: var(--t-term-countdown-pfx);  --term-countdown-msg: var(--t-term-countdown-msg);
+  --term-caret: var(--t-term-caret);
+}

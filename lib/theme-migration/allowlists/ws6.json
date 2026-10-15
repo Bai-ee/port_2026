@@ -1,0 +1,1779 @@
+{
+ "workstream": "WS6",
+ "description": "Colour literals intentionally left in the dashboard / admin JSX files owned by WS6 (contract 10.4 rule 5). ws6-js-scan.test.js fails on any literal in an owned, themed file that is neither a black shadow (X6) nor listed here with the exact occurrence count. W6-* ids are WS6-local categories that the contract exception list (X1-X13) does not cover.",
+ "legend": {
+  "X1": "Email HTML / customer email preview (contract X1): sent artifacts and the white wrapper around the preview document stay light.",
+  "X2": "Briefs, digests, published artifacts and every srcDoc iframe (contract X2), plus the X-post preview card that mimics the light-mode X UI. Separate documents with their own palette; their backdrops are literals on purpose.",
+  "X3": "Invoice Studio document preview (contract X3): documents are always light.",
+  "X5": "Media backdrops (black or dark-ink letterbox behind user video and images): fixed art, not theme (contract X5).",
+  "X6": "Mode-agnostic or data-semantic colours (contract X6): ink and white shadows, insets and glows, modal scrims, categorical accents.",
+  "X7": "Always-dark ops consoles (contract X7): AdminPage.jsx and app/admin/control.",
+  "X8": "Pinned light for v1 (contract X8, extended to the public Studio workbench /dashboard/studio, whose outer shell carries data-theme-scope=\"light\").",
+  "W6-A": "Never rendered: fallback inside var(--token, literal), or a colour named in a comment.",
+  "W6-B": "Light content on a fixed fill: white text on the brand gradient, platform chips and photo labels, and white hairlines or washes on dark-styled chrome.",
+  "W6-C": "Mid-tone saturated status or categorical solid (LED dots, chips, icons), or a data / user colour, with no token inside the closeness threshold. Readable on both modes, so it stays a fixed hue.",
+  "W6-E": "Intentionally dark console panel (log output, preview well): stays dark in both modes with light text."
+ },
+ "entries": [
+  {
+   "file": "app/dashboard/page.jsx",
+   "literal": "rgba(255,255,255,0.6)",
+   "count": 3,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/AdminCostView.jsx",
+   "literal": "#285f3b",
+   "count": 1,
+   "exceptionId": "W6-A",
+   "reason": "Fallback value inside var(--token, literal). The token is always defined on :root or the dashboard scope, so the literal is never rendered."
+  },
+  {
+   "file": "components/AdminCostView.jsx",
+   "literal": "#2a2420",
+   "count": 1,
+   "exceptionId": "W6-A",
+   "reason": "Fallback value inside var(--token, literal). The token is always defined on :root or the dashboard scope, so the literal is never rendered."
+  },
+  {
+   "file": "components/AdminCostView.jsx",
+   "literal": "#9f1f17",
+   "count": 1,
+   "exceptionId": "W6-A",
+   "reason": "Fallback value inside var(--token, literal). The token is always defined on :root or the dashboard scope, so the literal is never rendered."
+  },
+  {
+   "file": "components/AdminCostView.jsx",
+   "literal": "rgba(255,255,255,0.78)",
+   "count": 1,
+   "exceptionId": "W6-A",
+   "reason": "Fallback value inside var(--token, literal). The token is always defined on :root or the dashboard scope, so the literal is never rendered."
+  },
+  {
+   "file": "components/AdminCostView.jsx",
+   "literal": "rgba(42,36,32,0.12)",
+   "count": 1,
+   "exceptionId": "W6-A",
+   "reason": "Fallback value inside var(--token, literal). The token is always defined on :root or the dashboard scope, so the literal is never rendered."
+  },
+  {
+   "file": "components/AdminCostView.jsx",
+   "literal": "rgba(42,36,32,0.52)",
+   "count": 1,
+   "exceptionId": "W6-A",
+   "reason": "Fallback value inside var(--token, literal). The token is always defined on :root or the dashboard scope, so the literal is never rendered."
+  },
+  {
+   "file": "components/AdminCostView.jsx",
+   "literal": "rgba(42,36,32,0.72)",
+   "count": 1,
+   "exceptionId": "W6-A",
+   "reason": "Fallback value inside var(--token, literal). The token is always defined on :root or the dashboard scope, so the literal is never rendered."
+  },
+  {
+   "file": "components/AdminEmailModals.jsx",
+   "literal": "#285f3b",
+   "count": 2,
+   "exceptionId": "W6-A",
+   "reason": "Fallback value inside var(--token, literal). The token is always defined on :root or the dashboard scope, so the literal is never rendered."
+  },
+  {
+   "file": "components/AdminEmailModals.jsx",
+   "literal": "#2a2420",
+   "count": 3,
+   "exceptionId": "W6-A",
+   "reason": "Fallback value inside var(--token, literal). The token is always defined on :root or the dashboard scope, so the literal is never rendered."
+  },
+  {
+   "file": "components/AdminEmailModals.jsx",
+   "literal": "#5a5346",
+   "count": 3,
+   "exceptionId": "W6-A",
+   "reason": "Fallback value inside var(--token, literal). The token is always defined on :root or the dashboard scope, so the literal is never rendered."
+  },
+  {
+   "file": "components/AdminEmailModals.jsx",
+   "literal": "#9f1f17",
+   "count": 1,
+   "exceptionId": "W6-A",
+   "reason": "Fallback value inside var(--token, literal). The token is always defined on :root or the dashboard scope, so the literal is never rendered."
+  },
+  {
+   "file": "components/AdminEmailModals.jsx",
+   "literal": "#a0392b",
+   "count": 2,
+   "exceptionId": "W6-A",
+   "reason": "Fallback value inside var(--token, literal). The token is always defined on :root or the dashboard scope, so the literal is never rendered."
+  },
+  {
+   "file": "components/AdminEmailModals.jsx",
+   "literal": "#fff",
+   "count": 1,
+   "exceptionId": "X1",
+   "reason": "Backdrop / border of an <iframe> that renders a fixed-light document (email, invoice, brief or external site preview)."
+  },
+  {
+   "file": "components/AdminEmailModals.jsx",
+   "literal": "rgba(42,36,32,0.08)",
+   "count": 1,
+   "exceptionId": "X1",
+   "reason": "Backdrop / border of an <iframe> that renders a fixed-light document (email, invoice, brief or external site preview)."
+  },
+  {
+   "file": "components/AdminEmailModals.jsx",
+   "literal": "rgba(42,36,32,0.12)",
+   "count": 1,
+   "exceptionId": "W6-A",
+   "reason": "Fallback value inside var(--token, literal). The token is always defined on :root or the dashboard scope, so the literal is never rendered."
+  },
+  {
+   "file": "components/dashboard/ArchiveInboxCard.jsx",
+   "literal": "#b45309",
+   "count": 3,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/ArchiveInboxCard.jsx",
+   "literal": "rgba(128,128,128,.26)",
+   "count": 1,
+   "exceptionId": "W6-B",
+   "reason": "Mid-grey (128,128,128) alpha hairline: mode-agnostic by construction."
+  },
+  {
+   "file": "components/dashboard/ArchiveInboxCard.jsx",
+   "literal": "rgba(128,128,128,.34)",
+   "count": 3,
+   "exceptionId": "W6-B",
+   "reason": "Mid-grey (128,128,128) alpha hairline: mode-agnostic by construction."
+  },
+  {
+   "file": "components/dashboard/BrandSystemBuildModal.jsx",
+   "literal": "#4A9E5C",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/BrandSystemBuildModal.jsx",
+   "literal": "#D4A843",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/BrandSystemBuildModal.jsx",
+   "literal": "#D71921",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/BrandSystemChat.jsx",
+   "literal": "#4A9E5C",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/ClientBrainCard.jsx",
+   "literal": "rgba(0, 0, 0, 0.25)",
+   "count": 1,
+   "exceptionId": "W6-E",
+   "reason": "Dark input well on a dark-styled card surface; mode-agnostic."
+  },
+  {
+   "file": "components/dashboard/ClientBrainCard.jsx",
+   "literal": "rgba(255, 255, 255, 0.14)",
+   "count": 1,
+   "exceptionId": "W6-B",
+   "reason": "Light hairline / wash on a dark-styled surface or gradient highlight (legacy dark-era chrome); invisible on light, correct on dark, so it stays literal."
+  },
+  {
+   "file": "components/dashboard/content-ui/ContentUiStyles.jsx",
+   "literal": "#2a2420",
+   "count": 4,
+   "exceptionId": "X5",
+   "reason": "Black letterbox / video backdrop behind user media (fixed art); hover on a primary action handled via --t-text-strong. ALSO: Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/content-ui/ContentUiStyles.jsx",
+   "literal": "#2f9e6b",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/content-ui/ContentUiStyles.jsx",
+   "literal": "#7a4bd0",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Categorical accent / data colour (fixed hue, identity not theme)."
+  },
+  {
+   "file": "components/dashboard/content-ui/ContentUiStyles.jsx",
+   "literal": "#b7791f",
+   "count": 4,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/content-ui/ContentUiStyles.jsx",
+   "literal": "#d97706",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/content-ui/ContentUiStyles.jsx",
+   "literal": "#fff",
+   "count": 1,
+   "exceptionId": "W6-B",
+   "reason": "White text on a fixed-hue or media fill (brand gradient, platform chip, photo label); the fill does not follow the theme, so the text must not either."
+  },
+  {
+   "file": "components/dashboard/content-ui/ContentUiStyles.jsx",
+   "literal": "rgba(196,128,20,0.9)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/content-ui/ContentUiStyles.jsx",
+   "literal": "rgba(255,255,255,0.8)",
+   "count": 1,
+   "exceptionId": "W6-E",
+   "reason": "Light text on an intentionally dark console panel that stays dark in both modes."
+  },
+  {
+   "file": "components/dashboard/content-ui/ContentUiStyles.jsx",
+   "literal": "rgba(255,255,255,0.9)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/content-ui/ContentUiStyles.jsx",
+   "literal": "rgba(31,29,27,0.04)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/content-ui/ContentUiStyles.jsx",
+   "literal": "rgba(31,29,27,0.08)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/content-ui/ContentUiStyles.jsx",
+   "literal": "rgba(31,29,27,0.12)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/content-ui/ContentUiStyles.jsx",
+   "literal": "rgba(31,29,27,0.14)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/content-ui/ContentUiStyles.jsx",
+   "literal": "rgba(42,36,32,0.4)",
+   "count": 3,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/content-ui/ContentUiStyles.jsx",
+   "literal": "rgba(42,36,32,0.5)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/content-ui/xce-tokens.js",
+   "literal": "rgba(31,29,27,0.04)",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/content-ui/xce-tokens.js",
+   "literal": "rgba(31,29,27,0.08)",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/CopywriterCard.jsx",
+   "literal": "#2f9e6b",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/CopywriterCard.jsx",
+   "literal": "#4a7c7e",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Categorical accent / data colour (fixed hue, identity not theme)."
+  },
+  {
+   "file": "components/dashboard/CopywriterCard.jsx",
+   "literal": "#b7791f",
+   "count": 3,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/CopywriterCard.jsx",
+   "literal": "#d1584d",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/CopywriterCard.jsx",
+   "literal": "#d9a441",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/CopywriterCard.jsx",
+   "literal": "#fff",
+   "count": 1,
+   "exceptionId": "W6-B",
+   "reason": "White text on the fixed brand gradient fill (--t-accent-bright / --t-support-1 / --t-support-2 baseline); --t-on-accent is dark ink in the baseline, so white is kept to preserve the look."
+  },
+  {
+   "file": "components/dashboard/CopywriterCard.jsx",
+   "literal": "rgba(0,180,210,0.24)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/CopywriterCard.jsx",
+   "literal": "rgba(0,180,210,0.34)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/CopywriterCard.jsx",
+   "literal": "rgba(255,255,255,0.12)",
+   "count": 2,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/CopywriterCard.jsx",
+   "literal": "rgba(255,255,255,0.28)",
+   "count": 2,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/CopywriterCard.jsx",
+   "literal": "rgba(255,255,255,0.4)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/CopywriterCard.jsx",
+   "literal": "rgba(255,255,255,0.5)",
+   "count": 3,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/CopywriterCard.jsx",
+   "literal": "rgba(255,255,255,0.6)",
+   "count": 2,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/CopywriterCard.jsx",
+   "literal": "rgba(255,255,255,0.65)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/CopywriterCard.jsx",
+   "literal": "rgba(255,255,255,0.7)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/CopywriterCard.jsx",
+   "literal": "rgba(42,36,32,0.07)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/CopywriterCard.jsx",
+   "literal": "rgba(42,36,32,0.08)",
+   "count": 2,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/CopywriterCard.jsx",
+   "literal": "rgba(42,36,32,0.09)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/CopywriterCard.jsx",
+   "literal": "rgba(42,36,32,0.2)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/CreativeBriefComposerCard.jsx",
+   "literal": "#285f3b",
+   "count": 2,
+   "exceptionId": "W6-A",
+   "reason": "Fallback value inside var(--token, literal). The token is always defined on :root or the dashboard scope, so the literal is never rendered."
+  },
+  {
+   "file": "components/dashboard/CreativeBriefComposerCard.jsx",
+   "literal": "#2a2420",
+   "count": 2,
+   "exceptionId": "W6-A",
+   "reason": "Fallback value inside var(--token, literal). The token is always defined on :root or the dashboard scope, so the literal is never rendered."
+  },
+  {
+   "file": "components/dashboard/CreativeBriefComposerCard.jsx",
+   "literal": "#5a5346",
+   "count": 1,
+   "exceptionId": "W6-A",
+   "reason": "Fallback value inside var(--token, literal). The token is always defined on :root or the dashboard scope, so the literal is never rendered."
+  },
+  {
+   "file": "components/dashboard/CreativeBriefComposerCard.jsx",
+   "literal": "#9f1f17",
+   "count": 2,
+   "exceptionId": "W6-A",
+   "reason": "Fallback value inside var(--token, literal). The token is always defined on :root or the dashboard scope, so the literal is never rendered."
+  },
+  {
+   "file": "components/dashboard/CreativeBriefComposerCard.jsx",
+   "literal": "#fff",
+   "count": 1,
+   "exceptionId": "X2",
+   "reason": "Backdrop / border of an <iframe> that renders a fixed-light document (email, invoice, brief or external site preview)."
+  },
+  {
+   "file": "components/dashboard/CreativeBriefComposerCard.jsx",
+   "literal": "rgba(42,36,32,0.08)",
+   "count": 1,
+   "exceptionId": "X2",
+   "reason": "Backdrop / border of an <iframe> that renders a fixed-light document (email, invoice, brief or external site preview)."
+  },
+  {
+   "file": "components/dashboard/DashboardCreationFailedModal.jsx",
+   "literal": "#8b1e1e",
+   "count": 1,
+   "exceptionId": "W6-A",
+   "reason": "Colour mentioned in a code comment."
+  },
+  {
+   "file": "components/dashboard/DashboardCreationFailedModal.jsx",
+   "literal": "#ffffff",
+   "count": 1,
+   "exceptionId": "W6-B",
+   "reason": "White text on the fixed brand gradient fill (--t-accent-bright / --t-support-1 / --t-support-2 baseline); --t-on-accent is dark ink in the baseline, so white is kept to preserve the look."
+  },
+  {
+   "file": "components/dashboard/DashboardCreationFailedModal.jsx",
+   "literal": "rgba(255,255,255,0.18)",
+   "count": 1,
+   "exceptionId": "W6-B",
+   "reason": "Light hairline / wash on a dark-styled surface or gradient highlight (legacy dark-era chrome); invisible on light, correct on dark, so it stays literal."
+  },
+  {
+   "file": "components/dashboard/DashboardCreationFailedModal.jsx",
+   "literal": "rgba(255,255,255,0.28)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/DashboardCreationFailedModal.jsx",
+   "literal": "rgba(255,255,255,0.4)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/DashboardCreationFailedModal.jsx",
+   "literal": "rgba(255,255,255,0.65)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/DashboardCreationFailedModal.jsx",
+   "literal": "rgba(255,255,255,0)",
+   "count": 1,
+   "exceptionId": "W6-B",
+   "reason": "Light hairline / wash on a dark-styled surface or gradient highlight (legacy dark-era chrome); invisible on light, correct on dark, so it stays literal."
+  },
+  {
+   "file": "components/dashboard/DashboardLoadingOverlay.jsx",
+   "literal": "rgba(255,255,255,0.4)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/DashboardLoadingOverlay.jsx",
+   "literal": "rgba(255,255,255,0.65)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/InvoiceBuilderCard.jsx",
+   "literal": "#888",
+   "count": 1,
+   "exceptionId": "X3",
+   "reason": "Colour inside an HTML string rendered in a separate document (iframe srcDoc / brief-kit paper)."
+  },
+  {
+   "file": "components/dashboard/InvoiceBuilderCard.jsx",
+   "literal": "#fff",
+   "count": 1,
+   "exceptionId": "X3",
+   "reason": "Backdrop / border of an <iframe> that renders a fixed-light document (email, invoice, brief or external site preview)."
+  },
+  {
+   "file": "components/dashboard/InvoiceBuilderCard.jsx",
+   "literal": "rgba(42,36,32,0.12)",
+   "count": 1,
+   "exceptionId": "X3",
+   "reason": "Backdrop / border of an <iframe> that renders a fixed-light document (email, invoice, brief or external site preview)."
+  },
+  {
+   "file": "components/dashboard/KnowledgeBaseCard.jsx",
+   "literal": "#e67e22",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/leadgen/BriefEditorModal.jsx",
+   "literal": "#ff3b30",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/leadgen/CampaignBuilderModal.jsx",
+   "literal": "#ff3b30",
+   "count": 3,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/leadgen/LeadgenModulePanel.jsx",
+   "literal": "#4A9E5C",
+   "count": 2,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/leadgen/LeadgenModulePanel.jsx",
+   "literal": "#D4A843",
+   "count": 2,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/leadgen/LeadgenModulePanel.jsx",
+   "literal": "#D71921",
+   "count": 2,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/leadgen/MockupPromptEditorModal.jsx",
+   "literal": "#b45309",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/leadgen/MockupPromptEditorModal.jsx",
+   "literal": "#ff3b30",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/leadgen/QuickRunModal.jsx",
+   "literal": "#ff3b30",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/leadgen/SendPreviewModal.jsx",
+   "literal": "rgba(0,0,0,0.45)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Black modal scrim / dim layer: mode-agnostic dimming (alpha .35 to .7)."
+  },
+  {
+   "file": "components/dashboard/leadgen/SettingsModal.jsx",
+   "literal": "#16a34a",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/leadgen/SettingsModal.jsx",
+   "literal": "#ff3b30",
+   "count": 2,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/leadgen/SitePromptEditorModal.jsx",
+   "literal": "#b45309",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/leadgen/SitePromptEditorModal.jsx",
+   "literal": "#ff3b30",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/leadgen/VisualDnaModal.jsx",
+   "literal": "rgba(9, 9, 9, 0.58)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Black modal scrim / dim layer: mode-agnostic dimming (alpha .35 to .7)."
+  },
+  {
+   "file": "components/dashboard/LeadGenDashboard.jsx",
+   "literal": "#0cce6b",
+   "count": 7,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I). ALSO: Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/LeadGenDashboard.jsx",
+   "literal": "#10b981",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/LeadGenDashboard.jsx",
+   "literal": "#16a34a",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/LeadGenDashboard.jsx",
+   "literal": "#3a3a3a",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/LeadGenDashboard.jsx",
+   "literal": "#666",
+   "count": 2,
+   "exceptionId": "W6-C",
+   "reason": "Neutral grey status dot (inactive/pending); fixed."
+  },
+  {
+   "file": "components/dashboard/LeadGenDashboard.jsx",
+   "literal": "#6d28d9",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Categorical accent / data colour (fixed hue, identity not theme)."
+  },
+  {
+   "file": "components/dashboard/LeadGenDashboard.jsx",
+   "literal": "#7c3aed",
+   "count": 5,
+   "exceptionId": "X6",
+   "reason": "Categorical accent / data colour (fixed hue, identity not theme)."
+  },
+  {
+   "file": "components/dashboard/LeadGenDashboard.jsx",
+   "literal": "#c2410c",
+   "count": 2,
+   "exceptionId": "X6",
+   "reason": "Categorical accent / data colour (fixed hue, identity not theme)."
+  },
+  {
+   "file": "components/dashboard/LeadGenDashboard.jsx",
+   "literal": "#d97706",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/LeadGenDashboard.jsx",
+   "literal": "#f59e0b",
+   "count": 3,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/LeadGenDashboard.jsx",
+   "literal": "#ff3b30",
+   "count": 2,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/LeadGenDashboard.jsx",
+   "literal": "#ff4e42",
+   "count": 4,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I). ALSO: Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/LeadGenDashboard.jsx",
+   "literal": "#ffa400",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/LeadGenDashboard.jsx",
+   "literal": "#fff",
+   "count": 4,
+   "exceptionId": "W6-B",
+   "reason": "White text on a fixed-hue or media fill (brand gradient, platform chip, photo label); the fill does not follow the theme, so the text must not either."
+  },
+  {
+   "file": "components/dashboard/LeadGenDashboard.jsx",
+   "literal": "rgba(124, 58, 237, 0.4)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Categorical accent / data colour (fixed hue, identity not theme)."
+  },
+  {
+   "file": "components/dashboard/LeadGenDashboard.jsx",
+   "literal": "rgba(194, 65, 12, 0.3)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Categorical accent / data colour (fixed hue, identity not theme)."
+  },
+  {
+   "file": "components/dashboard/LeadGenDashboard.jsx",
+   "literal": "rgba(255, 59, 48, 0.04)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/LeadGenDashboard.jsx",
+   "literal": "rgba(255, 59, 48, 0.12)",
+   "count": 2,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/marketing/MarketingRefreshControl.jsx",
+   "literal": "#b45309",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/MarketSignalsReportBlocks.jsx",
+   "literal": "rgba(0,0,0,0.02)",
+   "count": 1,
+   "exceptionId": "X2",
+   "reason": "Colour inside an HTML string rendered in a separate document (iframe srcDoc / brief-kit paper)."
+  },
+  {
+   "file": "components/dashboard/MediaLibraryCard.jsx",
+   "literal": "#2a2420",
+   "count": 1,
+   "exceptionId": "X5",
+   "reason": "Black letterbox / video backdrop behind user media (fixed art); hover on a primary action handled via --t-text-strong."
+  },
+  {
+   "file": "components/dashboard/MediaLibraryCard.jsx",
+   "literal": "rgba(0,0,0,0.7)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Black modal scrim / dim layer: mode-agnostic dimming (alpha .35 to .7)."
+  },
+  {
+   "file": "components/dashboard/MediaLibraryCard.jsx",
+   "literal": "rgba(139,92,246,0.08)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Categorical accent / data colour (fixed hue, identity not theme)."
+  },
+  {
+   "file": "components/dashboard/MediaLibraryCard.jsx",
+   "literal": "rgba(139,92,246,0.18)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/MediaLibraryCard.jsx",
+   "literal": "rgba(20,20,30,0.4)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/MediaLibraryCard.jsx",
+   "literal": "rgba(255,255,255,0.14)",
+   "count": 1,
+   "exceptionId": "X5",
+   "reason": "Black letterbox / video backdrop behind user media (fixed art); hover on a primary action handled via --t-text-strong."
+  },
+  {
+   "file": "components/dashboard/MediaLibraryCard.jsx",
+   "literal": "rgba(255,255,255,0.35)",
+   "count": 2,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/MediaLibraryCard.jsx",
+   "literal": "rgba(255,255,255,0.5)",
+   "count": 3,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/MediaLibraryCard.jsx",
+   "literal": "rgba(255,255,255,0.7)",
+   "count": 1,
+   "exceptionId": "W6-E",
+   "reason": "Light text on an intentionally dark console panel that stays dark in both modes. ALSO: Black letterbox / video backdrop behind user media (fixed art); hover on a primary action handled via --t-text-strong."
+  },
+  {
+   "file": "components/dashboard/MediaLibraryCard.jsx",
+   "literal": "rgba(42,36,32,0.08)",
+   "count": 2,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/MediaLibraryCard.jsx",
+   "literal": "rgba(42,36,32,0.1)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/MediaLibraryCard.jsx",
+   "literal": "rgba(42,36,32,0.16)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/MediaLibraryCard.jsx",
+   "literal": "rgba(42,36,32,0.2)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/MediaLibraryCard.jsx",
+   "literal": "rgba(42,36,32,0.22)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/ModuleCardControls.jsx",
+   "literal": "#22c55e",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/ModuleCardControls.jsx",
+   "literal": "#666",
+   "count": 1,
+   "exceptionId": "W6-A",
+   "reason": "Fallback value inside var(--token, literal). The token is always defined on :root or the dashboard scope, so the literal is never rendered."
+  },
+  {
+   "file": "components/dashboard/ModuleCardControls.jsx",
+   "literal": "#6b7280",
+   "count": 3,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/ModuleCardControls.jsx",
+   "literal": "#ef4444",
+   "count": 2,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I). ALSO: Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/ModuleCardControls.jsx",
+   "literal": "#f59e0b",
+   "count": 3,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/ModuleCardControls.jsx",
+   "literal": "rgba(255,255,255,0.06)",
+   "count": 1,
+   "exceptionId": "W6-B",
+   "reason": "Light hairline / wash on a dark-styled surface or gradient highlight (legacy dark-era chrome); invisible on light, correct on dark, so it stays literal."
+  },
+  {
+   "file": "components/dashboard/ModuleCardControls.jsx",
+   "literal": "rgba(255,255,255,0.07)",
+   "count": 1,
+   "exceptionId": "W6-B",
+   "reason": "Light hairline / wash on a dark-styled surface or gradient highlight (legacy dark-era chrome); invisible on light, correct on dark, so it stays literal."
+  },
+  {
+   "file": "components/dashboard/ScoutTestMetaRow.jsx",
+   "literal": "#2a2420",
+   "count": 1,
+   "exceptionId": "W6-A",
+   "reason": "Fallback value inside var(--token, literal). The token is always defined on :root or the dashboard scope, so the literal is never rendered."
+  },
+  {
+   "file": "components/dashboard/SiteRecreateCard.jsx",
+   "literal": "#b7791f",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/SiteRecreateCard.jsx",
+   "literal": "rgba(255,255,255,0.4)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/SiteRecreateCard.jsx",
+   "literal": "rgba(255,255,255,0.5)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/SiteRecreateCard.jsx",
+   "literal": "rgba(255,255,255,0.6)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/SiteRecreateCard.jsx",
+   "literal": "rgba(255,255,255,0.65)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/SiteRecreateCard.jsx",
+   "literal": "rgba(255,255,255,0.7)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/SiteRecreateCard.jsx",
+   "literal": "rgba(42,36,32,0.08)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/SocialPostingPanel.jsx",
+   "literal": "#4a7c7e",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Categorical accent / data colour (fixed hue, identity not theme)."
+  },
+  {
+   "file": "components/dashboard/strategy-builder/CalendarPane.jsx",
+   "literal": "#60a5fa",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/strategy-builder/CalendarPane.jsx",
+   "literal": "#6b7280",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/strategy-builder/CalendarPane.jsx",
+   "literal": "#888",
+   "count": 2,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/strategy-builder/CalendarPane.jsx",
+   "literal": "#a78bfa",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/strategy-builder/CalendarPane.jsx",
+   "literal": "#c9a96e",
+   "count": 4,
+   "exceptionId": "W6-A",
+   "reason": "Fallback value inside var(--token, literal). The token is always defined on :root or the dashboard scope, so the literal is never rendered."
+  },
+  {
+   "file": "components/dashboard/strategy-builder/CalendarPane.jsx",
+   "literal": "#e8d5b0",
+   "count": 9,
+   "exceptionId": "W6-A",
+   "reason": "Fallback value inside var(--token, literal). The token is always defined on :root or the dashboard scope, so the literal is never rendered."
+  },
+  {
+   "file": "components/dashboard/strategy-builder/CalendarPane.jsx",
+   "literal": "#ef4444",
+   "count": 2,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/strategy-builder/CalendarPane.jsx",
+   "literal": "#f87171",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/strategy-builder/CalendarPane.jsx",
+   "literal": "#fbbf24",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/strategy-builder/InputsPane.jsx",
+   "literal": "#86efac",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/strategy-builder/InputsPane.jsx",
+   "literal": "#fbbf24",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/strategy-builder/SignalToggles.jsx",
+   "literal": "#86efac",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/strategy-builder/SignalToggles.jsx",
+   "literal": "#fbbf24",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/TileDetailAnalysisContent.jsx",
+   "literal": "#e8e6e1",
+   "count": 1,
+   "exceptionId": "W6-E",
+   "reason": "Light text on an intentionally dark console panel (log output, preview block) that stays dark in both modes."
+  },
+  {
+   "file": "components/dashboard/TileDetailAnalysisContent.jsx",
+   "literal": "rgba(0,0,0,0.35)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Black modal scrim / dim layer: mode-agnostic dimming (alpha .35 to .7)."
+  },
+  {
+   "file": "components/dashboard/WebsiteUrlGate.jsx",
+   "literal": "#9a9a9a",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/WebsiteUrlGate.jsx",
+   "literal": "#b9b9b9",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/WebsiteUrlGate.jsx",
+   "literal": "#fff",
+   "count": 1,
+   "exceptionId": "W6-B",
+   "reason": "White text on a fixed-hue or media fill (brand gradient, platform chip, photo label); the fill does not follow the theme, so the text must not either."
+  },
+  {
+   "file": "components/dashboard/WebsiteUrlGate.jsx",
+   "literal": "rgba(255,255,255,0.18)",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/WebsiteUrlGate.jsx",
+   "literal": "rgba(255,255,255,0.28)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/WebsiteUrlGate.jsx",
+   "literal": "rgba(255,255,255,0.6)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/WebsiteUrlGate.jsx",
+   "literal": "rgba(255,255,255,0)",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/x-content/BucketRail.jsx",
+   "literal": "#475569",
+   "count": 2,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/x-content/BucketsPanel.jsx",
+   "literal": "#475569",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/x-content/ItemGrid.jsx",
+   "literal": "#16a34a",
+   "count": 2,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I). ALSO: Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/x-content/ItemGrid.jsx",
+   "literal": "#475569",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/x-content/ItemGrid.jsx",
+   "literal": "#7c3aed",
+   "count": 2,
+   "exceptionId": "X6",
+   "reason": "Categorical accent / data colour (fixed hue, identity not theme)."
+  },
+  {
+   "file": "components/dashboard/x-content/ItemGrid.jsx",
+   "literal": "#d97706",
+   "count": 2,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I). ALSO: Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/x-content/ItemGrid.jsx",
+   "literal": "#dc2626",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/x-content/NasPanel.jsx",
+   "literal": "#16a34a",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/x-content/NasPanel.jsx",
+   "literal": "#a8a29e",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/x-content/NasPanel.jsx",
+   "literal": "#d97706",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "components/dashboard/x-content/TimelinePanel.jsx",
+   "literal": "#c026d3",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Categorical accent / data colour (fixed hue, identity not theme)."
+  },
+  {
+   "file": "components/dashboard/XCalendarCard.jsx",
+   "literal": "rgba(255,255,255,0.12)",
+   "count": 2,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/XCalendarCard.jsx",
+   "literal": "rgba(255,255,255,0.4)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/XCalendarCard.jsx",
+   "literal": "rgba(255,255,255,0.5)",
+   "count": 3,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/XCalendarCard.jsx",
+   "literal": "rgba(255,255,255,0.6)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/XCalendarCard.jsx",
+   "literal": "rgba(255,255,255,0.65)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/XCalendarCard.jsx",
+   "literal": "rgba(255,255,255,0.7)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/XCalendarCard.jsx",
+   "literal": "rgba(42,36,32,0.08)",
+   "count": 2,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/XCalendarCard.jsx",
+   "literal": "rgba(42,36,32,0.2)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/XMonitorCard.jsx",
+   "literal": "#2f9e6b",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/XMonitorCard.jsx",
+   "literal": "rgba(255,255,255,0.12)",
+   "count": 2,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/XMonitorCard.jsx",
+   "literal": "rgba(255,255,255,0.4)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/XMonitorCard.jsx",
+   "literal": "rgba(255,255,255,0.5)",
+   "count": 2,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/XMonitorCard.jsx",
+   "literal": "rgba(255,255,255,0.7)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/XMonitorCard.jsx",
+   "literal": "rgba(42,36,32,0.08)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/XMonitorCard.jsx",
+   "literal": "rgba(42,36,32,0.2)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/XProfileCard.jsx",
+   "literal": "#2f9e6b",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "components/dashboard/XProfileCard.jsx",
+   "literal": "rgba(255,255,255,0.12)",
+   "count": 2,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/XProfileCard.jsx",
+   "literal": "rgba(255,255,255,0.4)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/XProfileCard.jsx",
+   "literal": "rgba(255,255,255,0.5)",
+   "count": 3,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/XProfileCard.jsx",
+   "literal": "rgba(255,255,255,0.6)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/XProfileCard.jsx",
+   "literal": "rgba(255,255,255,0.65)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/XProfileCard.jsx",
+   "literal": "rgba(255,255,255,0.7)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/XProfileCard.jsx",
+   "literal": "rgba(42,36,32,0.08)",
+   "count": 2,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "components/dashboard/XProfileCard.jsx",
+   "literal": "rgba(42,36,32,0.2)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "#000",
+   "count": 8,
+   "exceptionId": "X5",
+   "reason": "Black letterbox / video backdrop behind user media (fixed art); hover on a primary action handled via --t-text-strong. ALSO: Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "#00cfff",
+   "count": 3,
+   "exceptionId": "X6",
+   "reason": "Categorical accent / data colour (fixed hue, identity not theme)."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "#0ea5e9",
+   "count": 3,
+   "exceptionId": "X6",
+   "reason": "Categorical accent / data colour (fixed hue, identity not theme)."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "#0f1419",
+   "count": 3,
+   "exceptionId": "X2",
+   "reason": "Inside an <iframe> tag (backdrop of a brief / digest / newsletter srcDoc document) or the X-post preview mimicry block (light-mode X card colours); neither follows the theme."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "#10b981",
+   "count": 5,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I). ALSO: Fallback value inside var(--token, literal). The token is always defined on :root or the dashboard scope, so the literal is never rendered."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "#14b8a6",
+   "count": 4,
+   "exceptionId": "X6",
+   "reason": "Categorical accent / data colour (fixed hue, identity not theme)."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "#1d9bf0",
+   "count": 2,
+   "exceptionId": "X2",
+   "reason": "Inside an <iframe> tag (backdrop of a brief / digest / newsletter srcDoc document) or the X-post preview mimicry block (light-mode X card colours); neither follows the theme."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "#22c55e",
+   "count": 6,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I). ALSO: Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "#2a2420",
+   "count": 1,
+   "exceptionId": "W6-A",
+   "reason": "Fallback value inside var(--token, literal). The token is always defined on :root or the dashboard scope, so the literal is never rendered."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "#3b82f6",
+   "count": 4,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "#4ade80",
+   "count": 1,
+   "exceptionId": "X2",
+   "reason": "Inside an <iframe> tag (backdrop of a brief / digest / newsletter srcDoc document) or the X-post preview mimicry block (light-mode X card colours); neither follows the theme."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "#536471",
+   "count": 3,
+   "exceptionId": "X2",
+   "reason": "Inside an <iframe> tag (backdrop of a brief / digest / newsletter srcDoc document) or the X-post preview mimicry block (light-mode X card colours); neither follows the theme."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "#6366f1",
+   "count": 2,
+   "exceptionId": "X6",
+   "reason": "Categorical accent / data colour (fixed hue, identity not theme)."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "#6b7280",
+   "count": 7,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex. ALSO: Neutral grey status dot (inactive/pending); fixed."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "#7b5fff",
+   "count": 2,
+   "exceptionId": "X6",
+   "reason": "Categorical accent / data colour (fixed hue, identity not theme)."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "#888",
+   "count": 2,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "#a855f7",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Categorical accent / data colour (fixed hue, identity not theme)."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "#ddd",
+   "count": 3,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "#e1e8ed",
+   "count": 1,
+   "exceptionId": "X2",
+   "reason": "Inside an <iframe> tag (backdrop of a brief / digest / newsletter srcDoc document) or the X-post preview mimicry block (light-mode X card colours); neither follows the theme."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "#e5ddd0",
+   "count": 1,
+   "exceptionId": "W6-A",
+   "reason": "Fallback value inside var(--token, literal). The token is always defined on :root or the dashboard scope, so the literal is never rendered."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "#e8e6e1",
+   "count": 2,
+   "exceptionId": "W6-E",
+   "reason": "Light text on an intentionally dark console panel (log output, preview block) that stays dark in both modes."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "#ef4444",
+   "count": 4,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "#f59e0b",
+   "count": 7,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I). ALSO: Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "#f87171",
+   "count": 1,
+   "exceptionId": "X2",
+   "reason": "Inside an <iframe> tag (backdrop of a brief / digest / newsletter srcDoc document) or the X-post preview mimicry block (light-mode X card colours); neither follows the theme."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "#f8f7f4",
+   "count": 1,
+   "exceptionId": "X2",
+   "reason": "Inside an <iframe> tag (backdrop of a brief / digest / newsletter srcDoc document) or the X-post preview mimicry block (light-mode X card colours); neither follows the theme."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "#ff3b30",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "#ff3de8",
+   "count": 3,
+   "exceptionId": "X6",
+   "reason": "Categorical accent / data colour (fixed hue, identity not theme)."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "#fff",
+   "count": 9,
+   "exceptionId": "X2",
+   "reason": "Inside an <iframe> tag (backdrop of a brief / digest / newsletter srcDoc document) or the X-post preview mimicry block (light-mode X card colours); neither follows the theme. ALSO: White text on the fixed brand gradient fill (--t-accent-bright / --t-support-1 / --t-support-2 baseline); --t-on-accent is dark ink in the baseline, so white is kept to preserve the look. ALSO: White text on a fixed-hue or media fill (brand gradient, platform chip, photo label); the fill does not follow the theme, so the text must not either. ALSO: Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "rgba(0,0,0,0.12)",
+   "count": 2,
+   "exceptionId": "X2",
+   "reason": "Inside an <iframe> tag (backdrop of a brief / digest / newsletter srcDoc document) or the X-post preview mimicry block (light-mode X card colours); neither follows the theme."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "rgba(0,0,0,0.35)",
+   "count": 2,
+   "exceptionId": "X6",
+   "reason": "Black modal scrim / dim layer: mode-agnostic dimming (alpha .35 to .7)."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "rgba(0,0,0,0.82)",
+   "count": 1,
+   "exceptionId": "X2",
+   "reason": "Inside an <iframe> tag (backdrop of a brief / digest / newsletter srcDoc document) or the X-post preview mimicry block (light-mode X card colours); neither follows the theme."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "rgba(0,200,228,0.22)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "rgba(102, 184, 164, 0.12)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Categorical accent / data colour (fixed hue, identity not theme)."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "rgba(171, 148, 218, 0.14)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Categorical accent / data colour (fixed hue, identity not theme)."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "rgba(239,68,68,0.45)",
+   "count": 3,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "rgba(245,158,11,0.30)",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "rgba(245,158,11,0.35)",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "rgba(245,158,11,0.40)",
+   "count": 1,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "rgba(245,158,11,0.45)",
+   "count": 3,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "rgba(255,255,255,0.04)",
+   "count": 1,
+   "exceptionId": "W6-B",
+   "reason": "Light hairline / wash on a dark-styled surface or gradient highlight (legacy dark-era chrome); invisible on light, correct on dark, so it stays literal."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "rgba(255,255,255,0.12)",
+   "count": 1,
+   "exceptionId": "X2",
+   "reason": "Inside an <iframe> tag (backdrop of a brief / digest / newsletter srcDoc document) or the X-post preview mimicry block (light-mode X card colours); neither follows the theme."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "rgba(255,255,255,0.18)",
+   "count": 2,
+   "exceptionId": "W6-B",
+   "reason": "Light hairline / wash on a dark-styled surface or gradient highlight (legacy dark-era chrome); invisible on light, correct on dark, so it stays literal."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "rgba(255,255,255,0.28)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "rgba(255,255,255,0.4)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "rgba(255,255,255,0.65)",
+   "count": 1,
+   "exceptionId": "X6",
+   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "rgba(255,255,255,0)",
+   "count": 1,
+   "exceptionId": "W6-B",
+   "reason": "Light hairline / wash on a dark-styled surface or gradient highlight (legacy dark-era chrome); invisible on light, correct on dark, so it stays literal."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "rgba(34,197,94,0.45)",
+   "count": 5,
+   "exceptionId": "W6-C",
+   "reason": "Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
+  },
+  {
+   "file": "DashboardPage.jsx",
+   "literal": "rgba(42,36,32,0.08)",
+   "count": 2,
+   "exceptionId": "X2",
+   "reason": "Inside an <iframe> tag (backdrop of a brief / digest / newsletter srcDoc document) or the X-post preview mimicry block (light-mode X card colours); neither follows the theme. ALSO: Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
+  }
+ ],
+ "pinnedPaths": [
+  {
+   "file": "AdminPage.jsx",
+   "exceptionId": "X7",
+   "reason": "Always-dark ops console ([data-admin-theme=\"dark\"]); deliberately not themed (contract 10.3)."
+  },
+  {
+   "file": "app/admin/control",
+   "exceptionId": "X7",
+   "reason": "Always-dark control console (black background, own palette); same design intent as AdminPage."
+  },
+  {
+   "file": "app/dashboard/studio",
+   "exceptionId": "X8",
+   "reason": "Public, shareable Studio workbench with its own self-contained palette and artwork (cloth, loop, paint, invoice and remix tools: X3/X4 artwork). Pinned light via data-theme-scope=\"light\" on #studio-page-shell; chrome migration is a follow-up decision."
+  }
+ ]
+}

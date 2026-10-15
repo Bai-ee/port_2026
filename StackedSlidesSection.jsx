@@ -13,6 +13,7 @@ import DeliverableHoverCard from './components/home/DeliverableHoverCards';
 import AnchorLavaShader from './components/home/AnchorLavaShader';
 import { easeInOutCubic, poolFromWords, scrambleMask, scrambleTextTo } from './components/home/scrambleText';
 import UpRightArrow from './components/UpRightArrow';
+import { internalPageCreamPaperBackground } from './pageSurfaceSystem';
 import CreateCaseStudyModal from './CreateCaseStudyModal';
 import {
   Bot,
@@ -64,7 +65,7 @@ const isNarrowTouchViewport = () =>
 // The DASHBOARD row's check in the CMO access table. The site's ink, matching the
 // Lock glyph and row labels beside it — the row's meaning carries on its own, so
 // the mark does not need a colour of its own.
-const CMO_CHECK_COLOR = '#2a2420';
+const CMO_CHECK_COLOR = 'var(--t-text)';
 
 const AGENCY_LOGO_BASE_HEIGHT = 14.7;
 const agencyLogos = [
@@ -150,8 +151,8 @@ const workHistory = [
 const slides = [
   {
     title: 'Section 1',
-    bg: '#f5f1df',
-    fg: '#2a2420',
+    bg: internalPageCreamPaperBackground,
+    fg: 'var(--t-text)',
     layout: 'grid',
     headlineText: 'Digital Media Consultant',
     supportText: 'Meet With Your Human',
@@ -345,14 +346,14 @@ function CmoTableRows({ dailyBriefOpen, onToggleDaily, dashboardOpen, onToggleDa
         onClick={isToggle ? (isDaily ? onToggleDaily : onToggleDashboard) : undefined}
         role={isToggle ? 'button' : undefined}
         aria-expanded={isToggle ? isOpen : undefined}
-        style={{ borderBottom: (row.task === 'Daily Brief' || row.task === 'DASHBOARD' || (row.sub && !isSubLast(arr, ri))) ? 'none' : '1px solid rgba(42,36,32,0.07)', cursor: isToggle ? 'pointer' : undefined }}
+        style={{ borderBottom: (row.task === 'Daily Brief' || row.task === 'DASHBOARD' || (row.sub && !isSubLast(arr, ri))) ? 'none' : '1px solid color-mix(in srgb, var(--t-text) 7%, transparent)', cursor: isToggle ? 'pointer' : undefined }}
       >
         <td style={{ padding: '0.7rem 0.2rem', textAlign: 'center', verticalAlign: 'middle', position: 'relative' }}>{row.task === 'DASHBOARD' ? <Check size={18} strokeWidth={3} color={CMO_CHECK_COLOR} style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? <BriefConnector first={isSubFirst(arr, ri)} last={isSubLast(arr, ri)} /> : <span className="cmo-arrow" aria-hidden="true"><Lock size={12} /></span>}</td>
-        <td style={{ padding: row.sub ? '0.7rem 0.4rem 0.7rem 1.1rem' : '0.7rem 0.4rem', color: row.sub ? 'rgba(42,36,32,0.55)' : 'rgba(42,36,32,0.75)', fontWeight: row.bold ? 700 : (row.sub ? 400 : 500) }}>{row.task === 'DASHBOARD' ? 'Dashboard' : row.task}</td>
-        <td style={{ padding: '0.7rem 0.4rem 0.7rem 0.6rem', textAlign: 'left', color: row.sub ? 'rgba(42,36,32,0.48)' : 'rgba(42,36,32,0.65)', fontWeight: row.bold ? 700 : 400 }}>{isToggle ? (
+        <td style={{ padding: row.sub ? '0.7rem 0.4rem 0.7rem 1.1rem' : '0.7rem 0.4rem', color: row.sub ? 'color-mix(in srgb, var(--t-text) 55%, transparent)' : 'color-mix(in srgb, var(--t-text) 75%, transparent)', fontWeight: row.bold ? 700 : (row.sub ? 400 : 500) }}>{row.task === 'DASHBOARD' ? 'Dashboard' : row.task}</td>
+        <td style={{ padding: '0.7rem 0.4rem 0.7rem 0.6rem', textAlign: 'left', color: row.sub ? 'color-mix(in srgb, var(--t-text) 48%, transparent)' : 'color-mix(in srgb, var(--t-text) 65%, transparent)', fontWeight: row.bold ? 700 : 400 }}>{isToggle ? (
           <span style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
             <span>{row.value}</span>
-            <span style={{ display: 'inline-flex', flexShrink: 0, marginTop: 2, transition: 'transform 0.15s ease', transform: isOpen ? 'rotate(180deg)' : 'none', color: 'rgba(42,36,32,0.5)' }} aria-hidden="true"><svg width="15" height="15" viewBox="0 0 12 12" fill="none"><polyline points="2,4 6,8 10,4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg></span>
+            <span style={{ display: 'inline-flex', flexShrink: 0, marginTop: 2, transition: 'transform 0.15s ease', transform: isOpen ? 'rotate(180deg)' : 'none', color: 'color-mix(in srgb, var(--t-text) 50%, transparent)' }} aria-hidden="true"><svg width="15" height="15" viewBox="0 0 12 12" fill="none"><polyline points="2,4 6,8 10,4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg></span>
           </span>
         ) : row.value}</td>
       </tr>
@@ -1643,19 +1644,19 @@ const StackedSlidesSection = () => {
         image = document.createElement('div');
         image.innerHTML = `
           <div style="padding:1.1rem;font-family:'Space Grotesk',system-ui,sans-serif;height:100%;box-sizing:border-box;display:flex;flex-direction:column;">
-            <p style="margin:0 0 0.7rem;font-size:0.6rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:rgba(42,36,32,0.4);font-family:'Space Mono',monospace;">Your Business, Mapped</p>
+            <p style="margin:0 0 0.7rem;font-size:0.6rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--t-text) 40%, transparent);font-family:'Space Mono',monospace;">Your Business, Mapped</p>
             <table style="width:100%;border-collapse:collapse;font-size:0.78rem;flex:1;">
-              <thead><tr style="border-bottom:1.5px solid rgba(42,36,32,0.15);">
-                <th style="text-align:left;padding:0.3rem 0.4rem;font-weight:900;color:rgba(42,36,32,0.4);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;font-family:'Doto','Space Mono',monospace;">Access</th>
+              <thead><tr style="border-bottom:1.5px solid color-mix(in srgb, var(--t-text) 15%, transparent);">
+                <th style="text-align:left;padding:0.3rem 0.4rem;font-weight:900;color:color-mix(in srgb, var(--t-text) 40%, transparent);font-size:0.58rem;text-transform:uppercase;letter-spacing:0.06em;font-family:'Doto','Space Mono',monospace;">Access</th>
                 <th style="width:1.2rem;"></th>
               </tr></thead>
               <tbody>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Onboarding Brief</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2a2420" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;"><polyline points="20 6 9 17 4 12"></polyline></svg></td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Executive Brief</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;color:rgba(42,36,32,0.45);"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Market Brief</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;color:rgba(42,36,32,0.45);"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Creative Brief</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;color:rgba(42,36,32,0.45);"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Strategy Brief</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;color:rgba(42,36,32,0.45);"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></td></tr>
-                <tr style="border-bottom:1px solid rgba(42,36,32,0.07);"><td style="padding:0.38rem 0.4rem;color:#2a2420;font-weight:500;">Website Developer Brief</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;color:rgba(42,36,32,0.45);"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></td></tr>
+                <tr style="border-bottom:1px solid color-mix(in srgb, var(--t-text) 7%, transparent);"><td style="padding:0.38rem 0.4rem;color:var(--t-text);font-weight:500;">Onboarding Brief</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--t-text)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;"><polyline points="20 6 9 17 4 12"></polyline></svg></td></tr>
+                <tr style="border-bottom:1px solid color-mix(in srgb, var(--t-text) 7%, transparent);"><td style="padding:0.38rem 0.4rem;color:var(--t-text);font-weight:500;">Executive Brief</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;color:color-mix(in srgb, var(--t-text) 45%, transparent);"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></td></tr>
+                <tr style="border-bottom:1px solid color-mix(in srgb, var(--t-text) 7%, transparent);"><td style="padding:0.38rem 0.4rem;color:var(--t-text);font-weight:500;">Market Brief</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;color:color-mix(in srgb, var(--t-text) 45%, transparent);"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></td></tr>
+                <tr style="border-bottom:1px solid color-mix(in srgb, var(--t-text) 7%, transparent);"><td style="padding:0.38rem 0.4rem;color:var(--t-text);font-weight:500;">Creative Brief</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;color:color-mix(in srgb, var(--t-text) 45%, transparent);"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></td></tr>
+                <tr style="border-bottom:1px solid color-mix(in srgb, var(--t-text) 7%, transparent);"><td style="padding:0.38rem 0.4rem;color:var(--t-text);font-weight:500;">Strategy Brief</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;color:color-mix(in srgb, var(--t-text) 45%, transparent);"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></td></tr>
+                <tr style="border-bottom:1px solid color-mix(in srgb, var(--t-text) 7%, transparent);"><td style="padding:0.38rem 0.4rem;color:var(--t-text);font-weight:500;">Website Developer Brief</td><td style="padding:0.38rem 0.2rem;text-align:center;vertical-align:middle;"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;color:color-mix(in srgb, var(--t-text) 45%, transparent);"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></td></tr>
               </tbody>
             </table>
           </div>`;
@@ -1684,14 +1685,14 @@ const StackedSlidesSection = () => {
         });
       } else if (isTablePreview) {
         Object.assign(image.style, {
-          background: '#f5f1df',
-          border: '1px solid rgba(42, 36, 32, 0.12)',
+          background: internalPageCreamPaperBackground,
+          border: '1px solid var(--t-border-subtle)',
           overflow: 'hidden',
         });
       } else {
         Object.assign(image.style, {
-          background: 'rgba(255,255,255,0.94)',
-          border: '1px solid rgba(42, 36, 32, 0.12)',
+          background: 'color-mix(in srgb, var(--t-surface) 94%, transparent)',
+          border: '1px solid var(--t-border-subtle)',
         });
       }
       document.body.appendChild(image);
@@ -2111,11 +2112,11 @@ const StackedSlidesSection = () => {
            name is clickable, and hover-only discovery fails on touch. */
         .testimonial-author-link {
           text-decoration: none;
-          border-bottom: 1px solid rgba(42, 36, 32, 0.3);
+          border-bottom: 1px solid color-mix(in srgb, var(--t-text) 30%, transparent);
           transition: border-color 0.2s ease, color 0.2s ease;
         }
         .testimonial-author-link:hover {
-          border-bottom-color: rgba(42, 36, 32, 0.75);
+          border-bottom-color: color-mix(in srgb, var(--t-text) 75%, transparent);
         }
         /* Per-quote link out to the full LinkedIn recommendations page. */
         .testimonial-source-link {
@@ -2123,16 +2124,16 @@ const StackedSlidesSection = () => {
           align-items: center;
           margin-left: auto;
           flex-shrink: 0;
-          color: rgba(42, 36, 32, 0.38);
+          color: var(--t-text-faint);
           transition: color 0.2s ease;
         }
-        .testimonial-source-link:hover { color: #2a2420; }
+        .testimonial-source-link:hover { color: var(--t-text); }
         .about-signature-social-link {
-          color: rgba(42, 36, 32, 0.4);
+          color: color-mix(in srgb, var(--t-text) 40%, transparent);
           transition: color 0.15s ease;
         }
         .about-signature-social-link:hover {
-          color: #6d4aff;
+          color: var(--t-support-1);
         }
         /* Hide scroll-animated elements before GSAP ScrollTrigger initializes to prevent FOUC */
         #stacked-slides-wrapper [data-capability-header],
@@ -2207,7 +2208,7 @@ const StackedSlidesSection = () => {
           cursor: pointer;
         }
         .cmo-table-inner table tbody tr:not([data-no-hover]):hover td {
-          background: rgba(42, 36, 32, 0.045);
+          background: color-mix(in srgb, var(--t-text) 4.5%, transparent);
         }
         .cmo-table-inner table tbody tr:not([data-no-hover]):hover td:first-child {
           border-top-left-radius: 0.5rem;
@@ -2226,7 +2227,7 @@ const StackedSlidesSection = () => {
           #footer-marquee-shell > div > div,
           #agency-marquee-shell > div > div { padding-right: 2rem !important; gap: 2rem !important; }
           [data-label-heading] {
-            color: #000000 !important;
+            color: var(--t-text-default) !important;
           }
           #capability-cards-grid {
             grid-template-columns: 1fr !important;
@@ -2312,7 +2313,7 @@ const StackedSlidesSection = () => {
             padding-top: 1.1rem !important;
             padding-bottom: 0.35rem !important;
             font-weight: 700 !important;
-            color: #2a2420 !important;
+            color: var(--t-text) !important;
           }
           #cmo-dashboard-table tbody td:nth-child(3) {
             grid-column: 2 !important;
@@ -2321,7 +2322,7 @@ const StackedSlidesSection = () => {
             padding: 0 0.4rem 1.1rem 0.4rem !important;
             font-size: 0.78rem !important;
             line-height: 1.5 !important;
-            color: rgba(42,36,32,0.6) !important;
+            color: color-mix(in srgb, var(--t-text) 60%, transparent) !important;
           }
           /* Sub-row descriptions: clear the connector elbow arm (extends ~0.55rem into col 2) */
           #cmo-dashboard-table tbody tr[data-sub] td:nth-child(3) {
@@ -2379,7 +2380,7 @@ const StackedSlidesSection = () => {
           position: absolute;
           inset: 0;
           pointer-events: none;
-          color: rgba(42, 36, 32, 0.38);
+          color: var(--t-text-faint);
         }
         /* Trunk — solid, overlaps row borders top + bottom so it reads as one
            unbroken line through every sub row. */
@@ -2390,7 +2391,7 @@ const StackedSlidesSection = () => {
           top: -1px;
           bottom: -1px;
           width: 1.5px;
-          background: #a39e93;
+          background: color-mix(in srgb, var(--t-text) 45%, var(--t-surface));
         }
         .cmo-conn--first::before { top: -0.62rem; }      /* climb up into the lock */
         .cmo-conn--last::before { bottom: calc(50% + 11px); }  /* stop at the top of the last curve — smooth bend, no tail */
@@ -2402,8 +2403,8 @@ const StackedSlidesSection = () => {
           top: calc(50% - 12px);
           width: calc(50% + 0.55rem);
           height: 12px;
-          border-left: 1.5px solid #a39e93;
-          border-bottom: 1.5px solid #a39e93;
+          border-left: 1.5px solid color-mix(in srgb, var(--t-text) 45%, var(--t-surface));
+          border-bottom: 1.5px solid color-mix(in srgb, var(--t-text) 45%, var(--t-surface));
           border-bottom-left-radius: 12px;
         }
         .cmo-conn-arrow {
@@ -2411,13 +2412,13 @@ const StackedSlidesSection = () => {
           left: 50%;
           transform: translateX(-50%);
           top: -0.55rem;
-          color: #a39e93;
+          color: color-mix(in srgb, var(--t-text) 45%, var(--t-surface));
         }
         .cmo-arrow {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          color: rgba(42, 36, 32, 0.75);
+          color: color-mix(in srgb, var(--t-text) 75%, transparent);
           font-size: 0.7rem;
           cursor: default;
         }
@@ -2540,7 +2541,7 @@ const StackedSlidesSection = () => {
           #cmo-about-divider {
             display: block;
             align-self: stretch;
-            background: rgba(42, 36, 32, 0.12);
+            background: var(--t-border-subtle);
           }
         }
         /* EXPERIMENT (revert by deleting this block + the two doPin/doUnpin
@@ -2612,7 +2613,7 @@ const StackedSlidesSection = () => {
           padding: clamp(1.5rem, 4vw, 3rem) !important;
           /* Fully opaque: the peek-card deck sits directly behind this card, and
              even 0.97 let the thumbnails read through the white. */
-          background: #ffffff !important;
+          background: var(--t-surface) !important;
           border-radius: clamp(1rem, 2vw, 1.4rem) !important;
         }
         /* The "focused onboarding panel" trial (d2d1e2ec) hid the deliverables
@@ -2648,7 +2649,7 @@ const StackedSlidesSection = () => {
         #cmo-about-divider {
           display: block !important;
           align-self: stretch !important;
-          background: rgba(42, 36, 32, 0.18) !important;
+          background: color-mix(in srgb, var(--t-text) 18%, transparent) !important;
         }
         #cmo-about-copy-col { justify-content: center; gap: clamp(0.85rem, 1.6vw, 1.35rem); }
         #cmo-about-mission-statement {
@@ -2691,7 +2692,7 @@ const StackedSlidesSection = () => {
           #cmo-about-divider {
             display: block !important;
             align-self: stretch !important;
-            background: rgba(42, 36, 32, 0.18) !important;
+            background: color-mix(in srgb, var(--t-text) 18%, transparent) !important;
           }
           #cmo-about-copy-col { gap: 0.75rem; }
           #cmo-about-mission-statement { max-width: none; }
@@ -2715,9 +2716,9 @@ const StackedSlidesSection = () => {
         .service-row {
           grid-column: 1 / -1;
           position: relative;
-          border-top: 1px solid rgba(42, 36, 32, 0.12);
+          border-top: 1px solid var(--t-border-subtle);
         }
-        .service-row:last-of-type { border-bottom: 1px solid rgba(42, 36, 32, 0.12); }
+        .service-row:last-of-type { border-bottom: 1px solid var(--t-border-subtle); }
         .service-row-trigger {
           width: 100%;
           display: flex;
@@ -2729,7 +2730,7 @@ const StackedSlidesSection = () => {
           border: 0;
           cursor: pointer;
           text-align: left;
-          color: #2a2420;
+          color: var(--t-text);
           font-family: 'Space Grotesk', system-ui, sans-serif;
           -webkit-tap-highlight-color: transparent;
         }
@@ -2756,7 +2757,7 @@ const StackedSlidesSection = () => {
           left: 0;
           width: 100%;
           height: 1.5px;
-          background: rgba(42, 36, 32, 0.55);
+          background: color-mix(in srgb, var(--t-text) 55%, transparent);
           transform: translateY(-50%);
           transition: transform 0.34s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.28s ease;
         }
@@ -2764,7 +2765,7 @@ const StackedSlidesSection = () => {
         .service-row-sign[data-open]::before { transform: translateY(-50%) rotate(135deg); }
         .service-row-sign[data-open]::after { transform: translateY(-50%) rotate(45deg); }
         .service-row-sign[data-open]::before,
-        .service-row-sign[data-open]::after { background: var(--service-accent, #2a2420); }
+        .service-row-sign[data-open]::after { background: var(--service-accent, var(--t-text)); }
         /* max-height, NOT the grid 0fr -> 1fr trick. That trick resolves to a
            0px track here: this grid container has no free space, so every
            interpolated fr value below 1 sizes to nothing and the panel stays
@@ -2787,7 +2788,7 @@ const StackedSlidesSection = () => {
           max-width: 46ch;
           font-size: clamp(0.9rem, 1.2vw, 1.02rem);
           line-height: 1.5;
-          color: rgba(42, 36, 32, 0.62);
+          color: color-mix(in srgb, var(--t-text) 62%, transparent);
           font-family: 'Space Grotesk', system-ui, sans-serif;
         }
         .service-row-carousel {
@@ -2815,8 +2816,8 @@ const StackedSlidesSection = () => {
           aspect-ratio: 16 / 10;
           overflow: hidden;
           border-radius: 0.7rem;
-          border: 1px solid rgba(42, 36, 32, 0.1);
-          background: rgba(42, 36, 32, 0.04);
+          border: 1px solid color-mix(in srgb, var(--t-text) 10%, transparent);
+          background: color-mix(in srgb, var(--t-text) 4%, transparent);
         }
         @media (prefers-reduced-motion: reduce) {
           .service-row-panel { transition: none; }
@@ -2833,7 +2834,7 @@ const StackedSlidesSection = () => {
         @keyframes cmoModalPopIn { from { opacity:0; transform: scale(0.96) translateY(8px); } to { opacity:1; transform: scale(1) translateY(0); } }
         #cmo-modal-overlay {
           position: fixed; inset: 0; z-index: 100000;
-          background: rgba(255,255,255,0.6);
+          background: color-mix(in srgb, var(--t-surface) 60%, transparent);
           backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
           display: flex; align-items: center; justify-content: center;
           padding: 20px; box-sizing: border-box;
@@ -2851,9 +2852,9 @@ const StackedSlidesSection = () => {
         #cmo-auth-card {
           position: relative; width: 100%; max-width: 44rem;
           padding: clamp(1.25rem,5vw,2rem); border-radius: 1.1rem; box-sizing: border-box;
-          background: rgba(255,255,255,1); border: 1px solid rgba(212,196,171,0.82);
+          background: var(--t-surface); border: 1px solid var(--t-glass-border);
           backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px);
-          box-shadow: 0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4),
+          box-shadow: 0 1px 0 color-mix(in srgb, var(--t-surface) 65%, transparent), inset 0 1px 0 color-mix(in srgb, var(--t-glass-highlight) 88.89%, transparent),
             0px 5px 10px rgba(0,0,0,0.1), 0px 15px 30px rgba(0,0,0,0.1), 0px 20px 40px rgba(0,0,0,0.15);
           display: flex; flex-direction: column;
           animation: cmoModalPopIn 220ms cubic-bezier(0.2,0.8,0.2,1);
@@ -2863,21 +2864,21 @@ const StackedSlidesSection = () => {
           display: flex; align-items: center; justify-content: space-between;
           gap: 0.75rem; margin-bottom: 0.8rem;
         }
-        #cmo-auth-sig { width: 2.75rem; height: 2.75rem; border-radius: 50%; object-fit: cover; border: 2px solid rgba(255,255,255,0.35); display: block; }
+        #cmo-auth-sig { width: 2.75rem; height: 2.75rem; border-radius: 50%; object-fit: cover; border: 2px solid color-mix(in srgb, var(--t-surface) 35%, transparent); display: block; }
         #cmo-auth-eyebrow {
           font-family: 'Space Mono', monospace; font-size: 0.82rem;
           letter-spacing: 0.14em; text-transform: uppercase;
-          color: rgba(42,36,32,0.44); font-weight: 700;
+          color: color-mix(in srgb, var(--t-text) 44%, transparent); font-weight: 700;
         }
         #cmo-auth-back-btn {
           display: inline-flex; align-items: center; justify-content: center;
           width: 2.4rem; height: 2.4rem; border-radius: 999px;
-          background: rgba(255,255,255,0.34); border: 1px solid rgba(42,36,32,0.12);
-          color: rgba(42,36,32,0.58); font-family: 'Space Mono', monospace;
+          background: color-mix(in srgb, var(--t-surface) 34%, transparent); border: 1px solid var(--t-border-subtle);
+          color: color-mix(in srgb, var(--t-text) 58%, transparent); font-family: 'Space Mono', monospace;
           font-size: 1.05rem; line-height: 1; cursor: pointer; padding: 0;
           transition: background 160ms ease, color 160ms ease;
         }
-        #cmo-auth-back-btn:hover { background: rgba(255,255,255,0.6); color: #2a2420; }
+        #cmo-auth-back-btn:hover { background: color-mix(in srgb, var(--t-surface) 60%, transparent); color: var(--t-text); }
         @media (max-width: 600px) {
           .cmo-submit-label { display: none; }
           #cmo-url-pill-submit {
@@ -2901,9 +2902,9 @@ const StackedSlidesSection = () => {
         #cmo-modal-marquee .cmo-marquee-item {
           font-family: 'Doto', 'Space Mono', monospace; font-size: clamp(2rem,8vw,5rem);
           font-weight: 700; letter-spacing: -0.02em; line-height: 1.05;
-          color: rgba(42,36,32,0.82); white-space: nowrap;
+          color: color-mix(in srgb, var(--t-text) 82%, transparent); white-space: nowrap;
         }
-        #cmo-modal-marquee .cmo-marquee-dot { font-family: 'Doto', monospace; color: rgba(42,36,32,0.35); padding: 0 0.3rem; }
+        #cmo-modal-marquee .cmo-marquee-dot { font-family: 'Doto', monospace; color: color-mix(in srgb, var(--t-text) 35%, transparent); padding: 0 0.3rem; }
         @media (prefers-reduced-motion: reduce) { #cmo-modal-marquee .cmo-marquee-track { animation: none; } }
         @media (max-width: 640px) {
           #cmo-modal-marquee { margin: 0; padding: 0; }
@@ -2915,14 +2916,14 @@ const StackedSlidesSection = () => {
         #cmo-modal-table { width: 100%; border-collapse: collapse; }
         #cmo-modal-table thead th {
           font-family: 'Space Mono', monospace; font-size: 0.58rem; font-weight: 600;
-          text-transform: uppercase; letter-spacing: 0.08em; color: rgba(42,36,32,0.4);
-          padding: 0.28rem 0.4rem; border-bottom: 1px solid rgba(42,36,32,0.1);
+          text-transform: uppercase; letter-spacing: 0.08em; color: color-mix(in srgb, var(--t-text) 40%, transparent);
+          padding: 0.28rem 0.4rem; border-bottom: 1px solid color-mix(in srgb, var(--t-text) 10%, transparent);
         }
-        .cmo-td-task { padding: 0.38rem 0.4rem; color: rgba(42,36,32,0.82); font-weight: 500; font-size: 0.88rem; }
+        .cmo-td-task { padding: 0.38rem 0.4rem; color: color-mix(in srgb, var(--t-text) 82%, transparent); font-weight: 500; font-size: 0.88rem; }
         .cmo-td-mark { padding: 0.38rem 0.2rem; text-align: center; }
-        .cmo-td-value { padding: 0.38rem 0.4rem; text-align: right; color: rgba(42,36,32,0.6); font-size: 0.82rem; }
-        .cmo-td-arrow { color: rgba(42,36,32,0.3); font-size: 0.7rem; }
-        #cmo-modal-table tbody tr { border-bottom: 1px solid rgba(42,36,32,0.07); }
+        .cmo-td-value { padding: 0.38rem 0.4rem; text-align: right; color: color-mix(in srgb, var(--t-text) 60%, transparent); font-size: 0.82rem; }
+        .cmo-td-arrow { color: color-mix(in srgb, var(--t-text) 30%, transparent); font-size: 0.7rem; }
+        #cmo-modal-table tbody tr { border-bottom: 1px solid color-mix(in srgb, var(--t-text) 7%, transparent); }
         #cmo-url-row {
           display: flex; align-items: stretch; gap: 0.5rem; width: 100%;
           box-sizing: border-box; margin-top: 0.75rem;
@@ -2931,17 +2932,17 @@ const StackedSlidesSection = () => {
           display: flex; align-items: center; gap: 0.5rem; flex: 1; min-width: 0;
           box-sizing: border-box;
           padding: 0.35rem 0.35rem 0.35rem 0.9rem;
-          background: rgba(255,255,255,0.55); border: 1px solid rgba(42,36,32,0.14);
-          border-radius: 999px; box-shadow: 0 1px 4px rgba(42,36,32,0.07);
+          background: color-mix(in srgb, var(--t-surface) 55%, transparent); border: 1px solid color-mix(in srgb, var(--t-text) 14%, transparent);
+          border-radius: 999px; box-shadow: 0 1px 4px color-mix(in srgb, var(--t-text) 7%, transparent);
           transition: border-color 160ms ease, box-shadow 160ms ease;
         }
-        #cmo-url-pill:focus-within { border-color: rgba(42,36,32,0.28); box-shadow: 0 0 0 3px rgba(42,36,32,0.06); }
+        #cmo-url-pill:focus-within { border-color: color-mix(in srgb, var(--t-text) 28%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--t-text) 6%, transparent); }
         #cmo-modal-url-input {
           flex: 1; min-width: 0; border: none; outline: none; background: transparent;
           padding: 0; margin: 0; font-family: 'Space Grotesk', system-ui, sans-serif;
-          font-size: clamp(0.85rem,1.1vw,0.95rem); color: #2a2420; line-height: 1.2;
+          font-size: clamp(0.85rem,1.1vw,0.95rem); color: var(--t-text); line-height: 1.2;
         }
-        #cmo-modal-url-input::placeholder { color: rgba(42,36,32,0.45); }
+        #cmo-modal-url-input::placeholder { color: color-mix(in srgb, var(--t-text) 45%, transparent); }
         #cmo-url-pill-submit {
           display: inline-flex; align-items: center; gap: 0.25rem; flex-shrink: 0;
           border-radius: 999px; padding: 0.5rem 0.75rem; line-height: 1;
@@ -2952,16 +2953,16 @@ const StackedSlidesSection = () => {
         /* Primary CTA — solid blue gradient + animated comet border (.cta-pill-btn::before) */
         .cmo-url-pill-submit-active {
           border: none;
-          background: linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
-          color: #fff; box-shadow: 0 2px 6px rgba(139,92,246,0.28); opacity: 1;
+          background: var(--t-gradient-accent);
+          color: var(--t-on-solid); box-shadow: 0 2px 6px color-mix(in srgb, var(--t-support-1) 28%, transparent); opacity: 1;
         }
         .cmo-url-pill-submit-active:hover { transform: translateY(-1px); filter: brightness(1.05); }
         /* Secondary CTA — static gradient border, no animated comet */
         .cmo-url-pill-submit-idle {
           border: 1px solid transparent;
-          background: linear-gradient(#ffffff,#ffffff) padding-box,
-            linear-gradient(90deg, hsla(185,100%,45%,0.5) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box;
-          color: #2a2420; box-shadow: 0 1px 4px rgba(42,36,32,0.07); opacity: 1;
+          background: linear-gradient(var(--t-surface), var(--t-surface)) padding-box,
+            linear-gradient(90deg, color-mix(in srgb, var(--t-accent-bright) 50%, transparent) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%) border-box;
+          color: var(--t-text); box-shadow: 0 1px 4px color-mix(in srgb, var(--t-text) 7%, transparent); opacity: 1;
         }
         .cmo-url-pill-submit-idle::before { display: none; }
         .cmo-url-pill-submit-idle:hover { filter: brightness(0.99); }
@@ -2971,7 +2972,7 @@ const StackedSlidesSection = () => {
         }
         #cmo-url-warning {
           font-family: 'Space Mono', monospace; font-size: 0.72rem;
-          color: rgba(180,35,24,0.7); letter-spacing: 0.03em;
+          color: color-mix(in srgb, var(--t-danger) 70%, transparent); letter-spacing: 0.03em;
         }
         #cmo-signin-link {
           display: inline-flex; align-items: center; justify-content: center;
@@ -3072,10 +3073,10 @@ const StackedSlidesSection = () => {
             data-stack-panel
             style={{
               ...panelStyle,
-              background: index === 0 ? 'rgba(245, 241, 223, 0.38)' : slide.bg,
+              background: index === 0 ? 'color-mix(in srgb, var(--t-chrome) 69.09%, transparent)' : slide.bg,
               backdropFilter: index === 0 ? 'blur(24px)' : 'none',
               WebkitBackdropFilter: index === 0 ? 'blur(24px)' : 'none',
-              boxShadow: index === 0 ? 'inset 0 0 0 1px rgba(255,255,255,0.45), inset 0 1px 0 rgba(255,255,255,0.6)' : 'none',
+              boxShadow: index === 0 ? 'inset 0 0 0 1px var(--t-glass-highlight), inset 0 1px 0 color-mix(in srgb, var(--t-surface) 60%, transparent)' : 'none',
               color: slide.fg,
             }}
           >
@@ -3085,9 +3086,9 @@ const StackedSlidesSection = () => {
                   <div id="panel-grid-layout" style={{ ...gridLayoutStyle, paddingBottom: 'clamp(5.75rem, 1.5vw, 1.4rem)' }}>
                     <div id="panel-hero-intro-centering" style={{ ...textCenteringStyle, marginTop: 'clamp(1.5rem, 3vw, 3rem)', marginBottom: 'clamp(1.5rem, 3vw, 3rem)' }}>
                       <div id="panel-hero-text-row" style={{ ...textRowStyle, display: 'flex', alignItems: 'center', gap: 'clamp(0.5rem, 1.5vw, 1rem)', width: '100%' }}>
-                        <div id="hero-url-input-row" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flex: 1, minWidth: 0, height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
-                          <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
-                          <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
+                        <div id="hero-url-input-row" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flex: 1, minWidth: 0, height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'color-mix(in srgb, var(--t-surface) 45%, transparent)', border: '1px solid var(--t-border-subtle)', borderRadius: '999px', boxShadow: '0 1px 4px color-mix(in srgb, var(--t-text) 7%, transparent)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
+                          <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'color-mix(in srgb, var(--t-text) 60%, transparent)' : 'color-mix(in srgb, var(--t-text) 40%, transparent)' }} />
+                          <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'color-mix(in srgb, var(--t-text) 75%, transparent)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
                           {/* Primary on-load CTA: loud gradient + comet border while empty,
                               calm white "ready" state once a valid site/email is entered. */}
                           <button id="hero-onboard-cta" className="cta-pill-btn" data-cta-state={urlIsValid ? 'ready' : 'idle'} onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaSecondaryStyle, flexShrink: 0, opacity: 1, padding: '0.75rem 0.75rem' } : { ...ctaStyle, flexShrink: 0, opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="hero-onboard-label">Connect</span><UpRightArrow style={ctaIconStyle} /></button>
@@ -3139,7 +3140,7 @@ const StackedSlidesSection = () => {
                           {[0, 1].map((i) => (
                             <div key={i} ref={i === 0 ? helloMarqueeSetRef : undefined} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
                               {['HELLO', '•', 'HELLO', '•'].map((w, j) => (
-                                <span key={j} data-hello-marquee-word={w === 'HELLO' ? '' : undefined} data-hello-marquee-dot={w === '•' ? '' : undefined} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 28.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
+                                <span key={j} data-hello-marquee-word={w === 'HELLO' ? '' : undefined} data-hello-marquee-dot={w === '•' ? '' : undefined} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 28.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: 'var(--t-text)', whiteSpace: 'nowrap' }}>{w}</span>
                               ))}
                             </div>
                           ))}
@@ -3187,13 +3188,13 @@ const StackedSlidesSection = () => {
                                       // one before it); `z` opts a card out of that.
                                       zIndex: z ?? i + 1,
                                       borderRadius: '10px',
-                                      border: '1px solid rgba(200,200,200,0.85)',
-                                      background: '#fcfaf4',
+                                      border: '1px solid color-mix(in srgb, var(--t-text) 22%, transparent)',
+                                      background: 'var(--t-raised)',
                                       overflow: 'hidden',
                                       willChange: 'transform',
                                       boxSizing: 'border-box',
                                       transform: 'rotate(var(--peek-rotate))',
-                                      boxShadow: '0 6px 20px rgba(0,0,0,0.09), 0 1px 0 rgba(255,255,255,0.85)',
+                                      boxShadow: '0 6px 20px rgba(0,0,0,0.09), 0 1px 0 color-mix(in srgb, var(--t-surface) 85%, transparent)',
                                     }}
                                   >
                                     {video ? (
@@ -3235,11 +3236,11 @@ const StackedSlidesSection = () => {
                                   <div data-hover-placeholder aria-hidden="true" style={{ display: 'none' }} />
                                   {isMobileCapabilityOpen ? (
                                     <div style={mobileCapabilityPreviewStyle} aria-hidden="true">
-                                      <div style={{ width: '100%', height: '100%', background: '#f5f1df', borderRadius: '0.75rem', padding: '1rem', boxSizing: 'border-box', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-                                        <p style={{ margin: '0 0 0.6rem', fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.4)', fontFamily: "'Space Mono', monospace" }}>Your Business, Mapped</p>
+                                      <div style={{ width: '100%', height: '100%', background: internalPageCreamPaperBackground, borderRadius: '0.75rem', padding: '1rem', boxSizing: 'border-box', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+                                        <p style={{ margin: '0 0 0.6rem', fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'color-mix(in srgb, var(--t-text) 40%, transparent)', fontFamily: "'Space Mono', monospace" }}>Your Business, Mapped</p>
                                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem', fontFamily: "'Space Grotesk', system-ui, sans-serif", flex: 1 }}>
-                                          <thead><tr style={{ borderBottom: '1px solid rgba(42,36,32,0.15)' }}><th style={{ width: '1.2rem' }} /><th style={{ textAlign: 'left', padding: '0.28rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.45)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: "'Doto', 'Space Mono', monospace" }}>Access</th></tr></thead>
-                                          <tbody>{CMO_TABLE_ROWS.map((row, ri, arr) => (<tr key={row.task} style={{ borderBottom: (row.task === 'Daily Brief' || row.task === 'DASHBOARD' || (row.sub && !isSubLast(arr, ri))) ? 'none' : '1px solid rgba(42,36,32,0.07)' }}><td style={{ padding: '0.38rem 0.2rem', textAlign: 'center', position: 'relative' }}>{row.task === 'DASHBOARD' ? <Check size={18} strokeWidth={3} color={CMO_CHECK_COLOR} style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? <BriefConnector first={isSubFirst(arr, ri)} last={isSubLast(arr, ri)} /> : <span className="cmo-arrow" aria-hidden="true"><Lock size={12} /></span>}</td><td style={{ padding: row.sub ? '0.38rem 0.4rem 0.38rem 0.9rem' : '0.38rem 0.4rem', color: row.sub ? 'rgba(42,36,32,0.55)' : '#2a2420', fontWeight: row.bold ? 700 : (row.sub ? 400 : 500) }}>{row.task === 'DASHBOARD' ? 'Dashboard' : row.task}</td></tr>))}</tbody>
+                                          <thead><tr style={{ borderBottom: '1px solid color-mix(in srgb, var(--t-text) 15%, transparent)' }}><th style={{ width: '1.2rem' }} /><th style={{ textAlign: 'left', padding: '0.28rem 0.4rem', fontWeight: 900, color: 'color-mix(in srgb, var(--t-text) 45%, transparent)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: "'Doto', 'Space Mono', monospace" }}>Access</th></tr></thead>
+                                          <tbody>{CMO_TABLE_ROWS.map((row, ri, arr) => (<tr key={row.task} style={{ borderBottom: (row.task === 'Daily Brief' || row.task === 'DASHBOARD' || (row.sub && !isSubLast(arr, ri))) ? 'none' : '1px solid color-mix(in srgb, var(--t-text) 7%, transparent)' }}><td style={{ padding: '0.38rem 0.2rem', textAlign: 'center', position: 'relative' }}>{row.task === 'DASHBOARD' ? <Check size={18} strokeWidth={3} color={CMO_CHECK_COLOR} style={{ display: 'inline-block', verticalAlign: 'middle' }} /> : row.sub ? <BriefConnector first={isSubFirst(arr, ri)} last={isSubLast(arr, ri)} /> : <span className="cmo-arrow" aria-hidden="true"><Lock size={12} /></span>}</td><td style={{ padding: row.sub ? '0.38rem 0.4rem 0.38rem 0.9rem' : '0.38rem 0.4rem', color: row.sub ? 'color-mix(in srgb, var(--t-text) 55%, transparent)' : 'var(--t-text)', fontWeight: row.bold ? 700 : (row.sub ? 400 : 500) }}>{row.task === 'DASHBOARD' ? 'Dashboard' : row.task}</td></tr>))}</tbody>
                                         </table>
                                       </div>
                                     </div>
@@ -3247,28 +3248,28 @@ const StackedSlidesSection = () => {
                                   <div style={capabilityContentStyle}>
                                     <HitloopAboutBlock />
                                     {item.body && <p id="cmo-card-onboard-body" style={{ ...capabilityCardBodyStyle, maxWidth: 'none', textAlign: 'left' }}>{item.body}</p>}
-                                    <div id="cmo-url-input-row" className="cmo-url-input-desktop" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.85rem', height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
-                                      <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
-                                      <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
-                                      <span id="cmo-dashboard-cta-hover-shell" style={{ display: 'inline-flex', flexShrink: 0, cursor: 'pointer' }}><button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'pointer', padding: '0.75rem 0.75rem' }}>Connect<UpRightArrow style={ctaIconStyle} /></button></span>
+                                    <div id="cmo-url-input-row" className="cmo-url-input-desktop" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.85rem', height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'color-mix(in srgb, var(--t-surface) 45%, transparent)', border: '1px solid var(--t-border-subtle)', borderRadius: '999px', boxShadow: '0 1px 4px color-mix(in srgb, var(--t-text) 7%, transparent)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
+                                      <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'color-mix(in srgb, var(--t-text) 60%, transparent)' : 'color-mix(in srgb, var(--t-text) 40%, transparent)' }} />
+                                      <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'color-mix(in srgb, var(--t-text) 75%, transparent)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
+                                      <span id="cmo-dashboard-cta-hover-shell" style={{ display: 'inline-flex', flexShrink: 0, cursor: 'pointer' }}><button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(var(--t-surface), var(--t-surface)) padding-box, linear-gradient(90deg, color-mix(in srgb, var(--t-accent-bright) 0%, transparent) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%) border-box', color: 'var(--t-text)', boxShadow: 'none', opacity: 1, cursor: 'pointer', padding: '0.75rem 0.75rem' }}>Connect<UpRightArrow style={ctaIconStyle} /></button></span>
                                     </div>
-                                    <div className="cmo-table-inner" style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '0px solid rgba(42,36,32,0.1)' }}>
+                                    <div className="cmo-table-inner" style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '0px solid color-mix(in srgb, var(--t-text) 10%, transparent)' }}>
                                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
                                         <colgroup><col style={{ width: '2rem' }} /><col style={{ width: '26%' }} /><col /></colgroup>
-                                        <thead><tr><th aria-hidden="true" /><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>Access</th><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>What you get</th></tr></thead>
+                                        <thead><tr><th aria-hidden="true" /><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'color-mix(in srgb, var(--t-text) 40%, transparent)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>Access</th><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'color-mix(in srgb, var(--t-text) 40%, transparent)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>What you get</th></tr></thead>
                                         <tbody><CmoTableRows dailyBriefOpen={dailyBriefOpen} onToggleDaily={() => setDailyBriefOpen((v) => !v)} dashboardOpen={dashboardOpen} onToggleDashboard={() => setDashboardOpen((v) => !v)} variant="desktop" /></tbody>
                                       </table>
                                     </div>
                                   </div>
-                                  <div id="cmo-dashboard-table" className="cmo-table-outer" style={{ gridColumn: '1 / -1', marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid rgba(42,36,32,0.1)' }}>
-                                    <div className="cmo-url-input-mobile" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
-                                      <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
-                                      <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
-                                      <button aria-label="Connect" className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="cmo-table-submit-label">Connect</span><UpRightArrow className="cmo-table-submit-arrow" style={ctaIconStyle} /></button>
+                                  <div id="cmo-dashboard-table" className="cmo-table-outer" style={{ gridColumn: '1 / -1', marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid color-mix(in srgb, var(--t-text) 10%, transparent)' }}>
+                                    <div className="cmo-url-input-mobile" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'color-mix(in srgb, var(--t-surface) 45%, transparent)', border: '1px solid var(--t-border-subtle)', borderRadius: '999px', boxShadow: '0 1px 4px color-mix(in srgb, var(--t-text) 7%, transparent)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
+                                      <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'color-mix(in srgb, var(--t-text) 60%, transparent)' : 'color-mix(in srgb, var(--t-text) 40%, transparent)' }} />
+                                      <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'color-mix(in srgb, var(--t-text) 75%, transparent)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
+                                      <button aria-label="Connect" className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(var(--t-surface), var(--t-surface)) padding-box, linear-gradient(90deg, color-mix(in srgb, var(--t-accent-bright) 0%, transparent) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%) border-box', color: 'var(--t-text)', boxShadow: 'none', opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="cmo-table-submit-label">Connect</span><UpRightArrow className="cmo-table-submit-arrow" style={ctaIconStyle} /></button>
                                     </div>
                                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
                                     <colgroup><col style={{ width: '2rem' }} /><col style={{ width: '26%' }} /><col /></colgroup>
-                                      <thead><tr><th style={{ width: '1.5rem' }} /><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>Get</th><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'rgba(42,36,32,0.4)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>What you get</th></tr></thead>
+                                      <thead><tr><th style={{ width: '1.5rem' }} /><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'color-mix(in srgb, var(--t-text) 40%, transparent)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>Get</th><th style={{ textAlign: 'left', padding: '0.25rem 0.4rem', fontWeight: 900, color: 'color-mix(in srgb, var(--t-text) 40%, transparent)', fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: "'Doto', 'Space Mono', monospace" }}>What you get</th></tr></thead>
                                       <tbody><CmoTableRows dailyBriefOpen={dailyBriefOpen} onToggleDaily={() => setDailyBriefOpen((v) => !v)} dashboardOpen={dashboardOpen} onToggleDashboard={() => setDashboardOpen((v) => !v)} variant="mobile" /></tbody>
                                     </table>
                                   </div>
@@ -3290,7 +3291,7 @@ const StackedSlidesSection = () => {
                           {[0, 1].map((i) => (
                             <div key={i} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
                               {['WORK & TESTIMONIALS', '•', 'WORK & TESTIMONIALS', '•'].map((w, j) => (
-                                <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 28.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
+                                <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 28.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: 'var(--t-text)', whiteSpace: 'nowrap' }}>{w}</span>
                               ))}
                             </div>
                           ))}
@@ -3328,7 +3329,7 @@ const StackedSlidesSection = () => {
                                   setCaseStudyImage(item.src);
                                 }
                               }}
-                              style={{ position: 'relative', width: '100%', borderRadius: '0.75rem', overflow: 'hidden', border: '1px solid rgba(42,36,32,0.1)', aspectRatio: '16 / 5', boxSizing: 'border-box', cursor: 'pointer' }}
+                              style={{ position: 'relative', width: '100%', borderRadius: '0.75rem', overflow: 'hidden', border: '1px solid color-mix(in srgb, var(--t-text) 10%, transparent)', aspectRatio: '16 / 5', boxSizing: 'border-box', cursor: 'pointer' }}
                             >
                               <Image src={item.src} alt="" fill sizes="(max-width: 768px) 100vw, 50vw" style={{ objectFit: 'cover' }} />
                             </div>
@@ -3346,7 +3347,7 @@ const StackedSlidesSection = () => {
                                     title={`${item.data.name} on LinkedIn`}
                                     style={quoteAttributionNameStyle}
                                   >{item.data.name}</a>
-                                  <span style={{ color: 'rgba(42,36,32,0.3)', fontSize: '0.75rem' }}>·</span>
+                                  <span style={{ color: 'color-mix(in srgb, var(--t-text) 30%, transparent)', fontSize: '0.75rem' }}>·</span>
                                   <span style={quoteAttributionRoleStyle}>{item.data.title}, {item.data.company}</span>
                                   <a
                                     className="testimonial-source-link"
@@ -3386,7 +3387,7 @@ const StackedSlidesSection = () => {
       </div>
 
       {/* second blurry panel — capability cards + footer */}
-      <section id="capabilities-panel" data-stack-panel style={{ ...panelStyle, minHeight: 'auto', background: 'rgba(245, 241, 223, 0.38)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.45), inset 0 1px 0 rgba(255,255,255,0.6)', color: '#2a2420' }}>
+      <section id="capabilities-panel" data-stack-panel style={{ ...panelStyle, minHeight: 'auto', background: 'color-mix(in srgb, var(--t-chrome) 69.09%, transparent)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', boxShadow: 'inset 0 0 0 1px var(--t-glass-highlight), inset 0 1px 0 color-mix(in srgb, var(--t-surface) 60%, transparent)', color: 'var(--t-text)' }}>
         <div style={contentStyle}>
           <div data-stack-inner style={innerStyle}>
             <div id="panel-capabilities-layout" style={gridLayoutStyle}>
@@ -3417,7 +3418,7 @@ const StackedSlidesSection = () => {
                           {[0, 1].map((i) => (
                             <div key={i} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
                               {['CONTACT', '•', 'CONTACT', '•'].map((w, j) => (
-                                <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 28.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
+                                <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 28.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: 'var(--t-text)', whiteSpace: 'nowrap' }}>{w}</span>
                               ))}
                             </div>
                           ))}
@@ -3426,10 +3427,10 @@ const StackedSlidesSection = () => {
                       <Image src="/img/sig.png" alt="Bryan Balli signature" width={276} height={208} style={inlineFooterSignatureStyle} />
 
                       <div id="footer-cta-input-row" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 'clamp(0.5rem, 1.5vw, 1rem)', width: '100%', marginTop: 'clamp(1.25rem, 2.5vw, 2rem)', marginBottom: 0 }}>
-                        <div id="footer-url-input-row" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flex: 1, minWidth: 'min(100%, 18rem)', height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'rgba(255,255,255,0.45)', border: '1px solid rgba(42,36,32,0.12)', borderRadius: '999px', boxShadow: '0 1px 4px rgba(42,36,32,0.07)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
-                          <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
-                          <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'rgba(42,36,32,0.75)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
-                          <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box', color: '#2a2420', boxShadow: 'none', opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="footer-submit-label">Connect</span><UpRightArrow style={ctaIconStyle} /></button>
+                        <div id="footer-url-input-row" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flex: 1, minWidth: 'min(100%, 18rem)', height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'color-mix(in srgb, var(--t-surface) 45%, transparent)', border: '1px solid var(--t-border-subtle)', borderRadius: '999px', boxShadow: '0 1px 4px color-mix(in srgb, var(--t-text) 7%, transparent)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
+                          <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'color-mix(in srgb, var(--t-text) 60%, transparent)' : 'color-mix(in srgb, var(--t-text) 40%, transparent)' }} />
+                          <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'color-mix(in srgb, var(--t-text) 75%, transparent)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
+                          <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(var(--t-surface), var(--t-surface)) padding-box, linear-gradient(90deg, color-mix(in srgb, var(--t-accent-bright) 0%, transparent) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%) border-box', color: 'var(--t-text)', boxShadow: 'none', opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="footer-submit-label">Connect</span><UpRightArrow style={ctaIconStyle} /></button>
                         </div>
                         <a
                           id="footer-contact-cta"
@@ -3444,7 +3445,7 @@ const StackedSlidesSection = () => {
                           <UpRightArrow style={ctaIconStyle} />
                         </a>
                       </div>
-                      <p id="footer-previously-at" style={{ margin: '0.5rem 0 0.35rem', textAlign: 'center', fontSize: '0.7rem', letterSpacing: '0.06em', color: 'rgba(42,36,32,0.32)', fontFamily: "'Space Mono', monospace" }}>previously at…</p>
+                      <p id="footer-previously-at" style={{ margin: '0.5rem 0 0.35rem', textAlign: 'center', fontSize: '0.7rem', letterSpacing: '0.06em', color: 'color-mix(in srgb, var(--t-text) 32%, transparent)', fontFamily: "'Space Mono', monospace" }}>previously at…</p>
                       <a id="agency-marquee-shell" ref={marqueeShellRef} href="https://www.linkedin.com/in/bryanballi/" target="_blank" rel="noopener noreferrer" style={{ ...agencyMarqueeShellStyle, cursor: 'pointer', textDecoration: 'none', display: 'block' }}>
                         <div ref={marqueeTrackRef} style={agencyMarqueeTrackStyle}>
                           <div ref={marqueeSetRef} style={agencyMarqueeSetStyle}>
@@ -3607,7 +3608,7 @@ const StackedSlidesSection = () => {
                 onMouseEnter={(e) => e.stopPropagation()}
                 onMouseLeave={(e) => e.stopPropagation()}
               >
-                <Globe size={16} strokeWidth={1.6} style={{ flexShrink: 0, color: urlIsValid ? 'rgba(42,36,32,0.6)' : 'rgba(42,36,32,0.4)' }} />
+                <Globe size={16} strokeWidth={1.6} style={{ flexShrink: 0, color: urlIsValid ? 'color-mix(in srgb, var(--t-text) 60%, transparent)' : 'color-mix(in srgb, var(--t-text) 40%, transparent)' }} />
                 <input
                   id="cmo-modal-url-input"
                   value={homepageUrl}
@@ -3655,7 +3656,7 @@ const quoteSectionStyle = {
   width: '100%',
   marginTop: 'clamp(2rem, 4vw, 3rem)',
   paddingTop: 'clamp(2.5rem, 5vw, 4rem)',
-  borderTop: '1px solid rgba(42, 36, 32, 0.12)',
+  borderTop: '1px solid var(--t-border-subtle)',
   boxSizing: 'border-box',
 };
 
@@ -3666,7 +3667,7 @@ const quoteTextStyle = {
   lineHeight: 1.08,
   letterSpacing: '-0.04em',
   fontFamily: "'Space Grotesk', system-ui, sans-serif",
-  color: '#2a2420',
+  color: 'var(--t-text)',
   maxWidth: '18ch',
 };
 
@@ -3788,7 +3789,7 @@ const supportTextStyle = {
   lineHeight: 1.6,
   fontWeight: 400,
   textAlign: 'justify',
-  color: 'rgba(42, 36, 32, 0.8)',
+  color: 'color-mix(in srgb, var(--t-text) 80%, transparent)',
 };
 
 const ctaStyle = {
@@ -3804,11 +3805,11 @@ const ctaStyle = {
   fontWeight: 700,
   letterSpacing: '0.01em',
   textDecoration: 'none',
-  color: '#ffffff',
-  background: 'linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)',
+  color: 'var(--t-on-solid)',
+  background: 'linear-gradient(175deg, color-mix(in srgb, var(--t-glass-highlight) 40%, transparent) 0%, transparent 52%), var(--t-gradient-accent)',
   border: 'none',
   borderRadius: '999px',
-  boxShadow: '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1)',
+  boxShadow: '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 color-mix(in srgb, var(--t-glass-highlight) 62.22%, transparent), inset 0 -1px 0 rgba(0,0,0,0.1)',
   whiteSpace: 'nowrap',
   cursor: 'pointer',
 };
@@ -3822,9 +3823,9 @@ const heroCtaStyle = {
 // Secondary CTA look: white background + static gradient border (no comet animation).
 const ctaSecondaryStyle = {
   ...ctaStyle,
-  background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(90deg, hsla(185,100%,45%,0) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box',
+  background: 'linear-gradient(var(--t-surface), var(--t-surface)) padding-box, linear-gradient(90deg, color-mix(in srgb, var(--t-accent-bright) 0%, transparent) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%) border-box',
   border: '1px solid transparent',
-  color: '#2a2420',
+  color: 'var(--t-text)',
   boxShadow: 'none',
 };
 
@@ -3833,7 +3834,7 @@ const ctaAvatarStyle = {
   height: '1.75rem',
   borderRadius: '50%',
   objectFit: 'cover',
-  border: '2px solid rgba(255,255,255,0.35)',
+  border: '2px solid color-mix(in srgb, var(--t-surface) 35%, transparent)',
   flexShrink: 0,
   display: 'block',
 };
@@ -3883,7 +3884,7 @@ const capabilityEyebrowStyle = {
   fontWeight: 700,
   letterSpacing: '-0.03em',
   textTransform: 'none',
-  color: '#2a2420',
+  color: 'var(--t-text)',
 };
 
 const capabilityHeadingStyle = {
@@ -3892,7 +3893,7 @@ const capabilityHeadingStyle = {
   lineHeight: 1.08,
   letterSpacing: '-0.04em',
   fontWeight: 700,
-  color: '#2a2420',
+  color: 'var(--t-text)',
   textWrap: 'balance',
 };
 
@@ -3911,15 +3912,15 @@ const capabilityCardTablePreviewStyle = {
   gap: 'clamp(0.8rem, 1.5vw, 1rem)',
   padding: 'clamp(1rem, 2vw, 1.35rem)',
   borderRadius: '1.1rem',
-  border: '1px solid rgba(42,36,32,0.1)',
+  border: '1px solid color-mix(in srgb, var(--t-text) 10%, transparent)',
   // No bottom border: the anchor band is the card's bottom edge now, and the
   // hairline showed as a light line under the dark band (overflow clips at the
   // padding box, so the band can never paint over a border).
   borderBottomWidth: 0,
-  background: 'rgba(255,255,255,1)',
+  background: 'var(--t-surface)',
   // Inset highlight only: the old `0 1px 0` outer shadow drew a straight hairline
   // that poked out past the rounded bottom corners once the anchor band landed.
-  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.4)',
+  boxShadow: 'inset 0 1px 0 color-mix(in srgb, var(--t-glass-highlight) 88.89%, transparent)',
   boxSizing: 'border-box',
   overflow: 'hidden',
 };
@@ -3930,9 +3931,9 @@ const capabilityCardStyle = {
   flexDirection: 'column',
   padding: 'clamp(1rem, 2vw, 1.35rem)',
   borderRadius: '1.1rem',
-  border: '1px solid rgba(42,36,32,0.1)',
-  background: 'rgba(255,255,255,1)',
-  boxShadow: '0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4)',
+  border: '1px solid color-mix(in srgb, var(--t-text) 10%, transparent)',
+  background: 'var(--t-surface)',
+  boxShadow: '0 1px 0 color-mix(in srgb, var(--t-surface) 65%, transparent), inset 0 1px 0 color-mix(in srgb, var(--t-glass-highlight) 88.89%, transparent)',
   boxSizing: 'border-box',
   overflow: 'visible',
 };
@@ -3950,7 +3951,7 @@ const capabilityBadgeStyle = {
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
-  background: 'rgba(42, 36, 32, 0.05)',
+  background: 'color-mix(in srgb, var(--t-text) 5%, transparent)',
   fontSize: 'clamp(0.72rem, 1vw, 0.85rem)',
   fontWeight: 800,
   letterSpacing: '-0.02em',
@@ -3971,14 +3972,14 @@ const capabilityCardTitleStyle = {
   lineHeight: 1.15,
   fontWeight: 700,
   letterSpacing: '-0.03em',
-  color: '#2a2420',
+  color: 'var(--t-text)',
 };
 
 const capabilityCardBodyStyle = {
   margin: 0,
   fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)',
   lineHeight: 1.55,
-  color: 'rgba(42, 36, 32, 0.6)',
+  color: 'color-mix(in srgb, var(--t-text) 60%, transparent)',
 };
 
 const mobileCapabilityPreviewStyle = {
@@ -3990,9 +3991,9 @@ const mobileCapabilityPreviewStyle = {
   aspectRatio: '16 / 9',
   borderRadius: '1.2rem',
   overflow: 'hidden',
-  background: 'rgba(255, 255, 255, 0.96)',
-  border: '1px solid rgba(42,36,32,0.1)',
-  boxShadow: '0 24px 80px rgba(42, 36, 32, 0.18)',
+  background: 'color-mix(in srgb, var(--t-surface) 96%, transparent)',
+  border: '1px solid color-mix(in srgb, var(--t-text) 10%, transparent)',
+  boxShadow: '0 24px 80px color-mix(in srgb, var(--t-text) 18%, transparent)',
   zIndex: 10,
   pointerEvents: 'none',
 };
@@ -4028,9 +4029,9 @@ const gridFeatureImageStyle = {
 const gridPlaceholderStyle = {
   width: '100%',
   height: '100%',
-  backgroundColor: 'rgba(42, 36, 32, 0.08)',
+  backgroundColor: 'var(--t-border-faint)',
   borderRadius: '0.5rem',
-  border: '1px solid rgba(42, 36, 32, 0.2)',
+  border: '1px solid color-mix(in srgb, var(--t-text) 20%, transparent)',
 };
 
 const testimonialCardStyle = {
@@ -4038,7 +4039,7 @@ const testimonialCardStyle = {
   borderRadius: '0.5rem',
   aspectRatio: '16 / 9',
   padding: 'clamp(1.5rem, 4vw, 3rem)',
-  border: '1px solid rgba(42, 36, 32, 0.1)',
+  border: '1px solid color-mix(in srgb, var(--t-text) 10%, transparent)',
   display: 'flex',
   flexDirection: 'column',
   justifyContent: 'center',
@@ -4056,7 +4057,7 @@ const testimonialCardQuoteStyle = {
   letterSpacing: '-0.02em',
   fontStyle: 'italic',
   fontWeight: 400,
-  color: 'rgba(42, 36, 32, 0.82)',
+  color: 'color-mix(in srgb, var(--t-text) 82%, transparent)',
   textWrap: 'balance',
 };
 
@@ -4072,7 +4073,7 @@ const testimonialCardAvatarStyle = {
   height: '2rem',
   borderRadius: '50%',
   objectFit: 'cover',
-  border: '1px solid rgba(42, 36, 32, 0.14)',
+  border: '1px solid color-mix(in srgb, var(--t-text) 14%, transparent)',
   flexShrink: 0,
   display: 'block',
 };
@@ -4089,21 +4090,21 @@ const testimonialCardNameStyle = {
   fontSize: 'clamp(0.78rem, 1vw, 0.875rem)',
   fontWeight: 600,
   letterSpacing: '-0.01em',
-  color: 'rgba(42, 36, 32, 0.75)',
+  color: 'color-mix(in srgb, var(--t-text) 75%, transparent)',
 };
 
 const testimonialCardCompanyStyle = {
   fontSize: 'clamp(0.72rem, 0.9vw, 0.8rem)',
   fontWeight: 400,
   letterSpacing: '0.02em',
-  color: 'rgba(42, 36, 32, 0.38)',
+  color: 'var(--t-text-faint)',
 };
 
 const featuredWorkLabelStyle = {
   width: '100%',
   marginTop: 'clamp(2rem, 4vw, 3rem)',
   paddingTop: 'clamp(2rem, 4vw, 3rem)',
-  borderTop: '1px solid rgba(42, 36, 32, 0.12)',
+  borderTop: '1px solid var(--t-border-subtle)',
   paddingBottom: 'clamp(1rem, 2vw, 1.5rem)',
   boxSizing: 'border-box',
 };
@@ -4126,9 +4127,9 @@ const featurePreviewCardStyle = {
   gridRow: 'span 3',
   borderRadius: '1rem',
   overflow: 'hidden',
-  border: '1px solid rgba(42, 36, 32, 0.12)',
-  background: 'rgba(255,255,255,0.46)',
-  boxShadow: '0 1px 0 rgba(255,255,255,0.55), inset 0 1px 0 rgba(255,255,255,0.32)',
+  border: '1px solid var(--t-border-subtle)',
+  background: 'color-mix(in srgb, var(--t-surface) 46%, transparent)',
+  boxShadow: '0 1px 0 color-mix(in srgb, var(--t-surface) 55%, transparent), inset 0 1px 0 color-mix(in srgb, var(--t-glass-highlight) 71.11%, transparent)',
 };
 
 const featurePreviewCardWideStyle = {
@@ -4172,21 +4173,21 @@ const filterChipStyle = {
   display: 'inline-flex',
   alignItems: 'center',
   padding: '0.38rem 0.85rem',
-  background: 'rgba(42, 36, 32, 0.05)',
-  border: '1px solid rgba(42, 36, 32, 0.15)',
+  background: 'color-mix(in srgb, var(--t-text) 5%, transparent)',
+  border: '1px solid color-mix(in srgb, var(--t-text) 15%, transparent)',
   borderRadius: '2rem',
   fontFamily: "'Space Mono', monospace",
   fontSize: '0.72rem',
   fontWeight: 400,
   letterSpacing: '0.04em',
-  color: 'rgba(42, 36, 32, 0.6)',
+  color: 'color-mix(in srgb, var(--t-text) 60%, transparent)',
   cursor: 'pointer',
 };
 
 const filterChipActiveStyle = {
-  background: '#2a2420',
-  border: '1px solid #2a2420',
-  color: '#f5f1df',
+  background: 'var(--t-text)',
+  border: '1px solid var(--t-text)',
+  color: 'var(--t-text-inverse)',
 };
 
 const servicesViewportStyle = {
@@ -4224,7 +4225,7 @@ const serviceVisualZoneStyle = {
   width: '100%',
   backgroundColor: 'transparent',
   borderRadius: '0.5rem',
-  border: '1px solid rgba(42, 36, 32, 0.1)',
+  border: '1px solid color-mix(in srgb, var(--t-text) 10%, transparent)',
 };
 
 
@@ -4232,7 +4233,7 @@ const serviceLabelStyle = {
   fontSize: 'clamp(0.7rem, 0.95vw, 0.82rem)',
   fontWeight: 500,
   letterSpacing: '0.01em',
-  color: 'rgba(42, 36, 32, 0.65)',
+  color: 'color-mix(in srgb, var(--t-text) 65%, transparent)',
   whiteSpace: 'nowrap',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
@@ -4254,7 +4255,7 @@ const hoverItemStyle = {
   gap: '0 clamp(0.75rem, 2vw, 1.75rem)',
   width: '100%',
   padding: 'clamp(1.2rem, 2.2vw, 1.8rem) 0',
-  borderBottom: '1px solid rgba(42, 36, 32, 0.12)',
+  borderBottom: '1px solid var(--t-border-subtle)',
   boxSizing: 'border-box',
 };
 
@@ -4263,7 +4264,7 @@ const hoverItemIndexStyle = {
   fontFamily: "'Space Mono', monospace",
   fontWeight: 400,
   letterSpacing: '0.06em',
-  color: 'rgba(42, 36, 32, 0.28)',
+  color: 'color-mix(in srgb, var(--t-text) 28%, transparent)',
   fontVariantNumeric: 'tabular-nums',
   alignSelf: 'center',
 };
@@ -4274,7 +4275,7 @@ const hoverItemTagStyle = {
   fontWeight: 400,
   letterSpacing: '0.1em',
   textTransform: 'uppercase',
-  color: 'rgba(42, 36, 32, 0.35)',
+  color: 'color-mix(in srgb, var(--t-text) 35%, transparent)',
   whiteSpace: 'nowrap',
   alignSelf: 'center',
 };
@@ -4300,7 +4301,7 @@ const hoverTextWrapStyle = {
 
 const hoverTitleStyle = {
   margin: 0,
-  color: '#2a2420',
+  color: 'var(--t-text)',
   fontSize: 'clamp(1.1rem, 2vw, 2.2rem)',
   lineHeight: 1.08,
   fontWeight: 700,
@@ -4316,15 +4317,15 @@ const testimonialsShellStyle = {
   width: '100%',
   marginTop: 'clamp(1.25rem, 2.5vw, 1.85rem)',
   paddingTop: 'clamp(1.25rem, 2.5vw, 1.85rem)',
-  borderTop: '1px solid rgba(42, 36, 32, 0.12)',
+  borderTop: '1px solid var(--t-border-subtle)',
   boxSizing: 'border-box',
 };
 
 const featuredQuoteStyle = {
   position: 'relative',
   padding: 'clamp(1.5rem, 3vw, 2.5rem)',
-  background: 'rgba(42, 36, 32, 0.03)',
-  border: '1px solid rgba(42, 36, 32, 0.1)',
+  background: 'color-mix(in srgb, var(--t-text) 3%, transparent)',
+  border: '1px solid color-mix(in srgb, var(--t-text) 10%, transparent)',
   borderRadius: '0.75rem',
   marginBottom: 'clamp(1rem, 2vw, 1.5rem)',
   overflow: 'hidden',
@@ -4336,7 +4337,7 @@ const featuredQuoteMarkStyle = {
   left: 'clamp(1rem, 2vw, 1.75rem)',
   fontSize: 'clamp(5rem, 10vw, 8rem)',
   lineHeight: 1,
-  color: 'rgba(42, 36, 32, 0.06)',
+  color: 'color-mix(in srgb, var(--t-text) 6%, transparent)',
   fontFamily: 'Georgia, serif',
   pointerEvents: 'none',
   userSelect: 'none',
@@ -4347,7 +4348,7 @@ const featuredQuoteTextStyle = {
   fontSize: 'clamp(1rem, 1.8vw, 1.3rem)',
   lineHeight: 1.6,
   fontWeight: 400,
-  color: '#2a2420',
+  color: 'var(--t-text)',
   letterSpacing: '-0.01em',
   maxWidth: '62ch',
   position: 'relative',
@@ -4383,7 +4384,7 @@ const aboutIdentityAvatarStyle = {
   borderRadius: '50%',
   objectFit: 'cover',
   display: 'block',
-  boxShadow: '0 4px 14px rgba(42, 36, 32, 0.16)',
+  boxShadow: '0 4px 14px color-mix(in srgb, var(--t-text) 16%, transparent)',
 };
 
 const aboutIdentityTextStackStyle = {
@@ -4400,7 +4401,7 @@ const aboutHeadingStyle = {
   lineHeight: 1,
   fontWeight: 700,
   letterSpacing: '-0.035em',
-  color: '#2a2420',
+  color: 'var(--t-text)',
   textAlign: 'left',
   whiteSpace: 'nowrap',
 };
@@ -4419,7 +4420,7 @@ const aboutSignatureDotStyle = {
   width: '0.5em',
   height: '0.5em',
   borderRadius: '50%',
-  background: '#2a2420',
+  background: 'var(--t-text)',
   flexShrink: 0,
 };
 
@@ -4432,13 +4433,13 @@ const aboutSignatureStyle = {
   fontWeight: 400,
   letterSpacing: 'normal',
   textTransform: 'none',
-  color: 'rgba(42, 36, 32, 0.52)',
+  color: 'var(--t-text-muted)',
 };
 
 const aboutSignatureDividerStyle = {
   width: '1px',
   height: '0.8rem',
-  background: 'rgba(42, 36, 32, 0.16)',
+  background: 'color-mix(in srgb, var(--t-text) 16%, transparent)',
   flexShrink: 0,
 };
 
@@ -4463,7 +4464,7 @@ const aboutLeadStyle = {
   fontFamily: "'Space Grotesk', system-ui, sans-serif",
   fontSize: 'clamp(0.8rem, 1vw, 0.88rem)',
   lineHeight: 1.6,
-  color: 'rgba(42, 36, 32, 0.46)',
+  color: 'color-mix(in srgb, var(--t-text) 46%, transparent)',
   textAlign: 'justify',
 };
 
@@ -4509,14 +4510,14 @@ const aboutPreviouslyLabelStyle = {
   fontWeight: 700,
   letterSpacing: '0.08em',
   textTransform: 'uppercase',
-  color: 'rgba(42, 36, 32, 0.4)',
+  color: 'color-mix(in srgb, var(--t-text) 40%, transparent)',
   fontFamily: "'Space Grotesk', system-ui, sans-serif",
 };
 
 const aboutPreviouslyRuleStyle = {
   flex: 1,
   height: '1px',
-  background: 'rgba(42, 36, 32, 0.14)',
+  background: 'color-mix(in srgb, var(--t-text) 14%, transparent)',
 };
 
 const aboutAgencyMarqueeShellStyle = {
@@ -4545,7 +4546,7 @@ const aboutMissionStatementStyle = {
   lineHeight: 1.45,
   letterSpacing: '-0.015em',
   fontWeight: 500,
-  color: 'rgba(42, 36, 32, 0.88)',
+  color: 'color-mix(in srgb, var(--t-text) 88%, transparent)',
   textAlign: 'justify',
 };
 
@@ -4554,30 +4555,30 @@ const aboutCopyCtaLineStyle = {
   fontFamily: "'Space Grotesk', system-ui, sans-serif",
   fontSize: 'clamp(0.8rem, 1vw, 0.88rem)',
   lineHeight: 1.6,
-  color: 'rgba(42, 36, 32, 0.46)',
+  color: 'color-mix(in srgb, var(--t-text) 46%, transparent)',
   textAlign: 'left',
 };
 
 const quoteAttributionNameStyle = {
   fontSize: 'clamp(0.8rem, 1.1vw, 0.9rem)',
   fontWeight: 700,
-  color: '#2a2420',
+  color: 'var(--t-text)',
   letterSpacing: '-0.01em',
 };
 
 const quoteAttributionSepStyle = {
   fontSize: '0.75rem',
-  color: 'rgba(42, 36, 32, 0.3)',
+  color: 'color-mix(in srgb, var(--t-text) 30%, transparent)',
 };
 
 const quoteAttributionRoleStyle = {
   fontSize: 'clamp(0.75rem, 1vw, 0.85rem)',
-  color: 'rgba(42, 36, 32, 0.45)',
+  color: 'color-mix(in srgb, var(--t-text) 45%, transparent)',
 };
 
 const testimonialsSourceLinkStyle = {
   fontSize: 'clamp(0.75rem, 1vw, 0.85rem)',
-  color: 'rgba(42, 36, 32, 0.55)',
+  color: 'color-mix(in srgb, var(--t-text) 55%, transparent)',
   textDecoration: 'none',
   letterSpacing: '-0.01em',
 };
@@ -4590,7 +4591,7 @@ const secondaryQuotesGridStyle = {
 
 const secondaryQuoteItemStyle = {
   padding: 'clamp(1rem, 2vw, 1.5rem)',
-  border: '1px solid rgba(42, 36, 32, 0.1)',
+  border: '1px solid color-mix(in srgb, var(--t-text) 10%, transparent)',
   borderRadius: '0.75rem',
   display: 'flex',
   flexDirection: 'column',
@@ -4602,7 +4603,7 @@ const secondaryQuoteTextStyle = {
   margin: 0,
   fontSize: 'clamp(0.82rem, 1.2vw, 0.95rem)',
   lineHeight: 1.65,
-  color: 'rgba(42, 36, 32, 0.7)',
+  color: 'color-mix(in srgb, var(--t-text) 70%, transparent)',
   fontStyle: 'italic',
   flexGrow: 1,
 };
@@ -4611,7 +4612,7 @@ const workHistoryShellStyle = {
   width: '100%',
   marginTop: 'clamp(2rem, 4vw, 3rem)',
   paddingTop: 'clamp(2.5rem, 5vw, 4rem)',
-  borderTop: '1px solid rgba(42, 36, 32, 0.12)',
+  borderTop: '1px solid var(--t-border-subtle)',
   boxSizing: 'border-box',
 };
 
@@ -4625,7 +4626,7 @@ const workHistoryHeaderStyle = {
 const workHistoryEyebrowStyle = {
   fontStyle: 'italic',
   fontSize: 'clamp(0.8rem, 1.2vw, 0.95rem)',
-  color: 'rgba(42, 36, 32, 0.5)',
+  color: 'color-mix(in srgb, var(--t-text) 50%, transparent)',
 };
 
 const workHistoryHeadlineStyle = {
@@ -4634,7 +4635,7 @@ const workHistoryHeadlineStyle = {
   fontWeight: 700,
   letterSpacing: '-0.03em',
   lineHeight: 1.1,
-  color: '#2a2420',
+  color: 'var(--t-text)',
   fontFamily: "'Space Grotesk', system-ui, sans-serif",
 };
 
@@ -4647,13 +4648,13 @@ const workHistoryItemStyle = {
   gridTemplateColumns: 'clamp(6rem, 10vw, 9rem) 1fr auto',
   gap: '0 clamp(1rem, 2.5vw, 2rem)',
   padding: 'clamp(1rem, 2vw, 1.5rem) 0',
-  borderBottom: '1px solid rgba(42, 36, 32, 0.1)',
+  borderBottom: '1px solid color-mix(in srgb, var(--t-text) 10%, transparent)',
   alignItems: 'start',
 };
 
 const workHistoryYearStyle = {
   fontSize: 'clamp(0.72rem, 1vw, 0.82rem)',
-  color: 'rgba(42, 36, 32, 0.4)',
+  color: 'color-mix(in srgb, var(--t-text) 40%, transparent)',
   letterSpacing: '0.02em',
   paddingTop: '0.2rem',
   whiteSpace: 'nowrap',
@@ -4676,13 +4677,13 @@ const workHistoryRoleStyle = {
   fontSize: 'clamp(0.95rem, 1.5vw, 1.15rem)',
   fontWeight: 700,
   letterSpacing: '-0.02em',
-  color: '#2a2420',
+  color: 'var(--t-text)',
   fontFamily: "'Space Grotesk', system-ui, sans-serif",
 };
 
 const workHistoryCompanyStyle = {
   fontSize: 'clamp(0.8rem, 1.1vw, 0.9rem)',
-  color: 'rgba(42, 36, 32, 0.45)',
+  color: 'color-mix(in srgb, var(--t-text) 45%, transparent)',
   fontWeight: 400,
 };
 
@@ -4690,22 +4691,22 @@ const workHistoryDescStyle = {
   margin: 0,
   fontSize: 'clamp(0.78rem, 1.1vw, 0.88rem)',
   lineHeight: 1.6,
-  color: 'rgba(42, 36, 32, 0.55)',
+  color: 'color-mix(in srgb, var(--t-text) 55%, transparent)',
   maxWidth: '54ch',
 };
 
 const workHistoryBadgeStyle = {
   display: 'inline-block',
   padding: '0.25rem 0.7rem',
-  background: 'rgba(42, 36, 32, 0.06)',
-  border: '1px solid rgba(42, 36, 32, 0.12)',
+  background: 'color-mix(in srgb, var(--t-text) 6%, transparent)',
+  border: '1px solid var(--t-border-subtle)',
   borderRadius: '2rem',
   fontFamily: "'Space Mono', monospace",
   fontSize: '0.7rem',
   fontWeight: 400,
   letterSpacing: '0.06em',
   textTransform: 'uppercase',
-  color: 'rgba(42, 36, 32, 0.5)',
+  color: 'color-mix(in srgb, var(--t-text) 50%, transparent)',
   whiteSpace: 'nowrap',
   marginTop: '0.2rem',
 };
@@ -4716,7 +4717,7 @@ const rateCardShellStyle = {
   marginTop: 'clamp(2rem, 4vw, 3rem)',
   paddingTop: 'clamp(2.5rem, 5vw, 4rem)',
   paddingBottom: 0,
-  borderTop: '1px solid rgba(42, 36, 32, 0.12)',
+  borderTop: '1px solid var(--t-border-subtle)',
   boxSizing: 'border-box',
 };
 
@@ -4730,7 +4731,7 @@ const rateCardHeaderStyle = {
 const rateCardEyebrowStyle = {
   fontStyle: 'italic',
   fontSize: 'clamp(0.8rem, 1.2vw, 0.95rem)',
-  color: 'rgba(42, 36, 32, 0.5)',
+  color: 'color-mix(in srgb, var(--t-text) 50%, transparent)',
 };
 
 const rateCardHeadlineStyle = {
@@ -4739,7 +4740,7 @@ const rateCardHeadlineStyle = {
   fontWeight: 700,
   letterSpacing: '-0.03em',
   lineHeight: 1.1,
-  color: '#2a2420',
+  color: 'var(--t-text)',
   fontFamily: "'Space Grotesk', system-ui, sans-serif",
 };
 
@@ -4747,7 +4748,7 @@ const rateCardSubtextStyle = {
   margin: 0,
   fontSize: 'clamp(0.8rem, 1.2vw, 0.9rem)',
   lineHeight: 1.6,
-  color: 'rgba(42, 36, 32, 0.55)',
+  color: 'color-mix(in srgb, var(--t-text) 55%, transparent)',
   maxWidth: '52ch',
 };
 
@@ -4761,7 +4762,7 @@ const processStepItemStyle = {
   gridTemplateColumns: '3rem 1fr',
   gap: '0 clamp(1rem, 2.5vw, 2rem)',
   padding: 'clamp(1.1rem, 2vw, 1.6rem) 0',
-  borderBottom: '1px solid rgba(42, 36, 32, 0.1)',
+  borderBottom: '1px solid color-mix(in srgb, var(--t-text) 10%, transparent)',
   alignItems: 'start',
 };
 
@@ -4770,7 +4771,7 @@ const processStepNumStyle = {
   fontWeight: 700,
   letterSpacing: '-0.04em',
   lineHeight: 1,
-  color: 'rgba(42, 36, 32, 0.1)',
+  color: 'color-mix(in srgb, var(--t-text) 10%, transparent)',
   fontFamily: "'Space Grotesk', system-ui, sans-serif",
   paddingTop: '0.1rem',
 };
@@ -4785,7 +4786,7 @@ const processStepTitleStyle = {
   fontSize: 'clamp(1rem, 1.6vw, 1.2rem)',
   fontWeight: 700,
   letterSpacing: '-0.02em',
-  color: '#2a2420',
+  color: 'var(--t-text)',
   fontFamily: "'Space Grotesk', system-ui, sans-serif",
   lineHeight: 1.2,
 };
@@ -4794,7 +4795,7 @@ const processStepDescStyle = {
   margin: 0,
   fontSize: 'clamp(0.78rem, 1.1vw, 0.88rem)',
   lineHeight: 1.6,
-  color: 'rgba(42, 36, 32, 0.55)',
+  color: 'color-mix(in srgb, var(--t-text) 55%, transparent)',
   maxWidth: '52ch',
 };
 
@@ -4812,8 +4813,8 @@ const textBryanBtnStyle = {
   alignItems: 'center',
   gap: '0.45rem',
   padding: '0.65rem 1.3rem',
-  background: '#2a2420',
-  color: '#f5f1df',
+  background: 'var(--t-text)',
+  color: 'var(--t-text-inverse)',
   fontSize: 'clamp(0.78rem, 1.1vw, 0.88rem)',
   fontWeight: 600,
   letterSpacing: '0.02em',
@@ -4825,7 +4826,7 @@ const textBryanBtnStyle = {
 
 const textBryanHintStyle = {
   fontSize: '0.72rem',
-  color: 'rgba(42, 36, 32, 0.38)',
+  color: 'var(--t-text-faint)',
   letterSpacing: '0.02em',
 };
 
@@ -4842,7 +4843,7 @@ const processToPackagesLabelStyle = {
   fontWeight: 400,
   letterSpacing: '0.12em',
   textTransform: 'uppercase',
-  color: 'rgba(42, 36, 32, 0.35)',
+  color: 'color-mix(in srgb, var(--t-text) 35%, transparent)',
   whiteSpace: 'nowrap',
 };
 
@@ -4854,7 +4855,7 @@ const rateCardGridStyle = {
 
 const rateCardItemStyle = {
   background: 'none',
-  border: '1px solid rgba(42, 36, 32, 0.2)',
+  border: '1px solid color-mix(in srgb, var(--t-text) 20%, transparent)',
   borderRadius: '0.5rem',
   padding: 'clamp(1.5rem, 3vw, 2rem)',
   display: 'flex',
@@ -4868,7 +4869,7 @@ const rateCardNameStyle = {
   fontSize: 'clamp(1.2rem, 2vw, 1.6rem)',
   fontWeight: 700,
   letterSpacing: '-0.02em',
-  color: '#7a6a3a',
+  color: 'var(--t-warning)',
   fontFamily: "'Space Grotesk', system-ui, sans-serif",
 };
 
@@ -4882,30 +4883,30 @@ const rateCardPriceStyle = {
   fontSize: 'clamp(1.6rem, 3vw, 2.4rem)',
   fontWeight: 700,
   letterSpacing: '-0.03em',
-  color: '#2a2420',
+  color: 'var(--t-text)',
 };
 
 const rateCardUnitStyle = {
   fontSize: 'clamp(0.8rem, 1.2vw, 0.9rem)',
-  color: 'rgba(42, 36, 32, 0.45)',
+  color: 'color-mix(in srgb, var(--t-text) 45%, transparent)',
 };
 
 const rateCardDescStyle = {
   margin: 0,
   fontSize: 'clamp(0.78rem, 1.1vw, 0.88rem)',
   lineHeight: 1.55,
-  color: 'rgba(42, 36, 32, 0.55)',
+  color: 'color-mix(in srgb, var(--t-text) 55%, transparent)',
   flexGrow: 1,
 };
 
 const rateCardBadgeStyle = {
   display: 'inline-block',
   padding: '0.3rem 0.8rem',
-  background: 'rgba(42, 36, 32, 0.08)',
+  background: 'var(--t-border-faint)',
   borderRadius: '2rem',
   fontSize: '0.72rem',
   fontWeight: 600,
-  color: 'rgba(42, 36, 32, 0.6)',
+  color: 'color-mix(in srgb, var(--t-text) 60%, transparent)',
   alignSelf: 'flex-start',
 };
 
@@ -4915,9 +4916,9 @@ const rateCardCtaStyle = {
   gap: '0.75rem',
   padding: '0.45rem 1.6rem 0.45rem 0.45rem',
   borderRadius: '2rem',
-  color: '#ffffff',
-  background: 'linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)',
-  boxShadow: '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1)',
+  color: 'var(--t-on-solid)',
+  background: 'linear-gradient(175deg, color-mix(in srgb, var(--t-glass-highlight) 40%, transparent) 0%, transparent 52%), var(--t-gradient-accent)',
+  boxShadow: '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 color-mix(in srgb, var(--t-glass-highlight) 62.22%, transparent), inset 0 -1px 0 rgba(0,0,0,0.1)',
   fontSize: 'clamp(0.9rem, 1.3vw, 1rem)',
   fontWeight: 700,
   textDecoration: 'none',
@@ -4930,7 +4931,7 @@ const contactCardStyle = {
   width: '100%',
   marginTop: 'clamp(2rem, 4vw, 3rem)',
   marginBottom: 'clamp(2rem, 4vw, 3rem)',
-  background: '#2a2420',
+  background: 'var(--t-text)',
   borderRadius: '1.25rem',
   padding: 'clamp(2.5rem, 5vw, 4rem) clamp(2rem, 4vw, 3.5rem)',
   display: 'flex',
@@ -4952,7 +4953,7 @@ const contactCardLeftStyle = {
 const contactCardEyebrowStyle = {
   fontStyle: 'italic',
   fontSize: 'clamp(0.8rem, 1.2vw, 0.95rem)',
-  color: 'rgba(245, 241, 223, 0.55)',
+  color: 'color-mix(in srgb, var(--t-text-inverse) 55%, transparent)',
   letterSpacing: '0.01em',
 };
 
@@ -4962,7 +4963,7 @@ const contactCardHeadlineStyle = {
   fontWeight: 700,
   lineHeight: 1.1,
   letterSpacing: '-0.03em',
-  color: '#f5f1df',
+  color: 'var(--t-text-inverse)',
   fontFamily: "'Space Grotesk', system-ui, sans-serif",
 };
 
@@ -4970,7 +4971,7 @@ const contactCardSubtextStyle = {
   margin: 0,
   fontSize: 'clamp(0.8rem, 1.2vw, 0.9rem)',
   lineHeight: 1.6,
-  color: 'rgba(245, 241, 223, 0.55)',
+  color: 'color-mix(in srgb, var(--t-text-inverse) 55%, transparent)',
 };
 
 const contactCardRightStyle = {
@@ -4989,11 +4990,11 @@ const contactCardPrimaryBtnStyle = {
   fontSize: 'clamp(0.9rem, 1.3vw, 1rem)',
   fontWeight: 700,
   letterSpacing: '0.01em',
-  color: '#ffffff',
-  background: 'linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)',
-  border: '1px solid rgba(255,255,255,0.22)',
+  color: 'var(--t-on-solid)',
+  background: 'linear-gradient(175deg, color-mix(in srgb, var(--t-glass-highlight) 40%, transparent) 0%, transparent 52%), var(--t-gradient-accent)',
+  border: '1px solid color-mix(in srgb, var(--t-surface) 22%, transparent)',
   borderRadius: '2rem',
-  boxShadow: '0 0 14px 3px rgba(0,200,228,0.22), 0 2px 6px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1)',
+  boxShadow: '0 0 14px 3px color-mix(in srgb, var(--t-accent-bright) 22%, transparent), 0 2px 6px rgba(0,0,0,0.18), inset 0 1px 0 color-mix(in srgb, var(--t-glass-highlight) 62.22%, transparent), inset 0 -1px 0 rgba(0,0,0,0.1)',
   textDecoration: 'none',
   whiteSpace: 'nowrap',
   cursor: 'pointer',
@@ -5002,7 +5003,7 @@ const contactCardPrimaryBtnStyle = {
 const contactCardSecondaryLinkStyle = {
   fontSize: 'clamp(0.8rem, 1.1vw, 0.9rem)',
   fontWeight: 500,
-  color: 'rgba(245, 241, 223, 0.65)',
+  color: 'color-mix(in srgb, var(--t-text-inverse) 65%, transparent)',
   textDecoration: 'none',
   whiteSpace: 'nowrap',
   cursor: 'pointer',
@@ -5018,7 +5019,7 @@ const inlineFooterStyle = {
 const inlineFooterDividerStyle = {
   width: '100%',
   height: '1px',
-  background: 'rgba(42, 36, 32, 0.12)',
+  background: 'var(--t-border-subtle)',
   margin: 'clamp(2.5rem, 5vw, 4rem) 0',
 };
 
@@ -5038,19 +5039,20 @@ const inlineFooterHeadingStyle = {
   fontSize: 'clamp(1rem, 1.8vw, 1.3rem)',
   fontWeight: 600,
   letterSpacing: '-0.02em',
-  color: '#2a2420',
+  color: 'var(--t-text)',
 };
 
 const inlineFooterSignatureStyle = {
   width: 'min(110px, 31vw)',
   height: 'auto',
   display: 'block',
+  filter: 'var(--t-logo-filter)',
 };
 
 const inlineFooterSubStyle = {
   margin: 0,
   fontSize: 'clamp(0.8rem, 1.1vw, 0.88rem)',
-  color: 'rgba(42, 36, 32, 0.5)',
+  color: 'color-mix(in srgb, var(--t-text) 50%, transparent)',
   maxWidth: '36ch',
 };
 
@@ -5069,7 +5071,7 @@ const aboutMeQuoteStyle = {
   letterSpacing: '-0.02em',
   fontStyle: 'italic',
   fontWeight: 400,
-  color: 'rgba(42, 36, 32, 0.82)',
+  color: 'color-mix(in srgb, var(--t-text) 82%, transparent)',
   textAlign: 'center',
   textWrap: 'balance',
 };
@@ -5078,7 +5080,7 @@ const aboutMeBylineStyle = {
   fontSize: 'clamp(0.78rem, 1vw, 0.875rem)',
   fontWeight: 500,
   letterSpacing: '0.01em',
-  color: 'rgba(42, 36, 32, 0.4)',
+  color: 'color-mix(in srgb, var(--t-text) 40%, transparent)',
 };
 
 const footerValueIntroStyle = {
@@ -5088,7 +5090,7 @@ const footerValueIntroStyle = {
   letterSpacing: '-0.02em',
   fontStyle: 'italic',
   fontWeight: 400,
-  color: 'rgba(42, 36, 32, 0.82)',
+  color: 'color-mix(in srgb, var(--t-text) 82%, transparent)',
   textAlign: 'center',
   maxWidth: '32ch',
   textWrap: 'balance',
@@ -5098,7 +5100,7 @@ const footerValueFollowStyle = {
   margin: 0,
   fontSize: 'clamp(0.95rem, 1.5vw, 1.1rem)',
   lineHeight: 1.4,
-  color: '#2a2420',
+  color: 'var(--t-text)',
   fontWeight: 600,
   letterSpacing: '-0.01em',
   textAlign: 'center',
@@ -5110,7 +5112,7 @@ const footerBridgeLabelStyle = {
   fontSize: 'clamp(0.9rem, 1.4vw, 1.15rem)',
   fontWeight: 600,
   letterSpacing: '-0.01em',
-  color: 'rgba(42, 36, 32, 0.75)',
+  color: 'color-mix(in srgb, var(--t-text) 75%, transparent)',
   textAlign: 'center',
   marginTop: 'clamp(0.15rem, 0.4vw, 0.35rem)',
 };
@@ -5129,9 +5131,9 @@ const footerBulletListStyle = {
 const footerBulletItemStyle = {
   fontSize: 'clamp(0.9rem, 1.4vw, 1.15rem)',
   lineHeight: 1.45,
-  color: 'rgba(42, 36, 32, 0.74)',
+  color: 'color-mix(in srgb, var(--t-text) 74%, transparent)',
   padding: '0.85rem 0',
-  borderTop: '1px solid rgba(42, 36, 32, 0.12)',
+  borderTop: '1px solid var(--t-border-subtle)',
 };
 
 const footerBulletMarkStyle = {};
@@ -5140,7 +5142,7 @@ const footerClosingStyle = {
   margin: 0,
   fontSize: 'clamp(0.78rem, 1vw, 0.875rem)',
   lineHeight: 1.6,
-  color: 'rgba(42, 36, 32, 0.42)',
+  color: 'color-mix(in srgb, var(--t-text) 42%, transparent)',
   fontWeight: 500,
   fontStyle: 'italic',
   letterSpacing: '0.01em',
@@ -5160,10 +5162,10 @@ const inlineFooterFormStyle = {
 const inlineFooterInputStyle = {
   flex: 1,
   padding: '0.75rem 1rem',
-  background: 'rgba(42, 36, 32, 0.04)',
-  border: '1px solid rgba(42, 36, 32, 0.15)',
+  background: 'color-mix(in srgb, var(--t-text) 4%, transparent)',
+  border: '1px solid color-mix(in srgb, var(--t-text) 15%, transparent)',
   borderRadius: '0.5rem',
-  color: '#2a2420',
+  color: 'var(--t-text)',
   fontSize: '0.88rem',
   outline: 'none',
   boxSizing: 'border-box',
@@ -5174,11 +5176,11 @@ const inlineFooterSubmitStyle = {
   alignItems: 'center',
   gap: '0.75rem',
   padding: '0.45rem 1.6rem 0.45rem 0.45rem',
-  background: 'linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)',
-  border: '1px solid rgba(255,255,255,0.22)',
+  background: 'linear-gradient(175deg, color-mix(in srgb, var(--t-glass-highlight) 40%, transparent) 0%, transparent 52%), var(--t-gradient-accent)',
+  border: '1px solid color-mix(in srgb, var(--t-surface) 22%, transparent)',
   borderRadius: '2rem',
-  boxShadow: '0 0 14px 3px rgba(0,200,228,0.22), 0 2px 6px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1)',
-  color: '#ffffff',
+  boxShadow: '0 0 14px 3px color-mix(in srgb, var(--t-accent-bright) 22%, transparent), 0 2px 6px rgba(0,0,0,0.18), inset 0 1px 0 color-mix(in srgb, var(--t-glass-highlight) 62.22%, transparent), inset 0 -1px 0 rgba(0,0,0,0.1)',
+  color: 'var(--t-on-solid)',
   fontSize: 'clamp(0.9rem, 1.3vw, 1rem)',
   fontWeight: 700,
   cursor: 'pointer',
@@ -5214,8 +5216,7 @@ const agencyLogoStyle = {
   height: `${AGENCY_LOGO_BASE_HEIGHT}px`,
   width: 'auto',
   display: 'block',
-  opacity: 0.45,
-  filter: 'grayscale(1)',
+  filter: 'var(--t-logo-filter-muted)',
   flexShrink: 0,
 };
 
@@ -5255,7 +5256,7 @@ const inlineFooterInnerDividerStyle = {
   width: '100%',
   maxWidth: '42rem',
   height: '1px',
-  background: 'rgba(42, 36, 32, 0.12)',
+  background: 'var(--t-border-subtle)',
   margin: 0,
 };
 
@@ -5270,7 +5271,7 @@ const inlineFooterBottomStyle = {
 
 const inlineFooterCopyrightStyle = {
   fontSize: '0.78rem',
-  color: 'rgba(42, 36, 32, 0.35)',
+  color: 'color-mix(in srgb, var(--t-text) 35%, transparent)',
 };
 
 const inlineFooterLegalStyle = {
@@ -5280,7 +5281,7 @@ const inlineFooterLegalStyle = {
 
 const inlineFooterLegalLinkStyle = {
   fontSize: '0.82rem',
-  color: 'rgba(42, 36, 32, 0.4)',
+  color: 'color-mix(in srgb, var(--t-text) 40%, transparent)',
   textDecoration: 'none',
   cursor: 'pointer',
 };
@@ -5290,7 +5291,7 @@ const inlineFooterSeoNavStyle = {
   flexWrap: 'wrap',
   gap: 'clamp(2rem, 5vw, 4rem)',
   padding: 'clamp(2rem, 4vw, 3rem) 0',
-  borderTop: '1px solid rgba(42, 36, 32, 0.1)',
+  borderTop: '1px solid color-mix(in srgb, var(--t-text) 10%, transparent)',
   marginTop: '50px',
 };
 
@@ -5306,13 +5307,13 @@ const inlineFooterNavHeadingStyle = {
   fontWeight: 700,
   letterSpacing: '0.1em',
   textTransform: 'uppercase',
-  color: 'rgba(42, 36, 32, 0.35)',
+  color: 'color-mix(in srgb, var(--t-text) 35%, transparent)',
   marginBottom: '0.2rem',
 };
 
 const inlineFooterNavLinkStyle = {
   fontSize: 'clamp(0.82rem, 1.1vw, 0.9rem)',
-  color: 'rgba(42, 36, 32, 0.6)',
+  color: 'color-mix(in srgb, var(--t-text) 60%, transparent)',
   textDecoration: 'none',
   cursor: 'pointer',
   lineHeight: 1.4,
@@ -5324,7 +5325,7 @@ const cmoTableHeadingStyle = {
   fontWeight: 700,
   letterSpacing: '0.08em',
   textTransform: 'uppercase',
-  color: 'rgba(42, 36, 32, 0.55)',
+  color: 'color-mix(in srgb, var(--t-text) 55%, transparent)',
   fontFamily: "'Space Mono', monospace",
 };
 
@@ -5336,7 +5337,7 @@ const cmoNoWebsiteLinkStyle = {
   fontWeight: 400,
   letterSpacing: '0.02em',
   textTransform: 'none',
-  color: 'rgba(42, 36, 32, 0.6)',
+  color: 'color-mix(in srgb, var(--t-text) 60%, transparent)',
   fontFamily: "'Space Mono', monospace",
   textDecoration: 'underline',
   textDecorationThickness: '0.5px',
@@ -5351,7 +5352,7 @@ const cmoTableFootingStyle = {
   fontWeight: 700,
   letterSpacing: '0.08em',
   textTransform: 'uppercase',
-  color: 'rgba(42, 36, 32, 0.55)',
+  color: 'color-mix(in srgb, var(--t-text) 55%, transparent)',
   fontFamily: "'Space Mono', monospace",
 };
 
@@ -5362,7 +5363,7 @@ const inlineFooterPoweredByStyle = {
   fontFamily: "'Space Mono', monospace",
   fontSize: 'clamp(0.7rem, 1vw, 0.82rem)',
   letterSpacing: '0.04em',
-  color: 'rgba(42, 36, 32, 0.5)',
+  color: 'color-mix(in srgb, var(--t-text) 50%, transparent)',
   fontWeight: 400,
 };
 
@@ -5577,7 +5578,7 @@ export function ContactCapabilitiesPanel() {
   return (
     <section
       id="dashboard-contact-capabilities"
-      style={{ ...panelStyle, minHeight: 'auto', background: 'transparent', boxShadow: 'none', color: '#2a2420' }}
+      style={{ ...panelStyle, minHeight: 'auto', background: 'transparent', boxShadow: 'none', color: 'var(--t-text)' }}
     >
       <style>{`
         @keyframes agentMarquee { from { transform: translate3d(0,0,0); } to { transform: translate3d(-50%,0,0); } }
@@ -5599,7 +5600,7 @@ export function ContactCapabilitiesPanel() {
                         {[0, 1].map((i) => (
                           <div key={i} aria-hidden={i > 0 ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
                             {['CONTACT', '•', 'CONTACT', '•'].map((w, j) => (
-                              <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 28.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
+                              <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 28.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: 'var(--t-text)', whiteSpace: 'nowrap' }}>{w}</span>
                             ))}
                           </div>
                         ))}
@@ -5622,9 +5623,9 @@ export function ContactCapabilitiesPanel() {
                       </a>
                     </div>
                     <p id="footer-capabilities-summary" style={{ ...supportTextStyle, marginTop: 'clamp(1rem, 2vw, 1.5rem)', marginBottom: 'clamp(0.75rem, 1.5vw, 1.25rem)', textAlign: 'left' }}>
-                      <strong style={{ color: '#2a2420' }}>Bryan Balli</strong> · Creative Lead @ HITLOOP
+                      <strong style={{ color: 'var(--t-text)' }}>Bryan Balli</strong> · Creative Lead @ HITLOOP
                     </p>
-                    <p id="footer-previously-at" style={{ margin: '0.5rem 0 0.35rem', textAlign: 'center', fontSize: '0.7rem', letterSpacing: '0.06em', color: 'rgba(42,36,32,0.32)', fontFamily: "'Space Mono', monospace" }}>previously at…</p>
+                    <p id="footer-previously-at" style={{ margin: '0.5rem 0 0.35rem', textAlign: 'center', fontSize: '0.7rem', letterSpacing: '0.06em', color: 'color-mix(in srgb, var(--t-text) 32%, transparent)', fontFamily: "'Space Mono', monospace" }}>previously at…</p>
                     <a id="agency-marquee-shell" ref={marqueeShellRef} href="https://www.linkedin.com/in/bryanballi/" target="_blank" rel="noopener noreferrer" style={{ ...agencyMarqueeShellStyle, cursor: 'pointer', textDecoration: 'none', display: 'block' }}>
                       <div ref={marqueeTrackRef} style={agencyMarqueeTrackStyle}>
                         <div ref={marqueeSetRef} style={agencyMarqueeSetStyle}>

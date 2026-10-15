@@ -108,7 +108,7 @@ export default function MockupPromptEditorModal({ open, prospect, onClose, onSav
       <style jsx>{`
         #lgmpe-backdrop {
           position: fixed; inset: 0;
-          background: rgba(15, 15, 15, 0.42);
+          background: var(--t-overlay);
           backdrop-filter: blur(8px);
           -webkit-backdrop-filter: blur(8px);
           z-index: 1000;
@@ -125,12 +125,12 @@ export default function MockupPromptEditorModal({ open, prospect, onClose, onSav
           height: min(88vh, 900px);
           display: flex;
           flex-direction: column;
-          background: #fafafa;
-          border: 1px solid rgba(0, 0, 0, 0.08);
+          background: var(--t-surface);
+          border: 1px solid color-mix(in srgb, var(--t-text-strong) 8%, transparent);
           border-radius: 18px;
           box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
           font-family: 'Inter', system-ui, -apple-system, sans-serif;
-          color: #1a1a1a;
+          color: var(--t-text-body);
           overflow: hidden;
         }
 
@@ -140,7 +140,7 @@ export default function MockupPromptEditorModal({ open, prospect, onClose, onSav
           justify-content: space-between;
           align-items: center;
           padding: 16px 22px;
-          border-bottom: 1px dashed rgba(0,0,0,0.10);
+          border-bottom: 1px dashed color-mix(in srgb, var(--t-text-strong) 10%, transparent);
           gap: 12px;
         }
         #lgmpe-head-left {
@@ -156,7 +156,7 @@ export default function MockupPromptEditorModal({ open, prospect, onClose, onSav
         }
         #lgmpe-meta {
           font-size: 11px;
-          color: #888;
+          color: var(--t-text-muted);
         }
         #lgmpe-head-right {
           display: flex;
@@ -169,8 +169,8 @@ export default function MockupPromptEditorModal({ open, prospect, onClose, onSav
           letter-spacing: 0.05em;
           text-transform: uppercase;
           color: #b45309;
-          background: rgba(180, 83, 9, 0.08);
-          border: 1px solid rgba(180, 83, 9, 0.22);
+          background: var(--t-warning-bg);
+          border: 1px solid var(--t-warning-border);
           border-radius: 5px;
           padding: 2px 6px;
         }
@@ -191,7 +191,7 @@ export default function MockupPromptEditorModal({ open, prospect, onClose, onSav
           font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
           font-size: 12px;
           line-height: 1.7;
-          color: #1a1a1a;
+          color: var(--t-text-body);
           tab-size: 2;
           box-sizing: border-box;
         }
@@ -205,13 +205,13 @@ export default function MockupPromptEditorModal({ open, prospect, onClose, onSav
         }
         .lgmpe-msg--err {
           color: #ff3b30;
-          background: rgba(255, 59, 48, 0.06);
-          border: 1px solid rgba(255, 59, 48, 0.22);
+          background: var(--t-danger-bg);
+          border: 1px solid var(--t-danger-border);
         }
         .lgmpe-msg--ok {
-          color: #166534;
-          background: rgba(22, 101, 52, 0.06);
-          border: 1px solid rgba(22, 101, 52, 0.18);
+          color: var(--t-success);
+          background: var(--t-success-bg);
+          border: 1px solid var(--t-success-border);
         }
 
         #lgmpe-foot {
@@ -220,12 +220,12 @@ export default function MockupPromptEditorModal({ open, prospect, onClose, onSav
           justify-content: space-between;
           align-items: center;
           padding: 14px 22px;
-          border-top: 1px dashed rgba(0,0,0,0.10);
+          border-top: 1px dashed color-mix(in srgb, var(--t-text-strong) 10%, transparent);
           gap: 12px;
         }
         #lgmpe-foot-hint {
           font-size: 11px;
-          color: #aaa;
+          color: var(--t-text-faint);
         }
         #lgmpe-foot-actions {
           display: flex;
