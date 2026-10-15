@@ -4,6 +4,8 @@ import React, {
   createContext, useCallback, useContext, useMemo, useRef, useState, useSyncExternalStore,
 } from 'react';
 import { resolveBoth } from '../../lib/theme/index.js';
+import { createLibrary } from '../../lib/theme-studio/library.js';
+import { createSafeStorage, localSource } from '../../lib/theme-runtime/storage.js';
 
 const Ctx = createContext(null);
 
@@ -87,4 +89,10 @@ export function useAnnouncer() {
     setMsg(`${text}${flip.current ? '' : '​'}`);
   }, []);
   return [msg, announce];
+}
+
+// --- My Themes library (P4) -------------------------------------------------
+/** A "My Themes" library bound to this browser's localStorage (failure-tolerant). */
+export function useThemeLibrary() {
+  return useMemo(() => createLibrary({ storage: createSafeStorage(localSource) }), []);
 }

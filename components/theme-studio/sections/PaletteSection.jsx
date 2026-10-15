@@ -5,6 +5,7 @@ import Section from '../controls/Section.jsx';
 import LabeledSlider from '../controls/LabeledSlider.jsx';
 import ModeSwitch from '../controls/ModeSwitch.jsx';
 import Swatch from '../controls/Swatch.jsx';
+import { Toggle } from '../controls/Toggle.jsx';
 import { KindBadge } from '../controls/LinkToggle.jsx';
 import Icon from '../Icon.jsx';
 import {
@@ -73,7 +74,7 @@ function GroupBlock({ group, def, mode, resolved }) {
 }
 
 export default function PaletteSection() {
-  const { edit, endEdit } = useStudio();
+  const { edit, endEdit, ui, dispatch, announce } = useStudio();
   const draft = useDraft();
   const mode = useEditingMode();
   const pair = useResolvedPair();
@@ -91,6 +92,19 @@ export default function PaletteSection() {
         {' '}
         palette. Each badge says whether those colors still follow the master hue (Linked), have been set by hand (Custom) or are protected (Locked).
       </p>
+
+      <div id="ts-full-range-row">
+        <Toggle
+          id="ts-full-range-toggle"
+          label="Full range"
+          description="Lets color sliders and the picker use the whole range (lightness 0 to 1, chroma 0 to 0.4, hue 0 to 360) and hides suggested-range warnings. Off by default."
+          checked={ui.fullRange}
+          onChange={(v) => {
+            dispatch({ type: 'fullRange/set', value: v });
+            announce(v ? 'Full range on. Suggested-range warnings are hidden.' : 'Full range off. Suggested-range warnings are shown.');
+          }}
+        />
+      </div>
 
       {PALETTE_GROUPS.map((g) => (
         <GroupBlock key={g.id} group={g} def={draft} mode={mode} resolved={resolved} />

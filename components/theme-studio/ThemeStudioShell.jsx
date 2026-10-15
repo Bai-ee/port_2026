@@ -10,6 +10,7 @@ import LiveRegion from './controls/LiveRegion.jsx';
 import Banner from './controls/Banner.jsx';
 import PresetModeSection from './sections/PresetModeSection.jsx';
 import PaletteCombosSection from './sections/PaletteCombosSection.jsx';
+import LibrarySection from './sections/LibrarySection.jsx';
 import MasterSection from './sections/MasterSection.jsx';
 import PaletteSection from './sections/PaletteSection.jsx';
 import SceneSection from './sections/SceneSection.jsx';
@@ -247,8 +248,9 @@ export default function ThemeStudioShell({ store: rawStore, onClose, returnFocus
             {hasDraft ? (
               <>
                 <PresetModeSection />
-                <PaletteCombosSection />
                 <MasterSection />
+                <PaletteCombosSection />
+                <LibrarySection />
                 <PaletteSection />
                 <SceneSection />
                 <AdvancedSection />

@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import Section from '../controls/Section.jsx';
 import { useStudio, useDraft, useEditingMode } from '../StudioContext.jsx';
 import { applyPalettePreset } from '../../../lib/theme/index.js';
 import {
   PALETTE_PRESETS, presetSwatches, activePalettePreset,
 } from '../../../lib/theme-studio/palette-presets.js';
+import { HARMONIES, getHarmony, buildHarmonyPatch, shufflePatch } from '../../../lib/theme-studio/harmony.js';
 import { MODE_LABEL } from '../../../lib/theme-studio/view-models.js';
 
 /**
@@ -24,11 +25,46 @@ export default function PaletteCombosSection() {
     return PALETTE_PRESETS.map((p) => ({ preset: p, swatches: presetSwatches(draft, p, mode) }));
   }, [draft, mode]);
   const active = useMemo(() => activePalettePreset(draft), [draft]);
+  const [harmony, setHarmony] = useState('triad');
+  // null = follow the master hue; a number = a chosen seed hue.
+  const [seedHue, setSeedHue] = useState(null);
+  const [shuffleCount, setShuffleCount] = useState(0);
+  const masterHue = draft ? draft.master.hue : 0;
+  const effectiveSeed = seedHue == null ? masterHue : seedHue;
+  const harmonyPreview = useMemo(() => {
+    if (!draft) return [];
+    const patch = buildHarmonyPatch(draft, { harmony, seedHue: effectiveSeed });
+    return presetSwatches(draft, { patch }, mode);
+  }, [draft, harmony, effectiveSeed, mode]);
+  const protectedRoles = useMemo(() => {
+    if (!draft) return 0;
+    let n = 0;
+    for (const m of Object.keys(draft.modes)) {
+      for (const r of Object.values(draft.modes[m].roles)) if (r.locked || r.link === 'custom') n += 1;
+    }
+    return n;
+  }, [draft]);
   if (!draft) return null;
 
   const tryCombo = (p) => {
     edit((d) => applyPalettePreset(d, p), { kind: 'set', label: `Combo: ${p.name}` });
     announce(`${p.name} applied to both palettes. Undo to go back.`);
+  };
+
+  const generate = () => {
+    const h = getHarmony(harmony);
+    const patch = buildHarmonyPatch(draft, { harmony, seedHue: effectiveSeed });
+    edit((d) => applyPalettePreset(d, { patch }), { kind: 'set', label: `Harmony: ${h.name}` });
+    announce(`${h.name} harmony applied at hue ${patch.hue}. Undo to go back.`);
+  };
+  const shuffle = () => {
+    // Seed comes from a click counter mixed with the clock, so each press differs
+    // while the patch itself stays a pure function of that seed.
+    const seed = (Date.now() + shuffleCount * 7919) >>> 0;
+    setShuffleCount((c) => c + 1);
+    const patch = shufflePatch(draft, { seed });
+    edit((d) => applyPalettePreset(d, { patch }), { kind: 'set', label: 'Combo: Shuffle' });
+    announce('Shuffled a new combo. Undo to go back.');
   };
 
   return (
@@ -57,6 +93,51 @@ export default function PaletteCombosSection() {
             <span className="ts-combo-note">{preset.note}</span>
           </button>
         ))}
+      </div>
+
+      <div id="ts-harmony-builder" data-section="harmony-builder">
+        <p className="ts-sub">Build a combo from a color harmony</p>
+        <div className="ts-field" id="ts-harmony-controls-row">
+          <label htmlFor="ts-harmony-select">Harmony</label>
+          <select id="ts-harmony-select" value={harmony} onChange={(e) => setHarmony(e.target.value)}>
+            {HARMONIES.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+          </select>
+          <label htmlFor="ts-harmony-seed-hue">Seed hue</label>
+          <input
+            id="ts-harmony-seed-hue"
+            type="number"
+            min={0}
+            max={360}
+            step={1}
+            value={Math.round(effectiveSeed)}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              if (Number.isFinite(v)) setSeedHue(((v % 360) + 360) % 360);
+            }}
+          />
+          <button
+            type="button"
+            className="ts-btn ts-btn--ghost ts-btn--sm"
+            id="ts-harmony-use-master"
+            disabled={seedHue == null}
+            onClick={() => setSeedHue(null)}
+          >
+            use master ({Math.round(masterHue)})
+          </button>
+        </div>
+        <p className="ts-sub" id="ts-harmony-note">{getHarmony(harmony).note}</p>
+        <span className="ts-combo-strip" id="ts-harmony-preview-strip" aria-hidden="true">
+          {harmonyPreview.map((hex, i) => <i key={i} style={{ background: hex }} />)}
+        </span>
+        <div className="ts-field" id="ts-harmony-actions-row">
+          <button type="button" className="ts-btn ts-btn--sm" id="ts-harmony-generate" onClick={generate}>Generate</button>
+          <button type="button" className="ts-btn ts-btn--sm" id="ts-harmony-shuffle" onClick={shuffle}>Shuffle</button>
+        </div>
+        <p className="ts-sub" id="ts-harmony-lock-hint">
+          Generate and Shuffle set hue, offsets and neutral tint only. {protectedRoles
+            ? `${protectedRoles} locked or custom role${protectedRoles === 1 ? ' is' : 's are'} left untouched.`
+            : 'Roles you lock or set to a custom color are left untouched.'} One press is one undo.
+        </p>
       </div>
     </Section>
   );

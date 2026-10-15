@@ -2,14 +2,14 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import LabeledSlider from './LabeledSlider.jsx';
-import Swatch from './Swatch.jsx';
-import { axisTrackGradient, normalizeHexInput } from '../../../lib/theme-studio/color-fields.js';
+import Swatch, { SwatchButton, GamutTag } from './Swatch.jsx';
+import { axisTrackGradient, normalizeHexInput, sliderBounds } from '../../../lib/theme-studio/color-fields.js';
 import { formatOklch } from '../../../lib/theme-studio/format.js';
 import { useStudio } from '../StudioContext.jsx';
 
 /** HEX text field: commits a valid color on Enter or blur, otherwise reverts and says so. */
 export function HexField({
-  id, label, hex, disabled, onCommit,
+  id, label, hex, disabled, onCommit, onOpenPicker,
 }) {
   const { announce } = useStudio();
   const [text, setText] = useState(hex);
@@ -36,6 +36,8 @@ export function HexField({
       type="text"
       className="ts-input ts-hexfield"
       aria-label={`${label}, hex`}
+      aria-haspopup={onOpenPicker ? 'dialog' : undefined}
+      data-ts-picker-trigger={onOpenPicker ? 'true' : undefined}
       aria-invalid={invalid ? 'true' : undefined}
       autoComplete="off"
       spellCheck={false}
@@ -47,6 +49,7 @@ export function HexField({
       onBlur={() => { focused.current = false; commit(); }}
       onKeyDown={(e) => {
         if (e.key === 'Enter') { e.preventDefault(); commit(); }
+        else if (e.key === 'ArrowDown' && onOpenPicker && !e.altKey && !e.ctrlKey && !e.metaKey) { e.preventDefault(); onOpenPicker(e.currentTarget); }
         else if (e.key === 'Escape' && text !== hex) { e.stopPropagation(); setText(hex); setInvalid(false); }
       }}
     />
@@ -57,23 +60,39 @@ export function HexField({
  * HEX plus OKLCH lightness / chroma / hue (and optional opacity) for one color.
  * Used for custom roles and custom scene colors.
  *   onPatch({l|c|h|a}, kind)   onHex(hex)   onEnd()
+ * P2: pass onOpenPicker(el) to make the swatch a color-picker button (and ArrowDown in the
+ * hex field open it). `pickerOpen`, `mapped` (gamut-mapped tag) and `advisory` (range findings,
+ * hidden while Full range is on) are optional.
  */
 export default function OklchEditor({
   idBase, label, value, hex, onPatch, onHex, onEnd, hueDisabled = false, hueNote, showAlpha = false, disabled = false,
+  onOpenPicker, pickerOpen = false, mapped = false, advisory,
 }) {
+  const { ui } = useStudio();
+  const b = sliderBounds(ui.fullRange);
+  const issues = !ui.fullRange && advisory && advisory.length ? advisory : null;
   return (
     <div className="ts-oklch" id={`${idBase}-oklch`}>
       <div className="ts-oklch-head">
-        <Swatch color={hex} />
-        <HexField id={`${idBase}-hex`} label={label} hex={hex} disabled={disabled} onCommit={onHex} />
+        {onOpenPicker ? (
+          <SwatchButton
+            id={`${idBase}-swatch`}
+            color={hex}
+            label={label}
+            expanded={pickerOpen}
+            onClick={(e) => onOpenPicker(e.currentTarget)}
+          />
+        ) : <Swatch color={hex} />}
+        <HexField id={`${idBase}-hex`} label={label} hex={hex} disabled={disabled} onCommit={onHex} onOpenPicker={onOpenPicker} />
+        {mapped ? <GamutTag id={`${idBase}-gamut-tag`} /> : null}
         <span className="ts-hint" style={{ fontFamily: 'var(--ts-mono)' }}>{formatOklch(value)}</span>
       </div>
       <LabeledSlider
         id={`${idBase}-l`}
         label="Lightness"
         value={value.l}
-        min={0}
-        max={1}
+        min={b.l[0]}
+        max={b.l[1]}
         step={0.005}
         page={0.05}
         trackBackground={axisTrackGradient('l', value)}
@@ -85,8 +104,8 @@ export default function OklchEditor({
         id={`${idBase}-c`}
         label="Chroma"
         value={value.c}
-        min={0}
-        max={0.4}
+        min={b.c[0]}
+        max={b.c[1]}
         step={0.005}
         page={0.04}
         trackBackground={axisTrackGradient('c', value)}
@@ -100,8 +119,8 @@ export default function OklchEditor({
         unit="°"
         kind="degrees"
         value={value.h}
-        min={0}
-        max={360}
+        min={b.h[0]}
+        max={b.h[1]}
         step={1}
         page={15}
         wrap
@@ -111,6 +130,14 @@ export default function OklchEditor({
         onValue={(v, k) => onPatch({ h: v }, k)}
         onEnd={onEnd}
       />
+      {issues ? (
+        <p className="ts-hint" id={`${idBase}-range-warning`}>
+          <strong>Outside the suggested range for this role:</strong>
+          {' '}
+          {issues.map((a) => `${a.field === 'l' ? 'lightness' : 'chroma'} ${a.value.toFixed(3)} (suggested ${a.min} to ${a.max})`).join(', ')}
+          . Full range hides this.
+        </p>
+      ) : null}
       {showAlpha ? (
         <LabeledSlider
           id={`${idBase}-a`}
