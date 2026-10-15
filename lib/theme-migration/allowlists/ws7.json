@@ -540,23 +540,9 @@
     },
     {
       "file": "HeroHeadline.jsx",
-      "literal": "#bda7b4",
+      "literal": "#ffffff",
       "count": 1,
-      "reason": "Gradient text fill of the hero headline; decorative, kept as artwork until a designer decision (coverage map section G).",
-      "exceptionId": "WS7-B"
-    },
-    {
-      "file": "HeroHeadline.jsx",
-      "literal": "#a09fc0",
-      "count": 1,
-      "reason": "Gradient text fill of the hero headline; decorative, kept as artwork until a designer decision (coverage map section G).",
-      "exceptionId": "WS7-B"
-    },
-    {
-      "file": "HeroHeadline.jsx",
-      "literal": "#8294b6",
-      "count": 1,
-      "reason": "Gradient text fill of the hero headline; decorative, kept as artwork until a designer decision (coverage map section G).",
+      "reason": "HEADLINE_BLEND_INK: pure-white ink under mix-blend-mode difference so the headline inverts against var(--t-page) in both modes; a blend-math constant, not a theme colour.",
       "exceptionId": "WS7-B"
     },
     {

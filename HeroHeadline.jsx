@@ -9,55 +9,75 @@ gsap.registerPlugin(ScrollTrigger);
 
 const SIMPLE_SCROLL_MEDIA_QUERY = '(max-width: 680px) and (pointer: coarse)';
 
-// Lines the subheadline cycles through. Add/remove freely — any length works.
+// Lines the subheadline cycles through. A single entry means the line only
+// scrambles under the cursor and always resolves back to it.
 const SUBHEADLINE_PHRASES = [
-  'HUMAN IN THE LOOP',
-  'Brand Identity & Design',
-  'Websites & Landing Pages',
-  'Social Media & Content',
-  'Video & Motion',
-  'SEO & Content Strategy',
-  'Email & Newsletter Systems',
-  'Daily Briefs',
-  'AI Automation & Workflows',
-  'Blockchain Products & Payments',
-  'Browser Based Gaming',
+  'BRYAN BALLI',
 ];
 
 // The subheadline is cursor-driven on fine-pointer devices: it churns while the
 // pointer moves and resolves into the next phrase once the pointer holds still
 // for IDLE_REVEAL_MS. It never advances on its own. Touch/coarse-pointer devices
-// get no pointermove events, so they fall back to the original timed cycle
-// (HOLD_MS between reveals) instead of freezing on the first phrase.
-// A click resets the rotation to the first phrase, so the name is always one
-// deliberate action away no matter how far the cursor has walked the list.
+// get no pointermove events, so with more than one phrase they fall back to a
+// timed cycle (HOLD_MS between reveals); with one phrase they stay static.
+// A click resets the rotation to the first phrase.
 const HOLD_MS = 1600;        // coarse-pointer fallback: hold between phrases
-const SCRAMBLE_MS = 340;     // time spent scrambling into the next phrase
-const IDLE_REVEAL_MS = 220;  // cursor stillness that triggers the reveal
+const SCRAMBLE_MS = 100;     // time spent scrambling into the next phrase
+const CHURN_IN_MS = 200;     // left-to-right sweep as the scramble starts
+const IDLE_REVEAL_MS = 50;   // cursor stillness that triggers the reveal (≈3 frames)
 
-// The last headline line abbreviates on narrow viewports: at the phone type
-// scale below (22vw) the full word overruns the panel, so phones get PORT.
-// Same 620px breakpoint as that type-scale override — keep the two in step.
+// The last headline line can swap to shorter copy on narrow viewports (same
+// 620px breakpoint as the phone type-scale override — keep the two in step).
+// CONSULTANT is the longest line (10 chars); both type scales are capped so it
+// fits the panel, so the narrow copy currently matches the wide copy.
 const HEADLINE_NARROW_QUERY = '(max-width: 620px)';
-const HEADLINE_LINES_WIDE = ['BRYAN', 'BALLI', 'PORTFOLIO'];
-const HEADLINE_LINES_NARROW = ['BRYAN', 'BALLI', 'PORT'];
+const HEADLINE_LINES_WIDE = ['DIGITAL', 'MEDIA', 'CONSULTANT'];
+const HEADLINE_LINES_NARROW = ['DIGITAL', 'MEDIA', 'CONSULTANT'];
 
 const headlineLinesFor = (narrow) => (narrow ? HEADLINE_LINES_NARROW : HEADLINE_LINES_WIDE);
 
-// Gradient lifted from the HITLOOP.AGENCY card: the last line runs rose to
-// periwinkle, left to right, under the solid name above it. width:'fit-content'
-// keeps the gradient box the width of the WORD rather than the panel, so the
-// ramp reads identically whether the line says PORTFOLIO or the narrow PORT.
-// Painted on the line span itself, never on inner markup — the intro scramble
-// rewrites textContent character by character and would wipe any child nodes.
-const HEADLINE_ACCENT_STYLE = {
-  width: 'fit-content',
-  backgroundImage: 'linear-gradient(90deg, #bda7b4 0%, #a09fc0 50%, #8294b6 100%)',
-  WebkitBackgroundClip: 'text',
-  backgroundClip: 'text',
-  WebkitTextFillColor: 'transparent',
-  color: 'transparent',
+// Poster fit. The headline is sized so its widest line spans the panel
+// (the 810px content column the hero input row sits in) and the block still
+// clears the hero gap. Measured with
+// canvas text metrics in the headline's own face, so the ratio holds for any
+// copy and re-fits once the webfont lands. Phones (≤620px) keep their own
+// clamp via the !important rule below.
+const HEADLINE_FONT_STACK = "'Doto', 'Space Mono', monospace";
+const HEADLINE_WEIGHT = 900;              // Doto 900 is loaded in app/layout.jsx
+const HEADLINE_LINE_HEIGHT = 0.8;
+const HEADLINE_TRACKING = -0.02;          // letterSpacing in em, mirrored in measurement
+// Doto tops out at 900; a same-colour stroke thickens the dots past that.
+// Mirrored in measurement (the stroke widens each line by its own width).
+const HEADLINE_STROKE_EM = 0.03;
+const HEADLINE_SUB_LINES_EM = 1.3;        // subheadline + its margin, in headline ems
+// Same column as #hero-url-input-row (StackedSlidesSection) and the nav strip:
+// max(10vw, centred 810px), so the headline's left edge lines up with the input.
+const HEADLINE_COLUMN_PX = 810;
+const HEADLINE_GUTTER_VW = 0.1;
+const HEADLINE_MIN_PX = 20;
+let headlineMeasureCtx = null;
+const measureHeadlineUnitWidth = (lines) => {
+  if (typeof document === 'undefined') return 0;
+  if (!headlineMeasureCtx) headlineMeasureCtx = document.createElement('canvas').getContext('2d');
+  const ctx = headlineMeasureCtx;
+  if (!ctx) return 0;
+  ctx.font = `${HEADLINE_WEIGHT} 100px ${HEADLINE_FONT_STACK}`;
+  let widest = 0;
+  for (const line of lines) {
+    const w = ctx.measureText(line).width + line.length * HEADLINE_TRACKING * 100 + HEADLINE_STROKE_EM * 100;
+    if (w > widest) widest = w;
+  }
+  return widest / 100; // width of the widest line per 1px of font size
 };
+
+// Blend: the hero text is painted white and composited with mix-blend-mode
+// difference, so it inverts whatever sits behind it — near-black over the
+// light page, shifting colour where it crosses the loop and gradient. Set
+// HEADLINE_BLEND_MODE to null to fall back to the plain textColor prop.
+// The blend sits on #hero-panel-top-left (not the lines) because applyLayout
+// writes a filter on the inner content node, which would isolate child blends.
+const HEADLINE_BLEND_MODE = 'difference';
+const HEADLINE_BLEND_INK = '#ffffff';
 
 const matchesNarrowHeadline = () =>
   typeof window !== 'undefined' &&
@@ -236,6 +256,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
         }
         churnCancel = scrambleChurn(subScrambleEl, SUBHEADLINE_PHRASES[targetIndex], {
           preserveWhitespace: true,
+          staggerInMs: CHURN_IN_MS,
         });
       }
       clearTimeout(idleTimer);
@@ -265,7 +286,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
         window.addEventListener('pointermove', handlePointerMove, { passive: true });
         window.addEventListener('pointerdown', handlePointerDown, { passive: true });
         pointerBound = true;
-      } else {
+      } else if (SUBHEADLINE_PHRASES.length > 1) {
         holdTimer = window.setTimeout(advanceTimed, HOLD_MS);
       }
     };
@@ -373,6 +394,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
       centeredTop: 0,
       maxWidth: 0,
       gapHeight: 180,
+      fontSize: 0,
     };
 
     const updateMetrics = () => {
@@ -392,8 +414,8 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
       const navHeight = nav.getBoundingClientRect().height ?? 64;
       const contentDocTop = contentAnchor.getBoundingClientRect().top + scrollY;
       const headlineHeight = contentEl.getBoundingClientRect().height || 0;
-      const sideGutter = Math.max(viewportWidth * 0.1, (viewportWidth - 810) / 2);
-      const maxWidth = Math.max(Math.min(viewportWidth - (sideGutter * 2), 672), 240);
+      const sideGutter = Math.max(viewportWidth * HEADLINE_GUTTER_VW, (viewportWidth - HEADLINE_COLUMN_PX) / 2);
+      const maxWidth = Math.max(viewportWidth - (sideGutter * 2), 240);
 
       // These are fixed viewport coords for position:fixed
       const gapTop = navHeight;
@@ -403,6 +425,13 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
       metrics.centeredTop = centeredTop;
       metrics.maxWidth = maxWidth;
       metrics.gapHeight = gapHeight;
+
+      // Poster fit: fill the width, never overflow the gap.
+      const lines = headlineLinesFor(matchesNarrowHeadline());
+      const unit = measureHeadlineUnitWidth(lines);
+      const byWidth = unit > 0 ? maxWidth / unit : Infinity;
+      const byHeight = gapHeight / (lines.length * HEADLINE_LINE_HEIGHT + HEADLINE_SUB_LINES_EM);
+      metrics.fontSize = Math.max(Math.floor(Math.min(byWidth, byHeight)), HEADLINE_MIN_PX);
     };
 
     const applyLayout = (progress = 0) => {
@@ -414,6 +443,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
       el.style.top = `${metrics.centeredTop}px`;
       el.style.maxWidth = `${metrics.maxWidth}px`;
       el.style.setProperty('--hero-gap-height', `${metrics.gapHeight}px`);
+      if (metrics.fontSize) el.style.setProperty('--hero-headline-size', `${metrics.fontSize}px`);
 
       // Hide subheadline when vertical space is too tight to avoid overlap with section 2
       const sub = el.querySelector('#hero-subheadline');
@@ -482,8 +512,13 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
     document.addEventListener('visibilitychange', scheduleRefresh);
     window.addEventListener('pageshow', scheduleRefresh);
     window.addEventListener('focus', scheduleRefresh);
+    // Re-fit once the Doto webfont is in: fallback metrics differ from the real face.
+    const fonts = typeof document !== 'undefined' ? document.fonts : null;
+    fonts?.ready?.then(scheduleRefresh);
+    fonts?.addEventListener?.('loadingdone', scheduleRefresh);
 
     return () => {
+      fonts?.removeEventListener?.('loadingdone', scheduleRefresh);
       cancelAnimationFrame(frame);
       window.removeEventListener('resize', scheduleRefresh);
       window.removeEventListener('orientationchange', scheduleRefresh);
@@ -495,7 +530,8 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
     };
   }, []);
 
-  const edge = 'max(10vw, calc((100vw - 810px) / 2))';
+  const ink = HEADLINE_BLEND_MODE ? HEADLINE_BLEND_INK : textColor;
+  const edge = `max(${HEADLINE_GUTTER_VW * 100}vw, calc((100vw - ${HEADLINE_COLUMN_PX}px) / 2))`;
 
   return (
     <>
@@ -504,10 +540,10 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
           #hero-panel-top-left h1 {
             /* Preserve the Doto face's original proportions; reclaim room
                between lines rather than distorting the letterforms. */
-            font-size: clamp(3.5rem, 22vw, 7.83rem) !important;
+            font-size: clamp(2.5rem, 13.5vw, 7.1rem) !important;
             line-height: 0.75 !important;
           }
-          #hero-subheadline { font-size: clamp(1rem, 4vw, 1.25rem) !important; }
+          #hero-subheadline { font-size: clamp(1.25rem, 6vw, 1.75rem) !important; }
           #hero-subheadline-scramble { white-space: normal; word-break: break-word; }
         }
       `}</style>
@@ -520,25 +556,30 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
           '--hero-gap-height': '70vh',
           top: '50vh',
           left: edge,
-          width: 'min(82vw, 42rem)',
-          maxWidth: '42rem',
+          width: `calc(100vw - (${edge}) * 2)`,
+          maxWidth: 'none',
           background: 'none',
           backdropFilter: 'none',
           WebkitBackdropFilter: 'none',
           border: 'none',
           boxShadow: 'none',
           padding: 0,
+          mixBlendMode: HEADLINE_BLEND_MODE || 'normal',
         }}
       >
         <div ref={headlineContentRef}>
           <h1 id="hero-headline-primary" style={{
-            fontWeight: 700,
-            fontFamily: "'Doto', 'Space Mono', monospace",
-            letterSpacing: '-0.02em',
-            lineHeight: 1.05,
-            color: textColor,
+            fontWeight: HEADLINE_WEIGHT,
+            fontFamily: HEADLINE_FONT_STACK,
+            letterSpacing: `${HEADLINE_TRACKING}em`,
+            WebkitTextStroke: `${HEADLINE_STROKE_EM}em currentColor`,
+            lineHeight: HEADLINE_LINE_HEIGHT,
+            color: ink,
             margin: 0,
-            fontSize: 'clamp(1.25rem, min(13vw, calc(var(--hero-gap-height) / 5)), 7.83rem)',
+            textAlign: 'left',
+            // Measured poster fit (set per frame on #hero-panel-top-left); the clamp is
+            // only the pre-measure fallback.
+            fontSize: 'var(--hero-headline-size, clamp(1.25rem, min(13vw, calc(var(--hero-gap-height) / 5)), 7.1rem))',
             textTransform: 'none',
           }}>
             {/* Rendered from the wide copy with index keys so a breakpoint swap
@@ -556,8 +597,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
                   {...(isAccent ? { 'data-hero-headline-accent': '' } : null)}
                   style={{
                     display: 'block',
-                    minHeight: '1.05em',
-                    ...(isAccent ? HEADLINE_ACCENT_STYLE : null),
+                    minHeight: `${HEADLINE_LINE_HEIGHT}em`,
                   }}
                 >
                   {line}
@@ -567,12 +607,16 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
           </h1>
           <p id="hero-subheadline" style={{
             margin: '1rem 0 0',
-            fontFamily: "'Space Grotesk', system-ui, sans-serif",
-            fontSize: 'clamp(1.4rem, 3.5vw, 2.45rem)',
+            textAlign: 'left',
+            // Same face/weight as the HELLO marquee (StackedSlidesSection) —
+            // the thin Doto, without the headline's stroke.
+            fontFamily: HEADLINE_FONT_STACK,
+            fontSize: 'clamp(1.8rem, 5vw, 3.6rem)',
+            letterSpacing: `${HEADLINE_TRACKING}em`,
             lineHeight: 1.5,
-            color: textColor,
+            color: ink,
             opacity: 0.85,
-            fontWeight: 300,
+            fontWeight: 700,
             maxWidth: '42ch',
           }}>
             <span
@@ -584,7 +628,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
                 whiteSpace: 'pre',
               }}
             >
-              Creative Systems for Modern Businesses
+              BRYAN BALLI
             </span>
           </p>
         </div>

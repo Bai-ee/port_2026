@@ -233,7 +233,7 @@
     {
       "file": "colors.css",
       "literal": "rgba(42,36,32,0.08)",
-      "count": 3,
+      "count": 2,
       "reason": "ink-tinted shadow: mode-agnostic like black shadows",
       "exceptionId": "X6"
     },

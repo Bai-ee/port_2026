@@ -1,7 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { useAuth } from './AuthContext';
 import UpRightArrow from './components/UpRightArrow';
+import { scrambleTextTo } from './components/home/scrambleText';
+
+const CTA_LABEL = 'Clients';
+const CTA_SCRAMBLE_MS = 420;
+const CTA_START_OPACITY = 0.25;
 
 // `actions` is an optional right-side slot: pass a node to replace the default
 // "Clients" CTA for a page that needs its own nav action (e.g. /looper's info
@@ -11,6 +16,9 @@ const Header = ({ logoRef, onOpenPage, logoSrc = '/img/sig.png', actions = null 
   const isSignatureLogo = logoSrc === '/img/sig.png';
   const { user } = useAuth();
   const [isMobile, setIsMobile] = useState(false);
+  const ctaLabelRefs = useRef([]);
+  const ctaArrowRef = useRef(null);
+  const ctaCancelRef = useRef([]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -35,6 +43,41 @@ const Header = ({ logoRef, onOpenPage, logoSrc = '/img/sig.png', actions = null 
       window.location.href = '/login?flow=homepage-create';
     }
   };
+
+  // Hover: the label scrambles in from low to full opacity, then the arrow
+  // appears. Text is written to the DOM directly (never React state) so the
+  // scramble's textContent writes can't desync React's text nodes.
+  const resetCta = () => {
+    ctaCancelRef.current.forEach((cancel) => cancel());
+    ctaCancelRef.current = [];
+    ctaLabelRefs.current.forEach((node) => {
+      if (!node) return;
+      node.textContent = CTA_LABEL;
+      node.style.transition = 'none';
+      node.style.opacity = '1';
+    });
+    if (ctaArrowRef.current) ctaArrowRef.current.style.opacity = '0';
+  };
+
+  const playCta = () => {
+    resetCta();
+    const nodes = ctaLabelRefs.current.filter(Boolean);
+    nodes.forEach((node, i) => {
+      node.style.opacity = String(CTA_START_OPACITY);
+      void node.offsetWidth;
+      node.style.transition = `opacity ${CTA_SCRAMBLE_MS}ms ease-out`;
+      node.style.opacity = '1';
+      ctaCancelRef.current.push(scrambleTextTo(node, CTA_LABEL, {
+        durationMs: CTA_SCRAMBLE_MS,
+        churnBeforeLock: true,
+        onComplete: i === 0 ? () => {
+          if (ctaArrowRef.current) ctaArrowRef.current.style.opacity = '1';
+        } : undefined,
+      }));
+    });
+  };
+
+  useEffect(() => () => ctaCancelRef.current.forEach((cancel) => cancel()), []);
 
   return (
     <>
@@ -62,10 +105,23 @@ const Header = ({ logoRef, onOpenPage, logoSrc = '/img/sig.png', actions = null 
                 id="founders-chat-cta"
                 className="founders-chat-cta--light"
                 onClick={handleDashboardCta}
+                onMouseEnter={playCta}
+                onMouseLeave={resetCta}
+                onFocus={playCta}
+                onBlur={resetCta}
+                style={{ position: 'relative' }}
               >
-                <span className="founders-chat-label-full">Clients</span>
-                <span className="founders-chat-label-short">Clients</span>
-                <UpRightArrow id="founders-chat-cta-icon" />
+                <span ref={(node) => { ctaLabelRefs.current[0] = node; }} className="founders-chat-label-full">{CTA_LABEL}</span>
+                <span ref={(node) => { ctaLabelRefs.current[1] = node; }} className="founders-chat-label-short">{CTA_LABEL}</span>
+                {/* Absolutely placed so revealing it never shifts the label. */}
+                <span
+                  ref={ctaArrowRef}
+                  id="founders-chat-cta-arrow-slot"
+                  aria-hidden="true"
+                  style={{ position: 'absolute', left: '100%', top: '50%', transform: 'translateY(-50%)', marginLeft: '0.3rem', lineHeight: 0, opacity: 0, transition: 'opacity 160ms ease-out', pointerEvents: 'none' }}
+                >
+                  <UpRightArrow id="founders-chat-cta-icon" />
+                </span>
               </button>
             )}
           </div>

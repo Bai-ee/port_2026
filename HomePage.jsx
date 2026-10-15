@@ -431,7 +431,10 @@ const HomePage = () => {
           width: '100vw',
           height: '100dvh',
           overflow: 'hidden',
-          background: 'transparent',
+          // Opaque (the page canvas token: white in the baseline) so the hero text's
+          // difference blend always has a backdrop to invert — a transparent
+          // backdrop shows the raw, pre-inverted ink during the intro fade.
+          background: 'var(--t-page)',
         }}
       >
         <div id="hero-gradient-overlay" style={heroGradientStyle} />
