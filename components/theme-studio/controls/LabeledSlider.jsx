@@ -76,6 +76,9 @@ export default function LabeledSlider({
         value={value}
         disabled={disabled}
         style={style}
+        aria-valuemin={min}
+        aria-valuemax={max}
+        aria-valuenow={value}
         aria-valuetext={valueText(textKind, value, 2)}
         aria-describedby={hintId}
         onPointerDown={onPointerDown}
