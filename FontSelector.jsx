@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { internalPageCreamPaperBackground } from './pageSurfaceSystem';
 
 const FontSelector = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -86,9 +87,9 @@ const FontSelector = () => {
           width: '50px',
           height: '50px',
           borderRadius: '50%',
-          backgroundColor: '#f5f1df',
-          color: '#2a2420',
-          border: '1px solid rgba(42, 36, 32, 0.3)',
+          background: internalPageCreamPaperBackground,
+          color: 'var(--t-text)',
+          border: '1px solid color-mix(in srgb, var(--t-text) 30%, transparent)',
           cursor: 'pointer',
           fontSize: '0.75rem',
           fontWeight: 700,
@@ -110,8 +111,8 @@ const FontSelector = () => {
             bottom: '5rem',
             right: '2rem',
             zIndex: 999,
-            backgroundColor: '#f5f1df',
-            border: '1px solid rgba(42, 36, 32, 0.2)',
+            background: internalPageCreamPaperBackground,
+            border: '1px solid color-mix(in srgb, var(--t-text) 20%, transparent)',
             borderRadius: '0.75rem',
             padding: '1.5rem',
             width: '280px',
@@ -121,10 +122,10 @@ const FontSelector = () => {
           }}
         >
           <div style={{ marginBottom: '1rem' }}>
-            <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.8rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(42, 36, 32, 0.6)' }}>
+            <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.8rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'color-mix(in srgb, var(--t-text) 60%, transparent)' }}>
               Font Family
             </p>
-            <p style={{ margin: 0, fontSize: '0.9rem', color: '#2a2420', fontWeight: 600 }}>
+            <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--t-text)', fontWeight: 600 }}>
               {selectedFont?.name}
             </p>
           </div>
@@ -137,9 +138,9 @@ const FontSelector = () => {
                 style={{
                   padding: '0.75rem',
                   borderRadius: '0.5rem',
-                  border: currentFont === font.value ? '1px solid #2a2420' : '1px solid rgba(42, 36, 32, 0.2)',
-                  backgroundColor: currentFont === font.value ? 'rgba(42, 36, 32, 0.1)' : 'transparent',
-                  color: '#2a2420',
+                  border: currentFont === font.value ? '1px solid var(--t-text)' : '1px solid color-mix(in srgb, var(--t-text) 20%, transparent)',
+                  backgroundColor: currentFont === font.value ? 'color-mix(in srgb, var(--t-text) 10%, transparent)' : 'transparent',
+                  color: 'var(--t-text)',
                   cursor: 'pointer',
                   fontSize: '0.9rem',
                   fontFamily: font.value,
@@ -147,7 +148,7 @@ const FontSelector = () => {
                   transition: 'all 0.2s ease',
                 }}
                 onMouseEnter={(e) => {
-                  e.target.style.backgroundColor = 'rgba(42, 36, 32, 0.08)';
+                  e.target.style.backgroundColor = 'var(--t-border-faint)';
                 }}
                 onMouseLeave={(e) => {
                   if (currentFont !== font.value) {
@@ -164,16 +165,16 @@ const FontSelector = () => {
           <div
             style={{
               padding: '1rem',
-              backgroundColor: 'rgba(42, 36, 32, 0.05)',
+              backgroundColor: 'color-mix(in srgb, var(--t-text) 5%, transparent)',
               borderRadius: '0.5rem',
-              borderTop: '1px solid rgba(42, 36, 32, 0.1)',
+              borderTop: '1px solid color-mix(in srgb, var(--t-text) 10%, transparent)',
               marginTop: '1rem',
             }}
           >
-            <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.75rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(42, 36, 32, 0.5)' }}>
+            <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.75rem', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'color-mix(in srgb, var(--t-text) 50%, transparent)' }}>
               Preview
             </p>
-            <p style={{ margin: 0, fontSize: '1.2rem', color: '#2a2420', fontFamily: currentFont, lineHeight: 1.4 }}>
+            <p style={{ margin: 0, fontSize: '1.2rem', color: 'var(--t-text)', fontFamily: currentFont, lineHeight: 1.4 }}>
               Design Partner For Ambitious Tech
             </p>
           </div>

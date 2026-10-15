@@ -183,10 +183,10 @@ export default function BrainBuilder({ getIdToken, asClientId = '', dashboardHre
               <div className="bb-progress-fill" style={{ width: `${progress.pct}%` }} />
             </div>
             {progress.requiredMissing.length ? (
-              <div style={{ fontSize: 12, color: 'rgba(42,36,32,0.6)' }}>{progress.requiredMissing.length} required {progress.requiredMissing.length === 1 ? 'field' : 'fields'} still empty.</div>
+              <div style={{ fontSize: 12, color: 'var(--bb-ink-soft)' }}>{progress.requiredMissing.length} required {progress.requiredMissing.length === 1 ? 'field' : 'fields'} still empty.</div>
             ) : null}
           </div>
-          {statusLine ? <div className="bb-header-status" style={{ fontSize: 13, color: 'rgba(42,36,32,0.7)' }} aria-live="polite">{statusLine}</div> : null}
+          {statusLine ? <div className="bb-header-status" style={{ fontSize: 13, color: 'var(--bb-ink-soft)' }} aria-live="polite">{statusLine}</div> : null}
         </header>
 
         {leaveWarn ? (

@@ -146,15 +146,37 @@ export function scrambleTextTo(node, next, options = {}) {
 // `template` fixes the character count (and, with preserveWhitespace, the space
 // positions) to the phrase that will be revealed, so the line never reflows
 // between churning and resolving. Returns a cancel function.
+// staggerInMs > 0 sweeps the churn in left to right — the mirror of
+// scrambleTextTo's left-to-right lock: each character keeps whatever the node
+// showed when the churn began until its start point in that window.
 export function scrambleChurn(node, template, options = {}) {
-  const { preserveWhitespace = false, intervalMs = 45 } = options;
+  const { preserveWhitespace = false, intervalMs = 45, staggerInMs = 0 } = options;
+  const prev = node.textContent || '';
+  const length = template.length;
   let rafId = 0;
   let last = -Infinity;
+  let start = 0;
+  let mask = '';
+  let swept = staggerInMs <= 0;
 
   const frame = (now) => {
-    if (now - last >= intervalMs) {
-      node.textContent = scrambleMask(template, { preserveWhitespace });
+    if (!start) start = now;
+    const elapsedMs = now - start;
+    const reroll = now - last >= intervalMs;
+    if (reroll) {
+      mask = scrambleMask(template, { preserveWhitespace });
       last = now;
+    }
+    if (staggerInMs > 0 && elapsedMs < staggerInMs) {
+      let out = '';
+      for (let i = 0; i < length; i += 1) {
+        const startAt = (i / length) * staggerInMs;
+        out += elapsedMs >= startAt ? mask[i] : (prev[i] ?? mask[i]);
+      }
+      node.textContent = out;
+    } else if (reroll || !swept) {
+      swept = true;
+      node.textContent = mask;
     }
     rafId = requestAnimationFrame(frame);
   };

@@ -59,14 +59,14 @@ export default function DashboardLoadingOverlay({
           boxSizing: 'border-box',
           overflow: 'hidden',
           ...internalPageGlassCardStyle,
-          background: 'rgba(255, 252, 248, 0.94)',
+          background: 'color-mix(in srgb, var(--t-raised) 94%, transparent)',
           boxShadow: '0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4), 0px 5px 10px rgba(0, 0, 0, 0.1), 0px 15px 30px rgba(0, 0, 0, 0.1), 0px 20px 40px rgba(0, 0, 0, 0.15)',
-          border: '1px solid #E4E4E4',
+          border: '1px solid var(--t-border-subtle)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', marginBottom: '1rem' }}>
-          <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', display: 'block' }} />
-          <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.44)', fontWeight: 700, fontFamily: '"Space Mono", monospace' }}>
+          <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid color-mix(in srgb, var(--t-surface) 35%, transparent)', display: 'block' }} />
+          <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'color-mix(in srgb, var(--t-text) 44%, transparent)', fontWeight: 700, fontFamily: '"Space Mono", monospace' }}>
             {isMobile ? 'Access' : 'Dashboard Access'}
           </span>
           <img
@@ -87,7 +87,7 @@ export default function DashboardLoadingOverlay({
                     style={{
                       margin: 0,
                       flexShrink: 0,
-                      color: '#2a2420',
+                      color: 'var(--t-text)',
                       fontSize: 'clamp(2rem, 8.5vw, 7rem)',
                       lineHeight: 1,
                       letterSpacing: '-0.04em',

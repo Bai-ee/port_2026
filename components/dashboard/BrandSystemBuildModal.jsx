@@ -70,20 +70,20 @@ export default function BrandSystemBuildModal({ open, onClose, getIdToken, onCom
           padding: 'clamp(1.25rem, 5vw, 2rem)',
           borderRadius: '10px',
           boxSizing: 'border-box',
-          background: 'rgba(255, 255, 255, 1)',
+          background: 'var(--t-surface)',
           boxShadow: '0px 5px 10px rgba(0, 0, 0, 0.1), 0px 15px 30px rgba(0, 0, 0, 0.1), 0px 20px 40px rgba(0, 0, 0, 0.15)',
-          border: '1px solid rgba(255, 255, 255, 0.5)',
+          border: '1px solid var(--t-glass-soft)',
         }}
       >
         {/* Brand row */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', justifyContent: 'space-between' }}>
-          <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', display: 'block' }} />
-          <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.44)', fontWeight: 700, fontFamily: '"Space Mono", monospace' }}>
+          <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid color-mix(in srgb, var(--t-surface) 35%, transparent)', display: 'block' }} />
+          <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'color-mix(in srgb, var(--t-text) 44%, transparent)', fontWeight: 700, fontFamily: '"Space Mono", monospace' }}>
             Brand System
           </span>
           <span
             id="brand-system-modal-status-orb"
-            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '2.4rem', height: '2.4rem', borderRadius: '999px', background: 'rgba(255,255,255,0.34)', border: '1px solid rgba(42,36,32,0.12)' }}
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '2.4rem', height: '2.4rem', borderRadius: '999px', background: 'color-mix(in srgb, var(--t-surface) 34%, transparent)', border: '1px solid var(--t-border-subtle)' }}
             aria-hidden="true"
           >
             <span style={{
@@ -100,7 +100,7 @@ export default function BrandSystemBuildModal({ open, onClose, getIdToken, onCom
             {['a', 'b'].map((k) => (
               <span key={k} aria-hidden={k === 'b' ? 'true' : undefined} style={{
                 flexShrink: 0, whiteSpace: 'nowrap',
-                color: '#2a2420',
+                color: 'var(--t-text)',
                 fontSize: 'clamp(1.5rem, 5vw, 3.4rem)',
                 lineHeight: 1.05,
                 letterSpacing: '-0.04em',

@@ -2,8 +2,8 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 
 const GRADIENT_BG =
-  'linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), ' +
-  'linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)';
+  'linear-gradient(175deg, color-mix(in srgb, var(--t-glass-highlight) 40%, transparent) 0%, transparent 52%), ' +
+  'var(--t-gradient-accent)';
 
 export default function ReelPlayer() {
   const videoRef = useRef(null);
@@ -125,8 +125,8 @@ export default function ReelPlayer() {
           margin: '0 auto',
           borderRadius: 'clamp(10px, 2vw, 20px)',
           overflow: 'hidden',
-          background: fullscreen ? '#000000' : '#ffffff',
-          border: '2px solid rgba(42,36,32,0.1)',
+          background: fullscreen ? '#000000' : 'var(--t-surface)',
+          border: '2px solid color-mix(in srgb, var(--t-text) 10%, transparent)',
           boxShadow: '0 8px 32px rgba(0,0,0,0.1), 0 2px 8px rgba(0,0,0,0.05)',
           cursor: playing && !showControls ? 'none' : 'pointer',
           aspectRatio: '16 / 9',
@@ -173,7 +173,7 @@ export default function ReelPlayer() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 4px 24px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.28)',
+              boxShadow: '0 4px 24px rgba(0,0,0,0.28), inset 0 1px 0 color-mix(in srgb, var(--t-glass-highlight) 62.22%, transparent)',
               flexShrink: 0,
               padding: 0,
             }}
@@ -181,7 +181,7 @@ export default function ReelPlayer() {
             <svg
               width="34%" height="34%"
               viewBox="0 0 24 24"
-              fill="#ffffff"
+              fill="var(--t-on-solid)"
               style={{ marginLeft: '8%', display: 'block' }}
             >
               <polygon points="5,3 19,12 5,21" />
@@ -196,7 +196,7 @@ export default function ReelPlayer() {
           style={{
             position: 'absolute', bottom: 0, left: 0, right: 0,
             padding: 'clamp(10px, 2vw, 20px) clamp(12px, 2.5vw, 24px) clamp(10px, 1.5vw, 16px)',
-            background: 'linear-gradient(to top, rgba(255,255,255,0.92) 0%, transparent 100%)',
+            background: 'linear-gradient(to top, color-mix(in srgb, var(--t-surface) 92%, transparent) 0%, transparent 100%)',
             display: 'flex', flexDirection: 'column', gap: 'clamp(6px, 1vw, 10px)',
             opacity: showControls && playing ? 1 : 0,
             transition: 'opacity 0.35s ease',
@@ -210,7 +210,7 @@ export default function ReelPlayer() {
             onClick={seek}
             style={{
               width: '100%', height: '3px',
-              background: 'rgba(42,36,32,0.15)',
+              background: 'color-mix(in srgb, var(--t-text) 15%, transparent)',
               borderRadius: '2px', cursor: 'pointer', position: 'relative',
             }}
           >
@@ -225,7 +225,7 @@ export default function ReelPlayer() {
               position: 'absolute', top: '50%', left: `${progress * 100}%`,
               transform: 'translate(-50%, -50%)',
               width: '10px', height: '10px', borderRadius: '50%',
-              background: 'hsl(262,100%,55%)',
+              background: 'var(--t-support-1)',
               boxShadow: '0 0 4px rgba(0,0,0,0.2)',
             }} />
           </div>
@@ -239,7 +239,7 @@ export default function ReelPlayer() {
               aria-label="Pause"
               style={{ ...darkBtnStyle }}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="#2a2420">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="var(--t-text)">
                 <rect x="5" y="3" width="4" height="18" rx="1" />
                 <rect x="15" y="3" width="4" height="18" rx="1" />
               </svg>
@@ -249,7 +249,7 @@ export default function ReelPlayer() {
             <span style={{
               fontFamily: "'Space Mono', monospace",
               fontSize: 'clamp(9px, 1vw, 11px)',
-              color: 'rgba(42,36,32,0.55)',
+              color: 'color-mix(in srgb, var(--t-text) 55%, transparent)',
               letterSpacing: '0.04em',
               flex: 1,
             }}>
@@ -264,12 +264,12 @@ export default function ReelPlayer() {
               style={{ ...darkBtnStyle }}
             >
               {fullscreen ? (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2a2420" strokeWidth="1.8" strokeLinecap="round">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--t-text)" strokeWidth="1.8" strokeLinecap="round">
                   <polyline points="8,3 3,3 3,8" /><polyline points="21,8 21,3 16,3" />
                   <polyline points="3,16 3,21 8,21" /><polyline points="16,21 21,21 21,16" />
                 </svg>
               ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2a2420" strokeWidth="1.8" strokeLinecap="round">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--t-text)" strokeWidth="1.8" strokeLinecap="round">
                   <polyline points="15,3 21,3 21,9" /><polyline points="9,21 3,21 3,15" />
                   <line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" />
                 </svg>

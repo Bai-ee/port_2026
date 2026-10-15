@@ -250,8 +250,8 @@ export default function RecreateLandingPage() {
   }
 
   return (
-    <div id="recreate-landing-shell" style={shellStyle}>
-      <InternalPageBackground />
+    <div id="recreate-landing-shell" data-theme-scope="light" style={shellStyle}>
+      <InternalPageBackground sceneMode="light" />
 
       <style>{`
         #recreate-primary-cta,
@@ -649,6 +649,9 @@ const shellStyle = {
   width: '100%',
   boxSizing: 'border-box',
   overflowX: 'hidden',
+  // Pinned light (theme exception X8): paint the light page so a dark root theme never shows through.
+  background: 'var(--t-page)',
+  color: 'var(--t-text-default)',
   fontFamily: '"Space Grotesk", system-ui, sans-serif',
 };
 

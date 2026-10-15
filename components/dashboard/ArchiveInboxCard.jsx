@@ -132,19 +132,19 @@ export default function ArchiveInboxCard({ getIdToken, clientId = null }) {
         }
         #archive-inbox-card .ai-btn:hover:not(:disabled) { border-color:currentColor; }
         #archive-inbox-card .ai-btn:disabled { opacity:.5; cursor:not-allowed; }
-        #archive-inbox-card .ai-btn--go { background:#111; color:#fff; border-color:#111; }
+        #archive-inbox-card .ai-btn--go { background:var(--t-text); color:var(--t-surface); border-color:var(--t-text); }
         #archive-inbox-card .ai-err {
           padding:8px 10px; border-radius:6px; font-size:12px;
-          background:rgba(185,28,28,.09); color:#b91c1c;
+          background:var(--t-danger-bg); color:var(--t-danger);
         }
         #archive-inbox-card .ai-list { display:flex; flex-direction:column; gap:8px; }
         #archive-inbox-card .ai-row {
           border:1px solid rgba(128,128,128,.26); border-left-width:3px; border-radius:6px; padding:10px 12px;
           display:flex; flex-direction:column; gap:6px;
         }
-        #archive-inbox-card .ai-row.is-ready { border-left-color:#15803d; }
+        #archive-inbox-card .ai-row.is-ready { border-left-color:var(--t-success); }
         #archive-inbox-card .ai-row.is-story { border-left-color:#b45309; }
-        #archive-inbox-card .ai-row.is-blocked { border-left-color:#b91c1c; }
+        #archive-inbox-card .ai-row.is-blocked { border-left-color:var(--t-danger); }
         #archive-inbox-card .ai-row-top { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
         #archive-inbox-card .ai-name { font-weight:600; font-size:13px; }
         #archive-inbox-card .ai-file { font-family:ui-monospace,monospace; font-size:11px; opacity:.6; word-break:break-all; }
@@ -152,9 +152,9 @@ export default function ArchiveInboxCard({ getIdToken, clientId = null }) {
           display:inline-flex; align-items:center; gap:4px; font-size:10px; letter-spacing:.05em;
           text-transform:uppercase; padding:2px 7px; border-radius:999px; border:1px solid currentColor;
         }
-        #archive-inbox-card .ai-pill.ok { color:#15803d; }
+        #archive-inbox-card .ai-pill.ok { color:var(--t-success); }
         #archive-inbox-card .ai-pill.warn { color:#b45309; }
-        #archive-inbox-card .ai-pill.stop { color:#b91c1c; }
+        #archive-inbox-card .ai-pill.stop { color:var(--t-danger); }
         #archive-inbox-card .ai-pill.flat { color:inherit; opacity:.55; }
         #archive-inbox-card .ai-meta { display:flex; gap:12px; flex-wrap:wrap; font-size:11px; opacity:.62; }
         #archive-inbox-card .ai-story { font-size:12.5px; opacity:.85; }

@@ -31,13 +31,13 @@
     white-space: nowrap;
     border: 1px solid transparent;
   }
-  .adq-fr-src--ai       { color: #6d28d9; background: rgba(109,40,217,0.06); border-color: rgba(109,40,217,0.15); }
-  .adq-fr-src--scout    { color: #0369a1; background: rgba(3,105,161,0.06);  border-color: rgba(3,105,161,0.15); }
-  .adq-fr-src--crawl    { color: #0f766e; background: rgba(15,118,110,0.06); border-color: rgba(15,118,110,0.15); }
-  .adq-fr-src--psi      { color: #b45309; background: rgba(180,83,9,0.06);   border-color: rgba(180,83,9,0.15); }
-  .adq-fr-src--user     { color: #374151; background: rgba(55,65,81,0.06);   border-color: rgba(55,65,81,0.15); }
-  .adq-fr-src--artifact { color: #9333ea; background: rgba(147,51,234,0.06); border-color: rgba(147,51,234,0.15); }
-  .adq-fr-src--module   { color: #0f766e; background: rgba(15,118,110,0.04); border-color: rgba(15,118,110,0.12); }
+  .adq-fr-src--ai       { color: var(--t-support-1); background: color-mix(in srgb, var(--t-support-1) 6%, transparent); border-color: color-mix(in srgb, var(--t-support-1) 15%, transparent); }
+  .adq-fr-src--scout    { color: var(--t-info); background: color-mix(in srgb, var(--t-info) 6%, transparent); border-color: color-mix(in srgb, var(--t-info) 15%, transparent); }
+  .adq-fr-src--crawl    { color: var(--t-success); background: color-mix(in srgb, var(--t-success) 6%, transparent); border-color: color-mix(in srgb, var(--t-success) 15%, transparent); }
+  .adq-fr-src--psi      { color: var(--t-warning); background: color-mix(in srgb, var(--t-warning) 6%, transparent); border-color: color-mix(in srgb, var(--t-warning) 15%, transparent); }
+  .adq-fr-src--user     { color: var(--t-text-secondary); background: color-mix(in srgb, var(--t-text-secondary) 6%, transparent); border-color: color-mix(in srgb, var(--t-text-secondary) 15%, transparent); }
+  .adq-fr-src--artifact { color: var(--t-support-2); background: color-mix(in srgb, var(--t-support-2) 6%, transparent); border-color: color-mix(in srgb, var(--t-support-2) 15%, transparent); }
+  .adq-fr-src--module   { color: var(--t-success); background: color-mix(in srgb, var(--t-success) 4%, transparent); border-color: color-mix(in srgb, var(--t-success) 12%, transparent); }
   #adq-scroll {
     flex: 1;
     overflow-y: auto;
@@ -45,7 +45,7 @@
   }
   /* Bucket section */
   .adq-bucket {
-    border-bottom: 1px solid rgba(42,36,32,0.09);
+    border-bottom: 1px solid color-mix(in srgb, var(--t-text) 9%, transparent);
     padding-bottom: 2px;
   }
   .adq-bucket:last-child { border-bottom: none; }
@@ -81,13 +81,13 @@
     font-weight: 700;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: #2a2420;
+    color: var(--t-text);
     line-height: 1;
   }
   .adq-bucket-sub {
     font-family: var(--font-ui);
     font-size: 11px;
-    color: rgba(42,36,32,0.5);
+    color: color-mix(in srgb, var(--t-text) 50%, transparent);
     line-height: 1.4;
   }
   .adq-bucket-hdr-right {
@@ -118,7 +118,7 @@
     font-size: 9px;
     font-weight: 700;
     letter-spacing: -0.02em;
-    color: #2a2420;
+    color: var(--t-text);
     line-height: 1;
     white-space: nowrap;
     pointer-events: none;
@@ -133,8 +133,8 @@
   }
   /* Section card */
   .adq-section-card {
-    background: rgba(255,255,255,0.72);
-    border: 1px solid rgba(42,36,32,0.11);
+    background: color-mix(in srgb, var(--t-surface) 72%, transparent);
+    border: 1px solid color-mix(in srgb, var(--t-text) 11%, transparent);
     border-radius: 8px;
     padding: 12px 12px 10px;
     display: flex;
@@ -163,13 +163,13 @@
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: #2a2420;
+    color: var(--t-text);
     line-height: 1.2;
   }
   .adq-sc-sub {
     font-family: var(--font-ui);
     font-size: 12px;
-    color: rgba(42,36,32,0.55);
+    color: color-mix(in srgb, var(--t-text) 55%, transparent);
     line-height: 1.35;
   }
   .adq-sc-footer-row {
@@ -189,16 +189,16 @@
     font-weight: 700;
     letter-spacing: 0.09em;
     text-transform: uppercase;
-    color: rgba(42,36,32,0.45);
+    color: color-mix(in srgb, var(--t-text) 45%, transparent);
     background: none;
-    border: 1px solid rgba(42,36,32,0.14);
+    border: 1px solid color-mix(in srgb, var(--t-text) 14%, transparent);
     border-radius: 4px;
     padding: 3px 7px;
     cursor: pointer;
     white-space: nowrap;
     transition: color 0.12s, border-color 0.12s;
   }
-  .adq-sc-open-btn:hover { color: #2a2420; border-color: rgba(42,36,32,0.35); }
+  .adq-sc-open-btn:hover { color: var(--t-text); border-color: color-mix(in srgb, var(--t-text) 35%, transparent); }
   /* Field rows */
   .adq-field-rows {
     list-style: none;
@@ -207,7 +207,7 @@
     display: flex;
     flex-direction: column;
     gap: 0;
-    border-top: 1px solid rgba(42,36,32,0.07);
+    border-top: 1px solid color-mix(in srgb, var(--t-text) 7%, transparent);
   }
   /* Field rows — sized to match the dashboard card line-item rows
      (.cap-list-row-main): same label scale, row height, and lock treatment. */
@@ -216,7 +216,7 @@
     align-items: center;
     gap: 10px;
     padding: 11px 0;
-    border-bottom: 1px solid rgba(42,36,32,0.07);
+    border-bottom: 1px solid color-mix(in srgb, var(--t-text) 7%, transparent);
     min-height: 44px;
   }
   .adq-fr:last-child { border-bottom: none; }
@@ -234,8 +234,8 @@
     flex-shrink: 0;
     display: block;
   }
-  .adq-fr-pip--ok   { background: #285f3b; }
-  .adq-fr-pip--miss { background: #9f1f17; }
+  .adq-fr-pip--ok   { background: var(--t-success); }
+  .adq-fr-pip--miss { background: var(--t-danger); }
   .adq-fr-label {
     font-family: var(--font-ui);
     font-size: clamp(0.8rem, 1.1vw, 0.875rem);
@@ -250,8 +250,8 @@
   .adq-fr--ok  .adq-fr-label { color: var(--text-display); }
   /* Style-guide alignment: missing rows keep neutral ink text (the MISSING chip
      carries the status) instead of alarm-red, matching the modal guide. */
-  .adq-fr--miss .adq-fr-label { color: rgba(42,36,32,0.72); font-weight: 400; }
-  .adq-fr--lock .adq-fr-label { color: rgba(42,36,32,0.38); }
+  .adq-fr--miss .adq-fr-label { color: var(--t-text-secondary); font-weight: 400; }
+  .adq-fr--lock .adq-fr-label { color: var(--t-text-faint); }
   .adq-fr--lock .adq-fr-indicator { color: var(--text-secondary); }
   .adq-fr-badge {
     font-family: var(--font-mono);
@@ -265,14 +265,14 @@
     white-space: nowrap;
   }
   .adq-fr-badge--ok {
-    color: #285f3b;
-    background: rgba(40,95,59,0.08);
-    border: 1px solid rgba(40,95,59,0.3);
+    color: var(--t-success);
+    background: color-mix(in srgb, var(--t-success) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--t-success) 30%, transparent);
   }
   .adq-fr-badge--miss {
-    color: #9f1f17;
-    background: rgba(159,31,23,0.06);
-    border: 1px solid rgba(159,31,23,0.24);
+    color: var(--t-danger);
+    background: color-mix(in srgb, var(--t-danger) 6%, transparent);
+    border: 1px solid color-mix(in srgb, var(--t-danger) 24%, transparent);
   }
   .adq-fr-upgrade {
     font-family: var(--font-mono);
@@ -281,8 +281,8 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-secondary);
-    background: rgba(255,255,255,0.6);
-    border: 1px solid rgba(42,36,32,0.12);
+    background: color-mix(in srgb, var(--t-surface) 60%, transparent);
+    border: 1px solid var(--t-border-subtle);
     border-radius: 6px;
     padding: 5px 9px;
     cursor: pointer;
@@ -292,7 +292,7 @@
   }
   .adq-fr-upgrade:hover {
     background: var(--text-display);
-    color: #ffffff;
+    color: var(--surface);
     border-color: var(--text-display);
   }
   /* Footer */
@@ -301,8 +301,8 @@
     align-items: center;
     gap: 10px;
     padding: 9px 16px;
-    border-top: 1px solid rgba(42,36,32,0.09);
-    background: rgba(255,255,255,0.55);
+    border-top: 1px solid color-mix(in srgb, var(--t-text) 9%, transparent);
+    background: color-mix(in srgb, var(--t-surface) 55%, transparent);
     flex-shrink: 0;
     flex-wrap: wrap;
   }
@@ -311,7 +311,7 @@
     font-size: 9px;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: rgba(42,36,32,0.38);
+    color: var(--t-text-faint);
     flex-shrink: 0;
     margin-right: 2px;
   }
@@ -321,7 +321,7 @@
     gap: 5px;
     font-family: var(--font-ui);
     font-size: 11px;
-    color: rgba(42,36,32,0.6);
+    color: color-mix(in srgb, var(--t-text) 60%, transparent);
     white-space: nowrap;
   }
   .adq-legend-item--right { margin-left: auto; display: flex; gap: 4px; align-items: center; }

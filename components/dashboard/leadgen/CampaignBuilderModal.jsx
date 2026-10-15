@@ -329,7 +329,7 @@ export default function CampaignBuilderModal({ open, onClose, onSaved, getIdToke
       <style jsx>{`
         #leadgen-modal-backdrop {
           position: fixed; inset: 0;
-          background: rgba(15, 15, 15, 0.42);
+          background: var(--t-overlay);
           backdrop-filter: blur(8px);
           -webkit-backdrop-filter: blur(8px);
           z-index: 1000;
@@ -345,12 +345,12 @@ export default function CampaignBuilderModal({ open, onClose, onSaved, getIdToke
           width: min(560px, 96vw);
           max-height: 92vh;
           overflow: auto;
-          background: #fafafa;
-          border: 1px solid rgba(0, 0, 0, 0.08);
+          background: var(--t-surface);
+          border: 1px solid color-mix(in srgb, var(--t-text-strong) 8%, transparent);
           border-radius: 18px;
           box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
           font-family: 'Inter', system-ui, -apple-system, sans-serif;
-          color: #1a1a1a;
+          color: var(--t-text-body);
           --lg-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
         }
         #leadgen-modal-head {
@@ -358,7 +358,7 @@ export default function CampaignBuilderModal({ open, onClose, onSaved, getIdToke
           justify-content: space-between;
           align-items: center;
           padding: 18px 22px;
-          border-bottom: 1px dashed rgba(0,0,0,0.10);
+          border-bottom: 1px dashed color-mix(in srgb, var(--t-text-strong) 10%, transparent);
         }
         #leadgen-modal-title {
           margin: 0;
@@ -368,16 +368,16 @@ export default function CampaignBuilderModal({ open, onClose, onSaved, getIdToke
         }
         :global(.leadgen-modal-x) {
           background: transparent;
-          border: 1px solid rgba(0,0,0,0.10);
+          border: 1px solid color-mix(in srgb, var(--t-text-strong) 10%, transparent);
           width: 28px; height: 28px;
           border-radius: 999px;
           display: inline-flex;
           align-items: center;
           justify-content: center;
           cursor: pointer;
-          color: #555;
+          color: var(--t-text-secondary);
         }
-        :global(.leadgen-modal-x:hover) { background: rgba(0,0,0,0.05); }
+        :global(.leadgen-modal-x:hover) { background: color-mix(in srgb, var(--t-text-strong) 5%, transparent); }
 
         #leadgen-modal-form {
           padding: 18px 22px 22px;
@@ -396,22 +396,22 @@ export default function CampaignBuilderModal({ open, onClose, onSaved, getIdToke
           font-family: var(--lg-mono);
           font-size: 9.5px;
           letter-spacing: 0.16em;
-          color: #9a9a9a;
+          color: var(--t-text-muted);
           text-transform: uppercase;
         }
         :global(.leadgen-field-input) {
           font-family: inherit;
           font-size: 13px;
-          color: #1a1a1a;
+          color: var(--t-text-body);
           padding: 9px 11px;
-          background: #fff;
-          border: 1px solid rgba(0,0,0,0.10);
+          background: var(--t-surface);
+          border: 1px solid color-mix(in srgb, var(--t-text-strong) 10%, transparent);
           border-radius: 8px;
           outline: none;
           transition: border-color 160ms ease;
           width: 100%;
         }
-        :global(.leadgen-field-input:focus) { border-color: #1a1a1a; }
+        :global(.leadgen-field-input:focus) { border-color: var(--t-text); }
         .leadgen-field-row {
           display: flex;
           gap: 10px;
@@ -425,22 +425,22 @@ export default function CampaignBuilderModal({ open, onClose, onSaved, getIdToke
         }
         :global(.leadgen-query-remove) {
           background: transparent;
-          border: 1px solid rgba(0,0,0,0.10);
+          border: 1px solid color-mix(in srgb, var(--t-text-strong) 10%, transparent);
           width: 30px; height: 30px;
           border-radius: 8px;
           cursor: pointer;
-          color: #777;
+          color: var(--t-text-muted);
           display: inline-flex;
           align-items: center;
           justify-content: center;
         }
         :global(.leadgen-query-remove:disabled) { opacity: 0.35; cursor: not-allowed; }
-        :global(.leadgen-query-remove:hover:not(:disabled)) { background: rgba(255, 59, 48, 0.06); color: #ff3b30; }
+        :global(.leadgen-query-remove:hover:not(:disabled)) { background: var(--t-danger-bg); color: #ff3b30; }
         :global(.leadgen-query-add) {
           align-self: flex-start;
           background: transparent;
-          border: 1px dashed rgba(0,0,0,0.18);
-          color: #555;
+          border: 1px dashed color-mix(in srgb, var(--t-text-strong) 18%, transparent);
+          color: var(--t-text-secondary);
           font-family: inherit;
           font-size: 11.5px;
           padding: 6px 10px;
@@ -450,11 +450,11 @@ export default function CampaignBuilderModal({ open, onClose, onSaved, getIdToke
           align-items: center;
           gap: 4px;
         }
-        :global(.leadgen-query-add:hover) { color: #1a1a1a; border-color: #1a1a1a; }
+        :global(.leadgen-query-add:hover) { color: var(--t-text-body); border-color: var(--t-text); }
 
         :global(.leadgen-field-hint) {
           font-size: 11px;
-          color: #888;
+          color: var(--t-text-muted);
           line-height: 1.5;
           padding: 6px 0 0;
         }
@@ -483,9 +483,9 @@ export default function CampaignBuilderModal({ open, onClose, onSaved, getIdToke
           font-size: 11px;
           padding: 5px 10px;
           border-radius: 999px;
-          border: 1px solid rgba(0,0,0,0.12);
-          background: #fff;
-          color: #555;
+          border: 1px solid color-mix(in srgb, var(--t-text-strong) 12%, transparent);
+          background: var(--t-surface);
+          color: var(--t-text-secondary);
           cursor: pointer;
           display: inline-flex;
           align-items: center;
@@ -494,30 +494,30 @@ export default function CampaignBuilderModal({ open, onClose, onSaved, getIdToke
           user-select: none;
         }
         :global(.leadgen-strategy-chip:hover) {
-          border-color: #1a1a1a;
-          color: #1a1a1a;
+          border-color: var(--t-text);
+          color: var(--t-text-body);
         }
         :global(.leadgen-strategy-chip--on) {
-          background: #1a1a1a;
-          border-color: #1a1a1a;
-          color: #fff;
+          background: var(--t-text);
+          border-color: var(--t-text);
+          color: var(--t-surface);
         }
         :global(.leadgen-strategy-chip--on:hover) {
-          background: #333;
-          border-color: #333;
+          background: var(--t-text);
+          border-color: var(--t-text);
         }
         :global(.leadgen-strategy-chip-badge) {
           font-size: 8.5px;
           letter-spacing: 0.05em;
           padding: 1px 5px;
           border-radius: 999px;
-          background: rgba(255,255,255,0.15);
+          background: color-mix(in srgb, var(--t-surface) 15%, transparent);
           color: inherit;
           text-transform: uppercase;
           font-weight: 600;
         }
         :global(.leadgen-strategy-chip:not(.leadgen-strategy-chip--on) .leadgen-strategy-chip-badge) {
-          background: rgba(0,0,0,0.05);
+          background: color-mix(in srgb, var(--t-text-strong) 5%, transparent);
         }
 
         :global(.leadgen-queries-reset) {
@@ -525,14 +525,14 @@ export default function CampaignBuilderModal({ open, onClose, onSaved, getIdToke
           font-size: 10.5px;
           color: #ff3b30;
           background: transparent;
-          border: 1px dashed rgba(255, 59, 48, 0.35);
+          border: 1px dashed color-mix(in srgb, var(--t-danger-solid) 35%, transparent);
           border-radius: 999px;
           padding: 2px 8px;
           cursor: pointer;
           transition: background 160ms ease;
         }
         :global(.leadgen-queries-reset:hover) {
-          background: rgba(255, 59, 48, 0.06);
+          background: var(--t-danger-bg);
         }
 
         :global(.leadgen-checkbox) {
@@ -540,15 +540,15 @@ export default function CampaignBuilderModal({ open, onClose, onSaved, getIdToke
           align-items: center;
           gap: 8px;
           font-size: 12px;
-          color: #555;
+          color: var(--t-text-secondary);
           margin-top: 2px;
         }
 
         #leadgen-modal-error {
           font-size: 12px;
           color: #ff3b30;
-          background: rgba(255, 59, 48, 0.06);
-          border: 1px solid rgba(255, 59, 48, 0.2);
+          background: var(--t-danger-bg);
+          border: 1px solid var(--t-danger-border);
           padding: 8px 10px;
           border-radius: 8px;
         }
@@ -558,7 +558,7 @@ export default function CampaignBuilderModal({ open, onClose, onSaved, getIdToke
           justify-content: flex-end;
           gap: 8px;
           padding-top: 4px;
-          border-top: 1px dashed rgba(0,0,0,0.10);
+          border-top: 1px dashed color-mix(in srgb, var(--t-text-strong) 10%, transparent);
           margin-top: 6px;
           padding-top: 14px;
         }

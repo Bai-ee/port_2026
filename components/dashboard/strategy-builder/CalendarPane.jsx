@@ -52,7 +52,7 @@ function getDaysInWindow(startDate, days) {
 }
 
 function PostRow({ item, onEdit, onRegen, regenBusy, editingId, editContent, onEditChange, onSave, onCancel }) {
-  const color = KIND_COLORS[item.kind] || '#888';
+  const color = KIND_COLORS[item.kind] || 'var(--t-text-muted)';
   const kindLabel = KIND_LABELS[item.kind] || item.kind;
   const isEditing = editingId === item.id;
   const isRegenning = regenBusy === item.id;

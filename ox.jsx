@@ -1,4 +1,4 @@
-import React, { useRef, useMemo, useEffect, useState } from 'react';
+import React, { useRef, useMemo, useEffect, useState, useCallback } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
@@ -6,6 +6,12 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { STORAGE_KEYS } from './lib/theme/constants.js';
+import { sceneBridge } from './lib/theme-scene/scene-bridge.js';
+import { applySceneToParams } from './lib/theme-scene/apply-scene.js';
+import { createSceneDriver, bindDriver, syncDriver } from './lib/theme-scene/scene-driver.js';
+import { applyBackgroundToColor, applyHighlightToUniforms, clearHighlightUniforms } from './lib/theme-scene/three-bindings.js';
+import SceneFallback from './components/theme-scene/SceneFallback';
 
 const SIMPLE_SCROLL_MEDIA_QUERY = '(max-width: 680px) and (pointer: coarse)';
 const MOBILE_MEDIA_QUERY = '(max-width: 767px), (pointer: coarse)';
@@ -44,17 +50,107 @@ const useMediaMatch = (query) => {
   return matches;
 };
 
+// `backgroundColor="theme"` paints the opaque canvas background from the active theme scene
+// (the page colour), instead of a fixed hex. null stays transparent, a hex string stays fixed.
+const THEME_BACKGROUND = 'theme';
+
 // Component to set scene background color
-const SceneBackground = ({ color }) => {
+const SceneBackground = ({ color, sceneDriver = null, smoothingRate = 10, snapMotion = false }) => {
   const { scene } = useThree();
+  const themeColorRef = useRef(null);
+  const appliedVersionRef = useRef(-1);
+  const themed = color === THEME_BACKGROUND && sceneDriver !== null;
 
   useEffect(() => {
-    if (color === null) {
+    if (themed) {
+      // One Color for the life of the mount; the render loop only ever .setRGB()s it in place.
+      const themeColor = new THREE.Color();
+      themeColorRef.current = themeColor;
+      applyBackgroundToColor(themeColor, sceneDriver.state);
+      appliedVersionRef.current = sceneDriver.state.version;
+      scene.background = themeColor;
+      return () => {
+        if (scene.background === themeColor) scene.background = null;
+        themeColorRef.current = null;
+      };
+    }
+    if (color === null || color === THEME_BACKGROUND) {
       scene.background = null;
     } else {
       scene.background = new THREE.Color(color);
     }
-  }, [color, scene]);
+    return undefined;
+  }, [color, scene, themed, sceneDriver]);
+
+  // Default priority (0) only: a positive-priority useFrame takes over rendering and blanks the scene.
+  useFrame((frameState) => {
+    if (!themed || !themeColorRef.current) return;
+    const smoothed = sceneDriver.step(frameState.clock.elapsedTime, smoothingRate, snapMotion);
+    if (smoothed.version !== appliedVersionRef.current) {
+      applyBackgroundToColor(themeColorRef.current, smoothed);
+      appliedVersionRef.current = smoothed.version;
+    }
+  });
+
+  return null;
+};
+
+// Opt-in debug counters for the e2e "no churn while dragging" check (contract §9.3.11). Mounted only
+// when localStorage[STORAGE_KEYS.debug] === '1'.
+let sceneCanvasCounter = 0;
+const readSceneDebugFlag = () => {
+  try {
+    return typeof window !== 'undefined' && window.localStorage.getItem(STORAGE_KEYS.debug) === '1';
+  } catch (error) {
+    return false;
+  }
+};
+
+// Listens for WebGL context loss on this canvas. Attached and removed inside one effect, so it
+// survives React StrictMode's mount/unmount/mount in dev. preventDefault() on `webglcontextlost` is
+// what allows the browser to fire `webglcontextrestored` later.
+const SceneContextGuard = ({ onLost, onRestored }) => {
+  const { gl } = useThree();
+
+  useEffect(() => {
+    const canvasElement = gl.domElement;
+    const handleLost = (event) => {
+      event.preventDefault();
+      onLost();
+    };
+    canvasElement.addEventListener('webglcontextlost', handleLost);
+    canvasElement.addEventListener('webglcontextrestored', onRestored);
+    return () => {
+      canvasElement.removeEventListener('webglcontextlost', handleLost);
+      canvasElement.removeEventListener('webglcontextrestored', onRestored);
+    };
+  }, [gl, onLost, onRestored]);
+
+  return null;
+};
+
+const SceneDebugStats = ({ canvasId }) => {
+  const { gl, scene } = useThree();
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const publish = () => {
+      const materials = new Set();
+      scene.traverse((object) => {
+        const material = object.material;
+        if (Array.isArray(material)) material.forEach((m) => materials.add(m));
+        else if (material) materials.add(material);
+      });
+      window.__themeSceneStats = {
+        canvasId,
+        materialCount: materials.size,
+        programCount: gl.info.programs ? gl.info.programs.length : 0,
+      };
+    };
+    publish();
+    const interval = window.setInterval(publish, 1000);
+    return () => window.clearInterval(interval);
+  }, [canvasId, gl, scene]);
 
   return null;
 };
@@ -264,8 +360,13 @@ const RadialDiffusionEffect = ({ diffusionStateRef }) => {
   return null;
 };
 
-const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {}, snapRef = null, scatterRef = null, silhouetteRef = null, diffusionStateRef = null }) => {
+const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {}, snapRef = null, scatterRef = null, silhouetteRef = null, diffusionStateRef = null, sceneMode = 'off', sceneDriver = null, snapMotion = false }) => {
   const meshRef = useRef();
+  // Theme scene deltas (hue shift, saturation/lightness/opacity, hue span) are composed over the
+  // surface's own params here, inside the render loop, into a reused object. No React state, no
+  // params-prop change (which would reset the smoothing in ox), no allocation per frame.
+  const sceneParamsRef = useRef({ hueOffset: 0, saturation: 0, lightness: 0, opacity: 1, hueSpan: 0.8 });
+  const appliedSceneVersionRef = useRef(-1);
   const groupRef = useRef();
   const simTimeRef = useRef(0);
   const hiddenRef = useRef(typeof document !== 'undefined' ? document.hidden : false);
@@ -365,7 +466,13 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {},
 
   // Material & Geom
   const material = useMemo(() => new THREE.ShaderMaterial({
-    uniforms: { uOpacity: { value: 1.0 } },
+    // uHighlight / uHighlightMix are driven in place by the theme scene (mix 0 = identical output).
+    // The material is created once; theme changes only ever touch these `.value`s.
+    uniforms: {
+      uOpacity: { value: 1.0 },
+      uHighlight: { value: new THREE.Vector3(0, 0, 0) },
+      uHighlightMix: { value: 0.0 },
+    },
     transparent: true,
     vertexShader: `
         varying vec3 vNormal;
@@ -378,6 +485,8 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {},
     `,
     fragmentShader: `
         uniform float uOpacity;
+        uniform vec3 uHighlight;
+        uniform float uHighlightMix;
         varying vec3 vNormal;
         varying vec3 vColor;
         void main() {
@@ -386,6 +495,7 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {},
             metallic = pow(metallic, 3.0);
             float diffuse = metallic * 0.8 + 0.2;
             vec3 col = vColor * diffuse;
+            col = mix(col, uHighlight, uHighlightMix * metallic);
             gl_FragColor = vec4(col, uOpacity);
         }
     `
@@ -506,7 +616,22 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {},
     groupRef.current.rotation.y = rotY;
     groupRef.current.rotation.z = rotZ;
 
-    material.uniforms.uOpacity.value = PARAMS.opacity ?? 1;
+    // Theme scene: effective hue/saturation/lightness/opacity/span. 'off' keeps the exact legacy path.
+    const sceneActive = sceneMode !== 'off' && sceneDriver !== null;
+    let sceneParams = null;
+    if (sceneActive) {
+      const sceneState = sceneDriver.step(state.clock.elapsedTime, runtimeProfile.paramSmoothing ?? 10, snapMotion);
+      sceneParams = applySceneToParams(PARAMS, sceneState, sceneParamsRef.current);
+      if (sceneState.version !== appliedSceneVersionRef.current) {
+        applyHighlightToUniforms(material.uniforms, sceneState);
+        appliedSceneVersionRef.current = sceneState.version;
+      }
+    } else if (appliedSceneVersionRef.current !== -1) {
+      clearHighlightUniforms(material.uniforms);
+      appliedSceneVersionRef.current = -1;
+    }
+
+    material.uniforms.uOpacity.value = sceneActive ? sceneParams.opacity : (PARAMS.opacity ?? 1);
     if (diffusionStateRef) {
       const diffusion = diffusionStateRef.current;
       diffusion.group = groupRef.current;
@@ -526,10 +651,11 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {},
     const waveAmp = PARAMS.waveAmplitude;
     const R = PARAMS.torusMajorRadius;
     const r = PARAMS.torusTubeRadius;
-    const hueOffset = PARAMS.hueOffset ?? 0;
+    const hueOffset = sceneActive ? sceneParams.hueOffset : (PARAMS.hueOffset ?? 0);
+    const hueSpan = sceneActive ? sceneParams.hueSpan : 0.8;
     const hueSpeed = PARAMS.hueSpeed;
-    const saturation = PARAMS.saturation;
-    const lightness = PARAMS.lightness;
+    const saturation = sceneActive ? sceneParams.saturation : PARAMS.saturation;
+    const lightness = sceneActive ? sceneParams.lightness : PARAMS.lightness;
     const scale08 = scale * 0.8;
     const timeFlow05 = time * flow * 0.5;
     const time04 = time * 0.4;
@@ -581,7 +707,7 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {},
       const ty = y * scale + wave * waveAmpY;
       const tz = z * scale08 + wave * waveZ;
 
-      const hue = (hueOffset + t * 0.8 + timeHue + wave * 0.05) % 1;
+      const hue = (hueOffset + t * hueSpan + timeHue + wave * 0.05) % 1;
       pColor.setHSL(hue, saturation, lightness + wave * 0.15);
 
       const i3 = i * 3;
@@ -672,8 +798,36 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {},
 // `pointerInfluenceScale` (optional, default 1 = unchanged homepage behavior):
 // multiplies the desktop profile's cursor-parallax strength — /looper passes
 // >1 for a stronger cursor reaction across the page.
-export default function App({ params = {}, liveParamsRef = null, backgroundColor = '#1a1a1a', onReady = null, snapRef = null, scatterRef = null, silhouetteRef = null, viewResetRef = null, pointerInfluenceScale = 1, enableDiffusion = false }) {
+//
+// `sceneMode` (default 'off' = byte-for-byte the pre-theme behaviour, so /looper, /capture and any
+// unmigrated caller are untouched):
+//   'theme'  follow the active theme scene (light/dark per the viewer's resolved mode, or the Studio draft)
+//   'light' | 'dark'  pinned to that palette regardless of the viewer's mode
+//   'off'    ignore the theme
+// Theme changes never remount the Canvas, replace the material, recompile a program or recreate the
+// renderer: the scene store is read into a driver (refs only) and written into existing uniforms /
+// the existing background Color inside useFrame.
+export default function App({ params = {}, liveParamsRef = null, backgroundColor = '#1a1a1a', onReady = null, snapRef = null, scatterRef = null, silhouetteRef = null, viewResetRef = null, pointerInfluenceScale = 1, enableDiffusion = false, sceneMode = 'off' }) {
   const controlsRef = useRef(null);
+  const [sceneState, setSceneState] = useState('ready');
+  const [canvasId] = useState(() => {
+    sceneCanvasCounter += 1;
+    return `scene-canvas-${sceneCanvasCounter}`;
+  });
+  const [debugStatsEnabled] = useState(readSceneDebugFlag);
+  // GL context loss: keep the canvas mounted, show the themed static fallback, resume on restore.
+  // Colours are rewritten every frame, so nothing needs re-uploading by hand.
+  const handleContextLost = useCallback(() => setSceneState('lost'), []);
+  const handleContextRestored = useCallback(() => setSceneState('ready'), []);
+  // A themed (opaque) background needs the driver even when the particles themselves ignore the theme.
+  const driverMode = sceneMode !== 'off' ? sceneMode : (backgroundColor === THEME_BACKGROUND ? 'theme' : 'off');
+  const sceneDriver = useMemo(() => {
+    const driver = createSceneDriver();
+    syncDriver(driver, sceneBridge, driverMode);
+    return driver;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => bindDriver(sceneDriver, sceneBridge, driverMode), [sceneDriver, driverMode]);
   const diffusionStateRef = useRef({
     group: null,
     origin: new THREE.Vector3(),
@@ -751,6 +905,9 @@ export default function App({ params = {}, liveParamsRef = null, backgroundColor
 
   return (
     <div
+      id="scene-canvas-shell"
+      data-scene-state={sceneState}
+      data-scene-mode={sceneMode}
       style={{
         position: 'fixed',
         top: 0,
@@ -762,6 +919,7 @@ export default function App({ params = {}, liveParamsRef = null, backgroundColor
         pointerEvents: 'none',
       }}
     >
+      {sceneState === 'lost' ? <SceneFallback id="scene-context-lost-fallback" reason="context-lost" /> : null}
       <Canvas
         camera={{ position: [0, 0, 100], fov: 60 }}
         dpr={qualityProfile.dpr}
@@ -769,6 +927,7 @@ export default function App({ params = {}, liveParamsRef = null, backgroundColor
         gl={{ alpha: true, antialias: qualityProfile.antialias, powerPreference: qualityProfile.powerPreference }}
         onCreated={({ gl }) => {
           gl.setClearColor(0x000000, 0);
+          gl.domElement.setAttribute('data-scene-canvas-id', canvasId);
           // Notify parent after the first frame is painted so callers can
           // gate UI transitions (e.g. a loading overlay) on canvas readiness.
           if (typeof onReady === 'function') {
@@ -776,8 +935,10 @@ export default function App({ params = {}, liveParamsRef = null, backgroundColor
           }
         }}
       >
-        <SceneBackground color={backgroundColor} />
-        <ParticleSwarm params={optimizedParams} liveParamsRef={liveParamsRef} runtimeProfile={qualityProfile} snapRef={snapRef} scatterRef={scatterRef} silhouetteRef={silhouetteRef} diffusionStateRef={enableDiffusion ? diffusionStateRef : null} />
+        <SceneBackground color={backgroundColor} sceneDriver={driverMode === 'off' ? null : sceneDriver} smoothingRate={qualityProfile.paramSmoothing} snapMotion={prefersReducedMotion} />
+        <ParticleSwarm params={optimizedParams} liveParamsRef={liveParamsRef} runtimeProfile={qualityProfile} snapRef={snapRef} scatterRef={scatterRef} silhouetteRef={silhouetteRef} diffusionStateRef={enableDiffusion ? diffusionStateRef : null} sceneMode={sceneMode} sceneDriver={sceneMode === 'off' ? null : sceneDriver} snapMotion={prefersReducedMotion} />
+        <SceneContextGuard onLost={handleContextLost} onRestored={handleContextRestored} />
+        {debugStatsEnabled ? <SceneDebugStats canvasId={canvasId} /> : null}
         <CameraHomeReset resetRef={viewResetRef} controlsRef={controlsRef} />
         {enableDiffusion ? <RadialDiffusionEffect diffusionStateRef={diffusionStateRef} /> : null}
         {qualityProfile.enableControls ? (

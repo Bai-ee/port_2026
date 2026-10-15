@@ -5,7 +5,6 @@ import dynamic from 'next/dynamic';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import HeroHeadline from './HeroHeadline';
-import HeroSchematicOverlay from './components/home/HeroSchematicOverlay';
 import { createHeroCursorStage } from './components/home/heroCursorStage';
 import Header from './Header';
 import HorizontalTextSection from './HorizontalTextSection';
@@ -16,6 +15,7 @@ import StackedSlidesSection from './StackedSlidesSection';
 // import LoopControls from './LoopControls';
 import PortfolioModal from './PortfolioModal';
 import HomepageAnalytics from './components/HomepageAnalytics';
+import SceneBoundary from './components/theme-scene/SceneBoundary';
 
 const AppCanvas = dynamic(() => import('./ox.jsx'), { ssr: false });
 
@@ -102,6 +102,11 @@ const interpolateHeroParams = (start, end, progress) => {
   return next;
 };
 
+// Tint blobs come from the deco-1..4 theme roles (baseline values are the former
+// rgb(196,124,86) / rgb(102,184,164) / rgb(214,191,123) / rgb(171,148,218)) at the original alphas.
+// `mix-blend-mode` is NOT set here: a CSS variable is not valid in a React inline style, so the
+// blend comes from the #hero-gradient-overlay rule in the page <style> below (multiply on light,
+// screen on dark via --t-blend-deco).
 const heroGradientStyle = {
   position: 'absolute',
   inset: 0,
@@ -109,15 +114,22 @@ const heroGradientStyle = {
   pointerEvents: 'none',
   opacity: 0,
   background: [
-    'radial-gradient(72% 68% at 18% 22%, rgba(196, 124, 86, 0.22) 0%, rgba(196, 124, 86, 0) 62%)',
-    'radial-gradient(82% 78% at 78% 70%, rgba(102, 184, 164, 0.18) 0%, rgba(102, 184, 164, 0) 66%)',
-    'linear-gradient(135deg, rgba(214, 191, 123, 0.14) 0%, rgba(255, 255, 255, 0) 38%, rgba(171, 148, 218, 0.12) 100%)',
+    'radial-gradient(72% 68% at 18% 22%, color-mix(in srgb, var(--t-deco-1) 22%, transparent) 0%, transparent 62%)',
+    'radial-gradient(82% 78% at 78% 70%, color-mix(in srgb, var(--t-deco-2) 18%, transparent) 0%, transparent 66%)',
+    'linear-gradient(135deg, color-mix(in srgb, var(--t-deco-3) 14%, transparent) 0%, transparent 38%, color-mix(in srgb, var(--t-deco-4) 12%, transparent) 100%)',
   ].join(', '),
-  mixBlendMode: 'multiply',
   filter: 'blur(6px) saturate(1.04)',
   transformOrigin: '50% 50%',
   willChange: 'transform, opacity',
   animation: 'heroGradientDrift 18s ease-in-out infinite alternate',
+};
+
+const heroTextScrimStyle = {
+  position: 'absolute',
+  inset: 0,
+  zIndex: 2,
+  pointerEvents: 'none',
+  background: 'radial-gradient(ellipse at center, var(--t-scrim) 0%, transparent 70%)',
 };
 
 const HomePage = () => {
@@ -129,8 +141,10 @@ const HomePage = () => {
   // Consumed by scripts/render-ui-teaser.mjs via the ui-teaser dashboard card.
   const [teaserCleanMode, setTeaserCleanMode] = useState(false);
 
-  const [canvasBackground, setCanvasBackground] = useState('#ffffff');
-  const [textColor, setTextColor] = useState('#000000');
+  // 'theme' = opaque canvas background from the active theme scene (baseline resolves to #ffffff);
+  // text colour is the theme's default text role (baseline resolves to #000000).
+  const [canvasBackground, setCanvasBackground] = useState('theme');
+  const [textColor, setTextColor] = useState('var(--t-text-default)');
   const [activePageId, setActivePageId] = useState(null);
   const headerLogoRef = useRef(null);
   const heroSectionRef = useRef(null);
@@ -139,10 +153,10 @@ const HomePage = () => {
   const paramsRef = useRef(HERO_PARAMS_START);
   const userParamsRef = useRef(HERO_PARAMS_START); // user's intentional settings (panel changes)
   const heroProgressRef = useRef(0); // current scroll progress, kept in sync with ScrollTrigger
-  // Cursor-driven hero readout: ox.jsx writes the loop's screen-space outline
-  // anchors into silhouetteRef, HeroHeadline writes the churn/reveal clock into
-  // cursorStageRef, and HeroSchematicOverlay draws the lines between them. Refs,
-  // not state — all three run per-frame and must never re-render this page.
+  // Per-frame hero refs: ox.jsx writes the loop's screen-space outline anchors
+  // into silhouetteRef, HeroHeadline writes the churn/reveal clock into
+  // cursorStageRef. (The cursor-to-loop measurement lines, HeroSchematicOverlay,
+  // were removed from this page.) Refs, not state — never re-render this page.
   const silhouetteRef = useRef(null);
   const cursorStageRef = useRef(createHeroCursorStage());
   // Click-to-reform: ox.jsx watches this flag, re-randomizes the live particle
@@ -247,7 +261,9 @@ const HomePage = () => {
     // backdrop-filter, and an ancestor at opacity < 1 isolates the backdrop root,
     // which kills the blur until opacity hits exactly 1 and then snaps it on.
     const peekPanel = document.querySelector('#stack-peek-panel');
-    gsap.set([gradient, canvasWrapper, nav, peekPanel].filter(Boolean), { autoAlpha: 0 });
+    // The text scrim rides in with the canvas so a dark-mode veil never shows before the scene does.
+    const textScrim = document.querySelector('#hero-text-scrim');
+    gsap.set([gradient, canvasWrapper, textScrim, nav, peekPanel].filter(Boolean), { autoAlpha: 0 });
     gsap.set([panelHeadline, urlInputRow, panelCta, panelGrid].filter(Boolean), { autoAlpha: 0 });
 
     const tl = gsap.timeline({ delay: 0.2 });
@@ -256,7 +272,7 @@ const HomePage = () => {
         { autoAlpha: 0, scale: 1.08 },
         { autoAlpha: 1, scale: 1, duration: 1.1, ease: 'power2.out' }
       )
-      .to(canvasWrapper, { autoAlpha: 1, duration: 1.2, ease: 'power2.out' }, '<0.1')
+      .to([canvasWrapper, textScrim].filter(Boolean), { autoAlpha: 1, duration: 1.2, ease: 'power2.out' }, '<0.1')
       // The nav and the bottom peek's website-url pill come in together, so both
       // are anchored to this label rather than to each other's positions.
       .addLabel('navReveal', '<0.2')
@@ -360,6 +376,9 @@ const HomePage = () => {
     <Header logoRef={headerLogoRef} onOpenPage={setActivePageId} logoSrc="/img/circle_logo.png" />
     <div style={{ position: 'relative', width: '100vw', minHeight: '100dvh', background: 'transparent', overflowX: 'clip' }}>
       <style>{`
+        #hero-gradient-overlay {
+          mix-blend-mode: var(--t-blend-deco, multiply);
+        }
         @keyframes heroGradientDrift {
           0% {
             transform: translate3d(0, 0, 0) scale(1);
@@ -412,19 +431,21 @@ const HomePage = () => {
           width: '100vw',
           height: '100dvh',
           overflow: 'hidden',
-          background: 'transparent',
+          // Opaque (the page canvas token: white in the baseline) so the hero text's
+          // difference blend always has a backdrop to invert — a transparent
+          // backdrop shows the raw, pre-inverted ink during the intro fade.
+          background: 'var(--t-page)',
         }}
       >
         <div id="hero-gradient-overlay" style={heroGradientStyle} />
         <div id="hero-canvas-wrapper" ref={canvasWrapperRef} style={{ position: 'absolute', inset: 0, opacity: 0 }}>
-          <AppCanvas params={params} liveParamsRef={paramsRef} backgroundColor={canvasBackground} silhouetteRef={silhouetteRef} scatterRef={heroScatterRef} viewResetRef={heroViewResetRef} />
+          <SceneBoundary fallbackId="hero-scene-fallback" fallbackPosition="fixed" fallbackZIndex={1}>
+            <AppCanvas params={params} liveParamsRef={paramsRef} backgroundColor={canvasBackground} sceneMode="theme" silhouetteRef={silhouetteRef} scatterRef={heroScatterRef} viewResetRef={heroViewResetRef} />
+          </SceneBoundary>
         </div>
-        <HeroSchematicOverlay
-          silhouetteRef={silhouetteRef}
-          cursorStageRef={cursorStageRef}
-          heroProgressRef={heroProgressRef}
-          color={textColor}
-        />
+        {/* Text-over-animation scrim: transparent in the baseline (--t-scrim alpha 0), a soft
+            dark veil behind the headline in dark mode so copy stays readable over the particles. */}
+        <div id="hero-text-scrim" aria-hidden="true" style={heroTextScrimStyle} />
         <HeroHeadline headerLogoRef={headerLogoRef} textColor={textColor} cursorStageRef={cursorStageRef} />
         {/* Section heading for screen readers and crawlers. Kept concise and
             honest (no keyword stuffing). Full credentials live in JSON-LD

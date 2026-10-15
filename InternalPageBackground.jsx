@@ -1,6 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import SceneBoundary from './components/theme-scene/SceneBoundary';
 
 const BackgroundScene = dynamic(() => import('./ox.jsx'), { ssr: false });
 
@@ -48,22 +49,30 @@ const sceneFrameStyle = {
   transformOrigin: '50% 50%',
 };
 
+// Theme tokens (baseline light values are identical to the former literals):
+//   --t-scene-wash       rgba(245, 241, 223, 0.08)
+//   --t-glass-highlight  rgba(255, 255, 255, 0.45)
+//   --t-surface @ 60%    rgba(255, 255, 255, 0.6) in light
 const washStyle = {
   position: 'absolute',
   inset: 0,
-  background: 'rgba(245, 241, 223, 0.08)',
+  background: 'var(--t-scene-wash)',
   backdropFilter: 'blur(18px)',
   WebkitBackdropFilter: 'blur(18px)',
-  boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.45), inset 0 1px 0 rgba(255,255,255,0.6)',
+  boxShadow: 'inset 0 0 0 1px var(--t-glass-highlight), inset 0 1px 0 color-mix(in srgb, var(--t-surface) 60%, transparent)',
 };
 
-export default function InternalPageBackground({ onReady = null }) {
+// `sceneMode` follows the active theme ('theme') by default. Pages pinned to a palette (X8, e.g.
+// /recreate) pass 'light' | 'dark'; 'off' ignores the theme entirely.
+export default function InternalPageBackground({ onReady = null, sceneMode = 'theme' }) {
   return (
     <div id="internal-page-bg" aria-hidden="true" style={wrapperStyle}>
-      <div style={sceneFrameStyle}>
-        <BackgroundScene params={BACKGROUND_PARAMS} backgroundColor={null} onReady={onReady} />
+      <div id="internal-page-bg-scene-frame" style={sceneFrameStyle}>
+        <SceneBoundary fallbackId="internal-page-bg-scene-fallback">
+          <BackgroundScene params={BACKGROUND_PARAMS} backgroundColor={null} onReady={onReady} sceneMode={sceneMode} />
+        </SceneBoundary>
       </div>
-      <div style={washStyle} />
+      <div id="internal-page-bg-wash" style={washStyle} />
     </div>
   );
 }

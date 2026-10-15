@@ -14,7 +14,7 @@ const eyebrowStyle = {
   fontSize: '11px',
   letterSpacing: '0.22em',
   textTransform: 'uppercase',
-  color: 'rgba(90,83,70,0.7)',
+  color: 'color-mix(in srgb, var(--t-text-eyebrow) 70%, transparent)',
   display: 'flex',
   alignItems: 'center',
   gap: '8px',
@@ -63,7 +63,7 @@ export default function WorkPage() {
           padding: 'clamp(3rem,8vh,7rem) clamp(1.25rem,max(8vw,calc((100% - 1100px) / 2)),12rem) clamp(2.5rem,5vh,4rem)',
           position: 'relative',
           overflow: 'hidden',
-          borderBottom: '1px solid rgba(0,0,0,0.05)',
+          borderBottom: '1px solid color-mix(in srgb, var(--t-text-strong) 5%, transparent)',
         }}
       >
         <span
@@ -77,7 +77,7 @@ export default function WorkPage() {
             fontWeight: 900,
             fontSize: 'clamp(80px,14vw,220px)',
             color: 'transparent',
-            WebkitTextStroke: '1.5px rgba(0,0,0,0.1)',
+            WebkitTextStroke: '1.5px color-mix(in srgb, var(--t-text-strong) 10%, transparent)',
             lineHeight: 0.8,
             pointerEvents: 'none',
             userSelect: 'none',
@@ -87,7 +87,7 @@ export default function WorkPage() {
         </span>
 
         <div className="inner-page-eyebrow" style={eyebrowStyle}>
-          <span style={{ width: 6, height: 6, background: '#1a1a1a', borderRadius: '50%', display: 'inline-block' }} />
+          <span style={{ width: 6, height: 6, background: 'var(--t-text-body)', borderRadius: '50%', display: 'inline-block' }} />
           Bryan Balli · Work
         </div>
 
@@ -101,7 +101,7 @@ export default function WorkPage() {
             fontSize: 'clamp(52px,11vw,160px)',
             margin: '0 0 28px',
             textTransform: 'uppercase',
-            color: '#0a0a0a',
+            color: 'var(--t-text-strong)',
           }}
         >
           Featured<br />Work.
@@ -114,7 +114,7 @@ export default function WorkPage() {
             fontWeight: 300,
             fontSize: 'clamp(1.1rem,2.2vw,1.65rem)',
             lineHeight: 1.3,
-            color: '#1a1a1a',
+            color: 'var(--t-text-body)',
             maxWidth: '52ch',
             margin: 0,
           }}
@@ -134,19 +134,19 @@ export default function WorkPage() {
           {projects.map(({ id, eyebrow, name, desc }) => (
             <div key={id} id={id} style={cardStyle}>
               <div style={eyebrowStyle}>
-                <span style={{ width: 6, height: 6, background: 'rgba(90,83,70,0.5)', borderRadius: '50%', display: 'inline-block' }} />
+                <span style={{ width: 6, height: 6, background: 'color-mix(in srgb, var(--t-text-eyebrow) 50%, transparent)', borderRadius: '50%', display: 'inline-block' }} />
                 {eyebrow}
               </div>
-              <h2 style={{ fontFamily: '"Doto", monospace', fontWeight: 900, fontSize: 'clamp(1.8rem,3vw,2.8rem)', color: '#0a0a0a', margin: '0 0 0.75rem', lineHeight: 1.05 }}>{name}</h2>
-              <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 300, fontSize: 'clamp(0.9rem,1.3vw,1rem)', lineHeight: 1.7, color: 'rgba(26,26,26,0.8)', margin: 0 }}>{desc}</p>
+              <h2 style={{ fontFamily: '"Doto", monospace', fontWeight: 900, fontSize: 'clamp(1.8rem,3vw,2.8rem)', color: 'var(--t-text-strong)', margin: '0 0 0.75rem', lineHeight: 1.05 }}>{name}</h2>
+              <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 300, fontSize: 'clamp(0.9rem,1.3vw,1rem)', lineHeight: 1.7, color: 'color-mix(in srgb, var(--t-text-body) 80%, transparent)', margin: 0 }}>{desc}</p>
             </div>
           ))}
         </div>
 
         {/* Full-width CTA card */}
         <div id="work-card-coming-soon" style={{ ...cardStyle, marginTop: '1.5rem' }}>
-          <h2 style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: 'clamp(1rem,1.5vw,1.15rem)', color: '#0a0a0a', margin: '0 0 0.75rem' }}>More Coming Soon</h2>
-          <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 300, fontSize: 'clamp(0.9rem,1.3vw,1rem)', lineHeight: 1.7, color: 'rgba(26,26,26,0.8)', margin: 0 }}>
+          <h2 style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 700, fontSize: 'clamp(1rem,1.5vw,1.15rem)', color: 'var(--t-text-strong)', margin: '0 0 0.75rem' }}>More Coming Soon</h2>
+          <p style={{ fontFamily: '"Space Grotesk", sans-serif', fontWeight: 300, fontSize: 'clamp(0.9rem,1.3vw,1rem)', lineHeight: 1.7, color: 'color-mix(in srgb, var(--t-text-body) 80%, transparent)', margin: 0 }}>
             Case studies with full process documentation and results are being prepared. Book a call to discuss a specific project type or see relevant work samples.
           </p>
         </div>

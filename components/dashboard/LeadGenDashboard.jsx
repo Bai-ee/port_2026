@@ -108,8 +108,8 @@ const SIGNAL_META = [
 const TIER_PALETTE = {
   hot:  { color: '#ff3b30', label: 'Hot',  rule: '≥ 75' },
   warm: { color: '#c2410c', label: 'Warm', rule: '≥ 55' },
-  cool: { color: '#1d4ed8', label: 'Cool', rule: '≥ 35' },
-  cold: { color: '#9a9a9a', label: 'Cold', rule: '< 35' },
+  cool: { color: 'var(--t-info)', label: 'Cool', rule: '≥ 35' },
+  cold: { color: 'var(--t-text-muted)', label: 'Cold', rule: '< 35' },
 };
 
 const STAGE_LABELS = {
@@ -1655,15 +1655,15 @@ const stageCounts = useMemo(() => {
           gap: 14px;
           padding: 22px 22px 26px;
           font-family: 'Inter', system-ui, -apple-system, sans-serif;
-          color: #1a1a1a;
+          color: var(--t-text-body);
           --lg-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
-          --lg-line: rgba(26, 26, 26, 0.10);
-          --lg-line-strong: rgba(26, 26, 26, 0.18);
-          --lg-ink: #1a1a1a;
-          --lg-muted: #6b6b6b;
-          --lg-faint: #9a9a9a;
-          --lg-bg: rgba(255, 255, 255, 0.55);
-          --lg-bg-strong: rgba(255, 255, 255, 0.85);
+          --lg-line: color-mix(in srgb, var(--t-text) 10%, transparent);
+          --lg-line-strong: color-mix(in srgb, var(--t-text) 18%, transparent);
+          --lg-ink: var(--t-text-body);
+          --lg-muted: var(--t-text-secondary);
+          --lg-faint: var(--t-text-muted);
+          --lg-bg: color-mix(in srgb, var(--t-surface) 55%, transparent);
+          --lg-bg-strong: color-mix(in srgb, var(--t-surface) 85%, transparent);
           --lg-signal: #ff3b30;
         }
 
@@ -1743,7 +1743,7 @@ const stageCounts = useMemo(() => {
         }
         :global(.leadgen-btn--primary:hover) {
           transform: translateY(-1px);
-          background: #000;
+          background: var(--t-text-strong);
         }
 
         /* ── Stats bar ───────────────────────────────────────────────── */
@@ -1752,7 +1752,7 @@ const stageCounts = useMemo(() => {
           grid-template-columns: repeat(5, 1fr);
           background:
             linear-gradient(var(--lg-bg), var(--lg-bg)),
-            radial-gradient(circle at 1px 1px, rgba(0,0,0,0.06) 1px, transparent 0) 0 0/14px 14px;
+            radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--t-text-strong) 6%, transparent) 1px, transparent 0) 0 0/14px 14px;
           border: 1px solid var(--lg-line);
           border-radius: 14px;
           overflow: hidden;
@@ -1876,10 +1876,10 @@ const stageCounts = useMemo(() => {
           border-style: solid;
         }
         #leadgen-starred-toggle.is-on {
-          background: #fef3c7;
+          background: var(--t-warning-bg);
           border-color: #f59e0b;
           border-style: solid;
-          color: #92400e;
+          color: var(--t-warning);
         }
 
         /* ── Threshold strip ─────────────────────────────────────────── */
@@ -1937,7 +1937,7 @@ const stageCounts = useMemo(() => {
           transition: background 160ms ease;
         }
         .leadgen-row:last-child { border-bottom: none; }
-        .leadgen-row:hover { background: rgba(255, 59, 48, 0.03); }
+        .leadgen-row:hover { background: var(--t-danger-bg); }
         .leadgen-col { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
         .leadgen-row-name { font-weight: 500; color: var(--lg-ink); }
         .leadgen-row-sub {
@@ -1980,7 +1980,7 @@ const stageCounts = useMemo(() => {
           padding: 1px 7px 1px 6px;
           border-radius: 999px;
           border: 1px solid var(--lg-line);
-          background: rgba(0, 0, 0, 0.02);
+          background: color-mix(in srgb, var(--t-text-strong) 2%, transparent);
           transition: color 140ms ease, border-color 140ms ease, background 140ms ease;
           max-width: 220px;
           overflow: hidden;
@@ -1994,10 +1994,10 @@ const stageCounts = useMemo(() => {
         .leadgen-row-chip:hover {
           color: var(--lg-ink);
           border-color: var(--lg-line-strong);
-          background: rgba(0, 0, 0, 0.04);
+          background: color-mix(in srgb, var(--t-text-strong) 4%, transparent);
         }
-        .leadgen-row-chip--gbp:hover { color: #1a73e8; border-color: rgba(26, 115, 232, 0.45); }
-        .leadgen-row-chip--email:hover { color: var(--lg-signal); border-color: rgba(255, 59, 48, 0.45); }
+        .leadgen-row-chip--gbp:hover { color: var(--t-info); border-color: color-mix(in srgb, var(--t-info-solid) 45%, transparent); }
+        .leadgen-row-chip--email:hover { color: var(--lg-signal); border-color: color-mix(in srgb, var(--t-danger-solid) 45%, transparent); }
         .leadgen-col-action {
           flex-direction: row !important;
           align-items: center;
@@ -2031,25 +2031,25 @@ const stageCounts = useMemo(() => {
         }
         .leadgen-row-action-btn {
           background: transparent;
-          border: 1px solid rgba(0,0,0,0.10);
+          border: 1px solid color-mix(in srgb, var(--t-text-strong) 10%, transparent);
           width: 26px; height: 26px;
           border-radius: 6px;
           cursor: pointer;
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          color: #777;
+          color: var(--t-text-muted);
           transition: all 160ms ease;
           padding: 0;
         }
         .leadgen-row-action-btn--package:hover {
-          background: rgba(37, 99, 235, 0.08);
-          border-color: rgba(37, 99, 235, 0.3);
-          color: #2563eb;
+          background: var(--t-info-bg);
+          border-color: var(--t-info-border);
+          color: var(--t-info);
         }
         .leadgen-row-action-btn--send:hover {
-          background: rgba(16, 185, 129, 0.08);
-          border-color: rgba(16, 185, 129, 0.3);
+          background: var(--t-success-bg);
+          border-color: var(--t-success-border);
           color: #10b981;
         }
 
@@ -2195,11 +2195,11 @@ const stageCounts = useMemo(() => {
           vertical-align: 1px;
         }
         .leadgen-legend-signal-tag--ok {
-          background: rgba(22, 101, 52, 0.10);
-          color: #166534;
+          background: var(--t-success-bg);
+          color: var(--t-success);
         }
         .leadgen-legend-signal-tag--todo {
-          background: rgba(255, 59, 48, 0.08);
+          background: var(--t-danger-bg);
           color: var(--lg-signal);
         }
         #leadgen-legend-foot {
@@ -2208,15 +2208,15 @@ const stageCounts = useMemo(() => {
           font-size: 11.5px;
           line-height: 1.55;
           color: var(--lg-muted);
-          background: rgba(255, 59, 48, 0.04);
-          border: 1px solid rgba(255, 59, 48, 0.18);
+          background: var(--t-danger-bg);
+          border: 1px solid var(--t-danger-border);
           border-radius: 10px;
         }
         #leadgen-legend-foot strong { color: var(--lg-ink); }
         #leadgen-legend-foot code {
           font-family: var(--lg-mono);
           font-size: 10.5px;
-          background: #fff;
+          background: var(--t-surface);
           padding: 1px 5px;
           border-radius: 4px;
           border: 1px solid var(--lg-line);
@@ -2237,7 +2237,7 @@ const stageCounts = useMemo(() => {
         .leadgen-score-spark-cell {
           width: 6px;
           height: 100%;
-          background: rgba(0, 0, 0, 0.06);
+          background: color-mix(in srgb, var(--t-text-strong) 6%, transparent);
           border-radius: 1px;
           position: relative;
           overflow: hidden;
@@ -2257,7 +2257,7 @@ const stageCounts = useMemo(() => {
         .leadgen-row-wrap { border-bottom: 1px solid var(--lg-line); }
         .leadgen-row-wrap:last-child { border-bottom: none; }
         .leadgen-row-wrap .leadgen-row { border-bottom: none; cursor: pointer; }
-        .leadgen-row-wrap.is-open .leadgen-row { background: rgba(255, 59, 48, 0.04); }
+        .leadgen-row-wrap.is-open .leadgen-row { background: var(--t-danger-bg); }
         :global(.leadgen-row-chev) {
           color: var(--lg-faint);
           margin-left: 6px;
@@ -2273,8 +2273,8 @@ const stageCounts = useMemo(() => {
           grid-template-columns: 1.4fr 1fr;
           gap: 18px;
           background:
-            linear-gradient(rgba(255,255,255,0.6), rgba(255,255,255,0.6)),
-            radial-gradient(circle at 1px 1px, rgba(0,0,0,0.05) 1px, transparent 0) 0 0/12px 12px;
+            linear-gradient(color-mix(in srgb, var(--t-surface) 60%, transparent), color-mix(in srgb, var(--t-surface) 60%, transparent)),
+            radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--t-text-strong) 5%, transparent) 1px, transparent 0) 0 0/12px 12px;
           border-top: 1px dashed var(--lg-line);
           animation: leadgen-fade 240ms ease-out;
         }
@@ -2308,7 +2308,7 @@ const stageCounts = useMemo(() => {
         }
         .leadgen-row-bar-track {
           height: 6px;
-          background: rgba(0, 0, 0, 0.06);
+          background: color-mix(in srgb, var(--t-text-strong) 6%, transparent);
           border-radius: 3px;
           overflow: hidden;
         }
@@ -2352,7 +2352,7 @@ const stageCounts = useMemo(() => {
           font-size: 10px;
           color: var(--lg-muted);
           padding: 1px 6px;
-          background: rgba(0, 0, 0, 0.04);
+          background: color-mix(in srgb, var(--t-text-strong) 4%, transparent);
           border-radius: 4px;
           max-width: 180px;
           overflow: hidden;
@@ -2368,15 +2368,15 @@ const stageCounts = useMemo(() => {
           min-width: 46px;
           text-align: right;
         }
-        .leadgen-row-input--hit .leadgen-row-input-mark  { color: #166534; }
-        .leadgen-row-input--hit .leadgen-row-input-pts   { color: #166534; }
+        .leadgen-row-input--hit .leadgen-row-input-mark  { color: var(--t-success); }
+        .leadgen-row-input--hit .leadgen-row-input-pts   { color: var(--t-success); }
         .leadgen-row-input--miss .leadgen-row-input-mark { color: var(--lg-faint); }
         .leadgen-row-input--miss .leadgen-row-input-label{ color: var(--lg-muted); }
         .leadgen-row-input--planned .leadgen-row-input-mark  { color: var(--lg-signal); }
         .leadgen-row-input--planned .leadgen-row-input-label { color: var(--lg-muted); }
         .leadgen-row-input--planned .leadgen-row-input-pts   {
           color: var(--lg-signal);
-          background: rgba(255, 59, 48, 0.08);
+          background: var(--t-danger-bg);
           padding: 1px 6px;
           border-radius: 4px;
           min-width: auto;
@@ -2391,8 +2391,8 @@ const stageCounts = useMemo(() => {
           align-items: baseline;
           gap: 8px;
           padding: 7px 10px;
-          background: rgba(255, 59, 48, 0.05);
-          border: 1px solid rgba(255, 59, 48, 0.18);
+          background: var(--t-danger-bg);
+          border: 1px solid var(--t-danger-border);
           border-radius: 10px;
           flex-wrap: wrap;
         }
@@ -2501,7 +2501,7 @@ const stageCounts = useMemo(() => {
         }
         .leadgen-tier--hot  { color: var(--lg-signal); border-color: var(--lg-signal); }
         .leadgen-tier--warm { color: #c2410c; border-color: rgba(194, 65, 12, 0.3); }
-        .leadgen-tier--cool { color: #1d4ed8; border-color: rgba(29, 78, 216, 0.3); }
+        .leadgen-tier--cool { color: var(--t-info); border-color: var(--t-info-border); }
         .leadgen-tier--cold { color: var(--lg-muted); }
         .leadgen-col-action { color: var(--lg-faint); justify-self: end; }
 
@@ -2515,7 +2515,7 @@ const stageCounts = useMemo(() => {
           color: var(--lg-muted);
           text-align: center;
           background:
-            radial-gradient(circle at 1px 1px, rgba(0,0,0,0.05) 1px, transparent 0) 0 0/12px 12px;
+            radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--t-text-strong) 5%, transparent) 1px, transparent 0) 0 0/12px 12px;
         }
         #leadgen-prospect-table-empty :global(svg) {
           color: var(--lg-faint);
@@ -2697,7 +2697,7 @@ const stageCounts = useMemo(() => {
           transition: background 0.15s, opacity 0.15s;
           white-space: nowrap;
         }
-        .leadgen-module-action-btn:hover { background: #000; }
+        .leadgen-module-action-btn:hover { background: var(--t-text-strong); }
         .leadgen-module-action-btn:disabled { opacity: 0.35; cursor: default; }
         .leadgen-module-action-btn--rerun {
           background: transparent;
@@ -2876,14 +2876,14 @@ const stageCounts = useMemo(() => {
           margin-bottom: 8px;
         }
         .leadgen-campaign-notice--ok {
-          color: #166534;
-          background: rgba(22, 101, 52, 0.06);
-          border: 1px solid rgba(22, 101, 52, 0.18);
+          color: var(--t-success);
+          background: var(--t-success-bg);
+          border: 1px solid var(--t-success-border);
         }
         .leadgen-campaign-notice--err {
           color: var(--lg-signal);
-          background: rgba(255, 59, 48, 0.06);
-          border: 1px solid rgba(255, 59, 48, 0.22);
+          background: var(--t-danger-bg);
+          border: 1px solid var(--t-danger-border);
         }
         .leadgen-campaign-status {
           width: 8px; height: 8px;

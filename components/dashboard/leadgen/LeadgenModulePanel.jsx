@@ -280,18 +280,18 @@ export default function LeadgenModulePanel({
         style={{
           position: 'relative', zIndex: 2, width: '100%', maxWidth: '52rem',
           padding: 'clamp(1.25rem, 5vw, 2rem)', borderRadius: '10px', boxSizing: 'border-box',
-          background: 'rgba(255,255,255,1)',
+          background: 'var(--t-surface)',
           boxShadow: '0px 5px 10px rgba(0,0,0,0.1), 0px 15px 30px rgba(0,0,0,0.1), 0px 20px 40px rgba(0,0,0,0.15)',
-          border: '1px solid rgba(255,255,255,0.5)',
+          border: '1px solid var(--t-glass-soft)',
         }}
       >
         {/* Brand row */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', justifyContent: 'space-between' }}>
-          <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', display: 'block' }} />
-          <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.44)', fontWeight: 700, fontFamily: '"Space Mono", monospace' }}>
+          <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid color-mix(in srgb, var(--t-surface) 35%, transparent)', display: 'block' }} />
+          <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'color-mix(in srgb, var(--t-text) 44%, transparent)', fontWeight: 700, fontFamily: '"Space Mono", monospace' }}>
             {moduleLabel || moduleId}
           </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '2.4rem', height: '2.4rem', borderRadius: '999px', background: 'rgba(255,255,255,0.34)', border: '1px solid rgba(42,36,32,0.12)' }} aria-hidden="true">
+          <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '2.4rem', height: '2.4rem', borderRadius: '999px', background: 'color-mix(in srgb, var(--t-surface) 34%, transparent)', border: '1px solid var(--t-border-subtle)' }} aria-hidden="true">
             <span style={{ width: '0.46rem', height: '0.46rem', borderRadius: '999px', background: statusDotColor, animation: statusPulse }} />
           </span>
         </div>
@@ -300,7 +300,7 @@ export default function LeadgenModulePanel({
         <div style={{ width: '100%', overflow: 'hidden', margin: '0 0 0.7rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', width: 'max-content', animation: 'lgm-marquee 14s linear infinite', willChange: 'transform' }}>
             {['a', 'b'].map((k) => (
-              <span key={k} aria-hidden={k === 'b' ? 'true' : undefined} style={{ flexShrink: 0, whiteSpace: 'nowrap', color: '#2a2420', fontSize: 'clamp(1.5rem, 5vw, 3.4rem)', lineHeight: 1.05, letterSpacing: '-0.04em', fontFamily: '"Doto", "Space Mono", monospace', fontWeight: 700 }}>
+              <span key={k} aria-hidden={k === 'b' ? 'true' : undefined} style={{ flexShrink: 0, whiteSpace: 'nowrap', color: 'var(--t-text)', fontSize: 'clamp(1.5rem, 5vw, 3.4rem)', lineHeight: 1.05, letterSpacing: '-0.04em', fontFamily: '"Doto", "Space Mono", monospace', fontWeight: 700 }}>
                 {marqueeText}
               </span>
             ))}
@@ -377,7 +377,7 @@ export default function LeadgenModulePanel({
                   <button
                     type="button"
                     onClick={runModule}
-                    style={{ alignSelf: 'flex-start', marginTop: 6, fontFamily: '"Space Mono", monospace', fontSize: '0.68rem', background: 'none', border: '1px solid rgba(42,36,32,0.18)', borderRadius: 6, padding: '5px 12px', cursor: 'pointer', color: 'rgba(42,36,32,0.5)', letterSpacing: '0.06em' }}
+                    style={{ alignSelf: 'flex-start', marginTop: 6, fontFamily: '"Space Mono", monospace', fontSize: '0.68rem', background: 'none', border: '1px solid color-mix(in srgb, var(--t-text) 18%, transparent)', borderRadius: 6, padding: '5px 12px', cursor: 'pointer', color: 'color-mix(in srgb, var(--t-text) 50%, transparent)', letterSpacing: '0.06em' }}
                   >
                     Re-run
                   </button>
@@ -404,34 +404,34 @@ export default function LeadgenModulePanel({
         #lgmc-shell {
           display: flex; flex-direction: column;
           width: 100%; min-height: 0; flex: 1 1 auto;
-          background: linear-gradient(180deg, rgba(255,255,255,0.6) 0%, rgba(255,255,255,0.5) 100%);
+          background: linear-gradient(180deg, color-mix(in srgb, var(--t-surface) 60%, transparent) 0%, var(--t-glass-soft) 100%);
           box-shadow: 0 5px 10px rgba(0,0,0,0.1), 0 15px 30px rgba(0,0,0,0.1), 0 20px 40px rgba(0,0,0,0.15);
           backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-          border-radius: 10px; border: 1px solid rgba(42,36,32,0.1); overflow: hidden;
+          border-radius: 10px; border: 1px solid color-mix(in srgb, var(--t-text) 10%, transparent); overflow: hidden;
         }
 
         /* Header — exact mirror of #bsc-header */
         #lgmc-header {
           display: flex; align-items: center; gap: 0.65rem;
           padding: 0.75rem 1rem;
-          border-bottom: 1px solid rgba(42,36,32,0.08);
-          background: rgba(255,255,255,0.7); flex-shrink: 0;
+          border-bottom: 1px solid var(--t-border-faint);
+          background: color-mix(in srgb, var(--t-surface) 70%, transparent); flex-shrink: 0;
         }
         #lgmc-avatar-wrap { position: relative; flex-shrink: 0; }
         #lgmc-avatar-img { width: 2.4rem; height: 2.4rem; border-radius: 999px; object-fit: cover; display: block; }
         #lgmc-online-dot {
           position: absolute; bottom: 1px; right: 1px;
           width: 0.55rem; height: 0.55rem; border-radius: 999px;
-          border: 2px solid rgba(255,252,248,0.92); transition: background 0.3s;
+          border: 2px solid color-mix(in srgb, var(--t-raised) 92%, transparent); transition: background 0.3s;
         }
         #lgmc-identity { display: flex; flex-direction: column; gap: 0.15rem; flex: 1; min-width: 0; }
-        #lgmc-name { font-family: "Space Grotesk", system-ui, sans-serif; font-weight: 700; font-size: 0.88rem; color: #2a2420; line-height: 1.2; }
+        #lgmc-name { font-family: "Space Grotesk", system-ui, sans-serif; font-weight: 700; font-size: 0.88rem; color: var(--t-text); line-height: 1.2; }
 
         /* Progress rail — exact mirror of #bsc-progress-rail */
-        #lgmc-progress-rail { height: 2px; background: rgba(42,36,32,0.08); flex-shrink: 0; position: relative; overflow: hidden; }
+        #lgmc-progress-rail { height: 2px; background: var(--t-border-faint); flex-shrink: 0; position: relative; overflow: hidden; }
         #lgmc-progress-fill {
           display: block; height: 100%;
-          background: linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+          background: linear-gradient(135deg, var(--t-accent-bright) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%);
           transition: width 0.35s ease;
         }
 
@@ -440,11 +440,11 @@ export default function LeadgenModulePanel({
           flex: 1 1 auto; min-height: 0; overflow-y: auto;
           -webkit-overflow-scrolling: touch;
           padding: 1rem; display: flex; flex-direction: column; gap: 0.65rem;
-          scrollbar-width: thin; scrollbar-color: rgba(42,36,32,0.14) transparent;
+          scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--t-text) 14%, transparent) transparent;
           overscroll-behavior: contain;
         }
         #lgmc-messages::-webkit-scrollbar { width: 3px; }
-        #lgmc-messages::-webkit-scrollbar-thumb { background: rgba(42,36,32,0.14); border-radius: 2px; }
+        #lgmc-messages::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--t-text) 14%, transparent); border-radius: 2px; }
         #lgmc-messages::-webkit-scrollbar-track { background: transparent; }
       `}</style>
     </div>

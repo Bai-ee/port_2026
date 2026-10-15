@@ -73,15 +73,15 @@ const cardStyle = {
   width: 'clamp(320px, 25vw, 380px)',
   boxSizing: 'border-box',
   // Glass: mostly transparent so the blurred background shows through.
-  background: 'rgba(252,250,246,0.18)',
+  background: 'color-mix(in srgb, var(--t-raised) 18%, transparent)',
   backdropFilter: 'blur(18px) saturate(1.2)',
   WebkitBackdropFilter: 'blur(18px) saturate(1.2)',
-  border: '1px solid rgba(255,255,255,0.55)',
+  border: '1px solid color-mix(in srgb, var(--t-surface) 55%, transparent)',
   borderRadius: '14px',
-  boxShadow: '0 30px 90px rgba(0,0,0,0.34), 0 4px 14px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.6)',
+  boxShadow: '0 30px 90px rgba(0,0,0,0.34), 0 4px 14px rgba(0,0,0,0.12), inset 0 1px 0 color-mix(in srgb, var(--t-surface) 60%, transparent)',
   padding: '1.1rem 1.1rem 0.95rem',
   fontFamily: FONT,
-  color: '#1c1814',
+  color: 'var(--t-text)',
 };
 const titleStyle = { margin: '0 0 0.85rem', fontSize: '1.4rem', fontWeight: 800, lineHeight: 1, letterSpacing: '-0.01em', textTransform: 'uppercase' };
 const shellStyle = {
@@ -91,17 +91,17 @@ const shellStyle = {
   borderRadius: '12px',
   overflow: 'hidden',
   background: SHELL_GRAD,
-  border: '1px solid rgba(42,36,32,0.1)',
+  border: '1px solid color-mix(in srgb, var(--t-text) 10%, transparent)',
 };
 const imgCover = { width: '100%', height: '100%', objectFit: 'cover', display: 'block' };
-const genStyle = { display: 'block', margin: '0.8rem 0 0.5rem', fontFamily: MONO, fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.45)' };
-const descStyle = { margin: 0, fontSize: '0.92rem', lineHeight: 1.4, color: '#2a2420' };
-const statusTagStyle = { display: 'inline', fontFamily: MONO, fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: '#15803d', background: 'rgba(34,197,94,0.16)', padding: '0.12rem 0.4rem', borderRadius: '4px', marginRight: '0.45rem', whiteSpace: 'nowrap' };
+const genStyle = { display: 'block', margin: '0.8rem 0 0.5rem', fontFamily: MONO, fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'color-mix(in srgb, var(--t-text) 45%, transparent)' };
+const descStyle = { margin: 0, fontSize: '0.92rem', lineHeight: 1.4, color: 'var(--t-text)' };
+const statusTagStyle = { display: 'inline', fontFamily: MONO, fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--t-success)', background: 'var(--t-success-bg)', padding: '0.12rem 0.4rem', borderRadius: '4px', marginRight: '0.45rem', whiteSpace: 'nowrap' };
 const footStyle = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '1rem', gap: '0.6rem' };
-const footStatusStyle = { display: 'inline-flex', alignItems: 'center', gap: '0.45rem', fontFamily: MONO, fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.55)' };
-const dotStyle = { width: '8px', height: '8px', borderRadius: '50%', background: '#22c55e', flexShrink: 0 };
+const footStatusStyle = { display: 'inline-flex', alignItems: 'center', gap: '0.45rem', fontFamily: MONO, fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'color-mix(in srgb, var(--t-text) 55%, transparent)' };
+const dotStyle = { width: '8px', height: '8px', borderRadius: '50%', background: 'var(--t-success-solid)', flexShrink: 0 };
 const btnGroupStyle = { display: 'inline-flex', alignItems: 'center', gap: '0.4rem' };
-const btnStyle = { display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontFamily: MONO, fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#2a2420', background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(42,36,32,0.2)', borderRadius: '7px', padding: '0.45rem 0.6rem', whiteSpace: 'nowrap' };
+const btnStyle = { display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontFamily: MONO, fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--t-text)', background: 'color-mix(in srgb, var(--t-surface) 60%, transparent)', border: '1px solid color-mix(in srgb, var(--t-text) 20%, transparent)', borderRadius: '7px', padding: '0.45rem 0.6rem', whiteSpace: 'nowrap' };
 
 // Per-item shell visuals (the embedded preview each dashboard card renders).
 const SHELLS = {
@@ -201,8 +201,8 @@ export default function DeliverableHoverCard({ id, shown = true, rot = 3.2, offX
           // edge with a visible border instead, so a stack doesn't read as heavy.
           ...(noShadow
             ? {
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.6)',
-                border: '1px solid rgba(42,36,32,0.28)',
+                boxShadow: 'inset 0 1px 0 color-mix(in srgb, var(--t-surface) 60%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--t-text) 28%, transparent)',
               }
             : null),
           transformOrigin: rot >= 0 ? 'center left' : 'center right',

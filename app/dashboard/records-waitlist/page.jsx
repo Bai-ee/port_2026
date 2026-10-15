@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../../AuthContext';
 
-const cell = { padding: '8px 10px', borderBottom: '1px solid rgba(0,0,0,0.08)', textAlign: 'left', fontSize: 13, verticalAlign: 'top' };
+const cell = { padding: '8px 10px', borderBottom: '1px solid color-mix(in srgb, var(--t-text-strong) 8%, transparent)', textAlign: 'left', fontSize: 13, verticalAlign: 'top' };
 
 export default function RecordsWaitlistAdminPage() {
   const { user, isAdmin, adminReady } = useAuth();
@@ -64,7 +64,7 @@ export default function RecordsWaitlistAdminPage() {
   );
 
   return (
-    <main id="records-waitlist-admin-shell" style={{ padding: '2rem clamp(1rem,4vw,3rem)', fontFamily: '"Space Grotesk", system-ui, sans-serif', minHeight: '100dvh', background: 'rgba(254,253,249,1)', color: '#1a1a1a' }}>
+    <main id="records-waitlist-admin-shell" style={{ padding: '2rem clamp(1rem,4vw,3rem)', fontFamily: '"Space Grotesk", system-ui, sans-serif', minHeight: '100dvh', background: 'var(--t-raised)', color: 'var(--t-text-body)' }}>
       <h1 style={{ fontWeight: 500, marginTop: 0 }}>Records waitlist</h1>
       {body}
     </main>

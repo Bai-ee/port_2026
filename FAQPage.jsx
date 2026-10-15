@@ -69,7 +69,7 @@ const FAQS = [
 
 const navLinkStyle = {
   fontSize: 'clamp(0.82rem, 1.1vw, 0.9rem)',
-  color: 'rgba(42,36,32,0.6)',
+  color: 'color-mix(in srgb, var(--t-text) 60%, transparent)',
   textDecoration: 'none',
   cursor: 'pointer',
   lineHeight: 1.4,
@@ -77,7 +77,7 @@ const navLinkStyle = {
 
 const legalLinkStyle = {
   fontSize: '0.82rem',
-  color: 'rgba(42,36,32,0.4)',
+  color: 'color-mix(in srgb, var(--t-text) 40%, transparent)',
   textDecoration: 'none',
   cursor: 'pointer',
 };
@@ -116,7 +116,7 @@ function FAQItem({ item, isOpen, onToggle }) {
           fontFamily: '"Space Grotesk", system-ui, sans-serif',
           fontSize: 'clamp(0.95rem, 1.6vw, 1.1rem)',
           fontWeight: 600,
-          color: '#1a1a1a',
+          color: 'var(--t-text-body)',
           lineHeight: 1.35,
         }}>
           {item.q}
@@ -128,15 +128,15 @@ function FAQItem({ item, isOpen, onToggle }) {
             width: '1.75rem',
             height: '1.75rem',
             borderRadius: '50%',
-            border: '1px solid rgba(0,0,0,0.12)',
-            background: isOpen ? '#1a1a1a' : 'rgba(255,255,255,0.6)',
+            border: '1px solid color-mix(in srgb, var(--t-text-strong) 12%, transparent)',
+            background: isOpen ? 'var(--t-text-body)' : 'color-mix(in srgb, var(--t-surface) 60%, transparent)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             transition: 'background 0.2s ease, transform 0.25s ease',
             transform: isOpen ? 'rotate(45deg)' : 'rotate(0deg)',
             fontSize: '1rem',
-            color: isOpen ? '#fff' : '#1a1a1a',
+            color: isOpen ? 'var(--t-surface)' : 'var(--t-text-body)',
             lineHeight: 1,
           }}
         >
@@ -160,7 +160,7 @@ function FAQItem({ item, isOpen, onToggle }) {
           fontFamily: '"Space Grotesk", system-ui, sans-serif',
           fontSize: 'clamp(0.88rem, 1.4vw, 1rem)',
           lineHeight: 1.7,
-          color: 'rgba(26,26,26,0.75)',
+          color: 'color-mix(in srgb, var(--t-text-body) 75%, transparent)',
         }}>
           {item.a}
         </p>
@@ -176,13 +176,13 @@ export default function FAQPage() {
   const toggle = (id) => setOpenId((prev) => (prev === id ? null : id));
 
   return (
-    <div id="faq-page-shell" className="inner-page-shell" style={{ minHeight: '100dvh', position: 'relative', background: 'rgba(254,253,249,1)' }}>
+    <div id="faq-page-shell" className="inner-page-shell" style={{ minHeight: '100dvh', position: 'relative', background: 'var(--t-raised)' }}>
       <InternalPageBackground />
 
       <style>{`
   @keyframes agentMarquee { from { transform: translate3d(0,0,0); } to { transform: translate3d(-50%,0,0); } }
   .inner-page-shell #founders-top-strip {
-    background: rgba(254, 253, 249, 0.72);
+    background: color-mix(in srgb, var(--t-raised) 72%, transparent);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
     box-shadow: inset 0 -1px 0 rgba(0,0,0,0.05);
@@ -207,7 +207,7 @@ export default function FAQPage() {
           padding: 'clamp(3rem, 8vh, 7rem) clamp(1.25rem, max(8vw, calc((100% - 1100px) / 2)), 12rem) clamp(2.5rem, 5vh, 4rem)',
             position: 'relative',
             overflow: 'hidden',
-            borderBottom: '1px solid rgba(0,0,0,0.05)',
+            borderBottom: '1px solid color-mix(in srgb, var(--t-text-strong) 5%, transparent)',
           }}
         >
           {/* Section watermark */}
@@ -222,7 +222,7 @@ export default function FAQPage() {
               fontWeight: 900,
               fontSize: 'clamp(80px,14vw,220px)',
               color: 'transparent',
-              WebkitTextStroke: '1.5px rgba(0,0,0,0.1)',
+              WebkitTextStroke: '1.5px color-mix(in srgb, var(--t-text-strong) 10%, transparent)',
               lineHeight: 0.8,
               pointerEvents: 'none',
               userSelect: 'none',
@@ -236,13 +236,13 @@ export default function FAQPage() {
             fontSize: '11px',
             letterSpacing: '0.22em',
             textTransform: 'uppercase',
-            color: 'rgba(90,83,70,0.7)',
+            color: 'color-mix(in srgb, var(--t-text-eyebrow) 70%, transparent)',
             display: 'flex',
             gap: '18px',
             alignItems: 'center',
             marginBottom: '24px',
           }}>
-            <span style={{ width: 6, height: 6, background: '#1a1a1a', borderRadius: '50%', display: 'inline-block' }} />
+            <span style={{ width: 6, height: 6, background: 'var(--t-text-body)', borderRadius: '50%', display: 'inline-block' }} />
             Bryan Balli
             <span>AI Design Engineer</span>
           </div>
@@ -255,7 +255,7 @@ export default function FAQPage() {
             fontSize: 'clamp(52px,11vw,160px)',
             margin: '0 0 28px',
             textTransform: 'uppercase',
-            color: '#0a0a0a',
+            color: 'var(--t-text-strong)',
           }}>
             Frequently<br />Asked.
           </h1>
@@ -265,7 +265,7 @@ export default function FAQPage() {
             fontWeight: 300,
             fontSize: 'clamp(1.1rem,2.2vw,1.65rem)',
             lineHeight: 1.3,
-            color: '#1a1a1a',
+            color: 'var(--t-text-body)',
             maxWidth: '52ch',
             margin: 0,
           }}>
@@ -299,7 +299,7 @@ export default function FAQPage() {
             width: '100%',
             padding: 'clamp(2.5rem, 5vw, 4.5rem) clamp(1.25rem, max(8vw, calc((100% - 1100px) / 2)), 12rem) clamp(3rem, 6vw, 5rem)',
             boxSizing: 'border-box',
-            borderTop: '1px solid rgba(42,36,32,0.08)',
+            borderTop: '1px solid var(--t-border-faint)',
           }}
         >
           {/* Value block — centred, matches homepage layout */}
@@ -325,20 +325,20 @@ export default function FAQPage() {
                 {['a', 'b'].map((k) => (
                   <div key={k} aria-hidden={k === 'b' ? 'true' : undefined} style={{ display: 'flex', alignItems: 'center', gap: '3rem', paddingRight: '3rem', flexShrink: 0 }}>
                     {['CONTACT', '•', 'CONTACT', '•'].map((w, j) => (
-                      <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: '#2a2420', whiteSpace: 'nowrap' }}>{w}</span>
+                      <span key={j} style={{ fontFamily: "'Doto', 'Space Mono', monospace", fontSize: 'clamp(1.6rem, 8.5vw, 7rem)', letterSpacing: '-0.02em', fontWeight: 700, lineHeight: 1.05, color: 'var(--t-text)', whiteSpace: 'nowrap' }}>{w}</span>
                     ))}
                   </div>
                 ))}
               </div>
             </div>
 
-            <Image src="/img/sig.png" alt="Bryan Balli signature" width={110} height={83} style={{ width: 'min(110px, 31vw)', height: 'auto', display: 'block' }} />
+            <Image id="faq-footer-signature" src="/img/sig.png" alt="Bryan Balli signature" width={110} height={83} style={{ width: 'min(110px, 31vw)', height: 'auto', display: 'block', filter: 'var(--t-logo-filter)' }} />
 
-            <blockquote style={{ margin: 'clamp(1rem, 2vw, 1.5rem) 0', padding: 'clamp(1rem, 2vw, 1.5rem) clamp(1.25rem, 3vw, 2rem)', borderLeft: '3px solid rgba(42,36,32,0.15)', fontSize: 'clamp(1.35rem, 1.85vw, 1.65rem)', lineHeight: 1.55, color: 'rgba(42,36,32,0.72)', fontStyle: 'italic', fontFamily: "'Space Grotesk', system-ui, sans-serif", textAlign: 'left' }}>
+            <blockquote style={{ margin: 'clamp(1rem, 2vw, 1.5rem) 0', padding: 'clamp(1rem, 2vw, 1.5rem) clamp(1.25rem, 3vw, 2rem)', borderLeft: '3px solid color-mix(in srgb, var(--t-text) 15%, transparent)', fontSize: 'clamp(1.35rem, 1.85vw, 1.65rem)', lineHeight: 1.55, color: 'var(--t-text-secondary)', fontStyle: 'italic', fontFamily: "'Space Grotesk', system-ui, sans-serif", textAlign: 'left' }}>
               "Brief, prototype, and pipeline — scoped to what you actually need to launch and keep running."
             </blockquote>
 
-            <p style={{ margin: 0, fontSize: 'clamp(0.7rem, 1.4vw, 0.91rem)', lineHeight: 1.6, fontWeight: 400, textAlign: 'left', color: 'rgba(42,36,32,0.8)', width: '100%' }}>
+            <p style={{ margin: 0, fontSize: 'clamp(0.7rem, 1.4vw, 0.91rem)', lineHeight: 1.6, fontWeight: 400, textAlign: 'left', color: 'color-mix(in srgb, var(--t-text) 80%, transparent)', width: '100%' }}>
               <strong>Bryan Balli</strong> leads a team across design and engineering as a Creative Technologist, with experience spanning agencies in Chicago, San Francisco, and remote teams. I slot into existing teams: audit what's built, fix what's blocking, and ship what's missing — across design, content, and systems.
             </p>
 
@@ -359,16 +359,16 @@ export default function FAQPage() {
                 fontWeight: 700,
                 letterSpacing: '0.01em',
                 textDecoration: 'none',
-                color: '#ffffff',
-                background: 'linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)',
+                color: 'var(--t-on-solid)',
+                background: 'linear-gradient(175deg, color-mix(in srgb, var(--t-glass-highlight) 40%, transparent) 0%, transparent 52%), var(--t-gradient-accent)',
                 borderRadius: '999px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1)',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 color-mix(in srgb, var(--t-glass-highlight) 62.22%, transparent), inset 0 -1px 0 rgba(0,0,0,0.1)',
                 whiteSpace: 'nowrap',
                 marginTop: '20px',
                 marginBottom: '20px',
               }}
             >
-              <Image src="/img/profile2_400x400.png" alt="" aria-hidden="true" width={28} height={28} style={{ width: '1.75rem', height: '1.75rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', flexShrink: 0, display: 'block' }} />
+              <Image src="/img/profile2_400x400.png" alt="" aria-hidden="true" width={28} height={28} style={{ width: '1.75rem', height: '1.75rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid color-mix(in srgb, var(--t-surface) 35%, transparent)', flexShrink: 0, display: 'block' }} />
               Meet With Your Human
               <UpRightArrow style={{ fontSize: '0.95rem', opacity: 0.9, marginLeft: '0.1rem' }} />
             </a>
@@ -394,7 +394,7 @@ export default function FAQPage() {
                           alt={k === 'a' ? logo.alt : ''}
                           width={renderedW}
                           height={renderedH}
-                          style={{ height: `${renderedH}px`, width: 'auto', display: 'block', opacity: 0.45, filter: 'grayscale(1)', flexShrink: 0 }}
+                          style={{ height: `${renderedH}px`, width: 'auto', display: 'block', filter: 'var(--t-logo-filter-muted)', flexShrink: 0 }}
                         />
                       );
                     })}
@@ -410,17 +410,17 @@ export default function FAQPage() {
             flexWrap: 'wrap',
             gap: 'clamp(2rem, 5vw, 4rem)',
             padding: 'clamp(2rem, 4vw, 3rem) 0',
-            borderTop: '1px solid rgba(42,36,32,0.1)',
+            borderTop: '1px solid color-mix(in srgb, var(--t-text) 10%, transparent)',
             marginTop: '50px',
           }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem', flex: '1 1 120px' }}>
-              <span style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.35)', marginBottom: '0.2rem' }}>Work</span>
+              <span style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'color-mix(in srgb, var(--t-text) 35%, transparent)', marginBottom: '0.2rem' }}>Work</span>
               <a href="#" style={navLinkStyle}>Featured Projects</a>
               <a href="#" style={navLinkStyle}>Case Studies</a>
               <a href="#" style={navLinkStyle}>Process</a>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem', flex: '1 1 120px' }}>
-              <span style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.35)', marginBottom: '0.2rem' }}>Services</span>
+              <span style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'color-mix(in srgb, var(--t-text) 35%, transparent)', marginBottom: '0.2rem' }}>Services</span>
               <a href="/services/ai-design-consulting" style={navLinkStyle}>AI Design Consulting</a>
               <a href="/services/web-development" style={navLinkStyle}>Web Development</a>
               <a href="/services/brand-identity" style={navLinkStyle}>Brand Identity</a>
@@ -428,7 +428,7 @@ export default function FAQPage() {
               <a href="/services/seo-geo" style={navLinkStyle}>SEO &amp; GEO</a>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem', flex: '1 1 120px' }}>
-              <span style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.35)', marginBottom: '0.2rem' }}>FAQ</span>
+              <span style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'color-mix(in srgb, var(--t-text) 35%, transparent)', marginBottom: '0.2rem' }}>FAQ</span>
               <a href="/faq#what-is-a-creative-technologist" style={navLinkStyle}>What Is a Creative Technologist?</a>
               <a href="/faq#ai-design-engineer" style={navLinkStyle}>What Is an AI Design Engineer?</a>
               <a href="/faq#how-i-work" style={navLinkStyle}>How I Work</a>
@@ -436,7 +436,7 @@ export default function FAQPage() {
               <a href="/faq#turnaround" style={navLinkStyle}>Turnaround &amp; Availability</a>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem', flex: '1 1 120px' }}>
-              <span style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.35)', marginBottom: '0.2rem' }}>Company</span>
+              <span style={{ fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'color-mix(in srgb, var(--t-text) 35%, transparent)', marginBottom: '0.2rem' }}>Company</span>
               <a href="#" style={navLinkStyle}>About</a>
               <a href="#" style={navLinkStyle}>How It Works</a>
               <a href="#" style={navLinkStyle}>Contact</a>
@@ -452,9 +452,9 @@ export default function FAQPage() {
             flexWrap: 'wrap',
             gap: '0.75rem',
             paddingTop: 'clamp(1rem, 2vw, 1.5rem)',
-            borderTop: '1px solid rgba(42,36,32,0.1)',
+            borderTop: '1px solid color-mix(in srgb, var(--t-text) 10%, transparent)',
           }}>
-            <span style={{ fontSize: '0.78rem', color: 'rgba(42,36,32,0.35)' }}>© 2026 Bryan Balli · All rights reserved</span>
+            <span style={{ fontSize: '0.78rem', color: 'color-mix(in srgb, var(--t-text) 35%, transparent)' }}>© 2026 Bryan Balli · All rights reserved</span>
             <div style={{ display: 'flex', gap: '1.5rem' }}>
               <a href="https://www.linkedin.com/in/bryanballi" style={legalLinkStyle}>LinkedIn</a>
               <a href="https://x.com/bai_ee" style={legalLinkStyle}>𝕏</a>

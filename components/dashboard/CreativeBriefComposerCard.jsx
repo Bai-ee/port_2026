@@ -221,15 +221,15 @@ export function CreativeBriefComposerView({ user }) {
                                   aria-pressed={form.include?.[`${item.id}:heading`] !== false}
                                   title="Toggle this section's heading"
                                   onClick={(e) => { e.stopPropagation(); toggle(`${item.id}:heading`); }}
-                                  style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8, padding: '3px 8px', border: '1px solid rgba(42,36,32,0.18)', borderRadius: 999, background: form.include?.[`${item.id}:heading`] !== false ? 'rgba(42,36,32,0.08)' : 'rgba(255,255,255,0.7)', cursor: 'pointer', font: '700 10px/1 var(--vrk-mono, monospace)', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--vrk-ink, #2a2420)', opacity: form.include?.[`${item.id}:heading`] !== false ? 1 : 0.55 }}
+                                  style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8, padding: '3px 8px', border: '1px solid color-mix(in srgb, var(--t-text) 18%, transparent)', borderRadius: 999, background: form.include?.[`${item.id}:heading`] !== false ? 'var(--t-border-faint)' : 'color-mix(in srgb, var(--t-surface) 70%, transparent)', cursor: 'pointer', font: '700 10px/1 var(--vrk-mono, monospace)', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--vrk-ink, #2a2420)', opacity: form.include?.[`${item.id}:heading`] !== false ? 1 : 0.55 }}
                                 >
                                   H · Heading {form.include?.[`${item.id}:heading`] !== false ? 'on' : 'off'}
                                 </button>
                               ) : null}
                             </span>
                             <span style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4 }} onClick={(e) => e.stopPropagation()}>
-                              <button type="button" aria-label={`Move ${item.label} up`} disabled={idx === 0} onClick={(e) => { e.stopPropagation(); move(group.key, item.id, -1); }} style={{ width: 22, height: 22, lineHeight: '20px', textAlign: 'center', padding: 0, border: '1px solid rgba(42,36,32,0.18)', borderRadius: 6, background: 'rgba(255,255,255,0.7)', cursor: idx === 0 ? 'not-allowed' : 'pointer', opacity: idx === 0 ? 0.4 : 1, fontSize: 11 }}>↑</button>
-                              <button type="button" aria-label={`Move ${item.label} down`} disabled={idx === ordered.length - 1} onClick={(e) => { e.stopPropagation(); move(group.key, item.id, 1); }} style={{ width: 22, height: 22, lineHeight: '20px', textAlign: 'center', padding: 0, border: '1px solid rgba(42,36,32,0.18)', borderRadius: 6, background: 'rgba(255,255,255,0.7)', cursor: idx === ordered.length - 1 ? 'not-allowed' : 'pointer', opacity: idx === ordered.length - 1 ? 0.4 : 1, fontSize: 11 }}>↓</button>
+                              <button type="button" aria-label={`Move ${item.label} up`} disabled={idx === 0} onClick={(e) => { e.stopPropagation(); move(group.key, item.id, -1); }} style={{ width: 22, height: 22, lineHeight: '20px', textAlign: 'center', padding: 0, border: '1px solid color-mix(in srgb, var(--t-text) 18%, transparent)', borderRadius: 6, background: 'color-mix(in srgb, var(--t-surface) 70%, transparent)', cursor: idx === 0 ? 'not-allowed' : 'pointer', opacity: idx === 0 ? 0.4 : 1, fontSize: 11 }}>↑</button>
+                              <button type="button" aria-label={`Move ${item.label} down`} disabled={idx === ordered.length - 1} onClick={(e) => { e.stopPropagation(); move(group.key, item.id, 1); }} style={{ width: 22, height: 22, lineHeight: '20px', textAlign: 'center', padding: 0, border: '1px solid color-mix(in srgb, var(--t-text) 18%, transparent)', borderRadius: 6, background: 'color-mix(in srgb, var(--t-surface) 70%, transparent)', cursor: idx === ordered.length - 1 ? 'not-allowed' : 'pointer', opacity: idx === ordered.length - 1 ? 0.4 : 1, fontSize: 11 }}>↓</button>
                             </span>
                           </div>
                         );
@@ -240,7 +240,7 @@ export function CreativeBriefComposerView({ user }) {
               })}
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
-                <button type="button" className="btn" style={{ background: '#2a2420', color: '#fff', borderColor: '#2a2420' }} onClick={() => save()} disabled={saveStatus?.kind === 'pending' || !dirty}>
+                <button type="button" className="btn" style={{ background: 'var(--t-text)', color: 'var(--t-surface)', borderColor: 'var(--t-text)' }} onClick={() => save()} disabled={saveStatus?.kind === 'pending' || !dirty}>
                   {saveStatus?.kind === 'pending' ? 'Saving…' : 'Save Settings'}
                 </button>
                 {saveStatus && saveStatus.kind !== 'pending' ? (

@@ -1,28 +1,34 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import { useAuth } from '../../AuthContext';
+import { readToken } from '../../lib/theme-runtime/read-token.js';
 
 const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '';
 const stripePromise = publishableKey ? loadStripe(publishableKey) : null;
 
-const stripeAppearance = {
-  theme: 'stripe',
-  variables: {
-    colorPrimary: '#2a2420',
-    colorText: '#2a2420',
-    colorTextSecondary: 'rgba(42, 36, 32, 0.6)',
-    colorBackground: '#ffffff',
-    borderRadius: '0.75rem',
-    fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-  },
-  rules: {
-    '.Input': {
-      border: '1px solid rgba(42, 36, 32, 0.12)',
-      boxShadow: 'none',
+// Stripe renders the PaymentElement in its own iframe, so CSS variables cannot reach it: resolve the
+// theme tokens to real colours when the element mounts. The fallbacks are the light baseline values.
+function buildStripeAppearance() {
+  const text = readToken('--t-text') || '#2a2420';
+  return {
+    theme: 'stripe',
+    variables: {
+      colorPrimary: text,
+      colorText: text,
+      colorTextSecondary: readToken('--t-text-secondary') || 'rgba(42, 36, 32, 0.6)',
+      colorBackground: readToken('--t-surface') || '#ffffff',
+      borderRadius: '0.75rem',
+      fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     },
-  },
-};
+    rules: {
+      '.Input': {
+        border: `1px solid ${readToken('--t-border-subtle') || 'rgba(42, 36, 32, 0.12)'}`,
+        boxShadow: 'none',
+      },
+    },
+  };
+}
 
 const PaymentStep = ({ onSuccess, ctaLabel = 'Subscribe · $5/mo', returnUrl }) => {
   const stripe = useStripe();
@@ -288,6 +294,9 @@ const SubscribeModal = ({
       el.scrollLeft = el.clientWidth * DEFAULT_TIER_INDEX;
     }
   }, [open]);
+
+  // Resolved once per payment session: Elements must not receive a new appearance object every render.
+  const stripeAppearance = useMemo(() => (clientSecret ? buildStripeAppearance() : null), [clientSecret]);
 
   if (!open) {
     return null;
@@ -631,7 +640,7 @@ const overlayStyle = {
   zIndex: 340,
   backdropFilter: 'blur(18px)',
   WebkitBackdropFilter: 'blur(18px)',
-  background: 'rgba(42, 36, 32, 0.18)',
+  background: 'color-mix(in srgb, var(--t-text) 18%, transparent)',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -643,14 +652,14 @@ const modalStyle = {
   position: 'relative',
   width: 'min(480px, 100%)',
   maxHeight: 'min(88dvh, 720px)',
-  color: '#2a2420',
+  color: 'var(--t-text)',
   display: 'flex',
   flexDirection: 'column',
   overflow: 'hidden',
-  background: '#ffffff',
+  background: 'var(--t-surface)',
   // Shadow + border match the dashboard loading card (DashboardLoadingOverlay).
-  boxShadow: '0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4), 0px 5px 10px rgba(0, 0, 0, 0.1), 0px 15px 30px rgba(0, 0, 0, 0.1), 0px 20px 40px rgba(0, 0, 0, 0.15)',
-  border: '1px solid #E4E4E4',
+  boxShadow: '0 1px 0 color-mix(in srgb, var(--t-surface) 65%, transparent), inset 0 1px 0 color-mix(in srgb, var(--t-surface) 40%, transparent), 0px 5px 10px rgba(0, 0, 0, 0.1), 0px 15px 30px rgba(0, 0, 0, 0.1), 0px 20px 40px rgba(0, 0, 0, 0.15)',
+  border: '1px solid var(--t-dash-border)',
   borderRadius: '1.5rem',
 };
 
@@ -671,19 +680,19 @@ const subscribeModalCss = `
   #subscribe-modal-close {
     flex-shrink: 0;
     justify-self: end;
-    background: rgba(255, 255, 255, 0.9);
-    border: 1px solid rgba(42, 36, 32, 0.15);
+    background: color-mix(in srgb, var(--t-surface) 90%, transparent);
+    border: 1px solid color-mix(in srgb, var(--t-text) 15%, transparent);
     border-radius: 6px;
     padding: 6px 12px;
     font-family: var(--font-mono, 'Space Mono', monospace);
     font-size: 12px;
     cursor: pointer;
-    color: #2a2420;
+    color: var(--t-text);
     white-space: nowrap;
   }
   #subscribe-modal-close:hover {
-    background: #2a2420;
-    color: #fff;
+    background: var(--t-text);
+    color: var(--t-surface);
   }
   .subscribe-tier-carousel {
     display: flex;
@@ -707,9 +716,9 @@ const subscribeModalCss = `
     align-items: center;
     justify-content: center;
     border-radius: 999px;
-    border: 1px solid rgba(42, 36, 32, 0.15);
-    background: rgba(255, 255, 255, 0.9);
-    color: #2a2420;
+    border: 1px solid color-mix(in srgb, var(--t-text) 15%, transparent);
+    background: color-mix(in srgb, var(--t-surface) 90%, transparent);
+    color: var(--t-text);
     font-size: 1.1rem;
     line-height: 1;
     cursor: pointer;
@@ -717,8 +726,8 @@ const subscribeModalCss = `
     padding: 0;
   }
   .subscribe-tier-nav:hover:not(:disabled) {
-    background: #2a2420;
-    color: #fff;
+    background: var(--t-text);
+    color: var(--t-surface);
   }
   .subscribe-tier-nav:disabled {
     opacity: 0.35;
@@ -744,12 +753,12 @@ const subscribeModalCss = `
     border-radius: 999px;
     border: none;
     padding: 0;
-    background: rgba(42, 36, 32, 0.18);
+    background: color-mix(in srgb, var(--t-text) 18%, transparent);
     cursor: pointer;
     transition: background 0.2s ease;
   }
   .subscribe-tier-dot--active {
-    background: #2a2420;
+    background: var(--t-text);
   }
   .subscribe-tab {
     flex: 1;
@@ -761,14 +770,14 @@ const subscribeModalCss = `
     font-size: 0.72rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: rgba(42, 36, 32, 0.5);
+    color: color-mix(in srgb, var(--t-text) 50%, transparent);
     cursor: pointer;
     transition: background 0.2s ease, color 0.2s ease;
   }
   .subscribe-tab--active {
-    background: #ffffff;
-    color: #2a2420;
-    box-shadow: 0 1px 3px rgba(42, 36, 32, 0.12);
+    background: var(--t-surface);
+    color: var(--t-text);
+    box-shadow: 0 1px 3px color-mix(in srgb, var(--t-text) 12%, transparent);
   }
 `;
 
@@ -789,7 +798,7 @@ const headerLogoStyle = {
   height: '2.75rem',
   borderRadius: '50%',
   objectFit: 'cover',
-  border: '2px solid rgba(255,255,255,0.35)',
+  border: '2px solid color-mix(in srgb, var(--t-surface) 35%, transparent)',
   display: 'block',
   flexShrink: 0,
 };
@@ -798,7 +807,7 @@ const headerLabelStyle = {
   fontSize: '0.82rem',
   letterSpacing: '0.14em',
   textTransform: 'uppercase',
-  color: 'rgba(42, 36, 32, 0.44)',
+  color: 'color-mix(in srgb, var(--t-text) 44%, transparent)',
   fontWeight: 700,
   fontFamily: '"Space Mono", monospace',
 };
@@ -815,7 +824,7 @@ const marqueeShellStyle = {
 const marqueeTitleStyle = {
   margin: 0,
   flexShrink: 0,
-  color: '#2a2420',
+  color: 'var(--t-text)',
   fontSize: 'clamp(2.2rem, 8vw, 3.6rem)',
   lineHeight: 1,
   letterSpacing: '-0.04em',
@@ -828,7 +837,7 @@ const summaryStyle = {
   margin: '0.75rem 0 0',
   fontSize: '0.95rem',
   lineHeight: 1.6,
-  color: 'rgba(42, 36, 32, 0.7)',
+  color: 'color-mix(in srgb, var(--t-text) 70%, transparent)',
 };
 
 const bodyStyle = {
@@ -847,9 +856,9 @@ const inputStyle = {
   width: '100%',
   minWidth: 0,
   borderRadius: '999px',
-  border: '1px solid rgba(42, 36, 32, 0.12)',
-  background: 'rgba(255,255,255,0.28)',
-  color: '#2a2420',
+  border: '1px solid var(--t-border-subtle)',
+  background: 'color-mix(in srgb, var(--t-surface) 28%, transparent)',
+  color: 'var(--t-text)',
   padding: '0.85rem 1rem',
   fontSize: '0.92rem',
   boxSizing: 'border-box',
@@ -864,9 +873,9 @@ const primaryButtonStyle = {
   boxSizing: 'border-box',
   border: 'none',
   textDecoration: 'none',
-  background: 'linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)',
-  boxShadow: '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1)',
-  color: '#ffffff',
+  background: 'linear-gradient(175deg, color-mix(in srgb, var(--t-surface) 18%, transparent) 0%, color-mix(in srgb, var(--t-surface) 0%, transparent) 52%), linear-gradient(135deg, var(--t-accent-bright) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%)',
+  boxShadow: '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 color-mix(in srgb, var(--t-surface) 28%, transparent), inset 0 -1px 0 rgba(0,0,0,0.1)',
+  color: 'var(--t-surface)',
   borderRadius: '999px',
   padding: '0.85rem 1.25rem',
   fontSize: '0.875rem',
@@ -883,10 +892,10 @@ const productSummaryStyle = {
   position: 'relative',
   padding: '1rem',
   borderRadius: '1rem',
-  border: '1px solid rgba(42, 36, 32, 0.12)',
+  border: '1px solid var(--t-border-subtle)',
   background:
-    'radial-gradient(60% 60% at 10% 15%, rgba(102, 184, 164, 0.12), transparent 60%), radial-gradient(50% 50% at 82% 72%, rgba(171, 148, 218, 0.14), transparent 65%), rgba(255,255,255,0.45)',
-  boxShadow: '0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4)',
+    'radial-gradient(60% 60% at 10% 15%, color-mix(in srgb, var(--t-deco-2) 12%, transparent), transparent 60%), radial-gradient(50% 50% at 82% 72%, color-mix(in srgb, var(--t-deco-4) 14%, transparent), transparent 65%), color-mix(in srgb, var(--t-surface) 45%, transparent)',
+  boxShadow: '0 1px 0 color-mix(in srgb, var(--t-surface) 65%, transparent), inset 0 1px 0 color-mix(in srgb, var(--t-surface) 40%, transparent)',
 };
 
 const productSummaryTextStyle = {
@@ -908,7 +917,7 @@ const productCopyStyle = {
   maxWidth: '34ch',
   fontSize: '0.85rem',
   lineHeight: 1.45,
-  color: 'rgba(42, 36, 32, 0.65)',
+  color: 'color-mix(in srgb, var(--t-text) 65%, transparent)',
 };
 
 // Same size as the original single-product $5 — keeps the price-to-copy
@@ -918,7 +927,7 @@ const productPriceStyle = {
   fontWeight: 900,
   letterSpacing: '-0.02em',
   lineHeight: 1,
-  color: '#2a2420',
+  color: 'var(--t-text)',
   fontFamily: "'Doto', 'Space Mono', monospace",
   textAlign: 'center',
   whiteSpace: 'nowrap',
@@ -933,7 +942,7 @@ const productPriceUnitStyle = {
   fontSize: '1.05rem',
   fontWeight: 700,
   letterSpacing: '0',
-  color: 'rgba(42, 36, 32, 0.75)',
+  color: 'color-mix(in srgb, var(--t-text) 75%, transparent)',
 };
 
 const tierCadenceStyle = {
@@ -941,7 +950,7 @@ const tierCadenceStyle = {
   fontSize: '0.72rem',
   letterSpacing: '0.06em',
   textTransform: 'uppercase',
-  color: 'rgba(42, 36, 32, 0.55)',
+  color: 'color-mix(in srgb, var(--t-text) 55%, transparent)',
   fontFamily: '"Space Mono", monospace',
   textAlign: 'center',
 };
@@ -961,10 +970,10 @@ const runPanelStyle = {
   gap: '0.9rem',
   padding: '0.85rem 1rem',
   borderRadius: '1rem',
-  border: '1px solid rgba(42, 36, 32, 0.12)',
+  border: '1px solid var(--t-border-subtle)',
   background:
-    'radial-gradient(60% 60% at 10% 15%, rgba(102, 184, 164, 0.12), transparent 60%), radial-gradient(50% 50% at 82% 72%, rgba(171, 148, 218, 0.14), transparent 65%), rgba(255,255,255,0.45)',
-  boxShadow: '0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4)',
+    'radial-gradient(60% 60% at 10% 15%, color-mix(in srgb, var(--t-deco-2) 12%, transparent), transparent 60%), radial-gradient(50% 50% at 82% 72%, color-mix(in srgb, var(--t-deco-4) 14%, transparent), transparent 65%), color-mix(in srgb, var(--t-surface) 45%, transparent)',
+  boxShadow: '0 1px 0 color-mix(in srgb, var(--t-surface) 65%, transparent), inset 0 1px 0 color-mix(in srgb, var(--t-surface) 40%, transparent)',
 };
 
 const runPriceStyle = {
@@ -973,7 +982,7 @@ const runPriceStyle = {
   fontWeight: 900,
   letterSpacing: '-0.02em',
   lineHeight: 1,
-  color: '#2a2420',
+  color: 'var(--t-text)',
   fontFamily: "'Doto', 'Space Mono', monospace",
   whiteSpace: 'nowrap',
 };
@@ -981,14 +990,14 @@ const runPriceStyle = {
 const runPriceUnitStyle = {
   fontSize: '0.85rem',
   fontWeight: 700,
-  color: 'rgba(42, 36, 32, 0.6)',
+  color: 'color-mix(in srgb, var(--t-text) 60%, transparent)',
 };
 
 const runCopyStyle = {
   margin: 0,
   fontSize: '0.82rem',
   lineHeight: 1.4,
-  color: 'rgba(42, 36, 32, 0.65)',
+  color: 'color-mix(in srgb, var(--t-text) 65%, transparent)',
   textAlign: 'left',
 };
 
@@ -1007,8 +1016,8 @@ const meetHumanButtonStyle = {
   width: '100%',
   boxSizing: 'border-box',
   border: '1px solid transparent',
-  background: 'linear-gradient(#ffffff, #ffffff) padding-box, linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%) border-box',
-  color: '#2a2420',
+  background: 'linear-gradient(var(--t-surface), var(--t-surface)) padding-box, linear-gradient(135deg, var(--t-accent-bright) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%) border-box',
+  color: 'var(--t-text)',
   borderRadius: '999px',
   padding: '0.85rem 1.25rem',
   fontSize: '0.875rem',
@@ -1022,7 +1031,7 @@ const errorTextStyle = {
   margin: 0,
   fontSize: '0.85rem',
   lineHeight: 1.5,
-  color: '#b3261e',
+  color: 'var(--t-danger)',
 };
 
 const successTitleStyle = {
@@ -1037,7 +1046,7 @@ const stripeBadgeStyle = {
   justifyContent: 'center',
   gap: '0.35rem',
   fontSize: '0.75rem',
-  color: 'rgba(42, 36, 32, 0.45)',
+  color: 'color-mix(in srgb, var(--t-text) 45%, transparent)',
 };
 
 // Segmented Subscribe / Run-Once switch — sits in the card gutter, matching
@@ -1048,7 +1057,7 @@ const tabRowStyle = {
   margin: '1rem clamp(1.25rem, 5vw, 2rem) 0',
   padding: '0.3rem',
   borderRadius: '999px',
-  background: 'rgba(42, 36, 32, 0.06)',
+  background: 'color-mix(in srgb, var(--t-text) 6%, transparent)',
 };
 
 // Cooldown panel — same pastel-radial surface as the tier summary card, sat
@@ -1060,17 +1069,17 @@ const cooldownPanelStyle = {
   margin: '1rem clamp(1.25rem, 5vw, 2rem) 0',
   padding: '1rem 1.1rem 1.1rem',
   borderRadius: '1rem',
-  border: '1px solid rgba(42, 36, 32, 0.12)',
+  border: '1px solid var(--t-border-subtle)',
   background:
-    'radial-gradient(60% 60% at 10% 15%, rgba(102, 184, 164, 0.12), transparent 60%), radial-gradient(50% 50% at 82% 72%, rgba(171, 148, 218, 0.14), transparent 65%), rgba(255,255,255,0.45)',
-  boxShadow: '0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4)',
+    'radial-gradient(60% 60% at 10% 15%, color-mix(in srgb, var(--t-deco-2) 12%, transparent), transparent 60%), radial-gradient(50% 50% at 82% 72%, color-mix(in srgb, var(--t-deco-4) 14%, transparent), transparent 65%), color-mix(in srgb, var(--t-surface) 45%, transparent)',
+  boxShadow: '0 1px 0 color-mix(in srgb, var(--t-surface) 65%, transparent), inset 0 1px 0 color-mix(in srgb, var(--t-surface) 40%, transparent)',
 };
 
 const cooldownEyebrowStyle = {
   fontSize: '0.72rem',
   letterSpacing: '0.06em',
   textTransform: 'uppercase',
-  color: 'rgba(42, 36, 32, 0.55)',
+  color: 'color-mix(in srgb, var(--t-text) 55%, transparent)',
   fontFamily: '"Space Mono", monospace',
 };
 
@@ -1087,12 +1096,12 @@ const cooldownCountStyle = {
   fontSize: 'clamp(2rem, 8vw, 2.8rem)',
   lineHeight: 1,
   letterSpacing: '-0.02em',
-  color: '#2a2420',
+  color: 'var(--t-text)',
 };
 
 const cooldownCountSubStyle = {
   fontSize: '0.8rem',
-  color: 'rgba(42, 36, 32, 0.6)',
+  color: 'color-mix(in srgb, var(--t-text) 60%, transparent)',
 };
 
 const cooldownFieldLabelStyle = {
@@ -1100,7 +1109,7 @@ const cooldownFieldLabelStyle = {
   fontSize: '0.72rem',
   letterSpacing: '0.06em',
   textTransform: 'uppercase',
-  color: 'rgba(42, 36, 32, 0.55)',
+  color: 'color-mix(in srgb, var(--t-text) 55%, transparent)',
   fontFamily: '"Space Mono", monospace',
 };
 
@@ -1108,9 +1117,9 @@ const cooldownInputStyle = {
   width: '100%',
   boxSizing: 'border-box',
   borderRadius: '0.75rem',
-  border: '1px solid rgba(42, 36, 32, 0.12)',
-  background: 'rgba(255,255,255,0.6)',
-  color: '#2a2420',
+  border: '1px solid var(--t-border-subtle)',
+  background: 'color-mix(in srgb, var(--t-surface) 60%, transparent)',
+  color: 'var(--t-text)',
   padding: '0.7rem 0.85rem',
   fontSize: '0.9rem',
   fontFamily: '"Space Mono", monospace',
@@ -1120,7 +1129,7 @@ const cooldownHelpStyle = {
   margin: 0,
   fontSize: '0.78rem',
   lineHeight: 1.5,
-  color: 'rgba(42, 36, 32, 0.6)',
+  color: 'color-mix(in srgb, var(--t-text) 60%, transparent)',
 };
 
 // Stripe badge left / existing-user sign-in right, under the CTA.
@@ -1136,7 +1145,7 @@ const signInLinkStyle = {
   letterSpacing: '0.08em',
   textTransform: 'uppercase',
   fontFamily: '"Space Mono", monospace',
-  color: 'rgba(42, 36, 32, 0.6)',
+  color: 'color-mix(in srgb, var(--t-text) 60%, transparent)',
   textDecoration: 'underline',
   textUnderlineOffset: '3px',
 };
@@ -1148,7 +1157,7 @@ const cryptoTriggerStyle = {
   alignSelf: 'flex-start',
   fontSize: '0.78rem',
   letterSpacing: '0.02em',
-  color: 'rgba(42, 36, 32, 0.45)',
+  color: 'color-mix(in srgb, var(--t-text) 45%, transparent)',
   textDecoration: 'underline',
   textUnderlineOffset: '3px',
   cursor: 'pointer',
@@ -1159,7 +1168,7 @@ const cryptoEyebrowStyle = {
   fontSize: '0.75rem',
   letterSpacing: '0.08em',
   textTransform: 'uppercase',
-  color: 'rgba(42, 36, 32, 0.48)',
+  color: 'color-mix(in srgb, var(--t-text) 48%, transparent)',
   marginBottom: '0.35rem',
 };
 
@@ -1168,20 +1177,20 @@ const cryptoPriceStyle = {
   fontSize: '1.5rem',
   fontWeight: 700,
   letterSpacing: '-0.03em',
-  color: '#2a2420',
+  color: 'var(--t-text)',
 };
 
 const cryptoUnitStyle = {
   fontSize: '0.85rem',
   fontWeight: 400,
-  color: 'rgba(42, 36, 32, 0.48)',
+  color: 'color-mix(in srgb, var(--t-text) 48%, transparent)',
 };
 
 const cryptoCopyStyle = {
   margin: '0.5rem 0 0',
   fontSize: '0.9rem',
   lineHeight: 1.6,
-  color: 'rgba(42, 36, 32, 0.7)',
+  color: 'color-mix(in srgb, var(--t-text) 70%, transparent)',
 };
 
 const cryptoConnectButtonStyle = {
@@ -1189,9 +1198,9 @@ const cryptoConnectButtonStyle = {
   alignItems: 'center',
   justifyContent: 'center',
   gap: '0.5rem',
-  border: '1px solid rgba(42, 36, 32, 0.12)',
+  border: '1px solid var(--t-border-subtle)',
   background: 'linear-gradient(135deg, rgba(153,69,255,0.12) 0%, rgba(20,241,149,0.12) 100%)',
-  color: '#2a2420',
+  color: 'var(--t-text)',
   borderRadius: '999px',
   padding: '0.85rem 1.25rem',
   fontSize: '0.85rem',
@@ -1204,9 +1213,9 @@ const cryptoPayButtonStyle = {
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
-  border: '1px solid rgba(42, 36, 32, 0.1)',
-  background: 'rgba(42, 36, 32, 0.06)',
-  color: 'rgba(42, 36, 32, 0.4)',
+  border: '1px solid color-mix(in srgb, var(--t-text) 10%, transparent)',
+  background: 'color-mix(in srgb, var(--t-text) 6%, transparent)',
+  color: 'color-mix(in srgb, var(--t-text) 40%, transparent)',
   borderRadius: '999px',
   padding: '0.85rem 1.25rem',
   fontSize: '0.85rem',
@@ -1219,7 +1228,7 @@ const cryptoNoticeStyle = {
   margin: 0,
   fontSize: '0.82rem',
   lineHeight: 1.5,
-  color: 'rgba(42, 36, 32, 0.55)',
+  color: 'color-mix(in srgb, var(--t-text) 55%, transparent)',
 };
 
 export default SubscribeModal;

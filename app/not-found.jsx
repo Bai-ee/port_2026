@@ -102,8 +102,8 @@ export default function NotFound() {
           display: flex;
           align-items: center;
           justify-content: center;
-          background: #f5f1df;
-          color: #2a2420;
+          background: linear-gradient(var(--t-chrome-strong), var(--t-chrome-strong)), var(--t-page);
+          color: var(--t-text);
           isolation: isolate;
         }
 
@@ -157,7 +157,7 @@ export default function NotFound() {
           font-weight: 900;
           line-height: 0.72;
           letter-spacing: 0;
-          color: #2a2420;
+          color: var(--t-text);
           text-transform: uppercase;
         }
 
@@ -186,14 +186,14 @@ export default function NotFound() {
         }
 
         .not-found-copy a {
-          color: #2a2420;
+          color: var(--t-text);
           text-decoration: none;
           border-bottom: 1px solid currentColor;
           padding-bottom: 0.15rem;
         }
 
         .not-found-copy a:focus-visible {
-          outline: 2px solid #2a2420;
+          outline: 2px solid var(--t-text);
           outline-offset: 0.35rem;
         }
 

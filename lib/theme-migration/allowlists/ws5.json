@@ -1,0 +1,2068 @@
+{
+  "workstream": "WS5",
+  "description": "Colour literals intentionally left in colors.css, styles/dashboard/*.css and styles/brain-builder.css. Matching is by (file, normalized literal). Black shadows (X6) are exempt in the scanner and are not listed. count = exact number of occurrences allowed in that file.",
+  "legend": {
+    "X2": "Contract 13 X2: published artifacts and documents hosted in frames (.brief-kit, brief/pricing/audit iframes)",
+    "X5": "Contract 13 X5: brand imagery and media; video/poster letterbox backdrops",
+    "X6": "Contract 13 X6: mode-agnostic shadows and fixed data-semantic / categorical colours (chips, charts, status one-offs, traffic-light dots)",
+    "X11": "Contract 13 X11: Radix yellow scale in colors.css, no consumers",
+    "X13": "Contract 13 X13: animation mechanics (comet ring heads, alpha masks) and specular sheens / glows over the vivid accent gradient",
+    "WS5-DARK": "WS5: surfaces that are dark by design in both modes (destructive/rename dialogs, Market-brief config console, dark scrims over imagery)",
+    "WS5-FIXED": "WS5: white text on a fill that is itself a fixed literal or fixed-colour token, so the pair does not change per mode",
+    "WS5-PAPER": "WS5: the Market Signals IN BRIEF paper preview, a printed-page look that stays light in both modes",
+    "WS5-LEFT": "WS5: one-off neutrals with no exact theme role; left literal to keep the light baseline identical (designer follow-up)"
+  },
+  "entries": [
+    {
+      "file": "colors.css",
+      "literal": "#000",
+      "count": 2,
+      "reason": "alpha-only mask stop: the colour is never painted",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "colors.css",
+      "literal": "#292109",
+      "count": 2,
+      "reason": "Radix yellow scale: no consumers",
+      "exceptionId": "X11"
+    },
+    {
+      "file": "colors.css",
+      "literal": "#2c2100e2",
+      "count": 1,
+      "reason": "Radix yellow scale: no consumers",
+      "exceptionId": "X11"
+    },
+    {
+      "file": "colors.css",
+      "literal": "#403100a8",
+      "count": 1,
+      "reason": "Radix yellow scale: no consumers",
+      "exceptionId": "X11"
+    },
+    {
+      "file": "colors.css",
+      "literal": "#443a1d",
+      "count": 1,
+      "reason": "Radix yellow scale: no consumers",
+      "exceptionId": "X11"
+    },
+    {
+      "file": "colors.css",
+      "literal": "#674c0070",
+      "count": 1,
+      "reason": "Radix yellow scale: no consumers",
+      "exceptionId": "X11"
+    },
+    {
+      "file": "colors.css",
+      "literal": "#7f5d015b",
+      "count": 1,
+      "reason": "Radix yellow scale: no consumers",
+      "exceptionId": "X11"
+    },
+    {
+      "file": "colors.css",
+      "literal": "#8160015b",
+      "count": 1,
+      "reason": "Radix yellow scale: no consumers",
+      "exceptionId": "X11"
+    },
+    {
+      "file": "colors.css",
+      "literal": "#817757",
+      "count": 1,
+      "reason": "Radix yellow scale: no consumers",
+      "exceptionId": "X11"
+    },
+    {
+      "file": "colors.css",
+      "literal": "#906a0052",
+      "count": 1,
+      "reason": "Radix yellow scale: no consumers",
+      "exceptionId": "X11"
+    },
+    {
+      "file": "colors.css",
+      "literal": "#9f76014a",
+      "count": 1,
+      "reason": "Radix yellow scale: no consumers",
+      "exceptionId": "X11"
+    },
+    {
+      "file": "colors.css",
+      "literal": "#bcb08f",
+      "count": 1,
+      "reason": "Radix yellow scale: no consumers",
+      "exceptionId": "X11"
+    },
+    {
+      "file": "colors.css",
+      "literal": "#c290003e",
+      "count": 1,
+      "reason": "Radix yellow scale: no consumers",
+      "exceptionId": "X11"
+    },
+    {
+      "file": "colors.css",
+      "literal": "#cc990005",
+      "count": 1,
+      "reason": "Radix yellow scale: no consumers",
+      "exceptionId": "X11"
+    },
+    {
+      "file": "colors.css",
+      "literal": "#d1c5a4",
+      "count": 1,
+      "reason": "Radix yellow scale: no consumers",
+      "exceptionId": "X11"
+    },
+    {
+      "file": "colors.css",
+      "literal": "#d2c6a4",
+      "count": 1,
+      "reason": "Radix yellow scale: no consumers",
+      "exceptionId": "X11"
+    },
+    {
+      "file": "colors.css",
+      "literal": "#dbcfad",
+      "count": 3,
+      "reason": "Radix yellow scale: no consumers",
+      "exceptionId": "X11"
+    },
+    {
+      "file": "colors.css",
+      "literal": "#e3a40035",
+      "count": 1,
+      "reason": "Radix yellow scale: no consumers",
+      "exceptionId": "X11"
+    },
+    {
+      "file": "colors.css",
+      "literal": "#e3d7b5",
+      "count": 1,
+      "reason": "Radix yellow scale: no consumers",
+      "exceptionId": "X11"
+    },
+    {
+      "file": "colors.css",
+      "literal": "#f0e4c1",
+      "count": 1,
+      "reason": "Radix yellow scale: no consumers",
+      "exceptionId": "X11"
+    },
+    {
+      "file": "colors.css",
+      "literal": "#f9ecca",
+      "count": 1,
+      "reason": "Radix yellow scale: no consumers",
+      "exceptionId": "X11"
+    },
+    {
+      "file": "colors.css",
+      "literal": "#fefdfa",
+      "count": 1,
+      "reason": "Radix yellow scale: no consumers",
+      "exceptionId": "X11"
+    },
+    {
+      "file": "colors.css",
+      "literal": "#ffc1002d",
+      "count": 1,
+      "reason": "Radix yellow scale: no consumers",
+      "exceptionId": "X11"
+    },
+    {
+      "file": "colors.css",
+      "literal": "#ffd2001c",
+      "count": 1,
+      "reason": "Radix yellow scale: no consumers",
+      "exceptionId": "X11"
+    },
+    {
+      "file": "colors.css",
+      "literal": "#fff",
+      "count": 8,
+      "reason": "alpha-only mask stop: the colour is never painted",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "colors.css",
+      "literal": "#fff4d2",
+      "count": 1,
+      "reason": "Radix yellow scale: no consumers",
+      "exceptionId": "X11"
+    },
+    {
+      "file": "colors.css",
+      "literal": "#fff9dccc",
+      "count": 1,
+      "reason": "Radix yellow scale: no consumers",
+      "exceptionId": "X11"
+    },
+    {
+      "file": "colors.css",
+      "literal": "#fffae3",
+      "count": 1,
+      "reason": "Radix yellow scale: no consumers",
+      "exceptionId": "X11"
+    },
+    {
+      "file": "colors.css",
+      "literal": "rgba(255, 255, 255, 1)",
+      "count": 2,
+      "reason": "comet ring bright head (animation artwork)",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "colors.css",
+      "literal": "rgba(255,255,255,0.18)",
+      "count": 1,
+      "reason": "specular white sheen over the vivid accent gradient (same in both modes)",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "colors.css",
+      "literal": "rgba(255,255,255,0.28)",
+      "count": 1,
+      "reason": "specular white sheen over the vivid accent gradient (same in both modes)",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "colors.css",
+      "literal": "rgba(42,36,32,0.08)",
+      "count": 2,
+      "reason": "ink-tinted shadow: mode-agnostic like black shadows",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "colors.css",
+      "literal": "rgba(42,36,32,0.18)",
+      "count": 1,
+      "reason": "ink-tinted shadow: mode-agnostic like black shadows",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "#000",
+      "count": 7,
+      "reason": "alpha-only mask stop: the colour is never painted / media letterbox / poster backdrop behind video or imagery",
+      "exceptionId": "X13 / X5"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "#14100c",
+      "count": 1,
+      "reason": "intentional dark modal chrome (destructive/rename dialogs stay dark in both modes)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "#c0392b",
+      "count": 2,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue) / intentional dark modal chrome (destructive/rename dialogs stay dark in both modes)",
+      "exceptionId": "X6 / WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "#e7d9c3",
+      "count": 5,
+      "reason": "intentional dark modal chrome (destructive/rename dialogs stay dark in both modes)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "#e87070",
+      "count": 1,
+      "reason": "intentional dark modal chrome (destructive/rename dialogs stay dark in both modes)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "#fff",
+      "count": 11,
+      "reason": "intentional dark modal chrome (destructive/rename dialogs stay dark in both modes) / alpha-only mask stop: the colour is never painted / frame hosting an embedded white document (pricing/brief/audit iframe), pinned light / white text on a fixed-colour fill that does not change per mode",
+      "exceptionId": "WS5-DARK / X13 / X2 / WS5-FIXED"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(0,0,0,0.94)",
+      "count": 4,
+      "reason": "alpha-only mask stop: the colour is never painted",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(114, 205, 214, 0.2)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(125, 214, 184, 0.22)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(126, 188, 242, 0.2)",
+      "count": 2,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(129, 210, 178, 0.2)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(148, 191, 244, 0.2)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(150, 184, 244, 0.18)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(152, 183, 244, 0.18)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(156, 129, 225, 0.22)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(162, 141, 236, 0.18)",
+      "count": 2,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(182, 212, 137, 0.22)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(191, 164, 245, 0.18)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(192,57,43,0.08)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(20, 18, 16, 0.55)",
+      "count": 1,
+      "reason": "translucent dark scrim/surface over media or dark panels (stays dark in both modes)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(20, 18, 16, 0.8)",
+      "count": 1,
+      "reason": "translucent dark scrim/surface over media or dark panels (stays dark in both modes)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(20, 184, 166, 0.22)",
+      "count": 2,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(231, 217, 195, 0.18)",
+      "count": 1,
+      "reason": "intentional dark modal chrome (destructive/rename dialogs stay dark in both modes)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(231,217,195,0.25)",
+      "count": 1,
+      "reason": "intentional dark modal chrome (destructive/rename dialogs stay dark in both modes)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(231,217,195,0.55)",
+      "count": 3,
+      "reason": "intentional dark modal chrome (destructive/rename dialogs stay dark in both modes)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(231,217,195,0.7)",
+      "count": 1,
+      "reason": "intentional dark modal chrome (destructive/rename dialogs stay dark in both modes)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(231,217,195,0.78)",
+      "count": 1,
+      "reason": "intentional dark modal chrome (destructive/rename dialogs stay dark in both modes)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(242, 186, 118, 0.2)",
+      "count": 2,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(242, 202, 127, 0.18)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(243, 162, 186, 0.18)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(244, 195, 120, 0.18)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(245, 158, 11, 0.26)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(246, 138, 177, 0.18)",
+      "count": 2,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(255, 208, 132, 0.18)",
+      "count": 2,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(255,255,255,0.18)",
+      "count": 3,
+      "reason": "specular white sheen over the vivid accent gradient (same in both modes)",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(255,255,255,0.28)",
+      "count": 2,
+      "reason": "specular white sheen over the vivid accent gradient (same in both modes)",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(255,255,255,0.6)",
+      "count": 1,
+      "reason": "white hairline on a dark scrim over media (stays white in both modes)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(255,255,255,1)",
+      "count": 1,
+      "reason": "comet ring bright head (animation artwork)",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(42,36,32,0.08)",
+      "count": 1,
+      "reason": "ink-tinted shadow: mode-agnostic like black shadows",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(42,36,32,0.12)",
+      "count": 1,
+      "reason": "ink-tinted shadow: mode-agnostic like black shadows",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/01-base.css",
+      "literal": "rgba(93, 201, 184, 0.22)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/02-style-guide-survey.css",
+      "literal": "#000",
+      "count": 2,
+      "reason": "alpha-only mask stop: the colour is never painted",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/02-style-guide-survey.css",
+      "literal": "#15803d",
+      "count": 2,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/02-style-guide-survey.css",
+      "literal": "#22c55e",
+      "count": 2,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/02-style-guide-survey.css",
+      "literal": "#991b1b",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/02-style-guide-survey.css",
+      "literal": "#9ca3af",
+      "count": 2,
+      "reason": "one-off neutral with no exact theme role; left literal to keep light identical",
+      "exceptionId": "WS5-LEFT"
+    },
+    {
+      "file": "styles/dashboard/02-style-guide-survey.css",
+      "literal": "#b91c1c",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/02-style-guide-survey.css",
+      "literal": "#fff",
+      "count": 1,
+      "reason": "white text on a fixed-colour fill that does not change per mode",
+      "exceptionId": "WS5-FIXED"
+    },
+    {
+      "file": "styles/dashboard/02-style-guide-survey.css",
+      "literal": "hsl(142, 72%, 29%)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/02-style-guide-survey.css",
+      "literal": "hsl(262, 80%, 32%)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/02-style-guide-survey.css",
+      "literal": "hsl(314, 85%, 32%)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/02-style-guide-survey.css",
+      "literal": "hsl(32, 92%, 28%)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/02-style-guide-survey.css",
+      "literal": "rgba(139, 92, 246, 0.22)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/02-style-guide-survey.css",
+      "literal": "rgba(153, 27, 27, 0.06)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/02-style-guide-survey.css",
+      "literal": "rgba(153, 27, 27, 0.32)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/02-style-guide-survey.css",
+      "literal": "rgba(153, 27, 27, 0.68)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/02-style-guide-survey.css",
+      "literal": "rgba(236, 72, 153, 0.22)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/02-style-guide-survey.css",
+      "literal": "rgba(245, 158, 11, 0.22)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/02-style-guide-survey.css",
+      "literal": "rgba(255,255,255,1)",
+      "count": 1,
+      "reason": "comet ring bright head (animation artwork)",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/02-style-guide-survey.css",
+      "literal": "rgba(34, 197, 94, 0.18)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/02-style-guide-survey.css",
+      "literal": "rgba(42, 36, 32, 0.08)",
+      "count": 1,
+      "reason": "ink-tinted shadow: mode-agnostic like black shadows",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/02-style-guide-survey.css",
+      "literal": "rgba(59, 130, 246, 0.65)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "#0cce6b",
+      "count": 4,
+      "reason": "Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "#1d6d43",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "#2d8a5e",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "#9a9080",
+      "count": 2,
+      "reason": "one-off neutral with no exact theme role; left literal to keep light identical",
+      "exceptionId": "WS5-LEFT"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "#c53030",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "#d05",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "#ff5c8a",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "#ff8b84",
+      "count": 2,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue) / Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "X6 / WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "#fff",
+      "count": 4,
+      "reason": "alpha-only mask stop: the colour is never painted",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "hsl(185, 90%, 25%)",
+      "count": 2,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "hsl(185,100%,55%)",
+      "count": 2,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "hsl(262, 80%, 32%)",
+      "count": 3,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "hsl(314, 85%, 32%)",
+      "count": 2,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(0,0,0,0.24)",
+      "count": 1,
+      "reason": "Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(0,0,0,0.28)",
+      "count": 1,
+      "reason": "Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(12,206,107,0.08)",
+      "count": 2,
+      "reason": "Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(12,206,107,0.1)",
+      "count": 1,
+      "reason": "Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(12,206,107,0.12)",
+      "count": 1,
+      "reason": "Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(12,206,107,0.13)",
+      "count": 1,
+      "reason": "Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(12,206,107,0.32)",
+      "count": 1,
+      "reason": "Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(12,206,107,0.36)",
+      "count": 1,
+      "reason": "Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(12,206,107,0.38)",
+      "count": 1,
+      "reason": "Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(12,206,107,0.55)",
+      "count": 1,
+      "reason": "Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(12,206,107,0.85)",
+      "count": 1,
+      "reason": "Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(139, 92, 246, 0.22)",
+      "count": 3,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(14, 165, 233, 0.22)",
+      "count": 2,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(14, 165, 233, 0.25)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(14,165,233,0.12)",
+      "count": 2,
+      "reason": "coloured glow shadow around a vivid accent control / Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "X13 / WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(14,165,233,0.68)",
+      "count": 2,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue) / Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "X6 / WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(16,16,18,0.96)",
+      "count": 1,
+      "reason": "Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(16,16,18,0.98)",
+      "count": 1,
+      "reason": "Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(236, 72, 153, 0.22)",
+      "count": 2,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(255, 255, 255, 1)",
+      "count": 1,
+      "reason": "comet ring bright head (animation artwork)",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(255,255,255,0.025)",
+      "count": 1,
+      "reason": "Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(255,255,255,0.035)",
+      "count": 2,
+      "reason": "Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(255,255,255,0.04)",
+      "count": 2,
+      "reason": "Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(255,255,255,0.045)",
+      "count": 1,
+      "reason": "Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(255,255,255,0.07)",
+      "count": 2,
+      "reason": "Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(255,255,255,0.08)",
+      "count": 2,
+      "reason": "Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(255,255,255,0.1)",
+      "count": 4,
+      "reason": "Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(255,255,255,0.11)",
+      "count": 1,
+      "reason": "Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(255,255,255,0.12)",
+      "count": 3,
+      "reason": "Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(255,255,255,0.14)",
+      "count": 2,
+      "reason": "Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(255,255,255,0.16)",
+      "count": 2,
+      "reason": "Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(255,255,255,0.18)",
+      "count": 2,
+      "reason": "specular white sheen over the vivid accent gradient (same in both modes)",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(255,255,255,0.22)",
+      "count": 1,
+      "reason": "Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(255,255,255,0.25)",
+      "count": 1,
+      "reason": "Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(255,255,255,0.28)",
+      "count": 3,
+      "reason": "specular white sheen over the vivid accent gradient (same in both modes) / Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "X13 / WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(255,59,48,0.08)",
+      "count": 2,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue) / Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "X6 / WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(255,59,48,0.28)",
+      "count": 2,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue) / Market-brief config panel is a pinned dark console (light-on-dark palette)",
+      "exceptionId": "X6 / WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(42,36,32,0.08)",
+      "count": 1,
+      "reason": "ink-tinted shadow: mode-agnostic like black shadows",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/03-strategy-builder.css",
+      "literal": "rgba(42,36,32,0.14)",
+      "count": 1,
+      "reason": "ink-tinted shadow: mode-agnostic like black shadows",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/04-data-quality.css",
+      "literal": "#22c55e",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/04-data-quality.css",
+      "literal": "hsl(185,90%,25%)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/04-data-quality.css",
+      "literal": "hsl(262,80%,32%)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/04-data-quality.css",
+      "literal": "hsl(314,85%,32%)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/04-data-quality.css",
+      "literal": "rgba(139, 92, 246, 0.22)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/04-data-quality.css",
+      "literal": "rgba(14, 165, 233, 0.22)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/04-data-quality.css",
+      "literal": "rgba(215, 25, 33, 0.55)",
+      "count": 1,
+      "reason": "coloured glow shadow around a vivid accent control",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/04-data-quality.css",
+      "literal": "rgba(236, 72, 153, 0.22)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/04-data-quality.css",
+      "literal": "rgba(34,197,94,0.45)",
+      "count": 1,
+      "reason": "coloured glow shadow around a vivid accent control",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/04-data-quality.css",
+      "literal": "rgba(42,36,32,0.07)",
+      "count": 1,
+      "reason": "ink-tinted shadow: mode-agnostic like black shadows",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/05-seo-performance.css",
+      "literal": "#00cfff",
+      "count": 8,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/05-seo-performance.css",
+      "literal": "#7b5fff",
+      "count": 7,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/05-seo-performance.css",
+      "literal": "#ff3de8",
+      "count": 9,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/05-seo-performance.css",
+      "literal": "rgba(0,207,255,0.08)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/05-seo-performance.css",
+      "literal": "rgba(0,207,255,0.32)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/05-seo-performance.css",
+      "literal": "rgba(255,61,232,0.08)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/05-seo-performance.css",
+      "literal": "rgba(255,61,232,0.30)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/06-intake-onboarding.css",
+      "literal": "#0d0d0d",
+      "count": 1,
+      "reason": "media letterbox / poster backdrop behind video or imagery",
+      "exceptionId": "X5"
+    },
+    {
+      "file": "styles/dashboard/06-intake-onboarding.css",
+      "literal": "#b61319",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/06-intake-onboarding.css",
+      "literal": "#c9930e",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/06-intake-onboarding.css",
+      "literal": "rgba(120, 86, 18, 0.92)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/06-intake-onboarding.css",
+      "literal": "rgba(146, 104, 21, 0.32)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/06-intake-onboarding.css",
+      "literal": "rgba(150, 22, 28, 0.6)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/06-intake-onboarding.css",
+      "literal": "rgba(150, 22, 28, 0.92)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/06-intake-onboarding.css",
+      "literal": "rgba(150, 22, 28, 0.95)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/06-intake-onboarding.css",
+      "literal": "rgba(255, 189, 46, 0.65)",
+      "count": 1,
+      "reason": "macOS traffic-light dots (fixed brand-neutral colours)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/06-intake-onboarding.css",
+      "literal": "rgba(255, 250, 240, 0.94)",
+      "count": 1,
+      "reason": "one-off neutral with no exact theme role; left literal to keep light identical",
+      "exceptionId": "WS5-LEFT"
+    },
+    {
+      "file": "styles/dashboard/06-intake-onboarding.css",
+      "literal": "rgba(255, 95, 86, 0.65)",
+      "count": 1,
+      "reason": "macOS traffic-light dots (fixed brand-neutral colours)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/06-intake-onboarding.css",
+      "literal": "rgba(255,255,255,1)",
+      "count": 1,
+      "reason": "comet ring bright head (animation artwork)",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/06-intake-onboarding.css",
+      "literal": "rgba(39, 201, 63, 0.65)",
+      "count": 1,
+      "reason": "macOS traffic-light dots (fixed brand-neutral colours)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/06-intake-onboarding.css",
+      "literal": "rgba(42,36,32,0.06)",
+      "count": 1,
+      "reason": "ink-tinted shadow: mode-agnostic like black shadows",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/06-intake-onboarding.css",
+      "literal": "rgba(42,36,32,0.1)",
+      "count": 1,
+      "reason": "ink-tinted shadow: mode-agnostic like black shadows",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/06-intake-onboarding.css",
+      "literal": "rgba(42,36,32,0.12)",
+      "count": 1,
+      "reason": "ink-tinted shadow: mode-agnostic like black shadows",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/07-modals-misc.css",
+      "literal": "#0b0906",
+      "count": 1,
+      "reason": "intentional dark modal chrome (destructive/rename dialogs stay dark in both modes)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/07-modals-misc.css",
+      "literal": "#14100c",
+      "count": 2,
+      "reason": "intentional dark modal chrome (destructive/rename dialogs stay dark in both modes)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/07-modals-misc.css",
+      "literal": "#8b1e1e",
+      "count": 2,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/07-modals-misc.css",
+      "literal": "#e7d9c3",
+      "count": 7,
+      "reason": "intentional dark modal chrome (destructive/rename dialogs stay dark in both modes)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/07-modals-misc.css",
+      "literal": "#f87171",
+      "count": 1,
+      "reason": "intentional dark modal chrome (destructive/rename dialogs stay dark in both modes)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/07-modals-misc.css",
+      "literal": "#fff",
+      "count": 4,
+      "reason": "frame hosting an embedded white document (pricing/brief/audit iframe), pinned light / intentional dark modal chrome (destructive/rename dialogs stay dark in both modes)",
+      "exceptionId": "X2 / WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/07-modals-misc.css",
+      "literal": "rgba(231, 217, 195, 0.18)",
+      "count": 2,
+      "reason": "intentional dark modal chrome (destructive/rename dialogs stay dark in both modes)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/07-modals-misc.css",
+      "literal": "rgba(231, 217, 195, 0.2)",
+      "count": 1,
+      "reason": "intentional dark modal chrome (destructive/rename dialogs stay dark in both modes)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/07-modals-misc.css",
+      "literal": "rgba(231, 217, 195, 0.4)",
+      "count": 1,
+      "reason": "intentional dark modal chrome (destructive/rename dialogs stay dark in both modes)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/07-modals-misc.css",
+      "literal": "rgba(231, 217, 195, 0.5)",
+      "count": 1,
+      "reason": "intentional dark modal chrome (destructive/rename dialogs stay dark in both modes)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/07-modals-misc.css",
+      "literal": "rgba(231, 217, 195, 0.6)",
+      "count": 1,
+      "reason": "intentional dark modal chrome (destructive/rename dialogs stay dark in both modes)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/07-modals-misc.css",
+      "literal": "rgba(231, 217, 195, 0.65)",
+      "count": 1,
+      "reason": "intentional dark modal chrome (destructive/rename dialogs stay dark in both modes)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/07-modals-misc.css",
+      "literal": "rgba(231, 217, 195, 0.7)",
+      "count": 1,
+      "reason": "intentional dark modal chrome (destructive/rename dialogs stay dark in both modes)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/07-modals-misc.css",
+      "literal": "rgba(231, 217, 195, 0.75)",
+      "count": 1,
+      "reason": "intentional dark modal chrome (destructive/rename dialogs stay dark in both modes)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/07-modals-misc.css",
+      "literal": "rgba(239, 68, 68, 0.1)",
+      "count": 1,
+      "reason": "intentional dark modal chrome (destructive/rename dialogs stay dark in both modes)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/07-modals-misc.css",
+      "literal": "rgba(239, 68, 68, 0.35)",
+      "count": 1,
+      "reason": "intentional dark modal chrome (destructive/rename dialogs stay dark in both modes)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/07-modals-misc.css",
+      "literal": "rgba(42,36,32,0.08)",
+      "count": 1,
+      "reason": "ink-tinted shadow: mode-agnostic like black shadows",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/08-ui-kit-interactions.css",
+      "literal": "#2f6b3d",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/08-ui-kit-interactions.css",
+      "literal": "#edf4ec",
+      "count": 1,
+      "reason": "one-off neutral with no exact theme role; left literal to keep light identical",
+      "exceptionId": "WS5-LEFT"
+    },
+    {
+      "file": "styles/dashboard/08-ui-kit-interactions.css",
+      "literal": "#fff",
+      "count": 8,
+      "reason": "alpha-only mask stop: the colour is never painted",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/08-ui-kit-interactions.css",
+      "literal": "rgba(0,150,158,1)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/08-ui-kit-interactions.css",
+      "literal": "rgba(0,200,228,0.22)",
+      "count": 1,
+      "reason": "coloured glow shadow around a vivid accent control",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/08-ui-kit-interactions.css",
+      "literal": "rgba(0,200,228,0.28)",
+      "count": 1,
+      "reason": "coloured glow shadow around a vivid accent control",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/08-ui-kit-interactions.css",
+      "literal": "rgba(185,167,141,0.14)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/08-ui-kit-interactions.css",
+      "literal": "rgba(255,255,255,0.18)",
+      "count": 1,
+      "reason": "specular white sheen over the vivid accent gradient (same in both modes)",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/08-ui-kit-interactions.css",
+      "literal": "rgba(255,255,255,0.28)",
+      "count": 1,
+      "reason": "specular white sheen over the vivid accent gradient (same in both modes)",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/08-ui-kit-interactions.css",
+      "literal": "rgba(255,255,255,1)",
+      "count": 2,
+      "reason": "comet ring bright head (animation artwork)",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/08-ui-kit-interactions.css",
+      "literal": "rgba(42,36,32,0.08)",
+      "count": 3,
+      "reason": "ink-tinted shadow: mode-agnostic like black shadows",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/08-ui-kit-interactions.css",
+      "literal": "rgba(42,36,32,0.09)",
+      "count": 1,
+      "reason": "ink-tinted shadow: mode-agnostic like black shadows",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/08-ui-kit-interactions.css",
+      "literal": "rgba(42,36,32,0.1)",
+      "count": 1,
+      "reason": "ink-tinted shadow: mode-agnostic like black shadows",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/08-ui-kit-interactions.css",
+      "literal": "rgba(47,107,61,0.32)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/09-market-signals.css",
+      "literal": "#191919",
+      "count": 1,
+      "reason": "paper-styled brief preview: a printed-page look that stays light in both modes",
+      "exceptionId": "WS5-PAPER"
+    },
+    {
+      "file": "styles/dashboard/09-market-signals.css",
+      "literal": "#1d6fa8",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/09-market-signals.css",
+      "literal": "#23211c",
+      "count": 1,
+      "reason": "paper-styled brief preview: a printed-page look that stays light in both modes",
+      "exceptionId": "WS5-PAPER"
+    },
+    {
+      "file": "styles/dashboard/09-market-signals.css",
+      "literal": "#6b6256",
+      "count": 1,
+      "reason": "paper-styled brief preview: a printed-page look that stays light in both modes",
+      "exceptionId": "WS5-PAPER"
+    },
+    {
+      "file": "styles/dashboard/09-market-signals.css",
+      "literal": "#8a8073",
+      "count": 2,
+      "reason": "paper-styled brief preview: a printed-page look that stays light in both modes",
+      "exceptionId": "WS5-PAPER"
+    },
+    {
+      "file": "styles/dashboard/09-market-signals.css",
+      "literal": "#a23d2c",
+      "count": 1,
+      "reason": "paper-styled brief preview: a printed-page look that stays light in both modes",
+      "exceptionId": "WS5-PAPER"
+    },
+    {
+      "file": "styles/dashboard/09-market-signals.css",
+      "literal": "#ddd6c8",
+      "count": 1,
+      "reason": "paper-styled brief preview: a printed-page look that stays light in both modes",
+      "exceptionId": "WS5-PAPER"
+    },
+    {
+      "file": "styles/dashboard/09-market-signals.css",
+      "literal": "#e3ddd0",
+      "count": 2,
+      "reason": "paper-styled brief preview: a printed-page look that stays light in both modes",
+      "exceptionId": "WS5-PAPER"
+    },
+    {
+      "file": "styles/dashboard/09-market-signals.css",
+      "literal": "#f4f1ea",
+      "count": 1,
+      "reason": "paper-styled brief preview: a printed-page look that stays light in both modes",
+      "exceptionId": "WS5-PAPER"
+    },
+    {
+      "file": "styles/dashboard/09-market-signals.css",
+      "literal": "#fff",
+      "count": 4,
+      "reason": "alpha-only mask stop: the colour is never painted",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/09-market-signals.css",
+      "literal": "rgba(0,200,228,0.22)",
+      "count": 1,
+      "reason": "coloured glow shadow around a vivid accent control",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/09-market-signals.css",
+      "literal": "rgba(0,200,228,0.34)",
+      "count": 1,
+      "reason": "coloured glow shadow around a vivid accent control",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/09-market-signals.css",
+      "literal": "rgba(255,255,255,0.18)",
+      "count": 2,
+      "reason": "specular white sheen over the vivid accent gradient (same in both modes)",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/09-market-signals.css",
+      "literal": "rgba(255,255,255,0.28)",
+      "count": 2,
+      "reason": "specular white sheen over the vivid accent gradient (same in both modes)",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/09-market-signals.css",
+      "literal": "rgba(255,255,255,1)",
+      "count": 1,
+      "reason": "comet ring bright head (animation artwork)",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/09-market-signals.css",
+      "literal": "rgba(42,36,32,0.06)",
+      "count": 1,
+      "reason": "ink-tinted shadow: mode-agnostic like black shadows",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/09-market-signals.css",
+      "literal": "rgba(42,36,32,0.08)",
+      "count": 3,
+      "reason": "ink-tinted shadow: mode-agnostic like black shadows",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/09-market-signals.css",
+      "literal": "rgba(42,36,32,0.1)",
+      "count": 1,
+      "reason": "ink-tinted shadow: mode-agnostic like black shadows",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/09-market-signals.css",
+      "literal": "rgba(42,36,32,0.14)",
+      "count": 1,
+      "reason": "ink-tinted shadow: mode-agnostic like black shadows",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/09-market-signals.css",
+      "literal": "rgba(42,36,32,0.16)",
+      "count": 1,
+      "reason": "ink-tinted shadow: mode-agnostic like black shadows",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/10-video-remix.css",
+      "literal": "#000",
+      "count": 6,
+      "reason": "media letterbox / poster backdrop behind video or imagery / alpha-only mask stop: the colour is never painted",
+      "exceptionId": "X5 / X13"
+    },
+    {
+      "file": "styles/dashboard/10-video-remix.css",
+      "literal": "#111",
+      "count": 2,
+      "reason": "media letterbox / poster backdrop behind video or imagery",
+      "exceptionId": "X5"
+    },
+    {
+      "file": "styles/dashboard/10-video-remix.css",
+      "literal": "#15803d",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/10-video-remix.css",
+      "literal": "#3b82f6",
+      "count": 4,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/10-video-remix.css",
+      "literal": "#b45309",
+      "count": 2,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/10-video-remix.css",
+      "literal": "#b91c1c",
+      "count": 5,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/10-video-remix.css",
+      "literal": "#fff",
+      "count": 7,
+      "reason": "white text on a fixed-colour fill that does not change per mode / alpha-only mask stop: the colour is never painted",
+      "exceptionId": "WS5-FIXED / X13"
+    },
+    {
+      "file": "styles/dashboard/10-video-remix.css",
+      "literal": "rgba(0,200,228,0.18)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/10-video-remix.css",
+      "literal": "rgba(0,200,228,0.22)",
+      "count": 2,
+      "reason": "coloured glow shadow around a vivid accent control",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/10-video-remix.css",
+      "literal": "rgba(122,77,255,0.08)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/10-video-remix.css",
+      "literal": "rgba(122,77,255,0.18)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/10-video-remix.css",
+      "literal": "rgba(17,109,255,0.06)",
+      "count": 2,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/10-video-remix.css",
+      "literal": "rgba(17,109,255,0.22)",
+      "count": 1,
+      "reason": "coloured glow shadow around a vivid accent control",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/10-video-remix.css",
+      "literal": "rgba(17,109,255,0.32)",
+      "count": 1,
+      "reason": "coloured glow shadow around a vivid accent control",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/10-video-remix.css",
+      "literal": "rgba(17,109,255,0.36)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/10-video-remix.css",
+      "literal": "rgba(17,109,255,0.5)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/10-video-remix.css",
+      "literal": "rgba(17,109,255,0.52)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/10-video-remix.css",
+      "literal": "rgba(17,17,17,0.82)",
+      "count": 1,
+      "reason": "translucent dark scrim/surface over media or dark panels (stays dark in both modes)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/10-video-remix.css",
+      "literal": "rgba(185,28,28,0.08)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/10-video-remix.css",
+      "literal": "rgba(214,69,69,0.08)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/10-video-remix.css",
+      "literal": "rgba(214,69,69,0.5)",
+      "count": 1,
+      "reason": "categorical / data-semantic colour with no theme role (status-like accent, chart or chip hue)",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/10-video-remix.css",
+      "literal": "rgba(255,255,255,0.18)",
+      "count": 2,
+      "reason": "specular white sheen over the vivid accent gradient (same in both modes)",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/10-video-remix.css",
+      "literal": "rgba(255,255,255,0.28)",
+      "count": 2,
+      "reason": "specular white sheen over the vivid accent gradient (same in both modes)",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/10-video-remix.css",
+      "literal": "rgba(255,255,255,0.7)",
+      "count": 1,
+      "reason": "white hairline on a dark scrim over media (stays white in both modes)",
+      "exceptionId": "WS5-DARK"
+    },
+    {
+      "file": "styles/dashboard/10-video-remix.css",
+      "literal": "rgba(255,255,255,1)",
+      "count": 1,
+      "reason": "comet ring bright head (animation artwork)",
+      "exceptionId": "X13"
+    },
+    {
+      "file": "styles/dashboard/10-video-remix.css",
+      "literal": "rgba(42,36,32,0.07)",
+      "count": 1,
+      "reason": "ink-tinted shadow: mode-agnostic like black shadows",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/10-video-remix.css",
+      "literal": "rgba(42,36,32,0.08)",
+      "count": 2,
+      "reason": "ink-tinted shadow: mode-agnostic like black shadows",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/10-video-remix.css",
+      "literal": "rgba(42,36,32,0.14)",
+      "count": 2,
+      "reason": "ink-tinted shadow: mode-agnostic like black shadows",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/10-video-remix.css",
+      "literal": "rgba(42,36,32,0.18)",
+      "count": 1,
+      "reason": "ink-tinted shadow: mode-agnostic like black shadows",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "#0a0a0a",
+      "count": 3,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "#116dff",
+      "count": 1,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "#166534",
+      "count": 1,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "#1a1a1a",
+      "count": 2,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "#5a5346",
+      "count": 1,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "#7a5cff",
+      "count": 1,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "#b14bff",
+      "count": 1,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "#dc2626",
+      "count": 2,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "#fbf8f0",
+      "count": 1,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "#fefdf9",
+      "count": 1,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "#ff4fa1",
+      "count": 1,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "#ff7a3a",
+      "count": 2,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "#fff",
+      "count": 3,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "rgba(0,0,0,.1)",
+      "count": 1,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "rgba(0,0,0,.15)",
+      "count": 2,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "rgba(17,109,255,0.06)",
+      "count": 1,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "rgba(17,109,255,0.25)",
+      "count": 1,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "rgba(176,90,255,0.16)",
+      "count": 1,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "rgba(176,90,255,0.35)",
+      "count": 1,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "rgba(212,196,171,0.82)",
+      "count": 1,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "rgba(22,101,52,0.06)",
+      "count": 1,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "rgba(22,101,52,0.40)",
+      "count": 1,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "rgba(220,38,38,0.06)",
+      "count": 1,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "rgba(220,38,38,0.15)",
+      "count": 1,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "rgba(220,38,38,0.40)",
+      "count": 1,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "rgba(255,120,90,0.20)",
+      "count": 1,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "rgba(255,180,90,0.16)",
+      "count": 1,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "rgba(255,255,255,.55)",
+      "count": 1,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "rgba(255,255,255,0.4)",
+      "count": 2,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "rgba(255,255,255,0.5)",
+      "count": 3,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "rgba(255,255,255,0.6)",
+      "count": 1,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "rgba(255,255,255,0.65)",
+      "count": 1,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "styles/dashboard/11-creative-brief.css",
+      "literal": "rgba(255,255,255,0.78)",
+      "count": 1,
+      "reason": ".brief-kit: published Creative Brief artifact kit, pinned light (data-theme-scope=\"light\" at the mount point)",
+      "exceptionId": "X2"
+    }
+  ]
+}

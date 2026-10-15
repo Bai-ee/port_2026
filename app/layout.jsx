@@ -1,9 +1,17 @@
 import Script from 'next/script';
 import { Doto, Space_Grotesk, Space_Mono } from 'next/font/google';
 import '../colors.css';
+// Theme Studio: generated --t-* tokens first, then the legacy-alias bridge, both after colors.css
+// so the aliases win over any same-name fallback in colors.css (contract §8.1).
+import '../styles/theme/theme.generated.css';
+import '../styles/theme/bridge.css';
 import { AuthProvider } from '../AuthContext';
 import AnalyticsPageView from '../components/AnalyticsPageView';
 import SmoothScroll from '../components/SmoothScroll';
+import ThemeRuntime from '../components/theme/ThemeRuntime';
+import ThemeStudioMount from '../components/theme/ThemeStudioMount';
+import { getBootstrapScript } from '../lib/theme/bootstrap-source.js';
+import themeRuntimeData from '../lib/theme/production/resolved.runtime.generated.js';
 
 // Self-hosted via next/font/google — preserves the literal family names
 // ("Doto" / "Space Grotesk" / "Space Mono") that every existing inline
@@ -15,6 +23,25 @@ const spaceGrotesk = Space_Grotesk({ subsets: ['latin'], weight: ['300', '400', 
 const spaceMono = Space_Mono({ subsets: ['latin'], weight: ['400', '700'], display: 'swap' });
 
 const GA_ID = process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID;
+
+// Theme Studio (contract §8.1). The production default viewer preference decides what the server
+// renders on <html>; 'system' renders no data-theme (the generated @media fallback covers no-JS and
+// the head bootstrap sets the real value before first paint).
+const THEME_DEFAULT_PREF = themeRuntimeData.defaults.viewerPreference;
+const THEME_BOOTSTRAP_SCRIPT = getBootstrapScript({ defaultPreference: THEME_DEFAULT_PREF });
+const THEME_SSR_ATTRS = THEME_DEFAULT_PREF === 'system'
+  ? {}
+  : { 'data-theme': THEME_DEFAULT_PREF, 'data-theme-pref': THEME_DEFAULT_PREF };
+
+// colorScheme/themeColor follow the production palette. Known limitation (contract risk 13):
+// themeColor follows the OS, not an explicit viewer override.
+export const viewport = {
+  colorScheme: THEME_DEFAULT_PREF === 'system' ? 'light dark' : THEME_DEFAULT_PREF,
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: themeRuntimeData.light.tokens['--t-page'] },
+    { media: '(prefers-color-scheme: dark)', color: themeRuntimeData.dark.tokens['--t-page'] },
+  ],
+};
 
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL
@@ -109,7 +136,16 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={`${doto.className} ${spaceGrotesk.className} ${spaceMono.className}`}>
+    <html
+      lang="en"
+      className={`${doto.className} ${spaceGrotesk.className} ${spaceMono.className}`}
+      suppressHydrationWarning
+      {...THEME_SSR_ATTRS}
+    >
+      <head>
+        {/* Pre-paint theme bootstrap: constant ES5 script, first child of <head> (lib/theme/bootstrap-source.js). */}
+        <script id="theme-bootstrap" dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
+      </head>
       <body
         suppressHydrationWarning
         style={{
@@ -117,11 +153,16 @@ export default function RootLayout({ children }) {
           fontFamily: '"Space Grotesk", system-ui, sans-serif',
           WebkitFontSmoothing: 'antialiased',
           MozOsxFontSmoothing: 'grayscale',
+          // Baseline resolves to #ffffff / #000000 (the previous UA defaults), so the look is unchanged.
+          background: 'var(--t-page)',
+          color: 'var(--t-text-default)',
         }}
       >
+        <ThemeRuntime />
         <SmoothScroll />
         <AuthProvider>
           <AnalyticsPageView />
+          <ThemeStudioMount />
           {children}
         </AuthProvider>
         {GA_ID && (

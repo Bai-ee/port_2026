@@ -50,7 +50,7 @@ const STATUS_WORDS = {
   unapproved: 'not approved — not used',
 };
 const COLLAPSED_GAPS = 3;
-const TOGGLE = { alignSelf: 'flex-start', padding: 0, border: 0, background: 'none', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'rgba(42,36,32,0.7)', textDecoration: 'underline' };
+const TOGGLE = { alignSelf: 'flex-start', padding: 0, border: 0, background: 'none', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'color-mix(in srgb, var(--t-text) 70%, transparent)', textDecoration: 'underline' };
 
 const STATUS_LINE = {
   draft: 'Saved draft — not approved',
@@ -155,7 +155,7 @@ function SuggestionCard({ s, text, thumbUrl, onText, onCommit, onSave, onDismiss
       <header id={`daily-suggestion-header-row-${s.id}`} className="xce-dl-card-head">
         <span className={`xce-dl-type xce-dl-type-${s.type}`}>{TYPE_LABEL[s.type] || s.type}</span>
         {s.match?.tier === 'genre' ? <span className="xce-dl-tier">genre-level match</span> : null}
-        {slotLabel(s.slot) ? <span id={`daily-suggestion-slot-label-${s.id}`} className="xce-dl-slot-label" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: '#2a2420' }}>{slotLabel(s.slot)}</span> : null}
+        {slotLabel(s.slot) ? <span id={`daily-suggestion-slot-label-${s.id}`} className="xce-dl-slot-label" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: 'var(--t-text)' }}>{slotLabel(s.slot)}</span> : null}
         <span className="xce-dl-slot">{timingLine(s)}</span>
         {trackChip ? <span id={`daily-suggestion-track-chip-${s.id}`} className="xce-chip">{trackChip}</span> : null}
         {media.chip ? <span id={`daily-suggestion-needs-staging-chip-${s.id}`} className="xce-chip xce-chip-warn">{media.chip}</span> : null}

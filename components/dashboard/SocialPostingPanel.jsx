@@ -375,54 +375,54 @@ export default function SocialPostingPanel({ getIdToken, sourceDraft, sourceLabe
       <style jsx>{`
         #social-posting-panel { margin-top: 18px; }
         .sp-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(240px, 0.75fr); gap: 14px; }
-        .sp-compose, .sp-agents, .sp-queue { border: 1px solid rgba(42,36,32,0.12); background: rgba(255,255,255,0.62); border-radius: 8px; padding: 14px; }
+        .sp-compose, .sp-agents, .sp-queue { border: 1px solid var(--t-border-subtle); background: var(--t-glass); border-radius: 8px; padding: 14px; }
         .sp-compose { grid-row: span 2; }
         .sp-section-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 10px; }
-        .sp-section-head span { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(42,36,32,0.66); }
-        .sp-section-head small { font-family: var(--font-mono); font-size: 11px; color: rgba(42,36,32,0.58); }
-        .sp-over { color: #b42318 !important; }
-        textarea { width: 100%; resize: vertical; min-height: 150px; border: 1px solid rgba(42,36,32,0.16); border-radius: 8px; padding: 12px; background: rgba(255,252,244,0.94); color: #211d1a; font: inherit; line-height: 1.45; outline: none; }
-        textarea:focus, input:focus { border-color: rgba(42,36,32,0.48); }
+        .sp-section-head span { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: color-mix(in srgb, var(--t-text) 66%, transparent); }
+        .sp-section-head small { font-family: var(--font-mono); font-size: 11px; color: color-mix(in srgb, var(--t-text) 58%, transparent); }
+        .sp-over { color: var(--t-danger) !important; }
+        textarea { width: 100%; resize: vertical; min-height: 150px; border: 1px solid color-mix(in srgb, var(--t-text) 16%, transparent); border-radius: 8px; padding: 12px; background: color-mix(in srgb, var(--t-raised) 94%, transparent); color: var(--t-text); font: inherit; line-height: 1.45; outline: none; }
+        textarea:focus, input:focus { border-color: color-mix(in srgb, var(--t-text) 48%, transparent); }
         .sp-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-        .sp-mode-row { display: inline-flex; gap: 4px; margin-bottom: 8px; padding: 3px; border: 1px solid rgba(42,36,32,0.12); border-radius: 8px; background: rgba(250,247,242,0.78); }
-        .sp-mode-row button { min-height: 26px; padding: 0 10px; border: 0; background: transparent; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(42,36,32,0.6); }
-        .sp-mode-row button.sp-mode-on { background: #24211e; color: #f7f4ef; }
-        .sp-repost-shell { display: grid; gap: 8px; min-height: 150px; padding: 12px; border: 1px solid rgba(42,36,32,0.16); border-radius: 8px; background: rgba(255,252,244,0.94); }
+        .sp-mode-row { display: inline-flex; gap: 4px; margin-bottom: 8px; padding: 3px; border: 1px solid var(--t-border-subtle); border-radius: 8px; background: color-mix(in srgb, var(--t-raised) 78%, transparent); }
+        .sp-mode-row button { min-height: 26px; padding: 0 10px; border: 0; background: transparent; font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: color-mix(in srgb, var(--t-text) 60%, transparent); }
+        .sp-mode-row button.sp-mode-on { background: var(--t-text); color: var(--t-text-inverse); }
+        .sp-repost-shell { display: grid; gap: 8px; min-height: 150px; padding: 12px; border: 1px solid color-mix(in srgb, var(--t-text) 16%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--t-raised) 94%, transparent); }
         .sp-repost-shell input { width: 100%; font: inherit; font-size: 13px; }
-        .sp-repost-note { font-size: 11px; line-height: 1.35; color: #8a5a10; }
-        button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid rgba(42,36,32,0.12); border-radius: 8px; background: #e6ded3; color: #211d1a; min-height: 36px; padding: 0 12px; font-weight: 800; cursor: pointer; }
+        .sp-repost-note { font-size: 11px; line-height: 1.35; color: var(--t-warning); }
+        button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--t-border-subtle); border-radius: 8px; background: var(--t-border-subtle); color: var(--t-text); min-height: 36px; padding: 0 12px; font-weight: 800; cursor: pointer; }
         button:disabled { opacity: 0.48; cursor: not-allowed; }
-        .sp-primary { background: #24211e; color: #f7f4ef; }
+        .sp-primary { background: var(--t-text); color: var(--t-text-inverse); }
         .sp-link-btn { margin-top: 8px; min-height: 28px; padding: 0; border: 0; background: transparent; color: #4a7c7e; font-size: 12px; }
-        .sp-strategy-card { margin-top: 10px; display: grid; gap: 7px; border: 1px solid rgba(42,36,32,0.1); border-radius: 8px; background: rgba(250,247,242,0.78); padding: 10px; }
+        .sp-strategy-card { margin-top: 10px; display: grid; gap: 7px; border: 1px solid color-mix(in srgb, var(--t-text) 10%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--t-raised) 78%, transparent); padding: 10px; }
         .sp-strategy-head, .sp-strategy-meta, .sp-strategy-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-        .sp-strategy-head span { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(42,36,32,0.66); }
-        .sp-strategy-head small, .sp-strategy-meta span { font-family: var(--font-mono); font-size: 10px; color: rgba(42,36,32,0.54); }
-        .sp-strategy-card p { margin: 0; font-size: 12px; line-height: 1.4; color: #211d1a; }
-        .sp-strategy-rationale { font-size: 11px; line-height: 1.35; color: rgba(42,36,32,0.56); }
+        .sp-strategy-head span { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: color-mix(in srgb, var(--t-text) 66%, transparent); }
+        .sp-strategy-head small, .sp-strategy-meta span { font-family: var(--font-mono); font-size: 10px; color: color-mix(in srgb, var(--t-text) 54%, transparent); }
+        .sp-strategy-card p { margin: 0; font-size: 12px; line-height: 1.4; color: var(--t-text); }
+        .sp-strategy-rationale { font-size: 11px; line-height: 1.35; color: color-mix(in srgb, var(--t-text) 56%, transparent); }
         .sp-strategy-actions { justify-content: flex-start; }
         .sp-strategy-actions .sp-link-btn { margin-top: 0; display: inline-flex; align-items: center; gap: 5px; }
         .sp-schedule-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; margin-top: 10px; }
         label { display: flex; flex-direction: column; gap: 6px; }
-        label span { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 800; text-transform: uppercase; color: rgba(42,36,32,0.64); }
-        input { min-height: 36px; border: 1px solid rgba(42,36,32,0.16); border-radius: 8px; padding: 0 10px; background: rgba(255,252,244,0.94); color: #211d1a; }
+        label span { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 800; text-transform: uppercase; color: color-mix(in srgb, var(--t-text) 64%, transparent); }
+        input { min-height: 36px; border: 1px solid color-mix(in srgb, var(--t-text) 16%, transparent); border-radius: 8px; padding: 0 10px; background: color-mix(in srgb, var(--t-raised) 94%, transparent); color: var(--t-text); }
         .sp-notice, .sp-error { margin: 10px 0 0; font-size: 12px; line-height: 1.35; }
-        .sp-notice-ok { color: #146c43; }
-        .sp-notice-error, .sp-error { color: #b42318; }
-        .sp-diagnostics { display: grid; gap: 3px; margin-top: 10px; border: 1px solid rgba(42,36,32,0.1); border-radius: 8px; background: rgba(250,247,242,0.74); padding: 10px; }
-        .sp-diagnostics strong { font-size: 12px; color: #211d1a; }
-        .sp-diagnostics span { font-family: var(--font-mono); font-size: 10px; color: rgba(42,36,32,0.58); }
+        .sp-notice-ok { color: var(--t-success); }
+        .sp-notice-error, .sp-error { color: var(--t-danger); }
+        .sp-diagnostics { display: grid; gap: 3px; margin-top: 10px; border: 1px solid color-mix(in srgb, var(--t-text) 10%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--t-raised) 74%, transparent); padding: 10px; }
+        .sp-diagnostics strong { font-size: 12px; color: var(--t-text); }
+        .sp-diagnostics span { font-family: var(--font-mono); font-size: 10px; color: color-mix(in srgb, var(--t-text) 58%, transparent); }
         .sp-agent-list { display: grid; gap: 8px; }
-        .sp-agent-card, .sp-post, .sp-empty { border: 1px solid rgba(42,36,32,0.1); border-radius: 8px; background: rgba(250,247,242,0.74); padding: 10px; }
-        .sp-agent-card strong, .sp-post strong { display: block; text-transform: capitalize; font-size: 12px; color: #211d1a; }
-        .sp-agent-card p, .sp-post p, .sp-empty { margin: 4px 0 0; font-size: 12px; line-height: 1.35; color: rgba(42,36,32,0.68); }
+        .sp-agent-card, .sp-post, .sp-empty { border: 1px solid color-mix(in srgb, var(--t-text) 10%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--t-raised) 74%, transparent); padding: 10px; }
+        .sp-agent-card strong, .sp-post strong { display: block; text-transform: capitalize; font-size: 12px; color: var(--t-text); }
+        .sp-agent-card p, .sp-post p, .sp-empty { margin: 4px 0 0; font-size: 12px; line-height: 1.35; color: color-mix(in srgb, var(--t-text) 68%, transparent); }
         .sp-queue { max-height: 320px; overflow: auto; }
         .sp-post { margin-bottom: 8px; }
         .sp-post div { display: flex; justify-content: space-between; gap: 8px; }
-        .sp-post span, .sp-post small { font-family: var(--font-mono); font-size: 10px; color: rgba(42,36,32,0.54); }
-        .sp-post-posted { border-color: rgba(20,108,67,0.24); }
-        .sp-post-failed { border-color: rgba(180,35,24,0.3); }
-        .sp-post-awaiting_approval { border-color: rgba(180,140,20,0.32); }
+        .sp-post span, .sp-post small { font-family: var(--font-mono); font-size: 10px; color: color-mix(in srgb, var(--t-text) 54%, transparent); }
+        .sp-post-posted { border-color: var(--t-success-border); }
+        .sp-post-failed { border-color: var(--t-danger-border); }
+        .sp-post-awaiting_approval { border-color: color-mix(in srgb, var(--t-warning-solid) 32%, transparent); }
         .sp-approval-actions { display: flex; gap: 6px; margin-top: 8px; }
         .sp-approval-actions button { min-height: 28px; padding: 0 10px; font-size: 11px; }
         .sp-icon-btn { min-height: 26px; width: 28px; padding: 0; }

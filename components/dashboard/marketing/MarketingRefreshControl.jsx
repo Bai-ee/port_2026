@@ -202,8 +202,8 @@ export default function MarketingRefreshControl({ running = false, onRun, estima
         #marketing-refresh-shell { position: relative; display: inline-block; }
         #marketing-refresh-button { min-height: 44px; padding: 0 16px; border: 1px solid currentColor; border-radius: 999px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
         #marketing-refresh-button:disabled { opacity: 0.5; cursor: default; }
-        #marketing-refresh-panel { margin-top: 8px; width: min(520px, 92vw); padding: 12px; border: 1px solid rgba(0,0,0,0.15); border-radius: 12px; background: #fff; color: #111; box-shadow: 0 8px 24px rgba(0,0,0,0.12); text-align: left; }
-        #marketing-refresh-panel .mr-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.08); }
+        #marketing-refresh-panel { margin-top: 8px; width: min(520px, 92vw); padding: 12px; border: 1px solid color-mix(in srgb, var(--t-text-strong) 15%, transparent); border-radius: 12px; background: var(--t-surface); color: var(--t-text); box-shadow: 0 8px 24px rgba(0,0,0,0.12); text-align: left; }
+        #marketing-refresh-panel .mr-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid color-mix(in srgb, var(--t-text-strong) 8%, transparent); }
         #marketing-refresh-panel .mr-row-main { display: flex; flex: 1 1 260px; gap: 10px; align-items: flex-start; min-height: 44px; cursor: pointer; }
         #marketing-refresh-panel .mr-row-text { display: flex; flex-direction: column; gap: 2px; }
         #marketing-refresh-panel .mr-row-label { font-weight: 600; }
@@ -211,9 +211,9 @@ export default function MarketingRefreshControl({ running = false, onRun, estima
         #marketing-refresh-panel .mr-row-meta { font-size: 12px; opacity: 0.65; }
         #marketing-refresh-panel .mr-row-option { display: flex; align-items: center; gap: 6px; min-height: 44px; font-size: 13px; }
         #marketing-refresh-panel input[type="checkbox"] { width: 20px; height: 20px; margin-top: 2px; }
-        #marketing-refresh-panel button { min-height: 44px; padding: 0 14px; border: 1px solid rgba(0,0,0,0.3); border-radius: 8px; background: #fff; color: inherit; font: inherit; cursor: pointer; }
+        #marketing-refresh-panel button { min-height: 44px; padding: 0 14px; border: 1px solid color-mix(in srgb, var(--t-text-strong) 30%, transparent); border-radius: 8px; background: var(--t-surface); color: inherit; font: inherit; cursor: pointer; }
         #marketing-refresh-panel button:disabled { opacity: 0.5; cursor: default; }
-        #marketing-refresh-confirm-row { margin-top: 10px; padding: 10px; border: 1px solid #b45309; border-radius: 8px; background: #fffbeb; font-size: 14px; }
+        #marketing-refresh-confirm-row { margin-top: 10px; padding: 10px; border: 1px solid #b45309; border-radius: 8px; background: var(--t-raised); font-size: 14px; }
         #marketing-refresh-confirm-total { margin-top: 8px; font-weight: 600; }
         #marketing-refresh-footer-note { margin-top: 10px; font-size: 12px; opacity: 0.65; }
         #marketing-refresh-panel .mr-config-link { border-color: transparent; background: transparent; text-decoration: underline; padding: 0 8px; }

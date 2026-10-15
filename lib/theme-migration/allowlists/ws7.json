@@ -1,0 +1,787 @@
+{
+  "workstream": "WS7",
+  "description": "Colour literals intentionally left in the public JSX files owned by WS7 (contract 10.4 rule 5). The scan test (ws7-js-scan.test.js) fails on any literal in an owned file that is neither here nor a mode-agnostic black shadow (X6).",
+  "legend": {
+    "WS7-A": "Intentional dark media/editor chrome that stays dark in both modes (video letterbox and dimmer, orphan or dev-only dark panels, dormant dark-surface sections). Light text on these surfaces would break if the surface followed the theme.",
+    "WS7-B": "Decorative artwork: brand gradients and shader palettes that are content, not UI chrome (the lava shader ramp and its CSS fallback must stay in step with each other; the headline text-fill gradient is a designer decision recorded in the coverage map).",
+    "X2": "Content rendered inside an iframe (a separate document with its own background).",
+    "X5": "Third-party brand marks (Google logo) and fixed brand imagery.",
+    "X6": "Categorical / data-semantic accent colours that identify an item and must not drift with the theme hue."
+  },
+  "pinnedFiles": [
+    {
+      "file": "components/looper/LooperLandingPage.jsx",
+      "exceptionId": "X8",
+      "reason": "/looper stays pinned light in v1: the outermost shell carries data-theme-scope=\"light\"."
+    },
+    {
+      "file": "components/recreate/RecreateLandingPage.jsx",
+      "exceptionId": "X8",
+      "reason": "/recreate stays pinned light in v1: the outermost shell carries data-theme-scope=\"light\" and the scene runs in light mode."
+    },
+    {
+      "file": "app/archive/page.jsx",
+      "exceptionId": "X8",
+      "reason": "/archive stays pinned (its own dark operator console): root main carries data-theme-scope=\"light\"."
+    },
+    {
+      "file": "app/capture/page.jsx",
+      "exceptionId": "X8",
+      "reason": "/capture stays pinned: capture-root carries data-theme-scope=\"light\"."
+    },
+    {
+      "file": "app/post-approval/page.jsx",
+      "exceptionId": "X8",
+      "reason": "/post-approval stays pinned: the page main carries data-theme-scope=\"light\"."
+    },
+    {
+      "file": "app/preview/layout.jsx",
+      "exceptionId": "X8",
+      "reason": "/preview/* stay pinned light: the shared layout shell carries data-theme-scope=\"light\" and paints the light page."
+    }
+  ],
+  "entries": [
+    {
+      "file": "TextOverlay.jsx",
+      "literal": "#000000",
+      "count": 2,
+      "reason": "Orphan text-editing overlay (no live importer); dark editor panel with light text.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "TextOverlay.jsx",
+      "literal": "#ffffff",
+      "count": 4,
+      "reason": "Orphan text-editing overlay (no live importer); dark editor panel with light text.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "TextOverlay.jsx",
+      "literal": "rgba(0, 0, 0, 0.3)",
+      "count": 2,
+      "reason": "Orphan text-editing overlay (no live importer); dark editor panel with light text.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "TextOverlay.jsx",
+      "literal": "rgba(0, 0, 0, 0.2)",
+      "count": 1,
+      "reason": "Orphan text-editing overlay (no live importer); dark editor panel with light text.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "TextOverlay.jsx",
+      "literal": "rgba(0, 0, 0, 0.15)",
+      "count": 1,
+      "reason": "Orphan text-editing overlay (no live importer); dark editor panel with light text.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "TextOverlay.jsx",
+      "literal": "rgba(15, 23, 42, 0.95)",
+      "count": 1,
+      "reason": "Orphan text-editing overlay (no live importer); dark editor panel with light text.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "TextOverlay.jsx",
+      "literal": "#d1d5db",
+      "count": 1,
+      "reason": "Orphan text-editing overlay (no live importer); dark editor panel with light text.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "TextOverlay.jsx",
+      "literal": "#1f2937",
+      "count": 2,
+      "reason": "Orphan text-editing overlay (no live importer); dark editor panel with light text.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "TextOverlay.jsx",
+      "literal": "#6b7280",
+      "count": 2,
+      "reason": "Orphan text-editing overlay (no live importer); dark editor panel with light text.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "HeroFooter.jsx",
+      "literal": "#fff",
+      "count": 3,
+      "reason": "Orphan hero footer editor (no live importer); dark slate panel with light text.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "HeroFooter.jsx",
+      "literal": "#d1d5db",
+      "count": 1,
+      "reason": "Orphan hero footer editor (no live importer); dark slate panel with light text.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "HeroFooter.jsx",
+      "literal": "#000",
+      "count": 3,
+      "reason": "Orphan hero footer editor (no live importer); dark slate panel with light text.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "HeroFooter.jsx",
+      "literal": "rgba(15, 23, 42, 0.95)",
+      "count": 1,
+      "reason": "Orphan hero footer editor (no live importer); dark slate panel with light text.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "HorizontalGallery.jsx",
+      "literal": "#000000",
+      "count": 1,
+      "reason": "Dormant section (mount is commented out in HomePage) designed as a dark gallery with cream text.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "HorizontalGallery.jsx",
+      "literal": "rgba(255, 255, 255, 0.08)",
+      "count": 1,
+      "reason": "Dormant section (mount is commented out in HomePage) designed as a dark gallery with cream text.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "HorizontalGallery.jsx",
+      "literal": "rgba(255, 255, 255, 0.015)",
+      "count": 1,
+      "reason": "Dormant section (mount is commented out in HomePage) designed as a dark gallery with cream text.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "HorizontalGallery.jsx",
+      "literal": "rgba(0, 0, 0, 0.18)",
+      "count": 1,
+      "reason": "Dormant section (mount is commented out in HomePage) designed as a dark gallery with cream text.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "HorizontalGallery.jsx",
+      "literal": "rgba(245, 241, 223, 0.12)",
+      "count": 1,
+      "reason": "Dormant section (mount is commented out in HomePage) designed as a dark gallery with cream text.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "HorizontalGallery.jsx",
+      "literal": "#f5f1df",
+      "count": 1,
+      "reason": "Dormant section (mount is commented out in HomePage) designed as a dark gallery with cream text.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "HorizontalGallery.jsx",
+      "literal": "rgba(245, 241, 223, 0.66)",
+      "count": 1,
+      "reason": "Dormant section (mount is commented out in HomePage) designed as a dark gallery with cream text.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "HorizontalTextSection.jsx",
+      "literal": "#f5f1df",
+      "count": 1,
+      "reason": "Dormant section (mount is commented out in HomePage) with cream text for a dark backdrop.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "HoverRevealList.jsx",
+      "literal": "rgba(245, 241, 223, 0.12)",
+      "count": 1,
+      "reason": "Dormant section (mount is commented out in HomePage) with cream text for a dark backdrop.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "HoverRevealList.jsx",
+      "literal": "rgba(245, 241, 223, 0.28)",
+      "count": 1,
+      "reason": "Dormant section (mount is commented out in HomePage) with cream text for a dark backdrop.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "HoverRevealList.jsx",
+      "literal": "#f5f1df",
+      "count": 1,
+      "reason": "Dormant section (mount is commented out in HomePage) with cream text for a dark backdrop.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "HoverRevealList.jsx",
+      "literal": "rgba(245, 241, 223, 0.35)",
+      "count": 1,
+      "reason": "Dormant section (mount is commented out in HomePage) with cream text for a dark backdrop.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "components/home/AnchorLavaControls.jsx",
+      "literal": "rgba(14, 14, 18, 0.94)",
+      "count": 1,
+      "reason": "Developer-only dark control panel for the lava shader.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "components/home/AnchorLavaControls.jsx",
+      "literal": "rgba(255, 255, 255, 0.14)",
+      "count": 2,
+      "reason": "Developer-only dark control panel for the lava shader.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "components/home/AnchorLavaControls.jsx",
+      "literal": "rgba(255, 255, 255, 0.92)",
+      "count": 1,
+      "reason": "Developer-only dark control panel for the lava shader.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "components/home/AnchorLavaControls.jsx",
+      "literal": "rgba(255, 255, 255, 0.12)",
+      "count": 1,
+      "reason": "Developer-only dark control panel for the lava shader.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "components/home/AnchorLavaControls.jsx",
+      "literal": "rgba(29, 219, 237, 0.55)",
+      "count": 1,
+      "reason": "Developer-only dark control panel for the lava shader.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "components/home/AnchorLavaControls.jsx",
+      "literal": "rgba(255, 255, 255, 0.18)",
+      "count": 3,
+      "reason": "Developer-only dark control panel for the lava shader.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "components/home/AnchorLavaControls.jsx",
+      "literal": "rgba(29, 219, 237, 0.14)",
+      "count": 1,
+      "reason": "Developer-only dark control panel for the lava shader.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "components/home/AnchorLavaControls.jsx",
+      "literal": "rgba(255, 255, 255, 0.06)",
+      "count": 1,
+      "reason": "Developer-only dark control panel for the lava shader.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "components/home/AnchorLavaControls.jsx",
+      "literal": "#8ef0fb",
+      "count": 1,
+      "reason": "Developer-only dark control panel for the lava shader.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "components/home/AnchorLavaControls.jsx",
+      "literal": "rgba(255, 255, 255, 0.8)",
+      "count": 1,
+      "reason": "Developer-only dark control panel for the lava shader.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "components/home/AnchorLavaControls.jsx",
+      "literal": "rgba(255,255,255,0.62)",
+      "count": 1,
+      "reason": "Developer-only dark control panel for the lava shader.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "components/home/AnchorLavaControls.jsx",
+      "literal": "rgba(255,255,255,0.07)",
+      "count": 1,
+      "reason": "Developer-only dark control panel for the lava shader.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "components/home/AnchorLavaControls.jsx",
+      "literal": "#fff",
+      "count": 1,
+      "reason": "Developer-only dark control panel for the lava shader.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "components/home/AnchorLavaControls.jsx",
+      "literal": "rgba(255,255,255,0.42)",
+      "count": 1,
+      "reason": "Developer-only dark control panel for the lava shader.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "components/home/AnchorLavaControls.jsx",
+      "literal": "rgba(14, 14, 18, 0.97)",
+      "count": 1,
+      "reason": "Developer-only dark control panel for the lava shader.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "components/home/AnchorLavaControls.jsx",
+      "literal": "rgba(255,255,255,0.08)",
+      "count": 1,
+      "reason": "Developer-only dark control panel for the lava shader.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "components/home/AnchorLavaControls.jsx",
+      "literal": "rgba(255,255,255,0.1)",
+      "count": 2,
+      "reason": "Developer-only dark control panel for the lava shader.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "components/home/AnchorLavaControls.jsx",
+      "literal": "rgba(29,219,237,0.45)",
+      "count": 1,
+      "reason": "Developer-only dark control panel for the lava shader.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "components/home/AnchorLavaControls.jsx",
+      "literal": "rgba(255,255,255,0.05)",
+      "count": 1,
+      "reason": "Developer-only dark control panel for the lava shader.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "components/home/AnchorLavaControls.jsx",
+      "literal": "rgba(255,255,255,0.78)",
+      "count": 1,
+      "reason": "Developer-only dark control panel for the lava shader.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "components/home/AnchorLavaControls.jsx",
+      "literal": "rgba(255,255,255,0.34)",
+      "count": 2,
+      "reason": "Developer-only dark control panel for the lava shader.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "components/home/AnchorLavaControls.jsx",
+      "literal": "rgba(255,255,255,0.16)",
+      "count": 2,
+      "reason": "Developer-only dark control panel for the lava shader.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "components/home/AnchorLavaControls.jsx",
+      "literal": "#000",
+      "count": 4,
+      "reason": "Developer-only dark control panel for the lava shader.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "components/home/AnchorLavaControls.jsx",
+      "literal": "rgba(255,255,255,0.3)",
+      "count": 1,
+      "reason": "Developer-only dark control panel for the lava shader.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "components/home/lavaShaderEngine.js",
+      "literal": "#adaed9",
+      "count": 1,
+      "reason": "WebGL shader palettes (artwork); consumed by the shader as raw colours.",
+      "exceptionId": "WS7-B"
+    },
+    {
+      "file": "components/home/lavaShaderEngine.js",
+      "literal": "#fbfaf3",
+      "count": 1,
+      "reason": "WebGL shader palettes (artwork); consumed by the shader as raw colours.",
+      "exceptionId": "WS7-B"
+    },
+    {
+      "file": "components/home/lavaShaderEngine.js",
+      "literal": "#d3a4c3",
+      "count": 1,
+      "reason": "WebGL shader palettes (artwork); consumed by the shader as raw colours.",
+      "exceptionId": "WS7-B"
+    },
+    {
+      "file": "components/home/lavaShaderEngine.js",
+      "literal": "#2cc3ee",
+      "count": 2,
+      "reason": "WebGL shader palettes (artwork); consumed by the shader as raw colours.",
+      "exceptionId": "WS7-B"
+    },
+    {
+      "file": "components/home/lavaShaderEngine.js",
+      "literal": "#595a9a",
+      "count": 1,
+      "reason": "WebGL shader palettes (artwork); consumed by the shader as raw colours.",
+      "exceptionId": "WS7-B"
+    },
+    {
+      "file": "components/home/lavaShaderEngine.js",
+      "literal": "#eb2cc9",
+      "count": 1,
+      "reason": "WebGL shader palettes (artwork); consumed by the shader as raw colours.",
+      "exceptionId": "WS7-B"
+    },
+    {
+      "file": "components/home/lavaShaderEngine.js",
+      "literal": "#1ddbed",
+      "count": 1,
+      "reason": "WebGL shader palettes (artwork); consumed by the shader as raw colours.",
+      "exceptionId": "WS7-B"
+    },
+    {
+      "file": "components/home/lavaShaderEngine.js",
+      "literal": "#803bf7",
+      "count": 1,
+      "reason": "WebGL shader palettes (artwork); consumed by the shader as raw colours.",
+      "exceptionId": "WS7-B"
+    },
+    {
+      "file": "components/home/lavaShaderEngine.js",
+      "literal": "#f42ac5",
+      "count": 1,
+      "reason": "WebGL shader palettes (artwork); consumed by the shader as raw colours.",
+      "exceptionId": "WS7-B"
+    },
+    {
+      "file": "components/home/lavaShaderEngine.js",
+      "literal": "#dfe9f2",
+      "count": 1,
+      "reason": "WebGL shader palettes (artwork); consumed by the shader as raw colours.",
+      "exceptionId": "WS7-B"
+    },
+    {
+      "file": "components/home/lavaShaderEngine.js",
+      "literal": "#5c6a7d",
+      "count": 1,
+      "reason": "WebGL shader palettes (artwork); consumed by the shader as raw colours.",
+      "exceptionId": "WS7-B"
+    },
+    {
+      "file": "components/home/lavaShaderEngine.js",
+      "literal": "#f2f5f8",
+      "count": 1,
+      "reason": "WebGL shader palettes (artwork); consumed by the shader as raw colours.",
+      "exceptionId": "WS7-B"
+    },
+    {
+      "file": "components/home/lavaShaderEngine.js",
+      "literal": "#f2f4f7",
+      "count": 2,
+      "reason": "WebGL shader palettes (artwork); consumed by the shader as raw colours.",
+      "exceptionId": "WS7-B"
+    },
+    {
+      "file": "components/home/lavaShaderEngine.js",
+      "literal": "#2a2f3a",
+      "count": 1,
+      "reason": "WebGL shader palettes (artwork); consumed by the shader as raw colours.",
+      "exceptionId": "WS7-B"
+    },
+    {
+      "file": "components/home/lavaShaderEngine.js",
+      "literal": "#ffd166",
+      "count": 1,
+      "reason": "WebGL shader palettes (artwork); consumed by the shader as raw colours.",
+      "exceptionId": "WS7-B"
+    },
+    {
+      "file": "components/home/lavaShaderEngine.js",
+      "literal": "#c1440e",
+      "count": 1,
+      "reason": "WebGL shader palettes (artwork); consumed by the shader as raw colours.",
+      "exceptionId": "WS7-B"
+    },
+    {
+      "file": "components/home/lavaShaderEngine.js",
+      "literal": "#ff5d8f",
+      "count": 1,
+      "reason": "WebGL shader palettes (artwork); consumed by the shader as raw colours.",
+      "exceptionId": "WS7-B"
+    },
+    {
+      "file": "components/home/lavaShaderEngine.js",
+      "literal": "#7ce7d8",
+      "count": 1,
+      "reason": "WebGL shader palettes (artwork); consumed by the shader as raw colours.",
+      "exceptionId": "WS7-B"
+    },
+    {
+      "file": "components/home/lavaShaderEngine.js",
+      "literal": "#123f6d",
+      "count": 1,
+      "reason": "WebGL shader palettes (artwork); consumed by the shader as raw colours.",
+      "exceptionId": "WS7-B"
+    },
+    {
+      "file": "components/home/lavaShaderEngine.js",
+      "literal": "#0b0b12",
+      "count": 1,
+      "reason": "WebGL shader palettes (artwork); consumed by the shader as raw colours.",
+      "exceptionId": "WS7-B"
+    },
+    {
+      "file": "ReelPlayer.jsx",
+      "literal": "rgba(0,0,0,0.62)",
+      "count": 1,
+      "reason": "Theatre dimmer and video letterbox: dark in both modes by design.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "ReelPlayer.jsx",
+      "literal": "#000000",
+      "count": 1,
+      "reason": "Theatre dimmer and video letterbox: dark in both modes by design.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "HeroHeadline.jsx",
+      "literal": "#ffffff",
+      "count": 1,
+      "reason": "HEADLINE_BLEND_INK: pure-white ink under mix-blend-mode difference so the headline inverts against var(--t-page) in both modes; a blend-math constant, not a theme colour.",
+      "exceptionId": "WS7-B"
+    },
+    {
+      "file": "AuthPage.jsx",
+      "literal": "#EA4335",
+      "count": 1,
+      "reason": "Google logo brand colours.",
+      "exceptionId": "X5"
+    },
+    {
+      "file": "AuthPage.jsx",
+      "literal": "#4285F4",
+      "count": 1,
+      "reason": "Google logo brand colours.",
+      "exceptionId": "X5"
+    },
+    {
+      "file": "AuthPage.jsx",
+      "literal": "#FBBC05",
+      "count": 1,
+      "reason": "Google logo brand colours.",
+      "exceptionId": "X5"
+    },
+    {
+      "file": "AuthPage.jsx",
+      "literal": "#34A853",
+      "count": 1,
+      "reason": "Google logo brand colours.",
+      "exceptionId": "X5"
+    },
+    {
+      "file": "components/home/DeliverableHoverCards.jsx",
+      "literal": "#F7F0EA",
+      "count": 1,
+      "reason": "Preview shell fill gradient: artwork frame behind screenshots and video.",
+      "exceptionId": "WS7-B"
+    },
+    {
+      "file": "components/home/DeliverableHoverCards.jsx",
+      "literal": "#D6CBD7",
+      "count": 1,
+      "reason": "Preview shell fill gradient: artwork frame behind screenshots and video.",
+      "exceptionId": "WS7-B"
+    },
+    {
+      "file": "components/home/DeliverableHoverCards.jsx",
+      "literal": "#fff",
+      "count": 1,
+      "reason": "Preview shell fill gradient: artwork frame behind screenshots and video.",
+      "exceptionId": "WS7-B"
+    },
+    {
+      "file": "components/home/DeliverableHoverCards.jsx",
+      "literal": "#000",
+      "count": 1,
+      "reason": "Preview shell fill gradient: artwork frame behind screenshots and video.",
+      "exceptionId": "WS7-B"
+    },
+    {
+      "file": "StackedSlidesSection.jsx",
+      "literal": "#8b5cf6",
+      "count": 1,
+      "reason": "Service row accent colour: one fixed categorical colour per service.",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "StackedSlidesSection.jsx",
+      "literal": "#0ea5e9",
+      "count": 2,
+      "reason": "Service row accent colour: one fixed categorical colour per service.",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "StackedSlidesSection.jsx",
+      "literal": "#14b8a6",
+      "count": 1,
+      "reason": "Service row accent colour: one fixed categorical colour per service.",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "StackedSlidesSection.jsx",
+      "literal": "#10b981",
+      "count": 1,
+      "reason": "Service row accent colour: one fixed categorical colour per service.",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "StackedSlidesSection.jsx",
+      "literal": "#f97316",
+      "count": 2,
+      "reason": "Service row accent colour: one fixed categorical colour per service.",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "StackedSlidesSection.jsx",
+      "literal": "#ec4899",
+      "count": 1,
+      "reason": "Service row accent colour: one fixed categorical colour per service.",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "StackedSlidesSection.jsx",
+      "literal": "#f59e0b",
+      "count": 1,
+      "reason": "Service row accent colour: one fixed categorical colour per service.",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "StackedSlidesSection.jsx",
+      "literal": "#6366f1",
+      "count": 1,
+      "reason": "Service row accent colour: one fixed categorical colour per service.",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "StackedSlidesSection.jsx",
+      "literal": "#a855f7",
+      "count": 1,
+      "reason": "Service row accent colour: one fixed categorical colour per service.",
+      "exceptionId": "X6"
+    },
+    {
+      "file": "StackedSlidesSection.jsx",
+      "literal": "#adaed9",
+      "count": 1,
+      "reason": "Lava shader brand ramp fallback gradient; must match LAVA_BRAND_STOPS in components/home/lavaShaderEngine.js.",
+      "exceptionId": "WS7-B"
+    },
+    {
+      "file": "StackedSlidesSection.jsx",
+      "literal": "#fbfaf3",
+      "count": 1,
+      "reason": "Lava shader brand ramp fallback gradient; must match LAVA_BRAND_STOPS in components/home/lavaShaderEngine.js.",
+      "exceptionId": "WS7-B"
+    },
+    {
+      "file": "StackedSlidesSection.jsx",
+      "literal": "#d3a4c3",
+      "count": 1,
+      "reason": "Lava shader brand ramp fallback gradient; must match LAVA_BRAND_STOPS in components/home/lavaShaderEngine.js.",
+      "exceptionId": "WS7-B"
+    },
+    {
+      "file": "StackedSlidesSection.jsx",
+      "literal": "rgba(42, 36, 32, 0.55)",
+      "count": 1,
+      "reason": "Particle-settings debug panel: dark developer chrome, light text, dark in both modes.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "StackedSlidesSection.jsx",
+      "literal": "rgba(42, 36, 32, 0.2)",
+      "count": 1,
+      "reason": "Particle-settings debug panel: dark developer chrome, light text, dark in both modes.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "StackedSlidesSection.jsx",
+      "literal": "rgba(245, 241, 223, 0.8)",
+      "count": 1,
+      "reason": "Particle-settings debug panel: dark developer chrome, light text, dark in both modes.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "StackedSlidesSection.jsx",
+      "literal": "rgba(18, 15, 12, 0.96)",
+      "count": 1,
+      "reason": "Particle-settings debug panel: dark developer chrome, light text, dark in both modes.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "StackedSlidesSection.jsx",
+      "literal": "rgba(255,255,255,0.1)",
+      "count": 1,
+      "reason": "Particle-settings debug panel: dark developer chrome, light text, dark in both modes.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "StackedSlidesSection.jsx",
+      "literal": "#f5f1df",
+      "count": 2,
+      "reason": "Particle-settings debug panel: dark developer chrome, light text, dark in both modes.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "StackedSlidesSection.jsx",
+      "literal": "rgba(255,255,255,0.08)",
+      "count": 2,
+      "reason": "Particle-settings debug panel: dark developer chrome, light text, dark in both modes.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "StackedSlidesSection.jsx",
+      "literal": "rgba(245,241,223,0.6)",
+      "count": 1,
+      "reason": "Particle-settings debug panel: dark developer chrome, light text, dark in both modes.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "StackedSlidesSection.jsx",
+      "literal": "rgba(255,255,255,0.12)",
+      "count": 1,
+      "reason": "Particle-settings debug panel: dark developer chrome, light text, dark in both modes.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "StackedSlidesSection.jsx",
+      "literal": "rgba(245,241,223,0.7)",
+      "count": 1,
+      "reason": "Particle-settings debug panel: dark developer chrome, light text, dark in both modes.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "StackedSlidesSection.jsx",
+      "literal": "rgba(255,255,255,0.06)",
+      "count": 2,
+      "reason": "Particle-settings debug panel: dark developer chrome, light text, dark in both modes.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "StackedSlidesSection.jsx",
+      "literal": "rgba(245,241,223,0.4)",
+      "count": 1,
+      "reason": "Particle-settings debug panel: dark developer chrome, light text, dark in both modes.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "StackedSlidesSection.jsx",
+      "literal": "rgba(245,241,223,0.65)",
+      "count": 1,
+      "reason": "Particle-settings debug panel: dark developer chrome, light text, dark in both modes.",
+      "exceptionId": "WS7-A"
+    },
+    {
+      "file": "StackedSlidesSection.jsx",
+      "literal": "rgba(245,241,223,0.45)",
+      "count": 1,
+      "reason": "Particle-settings debug panel: dark developer chrome, light text, dark in both modes.",
+      "exceptionId": "WS7-A"
+    }
+  ]
+}

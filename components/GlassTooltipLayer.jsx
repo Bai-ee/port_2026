@@ -181,12 +181,12 @@ export default function GlassTooltipLayer() {
           max-width: min(20rem, calc(100vw - 2rem));
           padding: 0.62rem 0.78rem;
           border-radius: 10px;
-          background: rgba(255, 255, 255, 0.84);
+          background: color-mix(in srgb, var(--t-surface) 84%, transparent);
           backdrop-filter: blur(10px);
           -webkit-backdrop-filter: blur(10px);
-          border: 1px solid rgba(255, 255, 255, 0.52);
+          border: 1px solid color-mix(in srgb, var(--t-surface) 52%, transparent);
           box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.1), 0px 15px 30px rgba(0, 0, 0, 0.12);
-          color: rgba(42, 36, 32, 0.76);
+          color: color-mix(in srgb, var(--t-text) 76%, transparent);
           font-family: "Space Mono", monospace;
           font-size: 0.68rem;
           line-height: 1.38;
@@ -207,8 +207,8 @@ export default function GlassTooltipLayer() {
           left: 50%;
           width: 8px;
           height: 8px;
-          background: rgba(255, 255, 255, 0.84);
-          border: 1px solid rgba(255, 255, 255, 0.52);
+          background: color-mix(in srgb, var(--t-surface) 84%, transparent);
+          border: 1px solid color-mix(in srgb, var(--t-surface) 52%, transparent);
           transform: translateX(-50%) rotate(45deg);
           backdrop-filter: blur(10px);
           -webkit-backdrop-filter: blur(10px);

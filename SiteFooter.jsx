@@ -20,13 +20,13 @@ const ctaStyle = {
   fontWeight: 700,
   letterSpacing: '0.01em',
   textDecoration: 'none',
-  color: '#ffffff',
+  color: 'var(--t-on-solid)',
   background:
-    'linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%), linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%)',
+    'linear-gradient(175deg, color-mix(in srgb, var(--t-glass-highlight) 40%, transparent) 0%, transparent 52%), var(--t-gradient-accent)',
   border: 'none',
   borderRadius: '999px',
   boxShadow:
-    '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1)',
+    '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 color-mix(in srgb, var(--t-glass-highlight) 62.22%, transparent), inset 0 -1px 0 rgba(0,0,0,0.1)',
   whiteSpace: 'nowrap',
   cursor: 'pointer',
 };
@@ -36,7 +36,7 @@ const ctaAvatarStyle = {
   height: '1.75rem',
   borderRadius: '50%',
   objectFit: 'cover',
-  border: '2px solid rgba(255,255,255,0.35)',
+  border: '2px solid color-mix(in srgb, var(--t-surface) 35%, transparent)',
   flexShrink: 0,
   display: 'block',
 };
@@ -53,7 +53,7 @@ export default function SiteFooter() {
         }
         #site-footer {
           width: 100%;
-          border-top: 1px solid rgba(42,36,32,0.1);
+          border-top: 1px solid color-mix(in srgb, var(--t-text) 10%, transparent);
           margin-top: clamp(3rem,6vw,5rem);
           box-sizing: border-box;
         }
@@ -93,7 +93,7 @@ export default function SiteFooter() {
           letter-spacing: -0.02em;
           font-weight: 700;
           line-height: 1.05;
-          color: #2a2420;
+          color: var(--t-text);
           white-space: nowrap;
         }
         #site-footer-sig {
@@ -116,7 +116,7 @@ export default function SiteFooter() {
           line-height: 1.6;
           font-weight: 400;
           text-align: left;
-          color: rgba(42,36,32,0.8);
+          color: color-mix(in srgb, var(--t-text) 80%, transparent);
           max-width: 46rem;
         }
         #site-footer-previously-at {
@@ -124,7 +124,7 @@ export default function SiteFooter() {
           text-align: center;
           font-size: 0.7rem;
           letter-spacing: 0.06em;
-          color: rgba(42,36,32,0.32);
+          color: color-mix(in srgb, var(--t-text) 32%, transparent);
           font-family: 'Space Mono',monospace;
         }
         #site-footer-agency-shell {
@@ -154,8 +154,7 @@ export default function SiteFooter() {
           height: 22px;
           width: auto;
           display: block;
-          opacity: 0.45;
-          filter: grayscale(1);
+          filter: var(--t-logo-filter-muted);
           flex-shrink: 0;
         }
         #site-footer-nav {
@@ -164,20 +163,20 @@ export default function SiteFooter() {
           justify-content: center;
           gap: clamp(2rem,5vw,4rem);
           padding: clamp(2rem,4vw,3rem) 0;
-          border-top: 1px solid rgba(42,36,32,0.1);
+          border-top: 1px solid color-mix(in srgb, var(--t-text) 10%, transparent);
           margin-top: 50px;
           list-style: none;
         }
         .sf-nav-col { display: flex; flex-direction: column; align-items: center; gap: 0.7rem; text-align: center; }
         .sf-nav-heading {
           font-size: 0.68rem; font-weight: 700; letter-spacing: 0.1em;
-          text-transform: uppercase; color: rgba(42,36,32,0.35); margin-bottom: 0.2rem;
+          text-transform: uppercase; color: color-mix(in srgb, var(--t-text) 35%, transparent); margin-bottom: 0.2rem;
         }
         .sf-nav-link {
           font-size: clamp(0.82rem,1.1vw,0.9rem);
-          color: rgba(42,36,32,0.6); text-decoration: none; line-height: 1.4;
+          color: color-mix(in srgb, var(--t-text) 60%, transparent); text-decoration: none; line-height: 1.4;
         }
-        .sf-nav-link:hover { color: #2a2420; }
+        .sf-nav-link:hover { color: var(--t-text); }
         /* Nav + bottom links inactive until pages ship — LinkedIn/X stay live */
         #site-footer-nav a,
         #site-footer-bottom a { pointer-events: none; cursor: default; }
@@ -187,13 +186,13 @@ export default function SiteFooter() {
           display: flex; flex-direction: column; justify-content: center; align-items: center;
           flex-wrap: wrap; gap: 0.75rem;
           padding-top: clamp(1rem,2vw,1.5rem);
-          border-top: 1px solid rgba(42,36,32,0.1);
+          border-top: 1px solid color-mix(in srgb, var(--t-text) 10%, transparent);
           text-align: center;
         }
-        #site-footer-copyright { font-size: 0.78rem; color: rgba(42,36,32,0.35); }
+        #site-footer-copyright { font-size: 0.78rem; color: color-mix(in srgb, var(--t-text) 35%, transparent); }
         #site-footer-social-links { display: flex; gap: 1.5rem; }
-        .sf-social-link { font-size: 0.82rem; color: rgba(42,36,32,0.4); text-decoration: none; }
-        .sf-social-link:hover { color: #2a2420; }
+        .sf-social-link { font-size: 0.82rem; color: color-mix(in srgb, var(--t-text) 40%, transparent); text-decoration: none; }
+        .sf-social-link:hover { color: var(--t-text); }
         @media (max-width: 900px) {
           #site-footer-inner { padding-left: 24px; padding-right: 24px; }
         }
@@ -225,7 +224,7 @@ export default function SiteFooter() {
             </div>
           </div>
 
-          <Image id="site-footer-sig" src="/img/sig.png" alt="Bryan Balli signature" width={276} height={208} style={{ width: 'min(110px,31vw)', height: 'auto', display: 'block' }} />
+          <Image id="site-footer-sig" src="/img/sig.png" alt="Bryan Balli signature" width={276} height={208} style={{ width: 'min(110px,31vw)', height: 'auto', display: 'block', filter: 'var(--t-logo-filter)' }} />
 
           {/* CTA */}
           <div id="site-footer-cta-row">

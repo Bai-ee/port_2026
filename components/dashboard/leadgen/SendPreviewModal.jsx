@@ -45,7 +45,7 @@ export default function SendPreviewModal({ open, prospect, onClose, getIdToken }
     }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
 
       <div id="send-preview-modal-shell" style={{
-        background: '#fff', borderRadius: 12, width: '100%', maxWidth: 640,
+        background: 'var(--t-surface)', borderRadius: 12, width: '100%', maxWidth: 640,
         maxHeight: '90vh', display: 'flex', flexDirection: 'column',
         overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.18)',
       }}>
@@ -53,13 +53,13 @@ export default function SendPreviewModal({ open, prospect, onClose, getIdToken }
         {/* Head */}
         <div id="send-preview-modal-head" style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '18px 24px', borderBottom: '1px solid #f1f5f9', flexShrink: 0,
+          padding: '18px 24px', borderBottom: '1px solid var(--t-border-subtle)', flexShrink: 0,
         }}>
           <div>
-            <div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Outreach Preview</div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: '#1e293b' }}>{prospect.name}</div>
+            <div style={{ fontSize: 11, color: 'var(--t-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Outreach Preview</div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--t-text)' }}>{prospect.name}</div>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 4 }}>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--t-text-muted)', padding: 4 }}>
             <X size={18} />
           </button>
         </div>
@@ -69,8 +69,8 @@ export default function SendPreviewModal({ open, prospect, onClose, getIdToken }
 
           {/* Email iframe preview */}
           {prospect.outreach?.emailHtml && (
-            <div id="send-preview-email-frame-shell" style={{ border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden', background: '#f8fafc' }}>
-              <div style={{ fontSize: 11, color: '#94a3b8', padding: '8px 12px', borderBottom: '1px solid #e2e8f0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Email Preview</div>
+            <div id="send-preview-email-frame-shell" style={{ border: '1px solid var(--t-info-border)', borderRadius: 10, overflow: 'hidden', background: 'var(--t-inset)' }}>
+              <div style={{ fontSize: 11, color: 'var(--t-text-muted)', padding: '8px 12px', borderBottom: '1px solid var(--t-info-border)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Email Preview</div>
               <iframe
                 id="send-preview-email-iframe"
                 srcDoc={prospect.outreach.emailHtml}
@@ -83,7 +83,7 @@ export default function SendPreviewModal({ open, prospect, onClose, getIdToken }
 
           {/* Editable note */}
           <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#64748b', display: 'block', marginBottom: 6 }}>Personal Note</label>
+            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--t-text-secondary)', display: 'block', marginBottom: 6 }}>Personal Note</label>
             <textarea
               id="send-preview-note-textarea"
               value={note}
@@ -91,9 +91,9 @@ export default function SendPreviewModal({ open, prospect, onClose, getIdToken }
               rows={5}
               style={{
                 width: '100%', boxSizing: 'border-box',
-                border: '1px solid #e2e8f0', borderRadius: 8,
+                border: '1px solid var(--t-info-border)', borderRadius: 8,
                 padding: '10px 12px', fontSize: 14, lineHeight: 1.6,
-                fontFamily: 'inherit', color: '#1e293b', resize: 'vertical',
+                fontFamily: 'inherit', color: 'var(--t-text)', background: 'var(--t-inset)', resize: 'vertical',
                 outline: 'none',
               }}
             />
@@ -101,7 +101,7 @@ export default function SendPreviewModal({ open, prospect, onClose, getIdToken }
 
           {/* Recipient */}
           <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#64748b', display: 'block', marginBottom: 6 }}>Sending To</label>
+            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--t-text-secondary)', display: 'block', marginBottom: 6 }}>Sending To</label>
             <input
               id="send-preview-recipient-input"
               type="email"
@@ -110,15 +110,15 @@ export default function SendPreviewModal({ open, prospect, onClose, getIdToken }
               placeholder="owner@business.com"
               style={{
                 width: '100%', boxSizing: 'border-box',
-                border: '1px solid #e2e8f0', borderRadius: 8,
+                border: '1px solid var(--t-info-border)', borderRadius: 8,
                 padding: '10px 12px', fontSize: 14, fontFamily: 'inherit',
-                color: '#1e293b', outline: 'none',
+                color: 'var(--t-text)', background: 'var(--t-inset)', outline: 'none',
               }}
             />
           </div>
 
           {error && (
-            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#dc2626' }}>
+            <div style={{ background: 'var(--t-danger-bg)', border: '1px solid var(--t-danger-border)', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: 'var(--t-danger)' }}>
               {error}
             </div>
           )}
@@ -127,19 +127,19 @@ export default function SendPreviewModal({ open, prospect, onClose, getIdToken }
         {/* Footer */}
         {sent ? (
           <div id="send-preview-modal-success" style={{
-            padding: '24px', borderTop: '1px solid #f1f5f9',
+            padding: '24px', borderTop: '1px solid var(--t-border-subtle)',
             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, flexShrink: 0,
           }}>
             <div style={{ fontSize: 28 }}>✅</div>
             <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 15, fontWeight: 600, color: '#1e293b', marginBottom: 4 }}>Email sent to {recipient}</div>
-              <div style={{ fontSize: 13, color: '#64748b' }}>The prospect has been marked as contacted.</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--t-text)', marginBottom: 4 }}>Email sent to {recipient}</div>
+              <div style={{ fontSize: 13, color: 'var(--t-text-secondary)' }}>The prospect has been marked as contacted.</div>
             </div>
             <button className="leadgen-btn leadgen-btn--primary" onClick={onClose}>Done</button>
           </div>
         ) : (
           <div id="send-preview-modal-foot" style={{
-            padding: '16px 24px', borderTop: '1px solid #f1f5f9',
+            padding: '16px 24px', borderTop: '1px solid var(--t-border-subtle)',
             display: 'flex', justifyContent: 'flex-end', gap: 10, flexShrink: 0,
           }}>
             <button

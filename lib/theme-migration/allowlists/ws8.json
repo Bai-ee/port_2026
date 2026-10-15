@@ -1,0 +1,109 @@
+{
+  "workstream": "WS8",
+  "description": "Colour literals intentionally left in the public/shared files no other workstream owned (contract 10.4 rule 5). The scan test (ws8-js-scan.test.js) fails on any literal in an owned file that is neither here nor a mode-agnostic black shadow (X6).",
+  "legend": {
+    "WS8-A": "Intentional dark surface that stays dark in both modes (the OAuth consent card, media letterbox).",
+    "X2": "Content rendered inside an iframe (a separate document, so CSS variables cannot reach it); values are the light-baseline fallbacks of tokens resolved at runtime.",
+    "X5": "Third-party brand marks and fixed brand colours (Solana tints)."
+  },
+  "entries": [
+    {
+      "file": "app/oauth/authorize/page.jsx",
+      "literal": "#0b0b0c",
+      "count": 3,
+      "reason": "OAuth consent screen is its own always-dark card (self-contained palette, identical in both modes, never themed); the literals are one coherent dark surface plus its light-on-dark text.",
+      "exceptionId": "WS8-A"
+    },
+    {
+      "file": "app/oauth/authorize/page.jsx",
+      "literal": "#f2f2f0",
+      "count": 5,
+      "reason": "OAuth consent screen is its own always-dark card (self-contained palette, identical in both modes, never themed); the literals are one coherent dark surface plus its light-on-dark text.",
+      "exceptionId": "WS8-A"
+    },
+    {
+      "file": "app/oauth/authorize/page.jsx",
+      "literal": "#161618",
+      "count": 1,
+      "reason": "OAuth consent screen is its own always-dark card (self-contained palette, identical in both modes, never themed); the literals are one coherent dark surface plus its light-on-dark text.",
+      "exceptionId": "WS8-A"
+    },
+    {
+      "file": "app/oauth/authorize/page.jsx",
+      "literal": "#2a2a2e",
+      "count": 1,
+      "reason": "OAuth consent screen is its own always-dark card (self-contained palette, identical in both modes, never themed); the literals are one coherent dark surface plus its light-on-dark text.",
+      "exceptionId": "WS8-A"
+    },
+    {
+      "file": "app/oauth/authorize/page.jsx",
+      "literal": "#3a3a40",
+      "count": 2,
+      "reason": "OAuth consent screen is its own always-dark card (self-contained palette, identical in both modes, never themed); the literals are one coherent dark surface plus its light-on-dark text.",
+      "exceptionId": "WS8-A"
+    },
+    {
+      "file": "app/oauth/authorize/page.jsx",
+      "literal": "#a0a0a6",
+      "count": 4,
+      "reason": "OAuth consent screen is its own always-dark card (self-contained palette, identical in both modes, never themed); the literals are one coherent dark surface plus its light-on-dark text.",
+      "exceptionId": "WS8-A"
+    },
+    {
+      "file": "app/oauth/authorize/page.jsx",
+      "literal": "#d98c8c",
+      "count": 2,
+      "reason": "OAuth consent screen is its own always-dark card (self-contained palette, identical in both modes, never themed); the literals are one coherent dark surface plus its light-on-dark text.",
+      "exceptionId": "WS8-A"
+    },
+    {
+      "file": "components/payments/SubscribeModal.jsx",
+      "literal": "#2a2420",
+      "count": 1,
+      "reason": "Stripe PaymentElement appearance fallback (light baseline) used only when the token cannot be read; Stripe renders in an iframe that CSS variables cannot reach. The live value is readToken(--t-text).",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "components/payments/SubscribeModal.jsx",
+      "literal": "rgba(42,36,32,0.6)",
+      "count": 1,
+      "reason": "Stripe appearance fallback (light baseline) for --t-text-secondary; iframe content, see buildStripeAppearance.",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "components/payments/SubscribeModal.jsx",
+      "literal": "#ffffff",
+      "count": 1,
+      "reason": "Stripe appearance fallback (light baseline) for --t-surface; iframe content, see buildStripeAppearance.",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "components/payments/SubscribeModal.jsx",
+      "literal": "rgba(42,36,32,0.12)",
+      "count": 1,
+      "reason": "Stripe appearance fallback (light baseline) for --t-border-subtle; iframe content, see buildStripeAppearance.",
+      "exceptionId": "X2"
+    },
+    {
+      "file": "components/payments/SubscribeModal.jsx",
+      "literal": "rgba(153,69,255,0.12)",
+      "count": 1,
+      "reason": "Solana brand purple tint behind the crypto-pay panel: fixed third-party brand colour, not a theme colour.",
+      "exceptionId": "X5"
+    },
+    {
+      "file": "components/payments/SubscribeModal.jsx",
+      "literal": "rgba(20,241,149,0.12)",
+      "count": 1,
+      "reason": "Solana brand green tint behind the crypto-pay panel: fixed third-party brand colour, not a theme colour.",
+      "exceptionId": "X5"
+    },
+    {
+      "file": "components/records/RecordsPage.jsx",
+      "literal": "#111111",
+      "count": 1,
+      "reason": "Dark video letterbox behind the example clip: media chrome that stays dark in both modes.",
+      "exceptionId": "WS8-A"
+    }
+  ]
+}

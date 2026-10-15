@@ -15,8 +15,8 @@ const WINDOW_DAYS = 400;
 const THUMBS_PER_ENTRY = 4;
 const THUMB_IDS_MAX = 48;
 const PLATFORM_META = {
-  facebook: { label: 'FB', name: 'Facebook', color: '#1d4ed8' },
-  x: { label: 'X', name: 'X', color: '#111827' },
+  facebook: { label: 'FB', name: 'Facebook', color: 'var(--t-info)' },
+  x: { label: 'X', name: 'X', color: 'var(--t-text)' },
   instagram: { label: 'IG', name: 'Instagram', color: '#c026d3' },
 };
 const KINDS = ['post', 'media', 'event', 'story', 'reel', 'comment'];
@@ -25,7 +25,7 @@ const dayShift = (day, n) => new Date(Date.parse(`${day}T12:00:00Z`) + n * 86_40
 const isoDay = (iso) => (iso ? String(iso).slice(0, 10) : '');
 const clip = (t, n) => { const s = String(t || '').replace(/\s+/g, ' ').trim(); return s.length > n ? `${s.slice(0, n - 1)}…` : s; };
 const timeOf = (ts) => { const d = new Date(ts); return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(11, 16); };
-const meta = (p) => PLATFORM_META[p] || { label: String(p || '?').slice(0, 2).toUpperCase(), name: String(p || ''), color: '#6b7280' };
+const meta = (p) => PLATFORM_META[p] || { label: String(p || '?').slice(0, 2).toUpperCase(), name: String(p || ''), color: 'var(--t-text-muted)' };
 
 function PlatformDot({ platform, count }) {
   const m = meta(platform);

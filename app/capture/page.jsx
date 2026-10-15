@@ -208,7 +208,7 @@ export default function CapturePage() {
   }, []);
 
   return (
-    <div id="capture-root" style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: bg }}>
+    <div id="capture-root" data-theme-scope="light" style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: bg }}>
       {/* Three.js canvas — fullscreen, no overlay copy */}
       <AppCanvas
         params={params}

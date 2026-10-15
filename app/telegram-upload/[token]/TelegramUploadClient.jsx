@@ -54,8 +54,8 @@ export default function TelegramUploadClient({ token }) {
           <input id="telegram-upload-file-input" type="file" accept="image/*,video/*" onChange={onPick} disabled={phase === 'uploading'} style={{ width: '100%', fontSize: 16 }} />
           {phase === 'uploading' && (
             <div id="telegram-upload-progress" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100} style={{ marginTop: 16 }}>
-              <div style={{ height: 8, background: '#eee', borderRadius: 4, overflow: 'hidden' }}>
-                <div style={{ width: `${percent}%`, height: '100%', background: '#111' }} />
+              <div style={{ height: 8, background: 'color-mix(in srgb, var(--t-text) 8%, transparent)', borderRadius: 4, overflow: 'hidden' }}>
+                <div style={{ width: `${percent}%`, height: '100%', background: 'var(--t-text-strong)' }} />
               </div>
               <p style={{ fontSize: 13, margin: '6px 0 0' }}>{percent}%</p>
             </div>

@@ -1,30 +1,30 @@
 // Content Engine design tokens — plain constants shared by the ui/* primitives.
-// The shared `xce-*` stylesheet in XContentEngineCard.jsx uses the same values
-// (literal copies, since that block is a CSS template). Change both together.
+// Values are theme-token references (`var(--t-*)`), so they follow the viewer's light/dark
+// preference. The shared `xce-*` stylesheet (ContentUiStyles.jsx) uses the same tokens.
 
 export const XCE_COLORS = {
-  ink: '#1f1d1b',
-  inkSoft: 'rgba(31,29,27,0.62)',
-  inkMuted: 'rgba(31,29,27,0.5)',
-  surface: '#ffffff',
-  surfaceMuted: '#f6f5f3',
-  border: 'rgba(31,29,27,0.12)',
-  borderStrong: 'rgba(31,29,27,0.24)',
-  onInk: '#ffffff',
-  green: '#23684a',
-  greenBg: 'rgba(47,158,107,0.12)',
-  greenBorder: 'rgba(47,158,107,0.3)',
-  amber: '#8a5a15',
-  amberBg: 'rgba(183,121,31,0.09)',
-  amberBorder: 'rgba(183,121,31,0.3)',
-  blue: '#1f55a6',
-  blueBg: 'rgba(40,105,200,0.1)',
-  blueBorder: 'rgba(40,105,200,0.28)',
-  red: '#9f1f17',
-  redBg: 'rgba(159,31,23,0.07)',
-  redBorder: 'rgba(159,31,23,0.28)',
-  greyBg: 'rgba(31,29,27,0.06)',
-  greyBorder: 'rgba(31,29,27,0.14)',
+  ink: 'var(--t-text)',
+  inkSoft: 'color-mix(in srgb, var(--t-text) 62%, transparent)',
+  inkMuted: 'color-mix(in srgb, var(--t-text) 50%, transparent)',
+  surface: 'var(--t-surface)',
+  surfaceMuted: 'var(--t-inset)',
+  border: 'color-mix(in srgb, var(--t-text) 12%, transparent)',
+  borderStrong: 'color-mix(in srgb, var(--t-text) 24%, transparent)',
+  onInk: 'var(--t-surface)',
+  green: 'var(--t-success)',
+  greenBg: 'var(--t-success-bg)',
+  greenBorder: 'var(--t-success-border)',
+  amber: 'var(--t-warning)',
+  amberBg: 'var(--t-warning-bg)',
+  amberBorder: 'var(--t-warning-border)',
+  blue: 'var(--t-info)',
+  blueBg: 'var(--t-info-bg)',
+  blueBorder: 'var(--t-info-border)',
+  red: 'var(--t-danger)',
+  redBg: 'var(--t-danger-bg)',
+  redBorder: 'var(--t-danger-border)',
+  greyBg: 'color-mix(in srgb, var(--t-text) 6%, transparent)',
+  greyBorder: 'color-mix(in srgb, var(--t-text) 14%, transparent)',
 };
 
 export const XCE_RADII = { sm: 8, md: 12, lg: 16, pill: 999 };
@@ -45,4 +45,4 @@ export const XCE_SHADOWS = {
 export const XCE_NAV_HEIGHT = 60;
 
 // The thin rule under the card header.
-export const XCE_GRADIENT_RULE = 'linear-gradient(90deg, #22c7e8 0%, #8a5cf0 55%, #e23fb8 100%)';
+export const XCE_GRADIENT_RULE = 'linear-gradient(90deg, var(--t-accent-bright) 0%, var(--t-support-1) 55%, var(--t-support-2) 100%)';

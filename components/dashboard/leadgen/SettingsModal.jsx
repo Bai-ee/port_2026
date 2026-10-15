@@ -331,7 +331,7 @@ export default function SettingsModal({ open, onClose, getIdToken }) {
       <style jsx>{`
         #leadgen-settings-backdrop {
           position: fixed; inset: 0;
-          background: rgba(15, 15, 15, 0.42);
+          background: var(--t-overlay);
           backdrop-filter: blur(8px);
           -webkit-backdrop-filter: blur(8px);
           z-index: 1000;
@@ -346,12 +346,12 @@ export default function SettingsModal({ open, onClose, getIdToken }) {
           width: min(680px, 96vw);
           max-height: 92vh;
           overflow: auto;
-          background: #fafafa;
-          border: 1px solid rgba(0, 0, 0, 0.08);
+          background: var(--t-surface);
+          border: 1px solid color-mix(in srgb, var(--t-text-strong) 8%, transparent);
           border-radius: 12px;
           box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
           font-family: 'Inter', system-ui, -apple-system, sans-serif;
-          color: #1a1a1a;
+          color: var(--t-text-body);
           --lg-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
         }
         #leadgen-settings-head {
@@ -359,7 +359,7 @@ export default function SettingsModal({ open, onClose, getIdToken }) {
           justify-content: space-between;
           align-items: center;
           padding: 18px 22px;
-          border-bottom: 1px dashed rgba(0,0,0,0.10);
+          border-bottom: 1px dashed color-mix(in srgb, var(--t-text-strong) 10%, transparent);
         }
         #leadgen-settings-title {
           margin: 0;
@@ -377,24 +377,24 @@ export default function SettingsModal({ open, onClose, getIdToken }) {
           align-items: center;
           gap: 5px;
           background: transparent;
-          border: 1px dashed rgba(0,0,0,0.18);
+          border: 1px dashed color-mix(in srgb, var(--t-text-strong) 18%, transparent);
           border-radius: 999px;
           padding: 4px 10px;
           font-family: inherit;
           font-size: 11px;
-          color: #555;
+          color: var(--t-text-secondary);
           cursor: pointer;
           transition: background 160ms ease, color 160ms ease;
         }
         :global(.leadgen-settings-reset:hover) {
-          background: rgba(0,0,0,0.05);
-          color: #1a1a1a;
+          background: color-mix(in srgb, var(--t-text-strong) 5%, transparent);
+          color: var(--t-text-body);
         }
 
         #leadgen-settings-loading {
           padding: 48px 22px;
           text-align: center;
-          color: #888;
+          color: var(--t-text-muted);
           font-size: 12.5px;
           font-family: var(--lg-mono);
         }
@@ -410,7 +410,7 @@ export default function SettingsModal({ open, onClose, getIdToken }) {
           flex-direction: column;
           gap: 8px;
           padding-bottom: 16px;
-          border-bottom: 1px dashed rgba(0,0,0,0.08);
+          border-bottom: 1px dashed color-mix(in srgb, var(--t-text-strong) 8%, transparent);
         }
         .leadgen-settings-section:last-of-type { border-bottom: none; }
         .leadgen-settings-section-head {
@@ -425,7 +425,7 @@ export default function SettingsModal({ open, onClose, getIdToken }) {
           font-weight: 500;
           letter-spacing: 0.04em;
           text-transform: uppercase;
-          color: #555;
+          color: var(--t-text-secondary);
         }
         .leadgen-settings-sum {
           font-family: var(--lg-mono);
@@ -437,7 +437,7 @@ export default function SettingsModal({ open, onClose, getIdToken }) {
         .leadgen-settings-blurb {
           margin: 0;
           font-size: 11.5px;
-          color: #777;
+          color: var(--t-text-muted);
           line-height: 1.5;
         }
         .leadgen-settings-grid {
@@ -449,15 +449,15 @@ export default function SettingsModal({ open, onClose, getIdToken }) {
         :global(.leadgen-settings-norm) {
           align-self: flex-start;
           background: transparent;
-          border: 1px dashed rgba(0,0,0,0.18);
-          color: #555;
+          border: 1px dashed color-mix(in srgb, var(--t-text-strong) 18%, transparent);
+          color: var(--t-text-secondary);
           font-family: inherit;
           font-size: 10.5px;
           padding: 4px 10px;
           border-radius: 999px;
           cursor: pointer;
         }
-        :global(.leadgen-settings-norm:hover) { color: #1a1a1a; border-color: #1a1a1a; }
+        :global(.leadgen-settings-norm:hover) { color: var(--t-text-body); border-color: var(--t-text); }
 
         .leadgen-settings-msg {
           font-size: 12px;
@@ -466,13 +466,13 @@ export default function SettingsModal({ open, onClose, getIdToken }) {
         }
         .leadgen-settings-msg--err {
           color: #ff3b30;
-          background: rgba(255, 59, 48, 0.06);
-          border: 1px solid rgba(255, 59, 48, 0.22);
+          background: var(--t-danger-bg);
+          border: 1px solid var(--t-danger-border);
         }
         .leadgen-settings-msg--ok {
-          color: #166534;
-          background: rgba(22, 101, 52, 0.06);
-          border: 1px solid rgba(22, 101, 52, 0.18);
+          color: var(--t-success);
+          background: var(--t-success-bg);
+          border: 1px solid var(--t-success-border);
         }
 
         #leadgen-settings-foot {

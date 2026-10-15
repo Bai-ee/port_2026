@@ -118,7 +118,7 @@ export function CalendarConnectView({ user }) {
               <div className="mb-config-field">
                 <span className="mb-config-label">Connected account</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, color: 'var(--text-display)' }}>
-                  <span style={{ width: 9, height: 9, borderRadius: 999, background: 'var(--success, #4A9E5C)', flexShrink: 0 }} />
+                  <span style={{ width: 9, height: 9, borderRadius: 999, background: 'var(--success, var(--t-success-solid))', flexShrink: 0 }} />
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{state?.email || 'Google account'}</span>
                 </div>
                 <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 6 }}>Calendar: {state?.calendarId || 'primary'}. The digest reads up to 5 days ahead.</span>

@@ -201,8 +201,8 @@ export default function DashboardRoute() {
         display: 'grid',
         placeItems: 'center',
         padding: 24,
-        background: 'linear-gradient(180deg,#fefdf9 0%,#fbf8f0 60%,#fdfaf2 100%)',
-        color: '#1a1a1a',
+        background: 'linear-gradient(180deg,var(--t-raised) 0%,var(--t-inset) 60%,var(--t-raised) 100%)',
+        color: 'var(--t-text-body)',
         fontFamily: '"Space Grotesk", system-ui, -apple-system, sans-serif',
       }}>
         <section style={{
@@ -210,21 +210,21 @@ export default function DashboardRoute() {
           display: 'grid',
           gap: 14,
           textAlign: 'center',
-          background: 'rgba(255,255,255,0.72)',
-          border: '1px solid #E4E4E4',
+          background: 'color-mix(in srgb, var(--t-surface) 72%, transparent)',
+          border: '1px solid var(--t-border-subtle)',
           boxShadow: '0 1px 2px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.6)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
           borderRadius: 12,
           padding: 24,
         }}>
-          <span style={{ fontSize: 9, fontFamily: '"Space Mono", ui-monospace, monospace', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#8a8a8a', fontWeight: 700 }}>
+          <span style={{ fontSize: 9, fontFamily: '"Space Mono", ui-monospace, monospace', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--t-text-muted)', fontWeight: 700 }}>
             Dashboard
           </span>
           <h1 style={{ margin: 0, fontSize: 24, lineHeight: 1.15, letterSpacing: 0 }}>
             Sign in to open Dashboard
           </h1>
-          <p style={{ margin: 0, color: '#444', fontSize: 14, lineHeight: 1.55 }}>
+          <p style={{ margin: 0, color: 'var(--t-text)', fontSize: 14, lineHeight: 1.55 }}>
             Client data and brief history live behind account access.
           </p>
           <a
@@ -234,8 +234,8 @@ export default function DashboardRoute() {
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
-              background: '#2a2420',
-              color: '#fff',
+              background: 'var(--t-text)',
+              color: 'var(--t-surface)',
               borderRadius: 999,
               padding: '0 18px',
               fontSize: 13,
@@ -261,8 +261,8 @@ export default function DashboardRoute() {
         display: 'grid',
         placeItems: 'center',
         padding: 24,
-        background: 'linear-gradient(180deg,#fefdf9 0%,#fbf8f0 60%,#fdfaf2 100%)',
-        color: '#1a1a1a',
+        background: 'linear-gradient(180deg,var(--t-raised) 0%,var(--t-inset) 60%,var(--t-raised) 100%)',
+        color: 'var(--t-text-body)',
         fontFamily: '"Space Grotesk", system-ui, -apple-system, sans-serif',
       }}>
         <section style={{
@@ -270,21 +270,21 @@ export default function DashboardRoute() {
           display: 'grid',
           gap: 12,
           textAlign: 'center',
-          background: 'rgba(255,255,255,0.72)',
-          border: '1px solid #E4E4E4',
+          background: 'color-mix(in srgb, var(--t-surface) 72%, transparent)',
+          border: '1px solid var(--t-border-subtle)',
           boxShadow: '0 1px 2px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.6)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
           borderRadius: 12,
           padding: 24,
         }}>
-          <span style={{ fontSize: 9, fontFamily: '"Space Mono", ui-monospace, monospace', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#8a8a8a', fontWeight: 700 }}>
+          <span style={{ fontSize: 9, fontFamily: '"Space Mono", ui-monospace, monospace', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--t-text-muted)', fontWeight: 700 }}>
             Set up your workspace
           </span>
           <h1 style={{ margin: 0, fontSize: 24, lineHeight: 1.15, letterSpacing: 0 }}>
             Setting up your dashboard…
           </h1>
-          <p style={{ margin: 0, color: '#444', fontSize: 14, lineHeight: 1.55 }}>
+          <p style={{ margin: 0, color: 'var(--t-text)', fontSize: 14, lineHeight: 1.55 }}>
             Building your first Creative Brief{pendingUrl ? <> from <strong>{pendingUrl}</strong></> : ''}. This only takes a moment.
           </p>
         </section>
@@ -305,8 +305,8 @@ export default function DashboardRoute() {
         display: 'grid',
         placeItems: 'center',
         padding: 24,
-        background: 'linear-gradient(180deg,#fefdf9 0%,#fbf8f0 60%,#fdfaf2 100%)',
-        color: '#1a1a1a',
+        background: 'linear-gradient(180deg,var(--t-raised) 0%,var(--t-inset) 60%,var(--t-raised) 100%)',
+        color: 'var(--t-text-body)',
         fontFamily: '"Space Grotesk", system-ui, -apple-system, sans-serif',
       }}>
         <section style={{
@@ -314,29 +314,29 @@ export default function DashboardRoute() {
           display: 'grid',
           gap: 12,
           textAlign: 'center',
-          background: 'rgba(255,255,255,0.72)',
-          border: '1px solid #E4E4E4',
+          background: 'color-mix(in srgb, var(--t-surface) 72%, transparent)',
+          border: '1px solid var(--t-border-subtle)',
           boxShadow: '0 1px 2px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.6)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
           borderRadius: 12,
           padding: 24,
         }}>
-          <span style={{ fontSize: 9, fontFamily: '"Space Mono", ui-monospace, monospace', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#8a8a8a', fontWeight: 700 }}>
+          <span style={{ fontSize: 9, fontFamily: '"Space Mono", ui-monospace, monospace', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--t-text-muted)', fontWeight: 700 }}>
             Dashboard
           </span>
           <h1 style={{ margin: 0, fontSize: 24, lineHeight: 1.15, letterSpacing: 0 }}>
             Workspace check failed
           </h1>
-          <p style={{ margin: 0, color: '#444', fontSize: 14, lineHeight: 1.55 }}>
+          <p style={{ margin: 0, color: 'var(--t-text)', fontSize: 14, lineHeight: 1.55 }}>
             {provisionError || 'Could not confirm your dashboard workspace.'}
           </p>
           <button type="button" onClick={() => window.location.reload()} style={{
             height: 40,
             justifySelf: 'center',
             borderRadius: 999,
-            border: '1px solid #d6d6d6',
-            background: '#fff',
+            border: '1px solid var(--t-border-subtle)',
+            background: 'var(--t-surface)',
             padding: '0 18px',
             fontSize: 13,
             fontFamily: '"Space Grotesk", system-ui, -apple-system, sans-serif',

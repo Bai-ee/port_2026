@@ -808,7 +808,7 @@ export default function ArchivePage() {
   const canUndoOrganize = Boolean(organizeState.lastActionWasApply) && !organizePolling;
 
   return (
-    <main style={{minHeight:'100vh',background:'#080808',color:'#f4f4f0',fontFamily:'Arial, sans-serif',padding:'32px'}}>
+    <main id="archive-page-shell" data-theme-scope="light" style={{minHeight:'100vh',background:'#080808',color:'#f4f4f0',fontFamily:'Arial, sans-serif',padding:'32px'}}>
       <div style={{maxWidth:1180,margin:'0 auto'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:48}}>
           <div><div style={{fontSize:12,letterSpacing:2,opacity:.5}}>HITLOOP / CREATIVE ARCHIVE</div><h1 style={{fontSize:48,margin:'8px 0'}}>Archive</h1></div>

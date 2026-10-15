@@ -1,0 +1,4196 @@
+{
+  "schemaVersion": 1,
+  "definitionId": "baseline",
+  "hash": "8e1e3b67",
+  "structure": {
+    "errors": [],
+    "warnings": []
+  },
+  "modes": {
+    "light": {
+      "mode": "light",
+      "results": [
+        {
+          "id": "text-default@page",
+          "label": "text-default on page",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-default",
+          "bg": [
+            "page"
+          ],
+          "fgHex": "#000000",
+          "bgHex": "#ffffff",
+          "ratio": 21,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-default@surface",
+          "label": "text-default on surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-default",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#000000",
+          "bgHex": "#ffffff",
+          "ratio": 21,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-default@raised",
+          "label": "text-default on raised",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-default",
+          "bg": [
+            "raised"
+          ],
+          "fgHex": "#000000",
+          "bgHex": "#fefdf9",
+          "ratio": 20.63,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-default@inset",
+          "label": "text-default on inset",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-default",
+          "bg": [
+            "inset"
+          ],
+          "fgHex": "#000000",
+          "bgHex": "#f7f7f6",
+          "ratio": 19.59,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-default@glass-strong",
+          "label": "text-default on glass-strong",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-default",
+          "bg": [
+            "glass-strong"
+          ],
+          "fgHex": "#000000",
+          "bgHex": "#ffffff",
+          "ratio": 21,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-strong@page",
+          "label": "text-strong on page",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-strong",
+          "bg": [
+            "page"
+          ],
+          "fgHex": "#0a0a0a",
+          "bgHex": "#ffffff",
+          "ratio": 19.8,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-strong@surface",
+          "label": "text-strong on surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-strong",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#0a0a0a",
+          "bgHex": "#ffffff",
+          "ratio": 19.8,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-strong@raised",
+          "label": "text-strong on raised",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-strong",
+          "bg": [
+            "raised"
+          ],
+          "fgHex": "#0a0a0a",
+          "bgHex": "#fefdf9",
+          "ratio": 19.45,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-strong@inset",
+          "label": "text-strong on inset",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-strong",
+          "bg": [
+            "inset"
+          ],
+          "fgHex": "#0a0a0a",
+          "bgHex": "#f7f7f6",
+          "ratio": 18.47,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-strong@glass-strong",
+          "label": "text-strong on glass-strong",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-strong",
+          "bg": [
+            "glass-strong"
+          ],
+          "fgHex": "#0a0a0a",
+          "bgHex": "#ffffff",
+          "ratio": 19.8,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-body@page",
+          "label": "text-body on page",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-body",
+          "bg": [
+            "page"
+          ],
+          "fgHex": "#1a1a1a",
+          "bgHex": "#ffffff",
+          "ratio": 17.4,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-body@surface",
+          "label": "text-body on surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-body",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#1a1a1a",
+          "bgHex": "#ffffff",
+          "ratio": 17.4,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-body@raised",
+          "label": "text-body on raised",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-body",
+          "bg": [
+            "raised"
+          ],
+          "fgHex": "#1a1a1a",
+          "bgHex": "#fefdf9",
+          "ratio": 17.1,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-body@inset",
+          "label": "text-body on inset",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-body",
+          "bg": [
+            "inset"
+          ],
+          "fgHex": "#1a1a1a",
+          "bgHex": "#f7f7f6",
+          "ratio": 16.24,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-body@glass-strong",
+          "label": "text-body on glass-strong",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-body",
+          "bg": [
+            "glass-strong"
+          ],
+          "fgHex": "#1a1a1a",
+          "bgHex": "#ffffff",
+          "ratio": 17.4,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text@page",
+          "label": "text on page",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text",
+          "bg": [
+            "page"
+          ],
+          "fgHex": "#2a2420",
+          "bgHex": "#ffffff",
+          "ratio": 15.31,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text@surface",
+          "label": "text on surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#2a2420",
+          "bgHex": "#ffffff",
+          "ratio": 15.31,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text@raised",
+          "label": "text on raised",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text",
+          "bg": [
+            "raised"
+          ],
+          "fgHex": "#2a2420",
+          "bgHex": "#fefdf9",
+          "ratio": 15.04,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text@inset",
+          "label": "text on inset",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text",
+          "bg": [
+            "inset"
+          ],
+          "fgHex": "#2a2420",
+          "bgHex": "#f7f7f6",
+          "ratio": 14.28,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text@glass-strong",
+          "label": "text on glass-strong",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text",
+          "bg": [
+            "glass-strong"
+          ],
+          "fgHex": "#2a2420",
+          "bgHex": "#ffffff",
+          "ratio": 15.31,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-secondary@surface",
+          "label": "text-secondary on surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-secondary",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#66615e",
+          "bgHex": "#ffffff",
+          "ratio": 6.11,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-muted@surface",
+          "label": "text-muted on surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "text-muted",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#908d8b",
+          "bgHex": "#ffffff",
+          "ratio": 3.3,
+          "pass": false,
+          "fgLocked": false,
+          "bgLocked": false,
+          "suggestion": {
+            "role": "text-muted",
+            "set": {
+              "a": 0.628
+            },
+            "resultingRatio": 4.56
+          }
+        },
+        {
+          "id": "text-faint@surface",
+          "label": "text-faint on surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "text-faint",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#aeacaa",
+          "bgHex": "#ffffff",
+          "ratio": 2.26,
+          "pass": false,
+          "fgLocked": false,
+          "bgLocked": false,
+          "suggestion": {
+            "role": "text-faint",
+            "set": {
+              "a": 0.628
+            },
+            "resultingRatio": 4.56
+          }
+        },
+        {
+          "id": "text-secondary@glass-strong",
+          "label": "text-secondary on glass-strong",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-secondary",
+          "bg": [
+            "glass-strong"
+          ],
+          "fgHex": "#66615e",
+          "bgHex": "#ffffff",
+          "ratio": 6.11,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-muted@glass-strong",
+          "label": "text-muted on glass-strong",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "text-muted",
+          "bg": [
+            "glass-strong"
+          ],
+          "fgHex": "#908d8b",
+          "bgHex": "#ffffff",
+          "ratio": 3.3,
+          "pass": false,
+          "fgLocked": false,
+          "bgLocked": false,
+          "suggestion": {
+            "role": "text-muted",
+            "set": {
+              "a": 0.628
+            },
+            "resultingRatio": 4.56
+          }
+        },
+        {
+          "id": "text-faint@glass-strong",
+          "label": "text-faint on glass-strong",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "text-faint",
+          "bg": [
+            "glass-strong"
+          ],
+          "fgHex": "#aeacaa",
+          "bgHex": "#ffffff",
+          "ratio": 2.26,
+          "pass": false,
+          "fgLocked": false,
+          "bgLocked": false,
+          "suggestion": {
+            "role": "text-faint",
+            "set": {
+              "a": 0.628
+            },
+            "resultingRatio": 4.56
+          }
+        },
+        {
+          "id": "text-eyebrow@surface",
+          "label": "text-eyebrow on surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-eyebrow",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#5a5346",
+          "bgHex": "#ffffff",
+          "ratio": 7.61,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "on-overlay@overlay",
+          "label": "on-overlay on overlay",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "on-overlay",
+          "bg": [
+            "overlay"
+          ],
+          "fgHex": "#faf7f2",
+          "bgHex": "#9d9c9b",
+          "ratio": 2.56,
+          "pass": false,
+          "fgLocked": false,
+          "bgLocked": false,
+          "suggestion": {
+            "role": "on-overlay",
+            "set": {
+              "l": 0.324
+            },
+            "resultingRatio": 4.58
+          }
+        },
+        {
+          "id": "text-inverse@text",
+          "label": "text-inverse on text",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-inverse",
+          "bg": [
+            "text"
+          ],
+          "fgHex": "#faf7f2",
+          "bgHex": "#2a2420",
+          "ratio": 14.33,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text@chrome-strong",
+          "label": "text on chrome-strong",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text",
+          "bg": [
+            "chrome-strong"
+          ],
+          "fgHex": "#2a2420",
+          "bgHex": "#f7f3e4",
+          "ratio": 13.78,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "on-accent@accent",
+          "label": "on-accent on accent",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "on-accent",
+          "bg": [
+            "accent"
+          ],
+          "fgHex": "#0c0908",
+          "bgHex": "#00adb5",
+          "ratio": 7.22,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "on-accent@accent-hover",
+          "label": "on-accent on accent-hover",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "on-accent",
+          "bg": [
+            "accent-hover"
+          ],
+          "fgHex": "#0c0908",
+          "bgHex": "#009da6",
+          "ratio": 6.02,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "on-accent@accent-pressed",
+          "label": "on-accent on accent-pressed",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "on-accent",
+          "bg": [
+            "accent-pressed"
+          ],
+          "fgHex": "#0c0908",
+          "bgHex": "#009199",
+          "ratio": 5.21,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "accent-text@page",
+          "label": "accent-text on page",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "accent-text",
+          "bg": [
+            "page"
+          ],
+          "fgHex": "#00747c",
+          "bgHex": "#ffffff",
+          "ratio": 5.54,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "accent-text@surface",
+          "label": "accent-text on surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "accent-text",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#00747c",
+          "bgHex": "#ffffff",
+          "ratio": 5.54,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "accent-text@surface+accent-soft",
+          "label": "accent-text on surface over accent-soft",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "accent-text",
+          "bg": [
+            "surface",
+            "accent-soft"
+          ],
+          "fgHex": "#00747c",
+          "bgHex": "#e6f7f8",
+          "ratio": 5.02,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "on-solid@success-solid",
+          "label": "on-solid on success-solid",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "on-solid",
+          "bg": [
+            "success-solid"
+          ],
+          "fgHex": "#ffffff",
+          "bgHex": "#4a9e5c",
+          "ratio": 3.31,
+          "pass": false,
+          "fgLocked": false,
+          "bgLocked": false,
+          "suggestion": {
+            "role": "on-solid",
+            "set": {
+              "l": 0.2706
+            },
+            "resultingRatio": 4.57
+          }
+        },
+        {
+          "id": "success@surface",
+          "label": "success on surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "success",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#285f3b",
+          "bgHex": "#ffffff",
+          "ratio": 7.53,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "success@surface+success-bg",
+          "label": "success on surface over success-bg",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "success",
+          "bg": [
+            "surface",
+            "success-bg"
+          ],
+          "fgHex": "#285f3b",
+          "bgHex": "#eaefeb",
+          "ratio": 6.47,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "on-solid@warning-solid",
+          "label": "on-solid on warning-solid",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "on-solid",
+          "bg": [
+            "warning-solid"
+          ],
+          "fgHex": "#ffffff",
+          "bgHex": "#d4a843",
+          "ratio": 2.21,
+          "pass": false,
+          "fgLocked": false,
+          "bgLocked": false,
+          "suggestion": {
+            "role": "on-solid",
+            "set": {
+              "l": 0.3771
+            },
+            "resultingRatio": 4.61
+          }
+        },
+        {
+          "id": "warning@surface",
+          "label": "warning on surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "warning",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#67533d",
+          "bgHex": "#ffffff",
+          "ratio": 7.29,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "warning@surface+warning-bg",
+          "label": "warning on surface over warning-bg",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "warning",
+          "bg": [
+            "surface",
+            "warning-bg"
+          ],
+          "fgHex": "#67533d",
+          "bgHex": "#edeae8",
+          "ratio": 6.09,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "on-solid@danger-solid",
+          "label": "on-solid on danger-solid",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "on-solid",
+          "bg": [
+            "danger-solid"
+          ],
+          "fgHex": "#ffffff",
+          "bgHex": "#d71921",
+          "ratio": 5.18,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "danger@surface",
+          "label": "danger on surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "danger",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#9f1f17",
+          "bgHex": "#ffffff",
+          "ratio": 7.83,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "danger@surface+danger-bg",
+          "label": "danger on surface over danger-bg",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "danger",
+          "bg": [
+            "surface",
+            "danger-bg"
+          ],
+          "fgHex": "#9f1f17",
+          "bgHex": "#f7edec",
+          "ratio": 6.81,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "on-solid@info-solid",
+          "label": "on-solid on info-solid",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "on-solid",
+          "bg": [
+            "info-solid"
+          ],
+          "fgHex": "#ffffff",
+          "bgHex": "#2f6fed",
+          "ratio": 4.55,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "info@surface",
+          "label": "info on surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "info",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#1d4ed8",
+          "bgHex": "#ffffff",
+          "ratio": 6.7,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "info@surface+info-bg",
+          "label": "info on surface over info-bg",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "info",
+          "bg": [
+            "surface",
+            "info-bg"
+          ],
+          "fgHex": "#1d4ed8",
+          "bgHex": "#edf1fc",
+          "ratio": 5.93,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "selection-fg@selection-bg",
+          "label": "selection-fg on selection-bg",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "selection-fg",
+          "bg": [
+            "selection-bg"
+          ],
+          "fgHex": "#2a2420",
+          "bgHex": "#bfebed",
+          "ratio": 11.9,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-fg@term-bg-top",
+          "label": "term-fg on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-fg",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#2a2420",
+          "bgHex": "#fcfaf7",
+          "ratio": 14.69,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-dim@term-bg-top",
+          "label": "term-dim on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-dim",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#8a8378",
+          "bgHex": "#fcfaf7",
+          "ratio": 3.6,
+          "pass": false,
+          "fgLocked": false,
+          "bgLocked": false,
+          "suggestion": {
+            "role": "term-dim",
+            "set": {
+              "l": 0.5568
+            },
+            "resultingRatio": 4.56
+          }
+        },
+        {
+          "id": "term-info-pfx@term-bg-top",
+          "label": "term-info-pfx on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-info-pfx",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#5a6b82",
+          "bgHex": "#fcfaf7",
+          "ratio": 5.22,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-info-msg@term-bg-top",
+          "label": "term-info-msg on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-info-msg",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#4b5563",
+          "bgHex": "#fcfaf7",
+          "ratio": 7.25,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-fetch-pfx@term-bg-top",
+          "label": "term-fetch-pfx on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-fetch-pfx",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#0e7c8b",
+          "bgHex": "#fcfaf7",
+          "ratio": 4.72,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-fetch-msg@term-bg-top",
+          "label": "term-fetch-msg on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-fetch-msg",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#1a6b76",
+          "bgHex": "#fcfaf7",
+          "ratio": 5.91,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-ok-pfx@term-bg-top",
+          "label": "term-ok-pfx on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-ok-pfx",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#3f7d2e",
+          "bgHex": "#fcfaf7",
+          "ratio": 4.82,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-ok-msg@term-bg-top",
+          "label": "term-ok-msg on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-ok-msg",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#46732f",
+          "bgHex": "#fcfaf7",
+          "ratio": 5.37,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-ai-pfx@term-bg-top",
+          "label": "term-ai-pfx on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-ai-pfx",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#8b3fb0",
+          "bgHex": "#fcfaf7",
+          "ratio": 5.87,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-ai-msg@term-bg-top",
+          "label": "term-ai-msg on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-ai-msg",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#79399a",
+          "bgHex": "#fcfaf7",
+          "ratio": 7.04,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-build-pfx@term-bg-top",
+          "label": "term-build-pfx on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-build-pfx",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#ad7a17",
+          "bgHex": "#fcfaf7",
+          "ratio": 3.62,
+          "pass": false,
+          "fgLocked": false,
+          "bgLocked": false,
+          "suggestion": {
+            "role": "term-build-pfx",
+            "set": {
+              "l": 0.5604
+            },
+            "resultingRatio": 4.57
+          }
+        },
+        {
+          "id": "term-build-msg@term-bg-top",
+          "label": "term-build-msg on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-build-msg",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#8f6512",
+          "bgHex": "#fcfaf7",
+          "ratio": 4.99,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-error-pfx@term-bg-top",
+          "label": "term-error-pfx on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-error-pfx",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#c0392b",
+          "bgHex": "#fcfaf7",
+          "ratio": 5.22,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-error-msg@term-bg-top",
+          "label": "term-error-msg on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-error-msg",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#a83226",
+          "bgHex": "#fcfaf7",
+          "ratio": 6.4,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-active-pfx@term-bg-top",
+          "label": "term-active-pfx on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-active-pfx",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#2f6fed",
+          "bgHex": "#fcfaf7",
+          "ratio": 4.37,
+          "pass": false,
+          "fgLocked": false,
+          "bgLocked": false,
+          "suggestion": {
+            "role": "term-active-pfx",
+            "set": {
+              "l": 0.5641
+            },
+            "resultingRatio": 4.55
+          }
+        },
+        {
+          "id": "term-active-msg@term-bg-top",
+          "label": "term-active-msg on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-active-msg",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#22303f",
+          "bgHex": "#fcfaf7",
+          "ratio": 12.9,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-screen-pfx@term-bg-top",
+          "label": "term-screen-pfx on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-screen-pfx",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#3b5bbf",
+          "bgHex": "#fcfaf7",
+          "ratio": 5.87,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-screen-msg@term-bg-top",
+          "label": "term-screen-msg on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-screen-msg",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#2f3f6f",
+          "bgHex": "#fcfaf7",
+          "ratio": 9.78,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-mock-pfx@term-bg-top",
+          "label": "term-mock-pfx on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-mock-pfx",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#c66a38",
+          "bgHex": "#fcfaf7",
+          "ratio": 3.65,
+          "pass": false,
+          "fgLocked": false,
+          "bgLocked": false,
+          "suggestion": {
+            "role": "term-mock-pfx",
+            "set": {
+              "l": 0.567
+            },
+            "resultingRatio": 4.58
+          }
+        },
+        {
+          "id": "term-mock-msg@term-bg-top",
+          "label": "term-mock-msg on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-mock-msg",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#a9552b",
+          "bgHex": "#fcfaf7",
+          "ratio": 5.01,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-countdown-pfx@term-bg-top",
+          "label": "term-countdown-pfx on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-countdown-pfx",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#ad7a17",
+          "bgHex": "#fcfaf7",
+          "ratio": 3.62,
+          "pass": false,
+          "fgLocked": false,
+          "bgLocked": false,
+          "suggestion": {
+            "role": "term-countdown-pfx",
+            "set": {
+              "l": 0.5604
+            },
+            "resultingRatio": 4.57
+          }
+        },
+        {
+          "id": "term-countdown-msg@term-bg-top",
+          "label": "term-countdown-msg on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-countdown-msg",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#8f6512",
+          "bgHex": "#fcfaf7",
+          "ratio": 4.99,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-fg@term-bg-bottom",
+          "label": "term-fg on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-fg",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#2a2420",
+          "bgHex": "#f2ebe0",
+          "ratio": 12.93,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-dim@term-bg-bottom",
+          "label": "term-dim on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-dim",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#8a8378",
+          "bgHex": "#f2ebe0",
+          "ratio": 3.17,
+          "pass": false,
+          "fgLocked": false,
+          "bgLocked": false,
+          "suggestion": {
+            "role": "term-dim",
+            "set": {
+              "l": 0.5255
+            },
+            "resultingRatio": 4.58
+          }
+        },
+        {
+          "id": "term-info-pfx@term-bg-bottom",
+          "label": "term-info-pfx on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-info-pfx",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#5a6b82",
+          "bgHex": "#f2ebe0",
+          "ratio": 4.59,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-info-msg@term-bg-bottom",
+          "label": "term-info-msg on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-info-msg",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#4b5563",
+          "bgHex": "#f2ebe0",
+          "ratio": 6.38,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-fetch-pfx@term-bg-bottom",
+          "label": "term-fetch-pfx on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-fetch-pfx",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#0e7c8b",
+          "bgHex": "#f2ebe0",
+          "ratio": 4.15,
+          "pass": false,
+          "fgLocked": false,
+          "bgLocked": false,
+          "suggestion": {
+            "role": "term-fetch-pfx",
+            "set": {
+              "l": 0.5164
+            },
+            "resultingRatio": 4.57
+          }
+        },
+        {
+          "id": "term-fetch-msg@term-bg-bottom",
+          "label": "term-fetch-msg on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-fetch-msg",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#1a6b76",
+          "bgHex": "#f2ebe0",
+          "ratio": 5.2,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-ok-pfx@term-bg-bottom",
+          "label": "term-ok-pfx on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-ok-pfx",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#3f7d2e",
+          "bgHex": "#f2ebe0",
+          "ratio": 4.24,
+          "pass": false,
+          "fgLocked": false,
+          "bgLocked": false,
+          "suggestion": {
+            "role": "term-ok-pfx",
+            "set": {
+              "l": 0.512
+            },
+            "resultingRatio": 4.55
+          }
+        },
+        {
+          "id": "term-ok-msg@term-bg-bottom",
+          "label": "term-ok-msg on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-ok-msg",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#46732f",
+          "bgHex": "#f2ebe0",
+          "ratio": 4.72,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-ai-pfx@term-bg-bottom",
+          "label": "term-ai-pfx on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-ai-pfx",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#8b3fb0",
+          "bgHex": "#f2ebe0",
+          "ratio": 5.16,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-ai-msg@term-bg-bottom",
+          "label": "term-ai-msg on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-ai-msg",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#79399a",
+          "bgHex": "#f2ebe0",
+          "ratio": 6.19,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-build-pfx@term-bg-bottom",
+          "label": "term-build-pfx on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-build-pfx",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#ad7a17",
+          "bgHex": "#f2ebe0",
+          "ratio": 3.18,
+          "pass": false,
+          "fgLocked": false,
+          "bgLocked": false,
+          "suggestion": {
+            "role": "term-build-pfx",
+            "set": {
+              "l": 0.53
+            },
+            "resultingRatio": 4.55
+          }
+        },
+        {
+          "id": "term-build-msg@term-bg-bottom",
+          "label": "term-build-msg on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-build-msg",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#8f6512",
+          "bgHex": "#f2ebe0",
+          "ratio": 4.39,
+          "pass": false,
+          "fgLocked": false,
+          "bgLocked": false,
+          "suggestion": {
+            "role": "term-build-msg",
+            "set": {
+              "l": 0.5286
+            },
+            "resultingRatio": 4.59
+          }
+        },
+        {
+          "id": "term-error-pfx@term-bg-bottom",
+          "label": "term-error-pfx on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-error-pfx",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#c0392b",
+          "bgHex": "#f2ebe0",
+          "ratio": 4.59,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-error-msg@term-bg-bottom",
+          "label": "term-error-msg on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-error-msg",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#a83226",
+          "bgHex": "#f2ebe0",
+          "ratio": 5.63,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-active-pfx@term-bg-bottom",
+          "label": "term-active-pfx on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-active-pfx",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#2f6fed",
+          "bgHex": "#f2ebe0",
+          "ratio": 3.84,
+          "pass": false,
+          "fgLocked": false,
+          "bgLocked": false,
+          "suggestion": {
+            "role": "term-active-pfx",
+            "set": {
+              "l": 0.5352
+            },
+            "resultingRatio": 4.57
+          }
+        },
+        {
+          "id": "term-active-msg@term-bg-bottom",
+          "label": "term-active-msg on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-active-msg",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#22303f",
+          "bgHex": "#f2ebe0",
+          "ratio": 11.35,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-screen-pfx@term-bg-bottom",
+          "label": "term-screen-pfx on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-screen-pfx",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#3b5bbf",
+          "bgHex": "#f2ebe0",
+          "ratio": 5.16,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-screen-msg@term-bg-bottom",
+          "label": "term-screen-msg on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-screen-msg",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#2f3f6f",
+          "bgHex": "#f2ebe0",
+          "ratio": 8.6,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-mock-pfx@term-bg-bottom",
+          "label": "term-mock-pfx on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-mock-pfx",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#c66a38",
+          "bgHex": "#f2ebe0",
+          "ratio": 3.21,
+          "pass": false,
+          "fgLocked": false,
+          "bgLocked": false,
+          "suggestion": {
+            "role": "term-mock-pfx",
+            "set": {
+              "l": 0.5371
+            },
+            "resultingRatio": 4.58
+          }
+        },
+        {
+          "id": "term-mock-msg@term-bg-bottom",
+          "label": "term-mock-msg on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-mock-msg",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#a9552b",
+          "bgHex": "#f2ebe0",
+          "ratio": 4.41,
+          "pass": false,
+          "fgLocked": false,
+          "bgLocked": false,
+          "suggestion": {
+            "role": "term-mock-msg",
+            "set": {
+              "l": 0.5366
+            },
+            "resultingRatio": 4.56
+          }
+        },
+        {
+          "id": "term-countdown-pfx@term-bg-bottom",
+          "label": "term-countdown-pfx on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-countdown-pfx",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#ad7a17",
+          "bgHex": "#f2ebe0",
+          "ratio": 3.18,
+          "pass": false,
+          "fgLocked": false,
+          "bgLocked": false,
+          "suggestion": {
+            "role": "term-countdown-pfx",
+            "set": {
+              "l": 0.53
+            },
+            "resultingRatio": 4.55
+          }
+        },
+        {
+          "id": "term-countdown-msg@term-bg-bottom",
+          "label": "term-countdown-msg on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-countdown-msg",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#8f6512",
+          "bgHex": "#f2ebe0",
+          "ratio": 4.39,
+          "pass": false,
+          "fgLocked": false,
+          "bgLocked": false,
+          "suggestion": {
+            "role": "term-countdown-msg",
+            "set": {
+              "l": 0.5286
+            },
+            "resultingRatio": 4.59
+          }
+        },
+        {
+          "id": "dash-text-primary@dash-surface",
+          "label": "dash-text-primary on dash-surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "dash-text-primary",
+          "bg": [
+            "dash-surface"
+          ],
+          "fgHex": "#222222",
+          "bgHex": "#ffffff",
+          "ratio": 15.91,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "dash-text-primary@dash-page",
+          "label": "dash-text-primary on dash-page",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "dash-text-primary",
+          "bg": [
+            "dash-page"
+          ],
+          "fgHex": "#222222",
+          "bgHex": "#f5f5f5",
+          "ratio": 14.59,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "dash-text-secondary@dash-surface",
+          "label": "dash-text-secondary on dash-surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "dash-text-secondary",
+          "bg": [
+            "dash-surface"
+          ],
+          "fgHex": "#666666",
+          "bgHex": "#ffffff",
+          "ratio": 5.74,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "dash-text-secondary@dash-page",
+          "label": "dash-text-secondary on dash-page",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "dash-text-secondary",
+          "bg": [
+            "dash-page"
+          ],
+          "fgHex": "#666666",
+          "bgHex": "#f5f5f5",
+          "ratio": 5.27,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text@page+scrim+scene-peak",
+          "label": "text on page over scrim over scene-peak",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text",
+          "bg": [
+            "page",
+            "scrim",
+            "scene-peak"
+          ],
+          "fgHex": "#2a2420",
+          "bgHex": "#c9fcea",
+          "ratio": 13.56,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "focus@page",
+          "label": "focus on page",
+          "kind": "nontext",
+          "min": 3,
+          "required": true,
+          "fg": "focus",
+          "bg": [
+            "page"
+          ],
+          "fgHex": "#007a82",
+          "bgHex": "#ffffff",
+          "ratio": 5.11,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "focus@surface",
+          "label": "focus on surface",
+          "kind": "nontext",
+          "min": 3,
+          "required": true,
+          "fg": "focus",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#007a82",
+          "bgHex": "#ffffff",
+          "ratio": 5.11,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "control-border@surface",
+          "label": "control-border on surface",
+          "kind": "nontext",
+          "min": 3,
+          "required": false,
+          "fg": "control-border",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#d0cfce",
+          "bgHex": "#ffffff",
+          "ratio": 1.56,
+          "pass": false,
+          "fgLocked": false,
+          "bgLocked": false,
+          "suggestion": {
+            "role": "control-border",
+            "set": {
+              "a": 0.492
+            },
+            "resultingRatio": 3.05
+          }
+        },
+        {
+          "id": "control-border-strong@surface",
+          "label": "control-border-strong on surface",
+          "kind": "nontext",
+          "min": 3,
+          "required": true,
+          "fg": "control-border-strong",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#8a8784",
+          "bgHex": "#ffffff",
+          "ratio": 3.57,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "accent@surface",
+          "label": "accent on surface",
+          "kind": "nontext",
+          "min": 3,
+          "required": false,
+          "fg": "accent",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#00adb5",
+          "bgHex": "#ffffff",
+          "ratio": 2.75,
+          "pass": false,
+          "fgLocked": false,
+          "bgLocked": false,
+          "suggestion": {
+            "role": "accent",
+            "set": {
+              "l": 0.65
+            },
+            "resultingRatio": 3.07
+          }
+        },
+        {
+          "id": "success-solid@surface",
+          "label": "success-solid on surface",
+          "kind": "nontext",
+          "min": 3,
+          "required": false,
+          "fg": "success-solid",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#4a9e5c",
+          "bgHex": "#ffffff",
+          "ratio": 3.31,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "warning-solid@surface",
+          "label": "warning-solid on surface",
+          "kind": "nontext",
+          "min": 3,
+          "required": false,
+          "fg": "warning-solid",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#d4a843",
+          "bgHex": "#ffffff",
+          "ratio": 2.21,
+          "pass": false,
+          "fgLocked": false,
+          "bgLocked": false,
+          "suggestion": {
+            "role": "warning-solid",
+            "set": {
+              "l": 0.6683
+            },
+            "resultingRatio": 3.06
+          }
+        },
+        {
+          "id": "danger-solid@surface",
+          "label": "danger-solid on surface",
+          "kind": "nontext",
+          "min": 3,
+          "required": false,
+          "fg": "danger-solid",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#d71921",
+          "bgHex": "#ffffff",
+          "ratio": 5.18,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "info-solid@surface",
+          "label": "info-solid on surface",
+          "kind": "nontext",
+          "min": 3,
+          "required": false,
+          "fg": "info-solid",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#2f6fed",
+          "bgHex": "#ffffff",
+          "ratio": 4.55,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        }
+      ],
+      "excluded": [
+        {
+          "roleId": "overlay",
+          "reason": "scrim behind modals (measured through text-inverse)"
+        },
+        {
+          "roleId": "glass-border",
+          "reason": "decorative panel edge"
+        },
+        {
+          "roleId": "glass-highlight",
+          "reason": "decorative inset hairline"
+        },
+        {
+          "roleId": "scrim",
+          "reason": "text-over-animation scrim (measured through the scene pair)"
+        },
+        {
+          "roleId": "text-disabled",
+          "reason": "disabled controls are exempt"
+        },
+        {
+          "roleId": "border-faint",
+          "reason": "decorative hairline"
+        },
+        {
+          "roleId": "border-subtle",
+          "reason": "decorative divider"
+        },
+        {
+          "roleId": "support-1",
+          "reason": "decorative accent"
+        },
+        {
+          "roleId": "support-2",
+          "reason": "decorative accent"
+        },
+        {
+          "roleId": "comet-1",
+          "reason": "decorative gradient stop"
+        },
+        {
+          "roleId": "comet-2",
+          "reason": "decorative gradient stop"
+        },
+        {
+          "roleId": "comet-3",
+          "reason": "decorative gradient stop"
+        },
+        {
+          "roleId": "comet-4",
+          "reason": "decorative gradient stop"
+        },
+        {
+          "roleId": "comet-5",
+          "reason": "decorative gradient stop"
+        },
+        {
+          "roleId": "comet-6",
+          "reason": "decorative gradient stop"
+        },
+        {
+          "roleId": "comet-7",
+          "reason": "decorative gradient stop"
+        },
+        {
+          "roleId": "deco-1",
+          "reason": "decorative hero tint"
+        },
+        {
+          "roleId": "deco-2",
+          "reason": "decorative hero tint"
+        },
+        {
+          "roleId": "deco-3",
+          "reason": "decorative hero tint"
+        },
+        {
+          "roleId": "deco-4",
+          "reason": "decorative hero tint"
+        },
+        {
+          "roleId": "disabled-bg",
+          "reason": "disabled controls are exempt"
+        },
+        {
+          "roleId": "shadow",
+          "reason": "shadow"
+        }
+      ]
+    },
+    "dark": {
+      "mode": "dark",
+      "results": [
+        {
+          "id": "text-default@page",
+          "label": "text-default on page",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-default",
+          "bg": [
+            "page"
+          ],
+          "fgHex": "#ede6e2",
+          "bgHex": "#0f0e0a",
+          "ratio": 15.65,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-default@surface",
+          "label": "text-default on surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-default",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#ede6e2",
+          "bgHex": "#181713",
+          "ratio": 14.54,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-default@raised",
+          "label": "text-default on raised",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-default",
+          "bg": [
+            "raised"
+          ],
+          "fgHex": "#ede6e2",
+          "bgHex": "#22201b",
+          "ratio": 13.19,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-default@inset",
+          "label": "text-default on inset",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-default",
+          "bg": [
+            "inset"
+          ],
+          "fgHex": "#ede6e2",
+          "bgHex": "#080806",
+          "ratio": 16.24,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-default@glass-strong",
+          "label": "text-default on glass-strong",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-default",
+          "bg": [
+            "glass-strong"
+          ],
+          "fgHex": "#ede6e2",
+          "bgHex": "#1e1c18",
+          "ratio": 13.79,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-strong@page",
+          "label": "text-strong on page",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-strong",
+          "bg": [
+            "page"
+          ],
+          "fgHex": "#f9f6f4",
+          "bgHex": "#0f0e0a",
+          "ratio": 17.95,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-strong@surface",
+          "label": "text-strong on surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-strong",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#f9f6f4",
+          "bgHex": "#181713",
+          "ratio": 16.67,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-strong@raised",
+          "label": "text-strong on raised",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-strong",
+          "bg": [
+            "raised"
+          ],
+          "fgHex": "#f9f6f4",
+          "bgHex": "#22201b",
+          "ratio": 15.12,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-strong@inset",
+          "label": "text-strong on inset",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-strong",
+          "bg": [
+            "inset"
+          ],
+          "fgHex": "#f9f6f4",
+          "bgHex": "#080806",
+          "ratio": 18.63,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-strong@glass-strong",
+          "label": "text-strong on glass-strong",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-strong",
+          "bg": [
+            "glass-strong"
+          ],
+          "fgHex": "#f9f6f4",
+          "bgHex": "#1e1c18",
+          "ratio": 15.81,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-body@page",
+          "label": "text-body on page",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-body",
+          "bg": [
+            "page"
+          ],
+          "fgHex": "#e1ddda",
+          "bgHex": "#0f0e0a",
+          "ratio": 14.3,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-body@surface",
+          "label": "text-body on surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-body",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#e1ddda",
+          "bgHex": "#181713",
+          "ratio": 13.29,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-body@raised",
+          "label": "text-body on raised",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-body",
+          "bg": [
+            "raised"
+          ],
+          "fgHex": "#e1ddda",
+          "bgHex": "#22201b",
+          "ratio": 12.06,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-body@inset",
+          "label": "text-body on inset",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-body",
+          "bg": [
+            "inset"
+          ],
+          "fgHex": "#e1ddda",
+          "bgHex": "#080806",
+          "ratio": 14.85,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-body@glass-strong",
+          "label": "text-body on glass-strong",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-body",
+          "bg": [
+            "glass-strong"
+          ],
+          "fgHex": "#e1ddda",
+          "bgHex": "#1e1c18",
+          "ratio": 12.6,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text@page",
+          "label": "text on page",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text",
+          "bg": [
+            "page"
+          ],
+          "fgHex": "#ede6e2",
+          "bgHex": "#0f0e0a",
+          "ratio": 15.65,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text@surface",
+          "label": "text on surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#ede6e2",
+          "bgHex": "#181713",
+          "ratio": 14.54,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text@raised",
+          "label": "text on raised",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text",
+          "bg": [
+            "raised"
+          ],
+          "fgHex": "#ede6e2",
+          "bgHex": "#22201b",
+          "ratio": 13.19,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text@inset",
+          "label": "text on inset",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text",
+          "bg": [
+            "inset"
+          ],
+          "fgHex": "#ede6e2",
+          "bgHex": "#080806",
+          "ratio": 16.24,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text@glass-strong",
+          "label": "text on glass-strong",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text",
+          "bg": [
+            "glass-strong"
+          ],
+          "fgHex": "#ede6e2",
+          "bgHex": "#1e1c18",
+          "ratio": 13.79,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-secondary@surface",
+          "label": "text-secondary on surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-secondary",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#b1aca8",
+          "bgHex": "#181713",
+          "ratio": 7.97,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-muted@surface",
+          "label": "text-muted on surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "text-muted",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#948f8b",
+          "bgHex": "#181713",
+          "ratio": 5.6,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-faint@surface",
+          "label": "text-faint on surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "text-faint",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#837f7b",
+          "bgHex": "#181713",
+          "ratio": 4.52,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-secondary@glass-strong",
+          "label": "text-secondary on glass-strong",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-secondary",
+          "bg": [
+            "glass-strong"
+          ],
+          "fgHex": "#b3ada9",
+          "bgHex": "#1e1c18",
+          "ratio": 7.67,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-muted@glass-strong",
+          "label": "text-muted on glass-strong",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "text-muted",
+          "bg": [
+            "glass-strong"
+          ],
+          "fgHex": "#96918d",
+          "bgHex": "#1e1c18",
+          "ratio": 5.45,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-faint@glass-strong",
+          "label": "text-faint on glass-strong",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "text-faint",
+          "bg": [
+            "glass-strong"
+          ],
+          "fgHex": "#86817d",
+          "bgHex": "#1e1c18",
+          "ratio": 4.41,
+          "pass": false,
+          "fgLocked": false,
+          "bgLocked": false,
+          "suggestion": {
+            "role": "text-faint",
+            "set": {
+              "a": 0.513
+            },
+            "resultingRatio": 4.58
+          }
+        },
+        {
+          "id": "text-eyebrow@surface",
+          "label": "text-eyebrow on surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-eyebrow",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#a9a49b",
+          "bgHex": "#181713",
+          "ratio": 7.23,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "on-overlay@overlay",
+          "label": "on-overlay on overlay",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "on-overlay",
+          "bg": [
+            "overlay"
+          ],
+          "fgHex": "#f0eeea",
+          "bgHex": "#070704",
+          "ratio": 17.41,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text-inverse@text",
+          "label": "text-inverse on text",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text-inverse",
+          "bg": [
+            "text"
+          ],
+          "fgHex": "#181612",
+          "bgHex": "#ede6e2",
+          "ratio": 14.64,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text@chrome-strong",
+          "label": "text on chrome-strong",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text",
+          "bg": [
+            "chrome-strong"
+          ],
+          "fgHex": "#ede6e2",
+          "bgHex": "#1a1913",
+          "ratio": 14.27,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "on-accent@accent",
+          "label": "on-accent on accent",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "on-accent",
+          "bg": [
+            "accent"
+          ],
+          "fgHex": "#15110d",
+          "bgHex": "#30c7d0",
+          "ratio": 9.13,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "on-accent@accent-hover",
+          "label": "on-accent on accent-hover",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "on-accent",
+          "bg": [
+            "accent-hover"
+          ],
+          "fgHex": "#15110d",
+          "bgHex": "#48d8e1",
+          "ratio": 10.9,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "on-accent@accent-pressed",
+          "label": "on-accent on accent-pressed",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "on-accent",
+          "bg": [
+            "accent-pressed"
+          ],
+          "fgHex": "#15110d",
+          "bgHex": "#58e5ee",
+          "ratio": 12.4,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "accent-text@page",
+          "label": "accent-text on page",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "accent-text",
+          "bg": [
+            "page"
+          ],
+          "fgHex": "#43d5dd",
+          "bgHex": "#0f0e0a",
+          "ratio": 10.85,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "accent-text@surface",
+          "label": "accent-text on surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "accent-text",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#43d5dd",
+          "bgHex": "#181713",
+          "ratio": 10.08,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "accent-text@surface+accent-soft",
+          "label": "accent-text on surface over accent-soft",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "accent-text",
+          "bg": [
+            "surface",
+            "accent-soft"
+          ],
+          "fgHex": "#43d5dd",
+          "bgHex": "#1c3331",
+          "ratio": 7.53,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "on-solid@success-solid",
+          "label": "on-solid on success-solid",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "on-solid",
+          "bg": [
+            "success-solid"
+          ],
+          "fgHex": "#0f0a07",
+          "bgHex": "#58b66c",
+          "ratio": 7.8,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "success@surface",
+          "label": "success on surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "success",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#69d18b",
+          "bgHex": "#181713",
+          "ratio": 9.48,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "success@surface+success-bg",
+          "label": "success on surface over success-bg",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "success",
+          "bg": [
+            "surface",
+            "success-bg"
+          ],
+          "fgHex": "#69d18b",
+          "bgHex": "#253526",
+          "ratio": 6.87,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "on-solid@warning-solid",
+          "label": "on-solid on warning-solid",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "on-solid",
+          "bg": [
+            "warning-solid"
+          ],
+          "fgHex": "#0f0a07",
+          "bgHex": "#e4b750",
+          "ratio": 10.49,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "warning@surface",
+          "label": "warning on surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "warning",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#e8b275",
+          "bgHex": "#181713",
+          "ratio": 9.44,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "warning@surface+warning-bg",
+          "label": "warning on surface over warning-bg",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "warning",
+          "bg": [
+            "surface",
+            "warning-bg"
+          ],
+          "fgHex": "#e8b275",
+          "bgHex": "#393023",
+          "ratio": 6.82,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "on-solid@danger-solid",
+          "label": "on-solid on danger-solid",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "on-solid",
+          "bg": [
+            "danger-solid"
+          ],
+          "fgHex": "#0f0a07",
+          "bgHex": "#fc5950",
+          "ratio": 6.27,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "danger@surface",
+          "label": "danger on surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "danger",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#fd7464",
+          "bgHex": "#181713",
+          "ratio": 6.71,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "danger@surface+danger-bg",
+          "label": "danger on surface over danger-bg",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "danger",
+          "bg": [
+            "surface",
+            "danger-bg"
+          ],
+          "fgHex": "#fd7464",
+          "bgHex": "#38241e",
+          "ratio": 5.46,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "on-solid@info-solid",
+          "label": "on-solid on info-solid",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "on-solid",
+          "bg": [
+            "info-solid"
+          ],
+          "fgHex": "#0f0a07",
+          "bgHex": "#5c94ff",
+          "ratio": 6.69,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "info@surface",
+          "label": "info on surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "info",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#87afff",
+          "bgHex": "#181713",
+          "ratio": 8.2,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "info@surface+info-bg",
+          "label": "info on surface over info-bg",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "info",
+          "bg": [
+            "surface",
+            "info-bg"
+          ],
+          "fgHex": "#87afff",
+          "bgHex": "#282c34",
+          "ratio": 6.4,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "selection-fg@selection-bg",
+          "label": "selection-fg on selection-bg",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "selection-fg",
+          "bg": [
+            "selection-bg"
+          ],
+          "fgHex": "#ede6e2",
+          "bgHex": "#1b4f4f",
+          "ratio": 7.47,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-fg@term-bg-top",
+          "label": "term-fg on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-fg",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#ede6e2",
+          "bgHex": "#0d0b08",
+          "ratio": 15.93,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-dim@term-bg-top",
+          "label": "term-dim on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-dim",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#96918a",
+          "bgHex": "#0d0b08",
+          "ratio": 6.28,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-info-pfx@term-bg-top",
+          "label": "term-info-pfx on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-info-pfx",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#aab9cd",
+          "bgHex": "#0d0b08",
+          "ratio": 9.86,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-info-msg@term-bg-top",
+          "label": "term-info-msg on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-info-msg",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#c2cbd8",
+          "bgHex": "#0d0b08",
+          "ratio": 12.01,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-fetch-pfx@term-bg-top",
+          "label": "term-fetch-pfx on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-fetch-pfx",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#7fc4d1",
+          "bgHex": "#0d0b08",
+          "ratio": 10.03,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-fetch-msg@term-bg-top",
+          "label": "term-fetch-msg on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-fetch-msg",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#9cd6df",
+          "bgHex": "#0d0b08",
+          "ratio": 12.26,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-ok-pfx@term-bg-top",
+          "label": "term-ok-pfx on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-ok-pfx",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#94c888",
+          "bgHex": "#0d0b08",
+          "ratio": 10.18,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-ok-msg@term-bg-top",
+          "label": "term-ok-msg on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-ok-msg",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#b1d89f",
+          "bgHex": "#0d0b08",
+          "ratio": 12.35,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-ai-pfx@term-bg-top",
+          "label": "term-ai-pfx on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-ai-pfx",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#d79bf9",
+          "bgHex": "#0d0b08",
+          "ratio": 9.31,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-ai-msg@term-bg-top",
+          "label": "term-ai-msg on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-ai-msg",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#e7b2ff",
+          "bgHex": "#0d0b08",
+          "ratio": 11.43,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-build-pfx@term-bg-top",
+          "label": "term-build-pfx on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-build-pfx",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#dab06d",
+          "bgHex": "#0d0b08",
+          "ratio": 9.74,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-build-msg@term-bg-top",
+          "label": "term-build-msg on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-build-msg",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#e9c48b",
+          "bgHex": "#0d0b08",
+          "ratio": 11.92,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-error-pfx@term-bg-top",
+          "label": "term-error-pfx on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-error-pfx",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#ff9382",
+          "bgHex": "#0d0b08",
+          "ratio": 9.12,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-error-msg@term-bg-top",
+          "label": "term-error-msg on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-error-msg",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#ffafa0",
+          "bgHex": "#0d0b08",
+          "ratio": 11.13,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-active-pfx@term-bg-top",
+          "label": "term-active-pfx on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-active-pfx",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#88b7ff",
+          "bgHex": "#0d0b08",
+          "ratio": 9.61,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-active-msg@term-bg-top",
+          "label": "term-active-msg on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-active-msg",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#beccdc",
+          "bgHex": "#0d0b08",
+          "ratio": 12.04,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-screen-pfx@term-bg-top",
+          "label": "term-screen-pfx on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-screen-pfx",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#92b4ff",
+          "bgHex": "#0d0b08",
+          "ratio": 9.54,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-screen-msg@term-bg-top",
+          "label": "term-screen-msg on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-screen-msg",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#b8caf8",
+          "bgHex": "#0d0b08",
+          "ratio": 12.02,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-mock-pfx@term-bg-top",
+          "label": "term-mock-pfx on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-mock-pfx",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#f0a27c",
+          "bgHex": "#0d0b08",
+          "ratio": 9.51,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-mock-msg@term-bg-top",
+          "label": "term-mock-msg on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-mock-msg",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#ffb694",
+          "bgHex": "#0d0b08",
+          "ratio": 11.58,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-countdown-pfx@term-bg-top",
+          "label": "term-countdown-pfx on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-countdown-pfx",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#dab06d",
+          "bgHex": "#0d0b08",
+          "ratio": 9.74,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-countdown-msg@term-bg-top",
+          "label": "term-countdown-msg on term-bg-top",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-countdown-msg",
+          "bg": [
+            "term-bg-top"
+          ],
+          "fgHex": "#e9c48b",
+          "bgHex": "#0d0b08",
+          "ratio": 11.92,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-fg@term-bg-bottom",
+          "label": "term-fg on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-fg",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#ede6e2",
+          "bgHex": "#070604",
+          "ratio": 16.41,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-dim@term-bg-bottom",
+          "label": "term-dim on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-dim",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#96918a",
+          "bgHex": "#070604",
+          "ratio": 6.48,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-info-pfx@term-bg-bottom",
+          "label": "term-info-pfx on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-info-pfx",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#aab9cd",
+          "bgHex": "#070604",
+          "ratio": 10.16,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-info-msg@term-bg-bottom",
+          "label": "term-info-msg on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-info-msg",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#c2cbd8",
+          "bgHex": "#070604",
+          "ratio": 12.37,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-fetch-pfx@term-bg-bottom",
+          "label": "term-fetch-pfx on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-fetch-pfx",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#7fc4d1",
+          "bgHex": "#070604",
+          "ratio": 10.34,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-fetch-msg@term-bg-bottom",
+          "label": "term-fetch-msg on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-fetch-msg",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#9cd6df",
+          "bgHex": "#070604",
+          "ratio": 12.63,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-ok-pfx@term-bg-bottom",
+          "label": "term-ok-pfx on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-ok-pfx",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#94c888",
+          "bgHex": "#070604",
+          "ratio": 10.49,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-ok-msg@term-bg-bottom",
+          "label": "term-ok-msg on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-ok-msg",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#b1d89f",
+          "bgHex": "#070604",
+          "ratio": 12.72,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-ai-pfx@term-bg-bottom",
+          "label": "term-ai-pfx on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-ai-pfx",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#d79bf9",
+          "bgHex": "#070604",
+          "ratio": 9.59,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-ai-msg@term-bg-bottom",
+          "label": "term-ai-msg on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-ai-msg",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#e7b2ff",
+          "bgHex": "#070604",
+          "ratio": 11.78,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-build-pfx@term-bg-bottom",
+          "label": "term-build-pfx on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-build-pfx",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#dab06d",
+          "bgHex": "#070604",
+          "ratio": 10.04,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-build-msg@term-bg-bottom",
+          "label": "term-build-msg on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-build-msg",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#e9c48b",
+          "bgHex": "#070604",
+          "ratio": 12.28,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-error-pfx@term-bg-bottom",
+          "label": "term-error-pfx on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-error-pfx",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#ff9382",
+          "bgHex": "#070604",
+          "ratio": 9.4,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-error-msg@term-bg-bottom",
+          "label": "term-error-msg on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-error-msg",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#ffafa0",
+          "bgHex": "#070604",
+          "ratio": 11.47,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-active-pfx@term-bg-bottom",
+          "label": "term-active-pfx on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-active-pfx",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#88b7ff",
+          "bgHex": "#070604",
+          "ratio": 9.9,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-active-msg@term-bg-bottom",
+          "label": "term-active-msg on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-active-msg",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#beccdc",
+          "bgHex": "#070604",
+          "ratio": 12.4,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-screen-pfx@term-bg-bottom",
+          "label": "term-screen-pfx on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-screen-pfx",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#92b4ff",
+          "bgHex": "#070604",
+          "ratio": 9.83,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-screen-msg@term-bg-bottom",
+          "label": "term-screen-msg on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-screen-msg",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#b8caf8",
+          "bgHex": "#070604",
+          "ratio": 12.39,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-mock-pfx@term-bg-bottom",
+          "label": "term-mock-pfx on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-mock-pfx",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#f0a27c",
+          "bgHex": "#070604",
+          "ratio": 9.8,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-mock-msg@term-bg-bottom",
+          "label": "term-mock-msg on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-mock-msg",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#ffb694",
+          "bgHex": "#070604",
+          "ratio": 11.93,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-countdown-pfx@term-bg-bottom",
+          "label": "term-countdown-pfx on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": false,
+          "fg": "term-countdown-pfx",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#dab06d",
+          "bgHex": "#070604",
+          "ratio": 10.04,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "term-countdown-msg@term-bg-bottom",
+          "label": "term-countdown-msg on term-bg-bottom",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "term-countdown-msg",
+          "bg": [
+            "term-bg-bottom"
+          ],
+          "fgHex": "#e9c48b",
+          "bgHex": "#070604",
+          "ratio": 12.28,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "dash-text-primary@dash-surface",
+          "label": "dash-text-primary on dash-surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "dash-text-primary",
+          "bg": [
+            "dash-surface"
+          ],
+          "fgHex": "#e8e8e8",
+          "bgHex": "#111111",
+          "ratio": 15.41,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "dash-text-primary@dash-page",
+          "label": "dash-text-primary on dash-page",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "dash-text-primary",
+          "bg": [
+            "dash-page"
+          ],
+          "fgHex": "#e8e8e8",
+          "bgHex": "#000000",
+          "ratio": 17.14,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "dash-text-secondary@dash-surface",
+          "label": "dash-text-secondary on dash-surface",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "dash-text-secondary",
+          "bg": [
+            "dash-surface"
+          ],
+          "fgHex": "#999999",
+          "bgHex": "#111111",
+          "ratio": 6.63,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "dash-text-secondary@dash-page",
+          "label": "dash-text-secondary on dash-page",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "dash-text-secondary",
+          "bg": [
+            "dash-page"
+          ],
+          "fgHex": "#999999",
+          "bgHex": "#000000",
+          "ratio": 7.37,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "text@page+scrim+scene-peak",
+          "label": "text on page over scrim over scene-peak",
+          "kind": "text",
+          "min": 4.5,
+          "required": true,
+          "fg": "text",
+          "bg": [
+            "page",
+            "scrim",
+            "scene-peak"
+          ],
+          "fgHex": "#ede6e2",
+          "bgHex": "#1d4231",
+          "ratio": 9.07,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "focus@page",
+          "label": "focus on page",
+          "kind": "nontext",
+          "min": 3,
+          "required": true,
+          "fg": "focus",
+          "bg": [
+            "page"
+          ],
+          "fgHex": "#43d5dd",
+          "bgHex": "#0f0e0a",
+          "ratio": 10.85,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "focus@surface",
+          "label": "focus on surface",
+          "kind": "nontext",
+          "min": 3,
+          "required": true,
+          "fg": "focus",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#43d5dd",
+          "bgHex": "#181713",
+          "ratio": 10.08,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "control-border@surface",
+          "label": "control-border on surface",
+          "kind": "nontext",
+          "min": 3,
+          "required": false,
+          "fg": "control-border",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#696662",
+          "bgHex": "#181713",
+          "ratio": 3.14,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "control-border-strong@surface",
+          "label": "control-border-strong on surface",
+          "kind": "nontext",
+          "min": 3,
+          "required": true,
+          "fg": "control-border-strong",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#9c9793",
+          "bgHex": "#181713",
+          "ratio": 6.2,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "accent@surface",
+          "label": "accent on surface",
+          "kind": "nontext",
+          "min": 3,
+          "required": false,
+          "fg": "accent",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#30c7d0",
+          "bgHex": "#181713",
+          "ratio": 8.72,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "success-solid@surface",
+          "label": "success-solid on surface",
+          "kind": "nontext",
+          "min": 3,
+          "required": false,
+          "fg": "success-solid",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#58b66c",
+          "bgHex": "#181713",
+          "ratio": 7.11,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "warning-solid@surface",
+          "label": "warning-solid on surface",
+          "kind": "nontext",
+          "min": 3,
+          "required": false,
+          "fg": "warning-solid",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#e4b750",
+          "bgHex": "#181713",
+          "ratio": 9.56,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "danger-solid@surface",
+          "label": "danger-solid on surface",
+          "kind": "nontext",
+          "min": 3,
+          "required": false,
+          "fg": "danger-solid",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#fc5950",
+          "bgHex": "#181713",
+          "ratio": 5.71,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        },
+        {
+          "id": "info-solid@surface",
+          "label": "info-solid on surface",
+          "kind": "nontext",
+          "min": 3,
+          "required": false,
+          "fg": "info-solid",
+          "bg": [
+            "surface"
+          ],
+          "fgHex": "#5c94ff",
+          "bgHex": "#181713",
+          "ratio": 6.09,
+          "pass": true,
+          "fgLocked": false,
+          "bgLocked": false
+        }
+      ],
+      "excluded": [
+        {
+          "roleId": "overlay",
+          "reason": "scrim behind modals (measured through text-inverse)"
+        },
+        {
+          "roleId": "glass-border",
+          "reason": "decorative panel edge"
+        },
+        {
+          "roleId": "glass-highlight",
+          "reason": "decorative inset hairline"
+        },
+        {
+          "roleId": "scrim",
+          "reason": "text-over-animation scrim (measured through the scene pair)"
+        },
+        {
+          "roleId": "text-disabled",
+          "reason": "disabled controls are exempt"
+        },
+        {
+          "roleId": "border-faint",
+          "reason": "decorative hairline"
+        },
+        {
+          "roleId": "border-subtle",
+          "reason": "decorative divider"
+        },
+        {
+          "roleId": "support-1",
+          "reason": "decorative accent"
+        },
+        {
+          "roleId": "support-2",
+          "reason": "decorative accent"
+        },
+        {
+          "roleId": "comet-1",
+          "reason": "decorative gradient stop"
+        },
+        {
+          "roleId": "comet-2",
+          "reason": "decorative gradient stop"
+        },
+        {
+          "roleId": "comet-3",
+          "reason": "decorative gradient stop"
+        },
+        {
+          "roleId": "comet-4",
+          "reason": "decorative gradient stop"
+        },
+        {
+          "roleId": "comet-5",
+          "reason": "decorative gradient stop"
+        },
+        {
+          "roleId": "comet-6",
+          "reason": "decorative gradient stop"
+        },
+        {
+          "roleId": "comet-7",
+          "reason": "decorative gradient stop"
+        },
+        {
+          "roleId": "deco-1",
+          "reason": "decorative hero tint"
+        },
+        {
+          "roleId": "deco-2",
+          "reason": "decorative hero tint"
+        },
+        {
+          "roleId": "deco-3",
+          "reason": "decorative hero tint"
+        },
+        {
+          "roleId": "deco-4",
+          "reason": "decorative hero tint"
+        },
+        {
+          "roleId": "disabled-bg",
+          "reason": "disabled controls are exempt"
+        },
+        {
+          "roleId": "shadow",
+          "reason": "shadow"
+        }
+      ]
+    }
+  },
+  "gamut": [
+    {
+      "mode": "light",
+      "roleId": "accent-text",
+      "mapped": true,
+      "deltaE": 0.02063
+    },
+    {
+      "mode": "light",
+      "roleId": "focus",
+      "mapped": true,
+      "deltaE": 0.02206
+    },
+    {
+      "mode": "light",
+      "roleId": "accent-hover",
+      "mapped": true,
+      "deltaE": 0.00883
+    },
+    {
+      "mode": "light",
+      "roleId": "accent-pressed",
+      "mapped": true,
+      "deltaE": 0.01589
+    },
+    {
+      "mode": "light",
+      "roleId": "support-1",
+      "mapped": true,
+      "deltaE": 0.00058
+    },
+    {
+      "mode": "light",
+      "roleId": "support-2",
+      "mapped": true,
+      "deltaE": 0.00059
+    },
+    {
+      "mode": "light",
+      "roleId": "comet-1",
+      "mapped": true,
+      "deltaE": 0.00003
+    },
+    {
+      "mode": "light",
+      "roleId": "comet-2",
+      "mapped": true,
+      "deltaE": 0.00045
+    },
+    {
+      "mode": "light",
+      "roleId": "comet-6",
+      "mapped": true,
+      "deltaE": 0.0005
+    },
+    {
+      "mode": "dark",
+      "roleId": "support-1",
+      "mapped": true,
+      "deltaE": 0.02889
+    },
+    {
+      "mode": "dark",
+      "roleId": "support-2",
+      "mapped": true,
+      "deltaE": 0.00773
+    },
+    {
+      "mode": "dark",
+      "roleId": "comet-1",
+      "mapped": true,
+      "deltaE": 0.00003
+    },
+    {
+      "mode": "dark",
+      "roleId": "comet-2",
+      "mapped": true,
+      "deltaE": 0.00045
+    },
+    {
+      "mode": "dark",
+      "roleId": "comet-6",
+      "mapped": true,
+      "deltaE": 0.0005
+    },
+    {
+      "mode": "dark",
+      "roleId": "info",
+      "mapped": true,
+      "deltaE": 0.00708
+    },
+    {
+      "mode": "dark",
+      "roleId": "info-bg",
+      "mapped": true,
+      "deltaE": 0.00708
+    },
+    {
+      "mode": "dark",
+      "roleId": "info-border",
+      "mapped": true,
+      "deltaE": 0.00708
+    },
+    {
+      "mode": "dark",
+      "roleId": "info-solid",
+      "mapped": true,
+      "deltaE": 0.00125
+    },
+    {
+      "mode": "dark",
+      "roleId": "term-ai-msg",
+      "mapped": true,
+      "deltaE": 0.01031
+    },
+    {
+      "mode": "dark",
+      "roleId": "term-error-pfx",
+      "mapped": true,
+      "deltaE": 0.00847
+    },
+    {
+      "mode": "dark",
+      "roleId": "term-error-msg",
+      "mapped": true,
+      "deltaE": 0.0308
+    },
+    {
+      "mode": "dark",
+      "roleId": "term-active-pfx",
+      "mapped": true,
+      "deltaE": 0.04645
+    },
+    {
+      "mode": "dark",
+      "roleId": "term-screen-pfx",
+      "mapped": true,
+      "deltaE": 0.01641
+    },
+    {
+      "mode": "dark",
+      "roleId": "term-mock-msg",
+      "mapped": true,
+      "deltaE": 0.00348
+    },
+    {
+      "mode": "dark",
+      "roleId": "term-caret",
+      "mapped": true,
+      "deltaE": 0.00125
+    }
+  ],
+  "ranges": [],
+  "summary": {
+    "pass": 188,
+    "fail": 26,
+    "advisoryFail": 20,
+    "excluded": 44,
+    "failRequired": 6
+  },
+  "statement": "Automated contrast checks only; this is not a WCAG conformance claim."
+}

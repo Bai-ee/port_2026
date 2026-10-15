@@ -25,13 +25,13 @@
     from var(--cta-angle),
     transparent 0deg,
     transparent 180deg,
-    hsla(185, 100%, 58%, 0.12) 200deg,
-    hsla(200, 100%, 62%, 0.35) 225deg,
-    hsla(225, 100%, 64%, 0.6)  250deg,
-    hsla(250, 100%, 66%, 0.78) 275deg,
-    hsla(275, 100%, 66%, 0.88) 300deg,
-    hsla(300, 100%, 68%, 0.94) 322deg,
-    hsla(320, 80%, 80%, 0.97)  338deg,
+    color-mix(in srgb, var(--t-comet-1) 12%, transparent) 200deg,
+    color-mix(in srgb, var(--t-comet-2) 35%, transparent) 225deg,
+    color-mix(in srgb, var(--t-comet-3) 60%, transparent)  250deg,
+    color-mix(in srgb, var(--t-comet-4) 78%, transparent) 275deg,
+    color-mix(in srgb, var(--t-comet-5) 88%, transparent) 300deg,
+    color-mix(in srgb, var(--t-comet-6) 94%, transparent) 322deg,
+    color-mix(in srgb, var(--t-comet-7) 97%, transparent)  338deg,
     rgba(255, 255, 255, 1)     350deg,
     transparent                358deg
   );
@@ -58,13 +58,13 @@
     from var(--cta-angle),
     transparent 0deg,
     transparent 180deg,
-    hsla(185, 100%, 58%, 0.12) 200deg,
-    hsla(200, 100%, 62%, 0.35) 225deg,
-    hsla(225, 100%, 64%, 0.6)  250deg,
-    hsla(250, 100%, 66%, 0.78) 275deg,
-    hsla(275, 100%, 66%, 0.88) 300deg,
-    hsla(300, 100%, 68%, 0.94) 322deg,
-    hsla(320, 80%, 80%, 0.97)  338deg,
+    color-mix(in srgb, var(--t-comet-1) 12%, transparent) 200deg,
+    color-mix(in srgb, var(--t-comet-2) 35%, transparent) 225deg,
+    color-mix(in srgb, var(--t-comet-3) 60%, transparent)  250deg,
+    color-mix(in srgb, var(--t-comet-4) 78%, transparent) 275deg,
+    color-mix(in srgb, var(--t-comet-5) 88%, transparent) 300deg,
+    color-mix(in srgb, var(--t-comet-6) 94%, transparent) 322deg,
+    color-mix(in srgb, var(--t-comet-7) 97%, transparent)  338deg,
     rgba(255, 255, 255, 1)     350deg,
     transparent                358deg
   );
@@ -92,10 +92,10 @@
   border-radius: 50%;
   padding: 2px;
   background: linear-gradient(135deg,
-    hsla(185, 100%, 58%, 0.8),
-    hsla(250, 100%, 66%, 0.9),
-    hsla(300, 100%, 68%, 0.95),
-    rgba(255, 255, 255, 0.95)
+    color-mix(in srgb, var(--t-comet-1) 80%, transparent),
+    color-mix(in srgb, var(--t-comet-4) 90%, transparent),
+    color-mix(in srgb, var(--t-comet-6) 95%, transparent),
+    color-mix(in srgb, var(--t-surface) 95%, transparent)
   );
   -webkit-mask:
     linear-gradient(#fff 0 0) content-box,
@@ -161,29 +161,32 @@
    error=red, active=blue). Consumed via var() in each console's
    own CSS/inline styles — change here, all terminals follow.
    ───────────────────────────────────────────────────────────── */
-:root, .light, .light-theme {
-  --term-bg: linear-gradient(180deg, #fcfaf7 0%, #f2ebe0 100%);
-  --term-border: rgba(42, 36, 32, 0.10);
-  --term-border-top: rgba(42, 36, 32, 0.06);
-  --term-shadow: 0px 4px 10px rgba(42, 36, 32, 0.05), 0px 14px 30px rgba(42, 36, 32, 0.08);
-  --term-titlebar-bg: rgba(42, 36, 32, 0.035);
-  --term-titlebar-border: rgba(42, 36, 32, 0.07);
-  --term-title-fg: rgba(42, 36, 32, 0.42);
-  --term-scroll-thumb: rgba(42, 36, 32, 0.16);
+/* Values are aliases of the theme tokens (styles/theme/theme.generated.css) so
+   the console follows the active theme mode; declared on [data-theme-scope] too so a
+   pinned subtree recomputes them. Same set is repeated in styles/theme/bridge.css. */
+:root, .light, .light-theme, [data-theme-scope] {
+  --term-bg: var(--t-term-bg);
+  --term-border: var(--t-term-border);
+  --term-border-top: var(--t-term-border-top);
+  --term-shadow: var(--t-term-shadow);
+  --term-titlebar-bg: var(--t-term-titlebar-bg);
+  --term-titlebar-border: var(--t-term-titlebar-border);
+  --term-title-fg: var(--t-term-title-fg);
+  --term-scroll-thumb: var(--t-term-scroll-thumb);
 
-  --term-fg: #2a2420;            /* default / untyped line text */
-  --term-dim: #8a8378;          /* system · dim */
-  --term-info-pfx: #5a6b82;   --term-info-msg: #4b5563;
-  --term-fetch-pfx: #0e7c8b;  --term-fetch-msg: #1a6b76;
-  --term-ok-pfx: #3f7d2e;     --term-ok-msg: #46732f;
-  --term-ai-pfx: #8b3fb0;     --term-ai-msg: #79399a;
-  --term-build-pfx: #ad7a17;  --term-build-msg: #8f6512;
-  --term-error-pfx: #c0392b;  --term-error-msg: #a83226;
-  --term-active-pfx: #2f6fed; --term-active-msg: #22303f;
-  --term-screen-pfx: #3b5bbf; --term-screen-msg: #2f3f6f;
-  --term-mock-pfx: #c66a38;   --term-mock-msg: #a9552b;
-  --term-countdown-pfx: #ad7a17; --term-countdown-msg: #8f6512;
-  --term-caret: #2f6fed;
+  --term-fg: var(--t-term-fg);
+  --term-dim: var(--t-term-dim);
+  --term-info-pfx: var(--t-term-info-pfx);  --term-info-msg: var(--t-term-info-msg);
+  --term-fetch-pfx: var(--t-term-fetch-pfx);  --term-fetch-msg: var(--t-term-fetch-msg);
+  --term-ok-pfx: var(--t-term-ok-pfx);  --term-ok-msg: var(--t-term-ok-msg);
+  --term-ai-pfx: var(--t-term-ai-pfx);  --term-ai-msg: var(--t-term-ai-msg);
+  --term-build-pfx: var(--t-term-build-pfx);  --term-build-msg: var(--t-term-build-msg);
+  --term-error-pfx: var(--t-term-error-pfx);  --term-error-msg: var(--t-term-error-msg);
+  --term-active-pfx: var(--t-term-active-pfx);  --term-active-msg: var(--t-term-active-msg);
+  --term-screen-pfx: var(--t-term-screen-pfx);  --term-screen-msg: var(--t-term-screen-msg);
+  --term-mock-pfx: var(--t-term-mock-pfx);  --term-mock-msg: var(--t-term-mock-msg);
+  --term-countdown-pfx: var(--t-term-countdown-pfx);  --term-countdown-msg: var(--t-term-countdown-msg);
+  --term-caret: var(--t-term-caret);
 }
 
 /* Skip rendering off-screen testimonials — safe because no ScrollTrigger is attached to this subtree */
@@ -201,10 +204,10 @@ body.cmo-modal-open #founders-top-strip { display: none; }
   width: 100%;
   z-index: 200;
   min-height: 64px;
-  background: rgba(245, 241, 223, 0.55);
+  background: var(--t-chrome);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.45), inset 0 -1px 0 rgba(42,36,32,0.08);
+  box-shadow: inset 0 0 0 1px var(--t-glass-highlight), inset 0 -1px 0 rgba(42,36,32,0.08);
 }
 #founders-top-strip-inner {
   display: flex;
@@ -244,12 +247,12 @@ body.cmo-modal-open #founders-top-strip { display: none; }
   width: 46px;
   height: 46px;
   border-radius: 50%;
-  background: rgba(245, 241, 223, 0.85);
+  background: var(--t-chrome-strong);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(255,255,255,0.5);
+  border: 1px solid var(--t-glass-soft);
   box-shadow: 0 6px 20px rgba(42,36,32,0.18), 0 1px 4px rgba(42,36,32,0.08);
-  color: #2a2420;
+  color: var(--t-text);
   cursor: pointer;
   transition: opacity 0.25s ease, transform 0.25s ease;
 }
@@ -264,9 +267,9 @@ body.cmo-modal-open #founders-top-strip { display: none; }
   justify-content: center;
   padding: 0.65rem 1rem;
   border-radius: 999px;
-  background: rgba(255,255,255,0.34);
-  border: 1px solid rgba(42, 36, 32, 0.1);
-  color: #2a2420;
+  background: color-mix(in srgb, var(--t-surface) 34%, transparent);
+  border: 1px solid color-mix(in srgb, var(--t-text) 10%, transparent);
+  color: var(--t-text);
   text-decoration: none;
   font-size: 0.84rem;
   font-weight: 700;
@@ -278,7 +281,7 @@ body.cmo-modal-open #founders-top-strip { display: none; }
 }
 #founders-login-link:hover,
 #founders-logout-link:hover {
-  background: rgba(255,255,255,1);
+  background: var(--t-surface);
   box-shadow: 0px 5px 10px rgba(0,0,0,0.067), 0px 15px 30px rgba(0,0,0,0.067), 0px 20px 40px rgba(0,0,0,0.1);
   transform: scale(1.012);
   transition: background 0.28s ease, box-shadow 0.28s ease, transform 0.28s ease;
@@ -293,10 +296,10 @@ body.cmo-modal-open #founders-top-strip { display: none; }
   border: none;
   border-radius: 999px;
   background:
-    linear-gradient(175deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 52%),
-    linear-gradient(135deg, hsl(185,100%,45%) 0%, hsl(262,100%,55%) 52%, hsl(314,100%,50%) 100%);
+    linear-gradient(175deg, rgba(255,255,255,0.18) 0%, transparent 52%),
+    linear-gradient(135deg, var(--t-accent-bright) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%);
   box-shadow: 0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.1);
-  color: #ffffff;
+  color: var(--t-on-solid);
   text-decoration: none;
   font-size: 0.84rem;
   font-weight: 700;
@@ -318,15 +321,18 @@ body.cmo-modal-open #founders-top-strip { display: none; }
   font-size: 0.95rem;
   opacity: 0.9;
 }
-/* Homepage variant: white bg + black text */
+/* Site-header variant: plain text link, no pill */
 .founders-chat-cta--light {
-  background: rgba(255,255,255,0.85) !important;
-  color: #2a2420 !important;
-  box-shadow: 0 1px 4px rgba(42,36,32,0.08), inset 0 1px 0 rgba(255,255,255,0.8) !important;
+  background: none !important;
+  color: var(--t-text) !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  padding: 0.5rem 0 !important;
 }
 .founders-chat-cta--light:hover {
-  background: rgba(255,255,255,1) !important;
-  box-shadow: 0px 5px 10px rgba(0,0,0,0.05), 0px 15px 30px rgba(0,0,0,0.05), 0px 20px 40px rgba(0,0,0,0.08) !important;
+  background: none !important;
+  box-shadow: none !important;
+  transform: none !important;
 }
 
 @media (max-width: 620px) {

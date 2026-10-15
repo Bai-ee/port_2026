@@ -392,7 +392,7 @@ export default function KnowledgeBaseCard({ getIdToken, apiPath }) {
           padding: 12px;
           border: 1px solid var(--border-visible);
           border-radius: 8px;
-          background: rgba(255,255,255,0.45);
+          background: color-mix(in srgb, var(--t-surface) 45%, transparent);
         }
         .kb-panel-head {
           display: flex;
@@ -435,7 +435,7 @@ export default function KnowledgeBaseCard({ getIdToken, apiPath }) {
           border: 1px solid var(--border-visible);
           border-radius: 8px;
           padding: 12px;
-          background: rgba(255,255,255,0.62);
+          background: var(--t-glass);
         }
         #kb-chat-answer p {
           margin: 7px 0 0;
@@ -463,7 +463,7 @@ export default function KnowledgeBaseCard({ getIdToken, apiPath }) {
           border: 1px solid var(--border-visible);
           border-radius: 8px;
           padding: 12px;
-          background: rgba(255,255,255,0.58);
+          background: color-mix(in srgb, var(--t-surface) 58%, transparent);
         }
         .kb-result-head {
           display: flex;
@@ -536,7 +536,7 @@ export default function KnowledgeBaseCard({ getIdToken, apiPath }) {
           padding: 5px 8px;
         }
         :global(.kb-hit-mark) {
-          background: rgba(74, 222, 128, 0.22);
+          background: var(--t-success-border);
           color: var(--text-primary);
           border-radius: 3px;
           padding: 0 2px;

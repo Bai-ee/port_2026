@@ -728,33 +728,33 @@ export default function OpsOverviewPage({ initialData = null, initialError = '' 
 }
 
 const opsOverviewCss = `
-  :root {
-    --page: #f5f1df;
-    --card: rgba(255, 255, 255, 0.5);
-    --card-border: rgba(212, 196, 171, 0.82);
-    --card-shadow: 0 1px 0 rgba(255, 255, 255, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.4);
-    --nav-bg: rgba(245, 241, 223, 0.18);
-    --text: #2a2420;
-    --text2: rgba(42, 36, 32, 0.7);
-    --text3: rgba(42, 36, 32, 0.48);
-    --text4: rgba(42, 36, 32, 0.22);
-    --divider: rgba(42, 36, 32, 0.1);
-    --divider2: rgba(42, 36, 32, 0.06);
-    --green: #22763a;
-    --green-bg: rgba(34, 118, 58, 0.08);
-    --green-bdr: rgba(34, 118, 58, 0.2);
-    --red: #b91c1c;
-    --red-bg: rgba(185, 28, 28, 0.08);
-    --red-bdr: rgba(185, 28, 28, 0.2);
-    --amber: #92400e;
-    --amber-bg: rgba(146, 64, 14, 0.08);
-    --amber-bdr: rgba(146, 64, 14, 0.18);
-    --blue: #1d4ed8;
-    --blue-bg: rgba(29, 78, 216, 0.07);
-    --blue-bdr: rgba(29, 78, 216, 0.18);
-    --purple: #6d28d9;
-    --purple-bg: rgba(109, 40, 217, 0.07);
-    --purple-bdr: rgba(109, 40, 217, 0.18);
+  #ops-overview-page {
+    --page: var(--t-chrome-strong);
+    --card: var(--t-glass-soft);
+    --card-border: var(--t-glass-border);
+    --card-shadow: 0 1px 0 color-mix(in srgb, var(--t-surface) 65%, transparent), inset 0 1px 0 color-mix(in srgb, var(--t-surface) 40%, transparent);
+    --nav-bg: color-mix(in srgb, var(--t-chrome) 33%, transparent);
+    --text: var(--t-text);
+    --text2: color-mix(in srgb, var(--t-text) 70%, transparent);
+    --text3: color-mix(in srgb, var(--t-text) 48%, transparent);
+    --text4: var(--t-control-border);
+    --divider: color-mix(in srgb, var(--t-text) 10%, transparent);
+    --divider2: color-mix(in srgb, var(--t-text) 6%, transparent);
+    --green: var(--t-success);
+    --green-bg: var(--t-success-bg);
+    --green-bdr: var(--t-success-border);
+    --red: var(--t-danger);
+    --red-bg: var(--t-danger-bg);
+    --red-bdr: var(--t-danger-border);
+    --amber: var(--t-warning);
+    --amber-bg: var(--t-warning-bg);
+    --amber-bdr: var(--t-warning-border);
+    --blue: var(--t-info);
+    --blue-bg: var(--t-info-bg);
+    --blue-bdr: var(--t-info-border);
+    --purple: var(--t-support-1);
+    --purple-bg: color-mix(in srgb, var(--t-support-1) 7%, transparent);
+    --purple-bdr: color-mix(in srgb, var(--t-support-1) 18%, transparent);
     --font-ui: "Space Grotesk", system-ui, sans-serif;
     --font-mono: "Space Mono", monospace;
   }
@@ -769,7 +769,7 @@ const opsOverviewCss = `
     content: "";
     position: fixed;
     inset: 0;
-    background: radial-gradient(circle, rgba(42, 36, 32, 0.08) 0.8px, transparent 0.8px);
+    background: radial-gradient(circle, var(--t-border-faint) 0.8px, transparent 0.8px);
     background-size: 16px 16px;
     pointer-events: none;
     z-index: 0;
@@ -784,7 +784,7 @@ const opsOverviewCss = `
     background: var(--nav-bg);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45), inset 0 -1px 0 rgba(42, 36, 32, 0.08);
+    box-shadow: inset 0 0 0 1px var(--t-glass-highlight), inset 0 -1px 0 var(--t-border-faint);
   }
   #founders-top-strip-inner {
     display: flex;
@@ -842,8 +842,8 @@ const opsOverviewCss = `
     min-height: 38px;
     padding: 0.45rem 1rem;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.36);
-    border: 1px solid rgba(42, 36, 32, 0.1);
+    background: color-mix(in srgb, var(--t-surface) 36%, transparent);
+    border: 1px solid color-mix(in srgb, var(--t-text) 10%, transparent);
     color: var(--text);
     font-family: var(--font-ui);
     font-size: 12px;
@@ -1035,8 +1035,8 @@ const opsOverviewCss = `
   .hero-meta-item {
     padding: 0.75rem 0.85rem;
     border-radius: 0.8rem;
-    background: rgba(255, 255, 255, 0.3);
-    border: 1px solid rgba(42, 36, 32, 0.08);
+    background: color-mix(in srgb, var(--t-surface) 30%, transparent);
+    border: 1px solid var(--t-border-faint);
   }
   .hero-meta-item .label {
     display: block;
@@ -1119,8 +1119,8 @@ const opsOverviewCss = `
     max-width: 100%;
     border-radius: 999px;
     padding: 0.35rem 0.65rem;
-    background: rgba(255, 255, 255, 0.42);
-    border: 1px solid rgba(42, 36, 32, 0.08);
+    background: color-mix(in srgb, var(--t-surface) 42%, transparent);
+    border: 1px solid var(--t-border-faint);
     font-size: 10px;
     color: var(--text2);
     overflow: hidden;
@@ -1178,7 +1178,7 @@ const opsOverviewCss = `
   }
   th {
     padding: 0.7rem 0.9rem 0.6rem;
-    background: rgba(255, 255, 255, 0.28);
+    background: color-mix(in srgb, var(--t-surface) 28%, transparent);
     border-bottom: 1px solid var(--divider);
     text-align: left;
     font-size: 9.5px;
@@ -1239,7 +1239,7 @@ const opsOverviewCss = `
   .cost-track {
     flex: 1;
     height: 5px;
-    background: rgba(42, 36, 32, 0.06);
+    background: color-mix(in srgb, var(--t-text) 6%, transparent);
     border-radius: 3px;
     overflow: hidden;
   }
@@ -1287,8 +1287,8 @@ const opsOverviewCss = `
     overflow: auto;
     border-radius: 0.8rem;
     padding: 0.95rem 1rem;
-    background: rgba(255, 255, 255, 0.34);
-    border: 1px solid rgba(42, 36, 32, 0.08);
+    background: color-mix(in srgb, var(--t-surface) 34%, transparent);
+    border: 1px solid var(--t-border-faint);
     color: var(--text2);
     font-family: var(--font-mono);
     font-size: 11px;

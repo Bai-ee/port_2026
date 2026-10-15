@@ -678,9 +678,9 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
                     fontSize: 12.5,
                     lineHeight: 1.5,
                     fontFamily: 'var(--vrk-body, inherit)',
-                    border: `1px solid ${sizeTier === 'danger' ? '#d9a79c' : sizeTier === 'warn' ? '#d9c58a' : 'rgba(42,36,32,0.14)'}`,
-                    background: sizeTier === 'danger' ? '#f7ece8' : sizeTier === 'warn' ? '#f6f0e2' : 'rgba(255,255,255,0.55)',
-                    color: sizeTier === 'danger' ? '#a8392a' : sizeTier === 'warn' ? '#8a6a1f' : 'var(--vrk-ink-soft, #5a5346)',
+                    border: `1px solid ${sizeTier === 'danger' ? 'var(--t-danger-border)' : sizeTier === 'warn' ? 'var(--t-warning-border)' : 'color-mix(in srgb, var(--t-text) 14%, transparent)'}`,
+                    background: sizeTier === 'danger' ? 'var(--t-danger-bg)' : sizeTier === 'warn' ? 'var(--t-warning-bg)' : 'color-mix(in srgb, var(--t-surface) 55%, transparent)',
+                    color: sizeTier === 'danger' ? 'var(--t-danger)' : sizeTier === 'warn' ? 'var(--t-warning)' : 'var(--vrk-ink-soft, #5a5346)',
                   }}
                 >
                   <span aria-hidden="true" style={{ fontSize: 14, lineHeight: '18px' }}>{sizeTier === 'ok' ? '✓' : '⚠'}</span>
@@ -950,8 +950,8 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
                               </span>
                               {orderable ? (
                                 <span style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4 }} onClick={(e) => e.stopPropagation()}>
-                                  <button type="button" aria-label={`Move ${title} up`} disabled={disabled || idx === 0} onClick={(e) => { e.stopPropagation(); if (!disabled) move(key, -1); }} style={{ width: 22, height: 22, lineHeight: '20px', textAlign: 'center', padding: 0, border: '1px solid rgba(42,36,32,0.18)', borderRadius: 6, background: 'rgba(255,255,255,0.7)', cursor: disabled || idx === 0 ? 'not-allowed' : 'pointer', opacity: disabled || idx === 0 ? 0.4 : 1, fontSize: 11 }}>↑</button>
-                                  <button type="button" aria-label={`Move ${title} down`} disabled={disabled || idx === ordered.length - 1} onClick={(e) => { e.stopPropagation(); if (!disabled) move(key, 1); }} style={{ width: 22, height: 22, lineHeight: '20px', textAlign: 'center', padding: 0, border: '1px solid rgba(42,36,32,0.18)', borderRadius: 6, background: 'rgba(255,255,255,0.7)', cursor: disabled || idx === ordered.length - 1 ? 'not-allowed' : 'pointer', opacity: disabled || idx === ordered.length - 1 ? 0.4 : 1, fontSize: 11 }}>↓</button>
+                                  <button type="button" aria-label={`Move ${title} up`} disabled={disabled || idx === 0} onClick={(e) => { e.stopPropagation(); if (!disabled) move(key, -1); }} style={{ width: 22, height: 22, lineHeight: '20px', textAlign: 'center', padding: 0, border: '1px solid color-mix(in srgb, var(--t-text) 18%, transparent)', borderRadius: 6, background: 'color-mix(in srgb, var(--t-surface) 70%, transparent)', cursor: disabled || idx === 0 ? 'not-allowed' : 'pointer', opacity: disabled || idx === 0 ? 0.4 : 1, fontSize: 11 }}>↑</button>
+                                  <button type="button" aria-label={`Move ${title} down`} disabled={disabled || idx === ordered.length - 1} onClick={(e) => { e.stopPropagation(); if (!disabled) move(key, 1); }} style={{ width: 22, height: 22, lineHeight: '20px', textAlign: 'center', padding: 0, border: '1px solid color-mix(in srgb, var(--t-text) 18%, transparent)', borderRadius: 6, background: 'color-mix(in srgb, var(--t-surface) 70%, transparent)', cursor: disabled || idx === ordered.length - 1 ? 'not-allowed' : 'pointer', opacity: disabled || idx === ordered.length - 1 ? 0.4 : 1, fontSize: 11 }}>↓</button>
                                 </span>
                               ) : null}
                             </div>
@@ -1042,7 +1042,7 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
                 {docs.length ? (
                   <div style={{ display: 'grid', gap: 0 }}>
                     {docs.map((d) => (
-                      <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13, color: 'var(--vrk-ink-soft, #5a5346)', borderBottom: '1px solid rgba(42,36,32,0.1)', padding: '8px 2px' }}>
+                      <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13, color: 'var(--vrk-ink-soft, #5a5346)', borderBottom: '1px solid color-mix(in srgb, var(--t-text) 10%, transparent)', padding: '8px 2px' }}>
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title}</span>
                         <span style={{ fontFamily: 'var(--vrk-mono, monospace)' }}>{d.chars}</span>
                       </div>
@@ -1143,7 +1143,7 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
                 }</span>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                   <button type="button" className="btn btn-outline" onClick={save} disabled={saveStatus?.kind === 'pending' || sendStatus?.kind === 'pending'}>{saveStatus?.kind === 'pending' ? 'Saving…' : 'Save Config'}</button>
-                  <button type="button" className="btn" style={{ background: '#2a2420', color: '#fff', borderColor: '#2a2420' }} onClick={runAndSend} disabled={sendStatus?.kind === 'pending' || saveStatus?.kind === 'pending'}>{sendStatus?.kind === 'pending' ? 'Working…' : 'Generate & Send Email'}</button>
+                  <button type="button" className="btn" style={{ background: 'var(--t-text)', color: 'var(--t-surface)', borderColor: 'var(--t-text)' }} onClick={runAndSend} disabled={sendStatus?.kind === 'pending' || saveStatus?.kind === 'pending'}>{sendStatus?.kind === 'pending' ? 'Working…' : 'Generate & Send Email'}</button>
                 </div>
               </div>
             </div>

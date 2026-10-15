@@ -14,7 +14,7 @@ const cardHeadingStyle = {
   fontFamily: '"Space Grotesk", system-ui, sans-serif',
   fontWeight: 700,
   fontSize: 'clamp(1rem,1.6vw,1.15rem)',
-  color: '#0a0a0a',
+  color: 'var(--t-text-strong)',
   margin: '0 0 0.6rem',
 };
 
@@ -23,7 +23,7 @@ const cardBodyStyle = {
   fontWeight: 400,
   fontSize: 'clamp(0.88rem,1.4vw,1rem)',
   lineHeight: 1.7,
-  color: 'rgba(26,26,26,0.78)',
+  color: 'color-mix(in srgb, var(--t-text-body) 78%, transparent)',
   margin: 0,
 };
 
@@ -69,7 +69,7 @@ export default function AiDesignConsultingPage() {
           padding: sectionPadding,
           position: 'relative',
           overflow: 'hidden',
-          borderBottom: '1px solid rgba(0,0,0,0.05)',
+          borderBottom: '1px solid color-mix(in srgb, var(--t-text-strong) 5%, transparent)',
         }}
       >
         <span
@@ -83,7 +83,7 @@ export default function AiDesignConsultingPage() {
             fontWeight: 900,
             fontSize: 'clamp(80px,14vw,220px)',
             color: 'transparent',
-            WebkitTextStroke: '1.5px rgba(0,0,0,0.1)',
+            WebkitTextStroke: '1.5px color-mix(in srgb, var(--t-text-strong) 10%, transparent)',
             lineHeight: 0.8,
             pointerEvents: 'none',
             userSelect: 'none',
@@ -100,7 +100,7 @@ export default function AiDesignConsultingPage() {
             fontSize: '11px',
             letterSpacing: '0.22em',
             textTransform: 'uppercase',
-            color: 'rgba(90,83,70,0.7)',
+            color: 'color-mix(in srgb, var(--t-text-eyebrow) 70%, transparent)',
             display: 'flex',
             gap: '0.5rem',
             alignItems: 'center',
@@ -121,7 +121,7 @@ export default function AiDesignConsultingPage() {
             fontSize: 'clamp(52px,11vw,160px)',
             margin: '0 0 28px',
             textTransform: 'uppercase',
-            color: '#0a0a0a',
+            color: 'var(--t-text-strong)',
           }}
         >
           AI Design<br />Consulting.
@@ -134,7 +134,7 @@ export default function AiDesignConsultingPage() {
             fontWeight: 300,
             fontSize: 'clamp(1.1rem,2.2vw,1.65rem)',
             lineHeight: 1.3,
-            color: '#1a1a1a',
+            color: 'var(--t-text-body)',
             maxWidth: '52ch',
             margin: 0,
           }}
@@ -174,7 +174,7 @@ export default function AiDesignConsultingPage() {
             fontSize: '11px',
             letterSpacing: '0.18em',
             textTransform: 'uppercase',
-            color: 'rgba(90,83,70,0.7)',
+            color: 'color-mix(in srgb, var(--t-text-eyebrow) 70%, transparent)',
             margin: '0 0 0.75rem',
           }}>
             Services Included
@@ -183,7 +183,7 @@ export default function AiDesignConsultingPage() {
             fontFamily: '"Space Mono", monospace',
             fontSize: '13px',
             lineHeight: 1.8,
-            color: 'rgba(26,26,26,0.78)',
+            color: 'color-mix(in srgb, var(--t-text-body) 78%, transparent)',
             margin: 0,
           }}>
             {SERVICES.join(' · ')}
