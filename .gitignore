@@ -22,7 +22,10 @@ clients/*/
 
 # Local AI / editor workflow
 CLAUDE.md
-.claude/
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/client-brain-strategy/
 
 # Regenerable diagnostic artifacts (relocated out of scripts/)
 docs/diagnostics/
