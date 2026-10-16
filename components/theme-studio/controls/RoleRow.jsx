@@ -2,13 +2,17 @@
 
 import React, { useEffect, useRef } from 'react';
 import Icon from '../Icon.jsx';
-import Swatch from './Swatch.jsx';
+import Swatch, { SwatchButton, GamutTag } from './Swatch.jsx';
+import ColorPicker from './ColorPicker.jsx';
 import LabeledSlider from './LabeledSlider.jsx';
 import OklchEditor from './OklchEditor.jsx';
 import LinkToggle, { KindBadge } from './LinkToggle.jsx';
 import A11yResultItem from './A11yResultItem.jsx';
-import { roleActions, applyRoleAction } from '../../../lib/theme-studio/role-state.js';
-import { editRoleHex, editRoleOklch } from '../../../lib/theme-studio/color-fields.js';
+import { roleActions, applyRoleAction, roleKind } from '../../../lib/theme-studio/role-state.js';
+import {
+  editRoleHex, editRoleOklch, pickerEditOklch, pickerEditHex, colorGamutInfo, advisoryIssues,
+} from '../../../lib/theme-studio/color-fields.js';
+import { isColorPickerOpen } from '../../../lib/theme-studio/ui-state.js';
 import { setRoleBase, setRoleLink } from '../../../lib/theme/index.js';
 import { useStudio } from '../StudioContext.jsx';
 
@@ -25,9 +29,9 @@ function A11yBadge({ a11y }) {
 }
 
 function RoleEditor({
-  row, def, mode, resolvedMode, resolvedOther, a11yEntry,
+  row, def, mode, resolvedMode, resolvedOther, a11yEntry, onOpenPicker, pickerOpen,
 }) {
-  const { edit, endEdit, announce } = useStudio();
+  const { edit, endEdit, announce, ui } = useStudio();
   const id = row.id;
   const idBase = `theme-studio-role-${id}`;
   const state = def.modes[mode].roles[id];
@@ -35,6 +39,8 @@ function RoleEditor({
   const other = PRIOR[mode];
   const cur = row.oklch;
   const isAlpha = cur.a < 1 || state.base.a < 1;
+  const mapped = colorGamutInfo(cur).mapped;
+  const advisory = advisoryIssues(id, mode, cur);
 
   const doAction = (action) => {
     edit((d) => applyRoleAction(d, mode, id, action), { kind: 'set', label: `${id}: ${action}` });
@@ -131,6 +137,10 @@ function RoleEditor({
           showAlpha={isAlpha}
           hueDisabled={!acts.hueEditable}
           hueNote="Hue is fixed so this color keeps its meaning. Adjust lightness and chroma."
+          onOpenPicker={onOpenPicker}
+          pickerOpen={pickerOpen}
+          mapped={mapped}
+          advisory={advisory}
           onPatch={(patch, kind) => edit((d) => editRoleOklch(d, mode, id, patch, d.modes[mode].roles[id].custom || cur), { kind, label: `${id} color`, coalesceKey: `${id}-oklch` })}
           onHex={(hex) => edit((d) => editRoleHex(d, mode, id, hex, d.modes[mode].roles[id].custom || cur), { kind: 'set', label: `${id} hex` })}
           onEnd={endEdit}
@@ -152,10 +162,28 @@ function RoleEditor({
         {' '}
         {row.usage}.
       </p>
+      {acts.kind === 'linked' ? (
+        <div className="ts-oklch-head" id={`${idBase}-picker-row`}>
+          <SwatchButton id={`${idBase}-swatch`} color={row.hex} label={id} expanded={pickerOpen} onClick={(e) => onOpenPicker(e.currentTarget)} />
+          <code className="ts-code">{row.hex}</code>
+          {mapped ? <GamutTag id={`${idBase}-gamut-tag`} /> : null}
+          <button type="button" className="ts-btn ts-btn--sm" id={`${idBase}-open-picker`} data-ts-picker-trigger="true" aria-haspopup="dialog" onClick={(e) => onOpenPicker(e.currentTarget)}>
+            <Icon name="pencil" size={14} /> Pick color
+          </button>
+        </div>
+      ) : null}
       <LinkToggle actions={acts} resettable={row.resettable} otherMode={other} onAction={doAction} idBase={idBase} />
       {tuning}
       {row.mapped ? (
         <p className="ts-hint">This color was reduced slightly to fit the sRGB screen gamut.</p>
+      ) : null}
+      {!ui.fullRange && acts.kind === 'linked' && advisory.length ? (
+        <p className="ts-hint" id={`${idBase}-range-warning`}>
+          <strong>Outside the suggested range for this role:</strong>
+          {' '}
+          {advisory.map((a) => `${a.field === 'l' ? 'lightness' : 'chroma'} ${a.value.toFixed(3)} (suggested ${a.min} to ${a.max})`).join(', ')}
+          . The “Hide suggested-range hints” switch in Palette turns this off.
+        </p>
       ) : null}
       {resolvedOther ? (
         <p className="ts-hint">
@@ -185,12 +213,34 @@ export default function RoleRow({
   row, def, mode, resolvedMode, resolvedOther, a11yEntry, expanded, onToggle, autoFocus,
 }) {
   const btn = useRef(null);
-  const { dispatch } = useStudio();
+  const opener = useRef(null);
+  // Anchor/focus-return element: the swatch that opened the picker, or the row head when
+  // the picker was opened from the Palette summary (the row did not exist yet).
+  const openerProxy = useRef({ get current() { return opener.current || btn.current; } });
+  const switched = useRef(false);
+  const { dispatch, ui, edit, endEdit, announce } = useStudio();
   const id = row.id;
+  const roleState = def.modes[mode].roles[id];
+  const pickerOpen = isColorPickerOpen(ui, id, mode);
+  const pickerOpenRef = useRef(pickerOpen);
+  pickerOpenRef.current = pickerOpen;
+  const openPicker = (el) => {
+    opener.current = el || btn.current;
+    switched.current = false;
+    dispatch({ type: 'colorPicker/open', roleId: id, mode });
+  };
+  const closePicker = () => dispatch({ type: 'colorPicker/close' });
+  const cur = row.oklch;
+  const noteSwitch = () => {
+    if (!switched.current && roleKind(roleState) === 'linked') {
+      switched.current = true;
+      announce(`${id} is now custom.`);
+    }
+  };
   useEffect(() => {
     if (autoFocus && btn.current) {
       btn.current.scrollIntoView({ block: 'center' });
-      btn.current.focus();
+      if (!pickerOpenRef.current) btn.current.focus();
       dispatch({ type: 'role/focused' });
     }
   }, [autoFocus, dispatch]);
@@ -204,9 +254,13 @@ export default function RoleRow({
         id={`theme-studio-role-${id}-head`}
         aria-expanded={expanded ? 'true' : 'false'}
         aria-controls={`theme-studio-role-${id}-editor`}
-        onClick={onToggle}
+        onClick={(e) => {
+          // A click on the swatch opens the color picker; anywhere else on the row opens the editor.
+          if (e.target instanceof Element && e.target.closest('.ts-role-swatches')) openPicker(btn.current);
+          else onToggle();
+        }}
       >
-        <span className="ts-role-swatches" aria-hidden="true">
+        <span className="ts-role-swatches" aria-hidden="true" data-ts-picker-trigger="true">
           <Swatch color={row.value} />
           {otherHex ? <Swatch color={otherHex} size="sm" /> : null}
         </span>
@@ -227,6 +281,36 @@ export default function RoleRow({
           resolvedMode={resolvedMode}
           resolvedOther={resolvedOther}
           a11yEntry={a11yEntry}
+          onOpenPicker={(el) => (pickerOpen ? closePicker() : openPicker(el))}
+          pickerOpen={pickerOpen}
+        />
+      ) : null}
+      {pickerOpen ? (
+        <ColorPicker
+          idBase={`theme-studio-role-${id}`}
+          label={id}
+          roleId={id}
+          mode={mode}
+          value={cur}
+          readOnly={!!roleState.locked}
+          willSwitch={roleKind(roleState) === 'linked'}
+          hueDisabled={!roleActions(roleState, id).hueEditable}
+          hueNote="Hue is fixed so this color keeps its meaning. Adjust lightness and chroma."
+          openerRef={openerProxy.current}
+          onPatch={(patch, kind) => {
+            noteSwitch();
+            edit((d) => pickerEditOklch(d, mode, id, patch, cur), { kind, label: `${id} color`, coalesceKey: `${id}-oklch` });
+          }}
+          onHex={(hex) => {
+            noteSwitch();
+            edit((d) => pickerEditHex(d, mode, id, hex, cur), { kind: 'set', label: `${id} hex` });
+          }}
+          onEnd={endEdit}
+          onClose={closePicker}
+          onUnlock={() => {
+            edit((d) => applyRoleAction(d, mode, id, 'unlock'), { kind: 'set', label: `${id}: unlock` });
+            announce(`${id} unlocked.`);
+          }}
         />
       ) : null}
     </li>

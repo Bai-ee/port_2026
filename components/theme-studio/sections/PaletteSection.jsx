@@ -5,6 +5,7 @@ import Section from '../controls/Section.jsx';
 import LabeledSlider from '../controls/LabeledSlider.jsx';
 import ModeSwitch from '../controls/ModeSwitch.jsx';
 import Swatch from '../controls/Swatch.jsx';
+import { Toggle } from '../controls/Toggle.jsx';
 import { KindBadge } from '../controls/LinkToggle.jsx';
 import Icon from '../Icon.jsx';
 import {
@@ -41,10 +42,15 @@ function GroupBlock({ group, def, mode, resolved }) {
               <button
                 type="button"
                 className="ts-role-head"
-                onClick={() => dispatch({ type: 'role/reveal', id, group: rd.group })}
-                aria-label={`${r.css}, ${KIND_LABEL[kind]}, ${r.hex}. Open in Advanced`}
+                id={`ts-palette-role-${id}-head`}
+                onClick={(e) => {
+                  // The swatch opens the color picker on the role (in Advanced); the rest of the row just reveals it.
+                  dispatch({ type: 'role/reveal', id, group: rd.group });
+                  if (e.target instanceof Element && e.target.closest('.ts-role-swatches')) dispatch({ type: 'colorPicker/open', roleId: id, mode });
+                }}
+                aria-label={`${r.css}, ${KIND_LABEL[kind]}, ${r.hex}. Open in Advanced. Click the swatch to pick a color`}
               >
-                <span className="ts-role-swatches" aria-hidden="true"><Swatch color={r.value} /></span>
+                <span className="ts-role-swatches" aria-hidden="true" data-ts-picker-trigger="true"><Swatch color={r.value} /></span>
                 <span className="ts-role-main">
                   <span className="ts-role-name">{r.css}</span>
                   <span className="ts-role-use">{r.hex}</span>
@@ -73,7 +79,7 @@ function GroupBlock({ group, def, mode, resolved }) {
 }
 
 export default function PaletteSection() {
-  const { edit, endEdit } = useStudio();
+  const { edit, endEdit, ui, dispatch, announce } = useStudio();
   const draft = useDraft();
   const mode = useEditingMode();
   const pair = useResolvedPair();
@@ -83,7 +89,7 @@ export default function PaletteSection() {
   const settings = draft.modes[mode].settings;
 
   return (
-    <Section id="palette" num="03" title="Accent, supporting and neutrals" summary={`${MODE_LABEL[mode]} palette`}>
+    <Section id="palette" num="05" title="Accent, supporting and neutrals" summary={`${MODE_LABEL[mode]} palette`}>
       <p className="ts-p">
         Showing the
         {' '}
@@ -91,6 +97,19 @@ export default function PaletteSection() {
         {' '}
         palette. Each badge says whether those colors still follow the master hue (Linked), have been set by hand (Custom) or are protected (Locked).
       </p>
+
+      <div id="ts-full-range-row">
+        <Toggle
+          id="ts-full-range-toggle"
+          label="Hide suggested-range hints"
+          description="Hides the amber suggested-range hints on roles and in the picker. Sliders already accept the full range; nothing is clamped. Off by default."
+          checked={ui.fullRange}
+          onChange={(v) => {
+            dispatch({ type: 'fullRange/set', value: v });
+            announce(v ? 'Suggested-range hints hidden.' : 'Suggested-range hints shown.');
+          }}
+        />
+      </div>
 
       {PALETTE_GROUPS.map((g) => (
         <GroupBlock key={g.id} group={g} def={draft} mode={mode} resolved={resolved} />

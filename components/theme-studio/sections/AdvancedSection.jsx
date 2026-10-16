@@ -33,7 +33,7 @@ export default function AdvancedSection() {
   const total = groups.reduce((n, g) => n + g.roles.length, 0);
 
   return (
-    <Section id="advanced" num="05" title="Advanced roles" summary={`${MODE_LABEL[mode]}, ${total} roles`}>
+    <Section id="advanced" num="07" title="Advanced roles" summary={`${MODE_LABEL[mode]}, ${total} roles`}>
       <div className="ts-stack" id="theme-studio-features-block">
         <p className="ts-sub">Features</p>
         <Toggle

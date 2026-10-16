@@ -65,7 +65,7 @@ export default function ExportSection() {
   };
 
   return (
-    <Section id="export" num="08" title="Save, export and import" summary={banner.status === 'validated' ? 'Validated' : 'Draft'}>
+    <Section id="export" num="10" title="Save, export and import" summary={banner.status === 'validated' ? 'Validated' : 'Draft'}>
       <Banner tone={banner.tone} id="theme-studio-export-status">
         <p><strong>{banner.title}</strong></p>
         <p>{banner.detail}</p>

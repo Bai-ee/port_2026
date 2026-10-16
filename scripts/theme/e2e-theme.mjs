@@ -445,6 +445,50 @@ async function main() {
     await context.close();
   });
 
+  await check('studio-master-v2-contrast-changes-text', async () => {
+    const { context, page } = await newPage(browser);
+    const dialog = await openStudio(page);
+    const slider = dialog.locator('#ts-master-contrast-slider');
+    await slider.scrollIntoViewIfNeeded();
+    await slider.focus();
+    const text = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--t-text').trim());
+    const before = await text();
+    await page.keyboard.press('End');
+    const after = await text();
+    assert(before && after && before !== after, `--t-text did not change with the Contrast slider (${before} -> ${after})`);
+    await dialog.locator('#ts-master-contrast-reset').click();
+    assert((await text()) === before, '--t-text did not return to its starting value after Reset');
+    await context.close();
+  });
+
+  await check('studio-library-save-load-roundtrip', async () => {
+    const { context, page } = await newPage(browser);
+    const dialog = await openStudio(page);
+    const header = dialog.locator('#theme-studio-section-library-header');
+    await header.scrollIntoViewIfNeeded();
+    if ((await header.getAttribute('aria-expanded')) !== 'true') await header.click();
+    const accent = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--t-accent').trim());
+    const original = await accent();
+    await dialog.locator('#ts-library-name').fill('e2e roundtrip');
+    await dialog.locator('#ts-library-save').click();
+    assert((await dialog.locator('#ts-library-list li').count()) === 1, 'saved theme did not appear in the list');
+    // change the draft, then load the snapshot back
+    const hue = dialog.locator('#theme-studio-master-hue');
+    await hue.scrollIntoViewIfNeeded();
+    await hue.focus();
+    await page.keyboard.press('PageUp');
+    assert((await accent()) !== original, 'moving the hue did not change the accent');
+    const item = dialog.locator('#ts-library-list li').first();
+    await item.locator('[id$="-load"]').click();
+    const confirm = page.getByRole('button', { name: /^Load theme$/ });
+    if (await confirm.count()) await confirm.click();
+    assert((await accent()) === original, 'loading the snapshot did not restore the accent');
+    await item.locator('[id$="-delete"]').click();
+    await page.getByRole('button', { name: /^Delete theme$/ }).click();
+    assert((await dialog.locator('#ts-library-list li').count()) === 0, 'delete did not remove the entry');
+    await context.close();
+  });
+
   await check('studio-inspector-readable-with-poor-draft', async () => {
     const poor = setNeutral(setIntensity(setMasterHue(BASELINE_DEFINITION, 0), 1.5), { tintStrength: 2 });
     const draft = JSON.stringify({ v: 1, savedAt: '2026-01-01T00:00:00.000Z', baseHash: hashDefinition(BASELINE_DEFINITION), definition: poor });

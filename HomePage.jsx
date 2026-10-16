@@ -18,9 +18,11 @@ import HomepageAnalytics from './components/HomepageAnalytics';
 import SceneBoundary from './components/theme-scene/SceneBoundary';
 
 const AppCanvas = dynamic(() => import('./ox.jsx'), { ssr: false });
+// Hero particle-shape tuner, opened with ?scene=1 or #scene; its own chunk, never loaded otherwise.
+const SceneSettingsPanel = dynamic(() => import('./SceneSettingsPanel'), { ssr: false });
 
 const HERO_PARAMS_START = {
-  scale: 200,
+  scale: 400,
   chaos: 0,
   flow: 0.37,
   particleCount: 25000,
@@ -35,7 +37,7 @@ const HERO_PARAMS_START = {
   saturation: 0.75,
   lightness: 0.4,
   torusMajorRadius: 0.5,
-  torusTubeRadius: 0.1,
+  torusTubeRadius: 1.03,
   torusSegments: 100,
   torusSegmentsDepth: 50,
   rotationX: -2.14159265358979,
@@ -172,6 +174,26 @@ const HomePage = () => {
   useLayoutEffect(() => {
     if (new URLSearchParams(window.location.search).has('teaser')) setTeaserCleanMode(true);
   }, []);
+
+  const [showSceneSettings, setShowSceneSettings] = useState(false);
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('scene') === '1' || url.hash === '#scene') setShowSceneSettings(true);
+  }, []);
+
+  // Panel edits: resolve against the user's base so slider spreads never lock in
+  // mid-scroll values. At rest the canvas shows the user's values as-is; mid-scroll
+  // it uses the normalized scroll base so the morph never jumps direction.
+  const handleSceneParamsChange = useCallback((next) => {
+    const resolved = typeof next === 'function' ? next(userParamsRef.current) : next;
+    userParamsRef.current = resolved;
+    const p = heroProgressRef.current;
+    paramsRef.current = p > 0
+      ? interpolateHeroParams(getScrollBase(resolved), HERO_PARAMS_END, p)
+      : resolved;
+    setParams(resolved);
+  }, []);
+  const handleCloseSceneSettings = useCallback(() => setShowSceneSettings(false), []);
 
   // Keep #content-section.marginTop = -peekHeight so the capabilitySectionStyle
   // borderTop always lands exactly at the 100dvh fold on page load.
@@ -488,6 +510,15 @@ const HomePage = () => {
         {/* <HorizontalTextSection /> */}
       </section>
       <PortfolioModal activePageId={activePageId} onClose={() => setActivePageId(null)} onOpenPage={setActivePageId} />
+      {showSceneSettings && (
+        <SceneSettingsPanel
+          initialParams={userParamsRef.current}
+          liveParamsRef={paramsRef}
+          onParamsChange={handleSceneParamsChange}
+          defaultParams={HERO_PARAMS_START}
+          onClose={handleCloseSceneSettings}
+        />
+      )}
     </div>
     </>
   );

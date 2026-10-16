@@ -23,3 +23,42 @@ export function SwatchCopy({ hex, label }) {
     </button>
   );
 }
+
+/**
+ * Swatch that opens the color picker. A real button (keyboard + screen reader),
+ * marked as a picker trigger so an outside-click on it does not double-close.
+ */
+export const SwatchButton = React.forwardRef(function SwatchButton({
+  id, color, label, expanded = false, size, onClick, mapped = false,
+}, ref) {
+  return (
+    <button
+      ref={ref}
+      type="button"
+      id={id}
+      className="ts-swatch-btn"
+      data-ts-picker-trigger="true"
+      aria-haspopup="dialog"
+      aria-expanded={expanded ? 'true' : 'false'}
+      aria-label={`Edit ${label} in the color picker`}
+      onClick={onClick}
+    >
+      <Swatch color={color} size={size} />
+      {mapped ? <GamutTag /> : null}
+    </button>
+  );
+});
+
+/** Small tag shown when the displayed color is the gamut-mapped version of the authored one. */
+export function GamutTag({ id }) {
+  return (
+    <span
+      id={id}
+      className="ts-badge ts-badge--advisory"
+      title="This chroma is outside the sRGB screen gamut. The color shown is the closest in-gamut match."
+      style={{ height: 16, padding: '0 5px', fontSize: 10 }}
+    >
+      gamut-mapped
+    </span>
+  );
+}

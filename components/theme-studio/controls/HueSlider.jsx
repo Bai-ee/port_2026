@@ -6,7 +6,7 @@ import { hueTrackGradient } from '../../../lib/theme-studio/color-fields.js';
 
 /** 0 to 360 degrees, wraps. The track shows the current lightness and chroma at every hue. */
 export default function HueSlider({
-  id, label, description, value, trackL = 0.7, trackC = 0.12, min = 0, max = 360, onValue, onEnd, disabled,
+  id, label, description, value, trackL = 0.7, trackC = 0.12, min = 0, max = 360, onValue, onEnd, disabled, headExtra,
 }) {
   const bg = useMemo(() => hueTrackGradient(trackL, trackC), [trackL, trackC]);
   return (
@@ -24,6 +24,7 @@ export default function HueSlider({
       kind="degrees"
       trackBackground={bg}
       disabled={disabled}
+      headExtra={headExtra}
       onValue={onValue}
       onEnd={onEnd}
     />

@@ -166,7 +166,7 @@ export default function SceneSection() {
   if (!draft || !pair) return null;
   const other = mode === 'light' ? 'dark' : 'light';
   return (
-    <Section id="scene" num="04" title="Background object" summary={`${draft.scene[mode].source === 'custom' ? 'Custom' : 'Follows theme'} (${mode})`}>
+    <Section id="scene" num="06" title="Background object" summary={`${draft.scene[mode].source === 'custom' ? 'Custom' : 'Follows theme'} (${mode})`}>
       <p className="ts-p">
         The animated background has its own colors for Light and Dark. Changes use the existing background, so no second
         canvas is created.

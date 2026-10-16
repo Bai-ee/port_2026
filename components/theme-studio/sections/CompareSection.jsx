@@ -15,7 +15,7 @@ export default function CompareSection() {
   const css = useMemo(() => buildPreviewScopeCss(draft, pair), [draft, pair]);
   if (!draft) return null;
   return (
-    <Section id="compare" num="07" title="Compare Light and Dark" summary="Side by side">
+    <Section id="compare" num="09" title="Compare Light and Dark" summary="Side by side">
       <p className="ts-p">
         Both panes use the same sample interface on the real tokens of your draft. The page itself is not duplicated.
       </p>

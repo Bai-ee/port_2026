@@ -4,6 +4,8 @@ import React, {
   createContext, useCallback, useContext, useMemo, useRef, useState, useSyncExternalStore,
 } from 'react';
 import { resolveBoth } from '../../lib/theme/index.js';
+import { createLibrary } from '../../lib/theme-studio/library.js';
+import { createSafeStorage, localSource } from '../../lib/theme-runtime/storage.js';
 
 const Ctx = createContext(null);
 
@@ -87,4 +89,37 @@ export function useAnnouncer() {
     setMsg(`${text}${flip.current ? '' : '​'}`);
   }, []);
   return [msg, announce];
+}
+
+// --- My Themes library (P4) -------------------------------------------------
+// One shared library per page. Every write bumps a version so every subscriber
+// (the Library section today, anything else later) re-reads the list.
+let sharedLibrary = null;
+let libraryVersion = 0;
+const libraryListeners = new Set();
+const notifyLibrary = () => { libraryVersion += 1; libraryListeners.forEach((fn) => fn()); };
+const WRITES = ['save', 'rename', 'duplicate', 'star', 'remove', 'importAll'];
+
+function getSharedLibrary() {
+  if (!sharedLibrary) {
+    const raw = createLibrary({ storage: createSafeStorage(localSource) });
+    sharedLibrary = Object.create(raw);
+    for (const k of WRITES) {
+      if (typeof raw[k] === 'function') sharedLibrary[k] = (...a) => { const r = raw[k](...a); notifyLibrary(); return r; };
+    }
+    sharedLibrary.cap = raw.cap;
+  }
+  return sharedLibrary;
+}
+const subscribeLibrary = (fn) => { libraryListeners.add(fn); return () => libraryListeners.delete(fn); };
+const libraryVersionNow = () => libraryVersion;
+
+/** A "My Themes" library bound to this browser's localStorage (failure-tolerant). */
+export function useThemeLibrary() {
+  return getSharedLibrary();
+}
+
+/** Changes whenever the shared library is written to; use it to re-read `list()`. */
+export function useLibraryVersion() {
+  return useSyncExternalStore(subscribeLibrary, libraryVersionNow, libraryVersionNow);
 }

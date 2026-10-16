@@ -6,6 +6,10 @@ For designers. You do not need to read code. Engine and schema details live in [
 
 Theme Studio changes the colors of the whole site from one place: both Light and Dark, the animated background, and the accent colors. Everything you do is a **local draft** stored in your own browser. Nothing reaches visitors until a developer publishes the file you export (see "Hand off").
 
+## What's in the Studio
+
+Top to bottom: **Mode and preset**, **Master controls** (hue, intensity, chroma, lightness shift, contrast, dark depth, warmth, hue spread, each with its own Reset), **Palette combos** (ready-made combos plus a harmony builder with Generate and a seeded Shuffle), **My themes** (save, load, star and back up named snapshots in this browser), then **Palette**, **Background object**, **Advanced roles**, **Accessibility**, **Compare** and **Save, export and import**. Click any color swatch to open the color picker and set an exact value. The suggested ranges are only hints; you can go to the extremes, and the "Hide suggested-range hints" switch in Palette hides the warnings.
+
 ## 1. Open it
 
 - Sign in as an admin and click **Theme Studio** (bottom left), or press **Alt+Shift+T**.
