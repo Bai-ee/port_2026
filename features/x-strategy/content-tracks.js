@@ -8,11 +8,14 @@ import { ENGINE_IDS } from '../x-content-inventory/engines.js';
 export const MAX_TRACKS = 6;
 export const MAX_BENCHMARKS_PER_TRACK = 3;
 export const MAX_DISTINCT_BENCHMARKS = 8;
+export const MAX_LISTS_PER_TRACK = 3;
+export const MAX_DISTINCT_LISTS = 8;
 export const MAX_PROMOTIONS_PER_TRACK = 4;
 const SHARE_EPSILON = 0.001;
 
 /** @typedef {{id:string,label:string,engine:'ue'|'record'|'client'|'identity',url:string|null,weeklyTarget:number}} Promotion */
-/** @typedef {{id:string,label:string,engines:string[],benchmarks:string[],share:number,promotions:Promotion[],topics:string[]}} ContentTrack */
+/** @typedef {{id:string,label:string}} TrackList */
+/** @typedef {{id:string,label:string,engines:string[],benchmarks:string[],lists:TrackList[],share:number,promotions:Promotion[],topics:string[]}} ContentTrack */
 
 // No code-default tracks: a client with no saved contentTracks has no tracks (and no track targets). The home client's
 // former two tracks live in its own plan doc (seeded by scripts/x-content/seed-home-priors.mjs), never here.
@@ -57,11 +60,40 @@ function normalizeHandle(h) {
   return v;
 }
 
+/** X list id from `https://x.com/i/lists/<digits>` (or twitter.com), or bare digits. Digits string or null. */
+export function parseListId(value) {
+  const v = String(value ?? '').trim();
+  if (!v) return null;
+  const m = v.match(/^(?:https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/i\/lists\/)?(\d{1,25})\/?(?:[?#].*)?$/i);
+  return m ? m[1] : null;
+}
+
+/** List label safe for a Brain row: no `| ; , =` or newlines, max 40 chars. */
+export function sanitizeListLabel(value) {
+  return String(value ?? '').replace(/[|;,=\r\n]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40).trim();
+}
+
+function normalizeLists(input, trackId) {
+  const arr = Array.isArray(input) ? input : [];
+  const seen = new Map();
+  for (const raw of arr) {
+    const rawId = raw && typeof raw === 'object' ? raw.id : raw;
+    const id = parseListId(rawId);
+    if (!id) throw bad(`Bad list id: ${rawId}`);
+    if (seen.has(id)) continue;
+    const label = sanitizeListLabel(raw && typeof raw === 'object' ? raw.label : '') || `List ${id}`;
+    seen.set(id, { id, label });
+  }
+  if (seen.size > MAX_LISTS_PER_TRACK) throw bad(`Track ${trackId}: at most ${MAX_LISTS_PER_TRACK} lists.`);
+  return [...seen.values()];
+}
+
 /**
  * Validate a full contentTracks list. Throws 400. An empty list is valid (no tracks => no track targets) and returns [].
  * Rules for a non-empty list: ≤MAX_TRACKS tracks; unique ids; every engine in exactly one track (disjoint + complete);
- * ≤MAX_BENCHMARKS_PER_TRACK handles per track and ≤`maxDistinctBenchmarks` distinct overall; shares ≥0 and
- * normalized to sum 1.
+ * ≤MAX_BENCHMARKS_PER_TRACK handles per track and ≤`maxDistinctBenchmarks` distinct overall; optional `lists`
+ * (≤MAX_LISTS_PER_TRACK per track, ≤MAX_DISTINCT_LISTS distinct ids overall; always returned, [] when absent);
+ * shares ≥0 and normalized to sum 1.
  */
 export function normalizeContentTracks(input, { maxDistinctBenchmarks = MAX_DISTINCT_BENCHMARKS } = {}) {
   if (!Array.isArray(input)) throw bad('contentTracks must be an array.');
@@ -70,6 +102,7 @@ export function normalizeContentTracks(input, { maxDistinctBenchmarks = MAX_DIST
   const ids = new Set();
   const engineOwner = new Map();
   const distinct = new Set();
+  const distinctLists = new Set();
   const tracks = input.map((raw) => {
     const id = String(raw?.id || '').trim().toLowerCase();
     if (!/^[a-z0-9-]{1,32}$/.test(id)) throw bad(`Bad track id: ${raw?.id}`);
@@ -86,15 +119,18 @@ export function normalizeContentTracks(input, { maxDistinctBenchmarks = MAX_DIST
     const benchmarks = [...new Set((Array.isArray(raw?.benchmarks) ? raw.benchmarks : []).map(normalizeHandle))];
     if (benchmarks.length > MAX_BENCHMARKS_PER_TRACK) throw bad(`Track ${id}: at most ${MAX_BENCHMARKS_PER_TRACK} benchmarks.`);
     benchmarks.forEach((h) => distinct.add(h));
+    const lists = normalizeLists(raw?.lists, id);
+    lists.forEach((l) => distinctLists.add(l.id));
     const share = Number(raw?.share);
     if (!Number.isFinite(share) || share < 0 || share > 1) throw bad(`Track ${id} share must be 0–1.`);
     const topics = [...new Set((Array.isArray(raw?.topics) ? raw.topics : []).map((t) => String(t).trim().slice(0, 40)).filter(Boolean))].slice(0, 12);
     const promotions = normalizePromotions(raw?.promotions ?? [], engines);
-    return { id, label, engines, benchmarks, share, promotions, topics };
+    return { id, label, engines, benchmarks, lists, share, promotions, topics };
   });
   const missing = ENGINE_IDS.filter((e) => !engineOwner.has(e));
   if (missing.length) throw bad(`Every engine must belong to a track; missing: ${missing.join(', ')}.`);
   if (distinct.size > maxDistinctBenchmarks) throw bad(`At most ${maxDistinctBenchmarks} distinct benchmarks across tracks.`);
+  if (distinctLists.size > MAX_DISTINCT_LISTS) throw bad(`At most ${MAX_DISTINCT_LISTS} distinct lists across tracks.`);
   const total = tracks.reduce((s, t) => s + t.share, 0);
   if (total <= 0) throw bad('Track shares must sum above 0.');
   if (Math.abs(total - 1) > SHARE_EPSILON) tracks.forEach((t) => { t.share = t.share / total; });

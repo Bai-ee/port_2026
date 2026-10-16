@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  DEFAULT_TRACKS, normalizeContentTracks, tracksOf, trackForEngine, allPromotions, normalizePromotions,
+  DEFAULT_TRACKS, normalizeContentTracks, tracksOf, trackForEngine, allPromotions, normalizePromotions, parseListId, MAX_LISTS_PER_TRACK, MAX_DISTINCT_LISTS,
 } from '../content-tracks.js';
 import { promotionsOf, promotionFor, promotionSelfReply } from '../promotions.js';
 import { twoTracks, twoTrackPlan } from './fixtures/two-tracks.js';
@@ -92,4 +92,46 @@ test('promotionsOf reads stored tracks', () => {
   const t = clone(); t[1].promotions[0].url = 'https://ue.example';
   const p = promotionsOf({ plan: { contentTracks: t } });
   assert.equal(p.find((x) => x.id === 'ue').url, 'https://ue.example/');
+});
+
+test('parseListId: URL, bare digits, trailing slash/query; garbage => null', () => {
+  assert.equal(parseListId('https://x.com/i/lists/1299069903333285888'), '1299069903333285888');
+  assert.equal(parseListId('https://twitter.com/i/lists/123/'), '123');
+  assert.equal(parseListId('https://x.com/i/lists/123?s=20'), '123');
+  assert.equal(parseListId(' 456 '), '456');
+  for (const v of ['', null, undefined, 'abc', 'https://x.com/someone', '12a', '1'.repeat(26), 'https://x.com/i/lists/']) assert.equal(parseListId(v), null);
+});
+
+test('lists: absent => [] and everything else unchanged', () => {
+  const out = normalizeContentTracks(clone());
+  assert.ok(out.every((t) => Array.isArray(t.lists) && t.lists.length === 0));
+});
+
+test('lists: URL -> id, dedupe, label sanitize/default/trim', () => {
+  const t = clone();
+  t[0].lists = [
+    { id: 'https://x.com/i/lists/111', label: '  A|B;C,D=E\nF ' },
+    { id: '111', label: 'dup' },
+    { id: '222', label: '' },
+  ];
+  const out = normalizeContentTracks(t);
+  assert.deepEqual(out[0].lists, [{ id: '111', label: 'A B C D E F' }, { id: '222', label: 'List 222' }]);
+  t[0].lists = [{ id: '444', label: 'x'.repeat(80) }];
+  assert.equal(normalizeContentTracks(t)[0].lists[0].label.length, 40);
+});
+
+test('lists: caps and bad ids throw 400', () => {
+  const mk = (lists, i = 0) => { const t = clone(); t[i].lists = lists; return t; };
+  const status = (fn) => assert.throws(fn, (e) => e.status === 400);
+  assert.equal(MAX_LISTS_PER_TRACK, 3);
+  assert.equal(MAX_DISTINCT_LISTS, 8);
+  status(() => normalizeContentTracks(mk([{ id: '1' }, { id: '2' }, { id: '3' }, { id: '4' }])));
+  status(() => normalizeContentTracks(mk([{ id: 'nope' }])));
+  status(() => normalizeContentTracks(mk([{ id: '' }])));
+  const t = clone();
+  t[0].lists = [1, 2, 3].map((id) => ({ id: String(id) }));
+  t[1].lists = [4, 5, 6].map((id) => ({ id: String(id) }));
+  normalizeContentTracks(t);
+  const t3 = [...t, { id: 'extra', label: 'Extra', engines: [], benchmarks: [], share: 0.1, promotions: [], topics: [], lists: [{ id: '7' }, { id: '8' }, { id: '9' }] }];
+  status(() => normalizeContentTracks(t3));
 });

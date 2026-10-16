@@ -442,12 +442,12 @@ const CONTENT_FIELDS = [
     ['Strategy Builder', 'Post Me'],
   )),
   F('content.contentTracks', 'Content Tracks', 'rows', {
-    rowFormat: 'pipe', rowKeys: ['label', 'share', 'topics', 'benchmarks'], maxRows: 6,
-    placeholder: 'label: Design | share: 50 | topics: client work; process | benchmarks: accountone; accounttwo',
+    rowFormat: 'pipe', rowKeys: ['label', 'share', 'topics', 'benchmarks', 'lists'], maxRows: 6,
+    placeholder: 'label: Design | share: 50 | topics: client work; process | benchmarks: accountone; accounttwo | lists: 1299069903333285888=Design craft',
   }, g(
     'The content lanes on X and what share of authored posts each gets.',
-    'One row per track. share is a percent, topics and benchmarks are separated with semicolons, handles have no @. Up to 6.',
-    'label: Roastery | share: 60 | topics: behind the roast; new lots | benchmarks: northlineroasters',
+    'One row per track. share is a percent, topics and benchmarks are separated with semicolons, handles have no @. Optional lists: <list id or x.com/i/lists URL>=Label, separated with semicolons, up to 3 per track. Up to 6 tracks.',
+    'label: Roastery | share: 60 | topics: behind the roast; new lots | benchmarks: northlineroasters | lists: 1299069903333285888=Coffee people',
     ['X Strategy'],
   )),
   F('content.trackTargets', 'Track Targets', 'rows', {

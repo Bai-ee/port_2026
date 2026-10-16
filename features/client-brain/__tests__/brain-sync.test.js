@@ -324,7 +324,7 @@ test('projects strategy doc, tracks and track targets from Markdown', () => {
   assert.equal(doc.open, 'Does video beat text?');
   assert.equal(doc.rules, undefined);
   const tracks = sync.projectFields(BRAIN_X, sync.CONTENT_TRACKS_FIELDS).values.contentTracks;
-  assert.deepEqual(tracks[0], { label: 'Design & client work', share: 0.6, topics: ['branding', 'web3'], benchmarks: ['seb__design'] });
+  assert.deepEqual(tracks[0], { label: 'Design & client work', share: 0.6, topics: ['branding', 'web3'], benchmarks: ['seb__design'], lists: [] });
   assert.equal(tracks[1].share, 0.4);
   const targets = sync.projectFields(BRAIN_X, sync.TRACK_TARGETS_FIELDS).values.trackTargets;
   assert.equal(targets[0].postsPerDay, 2);
@@ -407,4 +407,59 @@ test('writeBrainTargetsToPlan maps postsPerDay onto engines and the daily total'
   assert.equal(plan.authoredPerDay, 4);
   assert.equal(typeof plan.engineTargets.engines.identity.targetPerDay, 'number');
   assert.equal(sync.trackTargetsFromPlan(await store.get('c1'), mods).length, 2);
+});
+
+const LISTS_ROW = 'label: Design | share: 50% | topics: a; b | benchmarks: h1; h2 | lists: 1299069903333285888=Design craft; 1275110927726239748=AI builders';
+
+test('track lists: parse -> normalize -> format round trip is lossless', () => {
+  const md = `## Content Intelligence\n\n### Content Tracks\n- ${LISTS_ROW}\n`;
+  const tracks = sync.projectFields(md, sync.CONTENT_TRACKS_FIELDS).values.contentTracks;
+  assert.deepEqual(tracks[0].lists, [
+    { id: '1299069903333285888', label: 'Design craft' },
+    { id: '1275110927726239748', label: 'AI builders' },
+  ]);
+  const out = sync.applyCardEditsToMarkdown(md, { contentTracks: [{ ...tracks[0], share: 0.6 }] }, sync.CONTENT_TRACKS_FIELDS);
+  assert.match(out.markdown, /share: 60% \| topics: a; b \| benchmarks: h1; h2 \| lists: 1299069903333285888=Design craft; 1275110927726239748=AI builders/);
+  const same = sync.applyCardEditsToMarkdown(md, { contentTracks: tracks }, sync.CONTENT_TRACKS_FIELDS);
+  assert.deepEqual(same.changed, []);
+});
+
+test('track lists: bare id / URL accepted, bad ids dropped, capped at 3, label sanitized', () => {
+  const md = '## Content Intelligence\n\n### Content Tracks\n- label: T | lists: 11; https://x.com/i/lists/22/; junk=x; 33=a,b|c; 44=z\n';
+  const t = sync.projectFields(md, sync.CONTENT_TRACKS_FIELDS).values.contentTracks[0];
+  assert.deepEqual(t.lists, [{ id: '11', label: 'List 11' }, { id: '22', label: 'List 22' }, { id: '33', label: 'a b' }]);
+});
+
+test('track lists: a row without lists formats exactly as before', () => {
+  const md = '## Content Intelligence\n\n### Content Tracks\n- label: Design & client work | share: 60% | topics: branding; web3 | benchmarks: seb__design\n';
+  const t = sync.projectFields(md, sync.CONTENT_TRACKS_FIELDS).values.contentTracks;
+  const out = sync.applyCardEditsToMarkdown(md, { contentTracks: [{ ...t[0], share: 0.7 }] }, sync.CONTENT_TRACKS_FIELDS);
+  assert.match(out.markdown, /- label: Design & client work \| share: 70% \| topics: branding; web3 \| benchmarks: seb__design\n/);
+  assert.doesNotMatch(out.markdown, /lists:/);
+});
+
+test('track lists: mergeBrainTracks carries lists; absent key keeps stored lists; empty array clears', () => {
+  const existing = [{ id: 'design', label: 'Design', engines: ['client'], benchmarks: [], lists: [{ id: '9', label: 'Old' }], share: 1, promotions: [], topics: [] }];
+  const lists = [{ id: '1', label: 'One' }];
+  assert.deepEqual(sync.mergeBrainTracks(existing, [{ label: 'design', topics: [], benchmarks: [], lists }])[0].lists, lists);
+  assert.deepEqual(sync.mergeBrainTracks(existing, [{ label: 'design', topics: [], benchmarks: [] }])[0].lists, [{ id: '9', label: 'Old' }]);
+  assert.deepEqual(sync.mergeBrainTracks(existing, [{ label: 'design', topics: [], benchmarks: [], lists: [] }])[0].lists, []);
+});
+
+test('track lists: a list change is detected as a difference (plan -> Brain write-back)', () => {
+  const md = `## Content Intelligence\n\n### Content Tracks\n- ${LISTS_ROW}\n`;
+  const t = sync.projectFields(md, sync.CONTENT_TRACKS_FIELDS).values.contentTracks[0];
+  const relabeled = { ...t, lists: [{ ...t.lists[0], label: 'Renamed' }, t.lists[1]] };
+  assert.deepEqual(sync.applyCardEditsToMarkdown(md, { contentTracks: [relabeled] }, sync.CONTENT_TRACKS_FIELDS).changed, ['contentTracks']);
+  const dropped = { ...t, lists: [t.lists[0]] };
+  assert.deepEqual(sync.applyCardEditsToMarkdown(md, { contentTracks: [dropped] }, sync.CONTENT_TRACKS_FIELDS).changed, ['contentTracks']);
+});
+
+test('track lists: writeBrainTracksToPlan stores lists on the plan track', async () => {
+  const store = await storeWithTracks();
+  const rows = [{ label: 'Design & client work', share: 0.5, topics: [], benchmarks: ['seb__design'], lists: [{ id: '5', label: 'Five' }] }];
+  const res = await sync.writeBrainTracksToPlan(store, 'c1', rows, mods);
+  assert.deepEqual(res.warnings, []);
+  const doc = await store.get('c1');
+  assert.deepEqual(doc.plan.contentTracks[0].lists, [{ id: '5', label: 'Five' }]);
 });

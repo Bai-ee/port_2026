@@ -14,6 +14,7 @@ import { promotionsOf, promotionSelfReply } from '../../x-strategy/promotions.js
 import { strategyGuidance } from '../../x-strategy/strategy-doc.js';
 import { buildContributionPrompt, fallbackCopy, checkSuggestionText, marketHookTopic } from './copy.js';
 import { matchMarketTopic, textUsesTopic } from '../../content-context/market-signals.js';
+import { listSignalsPromptSection, matchListTheme } from '../../content-context/list-signals.js';
 
 const REVIEWED = new Set(['edited', 'saved', 'dismissed']);
 // Fallback sources all start with "fallback"; anything else names the model.
@@ -204,11 +205,14 @@ export async function runDailyLoop(deps, opts = {}) {
       usedLines.add(text);
       let source = 'fallback (item text, cut to fit)';
       let fromModel = false;
+      // Track lists: context for the model draft only (never pasted into fallback copy); non-quote slots with a block for their track.
+      const listSignals = !quoteSlot && inputs.listSignals && listSignalsPromptSection(inputs.listSignals, trackId) ? inputs.listSignals : null;
+      let listTheme = null;
       if (deps.draft && built.ok) {
         try {
-          const res = await deps.draft(built, { suggestionId: s.id, ...(marketSignals && !quoteSlot ? { marketSignals } : {}) });
+          const res = await deps.draft(built, { suggestionId: s.id, ...(marketSignals && !quoteSlot ? { marketSignals } : {}), ...(listSignals ? { listSignals, trackId } : {}) });
           run.usage.modelCalls += 1;
-          if (res?.post) { text = res.post; source = res.model || 'model'; fromModel = true; marketUsed = !!marketTopic && !quoteSlot && textUsesTopic(text, marketTopic); }
+          if (res?.post) { text = res.post; source = res.model || 'model'; fromModel = true; marketUsed = !!marketTopic && !quoteSlot && textUsesTopic(text, marketTopic); listTheme = listSignals ? matchListTheme(listSignals, trackId, text) : null; }
         } catch (err) {
           run.usage.failures += 1;
           source = `fallback — model call failed: ${String(err?.message || err).slice(0, 120)}`;
@@ -217,7 +221,7 @@ export async function runDailyLoop(deps, opts = {}) {
         source = `fallback — ${built.reason}`;
       }
       modelFlags.push(fromModel);
-      run.suggestions.push({ ...s, ...(marketUsed && marketTopic ? { trigger: { kind: 'market', reason: marketTopic } } : {}), slot: s.slot ?? null, package: s.package ?? null, draft: { text, selfReply: promotionSelfReply(s.promotion), source }, checks: checkSuggestionText(text, s), edit: null, reviewState: 'pending', socialPostId: null });
+      run.suggestions.push({ ...s, ...(marketUsed && marketTopic ? { trigger: { kind: 'market', reason: marketTopic } } : listTheme ? { trigger: { kind: 'lists', reason: listTheme } } : {}), slot: s.slot ?? null, package: s.package ?? null, draft: { text, selfReply: promotionSelfReply(s.promotion), source }, checks: checkSuggestionText(text, s), edit: null, reviewState: 'pending', socialPostId: null });
     }
     run.copySource = modelFlags.length && modelFlags.every(Boolean) ? 'model' : modelFlags.some(Boolean) ? 'mixed' : 'fallback';
     run.status = 'complete';

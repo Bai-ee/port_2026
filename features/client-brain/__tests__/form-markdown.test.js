@@ -192,3 +192,13 @@ test('over-long values already in the document do not block an unchanged save', 
   const { fields } = markdownToForm(doc);
   assert.doesNotThrow(() => formToMarkdown(fields, { preserved: doc }));
 });
+
+test('contentTracks rows with lists round-trip losslessly through the Brain Builder form', () => {
+  const lists = '1299069903333285888=Design craft; 1275110927726239748=AI builders';
+  const track = { label: 'Design', share: '50', topics: 'a; b', benchmarks: 'h1; h2', lists };
+  const a = formToMarkdown({ 'content.contentTracks': [track] }, { frontmatter: { clientId: 'c1', clientName: 'Harbor Row Coffee' } });
+  assert.ok(a.includes(`- label: Design | share: 50 | topics: a; b | benchmarks: h1; h2 | lists: ${lists}`));
+  const back = markdownToForm(a).fields;
+  assert.deepEqual(back['content.contentTracks'], [track]);
+  assert.equal(formToMarkdown(back, { preserved: a }), a);
+});

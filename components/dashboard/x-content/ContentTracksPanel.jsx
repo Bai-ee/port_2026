@@ -4,9 +4,9 @@ import React, { useState } from 'react';
 import { Plus, RefreshCw, X } from 'lucide-react';
 import {
   addDraftTrack, setTrackLabel, setTrackShare, validateTrackBenchmark, addTrackBenchmark, removeTrackBenchmark, validatePromotionUrl, setPromotionUrl,
-  trackBenchmarkRow, trackProfileSummary,
+  validateTrackList, addTrackList, removeTrackList, trackBenchmarkRow, trackProfileSummary,
 } from '../../../features/x-strategy/ui-model.js';
-import { MAX_BENCHMARKS_PER_TRACK, MAX_TRACKS } from '../../../features/x-strategy/content-tracks.js';
+import { MAX_BENCHMARKS_PER_TRACK, MAX_LISTS_PER_TRACK, MAX_TRACKS } from '../../../features/x-strategy/content-tracks.js';
 import { XCE_COLORS } from '../content-ui/xce-tokens';
 import Badge from '../content-ui/ui/Badge';
 import Card from '../content-ui/ui/Card';
@@ -44,6 +44,50 @@ function BenchmarkRow({ track, handle, rowsMeta, request, refreshing, saved, onR
       </div>
       {r.note ? <span id={`${base}-note`} style={S.note}>{r.note}</span> : null}
       {!saved ? <span style={S.note}>Not saved yet. Save tracks, then refresh to pull its posts.</span> : null}
+    </div>
+  );
+}
+
+// X lists on one track: removable chips (label + id) and an add row (list link or number + optional label).
+// Parsing and caps live in ui-model.js -> content-tracks.js; edits only change the draft (saved with "Save tracks").
+function TrackListsRow({ track, draft, setDraft }) {
+  const [listInput, setListInput] = useState('');
+  const [labelInput, setLabelInput] = useState('');
+  const [listErr, setListErr] = useState('');
+  const lists = track.lists || [];
+  const id = `x-strategy-track-${track.id}-lists`;
+  const add = () => {
+    const problem = validateTrackList(draft, track.id, listInput);
+    if (problem) { setListErr(problem); return; }
+    setDraft(addTrackList(draft, track.id, listInput, labelInput));
+    setListInput('');
+    setLabelInput('');
+    setListErr('');
+  };
+  const onKey = (e) => { if (e.key === 'Enter') add(); };
+  return (
+    <div id={`track-lists-config-row-${track.id}`} data-section="track-lists-config-row" style={{ display: 'grid', gap: 8, minWidth: 0 }}>
+      <span style={S.label}>{`X lists · ${lists.length}/${MAX_LISTS_PER_TRACK}`}</span>
+      <div id={`track-lists-chip-${track.id}`} data-count={lists.length} style={S.row}>
+        {lists.length === 0 ? <span id={`${id}-empty`} style={{ ...S.note, margin: 0 }}>No list yet. Paste an X list link to pull its posts into Today, quote and reply targets.</span> : null}
+        {lists.map((l) => (
+          <span key={l.id} id={`${id}-chip-${l.id}`} className="xce-chip" style={{ textTransform: 'none', gap: 6, maxWidth: '100%', minWidth: 0, paddingRight: 2 }}>
+            <span style={{ overflowWrap: 'anywhere', minWidth: 0 }}>{l.label} · {l.id}</span>
+            <button type="button" id={`${id}-chip-${l.id}-remove-button`} aria-label={`Remove list ${l.label}`}
+              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 28, minHeight: 28, padding: 0, border: 0, background: 'transparent', color: 'inherit', cursor: 'pointer' }}
+              onClick={() => setDraft(removeTrackList(draft, track.id, l.id))}><X size={12} /></button>
+          </span>
+        ))}
+      </div>
+      <div id={`${id}-add-row`} style={S.row}>
+        <input id={`${id}-url-input`} aria-label={`X list link for ${track.label}`} className="xce-input" style={{ flex: '2 1 180px', minWidth: 0 }} value={listInput}
+          placeholder="https://x.com/i/lists/…" inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false}
+          onChange={(e) => { setListInput(e.target.value); setListErr(''); }} onKeyDown={onKey} />
+        <input id={`${id}-label-input`} aria-label={`Label for the list on ${track.label}`} className="xce-input" style={{ flex: '1 1 120px', minWidth: 0 }} value={labelInput}
+          placeholder="Label (optional)" maxLength={40} onChange={(e) => setLabelInput(e.target.value)} onKeyDown={onKey} />
+        <button type="button" id={`${id}-add-button`} className="xce-btn xce-btn-ghost" style={{ minHeight: 40 }} disabled={lists.length >= MAX_LISTS_PER_TRACK} onClick={add}><Plus size={14} /> Add</button>
+      </div>
+      {listErr ? <span id={`${id}-error`} role="alert" style={S.err}>{listErr}</span> : null}
     </div>
   );
 }
@@ -99,6 +143,8 @@ function TrackRow({ track, draft, setDraft, savedHandles, rowsMeta, request, ref
         </div>
         {handleErr ? <span id={`${id}-benchmark-error`} role="alert" style={S.err}>{handleErr}</span> : null}
       </div>
+
+      <TrackListsRow track={track} draft={draft} setDraft={setDraft} />
 
       <div id={`${id}-promotions-panel`} style={{ display: 'grid', gap: 8 }}>
         <span style={S.label}>Promotion links (go in the self-reply)</span>

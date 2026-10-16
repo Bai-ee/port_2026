@@ -119,3 +119,20 @@ test('never throws on junk', () => {
   }
   assert.deepEqual(partitionPool(null, null), {});
 });
+
+test('planListFetches: lists first, handles get the remainder', async () => {
+  const { planListFetches } = await import('../scan-plan.js');
+  const lists = [{ id: '1' }, { id: '2' }, { id: '3' }];
+  assert.deepEqual(planListFetches(lists, 15), { lists, handleBudget: 12 });
+  assert.equal(planListFetches([], 15).handleBudget, 15);
+  assert.equal(planListFetches(lists).handleBudget, DEFAULT_BUDGET - 3);
+});
+
+test('planListFetches: lists beyond budget are cut; handleBudget floors at 0', async () => {
+  const { planListFetches } = await import('../scan-plan.js');
+  const lists = [{ id: '1' }, { id: '2' }, { id: '3' }];
+  const r = planListFetches(lists, 2);
+  assert.equal(r.lists.length, 2);
+  assert.equal(r.handleBudget, 0);
+  assert.equal(planListFetches(lists, 3).handleBudget, 0);
+});

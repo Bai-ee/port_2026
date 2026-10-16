@@ -1,6 +1,8 @@
 // Presentation strings shared by the dashboard panel and the --show CLI.
 // Pure; tolerates old runs that carry no slot / strategySource.
 
+import { LIST_TRIGGER_LABEL } from '../../content-context/list-signals.js';
+
 /** 'D · 15:00 CT · quote-react · P1' — null when the suggestion has no slot (old runs). */
 export function slotLabel(slot) {
   if (!slot?.letter) return null;
@@ -38,6 +40,7 @@ export function slotStatuses(run) {
 export const TRIGGER_LABEL = {
   'hot-narrative': 'Hot narrative',
   market: 'Hot narrative', // Market Signals topic shaped this draft (trigger.reason = the topic)
+  lists: LIST_TRIGGER_LABEL, // a track-list theme shaped this draft (trigger.reason = the theme)
   'opportunity-signal': 'Opportunity signal',
   'benchmark-gap': 'Benchmark gap',
   'archive-throwback': 'Archive throwback',

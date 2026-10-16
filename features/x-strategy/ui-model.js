@@ -2,7 +2,10 @@
 // Turns route payloads (strategy-get / refresh status / plan doc) into the plain-English strings and
 // request bodies StrategyPanel renders. Keep wording here so it is unit-testable.
 
-import { tracksOf, normalizeContentTracks, MAX_BENCHMARKS_PER_TRACK, MAX_DISTINCT_BENCHMARKS } from './content-tracks.js';
+import {
+  tracksOf, normalizeContentTracks, MAX_BENCHMARKS_PER_TRACK, MAX_DISTINCT_BENCHMARKS, MAX_LISTS_PER_TRACK, MAX_DISTINCT_LISTS,
+  parseListId, sanitizeListLabel,
+} from './content-tracks.js';
 import { sectionTitle } from './strategy-doc.js';
 import { ENGINE_IDS } from '../x-content-inventory/engines.js';
 import { PLAN_LIMITS, KNOWN_SLOT_TYPES, EVALUATION_CAVEAT, tierForAuthoredPerDay, isValidAuthoredPerDay } from './contracts.js';
@@ -585,6 +588,7 @@ export function trackDraftFromPlan(planOrDoc) {
   const pct = percentsFromWeights(tracks.map((t) => t.share));
   return tracks.map((t, i) => ({
     id: t.id, label: t.label, engines: [...t.engines], benchmarks: [...t.benchmarks], topics: [...(t.topics || [])],
+    lists: (t.lists || []).map((l) => ({ id: l.id, label: l.label })),
     share: pct[i],
     promotions: t.promotions.map((p) => ({ id: p.id, label: p.label, engine: p.engine, url: p.url || '', weeklyTarget: p.weeklyTarget })),
   }));
@@ -616,7 +620,7 @@ export function addDraftTrack(draft, label = 'New track') {
   let id = base;
   for (let n = 2; ids.has(id); n += 1) id = `${base}-${n}`;
   const first = list.length === 0;
-  return [...list, { id, label, engines: first ? [...ENGINE_IDS] : [], benchmarks: [], topics: [], share: first ? 100 : 0, promotions: [], isNew: true }];
+  return [...list, { id, label, engines: first ? [...ENGINE_IDS] : [], benchmarks: [], lists: [], topics: [], share: first ? 100 : 0, promotions: [], isNew: true }];
 }
 
 /** Rename one draft track (the id stays as created). */
@@ -649,6 +653,37 @@ export function removeTrackBenchmark(draft, trackId, handle) {
   return (draft || []).map((t) => (t.id === trackId ? { ...t, benchmarks: t.benchmarks.filter((x) => x !== h) } : t));
 }
 
+/**
+ * X lists on a track (Track Lists → Daily Signals §4). Parsing/sanitizing and the caps come from content-tracks.js.
+ * @returns {string|null} first problem with a list about to be added (`raw` = https://x.com/i/lists/<digits> or digits).
+ */
+export function validateTrackList(draft, trackId, raw) {
+  if (!String(raw ?? '').trim()) return 'Paste an X list link or its number.';
+  const id = parseListId(raw);
+  if (!id) return 'Not an X list. Use https://x.com/i/lists/<number> or just the number.';
+  const list = Array.isArray(draft) ? draft : [];
+  const track = list.find((t) => t.id === trackId);
+  if (!track) return 'Unknown track.';
+  const mine = track.lists || [];
+  if (mine.some((l) => l.id === id)) return `List ${id} is already on this track.`;
+  if (mine.length >= MAX_LISTS_PER_TRACK) return `At most ${MAX_LISTS_PER_TRACK} lists per track.`;
+  const distinct = new Set(list.flatMap((t) => (t.lists || []).map((l) => l.id)));
+  if (!distinct.has(id) && distinct.size >= MAX_DISTINCT_LISTS) return `At most ${MAX_DISTINCT_LISTS} distinct lists across tracks.`;
+  return null;
+}
+
+/** Add a list to a track (no-op when the input does not parse or is already there). Blank label => `List <id>`. */
+export function addTrackList(draft, trackId, raw, label = '') {
+  const id = parseListId(raw);
+  if (!id) return draft || [];
+  const clean = sanitizeListLabel(label) || `List ${id}`;
+  return (draft || []).map((t) => (t.id === trackId && !(t.lists || []).some((l) => l.id === id) ? { ...t, lists: [...(t.lists || []), { id, label: clean }] } : t));
+}
+
+export function removeTrackList(draft, trackId, listId) {
+  return (draft || []).map((t) => (t.id === trackId ? { ...t, lists: (t.lists || []).filter((l) => l.id !== String(listId)) } : t));
+}
+
 /** @returns {string|null} inline problem for a promotion link input (blank is fine: no link). */
 export function validatePromotionUrl(value) {
   const v = String(value ?? '').trim();
@@ -666,6 +701,7 @@ export function setPromotionUrl(draft, trackId, promotionId, url) {
 export function trackPayloadFromDraft(draft) {
   return (draft || []).map((t) => ({
     id: t.id, label: t.label, engines: [...t.engines], benchmarks: t.benchmarks.map(cleanHandle), topics: [...(t.topics || [])],
+    lists: (t.lists || []).map((l) => ({ id: l.id, label: l.label })),
     share: (Number(t.share) || 0) / 100,
     promotions: t.promotions.map((p) => ({ id: p.id, label: p.label, engine: p.engine, url: String(p.url ?? '').trim() || null, weeklyTarget: p.weeklyTarget })),
   }));

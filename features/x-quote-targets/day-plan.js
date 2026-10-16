@@ -38,6 +38,57 @@ function toIdSet(v) {
   return new Set();
 }
 
+/**
+ * Merge track-list candidates (dashboard_state.marketingBrief.listSignals, written by the scan's list pass)
+ * into a quoteTargets-shaped object, so every reader keeps consuming ONE candidate list.
+ *
+ * - Handle candidates come first and win a duplicate post id (they carry the watchlist vein).
+ * - List candidates get `vein` = their owning track, plus `trackId`, `listId`, `source: 'list'`.
+ * - Dismissed ids are NOT filtered here: consumers already honor `quoteTargets.dismissed` (buildDayPlan's
+ *   existingDraftIds, the card), and the merged object keeps that array untouched.
+ * - `listScan` = { generatedAt, stale, count }; stale when generatedAt is missing or older than STALE_SCAN_HOURS.
+ * - No listSignals (or no byTrack) => the input is returned unchanged, so clients without lists see no change.
+ *
+ * @param {object|null} quoteTargets
+ * @param {object|null} listSignals
+ * @param {{now?: number}} [opts]
+ */
+export function mergeListCandidates(quoteTargets, listSignals, opts = {}) {
+  if (!isObj(listSignals) || !isObj(listSignals.byTrack)) return quoteTargets ?? null;
+  const now = Number.isFinite(opts.now) ? opts.now : Date.now();
+  const qt = isObj(quoteTargets) ? quoteTargets : {};
+  const seen = new Set();
+  const candidates = [];
+  for (const c of Array.isArray(qt.candidates) ? qt.candidates : []) {
+    if (!isObj(c)) continue;
+    if (c.id != null) {
+      if (seen.has(String(c.id))) continue;
+      seen.add(String(c.id));
+    }
+    candidates.push(c);
+  }
+  let count = 0;
+  for (const [trackId, slot] of Object.entries(listSignals.byTrack)) {
+    for (const c of Array.isArray(slot?.posts) ? slot.posts : []) {
+      if (!isObj(c) || c.id == null || seen.has(String(c.id))) continue;
+      seen.add(String(c.id));
+      const owner = c.trackId || trackId;
+      candidates.push({ ...c, trackId: owner, vein: owner, source: 'list' });
+      count += 1;
+    }
+  }
+  const generatedAt = typeof listSignals.generatedAt === 'string' ? listSignals.generatedAt : null;
+  const parsed = generatedAt ? Date.parse(generatedAt) : NaN;
+  const stale = !Number.isFinite(parsed) || now - parsed > STALE_SCAN_HOURS * 3_600_000;
+  return {
+    ...qt,
+    // A client with lists but no handle scan still has a scan time.
+    generatedAt: qt.generatedAt ?? generatedAt,
+    candidates,
+    listScan: { generatedAt, stale, count },
+  };
+}
+
 function timeToMinutes(timeCT) {
   const m = /^(\d{1,2}):(\d{2})$/.exec(String(timeCT ?? ''));
   if (!m) return Number.POSITIVE_INFINITY;
@@ -83,7 +134,7 @@ function buildScan(quoteTargets, now) {
     stale = diffMs > STALE_SCAN_HOURS * 3_600_000;
   }
   const candidateCount = Array.isArray(quoteTargets.candidates) ? quoteTargets.candidates.length : 0;
-  return { generatedAt, ageHours, stale, candidateCount, usableCount: 0 };
+  return { generatedAt, ageHours, stale, candidateCount, usableCount: 0, listScan: quoteTargets.listScan ?? null };
 }
 
 /**

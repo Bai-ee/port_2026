@@ -11,6 +11,7 @@ const { checkRateLimit, getClientIp } = require('../../../../api/_lib/rate-limit
 const { loadClientBrainContext } = require('../../../../features/client-brain/store.cjs');
 const { logUsage } = require('../../../../api/_lib/usage-logger.cjs');
 const { collectRedditSignals, collectXMarketTalkSignals } = require('../../../../features/intelligence/_platform-signals.js');
+import { hasUsableListSignals, listPostsForReplyPool, collectPoolIds } from '../../../../features/intelligence/analysis-recipes/list-reply-pool.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -189,8 +190,9 @@ export async function POST(request) {
   if (needsRedditSignals && !redditSignals.length) {
     return json({ error: 'No Reddit signals to analyze yet — run a Reddit source test or refresh Market Signals with Reddit enabled first.' }, 409);
   }
-  if (wantsReplyPool && !agentData && !watchlistTimelines) {
-    return json({ error: 'No reply candidates yet — run a brief or pull the Watchlist (Mentions on) first.' }, 409);
+  const listSignals = marketingBrief?.listSignals || null;
+  if (wantsReplyPool && !agentData && !watchlistTimelines && !hasUsableListSignals(listSignals)) {
+    return json({ error: 'No reply candidates yet — run a brief, pull the Watchlist (Mentions on), or scan your track lists first.' }, 409);
   }
   if (wantsOpportunityPool && !opportunitySignals?.items?.length) {
     return json({ error: 'No Opportunity Signals to analyze yet — enable it in Market Insights and refresh signals first.' }, 409);
@@ -221,6 +223,13 @@ export async function POST(request) {
     redditSignals: redditSignals.map((it) => withVelocity(it, nowMs)),
     kolActivity: (Array.isArray(agentData?.kolActivity) ? agentData.kolActivity : []).map((it) => withVelocity(it, nowMs)),
   };
+  // Posts from the client's curated X lists (fresh listSignals only), deduped
+  // against the pool above, velocity-enriched, capped at 40 by velocity.
+  replyPool.listPosts = listPostsForReplyPool(listSignals, {
+    nowMs,
+    existingIds: collectPoolIds(replyPool),
+    enrich: withVelocity,
+  });
   const contentFor = (recipeId) => {
     const kind = getRecipe(recipeId)?.contentKind;
     if (kind === 'reply-pool') return replyPool;

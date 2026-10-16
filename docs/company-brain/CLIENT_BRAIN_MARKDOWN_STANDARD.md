@@ -371,7 +371,12 @@ writes it back here.
 `- label: Design | share: 50 | topics: client work; process | benchmarks: seb__design; toshioueki`
 
 `share` is a percent of authored posts; `topics` and `benchmarks` are `;`-separated (handles without `@`); `topics` and
-`benchmarks` may be omitted. Engines and promotions stay owned by X Strategy.
+`benchmarks` may be omitted.
+
+Optional `lists` attaches X lists to the track: `| lists: 1299069903333285888=Design craft; 1275110927726239748=AI builders`.
+Each item is `<list id>=<label>` separated with `;` (a bare id or an `https://x.com/i/lists/<id>` URL without `=label` is
+accepted; the label then defaults to `List <id>`). Max 3 lists per track, 8 distinct across tracks; labels are 40 characters
+and cannot contain `| ; , =`. Omit the key for no lists. Nothing reads lists yet beyond storing them on the track. Engines and promotions stay owned by X Strategy.
 
 **`## Content Intelligence` › `### Track Targets`** — one bullet per track:
 
