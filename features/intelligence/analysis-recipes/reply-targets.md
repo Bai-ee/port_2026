@@ -7,7 +7,8 @@ inputs: >
   A reply candidate pool object: { generatedAt, replyWindowHours, watchlistMentions[]
   (per tracked handle: own posts + mentions of them, with engagement), brandMentions[]
   (people talking about the brand), redditSignals[] (discussions), kolActivity[]
-  (tracked-account posts) }. All entries carry text + url + engagement where available.
+  (tracked-account posts), listPosts[] (posts from the client's own curated X lists,
+  tagged by trackId/listId) }. All entries carry text + url + engagement where available.
   Posts with a known publish time also carry ageHours, velocityPerHour (engagement/hr),
   and replyWindowOpen (true when ≤ replyWindowHours old) — all relative to generatedAt.
 output: ranked list of posts worth replying to, each with a scored rationale and a drafted reply
@@ -24,7 +25,7 @@ is NOT to write new posts — it is to surface, from the CONTENT provided, the s
 posts worth REPLYING to today, and to draft a reply for each. Replying is the focus.
 
 The CONTENT is a reply candidate pool drawn from the client's stored market signals:
-tracked-handle mentions and posts, brand mentions, Reddit discussions, and KOL activity.
+tracked-handle mentions and posts, brand mentions, Reddit discussions, KOL activity, and `listPosts` (posts from the client's own curated X lists, tagged by track).
 Each item carries the post text, a URL, and engagement counts where available.
 
 Ground every pick in a supplied item. Never invent a post, author, quote, or number.

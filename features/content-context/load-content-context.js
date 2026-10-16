@@ -8,6 +8,7 @@ import { loadDailyLoopInputs } from '../x-content-inventory/daily-loop/inputs.js
 import { resolvePlanInputs } from '../x-strategy/plan-inputs.js';
 import { mergeEngineConfig } from '../x-content-inventory/engine-quota.js';
 import { shapeMarketSignals } from './market-signals.js';
+import { shapeListSignals } from './list-signals.js';
 
 // Same thresholds the Strategy tab already uses for "stale" (contracts.js: 7 days) and the scan banner.
 export const CORPUS_STALE_DAYS = 7;
@@ -133,6 +134,15 @@ export function describeContentInputs({ raw, planDoc, planInputs, brainError = n
     }));
   }
 
+  // Track lists: listed only when a list scan is stored (clients without lists keep an unchanged hash).
+  if (raw.listsStored) {
+    out.push(entry('track-lists', 'Track lists', {
+      source: 'dashboard_state.marketingBrief.listSignals',
+      usable: !!raw.listSignals,
+      caveats: [!raw.listSignals && 'List scan is stale or empty: list context is not used.'],
+    }));
+  }
+
   // Inventory
   out.push(entry('inventory', 'Content inventory', {
     source: 'x_content_packages',
@@ -176,6 +186,11 @@ export async function loadContentContext(deps, { clientId, now = Date.now(), pac
   // Market Signals brief -> compact drafting context. Optional dep; a failed read just means no block (never blocks the loop).
   if (deps.readMarketSignals) {
     try { raw.marketSignals = shapeMarketSignals(await deps.readMarketSignals(clientId)); } catch { raw.marketSignals = null; }
+  }
+  // Track lists (scan output) -> compact per-track block; stale or unusable => null. Never blocks the loop.
+  if (raw.listSignals) {
+    raw.listsStored = true; // only when a scan is stored, so clients without lists keep raw + hash unchanged
+    try { raw.listSignals = shapeListSignals(raw.listSignals, { now }); } catch { raw.listSignals = null; }
   }
   const planInputs = resolvePlanInputs(planDoc);
   const inputs = describeContentInputs({ raw, planDoc, planInputs, brainError, now, strategyDoc });

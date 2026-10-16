@@ -136,3 +136,16 @@ export function partitionPool(posts, plan) {
   }
   return out;
 }
+
+/**
+ * Split the shared fetch budget between track lists and watchlist handles.
+ * A list costs 1 fetch; lists are fetched first; handles get what is left.
+ * @param {object[]} lists
+ * @param {number} [budget=DEFAULT_BUDGET]
+ * @returns {{lists: object[], handleBudget: number}}
+ */
+export function planListFetches(lists, budget = DEFAULT_BUDGET) {
+  const b = Number.isFinite(budget) ? Math.max(0, Math.trunc(budget)) : DEFAULT_BUDGET;
+  const picked = (Array.isArray(lists) ? lists : []).slice(0, b);
+  return { lists: picked, handleBudget: Math.max(0, b - picked.length) };
+}

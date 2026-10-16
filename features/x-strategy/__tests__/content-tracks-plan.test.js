@@ -146,3 +146,16 @@ test('content-plan: plan without contentTracks has no trackProfiles; with tracks
   assert.equal(withT.trackProfiles[1].status, 'no-benchmark');
   assert.ok(withT.plan.engineConfig.engines.identity.minPerDay >= 1);
 });
+
+test('plan change with contentTracks[].lists survives normalize/apply; bad lists rejected', () => {
+  const t = tracks();
+  t[0].lists = [{ id: 'https://x.com/i/lists/111', label: 'Design craft' }];
+  const res = applyChange(null, req({ changes: { contentTracks: t } }));
+  assert.ok(!res.error, JSON.stringify(res));
+  const saved = res.plan.contentTracks;
+  assert.deepEqual(saved[0].lists, [{ id: '111', label: 'Design craft' }]);
+  assert.deepEqual(saved[1].lists, []);
+  const badT = tracks();
+  badT[0].lists = [{ id: 'nope' }];
+  assert.equal(validatePlan(normalizePlan({ contentTracks: badT })).ok, false);
+});

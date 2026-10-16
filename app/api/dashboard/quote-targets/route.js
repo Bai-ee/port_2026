@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 import { randomUUID } from 'crypto';
 import { createSocialPost, readSocialQueue, getSocialPost, createDraftPostOnce, ensureDraftPost, findOpenPostForPackage, updateSocialPost, runPostingAgents } from '../../../../features/social-posting/twitter-service.js';
-import { buildDayPlan } from '../../../../features/x-quote-targets/day-plan.js';
+import { buildDayPlan, mergeListCandidates } from '../../../../features/x-quote-targets/day-plan.js';
 // Static import so Next bundles the calendar — docs/audits/ is NOT in
 // .vercelignore, but a runtime fs read of a repo path is fragile on serverless.
 import bundledCalendar from '../../../../docs/audits/x-calendar-15day.json' with { type: 'json' };
@@ -118,10 +118,13 @@ async function requireAdminContext(request) {
   return { decoded, context };
 }
 
-async function readQuoteTargets(clientId) {
+// One dashboard_state read for the GET and readOpportunities: the RAW stored quoteTargets plus the track-list signals.
+// Merging happens in memory only; the dismiss POST keeps reading/writing the raw doc.
+async function readQuoteState(clientId) {
   const snap = await fb.adminDb.collection('dashboard_state').doc(clientId).get();
-  if (!snap.exists) return null;
-  return snap.data()?.marketingBrief?.quoteTargets ?? null;
+  if (!snap.exists) return { rawQuoteTargets: null, listSignals: null };
+  const brief = snap.data()?.marketingBrief;
+  return { rawQuoteTargets: brief?.quoteTargets ?? null, listSignals: brief?.listSignals ?? null };
 }
 
 /**
@@ -155,7 +158,9 @@ export async function GET(request) {
   }
 
   try {
-    const quoteTargets = await readQuoteTargets(context.clientId);
+    const { rawQuoteTargets, listSignals } = await readQuoteState(context.clientId);
+    // Track-list candidates merge in memory; `dismissed` stays the raw stored array.
+    const quoteTargets = mergeListCandidates(rawQuoteTargets, listSignals);
 
     // Which calendar day to show. There is no stored start date yet, so the
     // day is explicit (?day=N) and defaults to 1 rather than being guessed
@@ -491,10 +496,14 @@ async function editQueuedPost({ clientId, postId, content, scheduledAt, expected
 }
 
 async function readOpportunities(clientId) {
-  const qt = await readQuoteTargets(clientId);
+  // Same merge as the GET and the MCP reader: track-list candidates in memory, dismissed ids dropped.
+  const { rawQuoteTargets, listSignals } = await readQuoteState(clientId);
+  const qt = mergeListCandidates(rawQuoteTargets, listSignals);
   const now = Date.now();
   const generatedMs = Date.parse(qt?.generatedAt || '');
-  const targets = (Array.isArray(qt?.candidates) ? qt.candidates : []).slice(0, 10).map((c) => {
+  const dismissed = new Set(Array.isArray(qt?.dismissed) ? qt.dismissed : []);
+  const open = (Array.isArray(qt?.candidates) ? qt.candidates : []).filter((c) => !dismissed.has(c.id));
+  const targets = open.slice(0, 10).map((c) => {
     const ageHours = ageHoursOf(c.createdAt, now);
     return {
       id: c.id || c.url || null,
@@ -504,6 +513,8 @@ async function readOpportunities(clientId) {
       ageHours: ageHours == null ? null : Math.round(ageHours * 10) / 10,
       windowOpen: ageHours == null ? null : ageHours <= DEFAULT_WINDOW_HOURS,
       kind: 'quote',
+      ...(c.trackId ? { trackId: c.trackId } : {}),
+      ...(c.source ? { source: c.source } : {}),
     };
   });
   return {

@@ -241,12 +241,33 @@ const num = (v) => { const n = parseFloat(String(v ?? '').replace('%', '')); ret
 const round = (n, d) => Math.round(n * 10 ** d) / 10 ** d;
 const lower = (v) => String(v || '').trim().toLowerCase();
 
-// Content tracks. Brain row: `label: Design | share: 50% | topics: a; b | benchmarks: h1; h2`.
+// Content tracks. Brain row: `label: Design | share: 50% | topics: a; b | benchmarks: h1; h2 | lists: 123=Label; 456=Label`.
 // share accepts "50", "50%" or "0.5" (a bare value <= 1 is a fraction); stored 0-1.
 function parseShare(v) {
   const n = num(v);
   if (n === undefined) return undefined;
   return /%/.test(String(v)) || n > 1 ? n / 100 : n;
+}
+// Lists: `id=label; id=label`; a bare id or an x.com/i/lists/<id> URL (no `=label`) is accepted. Split on `;` only.
+function listIdOf(v) {
+  const m = String(v || '').trim().match(/^(?:https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/i\/lists\/)?(\d{1,25})\/?(?:[?#].*)?$/i);
+  return m ? m[1] : null;
+}
+function parseListItems(v) {
+  return String(v || '').split(';').map((s) => s.trim()).filter(Boolean).map((item) => {
+    const i = item.indexOf('=');
+    return i < 0 ? { id: item, label: '' } : { id: item.slice(0, i), label: item.slice(i + 1) };
+  });
+}
+function normalizeListItems(items) {
+  const seen = new Map();
+  for (const raw of Array.isArray(items) ? items : []) {
+    const id = listIdOf(raw && typeof raw === 'object' ? raw.id : raw);
+    if (!id || seen.has(id)) continue;
+    const label = String((raw && typeof raw === 'object' ? raw.label : '') ?? '').replace(/[|;,=\r\n]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40).trim();
+    seen.set(id, { id, label: label || `List ${id}` });
+  }
+  return [...seen.values()].slice(0, 3);
 }
 function parseTrackRows(text) {
   return parseKeyedRows(text, 12).map((f) => ({
@@ -254,6 +275,7 @@ function parseTrackRows(text) {
     share: parseShare(f.share),
     topics: splitItems(f.topics),
     benchmarks: splitItems(f.benchmarks),
+    lists: parseListItems(f.lists),
   }));
 }
 function normalizeTrackRows(rows) {
@@ -265,6 +287,7 @@ function normalizeTrackRows(rows) {
       topics: [...new Set((Array.isArray(r?.topics) ? r.topics : []).map((t) => String(t).trim().slice(0, 40)).filter(Boolean))].slice(0, 12),
       benchmarks: [...new Set((Array.isArray(r?.benchmarks) ? r.benchmarks : [])
         .map((h) => String(h).trim().replace(/^@/, '').toLowerCase()).filter(Boolean))].slice(0, 3),
+      lists: normalizeListItems(r?.lists),
     };
   }).filter((r) => r.label).slice(0, 6);
 }
@@ -273,6 +296,7 @@ const formatTrackRow = (r) => [
   r.share != null && `share: ${round(r.share * 100, 1)}%`,
   r.topics.length && `topics: ${r.topics.join('; ')}`,
   r.benchmarks.length && `benchmarks: ${r.benchmarks.join('; ')}`,
+  r.lists?.length && `lists: ${r.lists.map((l) => `${l.id}=${l.label}`).join('; ')}`,
 ].filter(Boolean).join(' | ');
 
 // Does `a` already reflect every row of `b` (matched by key, compared on the fields both define)?
@@ -285,7 +309,8 @@ function rowsReflect(a, b, keyFn, fieldsEqual) {
 const sameSet = (x, y) => same([...(x || [])].sort(), [...(y || [])].sort());
 const tracksEqual = (a, b) => rowsReflect(a, b, (r) => lower(r.label), (ra, rb) =>
   (ra.share == null || rb.share == null || Math.abs(ra.share - rb.share) < 0.002)
-  && sameSet(ra.topics, rb.topics) && sameSet(ra.benchmarks, rb.benchmarks));
+  && sameSet(ra.topics, rb.topics) && sameSet(ra.benchmarks, rb.benchmarks)
+  && sameSet((ra.lists || []).map((l) => `${l.id}=${l.label}`), (rb.lists || []).map((l) => `${l.id}=${l.label}`)));
 
 // Track targets. Brain row:
 //   `track: Design | postsPerDay: 2 | original-showcase: 30 | original-text: 20 | reply: 30 | quote: 15 | self-quote: 5 | video: 40`
@@ -567,7 +592,7 @@ function mergeBrainTracks(existing, rows, engineIds = []) {
   const adoptEngines = tracks.length === 0;
   for (const row of rows || []) {
     const hit = tracks.find((t) => lower(t.label) === lower(row.label)) || tracks.find((t) => t.id === slugId(row.label));
-    const patch = { label: row.label, topics: row.topics, benchmarks: row.benchmarks, ...(row.share != null ? { share: row.share } : {}) };
+    const patch = { label: row.label, topics: row.topics, benchmarks: row.benchmarks, ...(Array.isArray(row.lists) ? { lists: row.lists } : {}), ...(row.share != null ? { share: row.share } : {}) };
     if (hit) Object.assign(hit, patch);
     else tracks.push({ id: slugId(row.label), engines: adoptEngines && tracks.length === 0 ? [...engineIds] : [], promotions: [], share: 0, ...patch });
   }
