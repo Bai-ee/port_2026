@@ -135,7 +135,7 @@ export default function OklchEditor({
           <strong>Outside the suggested range for this role:</strong>
           {' '}
           {issues.map((a) => `${a.field === 'l' ? 'lightness' : 'chroma'} ${a.value.toFixed(3)} (suggested ${a.min} to ${a.max})`).join(', ')}
-          . Full range hides this.
+          . The “Hide suggested-range hints” switch in Palette turns this off.
         </p>
       ) : null}
       {showAlpha ? (

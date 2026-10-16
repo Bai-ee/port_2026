@@ -383,7 +383,7 @@ export default function ColorPicker({
           <strong>Outside the suggested range for this role:</strong>
           {' '}
           {advisory.map((a) => `${a.field === 'l' ? 'lightness' : 'chroma'} ${a.value.toFixed(3)} (suggested ${a.min} to ${a.max})`).join(', ')}
-          . Turn on Full range to hide this.
+          . Switch on “Hide suggested-range hints” in Palette to hide this.
         </p>
       ) : null}
       <p className="ts-hint">Paste a hex, rgb() or hsl() color anywhere in this panel.</p>

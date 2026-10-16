@@ -338,6 +338,40 @@ Protected paths (`features/email-digest`, `app/api`, `app/briefs`, `brief-design
 
 Unchanged from contract section 13 (X1 email HTML, X2 briefs and published artefacts and `srcDoc` iframes, X3 Invoice documents, X4 Studio artwork, X5 logos and media, X6 black shadows and mimicry colours, X7 `AdminPage` dark console, X8 pinned-light routes, X9 generated bundles, X10 orphans, X11 `--yellow-*`, X12 shared particle presets if S1 is skipped, X13 non-colour mechanics). Engine-level additions: baseline accessibility findings are reported not fixed (D8, section 7.1); `scene` has no `emissive`; `scene-peak` is an approximation.
 
+## 13b. Studio v2 controls
+
+Added 2026-10-15 on `feat/theme-studio-v2`. The engine (`lib/theme/{resolve,color,validate,css,roles,tokens}.js`) is unchanged; every new control is a pure patch over existing definition fields via `lib/theme/edit.js`. With no draft, every page renders as before.
+
+**Inspector order** (display numbers 01 to 10, ids stable): `mode` Preset and mode, `master` Master controls, `combos` Palette combos, `library` My themes, `palette` Accent/supporting/neutrals, `scene`, `advanced`, `accessibility`, `compare`, `export`. Mode, Master and Combos open by default; the rest closed (`lib/theme-studio/ui-state.js`).
+
+**Master knobs** (`MASTER_KNOBS` in `lib/theme-studio/view-models.js`; each has its own Reset, one undo entry per gesture):
+
+| Knob (slider id) | Writes | Baseline |
+|---|---|---|
+| Master hue (`theme-studio-master-hue`) | `master.hue` | 201 |
+| Intensity (`theme-studio-master-intensity`) | `master.intensity` | 1 |
+| Chroma multiplier (`ts-master-chroma-slider`) | `modes.{light,dark}.settings.chromaScale` | 1 |
+| Lightness shift (`ts-master-lightness-slider`) | `modes.{light,dark}.settings.lightnessShift` | 0 |
+| Contrast (`ts-master-contrast-slider`) | `modes.*.settings.contrast` + `base.l` of linked surface/text/dashboard roles | 1 |
+| Dark depth (`ts-master-dark-depth-slider`) | `modes.dark.settings.surfaceDepth` + `base.l` of dark page/surface/raised/inset | 0 |
+| Warmth tint hue (`ts-master-warmth-hue-slider`) | `neutral.hue` | 56 |
+| Warmth strength (`ts-master-warmth-strength-slider`) | `neutral.tintStrength` | 1 |
+| Hue spread (`ts-master-hue-spread-slider`) | `offsets.{accentBright,support1,support2}` (scaled together) | 1 |
+
+Custom and locked roles are never moved by a knob; status colours never follow.
+
+**Colour picker** (`ts-color-picker-popover`, opened from any swatch button, `data-ts-picker-trigger`): 2D L by C pad, hue strip, OKLCH / hex / RGB / HSL fields, paste hex, `EyeDropper` where the browser has it. Editing a linked role makes it custom in the same undo entry; a locked role shows "Unlock to edit". On mobile it is a bottom sheet. Esc closes it and returns focus to the swatch. The Palette section toggle **Hide suggested-range hints** (`ts-full-range-toggle`, ui-state `fullRange`, session only) only hides the amber advisory hints; sliders and the picker always accept the hard bounds (L 0 to 1, C 0 to 0.4, H wraps).
+
+**Harmony builder** (`lib/theme-studio/harmony.js`, pure, in the Combos section, ids `ts-harmony-*`): complementary, split complementary, triad, analogous, monochrome, seeded from the master hue or a typed seed hue. **Generate** and **Shuffle** change master hue, offsets and neutral tint only (locked and custom roles untouched), one undo each. Shuffle is a pure function of its seed: the **Seed** field (`ts-harmony-shuffle-seed`) holds the seed the next Shuffle will use; the last used seed is shown, so a combo can be reproduced by typing it back.
+
+**Exact-colour combos** (`pins` on a preset in `lib/theme-studio/palette-presets.js`; `applyPalettePreset` in `lib/theme/edit.js` sets each pinned role custom, locked roles skipped): **Happy Hues 14** (happyhues.co/palettes/14) pins the light palette to `#fffffe` page/cards, `#272343` headings/overlay/on-accent/links/focus, `#2d334a` body text, `#ffd803` accent, `#e3f6f5` inset/chrome/support-2, `#bae8e8` support-1; dark follows its parametric patch (hue 96). The Studio applies combos with `applyCombo`, which first releases another exact combo's still-unchanged pins, so switching combos never leaves its hexes behind; roles the user changed or locked stay.
+
+**My themes library** (`lib/theme-studio/library.js`, pure with injected storage; `sections/LibrarySection.jsx`): save a named snapshot of the draft, load (one undo entry, confirm if the draft is unsaved), rename, duplicate, star, delete (confirm), export all / import all (merge or replace). Capped at 50; when full the oldest unstarred entry is evicted. Storage key `theme-studio:library:v1` (`STORAGE_KEYS.library`), browser-local only. The library is one shared store per page (`useThemeLibrary` / `useLibraryVersion` in `StudioContext.jsx`), so any write re-renders every list.
+
+**Ids to know:** `ts-master-v2-section`, `ts-master-<knob>-reset`, `ts-color-picker-popover`, `ts-full-range-toggle`, `ts-harmony-builder`, `ts-harmony-generate`, `ts-harmony-shuffle`, `ts-harmony-shuffle-seed`, `ts-library-section`, `ts-library-name`, `ts-library-save`, `ts-library-list`, `ts-library-item-<id>` (+ `-load`, `-delete`).
+
+**Tests:** unit in `lib/theme-studio/__tests__/{master-knobs,color-fields,color-picker,harmony,library,ui-state,components-static}.test.js`; e2e (`scripts/theme/e2e-theme.mjs`) adds `studio-master-v2-contrast-changes-text` and `studio-library-save-load-roundtrip`.
+
 ## 14. Tests
 
 `node --test 'lib/theme/__tests__/*.test.js'` (also part of `npm test`). Files: `color-math`, `gamut`, `contrast`, `resolve`, `hue-boundaries`, `neutrals`, `baseline-parity`, `baseline-report`, `validate`, `migrate`, `css-export`, `roundtrip`, `scene-resolve`, `edit`, `report`, `guide`, `tokens-manifest`, `bootstrap-source`, `generated-drift`, `scan-literals`, `fuzz`, `docs-coverage`.

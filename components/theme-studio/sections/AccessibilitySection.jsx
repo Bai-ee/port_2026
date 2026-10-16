@@ -30,7 +30,7 @@ export default function AccessibilitySection() {
   const summaryText = total ? `${total.failRequired} required to fix` : 'Checking';
 
   return (
-    <Section id="accessibility" num="06" title="Accessibility" summary={summaryText}>
+    <Section id="accessibility" num="08" title="Accessibility" summary={summaryText}>
       <p className="ts-p">{CONTRAST_STATEMENT}</p>
       <div className="ts-field">
         <span className="ts-label">Palette</span>

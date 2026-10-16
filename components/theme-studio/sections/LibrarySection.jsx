@@ -6,7 +6,7 @@ import Banner from '../controls/Banner.jsx';
 import ConfirmButton from '../controls/ConfirmButton.jsx';
 import Icon from '../Icon.jsx';
 import {
-  useStudio, useDraft, useStoreSelector, useThemeLibrary,
+  useStudio, useDraft, useStoreSelector, useThemeLibrary, useLibraryVersion,
 } from '../StudioContext.jsx';
 import { slugify } from '../../../lib/theme-studio/io.js';
 
@@ -109,11 +109,11 @@ export default function LibrarySection() {
   const draft = useDraft();
   const dirty = useStoreSelector(store, selDirty);
   const lib = useThemeLibrary();
-  const [version, setVersion] = useState(0);
+  const version = useLibraryVersion();
   const [name, setName] = useState('');
   const [note, setNote] = useState('');
   const [mergeImport, setMergeImport] = useState(true);
-  const bump = () => setVersion((v) => v + 1);
+  const bump = () => {}; // writes notify the shared library store
 
   // `version` is the re-read trigger after every library write.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -148,7 +148,7 @@ export default function LibrarySection() {
   };
 
   return (
-    <Section id="library" num="•" title="My themes" summary={entries.length ? `${entries.length} saved` : 'None yet'}>
+    <Section id="library" num="04" title="My themes" summary={entries.length ? `${entries.length} saved` : 'None yet'}>
       <div id="ts-library-section" className="ts-stack" data-section="library">
         <form className="ts-card" id="ts-library-save-form" onSubmit={save}>
           <label className="ts-label" htmlFor="ts-library-name">Save current as…</label>

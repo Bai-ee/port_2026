@@ -182,7 +182,7 @@ function RoleEditor({
           <strong>Outside the suggested range for this role:</strong>
           {' '}
           {advisory.map((a) => `${a.field === 'l' ? 'lightness' : 'chroma'} ${a.value.toFixed(3)} (suggested ${a.min} to ${a.max})`).join(', ')}
-          . Full range hides this.
+          . The “Hide suggested-range hints” switch in Palette turns this off.
         </p>
       ) : null}
       {resolvedOther ? (
@@ -214,11 +214,16 @@ export default function RoleRow({
 }) {
   const btn = useRef(null);
   const opener = useRef(null);
+  // Anchor/focus-return element: the swatch that opened the picker, or the row head when
+  // the picker was opened from the Palette summary (the row did not exist yet).
+  const openerProxy = useRef({ get current() { return opener.current || btn.current; } });
   const switched = useRef(false);
   const { dispatch, ui, edit, endEdit, announce } = useStudio();
   const id = row.id;
   const roleState = def.modes[mode].roles[id];
   const pickerOpen = isColorPickerOpen(ui, id, mode);
+  const pickerOpenRef = useRef(pickerOpen);
+  pickerOpenRef.current = pickerOpen;
   const openPicker = (el) => {
     opener.current = el || btn.current;
     switched.current = false;
@@ -235,7 +240,7 @@ export default function RoleRow({
   useEffect(() => {
     if (autoFocus && btn.current) {
       btn.current.scrollIntoView({ block: 'center' });
-      btn.current.focus();
+      if (!pickerOpenRef.current) btn.current.focus();
       dispatch({ type: 'role/focused' });
     }
   }, [autoFocus, dispatch]);
@@ -291,7 +296,7 @@ export default function RoleRow({
           willSwitch={roleKind(roleState) === 'linked'}
           hueDisabled={!roleActions(roleState, id).hueEditable}
           hueNote="Hue is fixed so this color keeps its meaning. Adjust lightness and chroma."
-          openerRef={opener}
+          openerRef={openerProxy.current}
           onPatch={(patch, kind) => {
             noteSwitch();
             edit((d) => pickerEditOklch(d, mode, id, patch, cur), { kind, label: `${id} color`, coalesceKey: `${id}-oklch` });

@@ -92,7 +92,34 @@ export function useAnnouncer() {
 }
 
 // --- My Themes library (P4) -------------------------------------------------
+// One shared library per page. Every write bumps a version so every subscriber
+// (the Library section today, anything else later) re-reads the list.
+let sharedLibrary = null;
+let libraryVersion = 0;
+const libraryListeners = new Set();
+const notifyLibrary = () => { libraryVersion += 1; libraryListeners.forEach((fn) => fn()); };
+const WRITES = ['save', 'rename', 'duplicate', 'star', 'remove', 'importAll'];
+
+function getSharedLibrary() {
+  if (!sharedLibrary) {
+    const raw = createLibrary({ storage: createSafeStorage(localSource) });
+    sharedLibrary = Object.create(raw);
+    for (const k of WRITES) {
+      if (typeof raw[k] === 'function') sharedLibrary[k] = (...a) => { const r = raw[k](...a); notifyLibrary(); return r; };
+    }
+    sharedLibrary.cap = raw.cap;
+  }
+  return sharedLibrary;
+}
+const subscribeLibrary = (fn) => { libraryListeners.add(fn); return () => libraryListeners.delete(fn); };
+const libraryVersionNow = () => libraryVersion;
+
 /** A "My Themes" library bound to this browser's localStorage (failure-tolerant). */
 export function useThemeLibrary() {
-  return useMemo(() => createLibrary({ storage: createSafeStorage(localSource) }), []);
+  return getSharedLibrary();
+}
+
+/** Changes whenever the shared library is written to; use it to re-read `list()`. */
+export function useLibraryVersion() {
+  return useSyncExternalStore(subscribeLibrary, libraryVersionNow, libraryVersionNow);
 }

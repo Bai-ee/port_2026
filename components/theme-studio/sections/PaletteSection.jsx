@@ -42,10 +42,15 @@ function GroupBlock({ group, def, mode, resolved }) {
               <button
                 type="button"
                 className="ts-role-head"
-                onClick={() => dispatch({ type: 'role/reveal', id, group: rd.group })}
-                aria-label={`${r.css}, ${KIND_LABEL[kind]}, ${r.hex}. Open in Advanced`}
+                id={`ts-palette-role-${id}-head`}
+                onClick={(e) => {
+                  // The swatch opens the color picker on the role (in Advanced); the rest of the row just reveals it.
+                  dispatch({ type: 'role/reveal', id, group: rd.group });
+                  if (e.target instanceof Element && e.target.closest('.ts-role-swatches')) dispatch({ type: 'colorPicker/open', roleId: id, mode });
+                }}
+                aria-label={`${r.css}, ${KIND_LABEL[kind]}, ${r.hex}. Open in Advanced. Click the swatch to pick a color`}
               >
-                <span className="ts-role-swatches" aria-hidden="true"><Swatch color={r.value} /></span>
+                <span className="ts-role-swatches" aria-hidden="true" data-ts-picker-trigger="true"><Swatch color={r.value} /></span>
                 <span className="ts-role-main">
                   <span className="ts-role-name">{r.css}</span>
                   <span className="ts-role-use">{r.hex}</span>
@@ -84,7 +89,7 @@ export default function PaletteSection() {
   const settings = draft.modes[mode].settings;
 
   return (
-    <Section id="palette" num="03" title="Accent, supporting and neutrals" summary={`${MODE_LABEL[mode]} palette`}>
+    <Section id="palette" num="05" title="Accent, supporting and neutrals" summary={`${MODE_LABEL[mode]} palette`}>
       <p className="ts-p">
         Showing the
         {' '}
@@ -96,12 +101,12 @@ export default function PaletteSection() {
       <div id="ts-full-range-row">
         <Toggle
           id="ts-full-range-toggle"
-          label="Full range"
-          description="Lets color sliders and the picker use the whole range (lightness 0 to 1, chroma 0 to 0.4, hue 0 to 360) and hides suggested-range warnings. Off by default."
+          label="Hide suggested-range hints"
+          description="Hides the amber suggested-range hints on roles and in the picker. Sliders already accept the full range; nothing is clamped. Off by default."
           checked={ui.fullRange}
           onChange={(v) => {
             dispatch({ type: 'fullRange/set', value: v });
-            announce(v ? 'Full range on. Suggested-range warnings are hidden.' : 'Full range off. Suggested-range warnings are shown.');
+            announce(v ? 'Suggested-range hints hidden.' : 'Suggested-range hints shown.');
           }}
         />
       </div>
