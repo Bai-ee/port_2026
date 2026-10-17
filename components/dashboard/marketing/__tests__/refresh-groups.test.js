@@ -40,3 +40,17 @@ test('paidGroupsFor stays backward compatible and attaches estimates only with c
   assert.equal(paidGroupsFor(sel)[0].estimate, undefined);
   assert.equal(paidGroupsFor(sel, {})[0].estimate.calls, 3);
 });
+
+test('groupFreshness: local memory, server asOf (newer wins), stale, none', async () => {
+  const { groupFreshness } = await import('../refresh-groups.js');
+  const now = Date.parse('2026-10-17T12:00:00Z');
+  const none = groupFreshness('analysis', { now });
+  assert.deepEqual(none, { asOf: null, ageHours: null, stale: true, source: null });
+  const local = groupFreshness('analysis', { now, lastRefreshed: { analysis: '2026-10-17T09:00:00Z' } });
+  assert.equal(local.ageHours, 3); assert.equal(local.stale, false); assert.equal(local.source, 'local');
+  const server = groupFreshness('analysis', { now, lastRefreshed: { analysis: '2026-10-17T09:00:00Z' }, serverAsOf: { analysis: '2026-10-17T11:00:00Z' } });
+  assert.equal(server.source, 'server'); assert.equal(server.ageHours, 1);
+  const old = groupFreshness('analysis', { now, serverAsOf: { analysis: '2026-10-15T12:00:00Z' } });
+  assert.equal(old.stale, true);
+  assert.equal(groupFreshness('analysis', { now, serverAsOf: { analysis: '2026-10-16T12:00:00Z' }, staleAfterHours: 48 }).stale, false);
+});
