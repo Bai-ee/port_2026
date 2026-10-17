@@ -99,6 +99,9 @@ export function classifyResult(res) {
   return { kind: 'ok' };
 }
 
+/** Badge text for a media task row. */
+export const TASK_BADGE = { film: 'To film', 'find-media': 'Find media' };
+
 /** Proposal window in CT wall time, and the minimum lead before a proposed slot. */
 export const PROPOSAL_WINDOW = { startMin: 9 * 60, endMin: 21 * 60, stepMin: 30, leadMin: 30 };
 
@@ -195,8 +198,9 @@ function toRow(p, colors = null) {
  * @param {object} [input.config]  engine config (defaults to DEFAULT_ENGINE_CONFIG)
  * @param {number} [input.weekStartsOn] 0 = Sunday (default), 1 = Monday
  * @param {object[]} [input.buckets] Content Center buckets (listBuckets rows); given => rows carry bucketId/bucketColor and a legend is returned
+ * @param {object[]} [input.tasks] content_tasks rows ({id,kind,title,dueOn,status,postId,packageId}); each lands on its dueOn day as a task row ("To film")
  */
-export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_ENGINE_CONFIG, weekStartsOn = 0, buckets = null } = {}) {
+export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_ENGINE_CONFIG, weekStartsOn = 0, buckets = null, tasks = [] } = {}) {
   const colors = Array.isArray(buckets) ? bucketColorMap(buckets) : null;
   if (!Number.isFinite(now)) throw new Error('now (epoch ms) is required');
   const dates = monthGridDates(month, { weekStartsOn });
@@ -288,7 +292,13 @@ export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_EN
 
   // ── Grid ─────────────────────────────────────────────────────────────────
   const emptyCounts = () => ({ pending: 0, awaiting: 0, held: 0, approved: 0, scheduled: 0, manual: 0, posted: 0, failed: 0 });
-  const totals = { ...emptyCounts(), proposed: 0, review: 0, needsMemory: 0 };
+  const totals = { ...emptyCounts(), proposed: 0, review: 0, needsMemory: 0, tasksOpen: 0 };
+  const tasksByDay = new Map();
+  for (const t of Array.isArray(tasks) ? tasks : []) {
+    if (!t || !DAY_RE.test(String(t.dueOn ?? ''))) continue;
+    if (!tasksByDay.has(t.dueOn)) tasksByDay.set(t.dueOn, []);
+    tasksByDay.get(t.dueOn).push({ id: t.id, kind: t.kind === 'find-media' ? 'find-media' : 'film', badge: TASK_BADGE[t.kind] || TASK_BADGE.film, title: excerpt(t.title, 80), status: t.status === 'done' ? 'done' : 'open', dueOn: t.dueOn, postId: t.postId ?? null, packageId: t.packageId ?? null });
+  }
   const reviewQueue = [];
 
   const days = dates.map((date) => {
@@ -305,6 +315,8 @@ export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_EN
         if (r.state === 'pending' || r.state === 'awaiting' || r.state === 'held') reviewQueue.push(r.id);
       }
     }
+    const dayTasks = (tasksByDay.get(date) || []).slice().sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    if (inMonth) totals.tasksOpen += dayTasks.filter((t) => t.status === 'open').length;
     const live = rows.filter((r) => r.state !== 'failed' && !r.proposed);
     const flags = [];
     for (let i = 1; i < live.length; i += 1) {
@@ -324,6 +336,7 @@ export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_EN
       counts,
       flags,
       posts: rows.map(({ ms, ...r }) => r),
+      tasks: dayTasks,
     };
   });
 

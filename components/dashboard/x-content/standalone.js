@@ -124,13 +124,19 @@ export function useCalendarProps(call, clientId) {
   }, [call]);
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [clientId]);
   const actions = useCalendarActions(standaloneCallSocial, () => load());
+  const [taskBusyId, setTaskBusyId] = useState(null);
+  // "Film this" task done/open toggle (content-task-update). Reloads the month on success; a failure shows as the panel error.
+  const onTaskToggle = useCallback(async (task, status) => {
+    setTaskBusyId(task.id);
+    try { await call('content-task-update', { taskId: task.id, status }); await load(); } catch (err) { setError(err.message || 'Could not update the task.'); } finally { setTaskBusyId(null); }
+  }, [call, load]);
   return {
-    calendar, loading, error, busyId: actions.busyId,
+    calendar, loading, error, busyId: actions.busyId || taskBusyId,
     onRefresh: () => load(),
     onShiftMonth: (d) => { const next = shiftMonth(monthRef.current, d); setMonth(next); load(next); },
     onToday: () => { const now = todayCT().slice(0, 7); setMonth(now); load(now); },
     onApprove: actions.onApprove, onReject: actions.onReject, onSave: actions.onSave,
-    onUnschedule: actions.onUnschedule, onReconcile: actions.onReconcile, onScore: actions.onScore,
+    onUnschedule: actions.onUnschedule, onReconcile: actions.onReconcile, onScore: actions.onScore, onTaskToggle,
   };
 }
 

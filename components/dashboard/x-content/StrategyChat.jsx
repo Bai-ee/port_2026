@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUp, ArrowUpRight, BookOpen, Check, FileText, Plus, Shield, Sparkles } from 'lucide-react';
 import {
+  memorySuggestModel,
   proposalKindLabel, proposalPayloadPreview, proposalStatusText, chatErrorText, costFooterText, plainChatText,
   historyDiffSummary,
 } from '../../../features/x-strategy/ui-model.js';
@@ -17,6 +18,7 @@ import ActionProposalCard from './ActionProposalCard.jsx';
 import UndoChip from './UndoChip.jsx';
 import AgentPermissionsPanel from './AgentPermissionsPanel.jsx';
 import { messageUndoChips } from '../../../features/x-strategy/action-ui-model.js';
+import MemorySuggestRows from './MemorySuggestRows.jsx';
 
 // StrategyChat - the agent chat in the Strategy tab's right column.
 //
@@ -107,7 +109,7 @@ export function formatDayTime(at) {
 
 const TONE_BY_STATUS = { pending: 'amber', ok: 'green', muted: 'grey', error: 'red' };
 
-function ProposalCard({ call, proposal, currentPlan, history, planVersion, deciding, onDecide, useModel, onUseModel, onViewPlan, onUndo, undoNote, docSections, onViewDoc }) {
+function ProposalCard({ call, proposal, currentPlan, history, planVersion, deciding, onDecide, useModel, onUseModel, memoryState, onMemoryState, onViewPlan, onUndo, undoNote, docSections, onViewDoc }) {
   const isDocEdit = proposal.kind === 'strategy-doc-edit';
   const id = proposal.id;
   // Cards made by an external assistant over MCP live in `t_mcp_<yyyymmdd>` threads (createProposalInThread).
@@ -171,6 +173,7 @@ function ProposalCard({ call, proposal, currentPlan, history, planVersion, decid
               {preview.map((line, i) => <li key={i}>{line}</li>)}
             </ul>
           ) : null}
+          {pending && proposal.kind === 'memory-suggest' ? <MemorySuggestRows proposal={proposal} state={memoryState} disabled={deciding} onChange={(next) => onMemoryState(id, next)} /> : null}
           {proposal.kind === 'item-media' && Array.isArray(proposal.payload?.rows) ? (
             <ul id={`x-strategy-proposal-item-media-thumbs-${id}`} data-section="chat-proposal-item-media" style={{ ...S.small, listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 6 }}>
               {proposal.payload.rows.slice(0, 12).map((r) => (
@@ -289,6 +292,7 @@ export default function StrategyChat({
   const [decideErrors, setDecideErrors] = useState({}); // proposalId -> text
   const [useModelIds, setUseModelIds] = useState({});   // proposalId -> owner ticked 'use the model' (regenerate-today)
   const [showPermissions, setShowPermissions] = useState(false);
+  const [memoryStates, setMemoryStates] = useState({});   // proposalId -> {edits, skip} (memory-suggest card, sent with decide)
 
   const mounted = useRef(true);
   const listRef = useRef(null);
@@ -416,7 +420,8 @@ export default function StrategyChat({
     setDecideErrors((e) => ({ ...e, [proposal.id]: '' }));
     try {
       const options = decision === 'confirm' && proposal.kind === 'regenerate-today' && useModelIds[proposal.id] ? { useModel: true } : undefined;
-      const res = await call('strategy-proposal-decide', { clientId, threadId: proposal.threadId || threadId, proposalId: proposal.id, decision, ...(options ? { options } : {}), ...(extra?.typed ? { typed: extra.typed } : {}) });
+      const memory = decision === 'confirm' && proposal.kind === 'memory-suggest' ? memorySuggestModel(proposal, memoryStates[proposal.id]) : null;
+      const res = await call('strategy-proposal-decide', { clientId, threadId: proposal.threadId || threadId, proposalId: proposal.id, decision, ...(options ? { options } : {}), ...(extra?.typed ? { typed: extra.typed } : {}), ...(memory ? { edits: memory.edits, skip: memory.skip } : {}) });
       if (!mounted.current || clientIdRef.current !== startedFor) return;
       const next = res.proposal || { ...proposal, status: decision === 'confirm' ? 'confirmed' : 'rejected' };
       setProposals((p) => ({ ...p, [proposal.id]: next }));
@@ -436,7 +441,7 @@ export default function StrategyChat({
     } finally {
       if (mounted.current) setDecidingId('');
     }
-  }, [decidingId, call, clientId, threadId, useModelIds, onPlanChanged, onRefreshed, onDocChanged]);
+  }, [decidingId, call, clientId, threadId, useModelIds, memoryStates, onPlanChanged, onRefreshed, onDocChanged]);
 
   const newThread = () => {
     if (sending) return;
@@ -550,6 +555,8 @@ export default function StrategyChat({
                         deciding={decidingId === pid}
                         onDecide={decide}
                         useModel={useModelIds[pid]}
+                        memoryState={memoryStates[pid]}
+                        onMemoryState={(proposalId, next) => setMemoryStates((m) => ({ ...m, [proposalId]: next }))}
                         onUseModel={(id, on) => setUseModelIds((u) => ({ ...u, [id]: on }))}
                         onViewPlan={onViewPlan}
                         onUndo={onUndo}

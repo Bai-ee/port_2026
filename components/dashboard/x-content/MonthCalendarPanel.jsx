@@ -120,6 +120,22 @@ function PostRow({ post, busy, onOpen, onApprove, onReject }) {
   );
 }
 
+// A "film this" reminder (content_tasks) on its due day. Presentation only: the toggle hands back to the host.
+function TaskRow({ task, busy, onToggle }) {
+  const done = task.status === 'done';
+  return (
+    <li id={`x-content-month-task-${task.id}`} className={`xce-mc-task${done ? ' xce-mc-task-done' : ''}`}>
+      <span id={`x-content-month-task-badge-${task.id}`} className="xce-mc-task-badge">{task.badge}</span>
+      <span className="xce-mc-task-title">{task.title}</span>
+      {onToggle ? (
+        <button type="button" id={`x-content-month-task-toggle-${task.id}`} className="xce-mc-text-btn" disabled={busy} aria-pressed={done} onClick={() => onToggle(task, done ? 'open' : 'done')}>
+          {done ? 'Reopen' : 'Done'}
+        </button>
+      ) : null}
+    </li>
+  );
+}
+
 // Sheet portal target: the Content Center card root when present, else the nearest .xce-scope, else body (standalone host).
 function sheetHost() {
   return document.getElementById('x-content-card') || document.querySelector('.xce-scope') || document.body;
@@ -140,6 +156,7 @@ function MonthCalendarPanelView({
   onUnschedule,
   onScore,
   onReconcile,
+  onTaskToggle,
 }) {
   const [view, setView] = useState('month');
   const [pendingOnly, setPendingOnly] = useState(false);
@@ -190,7 +207,7 @@ function MonthCalendarPanelView({
   };
   const quickApprove = (post) => onApprove(post, { content: post.content, scheduledAt: post.proposedAt || post.scheduledAt, expectedRevision: post.revision ?? null });
 
-  const agendaDays = days.filter((d) => d.inMonth && visible(d.posts).length);
+  const agendaDays = days.filter((d) => d.inMonth && (visible(d.posts).length || d.tasks?.length));
 
   return (
     <div id="x-content-month-calendar-panel" className="xce-panel xce-mc">
@@ -202,6 +219,7 @@ function MonthCalendarPanelView({
             {totals.awaiting ? <span><strong>{totals.awaiting}</strong> awaiting approval</span> : null}
             {totals.held ? <span className="xce-mc-summary-held"><strong>{totals.held}</strong> held for review</span> : null}
             {totals.review ? <span id="x-content-month-summary-review"><strong>{totals.review}</strong> review day{totals.review === 1 ? '' : 's'}{totals.needsMemory ? ` (${totals.needsMemory} need your memory)` : ''}</span> : null}
+            {totals.tasksOpen ? <span id="x-content-month-summary-tasks"><strong>{totals.tasksOpen}</strong> to film</span> : null}
             <span><strong>{totals.scheduled ?? 0}</strong> scheduled</span>
             <span><strong>{totals.posted ?? 0}</strong> posted</span>
             {totals.failed ? <span className="xce-mc-summary-failed"><strong>{totals.failed}</strong> failed</span> : null}
@@ -331,13 +349,18 @@ function MonthCalendarPanelView({
                 {selectedDay.flags.map((f, i) => <li key={`${f.kind}-${i}`}>{f.message}</li>)}
               </ul>
             ) : null}
+            {selectedDay?.tasks?.length ? (
+              <ul id="x-content-month-selected-day-tasks" className="xce-mc-rows">
+                {selectedDay.tasks.map((t) => <TaskRow key={t.id} task={t} busy={busyId === t.id} onToggle={onTaskToggle} />)}
+              </ul>
+            ) : null}
             {selectedDay && visible(selectedDay.posts).length ? (
               <ul className="xce-mc-rows">
                 {visible(selectedDay.posts).map((p) => (
                   <PostRow key={p.id} post={p} busy={busyId === p.id} onOpen={setOpenId} onApprove={quickApprove} onReject={onReject} />
                 ))}
               </ul>
-            ) : (
+            ) : selectedDay?.tasks?.length ? null : (
               <p className="xce-mc-empty">{pendingOnly ? 'Nothing pending on this day.' : 'Nothing on this day.'}</p>
             )}
           </section>
@@ -350,6 +373,7 @@ function MonthCalendarPanelView({
             <div key={d.date} id={`x-content-month-agenda-day-${d.date}`} className={`xce-mc-agenda-day${d.isToday ? ' xce-mc-agenda-today' : ''}`}>
               <p className="xce-mc-kicker">{dayHeading(d.date)}{d.isToday ? ' · today' : ''}</p>
               <ul className="xce-mc-rows">
+                {(d.tasks || []).map((t) => <TaskRow key={t.id} task={t} busy={busyId === t.id} onToggle={onTaskToggle} />)}
                 {visible(d.posts).map((p) => (
                   <PostRow key={p.id} post={p} busy={busyId === p.id} onOpen={setOpenId} onApprove={quickApprove} onReject={onReject} />
                 ))}

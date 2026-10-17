@@ -13,6 +13,8 @@ import { StrategyDocError } from '../strategy-doc-store.js';
 import { normalizeBatchSpec } from '../../x-content-inventory/calendar-batch.js';
 import { normalizeLinks } from '../../x-content-inventory/item-media.js';
 import { normalizeActionPayload, requiredTypedText } from './action-runtime.js';
+import { MAX_MEMORY_SUGGESTIONS, normalizeMemoryLine, applyMemoryLine } from '../../x-content-inventory/memory-suggest.js';
+import { MAX_MEDIA_TASKS, TASK_KINDS } from '../../x-content-inventory/content-tasks.js';
 
 export const SUMMARY_MAX = 200;
 export const RATIONALE_MAX = 800;
@@ -230,6 +232,49 @@ export function validateProposal(raw, { currentPlan, registry } = {}) {
       norm = { links: l.links, ...(Array.isArray(payload.rows) ? { rows: clone(payload.rows).slice(0, l.links.length) } : {}) };
       break;
     }
+    // Suggested memory lines for drafts that still carry a placeholder. `rows` = propose-time snapshot (the line is a
+    // SUGGESTION: the owner edits or skips each row on the card; the decide body carries {edits, skip}).
+    case 'memory-suggest': {
+      const rows = Array.isArray(payload.rows) ? payload.rows : [];
+      if (!rows.length) { errors.push('rows must be a non-empty list'); break; }
+      if (rows.length > MAX_MEMORY_SUGGESTIONS) { errors.push(`at most ${MAX_MEMORY_SUGGESTIONS} posts`); break; }
+      const seen = new Set();
+      const out = [];
+      for (const r of rows) {
+        const postId = isPlain(r) ? str(r.postId, 128) : '';
+        if (!ID_RE.test(postId)) { errors.push('rows contains an invalid postId'); break; }
+        if (seen.has(postId)) continue;
+        seen.add(postId);
+        const line = normalizeMemoryLine(r.suggestion);
+        if (!line.ok) { errors.push(`${postId}: ${line.error}`); break; }
+        out.push({ postId, expectedUpdatedAt: str(r.expectedUpdatedAt, 60), title: str(r.title, 90) || null, currentText: str(r.currentText, POST_TEXT_MAX * 2), suggestion: line.line, source: r.source === 'agent' ? 'agent' : 'facts' });
+      }
+      if (errors.length) break;
+      norm = { rows: out };
+      break;
+    }
+    // "Film this" reminders (content_tasks). Never touches a post or an item.
+    case 'media-tasks': {
+      const rows = Array.isArray(payload.rows) ? payload.rows : [];
+      if (!rows.length) { errors.push('rows must be a non-empty list'); break; }
+      if (rows.length > MAX_MEDIA_TASKS) { errors.push(`at most ${MAX_MEDIA_TASKS} tasks`); break; }
+      const seen = new Set();
+      const out = [];
+      for (const r of rows) {
+        const postId = isPlain(r) ? str(r.postId, 128) : '';
+        if (!ID_RE.test(postId)) { errors.push('rows contains an invalid postId'); break; }
+        if (seen.has(postId)) continue;
+        seen.add(postId);
+        const dueOn = str(r.dueOn, 10);
+        if (!DAY_RE.test(dueOn) || Number.isNaN(Date.parse(`${dueOn}T00:00:00Z`))) { errors.push(`${postId}: dueOn must be a YYYY-MM-DD date`); break; }
+        const kind = TASK_KINDS.includes(r.kind) ? r.kind : 'film';
+        const reviewOn = DAY_RE.test(str(r.reviewOn, 10)) ? str(r.reviewOn, 10) : null;
+        out.push({ postId, packageId: str(r.packageId, 128) || null, title: str(r.title, 90) || postId, kind, dueOn, reviewOn, ...(r.existing === true ? { existing: true } : {}) });
+      }
+      if (errors.length) break;
+      norm = { rows: out };
+      break;
+    }
     // Multi-day fill of the calendar (x-content-inventory/daily-fill.js): DRAFTS only. `preview` = propose-time counts + sample rows, display only.
     case 'daily-fill': {
       const from = typeof payload.from === 'string' ? payload.from.trim() : '';
@@ -371,10 +416,11 @@ export function compactResult(res) {
  * @param {(clientId:string, postId:string, patch:{reviewOn:string})=>Promise<boolean>} [deps.placeDraft]  sets an unscheduled draft's review day (queue-bulk set-review-date)
  * @param {(clientId:string, bucket:object)=>Promise<object>} [deps.upsertBucket]  bucket-store upsertBucket
  * @param {(clientId:string, bucketId:string, o:{reassignTo?:string})=>Promise<object>} [deps.deleteBucket]  bucket-store deleteBucket
+ * @param {(a:{clientId:string, rows:object[], by:string, proposalId?:string})=>Promise<{created:number,existing:number}>} [deps.runMediaTasks]  content_tasks writer (media-tasks)
  * @param {(clientId:string)=>Promise<object>} [deps.syncTracks]  re-sync content tracks after a bucket change
  * @param {(a:{clientId:string, kind:string, params:object, by:string, auth:object, context:object})=>Promise<object>} [deps.runPaidSync]  features/mcp/paid-syncs.js executor (daily cap enforced inside)
  */
-export function buildExecutors({ planStore, runDailyAction, runUpdateItemFacets, saveXGrowthProfile, refreshHandles, docStore, docBase, readPost, editPost, approvePost, approveAndSchedulePost, runPaidSync, runCalendarBatch, runItemMedia, runDailyFill, rejectPost, placeDraft, upsertBucket, deleteBucket, syncTracks, runAction, clock = Date.now }) {
+export function buildExecutors({ planStore, runDailyAction, runUpdateItemFacets, saveXGrowthProfile, refreshHandles, docStore, docBase, readPost, editPost, approvePost, approveAndSchedulePost, runPaidSync, runCalendarBatch, runItemMedia, runDailyFill, rejectPost, placeDraft, upsertBucket, deleteBucket, syncTracks, runAction, runMediaTasks, clock = Date.now }) {
   const need = (fn, name) => { if (typeof fn !== 'function') throw new ProposalExecutionError(`${name} is not available on this deployment`); return fn; };
   const social = () => import('../../social-posting/twitter-service.js');
   const readOwnedPost = async (clientId, payload) => {
@@ -524,6 +570,42 @@ export function buildExecutors({ planStore, runDailyAction, runUpdateItemFacets,
       if (res && res.ok === false) throw new ProposalExecutionError(res.error || 'daily fill refused');
       const failed = Array.isArray(res?.failed) ? res.failed.length : Number(res?.failed) || 0;
       return compactResult({ created: res?.created ?? 0, existing: res?.existing ?? 0, placed: res?.placed ?? 0, failed, counts: res?.counts, firstDate: res?.firstDate, lastDate: res?.lastDate });
+    },
+    // Replaces the placeholder in each non-skipped draft with the owner-approved line (edits[postId] wins over the
+    // suggestion). Each post goes through the existing update path, revision-checked; one stale/failed post fails alone.
+    // Never approves, schedules or publishes. `options` = {edits, skip}, sanitized by the decide route.
+    async 'memory-suggest'({ clientId, payload, options }) {
+      const read = need(readPost, 'post read');
+      const edit = need(editPost, 'post edit');
+      const skip = new Set(Array.isArray(options?.skip) ? options.skip : []);
+      const edits = isPlain(options?.edits) ? options.edits : {};
+      const results = [];
+      let skipped = 0;
+      for (const row of payload.rows) {
+        if (skip.has(row.postId)) { skipped += 1; continue; }
+        try {
+          const post = await read(clientId, row.postId);
+          if (!post || (post.clientId && post.clientId !== clientId)) throw Object.assign(new Error('post not found for this client'), { code: 'not-found' });
+          if (post.status !== 'draft') throw Object.assign(new Error(`post is ${post.status}; only a draft can take a memory line`), { code: 'not-draft' });
+          if (row.expectedUpdatedAt && (post.updatedAt || '') !== row.expectedUpdatedAt) throw Object.assign(new Error('post changed since this was proposed'), { code: 'stale' });
+          const applied = applyMemoryLine(post.content ?? post.text, typeof edits[row.postId] === 'string' ? edits[row.postId] : row.suggestion);
+          if (!applied.ok) throw Object.assign(new Error(applied.error), { code: 'cannot-apply' });
+          // needsStory is cleared explicitly (updateSocialPost only derives it for calendar-batch / daily-fill drafts).
+          await edit({ clientId, postId: row.postId, content: applied.content, needsStory: false, ...(Number.isInteger(post.revision) ? { expectedRevision: post.revision } : {}) });
+          results.push({ postId: row.postId, ok: true });
+        } catch (err) {
+          results.push({ postId: row.postId, ok: false, error: err?.code === 'revision-conflict' ? 'stale' : err?.code || 'failed', reason: err?.code === 'revision-conflict' ? 'changed since this was proposed' : String(err?.message || err).slice(0, 160) });
+        }
+      }
+      const updated = results.filter((r) => r.ok).length;
+      const failedRows = results.filter((r) => !r.ok);
+      if (!updated && failedRows.length) throw new ProposalExecutionError('no draft could be updated', { results: failedRows.slice(0, 10) });
+      return compactResult({ updated, skipped, failed: failedRows.length, results: failedRows.slice(0, 10) });
+    },
+    // Writes content_tasks reminders only; idempotent per post (re-runs report `existing`).
+    async 'media-tasks'({ clientId, payload, by, proposalId }) {
+      const res = await need(runMediaTasks, 'media tasks')({ clientId, rows: payload.rows, by, proposalId });
+      return compactResult({ created: res?.created ?? 0, existing: res?.existing ?? 0 });
     },
     // Runs NOTHING here. The dashboard (StrategyChat) sees clientAction and fires the Refresh panel's own run.
     async refresh({ payload }) {

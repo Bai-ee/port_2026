@@ -11,6 +11,8 @@ import { PLAN_FIELDS, HANDLE_RE, applyChange } from '../plan-state.js';
 import { tracksOf } from '../content-tracks.js';
 import { normalizeBatchSpec, MAX_BATCH, MAX_PER_DAY, MEMORY_PLACEHOLDER } from '../../x-content-inventory/calendar-batch.js';
 import { MAX_LINKS } from '../../x-content-inventory/item-media.js';
+import { MAX_MEMORY_SUGGESTIONS, MEMORY_LINE_MAX } from '../../x-content-inventory/memory-suggest.js';
+import { MAX_MEDIA_TASKS, TASK_KINDS } from '../../x-content-inventory/content-tasks.js';
 import { BRIEF_PARTS, freshnessOf } from '../brief-bundle.js';
 import { SECTION_KEYS, SECTION_MAX, STRATEGY_DOC_SECTIONS, applyDocEdit, normalizeSections } from '../strategy-doc.js';
 
@@ -73,6 +75,8 @@ export const PROPOSE_TOOL_BY_KIND = Object.freeze({
   refresh: 'propose_refresh',
   'queue-bulk': 'propose_queue_bulk',
   'bucket-edit': 'propose_bucket_edit',
+  'memory-suggest': 'propose_memory_suggestions',
+  'media-tasks': 'propose_media_tasks',
 });
 export const KIND_BY_PROPOSE_TOOL = Object.freeze(
   Object.fromEntries(Object.entries(PROPOSE_TOOL_BY_KIND).map(([k, v]) => [v, k])),
@@ -345,6 +349,16 @@ export const PROPOSE_TOOLS = Object.freeze([
     },
     reassignTo: str('delete only: bucket id that receives the deleted bucket\'s items'),
   }, ['op', 'bucket']),
+  propose('memory-suggest', `Propose SUGGESTED memory lines for drafts that still carry "[add your memory]" / "[add your take]" (they cannot be approved until filled). Pass postIds (up to ${MAX_MEMORY_SUGGESTIONS}, from get_queue) or a filter {from,to} on review day. Without suggestions the card uses a facts-only line from the library item (title, year). You MAY supply suggestions {postId: line} (at most ${MEMORY_LINE_MAX} characters, the owner's voice, grounded ONLY in the item's facts or what the owner has told you here; never invent a personal experience). The card shows each line as an editable suggestion with a per-row skip; nothing is written until the owner confirms, and nothing is approved or scheduled.`, {
+    postIds: { type: 'array', maxItems: MAX_MEMORY_SUGGESTIONS, items: str('Draft post id from get_queue') },
+    filter: { type: 'object', description: 'Alternative to postIds: every placeholder draft whose review day is in range.', properties: { from: str('YYYY-MM-DD'), to: str('YYYY-MM-DD') } },
+    suggestions: { type: 'object', description: 'Optional per-post lines: {postId: line}', additionalProperties: str('Suggested line', { maxLength: MEMORY_LINE_MAX }) },
+  }),
+  propose('media-tasks', `Propose "film this" reminders for calendar items that have no media yet (e.g. birthday drafts without a video). Pass postIds (up to ${MAX_MEDIA_TASKS}) or a filter {from,to} on the calendar day. One task per post, due 3 days before its day, shown on the month calendar as "To film" with a done toggle; re-proposing adds nothing twice. kind film (default) or find-media. It creates reminders only; no post or item changes.`, {
+    postIds: { type: 'array', maxItems: MAX_MEDIA_TASKS, items: str('Post id from get_queue') },
+    filter: { type: 'object', description: 'Alternative to postIds: every calendar item in range that lacks media.', properties: { from: str('YYYY-MM-DD'), to: str('YYYY-MM-DD') } },
+    kind: { type: 'string', enum: [...TASK_KINDS] },
+  }),
   propose('strategy-doc-edit', `Propose new text for ONE section of the owner's Strategy document. Send the WHOLE new section text (it replaces the section), keep the owner's own wording wherever it still holds, and change only what the conversation or the data supports. Call get_strategy_doc first and pass its version as expectedVersion. Sections: ${STRATEGY_DOC_SECTIONS.map((x) => `${x.key} (${x.hint})`).join('; ')}`, {
     section: { type: 'string', enum: [...SECTION_KEYS], description: 'Which section to replace' },
     text: str('The complete new text of that section', { maxLength: SECTION_MAX }),
@@ -784,6 +798,29 @@ export async function prepareProposal(toolName, input, { toolDeps, userMessages 
           spec: spec.spec,
           preview: { ...pre.counts, firstDate: pre.firstDate, lastDate: pre.lastDate, sample: pre.rows.slice(0, 5).map((r) => ({ reviewOn: r.reviewOn, title: r.title ?? r.packageId, packageId: r.packageId, ...(r.nasSha ? { nasSha: r.nasSha } : {}) })) },
         };
+        break;
+      }
+      case 'memory-suggest': {
+        if (typeof toolDeps?.previewMemorySuggestions !== 'function') return fail('memory suggestions are not available');
+        const ids = Array.isArray(input.postIds) ? [...new Set(input.postIds.map((x) => cleanText(x, 128)).filter(Boolean))] : [];
+        if (ids.length > MAX_MEMORY_SUGGESTIONS) return fail(`at most ${MAX_MEMORY_SUGGESTIONS} posts`);
+        if (!ids.length && !isPlain(input.filter)) return fail('provide postIds or a filter {from,to}');
+        const pre = await toolDeps.previewMemorySuggestions({ postIds: ids, filter: isPlain(input.filter) ? input.filter : null, suggestions: isPlain(input.suggestions) ? input.suggestions : {} });
+        if (!pre || pre.ok === false) return fail(pre?.error || 'could not prepare suggestions');
+        if (!pre.rows?.length) return fail(`no drafts to suggest for: ${(pre.problems || []).join('; ').slice(0, 400) || 'none matched'}`);
+        payload = { rows: pre.rows.slice(0, MAX_MEMORY_SUGGESTIONS) };
+        break;
+      }
+      case 'media-tasks': {
+        if (typeof toolDeps?.previewMediaTasks !== 'function') return fail('media tasks are not available');
+        const ids = Array.isArray(input.postIds) ? [...new Set(input.postIds.map((x) => cleanText(x, 128)).filter(Boolean))] : [];
+        if (ids.length > MAX_MEDIA_TASKS) return fail(`at most ${MAX_MEDIA_TASKS} posts`);
+        if (!ids.length && !isPlain(input.filter)) return fail('provide postIds or a filter {from,to}');
+        const pre = await toolDeps.previewMediaTasks({ postIds: ids, filter: isPlain(input.filter) ? input.filter : null, kind: TASK_KINDS.includes(input.kind) ? input.kind : 'film' });
+        if (!pre || pre.ok === false) return fail(pre?.error || 'could not plan the tasks');
+        const fresh = (pre.rows || []).filter((r) => !r.existing);
+        if (!fresh.length) return fail(`no new tasks: ${JSON.stringify(pre.skipped ?? {}).slice(0, 300)}${pre.rows?.length ? `; ${pre.rows.length} already have one` : ''}`);
+        payload = { rows: fresh.slice(0, MAX_MEDIA_TASKS) };
         break;
       }
       case 'daily-fill': {

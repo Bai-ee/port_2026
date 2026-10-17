@@ -35,6 +35,9 @@ import { syncBucketTracks } from './bucket-tracks.js';
 import { normalizeBatchSpec, planCalendarBatch, createCalendarBatch } from '../x-content-inventory/calendar-batch.js';
 import { runDailyFill, isFillPost } from '../x-content-inventory/daily-fill.js';
 import { findMediaCandidates, linkMediaPatch, normalizeLinks, mediaOf } from '../x-content-inventory/item-media.js';
+import { planMemorySuggestions, postNeedsMemory, MAX_MEMORY_SUGGESTIONS, MEMORY_LINE_MAX } from '../x-content-inventory/memory-suggest.js';
+import { planMediaTasks, createContentTaskStore } from '../x-content-inventory/content-tasks.js';
+import { ctDate } from '../x-content-inventory/month-calendar.js';
 import { hasExplicitTracks, trackBenchmarkHandles, newTrackBenchmarkHandles, loadTrackProfiles, profileBenchmarksFromPlan } from './track-profile.js';
 import { normalizeXGrowthProfile } from '../x-benchmark/profile.js';
 import { createFirestoreChatStore, ChatCapError, ChatStoreError, THREAD_ID_RE } from './agent/chat-store.js';
@@ -216,6 +219,8 @@ export function createStrategyHandlers({
   upsertBucket = null, deleteBucket = null, // (clientId, bucket) / (clientId, bucketId, {reassignTo}) -> the Content Center bucket-store writers (bucket-edit proposals). Absent => bucket-edit confirm fails clearly
   actionRuntime = null, // agent/action-runtime.js createActionRuntime(...): run_action / undo / audit log / autonomy. Absent => the action tools answer "not available" and the action-* routes 503
   rejectPost = null, // (clientId, postId, {reviewedBy, expectedRevision}) -> rejectDraft; queue-bulk delete-draft. Absent => lazy import of twitter-service
+  readQueuePosts = null, // (clientId) -> raw social_posts rows (newest first); memory-suggest / media-tasks previews. Absent => those tools say not available
+  listMediaTaskIds = null, createMediaTasks = null, // (clientId) -> Set of existing task ids; ({clientId, rows, by, proposalId}) -> {created, existing}: the content_tasks store (media-tasks)
   linkItemMedia = null, // (clientId, links) -> {linked, failed, results}; the quote-targets link-item-media writer. Absent => item-media confirm fails clearly
   env = {}, // explicit on purpose: only createStrategyHandlersFromDb passes process.env, so a bare handler can never reach a real model
 } = {}) {
@@ -724,6 +729,25 @@ export function createStrategyHandlers({
         });
         return { ok: true, rows };
       },
+      // Suggested memory lines for placeholder drafts (memory-suggest.js). Read-only; the card + decide carry the owner's edits.
+      ...(readQueuePosts ? {
+        previewMemorySuggestions: async ({ postIds = [], filter = null, suggestions = {} } = {}) => {
+          const posts = await readQueuePosts(clientId);
+          const inRange = (p) => (!filter?.from || (p.reviewOn && p.reviewOn >= filter.from)) && (!filter?.to || (p.reviewOn && p.reviewOn <= filter.to));
+          const want = new Set(postIds);
+          const picked = (want.size ? posts.filter((p) => want.has(p.id)) : posts.filter((p) => postNeedsMemory(p) && inRange(p))).slice(0, MAX_MEMORY_SUGGESTIONS);
+          const missing = [...want].filter((id) => !picked.some((p) => p.id === id)).map((id) => `${id}: unknown post id`);
+          const out = planMemorySuggestions({ posts: picked, packages: (await readPackages(clientId)) || [], suggestions });
+          return { ok: true, rows: out.rows, problems: [...missing, ...out.problems] };
+        },
+      } : {}),
+      // "Film this" reminders (content-tasks.js) for calendar items without media. Read-only dry run.
+      ...(readQueuePosts && listMediaTaskIds ? {
+        previewMediaTasks: async ({ postIds = [], filter = null, kind = 'film' } = {}) => {
+          const [posts, packages, existingTaskIds] = await Promise.all([readQueuePosts(clientId), readPackages(clientId), listMediaTaskIds(clientId)]);
+          return { ok: true, ...planMediaTasks({ posts, packages: packages || [], existingTaskIds, kind, today: ctDate(clock()), postIds, filter }) };
+        },
+      } : {}),
       // Dry run only (no writes): what a calendar batch would create. The proposal re-plans at confirm time.
       previewCalendarBatch: async (spec) => stripRows(await calendarBatch(clientId, spec)),
       // Dry run only (no writes): what a daily fill would create. The proposal re-plans at confirm time.
@@ -944,6 +968,7 @@ export function createStrategyHandlers({
     planStore, runDailyAction, runUpdateItemFacets, saveXGrowthProfile: saveProfileKeepingTracks, clock,
     docStore, docBase: SEED_STRATEGY_SECTIONS,
     readPost, editPost: editPost ? (a) => editPost(a) : null, runPaidSync,
+    runMediaTasks: createMediaTasks ? (a) => createMediaTasks(a) : null,
     runItemMedia: linkItemMedia ? ({ clientId, links }) => linkItemMedia(clientId, links) : null,
     runCalendarBatch: async ({ clientId, spec, proposalId }) => calendarBatch(clientId, spec, { execute: true, batchId: proposalId ? `calendar-batch-${proposalId}` : null }),
     runDailyFill: async ({ clientId, spec, proposalId }) => dailyFill(clientId, spec, { execute: true, batchId: proposalId ? `daily-fill-${proposalId}` : null }),
@@ -982,6 +1007,13 @@ export function createStrategyHandlers({
     // The model-use choice is the OWNER's, made on the card at confirm time; honored only for regenerate-today.
     const options = decision === 'confirm' && claim.proposal.kind === 'regenerate-today' && body?.options?.useModel === true ? { useModel: true } : {};
     if (decision === 'confirm' && claim.proposal.kind === 'action') options.typed = typeof body?.typed === 'string' ? body.typed.slice(0, 80) : '';
+    // memory-suggest: the owner's per-row edits / skips from the card. Only ids that are rows of THIS proposal, lines capped.
+    if (decision === 'confirm' && claim.proposal.kind === 'memory-suggest') {
+      const rowIds = new Set((claim.proposal.payload?.rows || []).map((r) => r.postId));
+      const rawEdits = body?.edits && typeof body.edits === 'object' && !Array.isArray(body.edits) ? body.edits : {};
+      options.edits = Object.fromEntries(Object.entries(rawEdits).filter(([k, v]) => rowIds.has(k) && typeof v === 'string').map(([k, v]) => [k, v.slice(0, MEMORY_LINE_MAX + 1)]));
+      options.skip = (Array.isArray(body?.skip) ? body.skip : []).map((x) => String(x ?? '')).filter((x) => rowIds.has(x));
+    }
     let out;
     try {
       out = await decideProposal({ proposal: claim.proposal, decision, executors, context, clientId: c.clientId, by: by(auth), auth, options, now });
@@ -1327,8 +1359,11 @@ export function createStrategyHandlersFromDb(db, {
     return { generatedAt: qt?.generatedAt || null, targets };
   };
   const ensureDraft = async (clientId, payload) => (await import('../social-posting/twitter-service.js')).ensureDraftPost(clientId, payload);
+  const taskStore = createContentTaskStore(db);
+  const listMediaTaskIds = (clientId) => taskStore.ids(clientId);
+  const createMediaTasks = ({ clientId, rows, by, proposalId }) => taskStore.create(clientId, rows, { by, proposalId });
   return createStrategyHandlers({
-    corpusStore, planStore, refreshService, readPackages, readAudience, readBuckets, readBucketEngine, readOpenPackageIds, readFillContext, readQuoteTargets, ensureDraft, placeDraft,
+    corpusStore, planStore, refreshService, readPackages, readAudience, readBuckets, readBucketEngine, readOpenPackageIds, readFillContext, readQuoteTargets, ensureDraft, placeDraft, listMediaTaskIds, createMediaTasks,
     readWorkerHealth: (clientId) => readWorkerHealthFromDb(db, { now: Date.now(), clientId }),
     docStore, onBrainOwnedSaved, readBrainTrackTargets, chatStore, agentLoopFactory, callModel, logUsage, runDailyAction, runUpdateItemFacets, readTodayRun, readContentContext, saveXGrowthProfile, env,
     readQueueSummary, readPost, readOpportunities, readResults, readMarketSignals, editPost, runPaidSync, actionRuntime,

@@ -20,6 +20,7 @@ import { ageHoursOf, DEFAULT_WINDOW_HOURS } from '../../../../features/x-quote-t
 import { buildPostResults } from '../../../../features/x-content-inventory/results.js';
 import { recentPostsFromQueue } from '../../../../features/x-content-inventory/allocate-slot.js';
 import { buildMonthCalendar, ctDate } from '../../../../features/x-content-inventory/month-calendar.js';
+import { createContentTaskStore } from '../../../../features/x-content-inventory/content-tasks.js';
 import { joinPerformance, engineStats } from '../../../../features/x-content-inventory/performance.js';
 import * as bucketStore from '../../../../features/x-content-inventory/bucket-store.js';
 import { bucketOfPost } from '../../../../features/x-content-inventory/bucket-colors.js';
@@ -311,6 +312,7 @@ const SUPPORTED_ACTIONS = [
   'inventory-save',
   'inventory-delete',
   'month-calendar',
+  'content-task-update',
   'content-context',
   'post-status',
   'post-results',
@@ -400,6 +402,17 @@ async function handleInventoryDelete(context, body) {
   return { ok: true, removed };
 }
 
+/** Mark one "film this" task done / open (content_tasks). Client-scoped by the store path; touches nothing else. */
+async function handleContentTaskUpdate(context, body) {
+  const taskId = typeof body?.taskId === 'string' ? body.taskId.trim() : '';
+  if (!taskId) throw badRequest('taskId is required');
+  const status = body?.status === 'done' ? 'done' : body?.status === 'open' ? 'open' : null;
+  if (!status) throw badRequest("status must be 'open' or 'done'");
+  const task = await createContentTaskStore(fb.adminDb).setStatus(context.clientId, taskId, status);
+  if (!task) throw Object.assign(new Error('Task not found.'), { status: 404 });
+  return { ok: true, task };
+}
+
 /**
  * Month calendar over social_posts, with undated drafts PROPOSED onto days (display only, nothing is written).
  * Read-only like the week view: Approve / Reject / edit go through the social-posting route.
@@ -421,7 +434,9 @@ async function handleMonthCalendar(context, body) {
   const pkgs = await readStoredPackages([...new Set(posts.map((p) => p.packageId).filter(Boolean))]).catch(() => new Map());
   // Posts without their own bucketId take it from their library item (bucket colors).
   const withBuckets = posts.map((p) => (p.bucketId || !pkgs.has(p.packageId) ? p : { ...p, bucketId: bucketOfPost(p, pkgs.get(p.packageId)) }));
-  const calendar = buildMonthCalendar({ posts: withBuckets, month, now: Date.now(), config, buckets });
+  // "To film" reminders (content_tasks): shown on their dueOn day. Advisory read; a failure never blocks the calendar.
+  const tasks = await createContentTaskStore(fb.adminDb).list(context.clientId).catch(() => []);
+  const calendar = buildMonthCalendar({ posts: withBuckets, month, now: Date.now(), config, buckets, tasks });
   await withRowThumbs(calendar, pkgs, context.clientId);
   return { ok: true, calendar };
 }
@@ -527,10 +542,10 @@ const readMarketSignals = memoByClient(MARKET_SIGNALS_MEMO_MS, readMarketSignals
 
 // Chat/MCP post edit: the SAME update path the Queue tab uses (social-posting `update` -> updateSocialPost), with a
 // fresh posting-agents score like that route does. Text/time only; approval stays with the owner's buttons.
-async function editQueuedPost({ clientId, postId, content, scheduledAt, expectedRevision }) {
+async function editQueuedPost({ clientId, postId, content, scheduledAt, expectedRevision, needsStory }) {
   const existing = await getSocialPost(clientId, postId);
   const text = content != null ? content : existing?.content;
-  const payload = { ...(content != null ? { content } : {}), ...(scheduledAt !== undefined ? { scheduledAt } : {}) };
+  const payload = { ...(content != null ? { content } : {}), ...(scheduledAt !== undefined ? { scheduledAt } : {}), ...(typeof needsStory === 'boolean' ? { needsStory } : {}) };
   const { agents } = runPostingAgents(text, { source: existing?.source || 'copywriter', ...(existing?.replyTo ? { replyTo: existing.replyTo } : {}) });
   return updateSocialPost(clientId, postId, { ...payload, agents }, { expectedRevision });
 }
@@ -997,6 +1012,7 @@ function getStrategyHandlers() {
       readTodayRun: (clientId) => latestDailyRun(createFirestoreRunStore(fb.adminDb), clientId),
       readContentContext: async (clientId) => summarizeContentContext(await readContentContext(clientId)),
       readQueueSummary,
+      readQueuePosts: readSocialQueue,
       readPost: readPostForChat,
       readOpportunities,
       readQuoteTargets: readQuoteTargetsForFill,
@@ -1083,6 +1099,7 @@ export async function POST(request) {
     if (action === 'month-calendar') {
       return json(await handleMonthCalendar(context, body));
     }
+    if (action === 'content-task-update') return json(await handleContentTaskUpdate(context, body));
     if (action === 'engine-performance') {
       return json(await handleEnginePerformance(context, body));
     }
