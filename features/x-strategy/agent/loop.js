@@ -177,9 +177,11 @@ export function createAgentLoop({
       }
     } catch { strategyDocText = ''; }
     // The owner's saved reply format (or the default) rides on every turn, outside the capped rule block.
+    let today = null;
+    try { today = await toolDeps?.getToday?.(); } catch { today = null; }
     let responseStyle;
     try { responseStyle = effectiveResponseStyle(await toolDeps?.getResponseStyle?.()); } catch { responseStyle = effectiveResponseStyle(null); }
-    const system = buildSystemPrompt({ planSummary: planSummary ?? null, strategyDocText, selectedContext: typeof selectedContext === 'string' ? selectedContext : '', responseStyle });
+    const system = buildSystemPrompt({ planSummary: planSummary ?? null, strategyDocText, selectedContext: typeof selectedContext === 'string' ? selectedContext : '', responseStyle, today });
 
     const account = async (resp, ok) => {
       const u = resp?.usage || {};

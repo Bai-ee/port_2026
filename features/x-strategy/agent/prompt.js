@@ -74,7 +74,7 @@ export function describeSelected(selected, resolved) {
  * @param {{evaluationSummary?: string, planSummary?: string|object}} input
  * @returns {string}
  */
-export function buildSystemPrompt({ evaluationSummary, planSummary, selectedContext, strategyDocText, responseStyle } = {}) {
+export function buildSystemPrompt({ evaluationSummary, planSummary, selectedContext, strategyDocText, responseStyle, today } = {}) {
   const plan = typeof planSummary === 'string' ? planSummary : summarizePlan(planSummary);
   const lines = [
     'You are the owner\'s admin-level operator for their Content Engine: you read any of their data, explain their X account against its benchmarks, and can do anything the dashboard can do. You are talking to the owner, one turn at a time.',
@@ -131,6 +131,8 @@ export function buildSystemPrompt({ evaluationSummary, planSummary, selectedCont
   lines.push(strategyDocText ? clip(strategyDocText, STRATEGY_DOC_MAX_CHARS) : 'STRATEGY DOCUMENT: none available.');
   if (selectedContext) lines.push(clip(selectedContext, 700));
   if (evaluationSummary) lines.push(`DATA NOTE: ${clip(evaluationSummary, 400)}`);
+  // The model has no clock: without this it guesses dates (it once asked the calendar for the wrong month).
+  if (today?.date) lines.push(`TODAY: ${today.date}${today.timezone ? ` (${today.timezone})` : ''}. "Today"/"tomorrow" mean this date and the next; never guess a date.`);
   // Last, so it wins over the generic formatting line above. Not part of the capped rule block.
   if (responseStyle?.text) {
     lines.push('', `OWNER REPLY FORMAT (${responseStyle.isDefault ? 'default until the owner sets their own' : 'set by the owner'}; follow it in every reply, it overrides the formatting rule above; data and honesty rules still apply). When the owner says how they want replies, call save_response_style.`, clip(responseStyle.text, 1300));

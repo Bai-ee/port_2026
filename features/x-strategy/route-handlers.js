@@ -786,6 +786,11 @@ export function createStrategyHandlers({
         },
         listUnmetRequests: ({ status } = {}) => unmetStore.list(clientId, { status, limit: 50 }),
       } : {}),
+      // Today in the client's timezone: the model has no clock, so every turn and get_calendar carry it (no guessed dates).
+      getToday: async () => {
+        const profile = preloaded.profile ?? (preloaded.profile = await loadProfile(clientId));
+        return { date: localDate(clock(), profile.timezone), timezone: profile.timezone || null };
+      },
       // The owner's reply format: read every turn (loop + get_response_style), written only by save_response_style.
       ...(responseStyleStore ? {
         getResponseStyle: () => responseStyleStore.get(clientId),
