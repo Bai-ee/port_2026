@@ -53,6 +53,24 @@ export const STATE_BY_STATUS = {
   failed: 'failed',
 };
 
+/** state -> the uniform `approval` mark every row carries (the card draws one indicator from it). */
+export const APPROVAL_BY_STATE = {
+  pending: 'unapproved',
+  awaiting: 'unapproved',
+  held: 'held',
+  failed: 'held',
+  approved: 'approved',
+  scheduled: 'scheduled',
+  manual: 'scheduled',
+  posted: 'posted',
+  suggested: 'suggested',
+};
+
+/** Quote window for a requote suggestion (same measured 36h as rank.js / daily-fill). */
+export const REQUOTE_WINDOW_HOURS = 36;
+const STATUS_URL_RE = /^https:\/\/(?:x|twitter)\.com\/\w+\/status\/(\d+)/i;
+const statusIdOf = (url) => STATUS_URL_RE.exec(String(url ?? ''))?.[1] ?? null;
+
 /** Local copy of twitter-service AMBIGUOUS_CLASSES (that module is server-only). */
 const AMBIGUOUS_CLASSES = new Set(['server-error-ambiguous', 'network-ambiguous', 'unknown']);
 
@@ -151,13 +169,16 @@ function slotMs(post) {
   return Number.isFinite(ms) ? ms : null;
 }
 
-function toRow(p, colors = null) {
+export function toRow(p, colors = null) {
   const bucketId = bucketOfPost(p);
   const held = p.status === 'needs_review' ? reasonText(p.errorClass) : null;
+  const state = STATE_BY_STATUS[p.status] || 'pending';
   return {
+    kind: 'post',
+    approval: APPROVAL_BY_STATE[state] || 'unapproved',
     id: p.id ?? null,
     status: p.status,
-    state: STATE_BY_STATUS[p.status] || 'pending',
+    state,
     engine: isEngine(p.engine) ? p.engine : null,
     packageId: p.packageId ?? null,
     title: excerpt(p.title || p.content, 80),
@@ -198,9 +219,11 @@ function toRow(p, colors = null) {
  * @param {object} [input.config]  engine config (defaults to DEFAULT_ENGINE_CONFIG)
  * @param {number} [input.weekStartsOn] 0 = Sunday (default), 1 = Monday
  * @param {object[]} [input.buckets] Content Center buckets (listBuckets rows); given => rows carry bucketId/bucketColor and a legend is returned
+ * @param {object[]} [input.suggestions] unsaved daily-run suggestions ({id,date,slot?,type,text,runId,expiresAt?}); each lands on its date as a `suggestion` row
+ * @param {object[]} [input.quoteTargets] open quote candidates ({id,url,handle,text,createdAt}); each lands on every day its 36h window covers (from today) as a `requote` row
  * @param {object[]} [input.tasks] content_tasks rows ({id,kind,title,dueOn,status,postId,packageId}); each lands on its dueOn day as a task row ("To film")
  */
-export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_ENGINE_CONFIG, weekStartsOn = 0, buckets = null, tasks = [] } = {}) {
+export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_ENGINE_CONFIG, weekStartsOn = 0, buckets = null, tasks = [], suggestions = [], quoteTargets = [] } = {}) {
   const colors = Array.isArray(buckets) ? bucketColorMap(buckets) : null;
   if (!Number.isFinite(now)) throw new Error('now (epoch ms) is required');
   const dates = monthGridDates(month, { weekStartsOn });
@@ -290,9 +313,71 @@ export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_EN
     if (!placed) unplaced.push({ ...row, reason: closed ? 'window-closed' : gridEnd < today ? 'out-of-range' : 'no-slot' });
   }
 
+  // ── Suggestions + requotes (display only; never placed, never counted as posts) ──
+  const extraByDate = new Map();
+  const addExtra = (date, row) => {
+    if (date < gridStart || date > gridEnd) return;
+    if (!extraByDate.has(date)) extraByDate.set(date, []);
+    extraByDate.get(date).push(row);
+  };
+  // Anything already saved shows only as its post: dedupe by quoted status id (sourceRef / fillSource / URL in the text).
+  const savedQuoteIds = new Set();
+  const savedSuggestionIds = new Set();
+  for (const p of Array.isArray(posts) ? posts : []) {
+    if (!p || p.status === 'rejected') continue;
+    const ref = p.sourceRef && typeof p.sourceRef === 'object' ? p.sourceRef : null;
+    if (ref?.kind === 'quote-target') { if (ref.id != null) savedQuoteIds.add(String(ref.id)); const u = statusIdOf(ref.url); if (u) savedQuoteIds.add(u); }
+    if (p.fillSource?.type === 'quote-target' && p.fillSource.id != null) savedQuoteIds.add(String(p.fillSource.id));
+    for (const m of String(p.content ?? '').matchAll(/https:\/\/(?:x|twitter)\.com\/\w+\/status\/(\d+)/gi)) savedQuoteIds.add(m[1]);
+    if (ref?.suggestionId) savedSuggestionIds.add(String(ref.suggestionId));
+    if (p.suggestionId) savedSuggestionIds.add(String(p.suggestionId));
+  }
+  const slotMinutes = (sg) => {
+    const m = /(\d{1,2}):(\d{2})\s*([ap]m)?/i.exec(String(sg?.slot?.timeCT ?? sg?.slot ?? sg?.proposedSlot?.localTime ?? ''));
+    if (!m) return null;
+    let h = Number(m[1]);
+    if (m[3]) h = (h % 12) + (m[3].toLowerCase() === 'pm' ? 12 : 0);
+    return h * 60 + Number(m[2]);
+  };
+  for (const sg of Array.isArray(suggestions) ? suggestions : []) {
+    if (!sg || sg.id == null || !DAY_RE.test(String(sg.date ?? ''))) continue;
+    const text = String(sg.text ?? '').trim();
+    if (!text || savedSuggestionIds.has(String(sg.id))) continue;
+    const mins = slotMinutes(sg);
+    const ms = ctWallToMs(sg.date, mins ?? 12 * 60);
+    addExtra(sg.date, {
+      kind: 'suggestion', state: 'suggested', approval: 'suggested', id: `suggestion:${sg.id}`, suggestionId: String(sg.id), runId: sg.runId ?? null,
+      date: sg.date, ms, time: ctTime(ms), suggestionType: sg.type ?? null, slot: sg.slot && typeof sg.slot === 'object' ? { letter: sg.slot.letter ?? null, timeCT: sg.slot.timeCT ?? null } : null,
+      title: excerpt(text, 80), content: text, text, expiresAt: sg.expiresAt ?? null, windowOpen: sg.expiresAt ? Date.parse(sg.expiresAt) > now : true,
+      status: 'suggested', needsStory: false, bucketId: null, bucketColor: null, proposed: false, quotedUrl: null,
+    });
+  }
+  for (const t of Array.isArray(quoteTargets) ? quoteTargets : []) {
+    const url = String(t?.url ?? '');
+    const sid = statusIdOf(url);
+    const id = String(t?.id ?? sid ?? '');
+    const created = Date.parse(t?.createdAt ?? '');
+    if (!sid || !id || !Number.isFinite(created)) continue;
+    if (savedQuoteIds.has(id) || savedQuoteIds.has(sid)) continue;
+    const expiresMs = created + REQUOTE_WINDOW_HOURS * 3_600_000;
+    if (expiresMs <= now) continue; // window closed
+    const handle = String(t?.handle ?? t?.author?.username ?? (typeof t?.author === 'string' ? t.author : '') ?? '').replace(/^@/, '') || null;
+    const first = ctDate(Math.max(now, created));
+    const last = ctDate(expiresMs);
+    for (let date = first < today ? today : first; date <= last; date = addDays(date, 1)) {
+      const ms = date === today ? now : ctWallToMs(date, 0);
+      addExtra(date, {
+        kind: 'requote', state: 'suggested', approval: 'suggested', id: `requote:${id}`, quoteTargetId: id, date, ms, time: '',
+        handle, quotedUrl: url, title: excerpt(t?.text, 80), content: String(t?.text ?? ''), text: String(t?.text ?? ''), quotedHandle: handle, createdAt: new Date(created).toISOString(),
+        expiresAt: new Date(expiresMs).toISOString(), windowOpen: true, trackId: t?.trackId ?? null,
+        status: 'suggested', needsStory: false, bucketId: null, bucketColor: null, proposed: false,
+      });
+    }
+  }
+
   // ── Grid ─────────────────────────────────────────────────────────────────
-  const emptyCounts = () => ({ pending: 0, awaiting: 0, held: 0, approved: 0, scheduled: 0, manual: 0, posted: 0, failed: 0 });
-  const totals = { ...emptyCounts(), proposed: 0, review: 0, needsMemory: 0, tasksOpen: 0 };
+  const emptyCounts = () => ({ pending: 0, awaiting: 0, held: 0, approved: 0, scheduled: 0, manual: 0, posted: 0, failed: 0, suggested: 0, requote: 0 });
+  const totals = { ...emptyCounts(), suggested: 0, requote: 0, proposed: 0, review: 0, needsMemory: 0, tasksOpen: 0 };
   const tasksByDay = new Map();
   for (const t of Array.isArray(tasks) ? tasks : []) {
     if (!t || !DAY_RE.test(String(t.dueOn ?? ''))) continue;
@@ -303,12 +388,13 @@ export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_EN
 
   const days = dates.map((date) => {
     const inMonth = date.slice(0, 7) === month;
-    const rows = (byDate.get(date) || []).slice().sort((a, b) => a.ms - b.ms);
+    const rows = [...(byDate.get(date) || []), ...(extraByDate.get(date) || [])].sort((a, b) => a.ms - b.ms);
     const counts = emptyCounts();
     for (const r of rows) {
-      counts[r.state] += 1;
+      const bucket = r.kind === 'requote' ? 'requote' : r.state; // requote rows share state 'suggested' but count apart
+      counts[bucket] += 1;
       if (inMonth) {
-        totals[r.state] += 1;
+        totals[bucket] += 1;
         if (r.proposed) totals.proposed += 1;
         if (r.reviewOn) totals.review += 1;
         if (r.reviewOn && r.needsStory) totals.needsMemory += 1;
@@ -317,7 +403,7 @@ export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_EN
     }
     const dayTasks = (tasksByDay.get(date) || []).slice().sort((a, b) => String(a.id).localeCompare(String(b.id)));
     if (inMonth) totals.tasksOpen += dayTasks.filter((t) => t.status === 'open').length;
-    const live = rows.filter((r) => r.state !== 'failed' && !r.proposed);
+    const live = rows.filter((r) => r.kind === 'post' && r.state !== 'failed' && !r.proposed);
     const flags = [];
     for (let i = 1; i < live.length; i += 1) {
       const gapMin = Math.round((live[i].ms - live[i - 1].ms) / 60000);
@@ -344,7 +430,7 @@ export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_EN
   for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
 
   // Legend: every active bucket (plus any inactive one that still has posts this month), in bucket order.
-  const inMonthRows = days.filter((d) => d.inMonth).flatMap((d) => d.posts);
+  const inMonthRows = days.filter((d) => d.inMonth).flatMap((d) => d.posts).filter((r) => r.kind === 'post');
   const legend = colors ? [...buckets].sort((a, b) => (a.order ?? 99) - (b.order ?? 99))
     .map((b) => ({ id: b.id, name: b.name || b.id, color: colors[b.id], count: inMonthRows.filter((r) => r.bucketId === b.id).length, active: b.active !== false }))
     .filter((b) => b.color && (b.active || b.count > 0)) : [];

@@ -364,7 +364,14 @@ test('rejectDraft also rejects an unscheduled approved row (the sheet offers Rej
 
 test('approveAndSchedule: any failure restores the row exactly (edited text does not survive a refused approval)', async () => {
   const p = await v2('Original [add your memory] text.');
-  await assert.rejects(svc.approveAndSchedule('c1', p.id, { scheduledAt: FUTURE(), content: 'Edited but still [add your memory].' }));
+  await assert.rejects(svc.approveAndSchedule('c1', p.id, { scheduledAt: new Date(Date.now() - 3600e3).toISOString(), content: 'Edited text.' }));
   assert.equal(raw(p.id).content, 'Original [add your memory] text.');
   assert.equal(raw(p.id).status, 'draft');
+});
+
+test('approveAndSchedule strips the placeholder (edited or stored) and schedules the clean text', async () => {
+  const p = await v2('Original [add your memory] text.');
+  const s = await svc.approveAndSchedule('c1', p.id, { scheduledAt: FUTURE(), content: 'Edited but still [add your memory].' });
+  assert.equal(s.status, 'scheduled');
+  assert.ok(!/add your memory/i.test(s.content));
 });

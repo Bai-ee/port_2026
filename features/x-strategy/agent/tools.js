@@ -436,7 +436,7 @@ export const PROPOSE_TOOLS = Object.freeze([
     },
     reassignTo: str('delete only: bucket id that receives the deleted bucket\'s items'),
   }, ['op', 'bucket']),
-  propose('memory-suggest', `Propose SUGGESTED memory lines for drafts that still carry "[add your memory]" / "[add your take]" (they cannot be approved until filled). Pass postIds (up to ${MAX_MEMORY_SUGGESTIONS}, from get_queue) or a filter {from,to} on review day. Without suggestions the card uses a facts-only line from the library item (title, year). You MAY supply suggestions {postId: line} (at most ${MEMORY_LINE_MAX} characters, the owner's voice, grounded ONLY in the item's facts or what the owner has told you here; never invent a personal experience). The card shows each line as an editable suggestion with a per-row skip; nothing is written until the owner confirms, and nothing is approved or scheduled.`, {
+  propose('memory-suggest', `Propose SUGGESTED memory lines for drafts that still carry "[add your memory]" / "[add your take]" (approving a draft removes the placeholder line, so filling it is optional). Pass postIds (up to ${MAX_MEMORY_SUGGESTIONS}, from get_queue) or a filter {from,to} on review day. Without suggestions the card uses a facts-only line from the library item (title, year). You MAY supply suggestions {postId: line} (at most ${MEMORY_LINE_MAX} characters, the owner's voice, grounded ONLY in the item's facts or what the owner has told you here; never invent a personal experience). The card shows each line as an editable suggestion with a per-row skip; nothing is written until the owner confirms, and nothing is approved or scheduled.`, {
     postIds: { type: 'array', maxItems: MAX_MEMORY_SUGGESTIONS, items: str('Draft post id from get_queue') },
     filter: { type: 'object', description: 'Alternative to postIds: every placeholder draft whose review day is in range.', properties: { from: str('YYYY-MM-DD'), to: str('YYYY-MM-DD') } },
     suggestions: { type: 'object', description: 'Optional per-post lines: {postId: line}', additionalProperties: str('Suggested line', { maxLength: MEMORY_LINE_MAX }) },
@@ -990,8 +990,9 @@ export async function prepareProposal(toolName, input, { toolDeps, userMessages 
           if (!isPlain(post)) { problems.push(`${postId}: unknown post id`); continue; }
           if (!okStatus.includes(post.status) || (action === 'set-review-date' && post.scheduledAt)) { problems.push(`${postId}: is ${post.status}, cannot ${action}`); continue; }
           const text = String(post.content ?? post.text ?? '');
-          const blocked = action === 'approve' && post.status === 'draft' && (post.needsStory === true || text.includes(MEMORY_PLACEHOLDER)) ? 'needs its story' : undefined;
-          rows.push({ postId, status: post.status, text: text.slice(0, 100), ...(blocked ? { blocked } : {}) });
+          // The memory line never blocks approval: approving strips the placeholder and notes it on the row.
+          const strips = action === 'approve' && post.status === 'draft' && (post.needsStory === true || text.toLowerCase().includes(MEMORY_PLACEHOLDER)) ? 'placeholder removed on approve' : undefined;
+          rows.push({ postId, status: post.status, text: text.slice(0, 100), ...(strips ? { note: strips } : {}) });
         }
         if (problems.length) return fail(`cannot ${action} these posts: ${problems.join('; ').slice(0, 600)}`);
         payload = { ...v.proposal.payload, rows };

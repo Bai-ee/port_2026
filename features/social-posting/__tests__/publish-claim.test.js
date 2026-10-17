@@ -208,7 +208,7 @@ test('approve-draft stamps reviewedAt/reviewedBy, is idempotent, and only accept
   const scheduled = await due('Already scheduled.');
   await assert.rejects(svc.approveDraft('c1', scheduled.id), { status: 409 });
   const story = await svc.createSocialPost('c1', { content: 'Needs the story [add your memory]', status: 'draft' });
-  await assert.rejects(svc.approveDraft('c1', story.id));
+  assert.equal((await svc.approveDraft('c1', story.id)).content, 'Needs the story');
   await assert.rejects(svc.approveDraft('c1', 'nope'), { status: 404 });
 });
 

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 import { randomUUID } from 'crypto';
-import { createSocialPost, readSocialQueue, getSocialPost, createDraftPostOnce, ensureDraftPost, findOpenPostForPackage, updateSocialPost, runPostingAgents } from '../../../../features/social-posting/twitter-service.js';
+import { createSocialPost, readSocialQueue, getSocialPost, createDraftPostOnce, ensureDraftPost, findOpenPostForPackage, updateSocialPost, runPostingAgents, approveDraft, unapproveDraft } from '../../../../features/social-posting/twitter-service.js';
 import { buildDayPlan, mergeListCandidates } from '../../../../features/x-quote-targets/day-plan.js';
 // Static import so Next bundles the calendar — docs/audits/ is NOT in
 // .vercelignore, but a runtime fs read of a repo path is fragile on serverless.
@@ -19,7 +19,7 @@ import { buildClientPackage, applyApproval } from '../../../../features/x-conten
 import { ageHoursOf, DEFAULT_WINDOW_HOURS } from '../../../../features/x-quote-targets/rank.js';
 import { buildPostResults } from '../../../../features/x-content-inventory/results.js';
 import { recentPostsFromQueue } from '../../../../features/x-content-inventory/allocate-slot.js';
-import { buildMonthCalendar, ctDate } from '../../../../features/x-content-inventory/month-calendar.js';
+import { buildMonthCalendar, ctDate, toRow as calendarPostRow } from '../../../../features/x-content-inventory/month-calendar.js';
 import { createContentTaskStore } from '../../../../features/x-content-inventory/content-tasks.js';
 import { joinPerformance, engineStats } from '../../../../features/x-content-inventory/performance.js';
 import * as bucketStore from '../../../../features/x-content-inventory/bucket-store.js';
@@ -313,6 +313,9 @@ const SUPPORTED_ACTIONS = [
   'inventory-save',
   'inventory-delete',
   'month-calendar',
+  'calendar-approve',
+  'calendar-unapprove',
+  'calendar-suggestion-approve',
   'content-task-update',
   'content-context',
   'post-status',
@@ -420,6 +423,27 @@ async function handleContentTaskUpdate(context, body) {
  * Month calendar over social_posts, with undated drafts PROPOSED onto days (display only, nothing is written).
  * Read-only like the week view: Approve / Reject / edit go through the social-posting route.
  */
+/** Today's (and any later) daily-run suggestions that are still unsaved: [{id,date,slot,type,text,runId,expiresAt}]. */
+async function readCalendarSuggestions(clientId, now) {
+  const today = ctDate(now);
+  const run = await latestDailyRun(createFirestoreRunStore(fb.adminDb), clientId);
+  if (!run || !(run.localDate >= today)) return [];
+  const runId = `${clientId}__${run.localDate}__${run.channel || 'x'}__v${run.version}`;
+  return (Array.isArray(run.suggestions) ? run.suggestions : [])
+    .filter((s) => s && typeof s.id === 'string' && !s.socialPostId && s.reviewState !== 'dismissed' && s.reviewState !== 'saved')
+    .map((s) => ({ id: s.id, date: run.localDate, slot: s.slot || null, proposedSlot: s.proposedSlot || null, type: s.type || null, runId,
+      text: String(s.edit?.text || s.draft?.text || ''), expiresAt: s.expiresAt || s.package?.expiresAt || null }));
+}
+
+/** Open (non-dismissed) quote candidates, track-list merged: [{id,url,handle,text,createdAt,trackId}]. */
+async function readCalendarQuoteTargets(clientId) {
+  const { rawQuoteTargets, listSignals } = await readQuoteState(clientId);
+  const qt = mergeListCandidates(rawQuoteTargets, listSignals);
+  const dismissed = new Set(Array.isArray(qt?.dismissed) ? qt.dismissed : []);
+  return (Array.isArray(qt?.candidates) ? qt.candidates : []).filter((c) => c && !dismissed.has(c.id))
+    .map((c) => ({ id: c.id || c.url, url: c.url, text: c.text, handle: c.author?.username || (typeof c.author === 'string' ? c.author : null), createdAt: c.createdAt, trackId: c.trackId }));
+}
+
 async function handleMonthCalendar(context, body) {
   const raw = typeof body?.month === 'string' ? body.month.trim() : '';
   const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(raw) ? raw : ctDate(Date.now()).slice(0, 7);
@@ -439,7 +463,13 @@ async function handleMonthCalendar(context, body) {
   const withBuckets = posts.map((p) => (p.bucketId || !pkgs.has(p.packageId) ? p : { ...p, bucketId: bucketOfPost(p, pkgs.get(p.packageId)) }));
   // "To film" reminders (content_tasks): shown on their dueOn day. Advisory read; a failure never blocks the calendar.
   const tasks = await createContentTaskStore(fb.adminDb).list(context.clientId).catch(() => []);
-  const calendar = buildMonthCalendar({ posts: withBuckets, month, now: Date.now(), config, buckets, tasks });
+  // Unsaved daily-run suggestions + open quote targets ride the same grid (display only). Advisory reads.
+  const now = Date.now();
+  const [suggestions, quoteTargets] = await Promise.all([
+    readCalendarSuggestions(context.clientId, now).catch(() => []),
+    readCalendarQuoteTargets(context.clientId).catch(() => []),
+  ]);
+  const calendar = buildMonthCalendar({ posts: withBuckets, month, now, config, buckets, tasks, suggestions, quoteTargets });
   await withRowThumbs(calendar, pkgs, context.clientId);
   return { ok: true, calendar };
 }
@@ -971,6 +1001,82 @@ async function readContentContext(clientId, { packageIds = dailyLoopDemoSet.ids,
   }, { clientId, now, packageIds, corpora: loopCorpora });
 }
 
+// ---- Calendar approve / unapprove (rule: the memory line never blocks approval; approving never schedules or publishes) ----
+
+const calendarRowOf = (post) => {
+  const ms = Date.parse(post.scheduledAt || post.postedAt || '');
+  return { ...calendarPostRow(post), ...(Number.isFinite(ms) ? { time: new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Chicago', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(ms)) } : {}) };
+};
+
+async function approveCalendarPost(context, decoded, postId, expectedRevision, content) {
+  let before = await getSocialPost(context.clientId, postId);
+  if (!before) throw Object.assign(new Error('Post not found.'), { status: 404 });
+  // Edited text from the row/sheet is applied first (revision-checked), then the placeholder is stripped on approve.
+  if (typeof content === 'string' && content.trim() && content.trim() !== before.content) {
+    if (expectedRevision != null && (before.revision || 0) !== Number(expectedRevision)) throw Object.assign(new Error('The post changed; reload and try again.'), { status: 409, code: 'revision-conflict' });
+    before = await updateSocialPost(context.clientId, postId, { content });
+    expectedRevision = before.revision;
+  }
+  const post = await approveDraft(context.clientId, postId, { reviewedBy: decoded?.email || decoded?.uid || null, expectedRevision });
+  return { post, row: calendarRowOf(post), stripped: before.status === 'draft' && before.content !== post.content };
+}
+
+async function handleCalendarApprove(context, decoded, body) {
+  const postId = String(body?.postId || '').trim();
+  if (!postId) throw Object.assign(new Error('postId is required.'), { status: 400 });
+  return { ok: true, ...(await approveCalendarPost(context, decoded, postId, body?.expectedRevision, body?.content)) };
+}
+
+async function handleCalendarUnapprove(context, body) {
+  const postId = String(body?.postId || '').trim();
+  if (!postId) throw Object.assign(new Error('postId is required.'), { status: 400 });
+  const post = await unapproveDraft(context.clientId, postId, { expectedRevision: body?.expectedRevision });
+  return { ok: true, post, row: calendarRowOf(post) };
+}
+
+/** Save a calendar suggestion / requote as a draft through the existing paths, then approve it. Nothing is scheduled or published. */
+async function handleCalendarSuggestionApprove(context, decoded, body) {
+  const kind = body?.kind;
+  const id = String(body?.id || '').trim();
+  if (!['suggestion', 'requote'].includes(kind) || !id) throw Object.assign(new Error('kind (suggestion|requote) and id are required.'), { status: 400 });
+  let postId;
+  if (kind === 'suggestion') {
+    const store = createFirestoreRunStore(fb.adminDb);
+    const run = await latestDailyRun(store, context.clientId);
+    if (!run) throw Object.assign(new Error('No daily run found.'), { status: 404 });
+    const key = { clientId: run.clientId, localDate: run.localDate, channel: run.channel, version: run.version };
+    const postExists = async (pid) => (await fb.adminDb.collection('social_posts').doc(String(pid)).get()).exists;
+    try {
+      const saved = await saveSuggestionDraft({ store, getPackage: getPackageFor(context.clientId), createDraftPostOnce, postExists, ...mediaSigners() }, { key, suggestionId: id, text: typeof body?.text === 'string' ? body.text : undefined });
+      postId = saved.postId;
+    } catch (err) {
+      if (err.checks) return { ok: false, status: err.status || 422, error: err.message, checks: err.checks };
+      if (err.code === 'needs-staging') return { ok: false, status: err.status || 409, error: err.message, code: err.code, packageId: err.packageId };
+      throw err;
+    }
+  } else {
+    const targets = await readCalendarQuoteTargets(context.clientId);
+    const t = targets.find((x) => String(x.id) === id || String(x.url).endsWith(`/status/${id}`));
+    if (!t) throw Object.assign(new Error('That quote target is no longer open.'), { status: 404 });
+    const created = Date.parse(t.createdAt || '');
+    if (!Number.isFinite(created) || created + 36 * 3_600_000 <= Date.now()) throw Object.assign(new Error('The quote window for that post has closed.'), { status: 409, code: 'window-closed' });
+    if (!QUOTE_URL_RE.test(String(t.url || ''))) throw Object.assign(new Error('That quote target has no valid post URL.'), { status: 422 });
+    const handle = String(t.handle || '').replace(/^@/, '');
+    const today = ctDate(Date.now());
+    // Same row shape as the daily-fill quote draft (same idempotency key, so a fill and this click never double up); a plain
+    // quote with no caption, since the memory line is never required.
+    const { post } = await ensureDraftPost(context.clientId, {
+      idempotencyKey: `daily-fill:${today}:quote:${t.id}`,
+      content: t.url, source: 'daily-fill', fillKind: 'quote', fillSource: { type: 'quote-target', id: String(t.id), asOf: today }, reviewOn: today,
+      needsStory: false, expiresAt: new Date(created + 36 * 3_600_000).toISOString(),
+      sourceRef: { kind: 'quote-target', url: t.url, id: String(t.id), handle: handle || null },
+    });
+    postId = post.id;
+  }
+  const out = await approveCalendarPost(context, decoded, postId, undefined);
+  return { ok: true, kind, created: true, ...out };
+}
+
 async function handleDailyRun(context, action, body) {
   // Fails closed with a code naming the missing input (approved Brain / plan doc / connected X, or contentLoop.enabled).
   await assertClientReady(fb.adminDb, context.clientId);
@@ -1171,6 +1277,12 @@ export async function POST(request) {
     if (action === 'post-results') return json(await handlePostResults(context));
     if (action === 'month-calendar') {
       return json(await handleMonthCalendar(context, body));
+    }
+    if (action === 'calendar-approve') return json(await handleCalendarApprove(context, decoded, body));
+    if (action === 'calendar-unapprove') return json(await handleCalendarUnapprove(context, body));
+    if (action === 'calendar-suggestion-approve') {
+      const result = await handleCalendarSuggestionApprove(context, decoded, body);
+      return json(result, result.ok === false ? (result.status || 422) : 200);
     }
     if (action === 'content-task-update') return json(await handleContentTaskUpdate(context, body));
     if (action === 'engine-performance') {

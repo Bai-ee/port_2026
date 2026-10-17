@@ -68,6 +68,12 @@ export const CONTENT_ACTIONS = [
   // ---- tier 1: reversible writes / drafts -----------------------------------------------------------
   Q('content.quote.draft', 'content', 'Draft a quote-post', 'Creates a draft quote-post for an X post (caption + quotedUrl). Draft only; never scheduled.', 'draft-quote',
     obj({ caption: str('The caption text.'), quotedUrl: str('https://x.com/<handle>/status/<digits>') }, ['caption', 'quotedUrl']), { tier: 1 }),
+  Q('calendar.post.approve', 'calendar', 'Approve a calendar post', 'Approves one draft (never schedules or publishes). A leftover "[add your memory]"/"[add your take]" placeholder is removed from the text, it does not block approval.', 'calendar-approve',
+    obj({ postId: str('social_posts id.'), expectedRevision: int('Post revision you read; refused on a mismatch.') }, ['postId']), { tier: 1, snapshot: [{ collection: 'social_posts', idArg: 'postId' }] }),
+  Q('calendar.post.unapprove', 'calendar', 'Unapprove a calendar post', 'Returns an approved, unscheduled post to draft. Refused for a scheduled or posted row.', 'calendar-unapprove',
+    obj({ postId: str('social_posts id.'), expectedRevision: int('Post revision you read.') }, ['postId']), { tier: 1, snapshot: [{ collection: 'social_posts', idArg: 'postId' }] }),
+  Q('calendar.suggestion.approve', 'calendar', 'Approve a calendar suggestion', 'Saves a daily-run suggestion (kind suggestion) or an open quote target (kind requote) as a draft through the existing save path, then approves it. Never schedules or publishes.', 'calendar-suggestion-approve',
+    obj({ kind: str('suggestion or requote.'), id: str('Suggestion id (from the calendar row suggestionId) or quote target id (row quoteTargetId).'), date: day('Calendar day the row was shown on.') }, ['kind', 'id']), { tier: 1 }),
   Q('content.quote-target.dismiss', 'content', 'Dismiss a quote target', 'Hides a quote-target candidate from the calendar (kept in a bounded dismissed list).', 'dismiss',
     obj({ candidateId: str('Candidate id.') }, ['candidateId']),
     { tier: 1, snapshot: [{ path: 'dashboard_state/{clientId}', field: 'marketingBrief.quoteTargets.dismissed' }] }),

@@ -479,11 +479,11 @@ const QUEUE_BULK_WHAT = Object.freeze({
 });
 function queueBulkPreview(p) {
   const rows = Array.isArray(p.rows) ? p.rows : [];
-  const blocked = rows.filter((r) => r.blocked).length;
+  const blocked = rows.filter((r) => r.note).length;
   return [
     `${QUEUE_BULK_WHAT[p.action] || p.action}${p.action === 'set-review-date' ? ` Day: ${p.date}.` : ''}`,
-    `Posts: ${(p.postIds || []).length}${blocked ? ` (${blocked} cannot be approved yet: needs its story)` : ''}`,
-    ...rows.slice(0, 8).map((r) => `${r.status}: ${r.text}${r.blocked ? ` [${r.blocked}]` : ''}`),
+    `Posts: ${(p.postIds || []).length}${blocked ? ` (${blocked} will have the memory placeholder removed on approve)` : ''}`,
+    ...rows.slice(0, 8).map((r) => `${r.status}: ${r.text}${r.note ? ` [${r.note}]` : ''}`),
     'Never schedules or publishes.',
   ];
 }

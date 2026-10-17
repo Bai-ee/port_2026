@@ -1,6 +1,6 @@
 // memory-suggest.js - suggested "memory" lines for drafts that still carry a blocking placeholder
-// ("[add your memory]" / "[add your take]", self-reply.js BLOCKING_PLACEHOLDERS). Those drafts cannot be approved,
-// scheduled or published until the placeholder is replaced.
+// ("[add your memory]" / "[add your take]", self-reply.js BLOCKING_PLACEHOLDERS). Approving such a draft strips the placeholder line;
+// scheduling or publishing text that still carries it is refused.
 //
 // Pure: no I/O, no clock, no model. A suggestion is ONLY a proposal for the owner to edit or skip; the deterministic
 // fallback is built from the library item's own facts (title, year) and claims no personal experience. A model-written

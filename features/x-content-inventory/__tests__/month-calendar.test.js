@@ -227,3 +227,62 @@ test('daily-fill fields pass through to rows (fillKind, expiresAt, source, fillS
   assert.equal(f2.fillKind, null);
   assert.equal(f2.fillSource, null);
 });
+
+// ---- suggestions + requotes + uniform approval mark ----
+const sug = (id, extra = {}) => ({ id, date: '2026-10-10', type: 'original', text: `suggest ${id}`, runId: 'r1', slot: { letter: 'A', timeCT: '9:30 AM' }, ...extra });
+const qtgt = (id, createdAt, extra = {}) => ({ id, url: `https://x.com/h/status/${id}`, handle: 'h', text: `target ${id}`, createdAt, ...extra });
+
+test('every post row carries kind post + a uniform approval mark', () => {
+  const cal = buildMonthCalendar({ posts: [
+    post('s', '2026-10-12T14:00:00Z'), post('a', '2026-10-13T14:00:00Z', { status: 'approved', scheduledAt: '2026-10-13T14:00:00Z' }),
+    post('p', '2026-10-09T14:00:00Z', { status: 'posted', postedAt: '2026-10-09T14:00:00Z' }),
+    draft('d', { reviewOn: '2026-10-14' }), post('h', '2026-10-15T14:00:00Z', { status: 'needs_review' }),
+  ], month: '2026-10', now: NOW });
+  const rows = allDays(cal).flatMap((d) => d.posts);
+  const by = Object.fromEntries(rows.map((r) => [r.id, r]));
+  assert.deepEqual([by.s.approval, by.a.approval, by.p.approval, by.d.approval, by.h.approval], ['scheduled', 'approved', 'posted', 'unapproved', 'held']);
+  assert.ok(rows.every((r) => r.kind === 'post'));
+});
+
+test('suggestions land on their date, are counted, and never touch spacing flags or the legend', () => {
+  const cal = buildMonthCalendar({ posts: [post('a', '2026-10-10T14:00:00Z')], month: '2026-10', now: NOW, buckets: [], suggestions: [sug('s1'), sug('s2', { slot: { letter: 'B', timeCT: '9:45 AM' } })] });
+  const d = day(cal, '2026-10-10');
+  const rows = d.posts.filter((r) => r.kind === 'suggestion');
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].approval, 'suggested');
+  assert.equal(rows[0].state, 'suggested');
+  assert.equal(rows[0].suggestionId, 's1');
+  assert.equal(rows[0].time, '09:30');
+  assert.equal(d.flags.length, 0);
+  assert.equal(d.counts.suggested, 2);
+  assert.equal(cal.totals.suggested, 2);
+  assert.equal(cal.totals.requote, 0);
+});
+
+test('a saved suggestion (its post carries suggestionId) shows only as the post', () => {
+  const cal = buildMonthCalendar({ posts: [draft('p', { sourceRef: { kind: 'daily-loop', suggestionId: 's1' }, scheduledAt: '2026-10-10T20:00:00Z' })], month: '2026-10', now: NOW, suggestions: [sug('s1'), sug('s2')] });
+  assert.deepEqual(day(cal, '2026-10-10').posts.filter((r) => r.kind === 'suggestion').map((r) => r.suggestionId), ['s2']);
+});
+
+test('requotes show on today and each later day the 36h window covers, closed ones never', () => {
+  const created = new Date(NOW - 10 * 3_600_000).toISOString(); // 10h old -> window to +26h (Sun Oct 11 05:00 CT)
+  const cal = buildMonthCalendar({ posts: [], month: '2026-10', now: NOW, quoteTargets: [qtgt('111', created), qtgt('222', new Date(NOW - 40 * 3_600_000).toISOString())] });
+  const r10 = day(cal, '2026-10-10').posts.filter((r) => r.kind === 'requote');
+  const r11 = day(cal, '2026-10-11').posts.filter((r) => r.kind === 'requote');
+  assert.equal(r10.length, 1);
+  assert.equal(r11.length, 1);
+  assert.equal(day(cal, '2026-10-12').posts.filter((r) => r.kind === 'requote').length, 0);
+  assert.equal(r10[0].quotedUrl, 'https://x.com/h/status/111');
+  assert.equal(r10[0].handle, 'h');
+  assert.equal(r10[0].windowOpen, true);
+  assert.ok(r10[0].expiresAt > created);
+  assert.equal(cal.totals.requote, 2);
+});
+
+test('a quote target that already has a saved post shows only as that post', () => {
+  const created = new Date(NOW - 2 * 3_600_000).toISOString();
+  const viaRef = draft('d1', { reviewOn: '2026-10-10', sourceRef: { kind: 'quote-target', id: '111', url: 'https://x.com/h/status/111' } });
+  const viaText = draft('d2', { reviewOn: '2026-10-10', content: 'take\n\nhttps://x.com/h/status/222' });
+  const cal = buildMonthCalendar({ posts: [viaRef, viaText], month: '2026-10', now: NOW, quoteTargets: [qtgt('111', created), qtgt('222', created), qtgt('333', created)] });
+  assert.deepEqual(day(cal, '2026-10-10').posts.filter((r) => r.kind === 'requote').map((r) => r.quoteTargetId), ['333']);
+});

@@ -116,13 +116,15 @@ test('createDraftPostOnce: second call returns the existing row, one row only, s
   await assert.rejects(svc.createDraftPostOnce('c1', 'bad id', { content: 'x' }), { status: 400 });
 });
 
-test('approveDraft blocks needsStory (code needs-story) and the [add your memory] placeholder', async () => {
+test('approveDraft never blocks on needsStory or the [add your memory] placeholder: it strips the line and approves', async () => {
   const flagged = await svc.createSocialPost('c1', { content: 'Flagged.', needsStory: true });
-  await assert.rejects(svc.approveDraft('c1', flagged.id), { status: 409, code: 'needs-story' });
-  assert.equal(raw(flagged.id).status, 'draft');
-  const ph = await svc.createSocialPost('c1', { content: 'Story [add your memory]' });
-  await assert.rejects(svc.approveDraft('c1', ph.id));
-  assert.equal(raw(ph.id).status, 'draft');
+  const f = await svc.approveDraft('c1', flagged.id);
+  assert.equal(f.status, 'approved');
+  assert.equal(f.needsStory, false);
+  const ph = await svc.createSocialPost('c1', { content: 'Story\n\n[add your memory]' });
+  const a = await svc.approveDraft('c1', ph.id);
+  assert.equal(a.status, 'approved');
+  assert.equal(raw(ph.id).content, 'Story');
 });
 
 test('approveDraft is idempotent on an approved row and rejects other statuses with not-draft', async () => {
