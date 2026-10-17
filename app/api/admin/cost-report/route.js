@@ -382,7 +382,7 @@ async function handle(request) {
     { key: 'last30days',   label: 'last30days · social search (ScrapeCreators)',           status: scrapeCreators.available ? 'estimate' : 'not-instrumented', usd: scrapeCreators.available ? round2(scrapeCreators.estUsd) : 0, note: scStatusNote },
     { key: 'recipes',      label: 'Analysis recipes',                                     status: 'tracked',         usd: 0,                      note: 'Logged to usage_events (recipe-run + pre-digest) — folded into Per-call above' },
     { key: 'kb_summaries', label: 'Knowledge-base chat',                                  status: 'not-instrumented', usd: 0,                      note: 'KB chat LLM calls still not routed through usage_events (brief/exec summaries now are)' },
-    { key: 'x_writes',     label: 'X API writes · Social Auto-Publish + Copywriter/Schedule Posts', status: 'not-instrumented', usd: 0, note: `${xApiWriteCount} write${xApiWriteCount === 1 ? '' : 's'} counted via usage_events in this window — X has no per-call price via the API, so it's counted but not priced. Dollar spend stays on developer.x.com.` },
+    { key: 'x_writes',     label: 'X API writes · Social Auto-Publish + Copywriter/Schedule Posts', status: 'not-instrumented', usd: 0, note: `${xApiWriteCount} write${xApiWriteCount === 1 ? '' : 's'} counted via usage_events in this window — The full X API ledger (reads + writes, by source) is the X API block above; dollars show only once a rate is set there. Billing truth stays on developer.x.com.` },
   ];
 
   return json({

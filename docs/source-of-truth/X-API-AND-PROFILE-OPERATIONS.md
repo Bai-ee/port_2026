@@ -135,9 +135,14 @@ X API v2 is **credit-metered** on the enrolled developer account. Writes consume
 }
 ```
 
-### ⚠️ X API spend is invisible to the Operating Cost card
+### X API usage ledger (counts, not the portal truth) — `features/x-api-usage/`
 
-`app/api/admin/cost-report/route.js` tracks **Anthropic**, **ScrapeCreators**, and **Browserless** only. There is **no X API ledger**. The card will report `$0` for X no matter how much is spent. Do not use it to check X budget — it will tell you everything is fine when it is not.
+Every call through a twitter-api-v2 client built by this app is now counted: `instrumentXClient` (Proxy over `client.v1` / `client.v2`, incl. paginator follow-up pages) wraps `getTwitterClient` (twitter-service.js), `getPlatformClient` + `getEnvOAuth1Client` (social-accounts.js), `getXOAuth2Client` + `getOAuth1Client` (x-oauth.js) and the unfollow script; the raw `GET /2/usage/tweets` fetch in `getXUsage` records itself. Not counted: OAuth plumbing (`getAppClient`: code exchange / token refresh). Callers attribute spend with `withXUsage({ clientId, source }, fn)` (AsyncLocalStorage). Data: Firestore `x_api_usage/{YYYY-MM-DD UTC}` (calls, readPosts, userReads, writes, errors + bySource / byEndpoint / byClient). Recording never throws into the X call; `X_API_USAGE_DISABLED=1` turns it off.
+
+- **No rate is hardcoded.** The owner sets `system_flags/x_api_pricing` `{perPostReadUsd, perUserLookupUsd, perWriteUsd, dailyReadCap, sourceCaps, note}` (admin `POST /api/admin/x-usage {action:'set-pricing'}`). Dollars show only for rates that are set; otherwise counts only.
+- `assertXBudget({ source, estimatePosts })` throws `XBudgetError` (`code:'x-budget'`) when today's reads + estimate pass the daily or per-source cap. Server pullers call it before spending.
+- Read: `readXUsage({days})` / admin `GET /api/admin/x-usage`; shown as the "X API" block on the Operating Cost card and via the agent read tool `get_x_spend`. `POST {action:'project-usage'}` is a REAL call to X (project monthly post usage + cap), explicit admin click only.
+- ⚠️ It still counts only what THIS app calls, and counts are not credits: the X developer portal remains the billing truth.
 
 **The only reliable way to check credit/plan state is the X developer portal** (`developer.x.com`, the enrolled account above). An agent cannot read it. **Ask the user** — do not guess a balance, and do not quote a price tier from memory. If the user does not know, say the balance is unknown and let them decide.
 

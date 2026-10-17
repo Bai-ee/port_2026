@@ -188,6 +188,24 @@ export function AdminOperatingCostView({ user }) {
 
   useEffect(() => { load(days); }, [days, load]);
 
+  // X API ledger (counts from this app; free Firestore read). Failure here never blocks the cost report.
+  const [xu, setXu] = useState(null);
+  const [xuNote, setXuNote] = useState('');
+  useEffect(() => {
+    let live = true;
+    authFetch(user, `/api/admin/x-usage?days=${days}`).then((r) => { if (live) setXu(r); }).catch(() => { if (live) setXu(null); });
+    return () => { live = false; };
+  }, [user, days]);
+  const checkXProjectUsage = useCallback(async () => {
+    if (!window.confirm('This makes 2 real X API calls (token + usage). Continue?')) return;
+    setXuNote('Checking…');
+    try {
+      const r = await authFetch(user, '/api/admin/x-usage', { method: 'POST', body: JSON.stringify({ action: 'project-usage' }) });
+      setXuNote(`X reports ${tok(r.usage?.project_usage)} of ${tok(r.usage?.project_cap)} posts this cycle.`);
+      setXu(await authFetch(user, `/api/admin/x-usage?days=${days}`));
+    } catch (e) { setXuNote(e.message || 'Check failed.'); }
+  }, [user, days]);
+
   const t = data?.totals || {};
   const a = data?.anthropic;
   const anthropicBreakdown = a?.byDescription || a?.byModel || [];
@@ -297,6 +315,36 @@ export function AdminOperatingCostView({ user }) {
                 <p className="oc-note" style={{ margin: 0 }}>{sc?.reason || 'Not connected.'}</p>
               )}
             </section>
+
+            {/* ── X API ledger ────────────────────────────────────────────────── */}
+            {xu?.ok ? (
+              <section className="section" id="operating-cost-x-api-section">
+                <div className="section-head">
+                  <span className="index">XA</span>
+                  <div>
+                    <h3>X API</h3>
+                    <p>Calls this app made to X, counted at the client. Dollars appear only when a rate is set; the X developer portal stays the billing truth.</p>
+                  </div>
+                  <button type="button" className="oc-btn" onClick={checkXProjectUsage} title="Real call: asks X for the project's monthly post usage (2 HTTP calls)">check X usage</button>
+                </div>
+                <div className="oc-metric-grid">
+                  <div className="oc-metric"><span className="oc-metric-value">{tok(xu.today.calls)}</span><span className="oc-metric-label">Calls today</span></div>
+                  <div className="oc-metric"><span className="oc-metric-value">{tok((xu.today.readPosts || 0) + (xu.today.userReads || 0))}</span><span className="oc-metric-label">Posts read today{xu.cap?.dailyReadCap != null ? ` / ${tok(xu.cap.dailyReadCap)}` : ''}</span></div>
+                  <div className="oc-metric"><span className="oc-metric-value">{tok(xu.month.calls)}</span><span className="oc-metric-label">Calls this month</span></div>
+                  <div className="oc-metric"><span className="oc-metric-value">{tok((xu.month.readPosts || 0) + (xu.month.userReads || 0))}</span><span className="oc-metric-label">Posts read this month</span></div>
+                  <div className="oc-metric"><span className="oc-metric-value">{xu.month.estUsd == null ? '—' : usd(xu.month.estUsd)}</span><span className="oc-metric-label">{xu.ratesSet ? 'Est month' : 'No rate set'}</span></div>
+                </div>
+                {Object.keys(xu.bySource || {}).length ? (
+                  <div className="oc-chip-row" style={{ marginTop: 8 }}>
+                    {Object.entries(xu.bySource).map(([k, v]) => (
+                      <span key={k} className="oc-chip">{k} · {tok(v.calls)} calls · {tok((v.readPosts || 0) + (v.userReads || 0))} read{v.writes ? ` · ${tok(v.writes)} writes` : ''}</span>
+                    ))}
+                  </div>
+                ) : <p className="oc-note" style={{ marginTop: 8 }}>No X API calls recorded in this window yet.</p>}
+                {xu.projectUsage ? <p className="oc-note" style={{ marginTop: 8 }}>Last X project check: {tok(xu.projectUsage.project_usage)} of {tok(xu.projectUsage.project_cap)} posts this cycle.</p> : null}
+                {xuNote ? <p className="oc-note" style={{ marginTop: 8 }}>{xuNote}</p> : null}
+              </section>
+            ) : null}
 
             {/* ── By client → run → stage line items ─────────────────────────── */}
             <section className="section">

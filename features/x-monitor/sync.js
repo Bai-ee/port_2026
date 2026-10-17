@@ -24,6 +24,7 @@
 // other client without its own connection fails closed (409) — never @bai_ee.
 
 import { createRequire } from 'node:module';
+import { withXUsage } from '../x-api-usage/index.js';
 import { getXOAuth2Client, getXOAuthConfigStatus, getXOAuthStatus } from '../social-posting/x-oauth.js';
 import { getPlatformClient, getSocialAccount, toPublicAccount } from '../social-posting/social-accounts.js';
 import { compactUser, diffRosters } from './audience-diff.js';
@@ -207,7 +208,7 @@ function clientIdFrom(opts) {
  * client whose stored X doc has no userId still gets a correct account (no
  * extra call).
  */
-export async function syncProfile(opts = {}) {
+async function syncProfileImpl(opts = {}) {
   const clientId = requireClientId(clientIdFrom(opts));
   const client = await getMonitorClient(clientId);
   let res;
@@ -258,7 +259,7 @@ export async function syncProfile(opts = {}) {
  * non_public_metrics/organic_metrics — asking for them on older posts is what
  * makes the whole request fail, so we bound the request instead of hoping.
  */
-export async function syncPosts({ clientId: rawClientId, deep = false } = {}) {
+async function syncPostsImpl({ clientId: rawClientId, deep = false } = {}) {
   const clientId = requireClientId(rawClientId);
   const client = await getMonitorClient(clientId); // 409 account-not-connected first
   const { accountId } = await requireAccountId(clientId);
@@ -362,7 +363,7 @@ export async function estimateAudienceCalls(accountId) {
  * short we still store the partial roster, but mark it incomplete so no diff —
  * this run's or the next one's — can turn "not fetched" into "unfollowed".
  */
-export async function syncAudience({ clientId: rawClientId, maxPages = DEFAULT_MAX_FOLLOWER_PAGES } = {}) {
+async function syncAudienceImpl({ clientId: rawClientId, maxPages = DEFAULT_MAX_FOLLOWER_PAGES } = {}) {
   const clientId = requireClientId(rawClientId);
   const client = await getMonitorClient(clientId); // 409 account-not-connected first
   const { accountId } = await requireAccountId(clientId);
@@ -487,3 +488,9 @@ function firstNumber(...values) {
   }
   return null;
 }
+
+// Every X Monitor sync is attributed to its client + the 'x-monitor' source in the X API usage ledger.
+const tagged = (fn) => (opts) => withXUsage({ clientId: clientIdFrom(opts) || null, source: 'x-monitor' }, () => fn(opts));
+export const syncProfile = tagged(syncProfileImpl);
+export const syncPosts = tagged(syncPostsImpl);
+export const syncAudience = tagged(syncAudienceImpl);

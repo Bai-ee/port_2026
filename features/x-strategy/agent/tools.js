@@ -161,6 +161,11 @@ export const READ_TOOLS = Object.freeze([
     input_schema: { type: 'object', properties: { days: int('Impressions window in days (default 30)', { minimum: 1, maximum: 120 }) } },
   },
   {
+    name: 'get_x_spend',
+    description: 'X API usage counted by this app (the ledger): calls and posts read today, this month and by day, split by source (strategy accounts, quote targets, X Monitor, searches, posting) and by endpoint, the daily read cap and what remains, and an estimated dollar figure ONLY when the owner has set a rate (otherwise counts only). Reads stored counters only; never calls X and never spends. The X developer portal remains the billing truth.',
+    input_schema: { type: 'object', properties: { days: int('Window in days for the by-day / by-source breakdown (default 30)', { minimum: 1, maximum: 90 }) } },
+  },
+  {
     name: 'get_evaluation',
     description: 'The current evaluation: own vs benchmark cadence, type mix, lift, top gaps, recommended tier, and caveats (likes-only, few rows, stale). Every figure has a row count and date range.',
     input_schema: { type: 'object', properties: {} },
@@ -512,6 +517,7 @@ export async function runReadTool(name, input, toolDeps) {
     });
     case 'get_rule_check': return need('getRuleCheck')({ days: Number.isInteger(input?.days) ? Math.min(Math.max(input.days, 1), 180) : 30 });
     case 'get_audience': return need('getAudience')({ days: Number.isInteger(input?.days) ? Math.min(Math.max(input.days, 1), 120) : 30 });
+    case 'get_x_spend': return need('getXSpend')({ days: Number.isInteger(input?.days) ? Math.min(Math.max(input.days, 1), 90) : 30 });
     case 'get_plan': return { plan: await need('getPlan')() };
     case 'get_tracks': {
       if (typeof deps.getTracks === 'function') return deps.getTracks();

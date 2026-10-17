@@ -773,6 +773,11 @@ export function createStrategyHandlers({
         // Resolved by the client's X account id, never by a handle match: no other client's account can answer.
         return summarizeAudience(await readAudience(clientId), { days, nowMs: clock() });
       },
+      getXSpend: async ({ days } = {}) => {
+        const { readXUsage } = await import('../x-api-usage/index.js');
+        const u = await readXUsage({ days });
+        return { today: u.today, month: u.month, byDay: u.byDay.slice(-14), bySource: u.bySource, byEndpoint: u.byEndpoint, estUsd: u.estUsd, ratesSet: u.ratesSet, cap: u.cap, projectUsage: u.projectUsage, note: u.note };
+      },
       topPosts: async ({ handle, type, topic, limit } = {}) => {
         const profile = preloaded.profile ?? (preloaded.profile = await loadProfile(clientId));
         const allowed = [profile.ownHandle, ...profile.benchmarkHandles].map((h) => safeHandle(h)).filter(Boolean);

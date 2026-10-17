@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { config as loadDotenv } from 'dotenv';
 import { TwitterApi } from 'twitter-api-v2';
+import { instrumentXClient } from '../x-api-usage/index.js';
 import { scoreXPost } from '../x-growth/index.js';
 import { compactTwitterError, mapTwitterError } from './twitter-errors.js';
 import { getAdapter } from './adapters/index.js';
@@ -133,7 +134,7 @@ function getTwitterClient() {
   }
 
   if (!twitterClient) {
-    twitterClient = new TwitterApi({ appKey, appSecret, accessToken, accessSecret });
+    twitterClient = instrumentXClient(new TwitterApi({ appKey, appSecret, accessToken, accessSecret }));
   }
   return twitterClient;
 }
