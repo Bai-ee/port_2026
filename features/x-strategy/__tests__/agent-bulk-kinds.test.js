@@ -142,6 +142,17 @@ test('tools: daily-fill uses previewDailyFill; refresh adds the estimate; queue-
   assert.equal(be.proposal.payload.bucket.sourceKind, 'manual');
 });
 
+test('tools: refresh shows the X API estimate when the client source is x-api, static text otherwise', async () => {
+  const xs = { dataSources: { strategyAccounts: 'x-api', quoteTargets: 'mac' }, estimates: { strategyAccounts: { calls: 6, maxPosts: 600 }, quoteTargets: { calls: 15, maxPosts: 300 } } };
+  const r = await prepareProposal('propose_refresh', { ...common, groups: ['strategy-accounts', 'quote-targets'], reason: 'stale' }, { toolDeps: { getXDataSources: async () => xs } });
+  const [a, q] = r.proposal.payload.estimate;
+  assert.equal(a.paid, true);
+  assert.match(a.text, /Paid X API — 6 calls, up to 600 posts/);
+  assert.equal(q.paid, false);
+  const none = await prepareProposal('propose_refresh', { ...common, groups: ['strategy-accounts'], reason: 'stale' }, { toolDeps: {} });
+  assert.equal(none.ok, true);
+});
+
 test('ui-model: labels and previews', () => {
   assert.equal(proposalKindLabel('daily-fill'), 'Fill the calendar with drafts');
   const lines = proposalPayloadPreview('daily-fill', { from: '2026-10-20', days: 2, include: ['quotes'], preview: { total: 2, byKind: { quote: 1, baseline: 1 }, sample: [{ date: '2026-10-20', kind: 'quote', text: 'hi' }] } });

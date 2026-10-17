@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  normalizeDataSources, sourceFor, withSource, withAutoDaily, sourceGroupsPresent, xApiPaidRows, formatXSpendLine, buildPricingBody,
+  normalizeDataSources, sourceFor, withSource, withAutoDaily, sourceGroupsPresent, xApiPaidRows, formatXSpendLine, buildPricingBody, estimatesByGroup, selectionUsesXApi,
 } from '../x-source-model.js';
 
 test('normalize defaults to mac / false and accepts the envelope', () => {
@@ -47,4 +47,19 @@ test('pricing body validates', () => {
   assert.deepEqual(buildPricingBody({ perPostReadUsd: '0.005', dailyReadCap: '500.7', perUserLookupUsd: '' }).body, { action: 'set-pricing', perPostReadUsd: 0.005, dailyReadCap: 500 });
   assert.ok(buildPricingBody({ perPostReadUsd: '-1' }).error);
   assert.ok(buildPricingBody({}).error);
+});
+
+test('spend line reads the real readXUsage shape (today.readPosts, cap.dailyReadCap)', () => {
+  assert.equal(formatXSpendLine({ today: { calls: 4, readPosts: 90, userReads: 2, estUsd: null }, cap: { dailyReadCap: 1000, usedToday: 92 } }), 'X API today: 4 calls · 90 posts · no rate set (cap 1000)');
+});
+
+test('estimatesByGroup maps x-data-sources-get estimates to group ids; selectionUsesXApi gates xApiConfirmed', () => {
+  const est = estimatesByGroup({ estimates: { strategyAccounts: { calls: 5, maxPosts: 500 }, quoteTargets: { calls: 15, maxPosts: 300 } } });
+  assert.deepEqual(est, { 'strategy-accounts': { calls: 5, maxPosts: 500 }, 'quote-targets': { calls: 15, maxPosts: 300 } });
+  assert.deepEqual(estimatesByGroup(null), {});
+  const rows = xApiPaidRows({ ids: ['quote-targets'] }, { quoteTargets: 'x-api' }, [], est, []);
+  assert.match(rows[0].estimate.text, /15 calls, up to 300 posts/);
+  assert.equal(selectionUsesXApi({ ids: ['quote-targets'] }, { quoteTargets: 'x-api' }), true);
+  assert.equal(selectionUsesXApi({ ids: ['quote-targets'] }, { quoteTargets: 'mac' }), false);
+  assert.equal(selectionUsesXApi({ ids: ['x-search'] }, { quoteTargets: 'x-api' }), false);
 });

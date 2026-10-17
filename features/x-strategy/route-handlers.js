@@ -849,6 +849,10 @@ export function createStrategyHandlers({
         // Resolved by the client's X account id, never by a handle match: no other client's account can answer.
         return summarizeAudience(await readAudience(clientId), { days, nowMs: clock() });
       },
+      getXDataSources: async () => {
+        const r = await xDataSourcesGet({ clientId }, { clientId });
+        return r?.ok ? { dataSources: r.dataSources, estimates: r.estimates } : null;
+      },
       getXSpend: async ({ days } = {}) => {
         const { readXUsage } = await import('../x-api-usage/index.js');
         const u = await readXUsage({ days });

@@ -3722,7 +3722,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     analysisRecipes: marketingBriefConfig?.analysisRecipes,
     xMonitorState: null,
   }), [marketingBriefConfig]);
-  const runMarketingRefresh = useCallback(async ({ ids, todayWithModel } = {}) => {
+  const runMarketingRefresh = useCallback(async ({ ids, todayWithModel, xApiConfirmed } = {}) => {
     if (!isAdmin || !user || marketingRefreshRunningRef.current || marketingBriefRunning) return;
     const list = Array.isArray(ids) ? ids : [];
     if (!list.length) return;
@@ -3746,7 +3746,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           } else {
             const runner = GROUP_RUNNERS[id];
             if (!runner) throw new Error('No runner for this group.');
-            const out = await runner({ getIdToken: brandSystemGetIdToken, clientId, options: { todayWithModel: !!todayWithModel }, note: appendDim, apiPath });
+            const out = await runner({ getIdToken: brandSystemGetIdToken, clientId, options: { todayWithModel: !!todayWithModel, xApiConfirmed: xApiConfirmed === true }, note: appendDim, apiPath });
             detail = Array.isArray(out?.detail) ? out.detail : [];
           }
           if (id !== 'market-signals') termPhaseClose(detail);
@@ -3782,6 +3782,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         console.info('[marketing-refresh] already running; agent refresh request ignored');
         return;
       }
+      // Never sets xApiConfirmed: x-api groups throw in their runner ("confirm in the Refresh panel"); free/Mac groups run normally.
       runMarketingRefresh({ ids, todayWithModel: false });
     };
     window.addEventListener('hitloop:marketing-refresh', onAgentRefresh);

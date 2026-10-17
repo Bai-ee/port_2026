@@ -80,12 +80,29 @@ export function xApiPaidRows(selection, sources, alreadyPaid = [], estimates = {
 
 const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 
+// x-data-sources-get `estimates:{strategyAccounts,quoteTargets}` ({calls,maxPosts,...}) -> { [groupId]: {calls,maxPosts} } for xApiPaidRows.
+export function estimatesByGroup(resp) {
+  const e = resp && typeof resp === 'object' && resp.estimates && typeof resp.estimates === 'object' ? resp.estimates : {};
+  const out = {};
+  for (const g of X_SOURCE_GROUPS) {
+    const v = e[g.key];
+    if (v && typeof v === 'object') out[g.groupId] = { calls: Number.isFinite(v.calls) ? v.calls : undefined, maxPosts: Number.isFinite(v.maxPosts) ? v.maxPosts : undefined };
+  }
+  return out;
+}
+
+// True when the selection includes a group whose source is X API (the confirm row then lists its estimate and confirming sets xApiConfirmed).
+export function selectionUsesXApi(selection, sources) {
+  const ids = Array.isArray(selection?.ids) ? selection.ids : [];
+  return X_SOURCE_GROUP_IDS.some((id) => ids.includes(id) && sourceFor(sources, id) === 'x-api');
+}
+
 // Header line from the readXUsage payload. Dollars only when the server returned a number; cap only when set.
 export function formatXSpendLine(usage) {
   if (!usage || typeof usage !== 'object') return 'X API today: unavailable';
   const t = usage.today && typeof usage.today === 'object' ? usage.today : {};
   const calls = n(t.calls);
-  const posts = n(t.posts);
+  const posts = n(t.readPosts ?? t.posts); // readXUsage: today.readPosts (older shape: posts)
   let line = `X API today: ${calls} ${calls === 1 ? 'call' : 'calls'} · ${posts} ${posts === 1 ? 'post' : 'posts'}`;
   const usd = t.estUsd ?? usage.estUsd;
   if (typeof usd === 'number' && Number.isFinite(usd)) line += ` · ~$${usd.toFixed(2)}`;

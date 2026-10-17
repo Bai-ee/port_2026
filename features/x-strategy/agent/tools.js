@@ -883,8 +883,22 @@ export async function prepareProposal(toolName, input, { toolDeps, userMessages 
       case 'refresh': {
         const v = validateProposal({ kind, payload: { groups: input.groups, reason: input.reason } });
         if (!v.ok) return fail(v.errors.join('; '));
+        // X data groups: when the client's source is the paid X API, show the server's call/post estimate (degrades to the static text if the dep is absent or fails).
+        let xs = null;
+        if (v.proposal.payload.groups.some((id) => id === 'strategy-accounts' || id === 'quote-targets') && typeof toolDeps?.getXDataSources === 'function') {
+          xs = await toolDeps.getXDataSources().catch(() => null);
+        }
+        const X_KEY = { 'strategy-accounts': 'strategyAccounts', 'quote-targets': 'quoteTargets' };
         const estimate = v.proposal.payload.groups.map((id) => {
           const g = REFRESH_GROUPS.find((x) => x.id === id);
+          const k = X_KEY[id];
+          if (k && xs?.dataSources?.[k] === 'x-api') {
+            const e = xs.estimates?.[k] || {};
+            const parts = [];
+            if (Number.isFinite(e.calls)) parts.push(`${e.calls} calls`);
+            if (Number.isFinite(e.maxPosts)) parts.push(`up to ${e.maxPosts} posts`);
+            return { id, label: g?.label ?? id, paid: true, text: `Paid X API${parts.length ? ` — ${parts.join(', ')}` : ''}. Runs only after you confirm it in the Refresh panel.`.slice(0, 200) };
+          }
           return { id, label: g?.label ?? id, paid: g?.paid === true, text: String(estimateFor(id, {})?.text ?? g?.cost ?? '').slice(0, 200) };
         });
         payload = { ...v.proposal.payload, estimate };

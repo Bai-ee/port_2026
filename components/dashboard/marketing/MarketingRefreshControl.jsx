@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { REFRESH_GROUPS, paidGroupsFor, estimateFor, readLastRefreshed, groupFreshness } from './refresh-groups.js';
 import { useMarketingContentCall } from './useMarketingContentCall';
 import { XSourceToggle, XSpendLine } from './XSourceControls.jsx';
-import { normalizeDataSources, sourceFor, autoDailyFor, withSource, withAutoDaily, sourceGroupsPresent, xApiPaidRows } from './x-source-model.js';
+import { normalizeDataSources, sourceFor, autoDailyFor, withSource, withAutoDaily, sourceGroupsPresent, xApiPaidRows, estimatesByGroup, selectionUsesXApi } from './x-source-model.js';
 
 const SELECTION_KEY = 'marketing-refresh-selection-v1';
 const FREE_IDS = REFRESH_GROUPS.filter((g) => !g.paid).map((g) => g.id);
@@ -73,11 +73,12 @@ export default function MarketingRefreshControl({ running = false, onRun, estima
   // X data sources (Mac bird vs X API) per group, loaded with the panel; a failed read leaves everything on the free Mac path.
   const [sources, setSources] = useState(() => normalizeDataSources(null));
   const [sourceNote, setSourceNote] = useState('');
+  const [xEstimates, setXEstimates] = useState({});
   const sourceGroupIds = useMemo(() => sourceGroupsPresent(REFRESH_GROUPS), []);
   useEffect(() => {
     if (!open || !clientId || !getIdToken) return undefined;
     let live = true;
-    call('x-data-sources-get', { clientId }).then((r) => { if (live) setSources(normalizeDataSources(r)); }).catch(() => {});
+    call('x-data-sources-get', { clientId }).then((r) => { if (live) { setSources(normalizeDataSources(r)); setXEstimates(estimatesByGroup(r)); } }).catch(() => {});
     return () => { live = false; };
   }, [open, clientId, getIdToken, call]);
 
@@ -87,8 +88,8 @@ export default function MarketingRefreshControl({ running = false, onRun, estima
     setPending(null);
     setSourceNote('');
     try {
-      const r = await call('x-data-sources-save', { clientId, dataSources: next });
-      if (r && (r.dataSources || r.strategyAccounts)) setSources(normalizeDataSources(r));
+      const r = await call('x-data-sources-save', { clientId, strategyAccounts: next.strategyAccounts, quoteTargets: next.quoteTargets, autoDaily: next.autoDaily });
+      if (r && r.dataSources) setSources(normalizeDataSources(r));
     } catch (e) {
       setSources(prev);
       setSourceNote(e?.message || 'Could not save the data source.');
@@ -124,14 +125,15 @@ export default function MarketingRefreshControl({ running = false, onRun, estima
   const confirm = () => {
     const sel = pending;
     setPending(null);
-    if (sel && typeof onRun === 'function') onRun(sel);
+    // xApiConfirmed is set ONLY here, and only when this confirm row listed an X API group with its estimate.
+    if (sel && typeof onRun === 'function') onRun(selectionUsesXApi(sel, sources) ? { ...sel, xApiConfirmed: true } : sel);
   };
 
   const paid = useMemo(() => {
     if (!pending) return [];
     const base = paidGroupsFor(pending, estimateCtx || {});
-    return [...base, ...xApiPaidRows(pending, sources, base, {}, REFRESH_GROUPS)];
-  }, [pending, estimateCtx, sources]);
+    return [...base, ...xApiPaidRows(pending, sources, base, xEstimates, REFRESH_GROUPS)];
+  }, [pending, estimateCtx, sources, xEstimates]);
   const totals = useMemo(() => totalsFor(paid), [paid]);
 
   return (
