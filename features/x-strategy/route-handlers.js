@@ -900,7 +900,14 @@ export function createStrategyHandlers({
       if (!v.ok) { dropped.push({ kind: raw?.kind ?? null, errors: v.errors }); continue; }
       proposals.push(assignProposal({ ...raw, kind: v.proposal.kind, payload: v.proposal.payload }, { threadId, now }));
     }
-    const assistantText = String(turn?.text ?? '');
+    // Honesty guard: the reply must never claim a card that does not exist. When a propose attempt failed (or the
+    // text talks about cards) and no card was made, say so under the reply.
+    let assistantText = String(turn?.text ?? '');
+    if (!proposals.length) {
+      const errs = [...(Array.isArray(turn?.proposalErrors) ? turn.proposalErrors : []), ...dropped.map((d) => `${d.kind}: ${(d.errors || []).join('; ')}`)];
+      if (errs.length) assistantText += `\n\n(No confirm card was created: ${errs.slice(0, 3).join(' | ').slice(0, 400)}. Ask me to try again.)`;
+      else if (/\bcards?\b/i.test(assistantText) && /\b(up|ready|below|above|confirm)\b/i.test(assistantText)) assistantText += '\n\n(No confirm card was created this turn. Ask me to propose it again.)';
+    }
     const toolResults = (Array.isArray(turn?.toolResults) ? turn.toolResults : []).slice(0, 20);
     const undoIds = toolResults.map((r) => r.undoId).filter(Boolean);
     await chatStore.appendTurn({ clientId: c.clientId, threadId, userText: text, assistantText, proposals, usage: turn?.usage, now, undoIds });

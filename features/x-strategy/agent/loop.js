@@ -158,6 +158,7 @@ export function createAgentLoop({
     const usage = { calls: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 };
     const proposals = [];
     const toolResults = []; // action tools used this turn: {tool, undoId?} (the chat shows an Undo chip per undoId)
+    const proposalErrors = []; // propose attempts that made no card this turn (the route tells the owner, never a silent 'card is up')
     const userMessages = [...(Array.isArray(history) ? history : []).filter((m) => m?.role === 'user').map((m) => String(m.text ?? '')), String(userText ?? '')];
     const messages = buildMessages(history, userText);
 
@@ -214,7 +215,7 @@ export function createAgentLoop({
         let text = textOf(content);
         if (capped && !text) text = ROUND_CAP_FALLBACK;
         const stopped = capped ? 'round-cap' : resp?.stop_reason === 'max_tokens' ? 'max-tokens' : 'end';
-        return { text, proposals, toolResults, usage: { ...usage }, rounds, stopped };
+        return { text, proposals, toolResults, proposalErrors, usage: { ...usage }, rounds, stopped };
       }
 
       rounds += 1;
@@ -259,7 +260,7 @@ export function createAgentLoop({
           return reply(`Proposal limit reached (${bulk ? MAX_BULK_PROPOSALS_PER_TURN : maxProposals} per turn). Do not propose more; tell the owner what else you would suggest in text.`, true);
         }
         const prep = await prepareProposal(tu.name, parsed.value, { toolDeps, userMessages });
-        if (!prep.ok) return reply(`Proposal rejected: ${prep.error}`, true);
+        if (!prep.ok) { proposalErrors.push(`${KIND_BY_PROPOSE_TOOL[tu.name]}: ${String(prep.error).slice(0, 160)}`); return reply(`Proposal rejected: ${prep.error}. NO card was created; fix the input and call the tool again, or tell the owner it failed.`, true); }
         proposals.push(prep.proposal);
         return reply('recorded - the owner will confirm or reject');
       }
