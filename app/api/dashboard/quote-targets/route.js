@@ -1096,7 +1096,8 @@ export async function POST(request) {
       return json(await handleDecidePackage(context, decoded, body, 'rejected'));
     }
     if (STRATEGY_ROUTE_ACTIONS.includes(action)) {
-      const result = await getStrategyHandlers().handle(action, body, context, { decoded });
+      // `authorization` + `impersonating` let the chat agent's run_action call routes AS this owner (same checks as the UI).
+      const result = await getStrategyHandlers().handle(action, body, context, { decoded, authorization: request.headers.get('authorization'), impersonating: context.impersonating === true });
       return json(result, result.ok === false ? (result.status || 422) : 200);
     }
     if (BUCKET_ACTIONS.has(action)) return json(await handleBucketAction(context, action, body));

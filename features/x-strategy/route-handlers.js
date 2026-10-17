@@ -20,7 +20,7 @@
 //       (default threadId `t_mcp_<yyyymmdd>`, created on first use) so they show up as ordinary pending cards in the
 //       Strategy chat. Executes nothing; the owner still confirms in the UI. Needs a chatStore (else {ok:false,status:503}).
 
-import { DEFAULT_PLAN, EVALUATION_THRESHOLDS } from './contracts.js';
+import { DEFAULT_PLAN, EVALUATION_THRESHOLDS, MAX_BULK_PROPOSALS_PER_TURN, BULK_PROPOSAL_KINDS } from './contracts.js';
 import { evaluate as defaultEvaluate } from './evaluate.js';
 import { StrategyPlanError, createFirestorePlanStore } from './plan-store.js';
 import { createFirestoreCorpusStore, normalizeHandle, CorpusStoreError } from './corpus-store.js';
@@ -43,6 +43,8 @@ import {
 } from './agent/proposals.js';
 import { normalizeSelected, describeSelected } from './agent/prompt.js';
 import { shapeMarketSignals } from './agent/tools.js';
+import { createActionRuntime } from './agent/action-runtime.js';
+import { createFirestoreActionStores } from './agent/action-stores.js';
 import { randomUUID } from 'node:crypto';
 import { StrategyDocError, createFirestoreStrategyDocStore } from './strategy-doc-store.js';
 import { draftDoc, STRATEGY_DOC_SECTIONS, describeDocChange } from './strategy-doc.js';
@@ -72,6 +74,10 @@ export const STRATEGY_ROUTE_ACTIONS = Object.freeze([
   'strategy-daily-fill-preview',
   'strategy-daily-fill-create',
   'strategy-freshness',
+  'strategy-action-undo',
+  'strategy-action-log',
+  'strategy-autonomy-get',
+  'strategy-autonomy-save',
 ]);
 
 export const REVIEW_DISPLAY_TEXT = 'Review my strategy against the latest data.';
@@ -208,6 +214,7 @@ export function createStrategyHandlers({
   ensureDraft = null, // (clientId, payload) -> {post, existing}; twitter-service ensureDraftPost. Absent => batch create answers 503
   mediaForItem = null, // (clientId, pkg) -> {mediaUrl, mediaType, mediaContentType, mediaStoragePath} | null; calendar-batch drafts carry the item's media
   upsertBucket = null, deleteBucket = null, // (clientId, bucket) / (clientId, bucketId, {reassignTo}) -> the Content Center bucket-store writers (bucket-edit proposals). Absent => bucket-edit confirm fails clearly
+  actionRuntime = null, // agent/action-runtime.js createActionRuntime(...): run_action / undo / audit log / autonomy. Absent => the action tools answer "not available" and the action-* routes 503
   rejectPost = null, // (clientId, postId, {reviewedBy, expectedRevision}) -> rejectDraft; queue-bulk delete-draft. Absent => lazy import of twitter-service
   linkItemMedia = null, // (clientId, links) -> {linked, failed, results}; the quote-targets link-item-media writer. Absent => item-media confirm fails clearly
   env = {}, // explicit on purpose: only createStrategyHandlersFromDb passes process.env, so a bare handler can never reach a real model
@@ -598,6 +605,11 @@ export function createStrategyHandlers({
   }
 
   const by = (auth) => auth?.decoded?.email || auth?.decoded?.uid || 'admin';
+  /** What run_action needs to call a route AS the owner: their own authorization header (+ ?as= while impersonating). */
+  const actionCtx = (clientId, context, auth) => ({
+    clientId, authorization: auth?.authorization || null,
+    impersonating: auth?.impersonating ?? context?.impersonating === true, by: by(auth),
+  });
 
   async function strategyPlanApply(body, context, auth) {
     const c = requireClient(body, context);
@@ -639,8 +651,10 @@ export function createStrategyHandlers({
   });
 
   /** Read tools for the agent, built from the same readers the strategy-get action uses. */
-  function buildToolDeps(clientId, context, preloaded) {
+  function buildToolDeps(clientId, context, preloaded, auth) {
     return {
+      // run_action / find_actions / undo_action / get_action_log. Needs the owner's own request auth (MCP and workers have none).
+      ...(actionRuntime ? { actions: { runtime: actionRuntime, ctx: actionCtx(clientId, context, auth) } } : {}),
       // Same computation as strategy-get (one source of numbers); the model never gets raw rows.
       getEvaluation: async () => {
         const r = await strategyGet({ clientId }, context);
@@ -791,14 +805,14 @@ export function createStrategyHandlers({
     return describeSelected(sel, resolved);
   }
 
-  async function strategyChatSend(body, context) {
+  async function strategyChatSend(body, context, auth) {
     const c = requireClient(body, context);
     if (c.error) return c.error;
     const off = needChat(); if (off) return off;
     const text = typeof body?.text === 'string' ? body.text.trim() : '';
     if (!text) return fail(400, 'text is required.');
     if (text.length > CHAT_TEXT_MAX) return fail(400, `text must be at most ${CHAT_TEXT_MAX} characters.`);
-    return runChatTurn(c.clientId, context, { threadIdRaw: body?.threadId, modelText: text, storedText: text, selected: body?.selected });
+    return runChatTurn(c.clientId, context, { threadIdRaw: body?.threadId, modelText: text, storedText: text, selected: body?.selected, auth });
   }
 
   /**
@@ -806,7 +820,7 @@ export function createStrategyHandlers({
    * `modelText` is what the model reads; `storedText` is what the thread shows (a Review stores a short line but
    * sends the full brief). `turnOpts` ({maxRounds, maxTokens}) lets a Review use a bigger tool budget.
    */
-  async function runChatTurn(clientId, context, { threadIdRaw, modelText, storedText, selected, turnOpts } = {}) {
+  async function runChatTurn(clientId, context, { threadIdRaw, modelText, storedText, selected, turnOpts, auth } = {}) {
     const c = { clientId };
     const text = storedText;
     const t = parseThreadId(threadIdRaw);
@@ -822,7 +836,7 @@ export function createStrategyHandlers({
 
     // An unconfigured model must not burn a turn: resolve the loop (no model call) before reserving.
     const preloaded = {};
-    const toolDeps = buildToolDeps(c.clientId, context, preloaded);
+    const toolDeps = buildToolDeps(c.clientId, context, preloaded, auth);
     const loop = await resolveLoop(c.clientId, toolDeps);
     if (!loop) return fail(503, 'The strategy agent model is not configured on this deployment (no model configured).', { turnsUsedToday: await chatStore.usedToday(c.clientId, now), cap: chatStore.cap });
 
@@ -852,15 +866,22 @@ export function createStrategyHandlers({
     const currentPlan = planDoc?.plan;
     const proposals = [];
     const dropped = [];
-    for (const raw of (Array.isArray(turn?.proposals) ? turn.proposals : []).slice(0, MAX_PROPOSALS_PER_TURN)) {
+    let singles = 0;
+    let bulks = 0;
+    for (const raw of Array.isArray(turn?.proposals) ? turn.proposals : []) {
+      // Single-item cards are capped at 2 a turn; bulk-class cards (incl. `action`) have their own cap.
+      if (BULK_PROPOSAL_KINDS.includes(raw?.kind) ? bulks >= MAX_BULK_PROPOSALS_PER_TURN : singles >= MAX_PROPOSALS_PER_TURN) continue;
+      if (BULK_PROPOSAL_KINDS.includes(raw?.kind)) bulks += 1; else singles += 1;
       const v = validateProposal(raw, { currentPlan });
       if (!v.ok) { dropped.push({ kind: raw?.kind ?? null, errors: v.errors }); continue; }
       proposals.push(assignProposal({ ...raw, kind: v.proposal.kind, payload: v.proposal.payload }, { threadId, now }));
     }
     const assistantText = String(turn?.text ?? '');
-    await chatStore.appendTurn({ clientId: c.clientId, threadId, userText: text, assistantText, proposals, usage: turn?.usage, now });
+    const toolResults = (Array.isArray(turn?.toolResults) ? turn.toolResults : []).slice(0, 20);
+    const undoIds = toolResults.map((r) => r.undoId).filter(Boolean);
+    await chatStore.appendTurn({ clientId: c.clientId, threadId, userText: text, assistantText, proposals, usage: turn?.usage, now, undoIds });
     return {
-      ok: true, threadId, text: assistantText, proposals,
+      ok: true, threadId, text: assistantText, proposals, toolResults, undoIds,
       ...(dropped.length ? { droppedProposals: dropped } : {}),
       usage: turn?.usage ?? null, rounds: turn?.rounds ?? null, stopped: turn?.stopped ?? null,
       turnsUsedToday: used, cap: chatStore.cap,
@@ -881,14 +902,14 @@ export function createStrategyHandlers({
   }
 
   // Review = one agent turn with a fixed brief and a bigger tool budget. Same cap, same proposals, same thread.
-  async function strategyReview(body, context) {
+  async function strategyReview(body, context, auth) {
     const c = requireClient(body, context);
     if (c.error) return c.error;
     const off = needChat(); if (off) return off;
     const doc = docStore ? await readDoc(c.clientId) : null;
     const out = await runChatTurn(c.clientId, context, {
       threadIdRaw: body?.threadId, modelText: buildReviewBrief(doc), storedText: REVIEW_DISPLAY_TEXT,
-      turnOpts: { maxRounds: REVIEW_MAX_ROUNDS, maxTokens: REVIEW_MAX_TOKENS },
+      turnOpts: { maxRounds: REVIEW_MAX_ROUNDS, maxTokens: REVIEW_MAX_TOKENS }, auth,
     });
     if (!out.ok || !docStore) return out;
     let lastReview = null;
@@ -928,6 +949,7 @@ export function createStrategyHandlers({
     runDailyFill: async ({ clientId, spec, proposalId }) => dailyFill(clientId, spec, { execute: true, batchId: proposalId ? `daily-fill-${proposalId}` : null }),
     refreshHandles: async ({ clientId, handles, context, auth }) => strategyRefresh({ clientId, handles }, context, auth),
     placeDraft, upsertBucket, deleteBucket, syncTracks, ...(rejectPost ? { rejectPost } : {}),
+    runAction: actionRuntime ? ({ clientId, payload, by: who, auth, context, proposalId }) => actionRuntime.executeApproved({ ...actionCtx(clientId, context, auth), by: who }, payload, { proposalId }) : null,
   });
   async function strategyProposalDecide(body, context, auth) {
     const c = requireClient(body, context);
@@ -959,6 +981,7 @@ export function createStrategyHandlers({
 
     // The model-use choice is the OWNER's, made on the card at confirm time; honored only for regenerate-today.
     const options = decision === 'confirm' && claim.proposal.kind === 'regenerate-today' && body?.options?.useModel === true ? { useModel: true } : {};
+    if (decision === 'confirm' && claim.proposal.kind === 'action') options.typed = typeof body?.typed === 'string' ? body.typed.slice(0, 80) : '';
     let out;
     try {
       out = await decideProposal({ proposal: claim.proposal, decision, executors, context, clientId: c.clientId, by: by(auth), auth, options, now });
@@ -969,7 +992,7 @@ export function createStrategyHandlers({
     if (!out.ok) {
       // Nothing ran: put it back to pending so there is no stuck state.
       await releaseQuietly();
-      return fail(out.status || 500, out.error, { proposal: out.proposal });
+      return fail(out.status || 500, out.error, { ...(out.code ? { code: out.code } : {}), proposal: out.proposal });
     }
     // The executor may have already run. Never re-execute: retry the save, and on persistent failure leave 'deciding'.
     let proposal = null;
@@ -1032,7 +1055,54 @@ export function createStrategyHandlers({
     return { ok: true, doc: out.doc, changed: out.changed, ...(out.changed ? { change: describeDocChange(out.doc.history.at(-1)) } : {}) };
   }
 
+  // ---- Agent actions: undo, log, autonomy (owner-set permissions) ---------------------------------------------
+
+  const needActions = () => (actionRuntime ? null : fail(503, 'Agent actions are not configured on this deployment.'));
+
+  async function strategyActionUndo(body, context, auth) {
+    const c = requireClient(body, context);
+    if (c.error) return c.error;
+    const off = needActions(); if (off) return off;
+    const undoId = typeof body?.undoId === 'string' ? body.undoId.trim() : '';
+    if (!undoId) return fail(400, 'undoId is required.');
+    const out = await actionRuntime.undo(actionCtx(c.clientId, context, auth), undoId);
+    return out.ok ? out : fail(409, out.error, { code: 'undo-refused' });
+  }
+
+  async function strategyActionLog(body, context, auth) {
+    const c = requireClient(body, context);
+    if (c.error) return c.error;
+    const off = needActions(); if (off) return off;
+    return { ok: true, log: await actionRuntime.log(actionCtx(c.clientId, context, auth)) };
+  }
+
+  async function strategyAutonomyGet(body, context) {
+    const c = requireClient(body, context);
+    if (c.error) return c.error;
+    const off = needActions(); if (off) return off;
+    return { ok: true, autonomy: await actionRuntime.getAutonomy(c.clientId), xFloor: 'typed' };
+  }
+
+  async function strategyAutonomySave(body, context) {
+    const c = requireClient(body, context);
+    if (c.error) return c.error;
+    const off = needActions(); if (off) return off;
+    const current = await actionRuntime.getAutonomy(c.clientId);
+    const given = body?.autonomy && typeof body.autonomy === 'object' ? body.autonomy : body; // UI sends {autonomy:{tier1,tier2,tier3}}
+    const next = {
+      tier1: given?.tier1 === undefined ? current.tier1 : given.tier1,
+      tier3: given?.tier3 === undefined ? current.tier3 : given.tier3,
+    };
+    if (!['auto', 'confirm'].includes(next.tier1)) return fail(400, "tier1 must be 'auto' or 'confirm'.");
+    if (!['confirm', 'typed'].includes(next.tier3)) return fail(400, "tier3 must be 'confirm' or 'typed'. X publishing is always typed.");
+    return { ok: true, autonomy: await actionRuntime.saveAutonomy(c.clientId, next), xFloor: 'typed' };
+  }
+
   const table = {
+    'strategy-action-undo': strategyActionUndo,
+    'strategy-action-log': strategyActionLog,
+    'strategy-autonomy-get': strategyAutonomyGet,
+    'strategy-autonomy-save': strategyAutonomySave,
     'strategy-get': strategyGet,
     'strategy-refresh': strategyRefresh,
     'strategy-refresh-status': strategyRefreshStatus,
@@ -1187,6 +1257,7 @@ export function createStrategyHandlersFromDb(db, {
   readQueueSummary, readPost, readOpportunities, readResults, readMarketSignals, editPost, runPaidSync,
   onXGrowthSaved, onBrainOwnedSaved, readBrainTrackTargets, saveXGrowthProfile = createXGrowthProfileSaver(db, { onSaved: onXGrowthSaved }), chatStore = createFirestoreChatStore(db, { env }),
   agentLoopFactory, callModel, logUsage, loadCommitted, docStore = createFirestoreStrategyDocStore(db),
+  actionRuntime = createActionRuntime(createFirestoreActionStores(db)),
   ...passThrough // any other createStrategyHandlers dep (linkItemMedia, mediaForItem from the quote-targets route; test overrides), forwarded as-is
 } = {}) {
   // `loadCommitted` (handle -> rows|null) lets a serverless host supply the committed corpora from static imports.
@@ -1260,7 +1331,7 @@ export function createStrategyHandlersFromDb(db, {
     corpusStore, planStore, refreshService, readPackages, readAudience, readBuckets, readBucketEngine, readOpenPackageIds, readFillContext, readQuoteTargets, ensureDraft, placeDraft,
     readWorkerHealth: (clientId) => readWorkerHealthFromDb(db, { now: Date.now(), clientId }),
     docStore, onBrainOwnedSaved, readBrainTrackTargets, chatStore, agentLoopFactory, callModel, logUsage, runDailyAction, runUpdateItemFacets, readTodayRun, readContentContext, saveXGrowthProfile, env,
-    readQueueSummary, readPost, readOpportunities, readResults, readMarketSignals, editPost, runPaidSync,
+    readQueueSummary, readPost, readOpportunities, readResults, readMarketSignals, editPost, runPaidSync, actionRuntime,
     readBriefRaw: (clientId, local) => readBriefRawFromDb(clientId, { db, ...local }),
     readXGrowthConfig: async (clientId) => {
       const snap = await db.collection('client_configs').doc(clientId).get();

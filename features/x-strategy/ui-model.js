@@ -375,6 +375,7 @@ export function planErrorView(result) {
 // ---- chat helpers (T4c) ------------------------------------------------------------------------------------
 
 const PROPOSAL_KIND_LABELS = Object.freeze({
+  action: 'Run an action',
   'plan-change': 'Change the plan',
   'benchmarks-change': 'Change the tracked accounts',
   'suggestion-edit': 'Edit a suggestion',
@@ -554,6 +555,7 @@ export function proposalPayloadPreview(kind, payload, currentPlan) {
     case 'refresh': return refreshPreview(p);
     case 'queue-bulk': return queueBulkPreview(p);
     case 'bucket-edit': return bucketEditPreview(p);
+    case 'action': return Array.isArray(p.warningLines) && p.warningLines.length ? p.warningLines : [String(p.warning || p.title || 'Run an action')];
     case 'item-media': {
       const rows = Array.isArray(p.rows) ? p.rows : p.links || [];
       const videos = rows.filter((r) => r.kind === 'video').length;
@@ -568,6 +570,7 @@ export function proposalPayloadPreview(kind, payload, currentPlan) {
 }
 
 const RESULT_LINES = {
+  action: (r) => r?.message || 'Done.',
   'plan-change': (r) => (r?.version ? `Plan updated to v${r.version}.` : 'Plan updated.'),
   'benchmarks-change': () => 'Accounts saved.',
   'suggestion-edit': () => "Today's suggestion updated — open the Today tab.",
@@ -922,4 +925,32 @@ export function stageErrorText(err) {
   const msg = String(err?.message || '');
   if (/analyzer|offline|worker/i.test(msg)) return `The Mac analyzer is offline or not registered, so nothing was queued. ${msg}`.trim();
   return msg || 'Could not queue the staging upload.';
+}
+
+/**
+ * View model for an `action` proposal card (agent/action-runtime.js). tier 2 = danger, tier 3 = warn, tier 1 = info.
+ * needsTyped => the confirm button stays disabled until the owner types confirmText exactly.
+ */
+export function actionCardModel(proposal) {
+  const p = proposal?.payload && typeof proposal.payload === 'object' ? proposal.payload : {};
+  const tier = Number(p.tier) || 1;
+  const lines = Array.isArray(p.warningLines) && p.warningLines.length ? p.warningLines.map(String) : p.warning ? [String(p.warning)] : [];
+  const count = typeof p.affected === 'number' ? p.affected : Array.isArray(p.affected) ? p.affected.length : Array.isArray(p.items) ? p.items.length : 1;
+  const needsTyped = p.typed === true && typeof p.confirmText === 'string' && p.confirmText !== '';
+  return {
+    title: String(p.title || proposal?.summary || 'Run an action'),
+    tone: tier >= 3 ? 'warn' : tier === 2 ? 'danger' : 'info',
+    warningLines: lines,
+    count,
+    irreversible: p.irreversible === true,
+    confirmLabel: needsTyped ? 'Confirm' : tier >= 3 ? `Confirm (${p.external === 'x' ? 'publishes to X' : 'spends or sends'})` : tier === 2 ? `Confirm (${count} ${count === 1 ? 'item' : 'items'})` : 'Confirm',
+    needsTyped,
+    confirmText: needsTyped ? p.confirmText : '',
+  };
+}
+
+/** Undo chip for a run_action/undo_action tool result: null when there is nothing to undo. */
+export function undoChipModel(toolResult) {
+  const undoId = typeof toolResult?.undoId === 'string' ? toolResult.undoId : '';
+  return undoId ? { undoId, label: 'Undo', hint: 'Restores what this action changed, if nothing changed since.' } : null;
 }

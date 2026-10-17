@@ -6,6 +6,7 @@ import { PROPOSAL_KINDS, PLAN_LIMITS, KNOWN_SLOT_TYPES, BULK_LIMITS, DAILY_FILL_
 import { estimateFor, REFRESH_GROUPS } from '../../../components/dashboard/marketing/refresh-groups.js';
 import { SOURCE_KINDS } from '../../x-content-inventory/buckets.js';
 import { validateProposal } from './proposals.js';
+import { ACTION_TOOLS } from './action-runtime.js';
 import { PLAN_FIELDS, HANDLE_RE, applyChange } from '../plan-state.js';
 import { tracksOf } from '../content-tracks.js';
 import { normalizeBatchSpec, MAX_BATCH, MAX_PER_DAY, MEMORY_PLACEHOLDER } from '../../x-content-inventory/calendar-batch.js';
@@ -351,7 +352,7 @@ export const PROPOSE_TOOLS = Object.freeze([
   }, ['section', 'text', 'expectedVersion']),
 ]);
 
-export const TOOL_SCHEMAS = Object.freeze([...READ_TOOLS, ...PROPOSE_TOOLS]);
+export const TOOL_SCHEMAS = Object.freeze([...READ_TOOLS, ...ACTION_TOOLS, ...PROPOSE_TOOLS]);
 export const READ_TOOL_NAMES = Object.freeze(READ_TOOLS.map((t) => t.name));
 
 const isPlain = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);

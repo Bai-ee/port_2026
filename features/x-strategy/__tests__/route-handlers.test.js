@@ -40,7 +40,7 @@ function setup({ config = { ownHandle: 'me_acct', benchmarkHandles: ['bench_a'],
 }
 
 test('route actions list matches the T2b scope', () => {
-  assert.deepEqual([...STRATEGY_ROUTE_ACTIONS].sort(), ['strategy-calendar-batch-create', 'strategy-calendar-batch-preview', 'strategy-chat-history', 'strategy-chat-send', 'strategy-daily-fill-create', 'strategy-daily-fill-preview', 'strategy-doc-get', 'strategy-doc-revert', 'strategy-doc-save', 'strategy-evaluate-handle', 'strategy-freshness', 'strategy-get', 'strategy-plan-apply', 'strategy-plan-revert', 'strategy-profile-save', 'strategy-proposal-decide', 'strategy-refresh', 'strategy-refresh-status', 'strategy-review']);
+  assert.deepEqual([...STRATEGY_ROUTE_ACTIONS].sort(), ['strategy-action-log', 'strategy-action-undo', 'strategy-autonomy-get', 'strategy-autonomy-save', 'strategy-calendar-batch-create', 'strategy-calendar-batch-preview', 'strategy-chat-history', 'strategy-chat-send', 'strategy-daily-fill-create', 'strategy-daily-fill-preview', 'strategy-doc-get', 'strategy-doc-revert', 'strategy-doc-save', 'strategy-evaluate-handle', 'strategy-freshness', 'strategy-get', 'strategy-plan-apply', 'strategy-plan-revert', 'strategy-profile-save', 'strategy-proposal-decide', 'strategy-refresh', 'strategy-refresh-status', 'strategy-review']);
 });
 
 test('a plan save waits for the Brain write-back and runs the targets one at a time (serverless-safe)', async () => {

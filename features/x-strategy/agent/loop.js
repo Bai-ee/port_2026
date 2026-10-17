@@ -10,6 +10,7 @@ import { BULK_PROPOSAL_KINDS, MAX_BULK_PROPOSALS_PER_TURN } from '../contracts.j
 import {
   TOOL_SCHEMAS, READ_TOOL_NAMES, KIND_BY_PROPOSE_TOOL, runReadTool, prepareProposal, serializeResult,
 } from './tools.js';
+import { ACTION_TOOL_NAMES, runActionTool } from './action-runtime.js';
 
 export { STRATEGY_AGENT_MODEL };
 
@@ -156,6 +157,7 @@ export function createAgentLoop({
   async function runTurn({ clientId, threadId, history = [], userText, selectedContext, maxRounds: roundsCap = maxRounds, maxTokens: tokensCap = maxTokens } = {}) {
     const usage = { calls: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 };
     const proposals = [];
+    const toolResults = []; // action tools used this turn: {tool, undoId?} (the chat shows an Undo chip per undoId)
     const userMessages = [...(Array.isArray(history) ? history : []).filter((m) => m?.role === 'user').map((m) => String(m.text ?? '')), String(userText ?? '')];
     const messages = buildMessages(history, userText);
 
@@ -212,7 +214,7 @@ export function createAgentLoop({
         let text = textOf(content);
         if (capped && !text) text = ROUND_CAP_FALLBACK;
         const stopped = capped ? 'round-cap' : resp?.stop_reason === 'max_tokens' ? 'max-tokens' : 'end';
-        return { text, proposals, usage: { ...usage }, rounds, stopped };
+        return { text, proposals, toolResults, usage: { ...usage }, rounds, stopped };
       }
 
       rounds += 1;
@@ -236,6 +238,18 @@ export function createAgentLoop({
         } catch (err) {
           return reply(`Tool failed: ${String(err?.message ?? err).slice(0, 200)}`, true);
         }
+      }
+      if (ACTION_TOOL_NAMES.includes(tu.name)) {
+        const out = await runActionTool(tu.name, parsed.value, toolDeps);
+        if (tu.name === 'run_action' || tu.name === 'undo_action') toolResults.push({ tool: tu.name, ...(typeof out.result?.undoId === 'string' ? { undoId: out.result.undoId } : {}) });
+        if (out.proposal) {
+          // `action` cards are bulk-class: they do not use the per-turn single-proposal cap.
+          if (proposals.filter((p) => BULK_PROPOSAL_KINDS.includes(p.kind)).length >= MAX_BULK_PROPOSALS_PER_TURN) {
+            return reply(`Proposal limit reached (${MAX_BULK_PROPOSALS_PER_TURN} cards per turn). Nothing ran; tell the owner what else you would do.`, true);
+          }
+          proposals.push(out.proposal);
+        }
+        return reply(serializeResult(out.result), out.isError === true);
       }
       if (KIND_BY_PROPOSE_TOOL[tu.name]) {
         // Bulk kinds (one card, many items) have their own small cap and do not use up the per-turn proposal cap.

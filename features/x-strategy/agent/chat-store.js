@@ -64,14 +64,14 @@ function foldInto(summaryNote, dropped) {
 }
 
 /** Pure: append a turn to a thread doc (or create it), enforce the bounds. */
-export function applyTurn(thread, { threadId, userText, assistantText, proposals = [], usage, now }) {
+export function applyTurn(thread, { threadId, userText, assistantText, proposals = [], usage, now, undoIds = [] }) {
   const at = toIso(now);
   const base = thread ? clone(thread) : { threadId, messages: [], proposals: {}, createdAt: at };
   const proposalIds = proposals.map((p) => p.id);
   const messages = [
     ...base.messages,
     { role: 'user', text: String(userText ?? ''), at },
-    { role: 'assistant', text: String(assistantText ?? ''), at, ...(proposalIds.length ? { proposalIds } : {}), ...(usage ? { usage: clone(usage) } : {}) },
+    { role: 'assistant', text: String(assistantText ?? ''), at, ...(proposalIds.length ? { proposalIds } : {}), ...(undoIds.length ? { undoIds: undoIds.slice(0, 20) } : {}), ...(usage ? { usage: clone(usage) } : {}) },
   ];
   let summaryNote = base.summaryNote;
   let kept = messages;
@@ -175,10 +175,10 @@ function makeStore(runTransaction, { cap, env }) {
       return (await runTransaction(clientId, null, null, { list: Math.min(Math.max(1, Number(limit) || 20), 50) })).list.map(summarize);
     },
 
-    async appendTurn({ clientId, threadId, userText, assistantText, proposals, usage, now }) {
+    async appendTurn({ clientId, threadId, userText, assistantText, proposals, usage, now, undoIds }) {
       checkIds(clientId, threadId);
       const { thread } = await runTransaction(clientId, threadId, (c) => {
-        const next = applyTurn(c.thread, { threadId, userText, assistantText, proposals, usage, now });
+        const next = applyTurn(c.thread, { threadId, userText, assistantText, proposals, usage, now, undoIds });
         return { out: { thread: clone(next) }, thread: next };
       });
       return thread;

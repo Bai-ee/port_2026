@@ -12,6 +12,7 @@ import { SECTION_KEYS, SECTION_MAX } from '../strategy-doc.js';
 import { StrategyDocError } from '../strategy-doc-store.js';
 import { normalizeBatchSpec } from '../../x-content-inventory/calendar-batch.js';
 import { normalizeLinks } from '../../x-content-inventory/item-media.js';
+import { normalizeActionPayload, requiredTypedText } from './action-runtime.js';
 
 export const SUMMARY_MAX = 200;
 export const RATIONALE_MAX = 800;
@@ -87,7 +88,7 @@ const idField = (payload, key, errors) => {
  * Validate a raw proposal. Returns {ok, errors, proposal?} where `proposal` has the payload NORMALIZED
  * (only the fields its kind may carry). `currentPlan` (optional) is the plan the merged change is checked against.
  */
-export function validateProposal(raw, { currentPlan } = {}) {
+export function validateProposal(raw, { currentPlan, registry } = {}) {
   const errors = [];
   if (!isPlain(raw)) return { ok: false, errors: ['proposal must be an object'] };
   const kind = raw.kind;
@@ -312,6 +313,12 @@ export function validateProposal(raw, { currentPlan } = {}) {
       norm = { op, bucket };
       break;
     }
+    // Any registry action (tier 1-3). The payload is REBUILT from the registry entry, never trusted from the model.
+    case 'action': {
+      const n = normalizeActionPayload(payload, { registry });
+      if (!n.ok) errors.push(...n.errors); else norm = n.payload;
+      break;
+    }
     default: break;
   }
   if (errors.length) return { ok: false, errors };
@@ -367,7 +374,7 @@ export function compactResult(res) {
  * @param {(clientId:string)=>Promise<object>} [deps.syncTracks]  re-sync content tracks after a bucket change
  * @param {(a:{clientId:string, kind:string, params:object, by:string, auth:object, context:object})=>Promise<object>} [deps.runPaidSync]  features/mcp/paid-syncs.js executor (daily cap enforced inside)
  */
-export function buildExecutors({ planStore, runDailyAction, runUpdateItemFacets, saveXGrowthProfile, refreshHandles, docStore, docBase, readPost, editPost, approvePost, approveAndSchedulePost, runPaidSync, runCalendarBatch, runItemMedia, runDailyFill, rejectPost, placeDraft, upsertBucket, deleteBucket, syncTracks, clock = Date.now }) {
+export function buildExecutors({ planStore, runDailyAction, runUpdateItemFacets, saveXGrowthProfile, refreshHandles, docStore, docBase, readPost, editPost, approvePost, approveAndSchedulePost, runPaidSync, runCalendarBatch, runItemMedia, runDailyFill, rejectPost, placeDraft, upsertBucket, deleteBucket, syncTracks, runAction, clock = Date.now }) {
   const need = (fn, name) => { if (typeof fn !== 'function') throw new ProposalExecutionError(`${name} is not available on this deployment`); return fn; };
   const social = () => import('../../social-posting/twitter-service.js');
   const readOwnedPost = async (clientId, payload) => {
@@ -573,6 +580,12 @@ export function buildExecutors({ planStore, runDailyAction, runUpdateItemFacets,
       if (typeof syncTracks === 'function') { try { synced = !!(await syncTracks(clientId))?.changed; } catch { /* a sync failure never fails the bucket write */ } }
       return compactResult({ op: payload.op, bucketId: out?.bucket?.id ?? payload.bucket.id ?? null, ...(out?.created !== undefined ? { created: out.created } : {}), tracksSynced: synced });
     },
+    // One registry action (<=50 items): snapshot -> route call -> audit, through the runtime. Typed text was checked by decideProposal.
+    async action({ clientId, payload, by, auth, context, proposalId }) {
+      const res = await need(runAction, 'action runtime')({ clientId, payload, by, auth, context, proposalId });
+      if (!res || res.ok === false) throw new ProposalExecutionError(res?.error || 'action failed', compactResult(res) ?? {});
+      return compactResult(res);
+    },
     async 'refresh-handles'({ clientId, payload, context, auth }) {
       const res = await need(refreshHandles, 'refresh')({ clientId, handles: payload.handles, context, auth });
       if (res && res.ok === false) throw new ProposalExecutionError(res.error || 'refresh refused');
@@ -597,6 +610,12 @@ export async function decideProposal({ proposal, decision, executors, context, c
   const decidedAt = iso(now);
   if (decision === 'reject') return { ok: true, proposal: { ...base, status: 'rejected', decidedAt, decidedBy: by } };
 
+  // Typed confirmation (X publishing is always typed): the owner must type the card's confirmText exactly. Nothing runs otherwise.
+  if (proposal.kind === 'action') {
+    const need = requiredTypedText(proposal.payload);
+    const given = String(options?.typed ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+    if (need && given !== need.toLowerCase()) return { ok: false, status: 400, error: `Type "${need}" to confirm this action.`, code: 'typed-mismatch' };
+  }
   const run = executors?.[proposal.kind];
   if (typeof run !== 'function') {
     return { ok: true, proposal: { ...base, status: 'failed', decidedAt, decidedBy: by, result: { error: `no executor for ${proposal.kind}` } } };
@@ -607,6 +626,6 @@ export async function decideProposal({ proposal, decision, executors, context, c
   } catch (err) {
     const structured = err instanceof ProposalExecutionError ? err.result : {};
     const result = { error: 'failed', message: String(err?.message || err).slice(0, 300), ...structured, ...(structured.error ? { error: structured.error } : {}) };
-    return { ok: true, proposal: { ...base, status: 'failed', decidedAt, decidedBy: by, result } };
+    return { ok: true, proposal: { ...base, status: 'failed', decidedAt, decidedBy: by, result, error: result.message } };
   }
 }
