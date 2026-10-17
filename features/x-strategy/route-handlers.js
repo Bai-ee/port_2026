@@ -612,7 +612,7 @@ export function createStrategyHandlers({
   const by = (auth) => auth?.decoded?.email || auth?.decoded?.uid || 'admin';
   /** What run_action needs to call a route AS the owner: their own authorization header (+ ?as= while impersonating). */
   const actionCtx = (clientId, context, auth) => ({
-    clientId, authorization: auth?.authorization || null,
+    clientId, authorization: auth?.authorization || null, origin: auth?.origin || null,
     impersonating: auth?.impersonating ?? context?.impersonating === true, by: by(auth),
   });
 

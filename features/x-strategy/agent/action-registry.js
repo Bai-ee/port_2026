@@ -18,6 +18,9 @@
 //             { collection, idArg }                 -> doc <collection>/<args[idArg]>   (idArg may be dotted: 'pkg.id')
 //             { path:'a/{clientId}/b/{bucket.id}' } -> doc path; {clientId} = resolved client, {x.y} = args path
 //             optional `field` = dotted field inside the doc to capture/restore instead of the whole doc
+//   viaRefreshPanel?  true => too long for the chat request (270-300 s): run_action never invokes it, it returns a `refresh`
+//             proposal (clientAction 'marketing-refresh') for the dashboard Refresh panel. Needs refreshGroups (REFRESH_GROUP_IDS)
+//             or refreshGroupsByArg {arg, map:{argValue:[ids]}}; an unmapped arg value is "not runnable in chat".
 //   undo?     { actionId, argsFrom:{ param:'args.x' | 'result.x' | 'before.x' } } native undo action (preferred over snapshot)
 //
 // Tier rules: reads 0; versioned/reversible writes and draft creation 1; deletes/rejects/overwrites 2; anything that
@@ -36,6 +39,7 @@
 //   worker/* other than pre-digest-refresh, intelligence/*, leadgen/*, site-clone, studio-*, knowledge-base/*, onboarding.
 //   mcp/*  -> the MCP transport is a separate surface.
 
+import { REFRESH_GROUP_IDS } from '../contracts.js';
 import { QUEUE_ACTIONS } from './catalog/queue.js';
 import { CONTENT_ACTIONS } from './catalog/content.js';
 import { STRATEGY_ACTIONS } from './catalog/strategy.js';
@@ -222,6 +226,12 @@ export function validateAction(e) {
   if (e.tier === 3 && !e.cost) p.push('tier 3 needs cost text');
   if (e.tier === 0 && (e.snapshot || e.undo)) p.push('tier 0 has nothing to undo');
   if (e.tier === 0 && e.method === 'POST' && e.irreversible) p.push('tier 0 cannot be irreversible');
+  if (e.viaRefreshPanel) {
+    const ids = [...(e.refreshGroups || []), ...Object.values(e.refreshGroupsByArg?.map || {}).flat()];
+    if (!ids.length) p.push('viaRefreshPanel needs refreshGroups or refreshGroupsByArg');
+    for (const g of ids) if (!REFRESH_GROUP_IDS.includes(g)) p.push(`refresh group ${g} unknown`);
+    if (e.refreshGroupsByArg && !(e.refreshGroupsByArg.arg in (e.args?.properties || {}))) p.push('refreshGroupsByArg.arg is not an arg');
+  }
   if (e.undo && !(e.undo.actionId && e.undo.argsFrom && typeof e.undo.argsFrom === 'object')) p.push('undo needs actionId + argsFrom');
   for (const s of e.snapshot || []) {
     const okDoc = typeof s.collection === 'string' && typeof s.idArg === 'string';

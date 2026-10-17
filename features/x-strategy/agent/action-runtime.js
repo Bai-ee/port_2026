@@ -17,7 +17,9 @@
 // an in-app chat tool only; toolDepsFor() (MCP) builds deps without `actions`, so the tools answer "not available".
 
 import { randomUUID } from 'node:crypto';
-import { ROUTE_MODULES as DEFAULT_ROUTE_MODULES, getAction as defaultGetAction, findActions as defaultFindActions } from './action-registry.js';
+import { ROUTE_MODULES as DEFAULT_ROUTE_MODULES, ROUTE_FILES, ROUTE_AUTH, getAction as defaultGetAction, findActions as defaultFindActions } from './action-registry.js';
+import { REFRESH_GROUP_IDS } from '../contracts.js';
+import { REFRESH_GROUPS, estimateFor } from '../../../components/dashboard/marketing/refresh-groups.js';
 
 export const ACTION_ITEMS_MAX = 50;
 export const AUTO_BATCH_MAX = 10; // a tier-1 batch larger than this asks for a card even when autonomy is 'auto'
@@ -83,15 +85,17 @@ const TYPE_OK = {
   object: (v) => isPlain(v),
 };
 
-/** JSON-schema-subset check of the agent's args against entry.args. Reserved body keys are always refused. */
+/** JSON-schema-subset check of the agent's args against entry.args. Reserved body keys are always refused.
+ *  Unknown keys are DROPPED (not refused) when the schema is closed (additionalProperties:false) and reported in `dropped`. */
 export function validateActionArgs(entry, args) {
   const errors = [];
+  const dropped = [];
   if (!isPlain(args)) return { ok: false, errors: ['args must be an object'] };
   const schema = isPlain(entry?.args) ? entry.args : { properties: {}, required: [] };
   const props = isPlain(schema.properties) ? schema.properties : {};
   for (const k of Object.keys(args)) {
     if (RESERVED_ARGS.includes(k)) errors.push(`${k} is set by the system and cannot be passed`);
-    else if (Object.keys(props).length && !(k in props) && schema.additionalProperties !== true) errors.push(`unknown argument ${k}`);
+    else if (!(k in props) && schema.additionalProperties !== true && (Object.keys(props).length || schema.additionalProperties === false)) dropped.push(k);
   }
   for (const k of schema.required || []) if (args[k] === undefined || args[k] === null || args[k] === '') errors.push(`${k} is required`);
   for (const [k, def] of Object.entries(props)) {
@@ -100,7 +104,10 @@ export function validateActionArgs(entry, args) {
     if (def?.type && TYPE_OK[def.type] && !TYPE_OK[def.type](v)) errors.push(`${k} must be ${def.type}`);
     else if (Array.isArray(def?.enum) && !def.enum.includes(v)) errors.push(`${k} must be one of ${def.enum.join(', ')}`);
   }
-  return errors.length ? { ok: false, errors } : { ok: true, errors: [], args: clone(args) };
+  if (errors.length) return { ok: false, errors };
+  const kept = clone(args);
+  for (const k of dropped) delete kept[k];
+  return { ok: true, errors: [], args: kept, dropped };
 }
 
 /** Compact "name:type*" summary of an entry's arguments for find_actions (* = required). */
@@ -108,6 +115,43 @@ export function summarizeArgs(entry) {
   const props = isPlain(entry?.args?.properties) ? entry.args.properties : {};
   const req = new Set(entry?.args?.required || []);
   return Object.fromEntries(Object.entries(props).map(([k, d]) => [k, `${d?.type || 'any'}${Array.isArray(d?.enum) ? `(${d.enum.join('|')})` : ''}${req.has(k) ? '*' : ''}`]));
+}
+
+// ---- refusals + Refresh-panel routing -------------------------------------------------------------------------
+
+/** Route actions the agent may never run, whatever the catalog says: it must not change its own permissions,
+ *  decide its own proposals, call itself, or undo outside the audited undo_action tool. */
+export const FORBIDDEN_ROUTE_ACTIONS = Object.freeze(['strategy-autonomy-save', 'strategy-proposal-decide', 'strategy-chat-send', 'strategy-action-undo']);
+
+/** @returns {string|null} why the agent may not run this entry at all. */
+export function refusalFor(entry) {
+  const act = entry?.action || entry?.query?.action || '';
+  if (/autonomy/i.test(act) && /save|set|update|write/i.test(act)) return 'The agent cannot change its own permissions; only the owner can (Autonomy settings).';
+  if (/autonomy/i.test(String(entry?.id)) && entry?.tier > 0) return 'The agent cannot change its own permissions; only the owner can (Autonomy settings).';
+  if (Object.keys(entry?.args?.properties || {}).some((k) => /^(agentAutonomy|autonomy)$/i.test(k)) && entry?.tier > 0) return 'The agent cannot change its own permissions; only the owner can (Autonomy settings).';
+  if (FORBIDDEN_ROUTE_ACTIONS.includes(act)) return 'The agent cannot run this action (it would approve, undo or call itself).';
+  return null;
+}
+
+/** Refresh group ids an entry maps to for these args; null = the entry is not a Refresh-panel entry. [] = no mapping. */
+export function refreshGroupsFor(entry, args) {
+  if (!entry?.viaRefreshPanel) return null;
+  if (Array.isArray(entry.refreshGroups)) return entry.refreshGroups.filter((g) => REFRESH_GROUP_IDS.includes(g));
+  const by = entry.refreshGroupsByArg;
+  const ids = by ? by.map?.[args?.[by.arg]] : null;
+  return Array.isArray(ids) ? ids.filter((g) => REFRESH_GROUP_IDS.includes(g)) : [];
+}
+
+function refreshProposal(entry, groups) {
+  const estimate = groups.map((id) => {
+    const g = REFRESH_GROUPS.find((x) => x.id === id);
+    return { id, label: g?.label ?? id, paid: g?.paid === true, text: String(estimateFor(id, {})?.text ?? g?.cost ?? '').slice(0, 200) };
+  });
+  const reason = `${entry.title}: runs in the dashboard Refresh panel (too long for chat).`.slice(0, 300);
+  return {
+    kind: 'refresh', payload: { groups, reason, estimate },
+    summary: `Refresh: ${estimate.map((e) => e.label).join(', ')}`.slice(0, 200), rationale: reason, evidence: [],
+  };
 }
 
 // ---- card payload --------------------------------------------------------------------------------------------
@@ -148,6 +192,9 @@ export function normalizeActionPayload(raw, { registry } = {}) {
   const entry = typeof p.actionId === 'string' ? getAction(p.actionId.trim()) : null;
   if (!entry) return { ok: false, errors: [`unknown actionId ${String(p.actionId).slice(0, 80)}; use find_actions`] };
   if (entry.tier === 0) return { ok: false, errors: ['read actions run directly and never need a card'] };
+  const refused = refusalFor(entry);
+  if (refused) return { ok: false, errors: [refused] };
+  if (entry.viaRefreshPanel) return { ok: false, errors: ['this action runs from the Refresh panel, not as an action card'] };
   const list = Array.isArray(p.items) ? p.items : isPlain(p.args) ? [p.args] : p.items === undefined && p.args === undefined ? [{}] : null;
   if (!list || !list.length) return { ok: false, errors: ['items must be a non-empty array of args'] };
   if (list.length > ACTION_ITEMS_MAX) return { ok: false, errors: [`at most ${ACTION_ITEMS_MAX} items per action`] };
@@ -189,22 +236,33 @@ export function requiredTypedText(payload, { registry } = {}) {
  */
 export async function invokeAction(entry, args, ctx, { routeModules = DEFAULT_ROUTE_MODULES } = {}) {
   if (!ctx?.authorization) throw new Error('no authorization available for this action');
+  const refused = refusalFor(entry);
+  if (refused) throw new Error(refused);
+  if (entry.viaRefreshPanel) throw new Error('this action runs from the Refresh panel, not in chat');
   const load = routeModules?.[entry.route];
   if (typeof load !== 'function') throw new Error(`no route module for ${entry.route}`);
   const mod = await load();
   const handler = mod?.[entry.method];
   if (typeof handler !== 'function') throw new Error(`route ${entry.route} has no ${entry.method} handler`);
+  const auth = ROUTE_AUTH[entry.route] || {};
+  // body.action for POST routes with an action switch; media/archive-inbox/client-brain take it from the query (entry.query.action).
   const qs = new URLSearchParams(entry.query || {});
-  if (ctx.impersonating && ctx.clientId) qs.set('as', ctx.clientId);
+  // Routes that resolve the client from body/query (verifyAdminRequest) never honour ?as=; the rest do while impersonating.
+  const explicit = auth.clientFrom === 'explicit';
+  if (!explicit && ctx.impersonating && ctx.clientId) qs.set('as', ctx.clientId);
   const headers = { authorization: ctx.authorization, 'content-type': 'application/json' };
-  let url = `http://internal${entry.path || `/api/dashboard/${entry.route}`}`;
+  const rel = (ROUTE_FILES[entry.route] || `app/api/dashboard/${entry.route}/route.js`).replace(/^app/, '').replace(/\/route\.js$/, '');
+  let url = `${ctx.origin || 'http://internal'}${rel}`;
   let init;
   if (entry.method === 'GET') {
     for (const [k, v] of Object.entries(args || {})) qs.set(k, typeof v === 'string' ? v : JSON.stringify(v));
-    if (entry.action) qs.set('action', entry.action);
+    for (const [k, v] of Object.entries(entry.fixed || {})) qs.set(k, typeof v === 'string' ? v : JSON.stringify(v));
+    if (entry.action && !qs.has('action')) qs.set('action', entry.action);
+    if (explicit && ctx.clientId) qs.set('clientId', ctx.clientId);
     init = { method: 'GET', headers };
   } else {
-    init = { method: entry.method, headers, body: JSON.stringify({ ...(args || {}), ...(entry.action ? { action: entry.action } : {}), clientId: ctx.clientId }) };
+    // Order: agent args, then `fixed` (the agent can never override it), then the system fields.
+    init = { method: entry.method, headers, body: JSON.stringify({ ...(args || {}), ...(entry.fixed || {}), ...(entry.action ? { action: entry.action } : {}), clientId: ctx.clientId }) };
   }
   const q = qs.toString();
   if (q) url += `?${q}`;
@@ -243,7 +301,15 @@ export function createActionRuntime({ audit, autonomy, docs, invoke, registry, c
         if (typeof id !== 'string' || !id) return null;
         refs.push({ path: `${s.collection}/${id}`, ownerChecked: true });
       } else if (s.path) {
-        refs.push({ path: s.path.replace('{clientId}', clientId), ...(s.field ? { field: s.field } : {}) });
+        let unresolved = false;
+        const path = s.path.replace(/\{([^}]+)\}/g, (_, k) => {
+          if (k === 'clientId') return clientId;
+          const v = getPath(args, k);
+          if (typeof v !== 'string' && typeof v !== 'number') { unresolved = true; return ''; }
+          return String(v);
+        });
+        if (unresolved || path.includes('//')) return null;
+        refs.push({ path, ...(s.field ? { field: s.field } : {}) });
       }
     }
     return refs;
@@ -341,12 +407,26 @@ export function createActionRuntime({ audit, autonomy, docs, invoke, registry, c
     async run(ctx, { actionId, args, items } = {}) {
       const entry = typeof actionId === 'string' ? reg.getAction(actionId.trim()) : null;
       if (!entry) return { kind: 'error', error: `unknown actionId ${String(actionId).slice(0, 80)}; call find_actions first` };
+      const refused = refusalFor(entry);
+      if (refused) return { kind: 'error', error: refused };
       const list = Array.isArray(items) ? items : [args ?? {}];
       if (!list.length || list.length > ACTION_ITEMS_MAX) return { kind: 'error', error: `items must hold 1-${ACTION_ITEMS_MAX} entries` };
       const checked = list.map((a) => validateActionArgs(entry, a ?? {}));
       const bad = checked.map((c, i) => (c.ok ? null : `item ${i + 1}: ${c.errors.join('; ')}`)).filter(Boolean);
       if (bad.length) return { kind: 'error', error: bad.slice(0, 5).join(' | ') };
       const clean = checked.map((c) => c.args);
+      const dropped = [...new Set(checked.flatMap((c) => c.dropped || []))];
+      const withDropped = (res) => (dropped.length ? { ...res, droppedArgs: dropped, droppedNote: `Ignored unknown arguments: ${dropped.join(', ')}.` } : res);
+
+      if (entry.viaRefreshPanel) {
+        // Long-running (270-300 s) group: never invoked from the chat request. The owner's confirm hands the group ids to the Refresh panel.
+        const groups = [...new Set(clean.flatMap((a) => refreshGroupsFor(entry, a) || []))];
+        if (!groups.length) return { kind: 'error', error: `${entry.title} cannot run in chat with these arguments; ask the owner to use the dashboard Refresh panel.` };
+        return {
+          kind: 'proposal', proposal: refreshProposal(entry, groups),
+          result: withDropped({ ok: true, needsConfirmation: true, viaRefreshPanel: true, groups, note: 'Nothing has run. A Refresh card is up; confirming it starts the groups in the dashboard Refresh panel (the owner sees the cost there). Tell the owner to confirm it.' }),
+        };
+      }
 
       if (entry.tier === 0) {
         const rows = [];
@@ -356,12 +436,12 @@ export function createActionRuntime({ audit, autonomy, docs, invoke, registry, c
           if (!out.ok) return { kind: 'error', error: `read failed (${out.status}): ${JSON.stringify(out.json?.error ?? out.json ?? null).slice(0, 200)}` };
           rows.push(out.json);
         }
-        return { kind: 'result', result: { ok: true, actionId: entry.id, data: compactJson(clean.length === 1 ? rows[0] : rows, READ_MAX_CHARS) } };
+        return { kind: 'result', result: withDropped({ ok: true, actionId: entry.id, data: compactJson(clean.length === 1 ? rows[0] : rows, READ_MAX_CHARS) }) };
       }
 
       const gate = resolveGate(entry, await getAutonomy(ctx.clientId), { itemCount: clean.length });
       if (gate === 'run') {
-        return { kind: 'result', result: shaped(await execute(entry, clean, ctx, { via: 'auto' }), entry) };
+        return { kind: 'result', result: withDropped(shaped(await execute(entry, clean, ctx, { via: 'auto' }), entry)) };
       }
       const norm = normalizeActionPayload({ actionId: entry.id, items: clean, typed: gate === 'typed' }, { registry: reg });
       if (!norm.ok) return { kind: 'error', error: norm.errors.join('; ') };
@@ -373,10 +453,10 @@ export function createActionRuntime({ audit, autonomy, docs, invoke, registry, c
           summary: `${entry.title}${clean.length > 1 ? ` (${clean.length})` : ''}`.slice(0, 200),
           rationale: p.warning.slice(0, 800), evidence: [],
         },
-        result: {
+        result: withDropped({
           ok: true, needsConfirmation: true, tier: p.tier, typedConfirm: p.typed, warning: p.warning,
           note: 'Nothing has run. A confirmation card is up for the owner. Tell them what it will change and that they must confirm it.',
-        },
+        }),
       };
     },
 

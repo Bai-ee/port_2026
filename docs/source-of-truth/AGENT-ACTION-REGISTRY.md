@@ -65,3 +65,11 @@ Google Calendar connect/callback, `x-monitor connect-start`), Telegram webhook s
 `pre-digest-refresh`, `mcp/*`. In `quote-targets`: `strategy-chat-send`/`strategy-chat-history` (recursion),
 `strategy-proposal-decide` (the agent must not approve its own cards), `strategy-review`, `save-thumb` (binary), `media-url`.
 Cron-only `social-posting GET ?action=process-due`. See the comment block at the top of `action-registry.js`.
+
+## Runtime contract (action-runtime.js)
+- `fixed` body/query fields are merged AFTER the agent's args. Unknown arg keys are dropped when the schema is closed and reported as `droppedArgs` in the run_action result.
+- `action:null` + `query:{action}` entries send the action in the query string (POST body carries the payload); GET entries pass args as query params.
+- `ROUTE_AUTH.clientFrom:'explicit'` routes (verifyAdminRequest) get `clientId` in body/query and never `as=`; `'context'` routes get `as=` while impersonating.
+- `viaRefreshPanel` entries (`refreshGroups` / `refreshGroupsByArg`) are never invoked from chat: run_action returns a `refresh` proposal and the dashboard Refresh panel runs the groups. Unmapped args = "cannot run in chat".
+- email-digest preview/send-now forward to `digestSelfOrigin()` (env/prod domain) on their own; no origin is needed from the chat request.
+- Refused for the agent everywhere (run, cards, invoke): strategy-autonomy-save, strategy-proposal-decide, strategy-chat-send, strategy-action-undo, or any entry whose args expose an autonomy field.

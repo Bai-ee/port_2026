@@ -70,7 +70,10 @@ test('args: schema checks, reserved keys refused', () => {
   assert.equal(validateActionArgs(e, { postId: 'p1' }).ok, true);
   assert.match(validateActionArgs(e, {}).errors[0], /postId is required/);
   assert.match(validateActionArgs(e, { postId: 'p', clientId: 'other' }).errors.join(), /clientId is set by the system/);
-  assert.match(validateActionArgs(e, { postId: 'p', nope: 1 }).errors.join(), /unknown argument/);
+  const dropped = validateActionArgs({ ...e, args: { ...e.args, additionalProperties: false } }, { postId: 'p', nope: 1 });
+  assert.equal(dropped.ok, true);
+  assert.deepEqual(dropped.dropped, ['nope']);
+  assert.deepEqual(dropped.args, { postId: 'p' });
   assert.match(validateActionArgs(e, { postId: 5 }).errors.join(), /must be string/);
 });
 
@@ -142,12 +145,13 @@ test('native undo runs the revert action with mapped args', async () => {
 test('failed route call: audited as failed, no undoId, no snapshot claim', async () => {
   const { rt, stores } = setup({ files: { 'social_posts/p1': post() } });
   const out = await rt.run(CTX, { actionId: 'q.update', args: { postId: 'p1', __fail: true } }).catch((e) => e);
-  // __fail is not in the schema, so it is refused before anything runs
-  assert.equal(out.kind, 'error');
+  // __fail is not in the schema: it is dropped (reported), so the call is not forced to fail
+  assert.equal(out.kind, 'result');
+  assert.deepEqual(out.result.droppedArgs, ['__fail']);
   const bad = await rt.run(CTX, { actionId: 'q.nosnap', args: {} });
   assert.equal(bad.result.status, 'ok');
   assert.equal(bad.result.undoId, undefined, 'no snapshot + no native undo => not undoable');
-  assert.equal((await stores.audit.recent(CLIENT, 5)).length, 1);
+  assert.equal((await stores.audit.recent(CLIENT, 5)).length, 2);
 });
 
 test('tier 1 with autonomy confirm, tier 2 and tier 3 produce cards and run nothing', async () => {
@@ -286,6 +290,127 @@ test('invokeAction: builds an authorized in-process Request (body, as=, GET quer
   await assert.rejects(invokeAction(entry, {}, { clientId: 'c1' }, { routeModules }), /no authorization/);
   const failing = { r: async () => ({ POST: async () => Response.json({ error: 'nope' }, { status: 403 }) }) };
   assert.equal((await invokeAction(entry, {}, CTX, { routeModules: failing })).ok, false);
+});
+
+test('invokeAction: fixed overrides agent args; query action on POST and GET; explicit-client routes get no as=', async () => {
+  const seen = [];
+  const routeModules = { media: async () => ({
+    POST: async (req) => { seen.push([req.url, await req.json()]); return Response.json({ ok: true }); },
+    GET: async (req) => { seen.push([req.url]); return Response.json({ ok: true }); },
+  }), 'digest-config': async () => ({ POST: async (req) => { seen.push([req.url, await req.json()]); return Response.json({ ok: true }); }, GET: async (req) => { seen.push([req.url]); return Response.json({ ok: true }); } }) };
+  const imp = { ...CTX, impersonating: true, origin: 'https://app.test' };
+  await invokeAction({ id: 'a', route: 'media', method: 'POST', action: null, query: { action: 'create-folder' }, fixed: { mode: 'safe' } }, { name: 'x', mode: 'evil' }, imp, { routeModules });
+  assert.match(seen[0][0], /^https:\/\/app\.test\/api\/dashboard\/media\?action=create-folder&as=c1$/);
+  assert.deepEqual(seen[0][1], { name: 'x', mode: 'safe', clientId: 'c1' }, 'fixed wins over the agent, no body.action for a query-action entry');
+  await invokeAction({ id: 'b', route: 'media', method: 'GET', action: null, query: { action: 'jobs' } }, { type: 'video-remix' }, CTX, { routeModules });
+  assert.match(seen[1][0], /\?action=jobs&type=video-remix$/);
+  await invokeAction({ id: 'c', route: 'digest-config', method: 'POST', action: null }, { tone: 't' }, imp, { routeModules });
+  assert.equal(seen[2][0].includes('as='), false, 'verifyAdminRequest routes use the explicit clientId, never as=');
+  assert.deepEqual(seen[2][1], { tone: 't', clientId: 'c1' });
+  await invokeAction({ id: 'd', route: 'digest-config', method: 'GET', action: null }, {}, imp, { routeModules });
+  assert.match(seen[3][0], /\?clientId=c1$/);
+});
+
+test('refresh-panel entries never invoke: run_action returns a refresh proposal with the group ids', async () => {
+  const entries = [
+    { id: 'r.sig', group: 'refresh', title: 'Refresh signals', description: 'x', route: 'r', method: 'GET', action: null, args: props({}), tier: 3, external: 'paid', cost: '$', viaRefreshPanel: true, refreshGroups: ['market-signals'] },
+    { id: 'r.brief', group: 'signals', title: 'Run brief', description: 'x', route: 'r', method: 'POST', action: null, args: props({ scope: { type: 'string' } }, ['scope']), tier: 3, external: 'paid', cost: '$', viaRefreshPanel: true, refreshGroupsByArg: { arg: 'scope', map: { 'marketing-director': ['market-signals'] } } },
+  ];
+  const reg = { getAction: (id) => entries.find((e) => e.id === id) ?? null, findActions: () => [] };
+  const calls = [];
+  const rt = createActionRuntime({ ...createMemoryActionStores(), invoke: async (...a) => { calls.push(a); return { ok: true, status: 200, json: {} }; }, registry: reg });
+  const out = await rt.run(CTX, { actionId: 'r.sig', args: { junk: 1 } });
+  assert.equal(out.kind, 'proposal');
+  assert.equal(out.proposal.kind, 'refresh');
+  assert.deepEqual(out.proposal.payload.groups, ['market-signals']);
+  assert.equal(validateProposal(out.proposal).ok, true, 'a valid refresh proposal');
+  const exec = buildExecutors({}).refresh({ payload: out.proposal.payload });
+  assert.equal((await exec).clientAction, 'marketing-refresh');
+  assert.equal((await rt.run(CTX, { actionId: 'r.brief', args: { scope: 'marketing-director' } })).proposal.payload.groups[0], 'market-signals');
+  const bad = await rt.run(CTX, { actionId: 'r.brief', args: { scope: 'social-media-manager' } });
+  assert.equal(bad.kind, 'error');
+  assert.match(bad.error, /Refresh panel/);
+  assert.equal(calls.length, 0, 'nothing was invoked in-process');
+  await assert.rejects(invokeAction(entries[0], {}, CTX, { routeModules: { r: async () => ({ GET: async () => Response.json({}) }) } }), /Refresh panel/);
+  assert.equal(normalizeActionPayload({ actionId: 'r.sig' }, { registry: reg }).ok, false, 'no action card for panel entries');
+});
+
+test('autonomy and proposal decisions are refused for the agent, in run, cards and invoke', async () => {
+  const entry = { id: 'x.autonomy.save', group: 'strategy', title: 'Save autonomy', description: 'x', route: 'r', method: 'POST', action: 'strategy-autonomy-save', args: props({}), tier: 1 };
+  const decide = { ...entry, id: 'x.decide', action: 'strategy-proposal-decide' };
+  const reg = { getAction: (id) => [entry, decide].find((e) => e.id === id) ?? null, findActions: () => [] };
+  const rt = createActionRuntime({ ...createMemoryActionStores(), invoke: async () => { throw new Error('must not run'); }, registry: reg });
+  for (const id of ['x.autonomy.save', 'x.decide']) {
+    const out = await rt.run(CTX, { actionId: id });
+    assert.equal(out.kind, 'error', id);
+    assert.equal(normalizeActionPayload({ actionId: id }, { registry: reg }).ok, false, id);
+    await assert.rejects(invokeAction(reg.getAction(id), {}, CTX, { routeModules: { r: async () => ({ POST: async () => Response.json({ ok: true }) }) } }));
+  }
+  assert.match((await rt.run(CTX, { actionId: 'x.autonomy.save' })).error, /own permissions/);
+});
+
+test('snapshot path placeholders resolve from args (content task)', async () => {
+  const entry = { id: 'c.task', group: 'content', title: 'Task', description: 'x', route: 'r', method: 'POST', action: 'content-task-update', args: props({ taskId: { type: 'string' }, status: { type: 'string' } }, ['taskId', 'status']), tier: 1, snapshot: [{ path: 'content_tasks/{clientId}/tasks/{taskId}' }] };
+  const stores = createMemoryActionStores();
+  stores.files.set('content_tasks/c1/tasks/media-p1', { status: 'open' });
+  const rt = createActionRuntime({ ...stores, registry: { getAction: () => entry, findActions: () => [] }, invoke: async (e, a) => { stores.files.set('content_tasks/c1/tasks/media-p1', { status: a.status }); return { ok: true, status: 200, json: { ok: true } }; } });
+  const out = await rt.run(CTX, { actionId: 'c.task', args: { taskId: 'media-p1', status: 'done' } });
+  assert.ok(out.result.undoId);
+  assert.equal((await rt.undo(CTX, out.result.undoId)).ok, true);
+  assert.equal(stores.files.get('content_tasks/c1/tasks/media-p1').status, 'open');
+});
+
+test('end to end with REAL catalog entries and injected route modules (no network, no firebase)', async () => {
+  const { getAction } = await import('../agent/action-registry.js');
+  const seen = [];
+  const mk = (name) => async () => ({
+    GET: async (req) => { seen.push([name, 'GET', req.url]); return Response.json({ ok: true, rows: [1] }); },
+    POST: async (req) => { seen.push([name, 'POST', req.url, await req.json()]); return Response.json({ ok: true }); },
+  });
+  const routeModules = { 'quote-targets': mk('qt'), 'social-posting': mk('sp'), 'digest-config': mk('dc'), media: mk('media') };
+  const stores = createMemoryActionStores();
+  stores.files.set('content_tasks/c1/tasks/media-p1', { status: 'open' });
+  stores.files.set('social_posts/p1', { clientId: 'c1', content: 'old', status: 'draft' });
+  const rt = createActionRuntime({ ...stores, invoke: (e, a, c) => invokeAction(e, a, c, { routeModules }) });
+  const imp = { ...CTX, impersonating: true };
+  // tier 0 via query action (GET)
+  const read = await rt.run(imp, { actionId: 'media.jobs', args: { type: 'video-remix', bogus: 1 } });
+  assert.equal(read.kind, 'result');
+  assert.deepEqual(read.result.droppedArgs, ['bogus']);
+  assert.match(seen[0][2], /\/api\/dashboard\/media\?action=jobs&as=c1&type=video-remix$/);
+  // tier 1 on a quote-targets action, snapshot from a templated path
+  const t = await rt.run(imp, { actionId: 'content.task.update', args: { taskId: 'media-p1', status: 'done' } });
+  assert.equal(t.kind, 'result');
+  assert.ok(t.result.undoId);
+  assert.deepEqual(seen[1][3], { taskId: 'media-p1', status: 'done', action: 'content-task-update', clientId: 'c1' });
+  // fixed body field cannot be overridden: queue.post.update fixes scheduledAt:null
+  const upd = await rt.run(imp, { actionId: 'queue.post.update', args: { postId: 'p1', content: 'new', scheduledAt: '2030-01-01T00:00:00Z' } });
+  assert.equal(upd.kind, 'result');
+  assert.deepEqual(upd.result.droppedArgs, ['scheduledAt'], 'the schedule cannot be smuggled into an edit');
+  assert.equal('scheduledAt' in seen.at(-1)[3], false);
+  const unsch = await rt.run(imp, { actionId: 'queue.post.unschedule', args: { postId: 'p1' } });
+  assert.equal(unsch.kind, 'result');
+  assert.equal(seen.at(-1)[3].scheduledAt, null, 'fixed field merged after agent args');
+  assert.equal(seen.at(-1)[3].action, 'update');
+  // X publishing: typed card, nothing invoked
+  const before = seen.length;
+  const sch = await rt.run(imp, { actionId: 'queue.post.schedule', args: { content: 'hello', postId: 'p1', scheduledAt: '2030-01-01T00:00:00Z' } });
+  assert.equal(sch.kind, 'proposal');
+  assert.equal(sch.proposal.payload.typed, true);
+  assert.match(sch.proposal.payload.confirmText, /^post 1$/);
+  // paid tier 3: confirm card with cost, not typed
+  const paid = await rt.run(imp, { actionId: 'xmonitor.sync-profile' });
+  assert.equal(paid.kind, 'proposal');
+  assert.equal(paid.proposal.payload.typed, false);
+  assert.ok(paid.proposal.payload.cost);
+  // refresh group entry -> refresh proposal
+  const rf = await rt.run(imp, { actionId: 'refresh.signals' });
+  assert.equal(rf.proposal.kind, 'refresh');
+  assert.deepEqual(rf.proposal.payload.groups, ['market-signals']);
+  // autonomy-save and decide are not in the registry at all
+  assert.equal(getAction('strategy.autonomy.save'), null);
+  assert.equal((await rt.run(imp, { actionId: 'strategy.autonomy.get' })).kind, 'result');
+  assert.equal(seen.length, before + 1, 'only the autonomy read ran after the cards');
 });
 
 test('loop: run_action card counts as bulk, tier-1 undoIds are reported in toolResults', async () => {

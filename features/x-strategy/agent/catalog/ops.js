@@ -48,7 +48,7 @@ export const SIGNALS_ACTIONS = [
     { tier: 2, snapshot: CFG_SNAP }),
   R('signals.brief.run', 'signals', 'Run a scoped market brief', 'Runs the Scout pipeline for a scope: marketing-director = fresh market signals only; social-media-manager = 30-day campaign + today\'s post from the stored scout brief.', 'marketing-brief-run', 'POST', null,
     obj({ scope: str('marketing-director | social-media-manager.', { enum: ['marketing-director', 'social-media-manager'] }) }, ['scope']),
-    { tier: 3, external: 'paid', cost: 'marketing-director: Scout about $0.10 plus ScrapeCreators credits; social-media-manager: model calls (a few cents).' }),
+    { tier: 3, external: 'paid', viaRefreshPanel: true, refreshGroupsByArg: { arg: 'scope', map: { 'marketing-director': ['market-signals'] } }, cost: 'marketing-director: Scout about $0.10 plus ScrapeCreators credits; social-media-manager: model calls (a few cents).' }),
   R('signals.recipes.list', 'signals', 'List analysis skills', 'Registered analysis recipes (ids, labels, content kinds).', 'recipe-run', 'GET', null, obj({}, [])),
   R('signals.recipes.run', 'signals', 'Run analysis skills', 'Runs up to 4 analysis recipes over stored signals (writes nothing, returns the analysis). One model call per skill.', 'recipe-run', 'POST', null,
     obj({ recipeIds: arr(str('customer-research | watchlist-analysis | reply-targets | reddit-analysis | x-market-talk | instagram-analysis | opportunity-signals'), 'Up to 4 recipe ids.') }, ['recipeIds']),
@@ -89,13 +89,13 @@ export const DIGEST_ACTIONS = [
 
 export const REFRESH_ACTIONS = [
   R('refresh.signals', 'refresh', 'Refresh market signals (Refresh group 1)', 'pre-digest-refresh phase=signals: Scout + watchlist + Reddit/IG/web searches + opportunity search (no paid X search).', 'pre-digest-refresh', 'GET', null,
-    obj({ force: str('1 to bypass the 6-hour Scout freshness skip.') }, []), { tier: 3, external: 'paid', query: { phase: 'signals' }, cost: 'Scout about $0.10 + ScrapeCreators credits + model calls.' }),
+    obj({ force: str('1 to bypass the 6-hour Scout freshness skip.') }, []), { tier: 3, external: 'paid', viaRefreshPanel: true, refreshGroups: ['market-signals'], query: { phase: 'signals' }, cost: 'Scout about $0.10 + ScrapeCreators credits + model calls.' }),
   R('refresh.analysis', 'refresh', 'Refresh analysis (Refresh group 3)', 'pre-digest-refresh phase=analysis: Reddit/IG/opportunity analyzers, strategy and reply targets, brief summaries, hosted brief.', 'pre-digest-refresh', 'GET', null,
-    obj({}, []), { tier: 3, external: 'paid', query: { phase: 'analysis' }, cost: 'Several Claude calls (analysis skills on).' }),
+    obj({}, []), { tier: 3, external: 'paid', viaRefreshPanel: true, refreshGroups: ['analysis'], query: { phase: 'analysis' }, cost: 'Several Claude calls (analysis skills on).' }),
   R('refresh.x-search', 'refresh', 'Refresh X search (Refresh group 2)', 'pre-digest-refresh phase=signals with allowX=1: runs the PAID X searches (Opportunity Signals X part and Market Talk on X).', 'pre-digest-refresh', 'GET', null,
-    obj({}, []), { tier: 3, external: 'paid', query: { phase: 'signals', allowX: '1' }, cost: 'About 1 paid X API call per enabled Opportunity query row, plus 1 for Market Talk if enabled; plus Scout/ScrapeCreators.' }),
+    obj({}, []), { tier: 3, external: 'paid', viaRefreshPanel: true, refreshGroups: ['x-search'], query: { phase: 'signals', allowX: '1' }, cost: 'About 1 paid X API call per enabled Opportunity query row, plus 1 for Market Talk if enabled; plus Scout/ScrapeCreators.' }),
   R('refresh.renders', 'refresh', 'Refresh renders (Refresh group 7)', 'pre-digest-refresh phase=modules: creative and video module renders.', 'pre-digest-refresh', 'GET', null,
-    obj({}, []), { tier: 3, external: 'paid', query: { phase: 'modules' }, cost: 'Studio/video render cost (Cloud Run GPU).' }),
+    obj({}, []), { tier: 3, external: 'paid', viaRefreshPanel: true, refreshGroups: ['renders'], query: { phase: 'modules' }, cost: 'Studio/video render cost (Cloud Run GPU).' }),
 ];
 
 export const XMONITOR_ACTIONS = [
@@ -103,7 +103,7 @@ export const XMONITOR_ACTIONS = [
   R('xmonitor.sync-profile', 'xmonitor', 'Sync X profile counters', 'Refreshes follower/following/post counts from the X API.', 'x-monitor', 'POST', 'sync-profile', obj({}, []), { tier: 3, external: 'paid', cost: '1 metered X API call.' }),
   R('xmonitor.sync-posts', 'xmonitor', 'Sync X post metrics', 'Pulls recent posts with impressions/engagement from the X API (deep = more pages).', 'x-monitor', 'POST', 'sync-posts', obj({ deep: bool('Fetch more history.') }, []), { tier: 3, external: 'paid', cost: '1 metered X API call (100 posts); deep adds pages.' }),
   R('xmonitor.sync-audience', 'xmonitor', 'Sync the follower roster', 'Pulls the follower roster to diff gained/lost followers.', 'x-monitor', 'POST', 'sync-audience', obj({}, []), { tier: 3, external: 'paid', cost: 'About 1 metered X API call per 1,000 followers.' }),
-  R('xmonitor.sync-all', 'xmonitor', 'Sync everything in X Monitor', 'Profile + posts + audience in one go (Refresh group 6).', 'x-monitor', 'POST', 'sync-all', obj({}, []), { tier: 3, external: 'paid', cost: 'About 2 metered X API calls plus 1 per 1,000 followers.' }),
+  R('xmonitor.sync-all', 'xmonitor', 'Sync everything in X Monitor', 'Profile + posts + audience in one go (Refresh group 6).', 'x-monitor', 'POST', 'sync-all', obj({}, []), { tier: 3, external: 'paid', viaRefreshPanel: true, refreshGroups: ['x-monitor'], cost: 'About 2 metered X API calls plus 1 per 1,000 followers.' }),
 ];
 
 export const MEDIA_ACTIONS = [

@@ -2,7 +2,8 @@
 // handlers in features/x-strategy/route-handlers.js, STRATEGY_ROUTE_ACTIONS). Same auth as the rest of that route
 // (bearer + admin + `?as=` + pilot owner). Every strategy handler REQUIRES body.clientId === the resolved client, so the
 // runtime must send clientId (it always does).
-// EXCLUDED here on purpose: strategy-chat-send (recursion), strategy-chat-history (the chat's own transcript),
+// EXCLUDED here on purpose: strategy-autonomy-save (the agent must never change its own permissions; the runtime also refuses it),
+// strategy-action-undo (the agent uses the undo_action tool), strategy-chat-send (recursion), strategy-chat-history (the chat's own transcript),
 // strategy-proposal-decide (the agent must never approve its own proposal cards), strategy-review (starts a model chat).
 import { str, int, bool, arr, obj, open, day } from './_schema.js';
 
@@ -16,6 +17,8 @@ const FILL_SPEC = open('Spec {from?: YYYY-MM-DD, days?: 1-31 (default 7), includ
 
 export const STRATEGY_ACTIONS = [
   S('strategy.get', 'strategy', 'Get the strategy overview', 'Profile, rows meta, evaluation, plan doc, track profiles and today\'s plan preview. Also re-syncs the content tracks (cheap write).', 'strategy-get', obj({}, [])),
+  S('strategy.action-log', 'strategy', 'Get the agent action log', 'The 50 most recent actions run through run_action (status, undoable). Same data as get_action_log.', 'strategy-action-log', obj({}, [])),
+  S('strategy.autonomy.get', 'strategy', 'Get the agent autonomy setting', 'The owner-set autonomy (tier1 auto|confirm, tier3 confirm|typed). Read-only; only the owner can change it.', 'strategy-autonomy-get', obj({}, [])),
   S('strategy.refresh-status', 'strategy', 'Check a corpus refresh', 'Status of a queued account refresh, or (workerOnly) just the Mac worker heartbeat.', 'strategy-refresh-status',
     obj({ requestId: str('Refresh request id.'), workerOnly: bool('Return only the worker heartbeat.') }, [])),
   S('strategy.evaluate-handle', 'strategy', 'Evaluate an X handle', 'Compares a handle\'s stored posts to the client\'s own (needs a prior refresh). Read-only.', 'strategy-evaluate-handle', obj({ handle: str('X handle, no @.') }, ['handle'])),

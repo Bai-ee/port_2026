@@ -51,7 +51,7 @@ test('every action literal exists in its route source (or the route\'s declared 
 });
 
 test('coverage: every action of the two core routes is catalogued or explicitly excluded', () => {
-  const EXCLUDED_QT = new Set(['strategy-chat-send', 'strategy-chat-history', 'strategy-proposal-decide', 'strategy-review', 'save-thumb', 'media-url']);
+  const EXCLUDED_QT = new Set(['strategy-chat-send', 'strategy-chat-history', 'strategy-proposal-decide', 'strategy-review', 'save-thumb', 'media-url', 'strategy-autonomy-save', 'strategy-action-undo']);
   const EXCLUDED_SP = new Set(['process-due-cron']);
   const registered = (route) => new Set(ACTIONS.filter((a) => a.route === route).map((a) => a.action).filter(Boolean));
 
@@ -71,6 +71,13 @@ test('coverage: every action of the two core routes is catalogued or explicitly 
   const spReg = registered('social-posting');
   for (const a of spActions) assert.ok(spReg.has(a) || EXCLUDED_SP.has(a), `social-posting action "${a}" is neither catalogued nor excluded`);
   assert.ok(spReg.has('process-due'));
+});
+
+test('the agent cannot decide its own proposals or change its own permissions', () => {
+  for (const a of ACTIONS) {
+    const act = a.action || a.query?.action;
+    assert.ok(!['strategy-proposal-decide', 'strategy-autonomy-save', 'strategy-action-undo', 'strategy-chat-send'].includes(act), a.id);
+  }
 });
 
 test('core route sizes: quote-targets and social-posting are thoroughly covered', () => {
@@ -132,7 +139,7 @@ test('tier 0 entries never carry snapshots; tier 1/2 core writes carry a snapsho
 test('snapshot paths match the real Firestore layout', () => {
   const paths = ACTIONS.flatMap((a) => (a.snapshot || []).map((s) => s.path || s.collection)).filter(Boolean);
   const roots = new Set(paths.map((p) => p.split('/')[0]));
-  for (const r of roots) assert.ok(['social_posts', 'x_content_packages', 'content_buckets', 'dashboard_state', 'client_configs', 'digest_config', 'x_strategy_plans', 'x_strategy_docs', 'clients'].includes(r), `unexpected snapshot root ${r}`);
+  for (const r of roots) assert.ok(['social_posts', 'x_content_packages', 'content_buckets', 'dashboard_state', 'client_configs', 'digest_config', 'x_strategy_plans', 'x_strategy_docs', 'clients', 'content_tasks'].includes(r), `unexpected snapshot root ${r}`);
   // Collection names the stores really use.
   const store = readFileSync(path.join(ROOT, 'features/x-content-inventory/bucket-store.js'), 'utf8');
   assert.ok(store.includes("'content_buckets'") && store.includes("'x_content_packages'"));
