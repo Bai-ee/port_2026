@@ -876,7 +876,7 @@ export function createStrategyHandlers({
     // History for the loop: stored messages (user/assistant) preceded by the folded summary as a 'note'.
     const history = [
       ...(thread?.summaryNote ? [{ role: 'note', text: thread.summaryNote }] : []),
-      ...(thread?.messages || []).slice(-HISTORY_MESSAGES_TO_MODEL).map((m) => ({ role: m.role, text: m.text })),
+      ...(thread?.messages || []).slice(-HISTORY_MESSAGES_TO_MODEL).map((m) => ({ role: m.role, text: withCardOutcomes(m, thread?.proposals) })),
     ];
     let turn;
     try {
@@ -900,13 +900,12 @@ export function createStrategyHandlers({
       if (!v.ok) { dropped.push({ kind: raw?.kind ?? null, errors: v.errors }); continue; }
       proposals.push(assignProposal({ ...raw, kind: v.proposal.kind, payload: v.proposal.payload }, { threadId, now }));
     }
-    // Honesty guard: the reply must never claim a card that does not exist. When a propose attempt failed (or the
-    // text talks about cards) and no card was made, say so under the reply.
+    // Honesty guard: the reply must never claim a card that does not exist. When a propose attempt failed and no
+    // card was made, say so under the reply.
     let assistantText = String(turn?.text ?? '');
     if (!proposals.length) {
       const errs = [...(Array.isArray(turn?.proposalErrors) ? turn.proposalErrors : []), ...dropped.map((d) => `${d.kind}: ${(d.errors || []).join('; ')}`)];
       if (errs.length) assistantText += `\n\n(No confirm card was created: ${errs.slice(0, 3).join(' | ').slice(0, 400)}. Ask me to try again.)`;
-      else if (/\bcards?\b/i.test(assistantText) && /\b(up|ready|below|above|confirm)\b/i.test(assistantText)) assistantText += '\n\n(No confirm card was created this turn. Ask me to propose it again.)';
     }
     const toolResults = (Array.isArray(turn?.toolResults) ? turn.toolResults : []).slice(0, 20);
     const undoIds = toolResults.map((r) => r.undoId).filter(Boolean);
@@ -917,6 +916,19 @@ export function createStrategyHandlers({
       usage: turn?.usage ?? null, rounds: turn?.rounds ?? null, stopped: turn?.stopped ?? null,
       turnsUsedToday: used, cap: chatStore.cap,
     };
+  }
+
+  // The model only sees message text, so an assistant message is followed by what happened to the cards it made
+  // (pending / confirmed / rejected / failed + the result line). Without this it tells the owner "you haven't
+  // confirmed it" after they did.
+  function withCardOutcomes(m, proposalsById) {
+    const text = String(m?.text ?? '');
+    if (m?.role !== 'assistant' || !Array.isArray(m.proposalIds) || !m.proposalIds.length || !proposalsById) return text;
+    const lines = m.proposalIds.map((pid) => proposalsById[pid]).filter(Boolean).map((p) => {
+      const result = p.result?.message || (p.result?.clientAction === 'marketing-refresh' ? `handed to the Refresh panel: ${(p.result.groups || []).join(', ')}` : '');
+      return `- ${p.kind} card: ${p.status}${result ? ` (${String(result).slice(0, 160)})` : ''}${p.error ? ` (error: ${String(p.error).slice(0, 160)})` : ''}`;
+    });
+    return lines.length ? `${text}\n\n[CARD OUTCOMES, recorded by the system]\n${lines.join('\n')}` : text;
   }
 
   /** Newest corpus pull across the own + benchmark handles (ISO) or null: "the data a review looked at". */

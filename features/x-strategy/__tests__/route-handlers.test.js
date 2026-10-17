@@ -792,3 +792,24 @@ test('strategy-freshness: per-group oldest asOf + tightest max age from the brie
   assert.equal(r.groups.serverAsOf['market-signals'], null);
   assert.ok(r.staleGroups.includes('market-signals'));
 });
+
+test('chat-send: the model sees what happened to earlier cards; a card-free reply gets no false "no card" note', async () => {
+  let n = 0;
+  const s = chatSetup({ loopResult: () => (n++ === 0
+    ? { text: 'Card is up.', proposals: [{ kind: 'refresh', payload: { groups: ['today-queue'], reason: 'stale' }, summary: 'Refresh', rationale: 'stale', evidence: [] }] }
+    : { text: 'Confirm the card to start it.', proposals: [] }) });
+  const r1 = await s.call('strategy-chat-send', { text: 'refresh' });
+  const d = await s.call('strategy-proposal-decide', { threadId: r1.threadId, proposalId: r1.proposals[0].id, decision: 'confirm' });
+  assert.equal(d.ok, true, JSON.stringify(d));
+  const r2 = await s.call('strategy-chat-send', { text: 'did it run?', threadId: r1.threadId });
+  const prior = s.loopCalls[1].history.find((m) => m.role === 'assistant');
+  assert.match(prior.text, /CARD OUTCOMES/);
+  assert.match(prior.text, /refresh card: confirmed \(handed to the Refresh panel: today-queue\)/);
+  assert.equal(r2.text, 'Confirm the card to start it.');
+});
+
+test('chat-send: a failed propose attempt with no card says so under the reply', async () => {
+  const s = chatSetup({ loopResult: { text: 'Card is up.', proposals: [], proposalErrors: ['refresh: groups must be a non-empty list'] } });
+  const r = await s.call('strategy-chat-send', { text: 'refresh' });
+  assert.match(r.text, /No confirm card was created: refresh: groups must be a non-empty list/);
+});
