@@ -76,11 +76,13 @@ export async function PATCH(request) {
       ]);
       await applyStageComplete({ getPackage, upsertPackage: (pkg) => upsertPackage(pkg, { returnPackages: false }), now: () => Date.now() }, { command: cmdData, result });
       // Posts that asked for this original (chat / post sheet "use high-res") get it now, without asking again.
-      const [{ attachStagedHires, HIRES_EDITABLE_STATUSES }, { pickMedia }, { tokenUrlFor }, { getSocialPost }] = await Promise.all([
+      const [{ attachStagedHires, HIRES_EDITABLE_STATUSES }, { pickMedia }, { tokenUrlFor }, { getSocialPost }, telegramStore, { enqueueCreativeFollowup }] = await Promise.all([
         import('../../../../../features/x-content-inventory/hires-media.js'),
         import('../../../../../features/x-content-inventory/item-actions.js'),
         import('../../../../../features/x-content-inventory/thumbs.js'),
         import('../../../../../features/social-posting/twitter-service.js'),
+        import('../../../../../features/telegram/store.js'),
+        import('../../../../../features/telegram/creative.js'),
       ]);
       const out = await attachStagedHires({
         getPackage,
@@ -97,6 +99,8 @@ export async function PATCH(request) {
           return true;
         }),
         now: () => Date.now(),
+        // A Telegram "Copy + high-res" tap is waiting on this original: queue the follow-up send (binding re-checked at send time).
+        onAttached: (w, { candidateId }) => enqueueCreativeFollowup({ db: fb.adminDb, store: telegramStore, now: Date.now() }, w, { candidateId }),
       }, { candidateId: cmdData.packageId });
       if (out.attached.length || out.skipped.length) console.info('[archive] high-res attach', cmdData.packageId, JSON.stringify(out));
     } catch (e) { console.error('[archive] stage write-back failed for', commandId, e); }

@@ -141,6 +141,18 @@ export function createReadModels(deps = {}) {
     return { today, week, tz: 'America/Chicago', config: cfg, unplaced };
   }
 
+  /** One calendar day (any date) with its posts: { date, posts } or null. Read-only. */
+  async function loadDay(clientId, date, { now: nowOverride } = {}) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date))) return null;
+    const [config, rows] = await Promise.all([
+      Promise.resolve(readEngineConfig?.(clientId)).catch(() => undefined),
+      Promise.resolve(readSocialQueue?.(clientId)).then((r) => r || []),
+    ]);
+    const cal = buildMonthCalendar({ posts: rows, month: String(date).slice(0, 7), now: nowMsOf(nowOverride ?? now), config });
+    for (const week of cal.weeks) for (const day of week) if (day.date === date && day.inMonth) return day;
+    return null;
+  }
+
   async function loadAccountHandle(clientId) {
     if (!db) return null;
     try {
@@ -158,5 +170,5 @@ export function createReadModels(deps = {}) {
     return rows.find((p) => p && String(p.id) === String(postId)) || null;
   }
 
-  return { loadBriefing, loadCalendar, todaySuggestions, loadAccountHandle, loadPost };
+  return { loadBriefing, loadCalendar, loadDay, todaySuggestions, loadAccountHandle, loadPost };
 }

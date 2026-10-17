@@ -108,9 +108,16 @@ export async function runDispatch(ctx, { now: nowIn } = {}) {
       await store.supersedeOutbox(db, item.id, { reason: 'access-revoked', now });
       continue;
     }
+    // A creative follow-up answers an explicit button tap: it is bound to that user + bindingVersion, and ignores
+    // pause/quiet hours (the person asked for it). Binding/access were re-checked above.
+    const direct = item.payload?.kind === 'creative';
+    if (direct && (String(binding.telegramUserId) !== String(item.payload.telegramUserId) || binding.bindingVersion !== item.payload.bindingVersion)) {
+      await store.supersedeOutbox(db, item.id, { reason: 'binding-changed', now });
+      continue;
+    }
     const settings = await store.getSettings(db, item.clientId);
-    if (settings.notificationsPaused) { await store.supersedeOutbox(db, item.id, { reason: 'notifications-paused', now }); continue; }
-    if (inQuietHours(now, settings.timezone, settings.quietHours)) {
+    if (!direct && settings.notificationsPaused) { await store.supersedeOutbox(db, item.id, { reason: 'notifications-paused', now }); continue; }
+    if (!direct && inQuietHours(now, settings.timezone, settings.quietHours)) {
       await store.retryOutbox(db, item.id, { retryAfterSec: Math.ceil((quietHoursEnd(now, settings.timezone, settings.quietHours) - now) / 1000), error: 'quiet-hours', now });
       continue;
     }
@@ -130,6 +137,8 @@ export async function runDispatch(ctx, { now: nowIn } = {}) {
         const r = await bot.sendSuggestionsNotice(binding);
         if (r?.skipped) { await store.supersedeOutbox(db, item.id, { reason: 'no-open-suggestions', now }); continue; }
         messageIds = r.messageIds;
+      } else if (direct) {
+        await bot.sendCreative(binding, item.payload.postId, { followup: true });
       } else if (item.payload?.kind === 'briefing') {
         await bot.showHappening(binding);
       }

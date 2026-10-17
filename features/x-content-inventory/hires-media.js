@@ -88,7 +88,7 @@ export async function findHiresMedia(deps, { postId, packageId, limit = HIRES_CA
  *   upsertPackage(pkg), now() }.
  * Staged -> { ok, status:'done', ... }. Not staged -> { ok, status:'staging', commandId, ... }. Throws {status} on a bad request.
  */
-export async function useHiresMedia(deps, { clientId, postId, candidateId, packageId } = {}) {
+export async function useHiresMedia(deps, { clientId, postId, candidateId, packageId, notify = null } = {}) {
   postId = String(postId || '').trim();
   candidateId = String(candidateId || '').trim();
   if (!postId || !candidateId) throw bad('postId and candidateId are required.');
@@ -120,7 +120,7 @@ export async function useHiresMedia(deps, { clientId, postId, candidateId, packa
     try {
       const latest = (await deps.getPackage(candidateId)) || cand;
       const waiting = (Array.isArray(latest.hiresPending) ? latest.hiresPending : []).filter((w) => w && w.postId !== postId);
-      await deps.upsertPackage({ ...latest, hiresPending: [...waiting, { postId, targetId: target.id, clientId: clientId || target.clientId || null, at: new Date(deps.now()).toISOString() }].slice(-HIRES_PENDING_MAX) });
+      await deps.upsertPackage({ ...latest, hiresPending: [...waiting, { postId, targetId: target.id, clientId: clientId || target.clientId || null, at: new Date(deps.now()).toISOString(), ...(cleanNotify(notify) ? { notify: cleanNotify(notify) } : {}) }].slice(-HIRES_PENDING_MAX) });
       autoAttach = true;
     } catch { /* the owner can still ask again once it is staged */ }
     return {
@@ -157,11 +157,18 @@ export async function useHiresMedia(deps, { clientId, postId, candidateId, packa
 
 export const HIRES_PENDING_MAX = 10;
 
+// Optional "tell this Telegram chat when the original is on the post" marker stored on a hiresPending entry.
+function cleanNotify(n) {
+  if (!n || n.telegramUserId == null || n.chatId == null) return null;
+  return { telegramUserId: String(n.telegramUserId), chatId: String(n.chatId), bindingVersion: n.bindingVersion ?? null };
+}
+
 /**
  * Called when a STAGE_FOR_PUBLISH command completes: puts the now-staged original on every post that asked for it
  * (candidate.hiresPending, written by useHiresMedia) and links it to each post's item; clears the list.
  * A post that is no longer editable, or belongs to another client, is skipped. Never throws per post.
- * deps: { getPackage, upsertPackage, getPost(clientId, postId), pickMedia(pkg), applyPostMedia(postId, media, {clientId}), now }
+ * deps: { getPackage, upsertPackage, getPost(clientId, postId), pickMedia(pkg), applyPostMedia(postId, media, {clientId}), now,
+ *   onAttached?(waitingEntry, {candidateId}) - best-effort hook per attached post (Telegram follow-up) }
  */
 export async function attachStagedHires(deps, { candidateId }) {
   const cand = await deps.getPackage(candidateId);
@@ -180,6 +187,7 @@ export async function attachStagedHires(deps, { candidateId }) {
       const target = w.targetId ? await deps.getPackage(w.targetId) : null;
       if (target) { const link = linkMediaPatch(target, cand, { now: deps.now() }); if (!link.error) await deps.upsertPackage({ ...target, ...link.patch }); }
       attached.push(w.postId);
+      try { await deps.onAttached?.(w, { candidateId }); } catch { /* a notification failure never undoes the attach */ }
     } catch (err) {
       skipped.push({ postId: w.postId, reason: String(err?.message || err).slice(0, 120) });
     }
