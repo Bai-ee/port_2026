@@ -819,6 +819,22 @@ async function handleFindItemMedia(context, body) {
   return { ok: true, id, candidates: findMediaCandidates(target, packages, { limit: body?.limit }) };
 }
 
+/**
+ * Every package of a client, paged past readInventory's un-paged bound (READ_LIMIT NAS rows) so the high-res finder sees
+ * the whole drive (~6k rows ~8s). Memoized per client for 60s: a find and the following use share one read.
+ */
+const readAllPackagesFor = memoByClient(60_000, async (clientId) => {
+  const all = [];
+  let cursor = null;
+  for (let page = 0; page < 20; page += 1) {
+    const r = await readInventory({ clientId, pageSize: 1000, ...(cursor ? { startAfter: cursor } : {}) });
+    all.push(...r.packages);
+    cursor = r.nextCursor;
+    if (!cursor) break;
+  }
+  return all;
+});
+
 /** Bigger copies of a post's (or item's) picture on the NAS, ranked, with staged/worker state (hires-media.js). Read-only. */
 async function handleFindHiresMedia(context, body) {
   const postId = String(body?.postId || '').trim();
@@ -827,7 +843,7 @@ async function handleFindHiresMedia(context, body) {
   const nasStatus = () => handleNasAction(nasDeps(context.clientId), 'nas-status', {});
   const out = await findHiresMedia({
     readPost: (id) => getSocialPost(context.clientId, id).then((p) => (p ? postStatusRow(p) : null)),
-    readPackages: async () => (await readInventory({ clientId: context.clientId })).packages,
+    readPackages: () => readAllPackagesFor(context.clientId),
     readStageStates: (ids) => readStageStatesFromDb(fb.adminDb, ids),
     nasStatus,
   }, { postId, packageId, limit: body?.limit });
@@ -844,7 +860,7 @@ async function handleHiresMediaUse(context, body, decoded) {
   return useHiresMedia({
     getPost: (id) => getSocialPost(clientId, id),
     getPackage: getPackageFor(clientId),
-    readPackages: async () => (await readInventory({ clientId })).packages,
+    readPackages: () => readAllPackagesFor(clientId),
     pendingStage: (id) => pendingStageFromDb(fb.adminDb, id),
     nasStage: (id) => handleNasAction(nasDeps(clientId), 'nas-stage', { id }, decoded),
     nasStatus: () => handleNasAction(nasDeps(clientId), 'nas-status', {}),
@@ -1053,6 +1069,7 @@ let strategyHandlers = null;
 function getStrategyHandlers() {
   if (!strategyHandlers) {
     strategyHandlers = createStrategyHandlersFromDb(fb.adminDb, {
+      readAllPackages: readAllPackagesFor,
       onXGrowthSaved: (clientId, prior, next) => require('../../../../features/client-brain/brain-sync.cjs').recordXGrowthEdits(clientId, prior, next),
       onBrainOwnedSaved: (clientId, target, prior, next) => require('../../../../features/client-brain/brain-sync.cjs').recordCardEdits(clientId, target, prior, next),
       readBrainTrackTargets: (clientId) => require('../../../../features/client-brain/brain-sync.cjs').readApprovedTrackTargets(clientId),

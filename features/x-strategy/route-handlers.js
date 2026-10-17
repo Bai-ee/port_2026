@@ -216,6 +216,7 @@ export function createStrategyHandlers({
   readBrainTrackTargets = null, // clientId -> approved Brain Track Targets rows (per-type shares); absent => postsPerDay only
   chatStore = null, agentLoopFactory = null, callModel = null, logUsage = null,
   responseStyleStore = null, // response-style.js store; absent => the default reply format, nothing saved
+  readAllPackages = null, // clientId -> every package (paged past READ_LIMIT); the high-res finder prefers it over readPackages
   unmetStore = null, // unmet-requests.js store; absent => log_unmet_request / get_unmet_requests say not available
   runDailyAction = null, runUpdateItemFacets = null, readTodayRun = null, readContentContext = null, saveXGrowthProfile = null,
   readQueueSummary = null, readPostsForQuery = null, readPost = null, readOpportunities = null, readResults = null, // chat read tools: (clientId[, postId]) -> plain JSON | null
@@ -825,7 +826,8 @@ export function createStrategyHandlers({
       ...(readPost ? {
         findHiresMedia: ({ postId, packageId, limit } = {}) => findHiresMedia({
           readPost: (id) => readPost(clientId, id),
-          readPackages: () => readPackages(clientId),
+          // Every NAS row (readAllPackages pages past the inventory read bound) so an original is never missed.
+          readPackages: () => (typeof readAllPackages === 'function' ? readAllPackages(clientId) : readPackages(clientId)),
           ...(readStageStates ? { readStageStates } : {}),
           ...(readNasStatus ? { nasStatus: () => readNasStatus(clientId) } : {}),
         }, { postId, packageId, limit }),
