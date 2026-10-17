@@ -33,6 +33,7 @@ import { resolvePlanInputs } from './plan-inputs.js';
 import { tracksOf, trackForPackage } from './content-tracks.js';
 import { syncBucketTracks } from './bucket-tracks.js';
 import { normalizeBatchSpec, planCalendarBatch, createCalendarBatch } from '../x-content-inventory/calendar-batch.js';
+import { runDailyFill, isFillPost } from '../x-content-inventory/daily-fill.js';
 import { findMediaCandidates, linkMediaPatch, normalizeLinks, mediaOf } from '../x-content-inventory/item-media.js';
 import { hasExplicitTracks, trackBenchmarkHandles, newTrackBenchmarkHandles, loadTrackProfiles, profileBenchmarksFromPlan } from './track-profile.js';
 import { normalizeXGrowthProfile } from '../x-benchmark/profile.js';
@@ -41,6 +42,7 @@ import {
   validateProposal, assignProposal, decideProposal, buildExecutors, normalizeHandleInput,
 } from './agent/proposals.js';
 import { normalizeSelected, describeSelected } from './agent/prompt.js';
+import { shapeMarketSignals } from './agent/tools.js';
 import { randomUUID } from 'node:crypto';
 import { StrategyDocError, createFirestoreStrategyDocStore } from './strategy-doc-store.js';
 import { draftDoc, STRATEGY_DOC_SECTIONS, describeDocChange } from './strategy-doc.js';
@@ -66,6 +68,8 @@ export const STRATEGY_ROUTE_ACTIONS = Object.freeze([
   'strategy-review',
   'strategy-calendar-batch-preview',
   'strategy-calendar-batch-create',
+  'strategy-daily-fill-preview',
+  'strategy-daily-fill-create',
 ]);
 
 export const REVIEW_DISPLAY_TEXT = 'Review my strategy against the latest data.';
@@ -196,6 +200,8 @@ export function createStrategyHandlers({
   readBucketEngine = null, // (clientId, bucketId) -> engine of one item in that bucket | null (first-sync migration only)
   readOpenPackageIds = null, // (clientId) -> Map packageId -> {postId, status, scheduledAt, reviewOn} of open posts (or a Set); batch skips or places them
   placeDraft = null, // (clientId, postId, {reviewOn, bucketId, media}) -> bool; sets an unscheduled draft's review day + missing media
+  readFillContext = null, // (clientId) -> {fillPosts:[{postId,status,reviewOn,fillKind,bucketId,idempotencyKey}], lastUsed: Map packageId -> 'YYYY-MM-DD'}; daily fill re-run accounting + 30-day spread
+  readQuoteTargets = null, // (clientId) -> {generatedAt, targets:[{id,url,text,handle,createdAt,trackId?}]} open (non-dismissed) quote candidates; daily fill quotes
   ensureDraft = null, // (clientId, payload) -> {post, existing}; twitter-service ensureDraftPost. Absent => batch create answers 503
   mediaForItem = null, // (clientId, pkg) -> {mediaUrl, mediaType, mediaContentType, mediaStoragePath} | null; calendar-batch drafts carry the item's media
   linkItemMedia = null, // (clientId, links) -> {linked, failed, results}; the quote-targets link-item-media writer. Absent => item-media confirm fails clearly
@@ -318,6 +324,55 @@ export function createStrategyHandlers({
     const c = requireClient(body, context);
     if (c.error) return c.error;
     const r = await calendarBatch(c.clientId, body?.spec, { execute: true, batchId: `calendar-batch-${clock()}` });
+    return r.ok ? r : fail(r.status, r.error);
+  }
+
+  // Daily fill (daily-fill.js): baseline + quote + narrative + client-work review drafts for a run of days. Shared by the
+  // route actions, the agent's propose tool (preview) and the confirmed proposal (execute); the cron uses dailyFillDeps.
+  const dailyFillDeps = {
+    loadInputs: async (clientId) => {
+      const profile = await loadProfile(clientId);
+      const planDoc = await planStore.get(clientId);
+      const nowMs = clock();
+      const [packages, openPosts, ctx, quotes, signals] = await Promise.all([
+        readPackages(clientId),
+        typeof readOpenPackageIds === 'function' ? readOpenPackageIds(clientId) : new Set(),
+        typeof readFillContext === 'function' ? readFillContext(clientId) : { fillPosts: [], lastUsed: new Map() },
+        typeof readQuoteTargets === 'function' ? readQuoteTargets(clientId).catch(() => null) : null,
+        typeof readMarketSignals === 'function' ? readMarketSignals(clientId).catch(() => null) : null,
+      ]);
+      return {
+        tracks: tracksOf(planDoc), engineTargets: planDoc?.plan?.engineTargets ?? {}, packages, openPosts,
+        fillPosts: (ctx?.fillPosts || []).filter(isFillPost), lastUsed: ctx?.lastUsed ?? new Map(),
+        quoteTargets: quotes?.targets ?? [], marketSignals: signals ? shapeMarketSignals(signals) : null,
+        asOf: { quotes: quotes?.generatedAt ?? null, signals: signals?.generatedAt ?? null },
+        today: localDate(nowMs, profile.timezone), nowMs,
+      };
+    },
+    ensureDraft: (clientId, payload) => (typeof ensureDraft === 'function' ? ensureDraft(clientId, payload) : Promise.reject(new Error('Creating drafts is not available on this deployment.'))),
+    placeDraft: (clientId, postId, patch) => (typeof placeDraft === 'function' ? placeDraft(clientId, postId, patch) : Promise.resolve(false)),
+    mediaFor: async (clientId, packageId) => {
+      if (typeof mediaForItem !== 'function') return null;
+      const pkg = ((await readPackages(clientId)) || []).find((p) => p.id === packageId);
+      return pkg ? mediaForItem(clientId, pkg) : null;
+    },
+  };
+  async function dailyFill(clientId, spec, { execute = false, batchId = null } = {}) {
+    if (execute && typeof ensureDraft !== 'function') return { ok: false, status: 503, error: 'Creating drafts is not available on this deployment.' };
+    return runDailyFill(clientId, { from: spec?.from, days: spec?.days, include: spec?.include, execute, batchId, deps: dailyFillDeps });
+  }
+  // Preview rows: text shortened (the agent's context is small); counts and skip examples are unchanged.
+  const stripFillRows = (r) => (r.ok ? { ...r, rows: r.rows.map(({ text, ...row }) => ({ ...row, text: text.slice(0, 140) })) } : r);
+  async function strategyDailyFillPreview(body, context) {
+    const c = requireClient(body, context);
+    if (c.error) return c.error;
+    const r = await dailyFill(c.clientId, body?.spec);
+    return r.ok ? stripFillRows(r) : fail(r.status, r.error);
+  }
+  async function strategyDailyFillCreate(body, context) {
+    const c = requireClient(body, context);
+    if (c.error) return c.error;
+    const r = await dailyFill(c.clientId, body?.spec, { execute: true, batchId: `daily-fill-${clock()}` });
     return r.ok ? r : fail(r.status, r.error);
   }
 
@@ -612,6 +667,8 @@ export function createStrategyHandlers({
       },
       // Dry run only (no writes): what a calendar batch would create. The proposal re-plans at confirm time.
       previewCalendarBatch: async (spec) => stripRows(await calendarBatch(clientId, spec)),
+      // Dry run only (no writes): what a daily fill would create. The proposal re-plans at confirm time.
+      previewDailyFill: async (spec) => stripFillRows(await dailyFill(clientId, spec)),
       getAlgorithm: async () => summarizeAlgorithm(getAlgorithmProfile()),
       scorePosts: async ({ handle, days, limit } = {}) => {
         const profile = preloaded.profile ?? (preloaded.profile = await loadProfile(clientId));
@@ -823,6 +880,7 @@ export function createStrategyHandlers({
     readPost, editPost: editPost ? (a) => editPost(a) : null, runPaidSync,
     runItemMedia: linkItemMedia ? ({ clientId, links }) => linkItemMedia(clientId, links) : null,
     runCalendarBatch: async ({ clientId, spec, proposalId }) => calendarBatch(clientId, spec, { execute: true, batchId: proposalId ? `calendar-batch-${proposalId}` : null }),
+    runDailyFill: async ({ clientId, spec, proposalId }) => dailyFill(clientId, spec, { execute: true, batchId: proposalId ? `daily-fill-${proposalId}` : null }),
     refreshHandles: async ({ clientId, handles, context, auth }) => strategyRefresh({ clientId, handles }, context, auth),
   });
   async function strategyProposalDecide(body, context, auth) {
@@ -945,6 +1003,8 @@ export function createStrategyHandlers({
     'strategy-review': strategyReview,
     'strategy-calendar-batch-preview': strategyCalendarBatchPreview,
     'strategy-calendar-batch-create': strategyCalendarBatchCreate,
+    'strategy-daily-fill-preview': strategyDailyFillPreview,
+    'strategy-daily-fill-create': strategyDailyFillCreate,
   };
 
   /** @returns {Promise<object>} result; failures carry {ok:false,status}. Auth is the caller's job. */
@@ -1025,7 +1085,7 @@ export function createStrategyHandlers({
     return { ok: true, threadId: tid, proposals: out, ...(dropped.length ? { dropped } : {}) };
   }
 
-  return { handle, actions: STRATEGY_ROUTE_ACTIONS, toolDepsFor, createProposalInThread, syncTracks };
+  return { handle, actions: STRATEGY_ROUTE_ACTIONS, toolDepsFor, createProposalInThread, syncTracks, dailyFillDeps };
 }
 
 /**
@@ -1125,9 +1185,32 @@ export function createStrategyHandlersFromDb(db, {
     }, { merge: true });
     return true;
   });
+  // Daily fill: earlier fill drafts (re-run accounting) and each item's last used day (the 30-day spread). Read-only.
+  const readFillContext = async (clientId) => {
+    const snap = await db.collection('social_posts').where('clientId', '==', clientId)
+      .select('packageId', 'status', 'source', 'fillKind', 'bucketId', 'reviewOn', 'scheduledAt', 'postedAt', 'idempotencyKey').get();
+    const fillPosts = [];
+    const lastUsed = new Map();
+    for (const d of snap.docs) {
+      const r = d.data();
+      if (r.source === 'daily-fill') fillPosts.push({ postId: d.id, status: r.status, source: r.source, reviewOn: r.reviewOn || null, fillKind: r.fillKind || null, bucketId: r.bucketId || null, idempotencyKey: r.idempotencyKey || null });
+      const day = String(r.postedAt || r.scheduledAt || r.reviewOn || '').slice(0, 10);
+      if (r.packageId && /^\d{4}-\d{2}-\d{2}$/.test(day) && r.status !== 'rejected' && (lastUsed.get(r.packageId) || '') < day) lastUsed.set(r.packageId, day);
+    }
+    return { fillPosts, lastUsed };
+  };
+  // Open (not dismissed) quote candidates straight from the stored scan; the route passes a richer reader (track-list merge).
+  const readQuoteTargets = async (clientId) => {
+    const snap = await db.collection('dashboard_state').doc(clientId).get();
+    const qt = snap.exists ? snap.data()?.marketingBrief?.quoteTargets : null;
+    const dismissed = new Set(Array.isArray(qt?.dismissed) ? qt.dismissed : []);
+    const targets = (Array.isArray(qt?.candidates) ? qt.candidates : []).filter((c) => c && !dismissed.has(c.id))
+      .map((c) => ({ id: c.id || c.url, url: c.url, text: c.text, handle: c.author?.username || (typeof c.author === 'string' ? c.author : null), createdAt: c.createdAt, trackId: c.trackId }));
+    return { generatedAt: qt?.generatedAt || null, targets };
+  };
   const ensureDraft = async (clientId, payload) => (await import('../social-posting/twitter-service.js')).ensureDraftPost(clientId, payload);
   return createStrategyHandlers({
-    corpusStore, planStore, refreshService, readPackages, readAudience, readBuckets, readBucketEngine, readOpenPackageIds, ensureDraft, placeDraft,
+    corpusStore, planStore, refreshService, readPackages, readAudience, readBuckets, readBucketEngine, readOpenPackageIds, readFillContext, readQuoteTargets, ensureDraft, placeDraft,
     readWorkerHealth: (clientId) => readWorkerHealthFromDb(db, { now: Date.now(), clientId }),
     docStore, onBrainOwnedSaved, readBrainTrackTargets, chatStore, agentLoopFactory, callModel, logUsage, runDailyAction, runUpdateItemFacets, readTodayRun, readContentContext, saveXGrowthProfile, env,
     readQueueSummary, readPost, readOpportunities, readResults, readMarketSignals, editPost, runPaidSync,
