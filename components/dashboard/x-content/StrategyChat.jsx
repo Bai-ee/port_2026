@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUp, ArrowUpRight, BookOpen, Check, FileText, Plus, Sparkles } from 'lucide-react';
+import { ArrowUp, ArrowUpRight, BookOpen, Check, FileText, Plus, Shield, Sparkles } from 'lucide-react';
 import {
   proposalKindLabel, proposalPayloadPreview, proposalStatusText, chatErrorText, costFooterText, plainChatText,
   historyDiffSummary,
@@ -13,6 +13,10 @@ import Badge from '../content-ui/ui/Badge';
 import IconButton from '../content-ui/ui/IconButton';
 import SectionLabel from '../content-ui/ui/SectionLabel';
 import MiniThumb from './MiniThumb.jsx';
+import ActionProposalCard from './ActionProposalCard.jsx';
+import UndoChip from './UndoChip.jsx';
+import AgentPermissionsPanel from './AgentPermissionsPanel.jsx';
+import { messageUndoChips } from '../../../features/x-strategy/action-ui-model.js';
 
 // StrategyChat - the agent chat in the Strategy tab's right column.
 //
@@ -284,6 +288,7 @@ export default function StrategyChat({
   const [decidingId, setDecidingId] = useState('');
   const [decideErrors, setDecideErrors] = useState({}); // proposalId -> text
   const [useModelIds, setUseModelIds] = useState({});   // proposalId -> owner ticked 'use the model' (regenerate-today)
+  const [showPermissions, setShowPermissions] = useState(false);
 
   const mounted = useRef(true);
   const listRef = useRef(null);
@@ -375,7 +380,7 @@ export default function StrategyChat({
       setThreadId(res.threadId || threadId);
       setMessages((m) => [
         ...m.map((x) => (x.pending ? { role: x.role, text: x.text } : x)),
-        { role: 'assistant', text: res.text || '', ...(fresh.length ? { proposalIds: fresh.map((p) => p.id) } : {}) },
+        { role: 'assistant', text: res.text || '', ...(fresh.length ? { proposalIds: fresh.map((p) => p.id) } : {}), ...(Array.isArray(res.toolResults) ? { toolResults: res.toolResults } : {}), ...(Array.isArray(res.undoIds) ? { undoIds: res.undoIds } : {}) },
       ]);
       if (fresh.length) setProposals((p) => ({ ...p, ...Object.fromEntries(fresh.map((x) => [x.id, x])) }));
       setUsed(res.turnsUsedToday); setCap(res.cap); setLastUsage(res.usage ?? null);
@@ -404,14 +409,14 @@ export default function StrategyChat({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reviewRequest?.nonce, loading]);
 
-  const decide = useCallback(async (proposal, decision) => {
+  const decide = useCallback(async (proposal, decision, extra) => {
     if (decidingId || typeof call !== 'function') return;
     const startedFor = clientId;
     setDecidingId(proposal.id);
     setDecideErrors((e) => ({ ...e, [proposal.id]: '' }));
     try {
       const options = decision === 'confirm' && proposal.kind === 'regenerate-today' && useModelIds[proposal.id] ? { useModel: true } : undefined;
-      const res = await call('strategy-proposal-decide', { clientId, threadId: proposal.threadId || threadId, proposalId: proposal.id, decision, ...(options ? { options } : {}) });
+      const res = await call('strategy-proposal-decide', { clientId, threadId: proposal.threadId || threadId, proposalId: proposal.id, decision, ...(options ? { options } : {}), ...(extra?.typed ? { typed: extra.typed } : {}) });
       if (!mounted.current || clientIdRef.current !== startedFor) return;
       const next = res.proposal || { ...proposal, status: decision === 'confirm' ? 'confirmed' : 'rejected' };
       setProposals((p) => ({ ...p, [proposal.id]: next }));
@@ -456,6 +461,12 @@ export default function StrategyChat({
       <div id="x-strategy-chat-header" style={S.head}>
         <h3 style={S.h}>Strategy</h3>
         <IconButton
+          id="x-strategy-chat-permissions-button"
+          label="Agent permissions"
+          icon={<Shield size={18} />}
+          onClick={() => setShowPermissions((v) => !v)}
+        />
+        <IconButton
           id="x-strategy-chat-new-thread-button"
           label="New thread"
           icon={<Plus size={18} />}
@@ -463,6 +474,8 @@ export default function StrategyChat({
           onClick={newThread}
         />
       </div>
+
+      {showPermissions ? <AgentPermissionsPanel clientId={clientId} call={call} /> : null}
 
       <div id="x-strategy-chat-messages" ref={listRef} role="log" aria-live="polite" style={S.list}>
         {loading ? <div id="x-strategy-chat-loading" className="xce-empty">Loading chat…</div> : null}
@@ -516,10 +529,18 @@ export default function StrategyChat({
             <div key={n} id={`x-strategy-chat-message-${n}`} data-role={m.role} style={{ display: 'grid', minWidth: 0 }}>
               <div id={`x-strategy-chat-message-text-${n}`} style={m.role === 'user' ? S.userBubble : S.botBubble}>{plainChatText(m.text)}</div>
               {clock ? <div id={`x-strategy-chat-message-time-${n}`} style={{ ...S.time, justifySelf: m.role === 'user' ? 'end' : 'start' }}>{clock}</div> : null}
+              {m.role === 'assistant' && messageUndoChips(m).length ? (
+                <div id={`x-strategy-chat-message-undo-${n}`}>
+                  {messageUndoChips(m).map((c) => <UndoChip key={c.undoId} undoId={c.undoId} label={c.label} call={call} clientId={clientId} />)}
+                </div>
+              ) : null}
               {ids.length ? (
                 <div id={`x-strategy-chat-message-proposals-${n}`} style={S.cardsCol}>
                   {ids.map((pid) => (
                     <div key={pid} style={{ display: 'grid', gap: 4, minWidth: 0 }}>
+                      {proposals[pid].kind === 'action' ? (
+                        <ActionProposalCard proposal={proposals[pid]} deciding={decidingId === pid} onDecide={decide} />
+                      ) : (
                       <ProposalCard
                         call={call}
                         proposal={proposals[pid]}
@@ -536,6 +557,7 @@ export default function StrategyChat({
                         docSections={docSections}
                         onViewDoc={onViewDoc}
                       />
+                      )}
                       {decideErrors[pid] ? <div id={`x-strategy-proposal-error-${pid}`} role="alert" style={{ ...S.err, margin: 0 }}>{decideErrors[pid]}</div> : null}
                     </div>
                   ))}
