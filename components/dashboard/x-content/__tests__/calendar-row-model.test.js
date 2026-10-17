@@ -54,3 +54,9 @@ test('override and requests', () => {
   assert.equal(hasBlockingPlaceholder('hi [add your memory]'), true);
   assert.equal(hasBlockingPlaceholder('hi'), false);
 });
+
+test('approveRequest sends the raw suggestion / quote-target id, not the prefixed row id', () => {
+  assert.deepEqual(approveRequest({ kind: 'suggestion', state: 'suggested', id: 'suggestion:s1', suggestionId: 's1', date: '2026-10-17' }).body, { kind: 'suggestion', id: 's1', date: '2026-10-17' });
+  assert.deepEqual(approveRequest({ kind: 'requote', state: 'suggested', id: 'requote:q9', quoteTargetId: 'q9', date: '2026-10-17' }).body, { kind: 'requote', id: 'q9', date: '2026-10-17' });
+  assert.equal(approveRequest({ kind: 'requote', state: 'suggested', id: 'requote:q7' }).body.id, 'q7');
+});

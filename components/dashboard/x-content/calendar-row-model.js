@@ -111,7 +111,12 @@ export function withOverride(row, overrides) {
 
 /** Route action + body for approving a row inline. */
 export function approveRequest(row) {
-  if (isSuggestionRow(row)) return { action: 'calendar-suggestion-approve', body: { kind: row.kind === 'requote' ? 'requote' : 'suggestion', id: row.id, date: row.date || null } };
+  if (isSuggestionRow(row)) {
+    const requote = row.kind === 'requote';
+    // The server wants the raw suggestion / quote-target id; row.id is prefixed ('suggestion:<id>' / 'requote:<id>') to stay unique.
+    const raw = (requote ? row.quoteTargetId : row.suggestionId) ?? String(row.id || '').replace(/^(suggestion|requote):/, '');
+    return { action: 'calendar-suggestion-approve', body: { kind: requote ? 'requote' : 'suggestion', id: raw, date: row.date || null } };
+  }
   return { action: 'calendar-approve', body: { postId: row.id } };
 }
 
