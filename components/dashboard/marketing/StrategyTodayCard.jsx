@@ -16,6 +16,14 @@ export default function StrategyTodayCard({ getIdToken, activeClientId, onOpenCa
   const noop = makeNavigate(onOpenCard, 'strategy-today');
   return (
     <div id="strategy-today-root" className="xce-scope">
+      {typeof onOpenCard === 'function' ? (
+        <div id="strategy-today-review-calendar-shell" className="xce-today-review-calendar">
+          <button type="button" id="strategy-today-review-calendar-button" className="xce-btn-primary" onClick={() => noop('queue')}>
+            Review everything on the calendar
+          </button>
+          <span id="strategy-today-review-calendar-hint" className="xce-mc-sheet-meta-line">Saved posts, today&apos;s suggestions and open requotes in one place. Approve from there.</span>
+        </div>
+      ) : null}
       <div id="strategy-today-view-segmented-shell" className="xce-today-segment">
         <SegmentedControl
           id="strategy-today-view-segmented"
@@ -37,6 +45,7 @@ export default function StrategyTodayCard({ getIdToken, activeClientId, onOpenCa
           <DailySuggestionsPanel clientId={activeClientId} call={call} callSocial={callSocial} onNavigate={noop} hideRefresh />
         </div>
       )}
+      <style>{`.xce-scope .xce-today-review-calendar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; }`}</style>
       <ContentUiStyles />
     </div>
   );

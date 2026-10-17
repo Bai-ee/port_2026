@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { classifyResult, ctDate, ctTime, ctWallToMs } from '../../../features/x-content-inventory/month-calendar.js';
 import { ENGINE_TAG, STATE_LABEL, StateDot, dayHeading } from './calendar-bits.jsx';
 import HiresMediaPanel from './HiresMediaPanel.jsx';
+import { rowApproval, hasBlockingPlaceholder } from './calendar-row-model.js';
 
 // PostSheet — review + edit one calendar post. Right-side sheet ≥481px,
 // full-screen on phones. Presentational: every action goes back to the card.
@@ -91,7 +92,12 @@ function PostSheetView({ post, busy, queue, call, onNavigate, onClose, onApprove
   const locked = post.state === 'posted' || post.state === 'failed' || post.status === 'posting' || held;
   const reviewable = post.state === 'pending' || post.state === 'approved' || post.state === 'awaiting';
   const canReject = reviewable || held;
-  const canApprove = reviewable && !post.needsStory && post.status !== 'needs_review';
+  // A leftover memory/take placeholder never blocks approval: approving strips that line.
+  const hasPlaceholder = hasBlockingPlaceholder(content);
+  const canApprove = reviewable && post.status !== 'needs_review';
+  const isApproved = rowApproval(post) === 'approved';
+  const canApproveOnly = !!call && reviewable && !isApproved && post.status !== 'needs_review';
+  const [inlineErr, setInlineErr] = useState('');
   const iso = whenToIso(when);
   const isFuture = iso ? Date.parse(iso) > Date.now() + 60_000 : false;
   const over = content.length > MAX_CHARS;
@@ -130,6 +136,17 @@ function PostSheetView({ post, busy, queue, call, onNavigate, onClose, onApprove
       const opts = { content, scheduledAt: iso, expectedRevision };
       if (override) opts.planOverride = { confirm: true, reason: overrideReason.trim() };
       run(() => onApprove(post, opts));
+    },
+    // Approve / Unapprove without scheduling (calendar-approve / calendar-unapprove). Reload on success.
+    approveOnly: async () => {
+      if (busy || over || empty || !call) return;
+      setInlineErr('');
+      try { await call('calendar-approve', { postId: post.id, content }); if (onRefresh) await onRefresh(); } catch (err) { setInlineErr(err?.message || 'Could not approve.'); }
+    },
+    unapprove: async () => {
+      if (busy || !call) return;
+      setInlineErr('');
+      try { await call('calendar-unapprove', { postId: post.id }); if (onRefresh) await onRefresh(); } catch (err) { setInlineErr(err?.message || 'Could not unapprove.'); }
     },
     reject: () => { if (!busy && canReject) run(() => onReject(post, { expectedRevision })); },
     save: () => {
@@ -270,8 +287,8 @@ function PostSheetView({ post, busy, queue, call, onNavigate, onClose, onApprove
           {post.needsStory ? (
             <p id="x-content-post-sheet-needs-story" className="xce-mc-notice">
               {post.reviewOn
-                ? 'Replace [add your memory] with your own line, save, then approve. Nothing posts until you do.'
-                : 'This draft still needs its story before it can be approved. Write it in the item drawer.'}
+                ? 'This draft has a [add your memory] line. Add your own line and save, or approve to remove the placeholder. Nothing posts until you schedule it.'
+                : 'This draft still has a story placeholder. Approving removes it; add your own line first if you want one.'}
             </p>
           ) : null}
           {post.state === 'awaiting' ? <p id="x-content-post-sheet-awaiting-note" className="xce-mc-notice">Awaiting your approval. Nothing posts until you approve it.</p> : null}
@@ -349,9 +366,18 @@ function PostSheetView({ post, busy, queue, call, onNavigate, onClose, onApprove
                   <button type="button" id="x-content-post-sheet-reject" className="xce-btn-ghost" disabled={busy} onClick={actions.reject}>Reject</button>
                   {contentDirty ? <button type="button" id="x-content-post-sheet-save" className="xce-btn-ghost" disabled={busy || over || empty} onClick={actions.save}>Save edit</button> : null}
                   <button type="button" id="x-content-post-sheet-approve" className="xce-btn-primary" disabled={approveBlocked} onClick={actions.approve} aria-describedby="x-content-post-sheet-consequence">
-                    {busy ? 'Working…' : 'Approve & schedule'}
+                    {busy ? 'Working…' : hasPlaceholder ? 'Approve & schedule (removes the memory placeholder)' : 'Approve & schedule'}
                   </button>
+                  {canApproveOnly ? (
+                    <button type="button" id="x-content-post-sheet-approve-only" className="xce-btn-ghost" disabled={busy || over || empty} onClick={actions.approveOnly} title="Approve without scheduling">
+                      {hasPlaceholder ? 'Approve (removes the memory placeholder)' : 'Approve'}
+                    </button>
+                  ) : null}
+                  {isApproved && call ? (
+                    <button type="button" id="x-content-post-sheet-unapprove" className="xce-btn-ghost" disabled={busy} onClick={actions.unapprove}>Unapprove</button>
+                  ) : null}
                 </div>
+                {inlineErr ? <p id="x-content-post-sheet-approval-error" className="xce-mc-over" role="alert">{inlineErr}</p> : null}
                 <p id="x-content-post-sheet-consequence" className="xce-mc-sheet-consequence">
                   {!canApprove ? 'Cannot be approved yet.' : !iso ? 'Set a publish time to approve.' : CONSEQUENCE}
                 </p>
