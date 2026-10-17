@@ -110,6 +110,10 @@ async function runDailyFillStep({ db, committedCorpusRows, readInputsFor }, clie
   const out = [];
   for (const clientId of clientIds) {
     try {
+      // Only clients with a saved strategy that has content tracks: a client without one gets no automatic drafts.
+      const planSnap = await db.collection('x_strategy_plans').doc(clientId).get();
+      const tracks = planSnap.exists ? planSnap.data()?.plan?.contentTracks : null;
+      if (!Array.isArray(tracks) || !tracks.length) { out.push({ clientId, ok: true, skipped: 'no-content-tracks' }); continue; }
       const r = await handlers.dailyFill(clientId, { from: today, days: 7 }, { execute: true });
       out.push({ clientId, ok: true, created: r?.created?.length ?? r?.created ?? 0, existing: r?.existing?.length ?? r?.existing ?? 0, placed: r?.placed?.length ?? r?.placed ?? 0, failed: r?.failed?.length ?? r?.failed ?? 0 });
     } catch (err) {
