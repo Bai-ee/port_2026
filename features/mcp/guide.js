@@ -27,6 +27,7 @@ SPEND AND SAFETY RULES (hard)
 WHICH TOOL FOR WHAT
 - "What's going on today / what can I do": get_daily_brief, then get_action_playbook for exact paste-ready messages and where to click.
 - "How is the account doing / what should I post / why": strategy_* read tools (evaluation, algorithm, score_posts, rule check, audience, tracks, queue, results).
+- "Continue / see the dashboard Strategy chat": chat_threads, chat_thread, chat_send (same threads, same agent, same daily cap; cards are confirmed in Marketing Director > Strategy (chat) in the dashboard). find_actions / get_action_log for the action registry and its log.
 - "Show me the data": get_client_overview -> get_document / query_collection; search_timeline for the archive; get_operating_costs; get_x_monitor.
 - "How does X work in the code": get_hitloop_guide -> list_repo_path / search_repo / read_repo_file / recent_commits.
 `;
