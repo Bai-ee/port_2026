@@ -75,6 +75,30 @@ export async function PATCH(request) {
         import('../../../../../features/x-content-inventory/nas.js'),
       ]);
       await applyStageComplete({ getPackage, upsertPackage: (pkg) => upsertPackage(pkg, { returnPackages: false }), now: () => Date.now() }, { command: cmdData, result });
+      // Posts that asked for this original (chat / post sheet "use high-res") get it now, without asking again.
+      const [{ attachStagedHires, HIRES_EDITABLE_STATUSES }, { pickMedia }, { tokenUrlFor }, { getSocialPost }] = await Promise.all([
+        import('../../../../../features/x-content-inventory/hires-media.js'),
+        import('../../../../../features/x-content-inventory/item-actions.js'),
+        import('../../../../../features/x-content-inventory/thumbs.js'),
+        import('../../../../../features/social-posting/twitter-service.js'),
+      ]);
+      const out = await attachStagedHires({
+        getPackage,
+        upsertPackage: (pkg) => upsertPackage(pkg, { returnPackages: false }),
+        getPost: (clientId, postId) => getSocialPost(clientId, postId),
+        // Staged NAS files live in the HITLOOP bucket: a token URL is all that is needed (publish re-signs anyway).
+        pickMedia: (pkg) => pickMedia(pkg, { hitloopUrl: (p) => tokenUrlFor(fb.adminStorage.bucket(), p), signEvLong: async () => null }),
+        applyPostMedia: (postId, media, { clientId } = {}) => fb.adminDb.runTransaction(async (tx) => {
+          const ref = fb.adminDb.collection('social_posts').doc(postId);
+          const snap = await tx.get(ref);
+          const cur = snap.exists ? snap.data() : null;
+          if (!cur || (clientId && cur.clientId !== clientId) || !HIRES_EDITABLE_STATUSES.includes(cur.status)) return false;
+          tx.set(ref, { ...media, revision: (Number(cur.revision) || 0) + 1, updatedAt: new Date().toISOString() }, { merge: true });
+          return true;
+        }),
+        now: () => Date.now(),
+      }, { candidateId: cmdData.packageId });
+      if (out.attached.length || out.skipped.length) console.info('[archive] high-res attach', cmdData.packageId, JSON.stringify(out));
     } catch (e) { console.error('[archive] stage write-back failed for', commandId, e); }
   }
 

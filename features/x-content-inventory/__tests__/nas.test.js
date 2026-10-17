@@ -187,7 +187,7 @@ test('upload-url: constraints and path', async () => {
   const { deps } = setup();
   const ok = await nasUploadUrl(deps, { packageId: nasPackageId(SHA), sha256: SHA, contentType: 'video/quicktime', sizeBytes: 1000 });
   assert.equal(ok.storagePath, `publish-staging/nas/nas-${'a'.repeat(16)}/${'a'.repeat(16)}.mov`);
-  assert.deepEqual(ok.headers, { 'Content-Type': 'video/quicktime' }); assert.match(ok.uploadUrl, /^https:\/\/signed\//);
+  assert.deepEqual(ok.headers, { 'content-type': 'video/quicktime' }); assert.match(ok.uploadUrl, /^https:\/\/signed\//);
   const base = { packageId: nasPackageId(SHA), sha256: SHA, contentType: 'image/jpeg', sizeBytes: 10 };
   await assert.rejects(() => nasUploadUrl(deps, { ...base, contentType: 'application/pdf' }), { status: 400 });
   await assert.rejects(() => nasUploadUrl(deps, { ...base, sizeBytes: 512 * 1024 * 1024 + 1 }), { status: 400 });

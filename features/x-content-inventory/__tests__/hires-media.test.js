@@ -215,3 +215,38 @@ test('runtime: media.use-hires runs on auto, snapshots the post and item, and un
   assert.equal(stores.files.get(`social_posts/${post.id}`).mediaStoragePath, post.mediaStoragePath);
   assert.deepEqual(stores.files.get(`x_content_packages/${thumb.id}`).assetRefs, []);
 });
+
+// ---- auto-attach when the copy completes + the upload header case fix ----
+import { attachStagedHires } from '../hires-media.js';
+import { nasUploadUrl } from '../nas.js';
+
+test('nas upload-url returns a lowercase content-type so the worker never sends it twice (v4 signature)', async () => {
+  const sha = 'a'.repeat(64);
+  const out = await nasUploadUrl({ signUpload: async () => 'https://signed' }, { packageId: `nas-${sha.slice(0, 16)}`, sha256: sha, contentType: 'image/jpeg', sizeBytes: 10 });
+  assert.deepEqual(out.headers, { 'content-type': 'image/jpeg' });
+  const merged = new Headers({ 'content-type': 'image/jpeg', ...out.headers });
+  assert.equal(merged.get('content-type'), 'image/jpeg');
+});
+
+test('attachStagedHires puts the staged original on waiting posts, links the item, skips non-editable, clears the list', async () => {
+  const pkgs = new Map([
+    ['nas-cand', { id: 'nas-cand', clientId: 'c1', mediaState: 'still', assetRefs: ['publish-staging/nas/nas-cand/abc.jpg'], hiresPending: [
+      { postId: 'p1', targetId: 'nas-thumb', clientId: 'c1' }, { postId: 'p2', targetId: 'nas-thumb', clientId: 'c1' }] }],
+    ['nas-thumb', { id: 'nas-thumb', clientId: 'c1', mediaState: 'still', assetRefs: [] }],
+  ]);
+  const posts = { p1: { clientId: 'c1', status: 'draft' }, p2: { clientId: 'c1', status: 'posted' } };
+  const applied = [];
+  const out = await attachStagedHires({
+    getPackage: async (id) => (pkgs.has(id) ? structuredClone(pkgs.get(id)) : null),
+    upsertPackage: async (p) => { pkgs.set(p.id, p); },
+    getPost: async (c, id) => posts[id] || null,
+    pickMedia: async () => ({ mediaUrl: 'https://u', mediaType: 'image', mediaStoragePath: 'publish-staging/nas/nas-cand/abc.jpg' }),
+    applyPostMedia: async (id, media) => { applied.push([id, media.mediaStoragePath, media.mediaFromHires.auto]); return true; },
+    now: () => 0,
+  }, { candidateId: 'nas-cand' });
+  assert.deepEqual(out.attached, ['p1']);
+  assert.equal(out.skipped[0].postId, 'p2');
+  assert.deepEqual(applied, [['p1', 'publish-staging/nas/nas-cand/abc.jpg', true]]);
+  assert.deepEqual(pkgs.get('nas-cand').hiresPending, []);
+  assert.ok((pkgs.get('nas-thumb').assetRefs || []).includes('publish-staging/nas/nas-cand/abc.jpg'));
+});

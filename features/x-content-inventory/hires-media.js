@@ -115,12 +115,23 @@ export async function useHiresMedia(deps, { clientId, postId, candidateId, packa
     const since = Date.parse(pending?.createdAt || '');
     const fresh = pending && !DONE_STATES.has(String(pending.state)) && (!Number.isFinite(since) || deps.now() - since < PENDING_STAGE_MS);
     const commandId = fresh ? pending.commandId : (await deps.nasStage(candidateId)).commandId; // nas-stage refuses never-public / client-approval-needed
+    // Remember who is waiting: when the worker reports the copy COMPLETE, attachStagedHires swaps it onto this post.
+    let autoAttach = false;
+    try {
+      const latest = (await deps.getPackage(candidateId)) || cand;
+      const waiting = (Array.isArray(latest.hiresPending) ? latest.hiresPending : []).filter((w) => w && w.postId !== postId);
+      await deps.upsertPackage({ ...latest, hiresPending: [...waiting, { postId, targetId: target.id, clientId: clientId || target.clientId || null, at: new Date(deps.now()).toISOString() }].slice(-HIRES_PENDING_MAX) });
+      autoAttach = true;
+    } catch { /* the owner can still ask again once it is staged */ }
     return {
       ok: true, status: 'staging', commandId, candidateId, width: offered.width, height: offered.height, ...(fresh ? { alreadyQueued: true } : {}),
       workerOnline: worker ? worker.online : null,
+      autoAttach,
       note: worker?.online === false
-        ? `Queued, but the NAS worker is offline. Needs you: start it on the Mac (${NAS_WORKER_START_COMMAND}); the copy runs as soon as it is up.`
-        : 'The Mac worker is copying the original to staging; usually under a minute. Ask me to check again (find_hires_media shows staged: true when it is ready), then use it.',
+        ? `Queued, but the NAS worker is offline. Needs you: start it on the Mac (${NAS_WORKER_START_COMMAND}); the copy runs as soon as it is up${autoAttach ? ' and it is then put on the post automatically' : ''}.`
+        : autoAttach
+          ? 'The Mac worker is copying the original to staging (usually under a minute); it is put on the post automatically when the copy finishes. find_hires_media / get_post show it.'
+          : 'The Mac worker is copying the original to staging; usually under a minute. Ask me to check again (find_hires_media shows staged: true when it is ready), then use it.',
       ...(worker?.online === false ? { needsYou: true, startCommand: NAS_WORKER_START_COMMAND } : {}),
     };
   }
@@ -142,6 +153,40 @@ export async function useHiresMedia(deps, { clientId, postId, candidateId, packa
     mediaType: media.mediaType, mediaStoragePath: media.mediaStoragePath, downloadUrl: media.mediaUrl,
     replacedMedia: prev, linkedToItem: linked, ...(linkWarning ? { linkWarning } : {}),
   };
+}
+
+export const HIRES_PENDING_MAX = 10;
+
+/**
+ * Called when a STAGE_FOR_PUBLISH command completes: puts the now-staged original on every post that asked for it
+ * (candidate.hiresPending, written by useHiresMedia) and links it to each post's item; clears the list.
+ * A post that is no longer editable, or belongs to another client, is skipped. Never throws per post.
+ * deps: { getPackage, upsertPackage, getPost(clientId, postId), pickMedia(pkg), applyPostMedia(postId, media, {clientId}), now }
+ */
+export async function attachStagedHires(deps, { candidateId }) {
+  const cand = await deps.getPackage(candidateId);
+  const waiting = Array.isArray(cand?.hiresPending) ? cand.hiresPending : [];
+  if (!cand || !waiting.length || !mediaOf(cand).kind) return { attached: [], skipped: [] };
+  const media = await deps.pickMedia(cand);
+  const attached = [];
+  const skipped = [];
+  for (const w of waiting) {
+    try {
+      if (!media) { skipped.push({ postId: w.postId, reason: 'no staged media' }); continue; }
+      const post = await deps.getPost(w.clientId, w.postId);
+      if (!post || (w.clientId && post.clientId !== w.clientId) || !HIRES_EDITABLE_STATUSES.includes(post.status)) { skipped.push({ postId: w.postId, reason: 'post not editable' }); continue; }
+      const ok = await deps.applyPostMedia(w.postId, { ...media, mediaFromHires: { candidateId, packageId: w.targetId, at: new Date(deps.now()).toISOString(), auto: true } }, { clientId: w.clientId });
+      if (!ok) { skipped.push({ postId: w.postId, reason: 'post changed' }); continue; }
+      const target = w.targetId ? await deps.getPackage(w.targetId) : null;
+      if (target) { const link = linkMediaPatch(target, cand, { now: deps.now() }); if (!link.error) await deps.upsertPackage({ ...target, ...link.patch }); }
+      attached.push(w.postId);
+    } catch (err) {
+      skipped.push({ postId: w.postId, reason: String(err?.message || err).slice(0, 120) });
+    }
+  }
+  const latest = (await deps.getPackage(candidateId)) || cand;
+  await deps.upsertPackage({ ...latest, hiresPending: [] });
+  return { attached, skipped };
 }
 
 export { isThumbnailPath };
