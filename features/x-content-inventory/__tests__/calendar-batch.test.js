@@ -65,7 +65,7 @@ test('planCalendarBatch anniversary: dated by event, sorted, undated and queued 
   assert.deepEqual(plan.rows.map((r) => [r.packageId, r.reviewOn, r.needsStory, r.track]), [
     ['nas-c', '2026-10-16', false, 'nas'], ['nas-a', '2026-12-17', true, 'nas'],
   ]);
-  assert.deepEqual(plan.counts, { matched: 4, drafts: 2, needsMemory: 1, skipped: { 'already-queued': 1, 'no-date': 1 } });
+  assert.deepEqual(plan.counts, { matched: 4, drafts: 2, placesExisting: 0, needsMemory: 1, skipped: { 'already-queued': 1, 'no-date': 1 } });
   assert.equal(plan.firstDate, '2026-10-16');
   assert.equal(plan.lastDate, '2026-12-17');
 });
@@ -81,6 +81,28 @@ test('planCalendarBatch anniversary perDay: one per date by default, the item wi
   assert.equal(plan.counts.skipped['day-full'], 1);
   const two = planCalendarBatch({ packages: twins, tracks, spec: { ...spec, dateRule: { kind: 'anniversary', perDay: 2 } }, today: TODAY });
   assert.equal(two.rows.filter((r) => r.reviewOn === '2026-12-17').length, 2);
+});
+
+test('existing open posts: an unscheduled undated draft is placed (text kept), anything else is skipped', async () => {
+  const spec = normalizeBatchSpec({ select: { track: 'nas' }, dateRule: { kind: 'anniversary', perDay: 2 } }).spec;
+  const open = new Map([
+    ['nas-a', { postId: 'social_a', status: 'draft', scheduledAt: null, reviewOn: null }],
+    ['nas-c', { postId: 'social_c', status: 'scheduled', scheduledAt: '2026-10-20T15:00:00Z', reviewOn: null }],
+  ]);
+  const plan = planCalendarBatch({ packages: PACKAGES, tracks, spec, today: TODAY, openPackageIds: open });
+  assert.deepEqual(plan.rows.map((r) => [r.packageId, r.existingPostId ?? null]), [['nas-a', 'social_a'], ['nas-b', null]]);
+  assert.equal(plan.counts.placesExisting, 1);
+  assert.equal(plan.counts.skipped['already-queued'], 1);
+  const placed = [];
+  const created = [];
+  const res = await createCalendarBatch('c1', plan, {
+    ensureDraft: async (c, p) => { created.push(p.packageId); return { post: p, existing: false }; },
+    placeDraft: async (postId, patch) => { placed.push([postId, patch.reviewOn, patch.media?.mediaUrl ?? null]); return true; },
+    mediaFor: async (id) => ({ mediaUrl: `https://m/${id}.mp4`, mediaType: 'video' }),
+  });
+  assert.deepEqual(res, { created: 1, existing: 0, placed: 1, failed: [] });
+  assert.deepEqual(placed, [['social_a', '2026-12-17', 'https://m/nas-a.mp4']]);
+  assert.deepEqual(created, ['nas-b']);
 });
 
 test('planCalendarBatch spread + limit + unknown track', () => {
@@ -102,8 +124,8 @@ test('createCalendarBatch: one draft per item via the create-once writer; a re-r
   };
   const spec = normalizeBatchSpec({ select: { track: 'nas' }, dateRule: { kind: 'anniversary' } }).spec;
   const plan = planCalendarBatch({ packages: PACKAGES, tracks, spec, today: TODAY });
-  assert.deepEqual(await createCalendarBatch('c1', plan, { ensureDraft }), { created: 3, existing: 0, failed: [] });
-  assert.deepEqual(await createCalendarBatch('c1', plan, { ensureDraft }), { created: 0, existing: 3, failed: [] });
+  assert.deepEqual(await createCalendarBatch('c1', plan, { ensureDraft }), { created: 3, existing: 0, placed: 0, failed: [] });
+  assert.deepEqual(await createCalendarBatch('c1', plan, { ensureDraft }), { created: 0, existing: 3, placed: 0, failed: [] });
   for (const post of store.values()) {
     assert.equal(post.status, 'draft');
     assert.equal(post.scheduledAt, null);

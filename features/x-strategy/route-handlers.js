@@ -194,7 +194,8 @@ export function createStrategyHandlers({
   readAudience = null, // (clientId) -> {account, snapshots, events, posts} from THIS client's stored X Monitor account ({account:null} when none); null => tool says unavailable
   readBuckets = null, // (clientId) -> Content Center buckets (listBuckets rows); absent => tracks are not synced to buckets
   readBucketEngine = null, // (clientId, bucketId) -> engine of one item in that bucket | null (first-sync migration only)
-  readOpenPackageIds = null, // (clientId) -> Set of package ids that already have an open post (calendar batch skips them)
+  readOpenPackageIds = null, // (clientId) -> Map packageId -> {postId, status, scheduledAt, reviewOn} of open posts (or a Set); batch skips or places them
+  placeDraft = null, // (clientId, postId, {reviewOn, bucketId, media}) -> bool; sets an unscheduled draft's review day + missing media
   ensureDraft = null, // (clientId, payload) -> {post, existing}; twitter-service ensureDraftPost. Absent => batch create answers 503
   mediaForItem = null, // (clientId, pkg) -> {mediaUrl, mediaType, mediaContentType, mediaStoragePath} | null; calendar-batch drafts carry the item's media
   linkItemMedia = null, // (clientId, links) -> {linked, failed, results}; the quote-targets link-item-media writer. Absent => item-media confirm fails clearly
@@ -297,7 +298,10 @@ export function createStrategyHandlers({
     if (typeof ensureDraft !== 'function') return { ok: false, status: 503, error: 'Creating drafts is not available on this deployment.' };
     const byId = new Map((packages || []).map((p) => [p.id, p]));
     const mediaFor = typeof mediaForItem === 'function' ? (id) => mediaForItem(clientId, byId.get(id)) : null;
-    const written = await createCalendarBatch(clientId, plan, { ensureDraft, mediaFor, batchId });
+    const written = await createCalendarBatch(clientId, plan, {
+      ensureDraft, mediaFor, batchId,
+      ...(typeof placeDraft === 'function' ? { placeDraft: (postId, patch) => placeDraft(clientId, postId, patch) } : {}),
+    });
     return { ok: true, spec: norm.spec, counts: plan.counts, firstDate: plan.firstDate, lastDate: plan.lastDate, ...written };
   }
   // Preview rows for the agent: first 20, text shortened. `previewCalendarBatch` keeps nasSha for the card thumbnails.
@@ -1097,12 +1101,31 @@ export function createStrategyHandlersFromDb(db, {
   // Calendar batch: items that already have an open post are skipped; drafts go through the create-once path.
   const readOpenPackageIds = async (clientId) => {
     const { OPEN_STATUSES } = await import('../social-posting/lifecycle.js');
-    const snap = await db.collection('social_posts').where('clientId', '==', clientId).select('packageId', 'status').get();
-    return new Set(snap.docs.map((d) => d.data()).filter((r) => r.packageId && OPEN_STATUSES.includes(r.status)).map((r) => r.packageId));
+    const snap = await db.collection('social_posts').where('clientId', '==', clientId).select('packageId', 'status', 'scheduledAt', 'reviewOn').get();
+    const open = new Map();
+    for (const d of snap.docs) {
+      const r = d.data();
+      if (r.packageId && OPEN_STATUSES.includes(r.status) && !open.has(r.packageId)) open.set(r.packageId, { postId: d.id, status: r.status, scheduledAt: r.scheduledAt || null, reviewOn: r.reviewOn || null });
+    }
+    return open;
   };
+  // Place an existing draft (transaction): still this client's unscheduled draft => set reviewOn (+ bucket, + media only
+  // when it has none), bump revision. Never touches status, text or schedule.
+  const placeDraft = async (clientId, postId, { reviewOn, bucketId, media }) => db.runTransaction(async (tx) => {
+    const ref = db.collection('social_posts').doc(postId);
+    const snap = await tx.get(ref);
+    const cur = snap.exists ? snap.data() : null;
+    if (!cur || cur.clientId !== clientId || cur.status !== 'draft' || cur.scheduledAt) return false;
+    tx.set(ref, {
+      reviewOn, ...(bucketId ? { bucketId } : {}),
+      ...(media && !cur.mediaUrl ? media : {}),
+      revision: (Number(cur.revision) || 0) + 1, updatedAt: new Date().toISOString(),
+    }, { merge: true });
+    return true;
+  });
   const ensureDraft = async (clientId, payload) => (await import('../social-posting/twitter-service.js')).ensureDraftPost(clientId, payload);
   return createStrategyHandlers({
-    corpusStore, planStore, refreshService, readPackages, readAudience, readBuckets, readBucketEngine, readOpenPackageIds, ensureDraft,
+    corpusStore, planStore, refreshService, readPackages, readAudience, readBuckets, readBucketEngine, readOpenPackageIds, ensureDraft, placeDraft,
     readWorkerHealth: (clientId) => readWorkerHealthFromDb(db, { now: Date.now(), clientId }),
     docStore, onBrainOwnedSaved, readBrainTrackTargets, chatStore, agentLoopFactory, callModel, logUsage, runDailyAction, runUpdateItemFacets, readTodayRun, readContentContext, saveXGrowthProfile, env,
     readQueueSummary, readPost, readOpportunities, readResults, readMarketSignals, editPost, runPaidSync,

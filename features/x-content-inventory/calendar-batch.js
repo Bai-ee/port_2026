@@ -162,7 +162,9 @@ function selector(spec, tracks) {
 }
 
 /**
- * Pure plan for one batch. `today` = YYYY-MM-DD in the client's time zone; `openPackageIds` = items that already have
+ * Pure plan for one batch. `today` = YYYY-MM-DD in the client's time zone. `openPackageIds` = items that already have
+ * an open post: a Set (all skipped), or a Map id -> {postId, status, scheduledAt, reviewOn} where an unscheduled draft
+ * with no review day is PLACED (row.existingPostId: it gets the date + media, its text is kept) and the rest skip.
  * an open post (they are skipped, never duplicated). Returns {ok, rows, skipped, counts} or {ok:false, error}.
  */
 export function planCalendarBatch({ packages = [], tracks = [], spec, today, openPackageIds = new Set() } = {}) {
@@ -173,13 +175,16 @@ export function planCalendarBatch({ packages = [], tracks = [], spec, today, ope
   const skipped = [];
   const candidates = [];
   for (const p of picked) {
-    if (openPackageIds.has(p.id)) { skipped.push({ packageId: p.id, title: p.title ?? null, reason: 'already-queued' }); continue; }
+    const open = openPackageIds.has(p.id) ? (openPackageIds instanceof Map ? openPackageIds.get(p.id) : true) : null;
+    const placeable = open && typeof open === 'object' && open.status === 'draft' && !open.scheduledAt && !open.reviewOn && open.postId;
+    if (open && !placeable) { skipped.push({ packageId: p.id, title: p.title ?? null, reason: 'already-queued' }); continue; }
+    const existingPostId = placeable ? open.postId : null;
     if (spec.dateRule.kind === 'anniversary') {
       const reviewOn = nextAnniversary(eventMonthDay(p), today);
       if (!reviewOn) { skipped.push({ packageId: p.id, title: p.title ?? null, reason: 'no-date' }); continue; }
-      candidates.push({ p, reviewOn });
+      candidates.push({ p, reviewOn, existingPostId });
     } else {
-      candidates.push({ p, reviewOn: null });
+      candidates.push({ p, reviewOn: null, existingPostId });
     }
   }
   if (spec.dateRule.kind === 'anniversary') {
@@ -203,7 +208,8 @@ export function planCalendarBatch({ packages = [], tracks = [], spec, today, ope
   }
   const kept = candidates.slice(0, spec.limit);
   for (const c of candidates.slice(spec.limit)) skipped.push({ packageId: c.p.id, title: c.p.title ?? null, reason: 'over-limit' });
-  const rows = kept.map(({ p, reviewOn }) => ({
+  const rows = kept.map(({ p, reviewOn, existingPostId }) => ({
+    ...(existingPostId ? { existingPostId } : {}),
     packageId: p.id,
     title: p.title ?? null,
     reviewOn,
@@ -220,7 +226,7 @@ export function planCalendarBatch({ packages = [], tracks = [], spec, today, ope
     ok: true,
     rows,
     skipped: skipped.slice(0, SKIP_EXAMPLES),
-    counts: { matched: picked.length, drafts: rows.length, needsMemory: rows.filter((r) => r.needsStory).length, skipped: byReason },
+    counts: { matched: picked.length, drafts: rows.length, placesExisting: rows.filter((r) => r.existingPostId).length, needsMemory: rows.filter((r) => r.needsStory && !r.existingPostId).length, skipped: byReason },
     firstDate: rows[0]?.reviewOn ?? null,
     lastDate: rows.length ? rows.map((r) => r.reviewOn).sort().at(-1) : null,
   };
@@ -228,17 +234,25 @@ export function planCalendarBatch({ packages = [], tracks = [], spec, today, ope
 
 /**
  * Write a planned batch. `ensureDraft(clientId, payload)` = twitter-service ensureDraftPost (one draft per
- * idempotency key; a re-run returns the existing row). `mediaFor(packageId)` -> media fields or null (optional). Returns {created, existing, failed:[{packageId,error}]}.
+ * idempotency key; a re-run returns the existing row). `mediaFor(packageId)` -> media fields or null (optional).
+ * `placeDraft(postId, {reviewOn, bucketId, media})` -> true|false places an existing draft (rows with existingPostId). Returns {created, existing, failed:[{packageId,error}]}.
  */
-export async function createCalendarBatch(clientId, plan, { ensureDraft, mediaFor = null, batchId = null } = {}) {
+export async function createCalendarBatch(clientId, plan, { ensureDraft, placeDraft = null, mediaFor = null, batchId = null } = {}) {
   if (typeof ensureDraft !== 'function') throw new Error('createCalendarBatch: ensureDraft is required');
-  const out = { created: 0, existing: 0, failed: [] };
+  const out = { created: 0, existing: 0, placed: 0, failed: [] };
   const rows = [...(plan?.rows || [])];
   const worker = async () => {
     for (let r = rows.shift(); r; r = rows.shift()) {
       try {
         // The item's own video/image (signed like create-draft-from-item); a media failure never blocks the draft.
         const media = typeof mediaFor === 'function' ? await Promise.resolve(mediaFor(r.packageId)).catch(() => null) : null;
+        if (r.existingPostId) {
+          // An existing unscheduled draft: give it its day (and media when it has none). Its text stays the owner's.
+          if (typeof placeDraft !== 'function') throw new Error('placing existing drafts is not available');
+          const placed = await placeDraft(r.existingPostId, { reviewOn: r.reviewOn, bucketId: r.bucketId, media });
+          if (placed) out.placed += 1; else out.failed.push({ packageId: r.packageId, error: 'draft changed; not placed' });
+          continue;
+        }
         const res = await ensureDraft(clientId, {
           ...(media || {}),
           idempotencyKey: `calendar-batch:${r.packageId}`,
