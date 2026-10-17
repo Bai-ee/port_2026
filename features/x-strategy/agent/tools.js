@@ -6,6 +6,7 @@ import { PROPOSAL_KINDS, PLAN_LIMITS, KNOWN_SLOT_TYPES, BULK_LIMITS, DAILY_FILL_
 import { estimateFor, REFRESH_GROUPS } from '../../../components/dashboard/marketing/refresh-groups.js';
 import { SOURCE_KINDS } from '../../x-content-inventory/buckets.js';
 import { validateProposal } from './proposals.js';
+import { queryPosts, linkFieldsOf, POST_QUERY_KINDS, FIND_POSTS_MAX } from '../post-query.js';
 import { ACTION_TOOLS } from './action-runtime.js';
 import { PLAN_FIELDS, HANDLE_RE, applyChange } from '../plan-state.js';
 import { tracksOf } from '../content-tracks.js';
@@ -232,6 +233,26 @@ export const READ_TOOLS = Object.freeze([
     input_schema: { type: 'object', properties: { postId: str('Post id, e.g. from get_queue') }, required: ['postId'] },
   },
   {
+    name: 'find_posts',
+    description: `Find saved posts of this client by kind and calendar day, with links. kind: quote (quotes a tweet), repost, reply, original or any. A post's day is its scheduledAt day (America/Chicago) or, for an unscheduled draft, its reviewOn day. Each row: id, status, kind, day, scheduledAt, reviewOn, text, quotedUrl / repostOfUrl / replyToUrl (the tweet it targets), postedUrl (after publish), bucket, track, fillKind, media, needsStory, expiresAt + windowOpen for open quote drafts. Up to ${FIND_POSTS_MAX} rows (total says how many matched). Read-only.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        kind: { type: 'string', enum: [...POST_QUERY_KINDS], description: 'quote | repost | reply | original | any (default any)' },
+        status: { type: 'array', items: { type: 'string' }, description: 'Only these statuses, e.g. ["draft","approved","scheduled"]' },
+        from: str('First day, YYYY-MM-DD (inclusive)'),
+        to: str('Last day, YYYY-MM-DD (inclusive)'),
+        bucket: str('Bucket / track id'),
+        track: str('Same as bucket'),
+        fillKind: str('baseline | quote | narrative | client-work'),
+        hasMedia: { type: 'boolean' },
+        needsStory: { type: 'boolean' },
+        text: str('Substring of the text or of a link'),
+        limit: int('Max rows', { minimum: 1, maximum: FIND_POSTS_MAX }),
+      },
+    },
+  },
+  {
     name: 'get_opportunities',
     description: `Top ${LIMITS.opportunitiesMax} quote/reply scan targets with age in hours and whether the window is still open, plus when the scan was generated and whether it is stale. Read-only.`,
     input_schema: { type: 'object', properties: {} },
@@ -447,6 +468,9 @@ function shapePost(p) {
     content: String(p.content ?? p.text ?? '').slice(0, LIMITS.textMax * 2),
     scheduledAt: p.scheduledAt ?? null, reviewedAt: p.reviewedAt ?? null,
     isReply: !!(p.replyTo ?? p.isReply),
+    ...linkFieldsOf(p),
+    reviewOn: strOrNull(p.reviewOn), bucket: strOrNull(p.bucketId) || strOrNull(p.engine), fillKind: strOrNull(p.fillKind),
+    expiresAt: strOrNull(p.expiresAt), needsStory: p.needsStory === true,
     lifecycle: {
       approved: lc.approved ?? (p.approved === undefined ? null : !!p.approved),
       scheduled: lc.scheduled ?? (p.scheduledAt ? true : null),
@@ -558,6 +582,12 @@ export async function runReadTool(name, input, toolDeps) {
       const postId = typeof input?.postId === 'string' ? input.postId.trim().slice(0, 160) : '';
       if (!postId) return { error: 'postId is required' };
       return shapePost(await deps.readPost(postId));
+    }
+    case 'find_posts': {
+      if (typeof deps.readPostsForQuery !== 'function') return NA();
+      const now = typeof deps.now === 'function' ? deps.now() : Date.now();
+      const posts = await deps.readPostsForQuery();
+      return queryPosts(posts, { ...(isPlain(input) ? input : {}), status: Array.isArray(input?.status) ? input.status.slice(0, 12) : input?.status }, { now });
     }
     case 'get_opportunities': {
       if (typeof deps.readOpportunities !== 'function') return NA();

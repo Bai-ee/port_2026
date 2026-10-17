@@ -231,11 +231,12 @@ export async function diagnoseTwitterAccess() {
   }
 }
 
-export async function readSocialQueue(clientId) {
-  const snap = await postsCol()
+export async function readSocialQueue(clientId, { limit = 0 } = {}) {
+  let q = postsCol()
     .where('clientId', '==', clientId)
-    .orderBy('createdAt', 'desc')
-    .get();
+    .orderBy('createdAt', 'desc');
+  if (Number.isFinite(limit) && limit > 0) q = q.limit(Math.floor(limit)); // optional bound; default stays unbounded
+  const snap = await q.get();
   return snap.docs.map((doc) => doc.data());
 }
 
