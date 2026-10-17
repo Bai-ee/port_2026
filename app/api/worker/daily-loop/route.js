@@ -10,8 +10,8 @@ const require = createRequire(import.meta.url);
 const EV_LONG_SIGN_MS = 6.9 * 24 * 60 * 60 * 1000; // v4 signed URLs cap at 7 days
 
 // Daily content loop cron (06:30 CT). Generates today's suggestions for each PILOT_CLIENT_IDS client from the latest
-// SAVED scan, with fallback copy only: no model drafter is wired, so this route cannot spend on a model. It never
-// calls bird or the X API. Fails closed in production without CRON_SECRET, and without PILOT_CLIENT_IDS.
+// SAVED scan, with fallback copy only: no model drafter is wired, so this route cannot spend on a model. It never calls
+// bird. The ONLY X API spend is the opt-in auto-daily step (runXApiAutoStep: dataSources 'x-api' + autoDaily on, budget-capped). Fails closed in production without CRON_SECRET, and without PILOT_CLIENT_IDS.
 // Same loader wiring as the dashboard's daily-run-generate (app/api/dashboard/quote-targets/route.js readContentContext).
 async function buildReadInputsFor() {
   const fb = require('../../../../api/_lib/firebase-admin.cjs');
@@ -123,6 +123,34 @@ async function runDailyFillStep({ db, committedCorpusRows, readInputsFor }, clie
   return out;
 }
 
+// Auto-daily X API refresh (strategy accounts + quote targets): ONLY for clients whose dataSources are 'x-api' with
+// autoDaily on; a default client (all 'mac') is skipped without a read of X. Runs before the fill so the fill sees the
+// fresh scan. Non-fatal and budget-capped (the pullers call assertXBudget); summarized in the response as `xApiAuto`.
+async function runXApiAutoStep(db, clientIds) {
+  try {
+    const [{ runAutoDailyXApi }, { readDataSources }, { pullCorporaViaXApi, createFirestoreUserIdCache }, { scanQuoteTargetsViaXApi, createFirestoreQuotePayloadWriter }, { createFirestoreCorpusStore }] = await Promise.all([
+      import('../../../../features/x-strategy/auto-daily.js'),
+      import('../../../../features/x-strategy/data-sources.js'),
+      import('../../../../features/x-strategy/x-api-pull.js'),
+      import('../../../../features/x-quote-targets/x-api-scan.js'),
+      import('../../../../features/x-strategy/corpus-store.js'),
+    ]);
+    const store = createFirestoreCorpusStore(db);
+    const userIdCache = createFirestoreUserIdCache(db);
+    const offset = Math.floor(Date.now() / 86_400_000) * 15; // rotate the quote-scan window daily
+    return await runAutoDailyXApi(clientIds, {
+      readDataSources: (id) => readDataSources(db, id),
+      pullCorpora: async (id) => {
+        const { readClientXGrowth } = await import('../../../../features/x-strategy/pull-corpora.js');
+        return pullCorporaViaXApi(id, { readXGrowth: (cid) => readClientXGrowth(db, cid), store, userIdCache });
+      },
+      scanQuotes: (id) => scanQuoteTargetsViaXApi(id, { db, offset, userIdCache, writePayload: createFirestoreQuotePayloadWriter(db) }),
+    });
+  } catch (err) {
+    return [{ ok: false, error: String(err?.message || err).slice(0, 200) }];
+  }
+}
+
 async function run(request) {
   const { cronAuthorized, pilotClientIds, runScheduledDailyLoop } = await import('../../../../features/x-content-inventory/daily-loop/scheduled.js');
   if (!cronAuthorized({ authorization: request.headers.get('authorization') || '', vercelCron: request.headers.get('x-vercel-cron') || '' })) {
@@ -136,6 +164,7 @@ async function run(request) {
   const built = await buildReadInputsFor();
   const { db, assertReady, readInputsFor } = built;
   const results = await runScheduledDailyLoop({ store: createFirestoreRunStore(db), assertReady, readInputsFor }, { clientIds });
+  const xApiAuto = await runXApiAutoStep(db, results.filter((r) => r.ok).map((r) => r.clientId));
   // Non-fatal: a fill failure is reported in `dailyFill` and never changes `ok` or the suggestions result.
   let dailyFill = [];
   try {
@@ -144,7 +173,7 @@ async function run(request) {
   } catch (err) {
     dailyFill = [{ ok: false, error: String(err?.message || err).slice(0, 200) }];
   }
-  return NextResponse.json({ ok: results.every((r) => r.ok), results, dailyFill });
+  return NextResponse.json({ ok: results.every((r) => r.ok), results, xApiAuto, dailyFill });
 }
 
 export const GET = run;

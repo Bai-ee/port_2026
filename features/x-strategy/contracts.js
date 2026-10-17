@@ -108,7 +108,7 @@ export const DAILY_FILL_INCLUDES = Object.freeze(['baseline', 'quotes', 'narrati
 export const QUEUE_BULK_ACTIONS = Object.freeze(['approve', 'unschedule', 'delete-draft', 'set-review-date']);
 export const BUCKET_EDIT_OPS = Object.freeze(['upsert', 'delete']);
 /** Mirror of components/dashboard/marketing/refresh-groups.js REFRESH_GROUPS ids (a test asserts equality). */
-export const REFRESH_GROUP_IDS = Object.freeze(['market-signals', 'x-search', 'analysis', 'strategy-accounts', 'today-queue', 'x-monitor', 'renders']);
+export const REFRESH_GROUP_IDS = Object.freeze(['market-signals', 'x-search', 'analysis', 'strategy-accounts', 'today-queue', 'x-monitor', 'renders', 'quote-targets']);
 
 /** Kinds only server code may create (the MCP server's request_sync). The in-app agent has no propose tool for them. */
 export const SERVER_ONLY_PROPOSAL_KINDS = Object.freeze(['paid-sync']);

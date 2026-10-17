@@ -2191,3 +2191,8 @@ export async function searchXPosts(query, { limit = 10 } = {}) {
     return { ok: false, items: [], error: message, code };
   }
 }
+
+/** The shared X API client (read paths outside this file: strategy-accounts / quote-targets pullers). Throws when credentials are missing. */
+export function getXReadClient() {
+  return getTwitterClient();
+}

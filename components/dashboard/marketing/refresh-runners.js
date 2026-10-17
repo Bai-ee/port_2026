@@ -1,6 +1,8 @@
 // Unified Refresh — runners for groups 2-7 (group 1 is run by the host via the dashboard generateReport path).
 // Each runner: (ctx) => Promise<{ detail: [{ type: 'dim'|'ok'|'error', prefix, text }] }>, THROWS on failure.
 // ctx = { getIdToken, clientId, options: { todayWithModel }, note(text), apiPath?(path) }
+// X API data sources (groups 4 and 8): a run on the paid X API needs ctx.options.xApiConfirmed === true, which the host sets only
+// after the panel's confirm row listed that group's estimate (paidGroupsFor with the client's dataSources). Without it the runner throws.
 // Nothing here runs on import; the host calls a runner only after the confirm row.
 
 const QUOTE_TARGETS = '/api/dashboard/quote-targets';
@@ -23,6 +25,10 @@ async function request(ctx, path, { method = 'POST', body } = {}) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data?.ok === false) throw new Error(data?.error || `${path} failed (${res.status})`);
   return data;
+}
+
+function requireXApiConfirm(ctx, label) {
+  if (ctx?.options?.xApiConfirmed !== true) throw new Error(`${label} is set to the paid X API; confirm its estimate in the Refresh panel first.`);
 }
 
 const quoteCall = (ctx, action, body = {}) => request(ctx, QUOTE_TARGETS, { body: { action, ...body } });
@@ -72,10 +78,30 @@ export const GROUP_RUNNERS = {
     };
   },
 
-  // Group 4 — free; enqueues a Mac-worker (bird) refresh for you + every benchmark (no handles = all).
+  // Group 4 — Mac worker (free, queued) or the paid X API, per the client's saved data source. confirmPaid is sent only
+  // because the panel's confirm row already named the estimate; the server refuses an x-api run without it.
   'strategy-accounts': async (ctx) => {
+    const src = await quoteCall(ctx, 'x-data-sources-get', { clientId: ctx.clientId });
+    if (src?.dataSources?.strategyAccounts === 'x-api') {
+      requireXApiConfirm(ctx, 'Strategy accounts');
+      const res = await quoteCall(ctx, 'strategy-refresh', { clientId: ctx.clientId, confirmPaid: true });
+      const done = Object.values(res?.handles || {}).filter((h) => h.status === 'done' || h.status === 'partial').length;
+      return { detail: [okLine('[ACCOUNTS]', `Pulled via the X API — ${done}/${Object.keys(res?.handles || {}).length} account(s), ${res?.calls ?? '?'} call(s), ${res?.posts ?? '?'} post(s)${res?.stopped ? ` — stopped: ${res.stopped}` : ''}`)] };
+    }
     const res = await quoteCall(ctx, 'strategy-refresh', { clientId: ctx.clientId });
     return { detail: [okLine('[ACCOUNTS]', `Queued for the Mac worker${res?.requestId ? ` (request ${res.requestId})` : ''} — status ${res?.status || 'queued'}`)] };
+  },
+
+  // Group 8 — quote-target scan. X API source: runs on the server (paid, inline); Mac source: the scan runs locally, nothing to start here.
+  'quote-targets': async (ctx) => {
+    const src = await quoteCall(ctx, 'x-data-sources-get', { clientId: ctx.clientId });
+    if (src?.dataSources?.quoteTargets === 'x-api') {
+      requireXApiConfirm(ctx, 'Quote targets');
+      const res = await quoteCall(ctx, 'quote-scan-refresh', { clientId: ctx.clientId, confirmPaid: true });
+      return { detail: [okLine('[QUOTES]', `Scanned via the X API — ${res?.succeeded ?? '?'}/${res?.scanned ?? '?'} account(s), ${res?.candidates ?? 0} candidate(s), ${res?.calls ?? '?'} call(s), ${res?.posts ?? '?'} post(s)${res?.stopped ? ` — stopped: ${res.stopped}` : ''}`)] };
+    }
+    const res = await quoteCall(ctx, 'quote-scan-refresh', { clientId: ctx.clientId });
+    return { detail: [dimLine('[QUOTES]', res?.instructions || 'The quote scan runs on your Mac (launchd). Switch this source to the X API to scan from the server.')] };
   },
 
   // Group 5 — free; draft copy via model only when the option is on. Results are not stored here.
