@@ -35,6 +35,8 @@ import { syncBucketTracks } from './bucket-tracks.js';
 import { normalizeBatchSpec, planCalendarBatch, createCalendarBatch } from '../x-content-inventory/calendar-batch.js';
 import { runDailyFill, isFillPost } from '../x-content-inventory/daily-fill.js';
 import { findMediaCandidates, linkMediaPatch, normalizeLinks, mediaOf } from '../x-content-inventory/item-media.js';
+import { findHiresMedia, readStageStatesFromDb } from '../x-content-inventory/hires-media.js';
+import { handleNasAction } from '../x-content-inventory/nas.js';
 import { planMemorySuggestions, postNeedsMemory, MAX_MEMORY_SUGGESTIONS, MEMORY_LINE_MAX } from '../x-content-inventory/memory-suggest.js';
 import { planMediaTasks, createContentTaskStore } from '../x-content-inventory/content-tasks.js';
 import { ctDate } from '../x-content-inventory/month-calendar.js';
@@ -214,6 +216,7 @@ export function createStrategyHandlers({
   readBrainTrackTargets = null, // clientId -> approved Brain Track Targets rows (per-type shares); absent => postsPerDay only
   chatStore = null, agentLoopFactory = null, callModel = null, logUsage = null,
   responseStyleStore = null, // response-style.js store; absent => the default reply format, nothing saved
+  readAllPackages = null, // clientId -> every package (paged past READ_LIMIT); the high-res finder prefers it over readPackages
   unmetStore = null, // unmet-requests.js store; absent => log_unmet_request / get_unmet_requests say not available
   runDailyAction = null, runUpdateItemFacets = null, readTodayRun = null, readContentContext = null, saveXGrowthProfile = null,
   readQueueSummary = null, readPostsForQuery = null, readPost = null, readOpportunities = null, readResults = null, // chat read tools: (clientId[, postId]) -> plain JSON | null
@@ -238,6 +241,7 @@ export function createStrategyHandlers({
   readDataSources = null, saveDataSources = null, // (clientId) -> normalized dataSources | (clientId, patch) -> saved. Absent => every source is 'mac' and x-data-sources-save answers 503
   pullCorpora = null, // (clientId, {handles}) -> pullCorporaViaXApi result (the PAID X API). Absent => x-api source answers 503
   scanQuotes = null, // (clientId, {}) -> scanQuoteTargetsViaXApi result (the PAID X API). Absent => x-api source answers 503
+  readStageStates = null, readNasStatus = null, // (ids) -> Map id -> {state,commandId} of NAS stage commands; (clientId) -> nas-status. find_hires_media only; absent => no stage progress / worker info
   linkItemMedia = null, // (clientId, links) -> {linked, failed, results}; the quote-targets link-item-media writer. Absent => item-media confirm fails clearly
   env = {}, // explicit on purpose: only createStrategyHandlersFromDb passes process.env, so a bare handler can never reach a real model
 } = {}) {
@@ -818,6 +822,16 @@ export function createStrategyHandlers({
         if (!target) return { error: `unknown item ${id}` };
         return { id, title: target.title ?? null, hasMedia: !!mediaOf(target).kind, candidates: findMediaCandidates(target, pkgs, { limit }) };
       },
+      // High-res original of a post's picture from the NAS (hires-media.js). Read-only; staging/using goes through run_action.
+      ...(readPost ? {
+        findHiresMedia: ({ postId, packageId, limit } = {}) => findHiresMedia({
+          readPost: (id) => readPost(clientId, id),
+          // Every NAS row (readAllPackages pages past the inventory read bound) so an original is never missed.
+          readPackages: () => (typeof readAllPackages === 'function' ? readAllPackages(clientId) : readPackages(clientId)),
+          ...(readStageStates ? { readStageStates } : {}),
+          ...(readNasStatus ? { nasStatus: () => readNasStatus(clientId) } : {}),
+        }, { postId, packageId, limit }),
+      } : {}),
       previewItemMedia: async (links) => {
         const norm = normalizeLinks(links);
         if (!norm.ok) return { ok: false, error: norm.errors.join('; ') };
@@ -1546,6 +1560,7 @@ export function createStrategyHandlersFromDb(db, {
   const createMediaTasks = ({ clientId, rows, by, proposalId }) => taskStore.create(clientId, rows, { by, proposalId });
   return createStrategyHandlers({
     corpusStore, planStore, refreshService, readPackages, readAudience, readBuckets, readBucketEngine, readOpenPackageIds, readFillContext, readQuoteTargets, ensureDraft, placeDraft, listMediaTaskIds, createMediaTasks,
+    readStageStates: (ids) => readStageStatesFromDb(db, ids), readNasStatus: () => handleNasAction({ db, now: () => Date.now() }, 'nas-status', {}),
     readDataSources, saveDataSources, pullCorpora, scanQuotes, responseStyleStore, unmetStore,
     readWorkerHealth: (clientId) => readWorkerHealthFromDb(db, { now: Date.now(), clientId }),
     docStore, onBrainOwnedSaved, readBrainTrackTargets, chatStore, agentLoopFactory, callModel, logUsage, runDailyAction, runUpdateItemFacets, readTodayRun, readContentContext, saveXGrowthProfile, env,

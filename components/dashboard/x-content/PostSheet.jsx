@@ -5,6 +5,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { classifyResult, ctDate, ctTime, ctWallToMs } from '../../../features/x-content-inventory/month-calendar.js';
 import { ENGINE_TAG, STATE_LABEL, StateDot, dayHeading } from './calendar-bits.jsx';
+import HiresMediaPanel from './HiresMediaPanel.jsx';
 
 // PostSheet — review + edit one calendar post. Right-side sheet ≥481px,
 // full-screen on phones. Presentational: every action goes back to the card.
@@ -44,7 +45,7 @@ function whenToIso({ date, time }) {
   return new Date(ctWallToMs(date, h * 60 + m)).toISOString();
 }
 
-function PostSheetView({ post, busy, queue, onNavigate, onClose, onApprove, onReject, onSave, onUnschedule, onScore, onReconcile, onRefresh }) {
+function PostSheetView({ post, busy, queue, call, onNavigate, onClose, onApprove, onReject, onSave, onUnschedule, onScore, onReconcile, onRefresh }) {
   const [content, setContent] = useState(post.content || '');
   const [when, setWhen] = useState(() => initialWhen(post));
   const [score, setScore] = useState(null);
@@ -224,6 +225,7 @@ function PostSheetView({ post, busy, queue, onNavigate, onClose, onApprove, onRe
                 : <img src={post.mediaUrl} alt="" />}
             </div>
           ) : null}
+          <HiresMediaPanel post={post} call={call} onRefresh={onRefresh} />
           {!post.mediaUrl && post.thumbUrl ? (
             <div id="x-content-post-sheet-item-thumb-row" className="xce-mc-field">
               <span className="xce-mc-kicker">From library item</span>

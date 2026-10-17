@@ -31,6 +31,7 @@ import { syncRenderedVideos } from '../../../../features/rendered-videos/sync.js
 import { resolveMediaUrlsBatch, MEDIA_URLS_MAX_IDS, MEDIA_KINDS, tokenUrlFor } from '../../../../features/x-content-inventory/thumbs.js';
 import { setRights, saveThumb, createDraftFromItem, pickMedia } from '../../../../features/x-content-inventory/item-actions.js';
 import { NAS_ACTIONS, handleNasAction } from '../../../../features/x-content-inventory/nas.js';
+import { findHiresMedia, useHiresMedia, HIRES_EDITABLE_STATUSES, pendingStageFromDb, readStageStatesFromDb } from '../../../../features/x-content-inventory/hires-media.js';
 import { runDailyLoop, localDateOf, LOOP_VERSION } from '../../../../features/x-content-inventory/daily-loop.js';
 import { assertClientReady, resolveClientXHandle } from '../../../../features/client-readiness/index.js';
 import {
@@ -332,6 +333,8 @@ const SUPPORTED_ACTIONS = [
   'media-urls',
   'save-thumb',
   'find-item-media',
+  'find-hires-media',
+  'hires-media-use',
   'link-item-media',
   'set-rights',
   'create-draft-from-item',
@@ -817,6 +820,65 @@ async function handleFindItemMedia(context, body) {
 }
 
 /**
+ * Every package of a client, paged past readInventory's un-paged bound (READ_LIMIT NAS rows) so the high-res finder sees
+ * the whole drive (~6k rows ~8s). Memoized per client for 60s: a find and the following use share one read.
+ */
+const readAllPackagesFor = memoByClient(60_000, async (clientId) => {
+  const all = [];
+  let cursor = null;
+  for (let page = 0; page < 20; page += 1) {
+    const r = await readInventory({ clientId, pageSize: 1000, ...(cursor ? { startAfter: cursor } : {}) });
+    all.push(...r.packages);
+    cursor = r.nextCursor;
+    if (!cursor) break;
+  }
+  return all;
+});
+
+/** Bigger copies of a post's (or item's) picture on the NAS, ranked, with staged/worker state (hires-media.js). Read-only. */
+async function handleFindHiresMedia(context, body) {
+  const postId = String(body?.postId || '').trim();
+  const packageId = String(body?.packageId || '').trim();
+  if (!postId && !packageId) throw badRequest('postId or packageId is required.');
+  const nasStatus = () => handleNasAction(nasDeps(context.clientId), 'nas-status', {});
+  const out = await findHiresMedia({
+    readPost: (id) => getSocialPost(context.clientId, id).then((p) => (p ? postStatusRow(p) : null)),
+    readPackages: () => readAllPackagesFor(context.clientId),
+    readStageStates: (ids) => readStageStatesFromDb(fb.adminDb, ids),
+    nasStatus,
+  }, { postId, packageId, limit: body?.limit });
+  if (out.error) throw badRequest(out.error, 404);
+  return out;
+}
+
+/**
+ * Put the high-res original on a post (hires-media.js): queues the NAS copy when the file is not staged yet, otherwise
+ * swaps the post's media (transaction; draft/approved/scheduled only, bumps revision) and links it to the item.
+ */
+async function handleHiresMediaUse(context, body, decoded) {
+  const clientId = context.clientId;
+  return useHiresMedia({
+    getPost: (id) => getSocialPost(clientId, id),
+    getPackage: getPackageFor(clientId),
+    readPackages: () => readAllPackagesFor(clientId),
+    pendingStage: (id) => pendingStageFromDb(fb.adminDb, id),
+    nasStage: (id) => handleNasAction(nasDeps(clientId), 'nas-stage', { id }, decoded),
+    nasStatus: () => handleNasAction(nasDeps(clientId), 'nas-status', {}),
+    pickMedia: (pkg) => pickMedia(pkg, mediaSigners()),
+    applyPostMedia: (postId, media) => fb.adminDb.runTransaction(async (tx) => {
+      const ref = fb.adminDb.collection('social_posts').doc(postId);
+      const snap = await tx.get(ref);
+      const cur = snap.exists ? snap.data() : null;
+      if (!cur || cur.clientId !== clientId || !HIRES_EDITABLE_STATUSES.includes(cur.status)) return false;
+      tx.set(ref, { ...media, revision: (Number(cur.revision) || 0) + 1, updatedAt: new Date().toISOString() }, { merge: true });
+      return true;
+    }),
+    upsertPackage: upsertFor(clientId),
+    now: () => Date.now(),
+  }, { clientId, postId: body?.postId, candidateId: body?.candidateId, packageId: body?.packageId });
+}
+
+/**
  * Give items the media of other items of THIS client (item-media.js). Each link is independent: one bad pair fails
  * alone. Writes package fields only; never touches posts. Used by the route action and the confirmed chat proposal.
  */
@@ -1007,6 +1069,7 @@ let strategyHandlers = null;
 function getStrategyHandlers() {
   if (!strategyHandlers) {
     strategyHandlers = createStrategyHandlersFromDb(fb.adminDb, {
+      readAllPackages: readAllPackagesFor,
       onXGrowthSaved: (clientId, prior, next) => require('../../../../features/client-brain/brain-sync.cjs').recordXGrowthEdits(clientId, prior, next),
       onBrainOwnedSaved: (clientId, target, prior, next) => require('../../../../features/client-brain/brain-sync.cjs').recordCardEdits(clientId, target, prior, next),
       readBrainTrackTargets: (clientId) => require('../../../../features/client-brain/brain-sync.cjs').readApprovedTrackTargets(clientId),
@@ -1135,6 +1198,8 @@ export async function POST(request) {
     if (action === 'media-urls') return json(await handleMediaUrls(context, body));
     if (action === 'save-thumb') return json(await handleSaveThumb(context, body));
     if (action === 'find-item-media') return json(await handleFindItemMedia(context, body));
+    if (action === 'find-hires-media') return json(await handleFindHiresMedia(context, body));
+    if (action === 'hires-media-use') return json(await handleHiresMediaUse(context, body, decoded));
     if (action === 'link-item-media') return json({ ok: true, ...(await linkItemMediaFor(context.clientId, body?.links)) });
     if (action === 'set-rights') return json(await handleSetRights(context, body));
     if (action === 'create-draft-from-item') return json(await handleCreateDraftFromItem(context, body));
