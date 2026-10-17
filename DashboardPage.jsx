@@ -3771,6 +3771,23 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     }
   }, [isAdmin, user, marketingBriefRunning, client, bootstrap?.effectiveClientId, generateReport, brandSystemGetIdToken, settleActiveLine, apiPath]);
 
+  // Agent refresh confirm card -> same runner/terminal/minimize chip as the header Refresh.
+  useEffect(() => {
+    if (!isAdmin || typeof window === 'undefined') return undefined;
+    const onAgentRefresh = (e) => {
+      const known = new Set(Object.keys(MARKETING_REFRESH_LABELS));
+      const ids = (Array.isArray(e?.detail?.ids) ? e.detail.ids : []).filter((id) => known.has(id));
+      if (!ids.length) return;
+      if (marketingRefreshRunningRef.current || marketingBriefRunning) {
+        console.info('[marketing-refresh] already running; agent refresh request ignored');
+        return;
+      }
+      runMarketingRefresh({ ids, todayWithModel: false });
+    };
+    window.addEventListener('hitloop:marketing-refresh', onAgentRefresh);
+    return () => window.removeEventListener('hitloop:marketing-refresh', onAgentRefresh);
+  }, [isAdmin, marketingBriefRunning, runMarketingRefresh]);
+
   // Fast path: re-run the enabled Analysis Skills over the already-stored signals
   // (no new ~3-min search). Use when the signals are fresh but the REPORT didn't
   // render — reliable and ~50s. Reads server-stored agentData; writes nothing new.

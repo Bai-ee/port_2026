@@ -231,6 +231,12 @@ function PostSheetView({ post, busy, queue, onNavigate, onClose, onApprove, onRe
             </div>
           ) : null}
 
+          {post.fillSource ? (
+            <p id="x-content-post-sheet-fill-source" className="xce-mc-sheet-meta-line">
+              From: {post.fillSource.type || 'source'}{post.fillSource.asOf ? ` · ${String(post.fillSource.asOf).slice(0, 10)}` : ''}
+            </p>
+          ) : null}
+
           <div id="x-content-post-sheet-text-field" className="xce-mc-field">
             <label htmlFor="x-content-post-sheet-text" className="xce-mc-kicker">Post</label>
             <textarea
