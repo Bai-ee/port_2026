@@ -181,3 +181,9 @@ test('runDailyFillForCron: today + 6 days, every kind, executes', async () => {
   assert.equal(r.preview, false);
   assert.ok(seen.length > 0 && seen.every((d) => d.reviewOn >= TODAY && d.reviewOn <= '2026-10-23'));
 });
+
+test('baseline: junk auto-caption titles are never picked', () => {
+  const junk = pkg('nas-junk', 'nas', { ...ready, title: 'Heavily corrupted or low-quality video frame with no clear subject' });
+  const p = planDailyFill({ tracks, packages: [junk, ...PACKAGES], from: TODAY, days: 3, today: TODAY, include: ['baseline'] });
+  assert.ok(!p.rows.some((r) => r.packageId === 'nas-junk'));
+});

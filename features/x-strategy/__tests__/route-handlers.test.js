@@ -40,7 +40,7 @@ function setup({ config = { ownHandle: 'me_acct', benchmarkHandles: ['bench_a'],
 }
 
 test('route actions list matches the T2b scope', () => {
-  assert.deepEqual([...STRATEGY_ROUTE_ACTIONS].sort(), ['strategy-calendar-batch-create', 'strategy-calendar-batch-preview', 'strategy-chat-history', 'strategy-chat-send', 'strategy-daily-fill-create', 'strategy-daily-fill-preview', 'strategy-doc-get', 'strategy-doc-revert', 'strategy-doc-save', 'strategy-evaluate-handle', 'strategy-get', 'strategy-plan-apply', 'strategy-plan-revert', 'strategy-profile-save', 'strategy-proposal-decide', 'strategy-refresh', 'strategy-refresh-status', 'strategy-review']);
+  assert.deepEqual([...STRATEGY_ROUTE_ACTIONS].sort(), ['strategy-calendar-batch-create', 'strategy-calendar-batch-preview', 'strategy-chat-history', 'strategy-chat-send', 'strategy-daily-fill-create', 'strategy-daily-fill-preview', 'strategy-doc-get', 'strategy-doc-revert', 'strategy-doc-save', 'strategy-evaluate-handle', 'strategy-freshness', 'strategy-get', 'strategy-plan-apply', 'strategy-plan-revert', 'strategy-profile-save', 'strategy-proposal-decide', 'strategy-refresh', 'strategy-refresh-status', 'strategy-review']);
 });
 
 test('a plan save waits for the Brain write-back and runs the targets one at a time (serverless-safe)', async () => {
@@ -778,4 +778,17 @@ test('daily fill: preview plans without writing, create writes drafts through en
   assert.equal(drafts[0].source, 'daily-fill');
   assert.equal(drafts[0].fillKind, 'narrative');
   assert.match(drafts[0].content, /\[add your take\]$/);
+});
+
+test('strategy-freshness: per-group oldest asOf + tightest max age from the brief bundle', async () => {
+  const h = createStrategyHandlers({
+    corpusStore: { get: async () => null }, planStore: { get: async () => null }, refreshService: {}, readXGrowthConfig: async () => null,
+    readBriefRaw: async () => ({ marketingBrief: null }),
+  });
+  const r = await h.handle('strategy-freshness', { clientId: 'c1' }, CTX, AUTH);
+  assert.equal(r.ok, true);
+  assert.ok(r.parts && typeof r.parts === 'object');
+  assert.equal(r.groups.staleAfterHours['market-signals'], 24);
+  assert.equal(r.groups.serverAsOf['market-signals'], null);
+  assert.ok(r.staleGroups.includes('market-signals'));
 });

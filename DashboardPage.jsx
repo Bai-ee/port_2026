@@ -12467,7 +12467,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 <React.Fragment>
                   {isAdmin && activeCapabilityFilter === 'growth' && (
                     <div id="marketing-director-refresh-shell" style={{ margin: '0 0 8px', maxWidth: '100%' }}>
-                      <MarketingRefreshControl running={marketingRefreshRunning || marketingBriefRunning} onRun={runMarketingRefresh} estimateCtx={marketingEstimateCtx} onOpenConfig={openMarketingRefreshConfig} />
+                      <MarketingRefreshControl running={marketingRefreshRunning || marketingBriefRunning} onRun={runMarketingRefresh} estimateCtx={marketingEstimateCtx} onOpenConfig={openMarketingRefreshConfig} getIdToken={brandSystemGetIdToken} clientId={client?.clientId || client?.id || bootstrap?.effectiveClientId} />
                     </div>
                   )}
                   <div className={`segmented cap-step-seg cap-step-seg--top${_forceList ? ' cap-step-seg--tabs' : ''}`} role="tablist" aria-label="Workflow steps" data-tooltip-disabled="true">

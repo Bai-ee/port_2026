@@ -48,7 +48,7 @@ import { StrategyDocError, createFirestoreStrategyDocStore } from './strategy-do
 import { draftDoc, STRATEGY_DOC_SECTIONS, describeDocChange } from './strategy-doc.js';
 import { SEED_STRATEGY_SECTIONS } from './strategy-doc-seed.js';
 import { summarizeAlgorithm, scorePosts as shapeScoredPosts, ruleCheck, summarizeAudience } from './insights.js';
-import { buildBriefBundle, readBriefRaw as readBriefRawFromDb } from './brief-bundle.js';
+import { buildBriefBundle, freshnessOf, readBriefRaw as readBriefRawFromDb } from './brief-bundle.js';
 import { scoreXPost, getAlgorithmProfile } from '../x-growth/index.js';
 import { guardXPost } from '../x-content-guard/index.js';
 
@@ -71,6 +71,7 @@ export const STRATEGY_ROUTE_ACTIONS = Object.freeze([
   'strategy-calendar-batch-create',
   'strategy-daily-fill-preview',
   'strategy-daily-fill-create',
+  'strategy-freshness',
 ]);
 
 export const REVIEW_DISPLAY_TEXT = 'Review my strategy against the latest data.';
@@ -367,6 +368,24 @@ export function createStrategyHandlers({
   }
   // Preview rows: text shortened (the agent's context is small); counts and skip examples are unchanged.
   const stripFillRows = (r) => (r.ok ? { ...r, rows: r.rows.map(({ text, ...row }) => ({ ...row, text: text.slice(0, 140) })) } : r);
+  // Per-part freshness (the same bundle get_freshness reads) plus, per Refresh group, the OLDEST age-ruled part's asOf
+  // and the tightest max age, so the Refresh panel's "updated Xh ago / stale" labels agree with the agent.
+  async function strategyFreshness(body, context) {
+    const c = requireClient(body, context);
+    if (c.error) return c.error;
+    if (!readBriefRaw) return fail(501, 'Freshness is not available on this deployment.');
+    const f = freshnessOf(buildBriefBundle(await readBriefRaw(c.clientId, briefReaders(c.clientId, {})), { now: Date.now() }));
+    const serverAsOf = {};
+    const staleAfterHours = {};
+    for (const p of Object.values(f.parts)) {
+      const g = p.refreshGroup;
+      if (!g || !Number.isFinite(p.maxAgeHours)) continue;
+      staleAfterHours[g] = Math.min(staleAfterHours[g] ?? Infinity, p.maxAgeHours);
+      if (!(g in serverAsOf)) serverAsOf[g] = p.asOf ?? null;
+      else if (serverAsOf[g] && (!p.asOf || Date.parse(p.asOf) < Date.parse(serverAsOf[g]))) serverAsOf[g] = p.asOf ?? null;
+    }
+    return { ok: true, ...f, groups: { serverAsOf, staleAfterHours } };
+  }
   async function strategyDailyFillPreview(body, context) {
     const c = requireClient(body, context);
     if (c.error) return c.error;
@@ -1032,6 +1051,7 @@ export function createStrategyHandlers({
     'strategy-calendar-batch-create': strategyCalendarBatchCreate,
     'strategy-daily-fill-preview': strategyDailyFillPreview,
     'strategy-daily-fill-create': strategyDailyFillCreate,
+    'strategy-freshness': strategyFreshness,
   };
 
   /** @returns {Promise<object>} result; failures carry {ok:false,status}. Auth is the caller's job. */

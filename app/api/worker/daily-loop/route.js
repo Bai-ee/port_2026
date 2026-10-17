@@ -7,6 +7,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const require = createRequire(import.meta.url);
+const EV_LONG_SIGN_MS = 6.9 * 24 * 60 * 60 * 1000; // v4 signed URLs cap at 7 days
 
 // Daily content loop cron (06:30 CT). Generates today's suggestions for each PILOT_CLIENT_IDS client from the latest
 // SAVED scan, with fallback copy only: no model drafter is wired, so this route cannot spend on a model. It never
@@ -77,9 +78,30 @@ async function runDailyFillStep({ db, committedCorpusRows, readInputsFor }, clie
   let handlers;
   try {
     const { createStrategyHandlersFromDb } = await import('../../../../features/x-strategy/route-handlers.js');
+    const { pickMedia } = await import('../../../../features/x-content-inventory/item-actions.js');
+    const { tokenUrlFor } = await import('../../../../features/x-content-inventory/thumbs.js');
+    const { projectBrief } = require('../../../../features/intelligence/_brief-intel.js');
+    const fb = require('../../../../api/_lib/firebase-admin.cjs');
+    const bridge = require('../../../../api/_lib/editvideos-bridge.cjs');
+    // Same signers as the dashboard route's mediaSigners (the post stores the object ref; publish re-signs).
+    const signers = {
+      async signEvLong(p) {
+        try {
+          const [url] = await bridge.bridgeBucket().file(p).getSignedUrl({ version: 'v4', action: 'read', expires: Date.now() + EV_LONG_SIGN_MS });
+          return url;
+        } catch { return null; }
+      },
+      hitloopUrl: (p) => tokenUrlFor(fb.adminStorage.bucket(), p),
+    };
     handlers = createStrategyHandlersFromDb(db, {
       loadCommitted: committedCorpusRows,
       readPackages: async (clientId) => (await readInputsFor(clientId)).packages || [],
+      // Narratives come from the projected Market Signals brief, as on the dashboard route.
+      readMarketSignals: async (clientId) => {
+        const snap = await db.collection('dashboard_state').doc(clientId).get();
+        return snap.exists ? projectBrief(snap.data()?.marketingBrief, snap.data()) : null;
+      },
+      mediaForItem: (clientId, pkg) => (pkg && pkg.clientId === clientId ? pickMedia(pkg, signers) : null),
     });
   } catch (err) {
     return clientIds.map((clientId) => ({ clientId, ok: false, error: String(err?.message || err).slice(0, 200) }));

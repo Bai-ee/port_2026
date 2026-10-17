@@ -25,6 +25,8 @@ const MAX_PER_TRACK_PER_DAY = 3;
 const MAX_QUOTES = 10;
 const MAX_NARRATIVES = 2; // today + tomorrow
 const SKIP_EXAMPLES = 30;
+// Auto-caption titles that describe a broken/unreadable frame, not the content: never worth a calendar slot.
+const JUNK_TITLE_RE = /\b(corrupted|low[- ]quality (video|image|frame)|unreadable|cannot be determined|unable to (identify|determine))\b/i;
 const WRITE_CONCURRENCY = 10;
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const DAY_MS = 86_400_000;
@@ -139,7 +141,7 @@ export function planDailyFill({
       const md = date.slice(5);
       const ranked = [];
       for (const p of pool) {
-        if (used.has(p.id) || /^example/i.test(p.id) || /^todo\b/i.test(String(p.title ?? ''))) continue; // seed/example rows are never picked
+        if (used.has(p.id) || /^example/i.test(p.id) || /^todo\b/i.test(String(p.title ?? '')) || JUNK_TITLE_RE.test(String(p.title ?? ''))) continue; // seed/example rows and junk auto-captions are never picked
         const dated = eventMonthDay(p);
         if (dated && dated !== md) continue; // an anniversary item belongs on its own day only
         const prior = lastOf(p.id);
