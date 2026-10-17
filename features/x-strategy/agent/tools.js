@@ -251,7 +251,7 @@ export const READ_TOOLS = Object.freeze([
   },
   {
     name: 'find_hires_media',
-    description: "High-res / original / full-size file for a post's picture, from the drive (NAS). For a post (postId) or library item (packageId): the item's own size and whether it is a thumbnail, plus ranked bigger copies of the same photo (width, height, why it matches, staged = already copied from the drive and usable, stageState while copying) and whether the Mac NAS worker is online. Read-only. To use one, run_action media.use-hires with postId, packageId (target.id) and candidateId; if it is not staged yet that queues the copy.",
+    description: "High-res / original / full-size file for a post's picture, from the drive (NAS). For a post (postId) or library item (packageId): the item's own size and whether it is a thumbnail, plus ranked bigger copies of the same photo and, last, the item's OWN original (self: true; always usable, even when no bigger copy exists; bestId falls back to it) (width, height, why it matches, staged = already copied from the drive and usable, stageState while copying) and whether the Mac NAS worker is online. Read-only. To use one, run_action media.use-hires with postId, packageId (target.id) and candidateId; if it is not staged yet that queues the copy.",
     input_schema: { type: 'object', properties: { postId: str('Post id (its library item is used)'), packageId: str('Library item id, when there is no post'), limit: int('Max candidates', { minimum: 1, maximum: 20 }) } },
   },
   {

@@ -105,7 +105,7 @@ export const CONTENT_ACTIONS = [
     obj({ folder: open('{id?, bucketId, name, rule? | itemIds?}') }, ['folder']), { tier: 1, snapshot: [{ path: 'content_buckets/{clientId}/folders/{folder.id}' }] }),
   Q('nas.stage', 'nas', 'Stage a NAS item\'s media (original from the drive)', 'Queues the Mac worker copying a NAS item\'s original high-res full size file from the drive to staging. Refused for never-public. To swap a post\'s flyer use media.use-hires.', 'nas-stage', obj({ id: itemId }, ['id']), { tier: 1 }),
   Q('media.use-hires', 'content', 'Use the high-res original on a post (from the drive/NAS)',
-    'Put the high-res original full size copy of a flyer or photo from the drive (NAS) on a post; candidateId from find_hires_media. Not staged yet: queues the copy, run again when staged. Undoable.', 'hires-media-use',
+    'Put the high-res original full size copy of a flyer/photo from the drive (NAS) on a post; candidateId = find_hires_media bestId (can be the item itself). Auto-attaches when copied. Undoable.', 'hires-media-use',
     obj({ postId: str('social_posts id (draft, approved or scheduled).'), packageId: str('The post\'s item id (target.id from find_hires_media).'), candidateId: str('x_content_packages id of the high-res copy (from find_hires_media).') }, ['postId', 'packageId', 'candidateId']),
     { tier: 1, snapshot: [{ collection: 'social_posts', idArg: 'postId' }, { collection: 'x_content_packages', idArg: 'packageId' }] }),
   Q('nas.cancel', 'nas', 'Cancel a NAS job', 'Cancels a queued/running NAS analyzer job.', 'nas-cancel', obj({ commandId: str('archive_commands id.') }, ['commandId']), { tier: 1 }),
