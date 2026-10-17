@@ -31,11 +31,11 @@ test('prompt stays compact and embeds only a capped plan summary, not the evalua
   assert.match(summarizePlan(null), /No saved plan/);
 });
 
-test('one propose tool per agent-proposable kind (server-only kinds like paid-sync have none), plus the eighteen read tools, all with object schemas', () => {
+test('one propose tool per agent-proposable kind (server-only kinds like paid-sync have none), plus the twenty read tools, all with object schemas', () => {
   assert.deepEqual(Object.keys(PROPOSE_TOOL_BY_KIND).sort(), PROPOSAL_KINDS.filter((k) => !SERVER_ONLY_PROPOSAL_KINDS.includes(k)).sort());
   assert.ok(PROPOSAL_KINDS.includes('paid-sync') && !('paid-sync' in PROPOSE_TOOL_BY_KIND));
-  assert.deepEqual(READ_TOOL_NAMES, ['get_strategy_doc', 'get_algorithm', 'score_posts', 'get_rule_check', 'get_audience', 'get_evaluation', 'get_plan', 'get_tracks', 'get_context', 'get_today_run', 'search_inventory', 'top_posts', 'get_queue', 'get_market_signals', 'find_item_media', 'get_post', 'get_opportunities', 'get_results']);
-  assert.equal(TOOL_SCHEMAS.length, 33);
+  assert.deepEqual(READ_TOOL_NAMES, ['get_strategy_doc', 'get_algorithm', 'score_posts', 'get_rule_check', 'get_audience', 'get_evaluation', 'get_plan', 'get_tracks', 'get_context', 'get_today_run', 'search_inventory', 'top_posts', 'get_queue', 'get_market_signals', 'find_item_media', 'get_post', 'get_opportunities', 'get_results', 'get_brief', 'get_freshness']);
+  assert.equal(TOOL_SCHEMAS.length, 35);
   for (const t of TOOL_SCHEMAS) {
     assert.equal(t.input_schema.type, 'object');
     assert.ok(t.description);

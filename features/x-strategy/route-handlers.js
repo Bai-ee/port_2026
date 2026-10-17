@@ -46,6 +46,7 @@ import { StrategyDocError, createFirestoreStrategyDocStore } from './strategy-do
 import { draftDoc, STRATEGY_DOC_SECTIONS, describeDocChange } from './strategy-doc.js';
 import { SEED_STRATEGY_SECTIONS } from './strategy-doc-seed.js';
 import { summarizeAlgorithm, scorePosts as shapeScoredPosts, ruleCheck, summarizeAudience } from './insights.js';
+import { buildBriefBundle, readBriefRaw as readBriefRawFromDb } from './brief-bundle.js';
 import { scoreXPost, getAlgorithmProfile } from '../x-growth/index.js';
 import { guardXPost } from '../x-content-guard/index.js';
 
@@ -189,6 +190,7 @@ export function createStrategyHandlers({
   runDailyAction = null, runUpdateItemFacets = null, readTodayRun = null, readContentContext = null, saveXGrowthProfile = null,
   readQueueSummary = null, readPost = null, readOpportunities = null, readResults = null, // chat read tools: (clientId[, postId]) -> plain JSON | null
   readMarketSignals = null, // (clientId) -> projected brief (features/intelligence/_brief-intel.js projectBrief) | null
+  readBriefRaw = null, // (clientId, {readPlanDoc, readStrategyDoc, readCorpora, readXMonitor, readTodayRun}) -> raw brief inputs (brief-bundle.js readBriefRaw); absent => get_brief / get_freshness say not available
   editPost = null, // ({clientId, postId, content?, scheduledAt?}) -> saved post; the existing updateSocialPost path
   runPaidSync = null, // ({clientId, kind, params, by, auth, context}) -> result; the `paid-sync` proposal executor (features/mcp/paid-syncs.js). Absent => confirming one fails with a clear message
   readAudience = null, // (clientId) -> {account, snapshots, events, posts} from THIS client's stored X Monitor account ({account:null} when none); null => tool says unavailable
@@ -333,6 +335,26 @@ export function createStrategyHandlers({
   async function loadProfile(clientId) {
     const config = await readXGrowthConfig(clientId);
     return withProfileDefaults(resolveProfile({ config }));
+  }
+
+  /** Local readers the brief bundle composes (same stores the other chat tools use). */
+  function briefReaders(clientId, preloaded) {
+    return {
+      readPlanDoc: (id) => planStore.get(id),
+      readStrategyDoc: (id) => (docStore ? readDoc(id) : null),
+      readTodayRun: readTodayRun ? (id) => readTodayRun(id) : null,
+      readXMonitor: readAudience ? async (id) => (await readAudience(id))?.account ?? null : null,
+      readCorpora: async () => {
+        const profile = preloaded.profile ?? (preloaded.profile = await loadProfile(clientId));
+        const handles = [profile.ownHandle, ...(profile.benchmarkHandles || [])].map((h) => safeHandle(h)).filter(Boolean);
+        const now = Date.now();
+        return Promise.all([...new Set(handles)].map(async (h) => {
+          const r = await readHandle(h);
+          const d = describeRows(h, r, now);
+          return { handle: h, source: r.source, rows: (r.rows || []).length, pulledAt: d.freshness.pulledAt };
+        }));
+      },
+    };
   }
 
   /** Never fails a read path: a health lookup error just omits the field. */
@@ -570,6 +592,8 @@ export function createStrategyHandlers({
       ...(readOpportunities ? { readOpportunities: () => readOpportunities(clientId) } : {}),
       ...(readResults ? { readResults: () => readResults(clientId) } : {}),
       ...(readMarketSignals ? { readMarketSignals: () => readMarketSignals(clientId) } : {}),
+      // Every brief/market/strategy part with its age + the Refresh group that updates it. Read-only; never refreshes.
+      ...(readBriefRaw ? { readBriefBundle: async ({ part } = {}) => buildBriefBundle(await readBriefRaw(clientId, briefReaders(clientId, preloaded)), { now: Date.now(), part }) } : {}),
       searchInventory: async ({ query, limit, track } = {}) => {
         const max = Math.min(Math.max(1, Number(limit) || 10), 20);
         const tokens = String(query ?? '').toLowerCase().split(/\s+/).filter(Boolean).slice(0, 8);
@@ -1131,6 +1155,7 @@ export function createStrategyHandlersFromDb(db, {
     readWorkerHealth: (clientId) => readWorkerHealthFromDb(db, { now: Date.now(), clientId }),
     docStore, onBrainOwnedSaved, readBrainTrackTargets, chatStore, agentLoopFactory, callModel, logUsage, runDailyAction, runUpdateItemFacets, readTodayRun, readContentContext, saveXGrowthProfile, env,
     readQueueSummary, readPost, readOpportunities, readResults, readMarketSignals, editPost, runPaidSync,
+    readBriefRaw: (clientId, local) => readBriefRawFromDb(clientId, { db, ...local }),
     readXGrowthConfig: async (clientId) => {
       const snap = await db.collection('client_configs').doc(clientId).get();
       return snap.exists ? snap.data()?.marketingBriefConfig?.xGrowth ?? null : null;
