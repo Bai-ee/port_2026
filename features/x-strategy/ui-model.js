@@ -443,7 +443,7 @@ function calendarBatchPreview(p) {
   return [
     `Items: ${which || 'none'}`,
     `Dated: ${when}`,
-    ...(Number.isInteger(pre.drafts) ? [`Drafts: ${pre.drafts}${pre.firstDate ? ` (${pre.firstDate} to ${pre.lastDate})` : ''}, ${pre.needsMemory ?? 0} waiting for your memory`] : []),
+    ...(Number.isInteger(pre.drafts) ? [`Drafts: ${pre.drafts}${pre.firstDate ? ` (${pre.firstDate} to ${pre.lastDate})` : ''}${pre.placesExisting ? `, ${pre.placesExisting} of them your existing drafts (text kept)` : ''}, ${pre.needsMemory ?? 0} new ones waiting for your memory`] : []),
     ...(skipped ? [`Skipped: ${skipped}`] : []),
     ...(Array.isArray(pre.sample) ? pre.sample.map((r) => `${r.reviewOn}: ${r.title}`) : []),
     'Drafts only: nothing is approved, scheduled or published. The count is re-checked when you confirm.',
