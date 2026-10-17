@@ -198,7 +198,7 @@ export const READ_TOOLS = Object.freeze([
   },
   {
     name: 'get_calendar',
-    description: "The ONE place for every possible post: saved posts of all statuses (draft, approved, scheduled, posted, held), today's daily suggestions and open requotes, per day. Each item: kind (post | suggestion | requote), id (postId / suggestionId / quoteTargetId), approval (unapproved | held | approved | scheduled | posted | suggested), time, text, quotedUrl, handle, windowOpen, expiresAt, bucket, hasPlaceholder. Approving a post with a [add your memory] / [add your take] placeholder REMOVES the placeholder; it never blocks approval. To approve: run_action calendar.post.approve (postId) or calendar.suggestion.approve (kind + id). Default today..today+6, max 31 days. filter: all | unapproved | approved | suggestions. Read-only.",
+    description: "The ONE place for every possible post: saved posts of all statuses (draft, approved, scheduled, posted, held), today's daily suggestions and open requotes, per day. Each item: kind (post | suggestion | requote), id (postId / suggestionId / quoteTargetId), approval (unapproved | held | approved | scheduled | posted | suggested), time, text, quotedUrl, handle, windowOpen, expiresAt, bucket, hasPlaceholder. Approving a post with a [add your memory] / [add your take] placeholder REMOVES the placeholder; it never blocks approval. To approve: run_action calendar.post.approve (postId) or calendar.suggestion.approve (kind + id). Omit from/to for today and the next 6 days (the server knows today's date; never guess dates). Max 31 days. filter: all | unapproved | approved | suggestions. Read-only.",
     input_schema: {
       type: 'object',
       properties: {
@@ -700,7 +700,8 @@ export async function runReadTool(name, input, toolDeps) {
       const to = typeof input?.to === 'string' && dayRe.test(input.to.trim()) ? input.to.trim() : undefined;
       const res = await deps.readCalendar({ from, to });
       const days = Array.isArray(res) ? res : list(res?.days);
-      return shapeCalendar(days, { filter: input?.filter, from: res?.from ?? days[0]?.date ?? null, to: res?.to ?? days[days.length - 1]?.date ?? null });
+      const today = typeof deps.getToday === 'function' ? await deps.getToday().catch(() => null) : null;
+      return { ...(today?.date ? { today: today.date, timezone: today.timezone } : {}), ...shapeCalendar(days, { filter: input?.filter, from: res?.from ?? days[0]?.date ?? null, to: res?.to ?? days[days.length - 1]?.date ?? null }) };
     }
     case 'search_inventory': {
       const query = String(input?.query ?? '').trim();
