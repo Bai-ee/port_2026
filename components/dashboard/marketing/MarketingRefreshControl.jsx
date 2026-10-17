@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { REFRESH_GROUPS, paidGroupsFor, estimateFor, readLastRefreshed } from './refresh-groups.js';
+import { REFRESH_GROUPS, paidGroupsFor, estimateFor, readLastRefreshed, groupFreshness } from './refresh-groups.js';
+import { useMarketingContentCall } from './useMarketingContentCall';
 
 const SELECTION_KEY = 'marketing-refresh-selection-v1';
 const FREE_IDS = REFRESH_GROUPS.filter((g) => !g.paid).map((g) => g.id);
@@ -51,8 +52,19 @@ function totalsFor(paid) {
   return { usd, calls, unknownUsd };
 }
 
-export default function MarketingRefreshControl({ running = false, onRun, estimateCtx, onOpenConfig }) {
+export default function MarketingRefreshControl({ running = false, onRun, estimateCtx, onOpenConfig, freshnessCtx, getIdToken, clientId }) {
   const [open, setOpen] = useState(false);
+  // Server freshness (strategy-freshness = the same bundle the strategy agent's get_freshness reads), re-read when the
+  // panel opens and after a run ends, so the panel and the agent agree on what is stale. A passed freshnessCtx wins.
+  const { call } = useMarketingContentCall(getIdToken);
+  const [serverFreshness, setServerFreshness] = useState(null);
+  useEffect(() => {
+    if (!open || running || !clientId || !getIdToken) return undefined;
+    let live = true;
+    call('strategy-freshness', { clientId }).then((r) => { if (live) setServerFreshness(r?.groups || null); }).catch(() => {});
+    return () => { live = false; };
+  }, [open, running, clientId, getIdToken, call]);
+  const freshness = freshnessCtx || serverFreshness;
   const [selection, setSelection] = useState({ ids: [], todayWithModel: false });
   const [last, setLast] = useState({});
   const [pending, setPending] = useState(null); // selection awaiting confirm
@@ -124,6 +136,11 @@ export default function MarketingRefreshControl({ running = false, onRun, estima
                       <span className="mr-row-label">{g.n}. {g.label}</span>
                       <span className="mr-row-updates">{g.updates}</span>
                       <span className="mr-row-meta">{relativeTime(last[g.id])} · {metaEstimate}</span>
+                      {(() => {
+                        const f = groupFreshness(g.id, { lastRefreshed: last, serverAsOf: freshness?.serverAsOf, staleAfterHours: freshness?.staleAfterHours?.[g.id] });
+                        const label = f.asOf ? (f.stale ? `stale · updated ${f.ageHours < 48 ? `${Math.round(f.ageHours)}h` : `${Math.round(f.ageHours / 24)}d`} ago` : `updated ${f.ageHours < 1 ? '<1' : Math.round(f.ageHours)}h ago`) : 'stale · no refresh recorded';
+                        return <span id={`marketing-refresh-freshness-${g.id}`} className="mr-row-freshness" data-stale={f.stale ? 'true' : 'false'}>{label}</span>;
+                      })()}
                     </span>
                   </label>
                   {g.id === 'today-queue' ? (
@@ -209,6 +226,8 @@ export default function MarketingRefreshControl({ running = false, onRun, estima
         #marketing-refresh-panel .mr-row-label { font-weight: 600; }
         #marketing-refresh-panel .mr-row-updates { font-size: 13px; }
         #marketing-refresh-panel .mr-row-meta { font-size: 12px; opacity: 0.65; }
+        #marketing-refresh-panel .mr-row-freshness { font-size: 12px; color: var(--t-text); opacity: 0.65; }
+        #marketing-refresh-panel .mr-row-freshness[data-stale="true"] { color: var(--t-danger); opacity: 1; }
         #marketing-refresh-panel .mr-row-option { display: flex; align-items: center; gap: 6px; min-height: 44px; font-size: 13px; }
         #marketing-refresh-panel input[type="checkbox"] { width: 20px; height: 20px; margin-top: 2px; }
         #marketing-refresh-panel button { min-height: 44px; padding: 0 14px; border: 1px solid color-mix(in srgb, var(--t-text-strong) 30%, transparent); border-radius: 8px; background: var(--t-surface); color: inherit; font: inherit; cursor: pointer; }

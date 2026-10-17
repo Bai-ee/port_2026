@@ -51,11 +51,20 @@ function readView() {
   }
 }
 
+const FILL_KIND_LABEL = { quote: 'Quote', narrative: 'Narrative', 'client-work': 'Client work', baseline: 'Baseline' };
+
+// A daily-fill quote draft is only useful inside its window; past expiresAt it renders muted.
+export function isQuoteWindowClosed(post, nowMs = Date.now()) {
+  const t = post?.fillKind === 'quote' && post?.expiresAt ? Date.parse(post.expiresAt) : NaN;
+  return Number.isFinite(t) && t < nowMs;
+}
+
 function PostRow({ post, busy, onOpen, onApprove, onReject }) {
+  const windowClosed = isQuoteWindowClosed(post);
   const pending = (post.state === 'pending' || post.state === 'awaiting') && !post.needsStory;
   const rejectOnly = post.state === 'held';
   return (
-    <li id={`x-content-month-row-${post.id}`} className={`xce-mc-row xce-mc-state-${post.state}`}>
+    <li id={`x-content-month-row-${post.id}`} className={`xce-mc-row xce-mc-state-${post.state}${windowClosed ? ' xce-mc-row-expired' : ''}`}>
       <button type="button" className="xce-mc-row-main" data-bucket={post.bucketColor ? post.bucketId || 'none' : undefined} data-thumb={post.thumbUrl ? '' : undefined}
         style={post.bucketColor ? { '--mc-bucket': post.bucketColor } : undefined} onClick={() => onOpen(post.id)}>
         <span className="xce-mc-row-time">{post.time || '—'}</span>
@@ -67,6 +76,10 @@ function PostRow({ post, busy, onOpen, onApprove, onReject }) {
             {post.reviewOn ? ' · review day' : post.proposed ? ' · proposed' : ''}
             {post.engine ? ` · ${ENGINE_TAG[post.engine]}` : ''}
             {post.needsStory ? (post.reviewOn ? ' · needs your memory' : ' · needs story') : ''}
+            {FILL_KIND_LABEL[post.fillKind] ? (
+              <span id={`x-content-month-row-fill-kind-${post.id}`} className="xce-mc-fill-badge" data-fill-kind={post.fillKind}>{FILL_KIND_LABEL[post.fillKind]}</span>
+            ) : null}
+            {windowClosed ? <span id={`x-content-month-row-window-closed-${post.id}`} className="xce-mc-fill-closed">window closed</span> : null}
           </span>
           {post.state === 'held' ? (
             <span id={`x-content-month-row-held-${post.id}`} className="xce-mc-row-note">{post.heldReason} {post.heldNext}</span>

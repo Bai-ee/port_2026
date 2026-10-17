@@ -294,6 +294,9 @@ export default function ContentUiStyles() {
         .xce-scope .xce-mc-chip:hover { border-color: var(--t-text); }
         .xce-scope .xce-mc-chip-time { flex: 0 0 auto; font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; }
         .xce-scope .xce-mc-chip-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .xce-scope .xce-mc-fill-badge { margin-left: 6px; padding: 0 6px; border: 1px solid color-mix(in srgb, var(--t-text) 30%, transparent); border-radius: 999px; font-size: 11px; }
+        .xce-scope .xce-mc-fill-closed { margin-left: 6px; font-size: 11px; color: var(--t-danger); }
+        .xce-scope .xce-mc-row-expired { opacity: 0.5; }
         .xce-scope .xce-mc-chip.xce-mc-state-pending { border-style: dashed; border-color: color-mix(in srgb, var(--t-text) 30%, transparent); background: transparent; color: color-mix(in srgb, var(--t-text) 50%, transparent); }
         .xce-scope .xce-mc-chip.xce-mc-state-awaiting { border-style: dashed; border-color: color-mix(in srgb, var(--t-text) 30%, transparent); background: transparent; color: color-mix(in srgb, var(--t-text) 50%, transparent); }
         .xce-scope .xce-mc-chip.xce-mc-state-held { border-style: dashed; border-color: color-mix(in srgb, var(--t-text) 30%, transparent); background: transparent; color: color-mix(in srgb, var(--t-text) 50%, transparent); }

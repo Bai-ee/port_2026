@@ -2,16 +2,26 @@
 // guard carried on a social_posts doc. No firebase, no network.
 
 export const MEMORY_PLACEHOLDER = '[add your memory]';
+export const TAKE_PLACEHOLDER = '[add your take]'; // daily-fill quote / narrative drafts
+// Every placeholder that blocks approval, scheduling and publishing while it is still in the text.
+export const BLOCKING_PLACEHOLDERS = Object.freeze([MEMORY_PLACEHOLDER, TAKE_PLACEHOLDER]);
 
-/** True while a draft still contains the unfilled memory placeholder. */
-export function hasMemoryPlaceholder(content) {
-  return String(content || '').toLowerCase().includes(MEMORY_PLACEHOLDER);
+/** The first unfilled placeholder in `content`, or null. */
+export function findPlaceholder(content) {
+  const low = String(content || '').toLowerCase();
+  return BLOCKING_PLACEHOLDERS.find((p) => low.includes(p)) || null;
 }
 
-/** Throws a 409 when a post still carries the placeholder (schedule / post-now). */
+/** True while a draft still contains an unfilled placeholder ("[add your memory]" / "[add your take]"). */
+export function hasMemoryPlaceholder(content) {
+  return findPlaceholder(content) !== null;
+}
+
+/** Throws a 409 when a post still carries a placeholder (schedule / post-now). */
 export function assertNoMemoryPlaceholder(content) {
-  if (hasMemoryPlaceholder(content)) {
-    const err = new Error(`This post still contains "${MEMORY_PLACEHOLDER}". Write your memory before scheduling or posting.`);
+  const found = findPlaceholder(content);
+  if (found) {
+    const err = new Error(`This post still contains "${found}". Write your ${found === TAKE_PLACEHOLDER ? 'take' : 'memory'} before scheduling or posting.`);
     err.status = 409;
     throw err;
   }

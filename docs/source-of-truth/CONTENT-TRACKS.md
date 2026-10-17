@@ -65,6 +65,21 @@ X Strategy → Plan tab → "Content tracks" (`#x-strategy-content-tracks-panel`
 - Home 2026-10-16: 7/14 birthdays have an exact same-release video (Angie Brown, Bob Sinclar, Crystal Waters, DJ Sneak, Ice Cube, Roger Sanchez, Tracie Spencer); Derrick Carter has one word match; 6 have none (need a shoot).
 - Previews: `thumbs.js` thumb now falls back to the item's own image ref (Discogs covers resolve without capture); `thumb-capture.js` asks the server for items with an image ref or `serverThumb:true`. Month calendar rows carry `thumbUrl` (route `withRowThumbs`: item thumb → NAS worker thumb `<localThumbBase>/thumbs/<sha>.jpg` when online → post poster/image), shown at 40px on day/agenda rows (`x-content-month-row-thumb-<id>`) and 64px in the post sheet when the post has no media of its own (`x-content-post-sheet-item-thumb`). Chat cards use `components/dashboard/x-content/MiniThumb.jsx` (by item id; NAS via one cached `nas-status`): item-media pairs and calendar-batch samples.
 
+## Daily fill (2026-10-17)
+
+`features/x-content-inventory/daily-fill.js` fills the calendar with **review drafts** (`social_posts` status `draft`, `scheduledAt` null, `reviewOn` = the day; source `daily-fill`). Nothing approves, schedules or publishes. Four kinds (post fields `fillKind`, `fillSource {type,id,asOf}`, `expiresAt?`, `bucketId`):
+
+- **baseline**: per track, per day, up to the track's posts/day target (engine targets summed, weekly minimum / 7, same rule as Insights; no engine target = 1/day when `share` > 0, 0 when 0; max 3). Pick order: item whose event date is that day (dated items are only eligible on their own day), then media ready (`mediaState` video/still + `effort` ready), then least recently used. Never an item with an open post (a bare unscheduled draft is *placed* instead), never one picked earlier in the same plan, never one used within 30 days (`lastUsed` from `social_posts`). `EXAMPLE*` / `TODO` seed rows are skipped.
+- **quote**: each open, not-dismissed quote target whose 36h window is still open becomes a same-day draft for TODAY only; `expiresAt` = target time + 36h; text = `@handle on this: [add your take]` + the target URL last (statement caption, no question mark); target kept in `sourceRef {kind:'quote-target', url, id, handle}`.
+- **narrative**: up to one a day (today, tomorrow) from the Market Signals topics/opportunities, text = `topic: detail` + `Where it shows up in my work: [add your take]`.
+- **client-work**: the baseline slots of client-work tracks (engine `client`, or a label like Video Editing / Graphic Design), kind `client-work`, max 1 a day, never added on top of the baseline count.
+
+Gate: `[add your take]` joins `[add your memory]` in `features/social-posting/self-reply.js` (`BLOCKING_PLACEHOLDERS`): approve, schedule, post-now and the due sweep all refuse text that still has either, and `needsStory` follows the text for `daily-fill` drafts like `calendar-batch` ones.
+
+Idempotent: key `daily-fill:<date>:<kind>:<packageId|targetId>` through `ensureDraftPost`; earlier fill drafts on a day/bucket count toward that track's target and a quote/narrative already filled is skipped, so a re-run adds nothing. Rows carry `reason` + `source {type,id,asOf}`.
+
+Wiring: `createStrategyHandlers` deps `readFillContext`, `readQuoteTargets` (plus the existing `readOpenPackageIds`, `readMarketSignals`, `ensureDraft`, `placeDraft`, `mediaForItem`); route actions `strategy-daily-fill-preview` / `strategy-daily-fill-create` (body `{clientId, spec:{from?, days?(1-31, default 7), include?}}`); agent deps `previewDailyFill(spec)` / executor `runDailyFill({clientId, spec, proposalId})`. The cron entry is `runDailyFillForCron(clientId, {today, deps})` (today + 6 days, every kind), with `deps = handlers.dailyFillDeps`.
+
 ## Limits
 - Insights → "By content track" renders `evaluation.byTrack` (per-track benchmarks, gaps vs the track lead, "no benchmark yet"); the overall pace section stays labelled separately. Own posts are not tagged by track, so each track's own side is all of your posts (stated in the UI).
 - Follow-up: the Content Engine library list is ~6.6 MB (≈1980 NAS + 820 rv rows). Loading `rv-` by bucket needs the shared `inventory-list` loader split (BucketsPanel, two other panels and the day-plan slot lookup all read it) — not done.

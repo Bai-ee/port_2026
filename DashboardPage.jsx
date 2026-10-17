@@ -3771,6 +3771,23 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     }
   }, [isAdmin, user, marketingBriefRunning, client, bootstrap?.effectiveClientId, generateReport, brandSystemGetIdToken, settleActiveLine, apiPath]);
 
+  // Agent refresh confirm card -> same runner/terminal/minimize chip as the header Refresh.
+  useEffect(() => {
+    if (!isAdmin || typeof window === 'undefined') return undefined;
+    const onAgentRefresh = (e) => {
+      const known = new Set(Object.keys(MARKETING_REFRESH_LABELS));
+      const ids = (Array.isArray(e?.detail?.ids) ? e.detail.ids : []).filter((id) => known.has(id));
+      if (!ids.length) return;
+      if (marketingRefreshRunningRef.current || marketingBriefRunning) {
+        console.info('[marketing-refresh] already running; agent refresh request ignored');
+        return;
+      }
+      runMarketingRefresh({ ids, todayWithModel: false });
+    };
+    window.addEventListener('hitloop:marketing-refresh', onAgentRefresh);
+    return () => window.removeEventListener('hitloop:marketing-refresh', onAgentRefresh);
+  }, [isAdmin, marketingBriefRunning, runMarketingRefresh]);
+
   // Fast path: re-run the enabled Analysis Skills over the already-stored signals
   // (no new ~3-min search). Use when the signals are fresh but the REPORT didn't
   // render — reliable and ~50s. Reads server-stored agentData; writes nothing new.
@@ -12450,7 +12467,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 <React.Fragment>
                   {isAdmin && activeCapabilityFilter === 'growth' && (
                     <div id="marketing-director-refresh-shell" style={{ margin: '0 0 8px', maxWidth: '100%' }}>
-                      <MarketingRefreshControl running={marketingRefreshRunning || marketingBriefRunning} onRun={runMarketingRefresh} estimateCtx={marketingEstimateCtx} onOpenConfig={openMarketingRefreshConfig} />
+                      <MarketingRefreshControl running={marketingRefreshRunning || marketingBriefRunning} onRun={runMarketingRefresh} estimateCtx={marketingEstimateCtx} onOpenConfig={openMarketingRefreshConfig} getIdToken={brandSystemGetIdToken} clientId={client?.clientId || client?.id || bootstrap?.effectiveClientId} />
                     </div>
                   )}
                   <div className={`segmented cap-step-seg cap-step-seg--top${_forceList ? ' cap-step-seg--tabs' : ''}`} role="tablist" aria-label="Workflow steps" data-tooltip-disabled="true">

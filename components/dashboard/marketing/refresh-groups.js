@@ -135,3 +135,25 @@ export function markGroupRefreshed(id) {
     /* storage unavailable — last-refreshed simply isn't remembered */
   }
 }
+
+// ---------------------------------------------------------------------------
+// Freshness per group. Pure. Server asOf (when provided) wins over the per-viewer
+// "last refreshed" memory only if it is newer; with neither, asOf is null.
+// -> { asOf: ISO|null, ageHours: number|null, stale: boolean, source: 'server'|'local'|null }
+// A group with no known asOf is stale. Default threshold is 24h.
+// ---------------------------------------------------------------------------
+export const DEFAULT_STALE_HOURS = 24;
+
+export function groupFreshness(groupId, { lastRefreshed, serverAsOf, now, staleAfterHours } = {}) {
+  const ts = (v) => { const t = v ? Date.parse(v) : NaN; return Number.isFinite(t) ? t : null; };
+  const local = ts(lastRefreshed?.[groupId]);
+  const server = ts(serverAsOf?.[groupId]);
+  const nowMs = Number.isFinite(now) ? now : ts(now) ?? Date.now();
+  let best = null; let source = null;
+  if (server !== null) { best = server; source = 'server'; }
+  if (local !== null && (best === null || local > best)) { best = local; source = 'local'; }
+  if (best === null) return { asOf: null, ageHours: null, stale: true, source: null };
+  const ageHours = Math.max(0, (nowMs - best) / 3600000);
+  const limit = Number(staleAfterHours) > 0 ? Number(staleAfterHours) : DEFAULT_STALE_HOURS;
+  return { asOf: new Date(best).toISOString(), ageHours, stale: ageHours > limit, source };
+}

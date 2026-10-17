@@ -6,6 +6,7 @@
 import { createRequire } from 'node:module';
 import { STRATEGY_AGENT_MODEL, STRATEGY_DOC_MAX_CHARS, buildSystemPrompt } from './prompt.js';
 import { renderDocText, describeDocChange } from '../strategy-doc.js';
+import { BULK_PROPOSAL_KINDS, MAX_BULK_PROPOSALS_PER_TURN } from '../contracts.js';
 import {
   TOOL_SCHEMAS, READ_TOOL_NAMES, KIND_BY_PROPOSE_TOOL, runReadTool, prepareProposal, serializeResult,
 } from './tools.js';
@@ -237,8 +238,11 @@ export function createAgentLoop({
         }
       }
       if (KIND_BY_PROPOSE_TOOL[tu.name]) {
-        if (proposals.length >= maxProposals) {
-          return reply(`Proposal limit reached (${maxProposals} per turn). Do not propose more; tell the owner what else you would suggest in text.`, true);
+        // Bulk kinds (one card, many items) have their own small cap and do not use up the per-turn proposal cap.
+        const bulk = BULK_PROPOSAL_KINDS.includes(KIND_BY_PROPOSE_TOOL[tu.name]);
+        if (bulk ? proposals.filter((p) => BULK_PROPOSAL_KINDS.includes(p.kind)).length >= MAX_BULK_PROPOSALS_PER_TURN
+          : proposals.filter((p) => !BULK_PROPOSAL_KINDS.includes(p.kind)).length >= maxProposals) {
+          return reply(`Proposal limit reached (${bulk ? MAX_BULK_PROPOSALS_PER_TURN : maxProposals} per turn). Do not propose more; tell the owner what else you would suggest in text.`, true);
         }
         const prep = await prepareProposal(tu.name, parsed.value, { toolDeps, userMessages });
         if (!prep.ok) return reply(`Proposal rejected: ${prep.error}`, true);

@@ -137,3 +137,9 @@ test('never throws on junk', () => {
     assert.ok(Array.isArray(cal.days) && cal.days.length > 0);
   }
 });
+
+test('no report and no history still types every slot (default mix), never undefined', () => {
+  const cal = buildCalendar({ report: {}, ownStats: summarizeCorpus([], { handle: 'new' }), tier: { tier: 1, authoredPerDay: 5 } });
+  assert.ok(cal.days[0].slots.every((s) => typeof s.type === 'string' && s.type));
+  assert.ok(cal.days[0].slots.some((s) => s.type === 'quote-react'));
+});

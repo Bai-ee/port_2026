@@ -564,6 +564,17 @@ async function readOpportunities(clientId) {
   };
 }
 
+// Daily fill: the same open candidates as readOpportunities (track-list merge, dismissed dropped), with the raw
+// createdAt the 36h window needs.
+async function readQuoteTargetsForFill(clientId) {
+  const { rawQuoteTargets, listSignals } = await readQuoteState(clientId);
+  const qt = mergeListCandidates(rawQuoteTargets, listSignals);
+  const dismissed = new Set(Array.isArray(qt?.dismissed) ? qt.dismissed : []);
+  const targets = (Array.isArray(qt?.candidates) ? qt.candidates : []).filter((c) => c && !dismissed.has(c.id))
+    .map((c) => ({ id: c.id || c.url, url: c.url, text: c.text, handle: c.author?.username || (typeof c.author === 'string' ? c.author : null), createdAt: c.createdAt, trackId: c.trackId }));
+  return { generatedAt: qt?.generatedAt || null, targets };
+}
+
 async function readResultsForChat(clientId) {
   const rows = joinPerformance({ posts: await readSocialQueue(clientId) });
   const stats = engineStats(rows, { windowDays: 30, now: Date.now() });
@@ -978,6 +989,8 @@ function getStrategyHandlers() {
       loadCommitted: committedCorpusRows,
       readPackages: async (clientId) => (await readInventory({ clientId })).packages,
       linkItemMedia: (clientId, links) => linkItemMediaFor(clientId, links),
+      upsertBucket: (clientId, bucket) => bucketStore.upsertBucket(clientId, bucket),
+      deleteBucket: (clientId, bucketId, opts) => bucketStore.deleteBucket(clientId, bucketId, opts),
       mediaForItem: (clientId, pkg) => (pkg && pkg.clientId === clientId ? pickMedia(pkg, mediaSigners()) : null),
       runDailyAction: (context, action, body) => handleDailyRun(context, action, body),
       runUpdateItemFacets: (context, body) => handleUpdateItemFacets(context, body),
@@ -986,6 +999,7 @@ function getStrategyHandlers() {
       readQueueSummary,
       readPost: readPostForChat,
       readOpportunities,
+      readQuoteTargets: readQuoteTargetsForFill,
       readResults: readResultsForChat,
       readMarketSignals,
       editPost: editQueuedPost,

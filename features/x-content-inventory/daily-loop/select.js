@@ -342,7 +342,7 @@ export function selectSuggestions(input = {}) {
 
 const slotView = (slot, fillReason) => ({
   letter: slot.letter, timeCT: slot.timeCT ?? null, startsAt: slot.startsAt ?? null,
-  type: slot.type, lane: slot.lane ?? null, pillar: slot.pillar ?? null, fillReason,
+  type: slot.type ?? null, lane: slot.lane ?? null, pillar: slot.pillar ?? null, fillReason,
 });
 
 const proposedSlotOf = (slot, localDate, timezone) => ({

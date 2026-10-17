@@ -40,7 +40,7 @@ function setup({ config = { ownHandle: 'me_acct', benchmarkHandles: ['bench_a'],
 }
 
 test('route actions list matches the T2b scope', () => {
-  assert.deepEqual([...STRATEGY_ROUTE_ACTIONS].sort(), ['strategy-calendar-batch-create', 'strategy-calendar-batch-preview', 'strategy-chat-history', 'strategy-chat-send', 'strategy-doc-get', 'strategy-doc-revert', 'strategy-doc-save', 'strategy-evaluate-handle', 'strategy-get', 'strategy-plan-apply', 'strategy-plan-revert', 'strategy-profile-save', 'strategy-proposal-decide', 'strategy-refresh', 'strategy-refresh-status', 'strategy-review']);
+  assert.deepEqual([...STRATEGY_ROUTE_ACTIONS].sort(), ['strategy-calendar-batch-create', 'strategy-calendar-batch-preview', 'strategy-chat-history', 'strategy-chat-send', 'strategy-daily-fill-create', 'strategy-daily-fill-preview', 'strategy-doc-get', 'strategy-doc-revert', 'strategy-doc-save', 'strategy-evaluate-handle', 'strategy-freshness', 'strategy-get', 'strategy-plan-apply', 'strategy-plan-revert', 'strategy-profile-save', 'strategy-proposal-decide', 'strategy-refresh', 'strategy-refresh-status', 'strategy-review']);
 });
 
 test('a plan save waits for the Brain write-back and runs the targets one at a time (serverless-safe)', async () => {
@@ -754,4 +754,41 @@ test('readClientAudience: social_accounts userId -> x_monitor/{userId}; clientId
   const dangling = audienceDb({ social: { c: { platforms: { x: { userId: '999' } } } }, monitors });
   assert.deepEqual(await readClientAudience(dangling, 'c'), { account: null });
   assert.deepEqual(await readClientAudience(db, ''), { account: null });
+});
+
+test('daily fill: preview plans without writing, create writes drafts through ensureDraft, dailyFillDeps is exposed for the cron', async () => {
+  const chain = { where: () => chain, select: () => chain, limit: () => chain, get: async () => ({ docs: [], empty: true, forEach: () => {} }), doc: () => ({ get: async () => ({ exists: false, data: () => undefined }), collection: () => chain }) };
+  const drafts = [];
+  const h = createStrategyHandlersFromDb({ collection: () => chain }, {
+    env: {},
+    readPackages: async () => [{ id: 'rec-1', clientId: 'c1', bucketId: 'record', engine: 'record', title: 'A record', mediaState: 'video', effort: 'ready' }],
+    readMarketSignals: async () => ({ generatedAt: '2026-10-17T00:00:00Z', narratives: [{ trend: 'Vinyl is back', detail: 'up' }] }),
+    readQuoteTargets: async () => ({ generatedAt: null, targets: [] }),
+    ensureDraft: async (cid, payload) => { drafts.push(payload); return { post: payload, existing: false }; },
+  });
+  assert.equal(typeof h.dailyFillDeps.loadInputs, 'function');
+  const pre = await h.handle('strategy-daily-fill-preview', { clientId: 'c1', spec: { days: 1, include: ['narratives'] } }, CTX, AUTH);
+  assert.equal(pre.ok, true, pre.error);
+  assert.equal(pre.preview, true);
+  assert.equal(drafts.length, 0);
+  assert.equal((await h.handle('strategy-daily-fill-preview', { clientId: 'c1', spec: { days: 99 } }, CTX, AUTH)).ok, false);
+  const r = await h.handle('strategy-daily-fill-create', { clientId: 'c1', spec: { days: 1, include: ['narratives'] } }, CTX, AUTH);
+  assert.equal(r.ok, true, r.error);
+  assert.equal(r.created, 1);
+  assert.equal(drafts[0].source, 'daily-fill');
+  assert.equal(drafts[0].fillKind, 'narrative');
+  assert.match(drafts[0].content, /\[add your take\]$/);
+});
+
+test('strategy-freshness: per-group oldest asOf + tightest max age from the brief bundle', async () => {
+  const h = createStrategyHandlers({
+    corpusStore: { get: async () => null }, planStore: { get: async () => null }, refreshService: {}, readXGrowthConfig: async () => null,
+    readBriefRaw: async () => ({ marketingBrief: null }),
+  });
+  const r = await h.handle('strategy-freshness', { clientId: 'c1' }, CTX, AUTH);
+  assert.equal(r.ok, true);
+  assert.ok(r.parts && typeof r.parts === 'object');
+  assert.equal(r.groups.staleAfterHours['market-signals'], 24);
+  assert.equal(r.groups.serverAsOf['market-signals'], null);
+  assert.ok(r.staleGroups.includes('market-signals'));
 });

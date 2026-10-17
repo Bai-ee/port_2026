@@ -7,6 +7,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const require = createRequire(import.meta.url);
+const EV_LONG_SIGN_MS = 6.9 * 24 * 60 * 60 * 1000; // v4 signed URLs cap at 7 days
 
 // Daily content loop cron (06:30 CT). Generates today's suggestions for each PILOT_CLIENT_IDS client from the latest
 // SAVED scan, with fallback copy only: no model drafter is wired, so this route cannot spend on a model. It never
@@ -41,6 +42,7 @@ async function buildReadInputsFor() {
   };
   return {
     db: fb.adminDb,
+    committedCorpusRows,
     assertReady: (clientId) => assertClientReady(fb.adminDb, clientId),
     async readInputsFor(clientId) {
       const xGrowth = await readXGrowthConfigFor(clientId).catch(() => null);
@@ -68,6 +70,59 @@ async function buildReadInputsFor() {
   };
 }
 
+// Daily fill (calendar drafts per bucket track): runs AFTER the suggestions step, non-fatal, drafts only (never publishes).
+// Choice: reuse the Strategy handler factory's `dailyFill` (it already wires ensureDraft/placeDraft/readOpenPackageIds)
+// instead of hand-building runDailyFillForCron deps here. Only readPackages is supplied (the content inventory the
+// suggestions step already reads); handlers without `dailyFill` (older build) are reported as skipped, not failed.
+async function runDailyFillStep({ db, committedCorpusRows, readInputsFor }, clientIds, today) {
+  let handlers;
+  try {
+    const { createStrategyHandlersFromDb } = await import('../../../../features/x-strategy/route-handlers.js');
+    const { pickMedia } = await import('../../../../features/x-content-inventory/item-actions.js');
+    const { tokenUrlFor } = await import('../../../../features/x-content-inventory/thumbs.js');
+    const { projectBrief } = require('../../../../features/intelligence/_brief-intel.js');
+    const fb = require('../../../../api/_lib/firebase-admin.cjs');
+    const bridge = require('../../../../api/_lib/editvideos-bridge.cjs');
+    // Same signers as the dashboard route's mediaSigners (the post stores the object ref; publish re-signs).
+    const signers = {
+      async signEvLong(p) {
+        try {
+          const [url] = await bridge.bridgeBucket().file(p).getSignedUrl({ version: 'v4', action: 'read', expires: Date.now() + EV_LONG_SIGN_MS });
+          return url;
+        } catch { return null; }
+      },
+      hitloopUrl: (p) => tokenUrlFor(fb.adminStorage.bucket(), p),
+    };
+    handlers = createStrategyHandlersFromDb(db, {
+      loadCommitted: committedCorpusRows,
+      readPackages: async (clientId) => (await readInputsFor(clientId)).packages || [],
+      // Narratives come from the projected Market Signals brief, as on the dashboard route.
+      readMarketSignals: async (clientId) => {
+        const snap = await db.collection('dashboard_state').doc(clientId).get();
+        return snap.exists ? projectBrief(snap.data()?.marketingBrief, snap.data()) : null;
+      },
+      mediaForItem: (clientId, pkg) => (pkg && pkg.clientId === clientId ? pickMedia(pkg, signers) : null),
+    });
+  } catch (err) {
+    return clientIds.map((clientId) => ({ clientId, ok: false, error: String(err?.message || err).slice(0, 200) }));
+  }
+  if (typeof handlers.dailyFill !== 'function') return clientIds.map((clientId) => ({ clientId, ok: true, skipped: 'daily-fill-unavailable' }));
+  const out = [];
+  for (const clientId of clientIds) {
+    try {
+      // Only clients with a saved strategy that has content tracks: a client without one gets no automatic drafts.
+      const planSnap = await db.collection('x_strategy_plans').doc(clientId).get();
+      const tracks = planSnap.exists ? planSnap.data()?.plan?.contentTracks : null;
+      if (!Array.isArray(tracks) || !tracks.length) { out.push({ clientId, ok: true, skipped: 'no-content-tracks' }); continue; }
+      const r = await handlers.dailyFill(clientId, { from: today, days: 7 }, { execute: true });
+      out.push({ clientId, ok: true, created: r?.created?.length ?? r?.created ?? 0, existing: r?.existing?.length ?? r?.existing ?? 0, placed: r?.placed?.length ?? r?.placed ?? 0, failed: r?.failed?.length ?? r?.failed ?? 0 });
+    } catch (err) {
+      out.push({ clientId, ok: false, error: String(err?.message || err).slice(0, 200) });
+    }
+  }
+  return out;
+}
+
 async function run(request) {
   const { cronAuthorized, pilotClientIds, runScheduledDailyLoop } = await import('../../../../features/x-content-inventory/daily-loop/scheduled.js');
   if (!cronAuthorized({ authorization: request.headers.get('authorization') || '', vercelCron: request.headers.get('x-vercel-cron') || '' })) {
@@ -78,9 +133,18 @@ async function run(request) {
     return NextResponse.json({ ok: false, error: err.message }, { status: err.status || 503 });
   }
   const { createFirestoreRunStore } = await import('../../../../features/x-content-inventory/daily-run-store.js');
-  const { db, assertReady, readInputsFor } = await buildReadInputsFor();
+  const built = await buildReadInputsFor();
+  const { db, assertReady, readInputsFor } = built;
   const results = await runScheduledDailyLoop({ store: createFirestoreRunStore(db), assertReady, readInputsFor }, { clientIds });
-  return NextResponse.json({ ok: results.every((r) => r.ok), results });
+  // Non-fatal: a fill failure is reported in `dailyFill` and never changes `ok` or the suggestions result.
+  let dailyFill = [];
+  try {
+    const { localDateOf } = await import('../../../../features/x-content-inventory/daily-loop/time-ids.js');
+    dailyFill = await runDailyFillStep(built, results.filter((r) => r.ok).map((r) => r.clientId), localDateOf(Date.now()));
+  } catch (err) {
+    dailyFill = [{ ok: false, error: String(err?.message || err).slice(0, 200) }];
+  }
+  return NextResponse.json({ ok: results.every((r) => r.ok), results, dailyFill });
 }
 
 export const GET = run;
