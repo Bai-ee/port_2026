@@ -77,9 +77,9 @@ const fmtDay = (ms) => new Date(ms).toISOString().slice(0, 10);
 export const addDays = (d, n) => fmtDay(dayMs(d) + n * 86_400_000);
 const isLeap = (y) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
 
-/** An item's event month-day ("MM-DD"): owner edits first, then facets (eventMonthDay, else eventDate). */
+/** An item's event month-day ("MM-DD"): owner edits first, then facets, then the item itself (eventMonthDay, else eventDate). */
 export function eventMonthDay(pkg) {
-  for (const src of [pkg?.humanEdits, pkg?.facets]) {
+  for (const src of [pkg?.humanEdits, pkg?.facets, pkg]) {
     const md = String(src?.eventMonthDay ?? '').trim();
     if (MONTH_DAY_RE.test(md)) return md;
     const full = String(src?.eventDate ?? '').trim();
@@ -104,7 +104,7 @@ export function nextAnniversary(md, today) {
 
 /** "Dec 17, 2014" / "Dec 17" for the draft's first line, or ''. */
 function dateLabel(pkg) {
-  const full = String(pkg?.humanEdits?.eventDate ?? pkg?.facets?.eventDate ?? '').trim();
+  const full = String(pkg?.humanEdits?.eventDate ?? pkg?.facets?.eventDate ?? pkg?.eventDate ?? '').trim();
   const md = eventMonthDay(pkg);
   if (!md) return '';
   const [mm, dd] = md.split('-').map(Number);
@@ -112,19 +112,24 @@ function dateLabel(pkg) {
   return `${MONTHS[mm - 1]} ${dd}${year ? `, ${year}` : ''}`;
 }
 
-const realStory = (pkg) => {
-  const s = String(pkg?.story ?? '').trim();
-  return s && !hasPlaceholderStory(pkg) ? s : '';
-};
+// The owner's own words: an owner-edited story. A generated story ("X was born …. Source: <url>") is facts, not memory.
+const ownerStory = (pkg) => String(pkg?.humanEdits?.story ?? '').trim();
+// Facts from a generated story, without the source line or links (links belong in the self-reply, not the post).
+const storyFacts = (pkg) => (hasPlaceholderStory(pkg) ? '' : String(pkg?.story ?? '')
+  .replace(/\s*source:.*$/is, '').replace(/https?:\/\/\S+/g, '').replace(/\s+/g, ' ').trim());
 
-/** Draft text: date + title + where, then the owner's story or the memory placeholder. Always <= 280 chars. */
+/**
+ * Draft text: date · title, where, the item's facts, then the owner's story or the memory placeholder (a batch draft
+ * always waits for the owner's own line unless they already wrote one). Always <= 280 chars.
+ */
 export function draftTextFor(pkg) {
   const facets = pkg?.facets || {};
   const title = text(pkg?.title || (Array.isArray(facets.partyNames) ? facets.partyNames[0] : '') || pkg?.id, 120);
   const where = [Array.isArray(facets.venues) ? facets.venues[0] : '', Array.isArray(facets.cities) && !facets.venues?.length ? facets.cities[0] : '']
     .map((x) => text(x, 60)).filter((x) => x && !title.toLowerCase().includes(x.toLowerCase())).join(', ');
-  const head = [[dateLabel(pkg), title].filter(Boolean).join(' · '), where].filter(Boolean).join('\n');
-  const tail = realStory(pkg) || MEMORY_PLACEHOLDER;
+  const own = ownerStory(pkg);
+  const head = [[dateLabel(pkg), title].filter(Boolean).join(' · '), where, own ? '' : storyFacts(pkg)].filter(Boolean).join('\n');
+  const tail = own || MEMORY_PLACEHOLDER;
   const room = POST_MAX - tail.length - 2;
   if (room < 20) return tail.slice(0, POST_MAX);
   const h = head.length > room ? `${head.slice(0, room - 1).trimEnd()}…` : head;
@@ -179,7 +184,7 @@ export function planCalendarBatch({ packages = [], tracks = [], spec, today, ope
   }
   if (spec.dateRule.kind === 'anniversary') {
     // Per date, the best items first (owner story, then a full printed date, then a title); extras beyond perDay skip.
-    const rank = (p) => (realStory(p) ? 0 : 4) + (DAY_RE.test(String(p.humanEdits?.eventDate ?? p.facets?.eventDate ?? '')) ? 0 : 2) + (p.title ? 0 : 1);
+    const rank = (p) => (ownerStory(p) ? 0 : 4) + (DAY_RE.test(String(p.humanEdits?.eventDate ?? p.facets?.eventDate ?? '')) ? 0 : 2) + (p.title ? 0 : 1);
     candidates.sort((a, b) => a.reviewOn.localeCompare(b.reviewOn) || rank(a.p) - rank(b.p) || String(a.p.id).localeCompare(String(b.p.id)));
     const perDate = new Map();
     const kept = [];
@@ -203,7 +208,7 @@ export function planCalendarBatch({ packages = [], tracks = [], spec, today, ope
     title: p.title ?? null,
     reviewOn,
     content: draftTextFor(p),
-    needsStory: !realStory(p),
+    needsStory: !ownerStory(p),
     engine: resolveEngine(p),
     bucketId: bucketOfPackage(p),
     nasSha: typeof p.nas?.sha256 === 'string' ? p.nas.sha256 : null,
@@ -223,16 +228,19 @@ export function planCalendarBatch({ packages = [], tracks = [], spec, today, ope
 
 /**
  * Write a planned batch. `ensureDraft(clientId, payload)` = twitter-service ensureDraftPost (one draft per
- * idempotency key; a re-run returns the existing row). Returns {created, existing, failed:[{packageId,error}]}.
+ * idempotency key; a re-run returns the existing row). `mediaFor(packageId)` -> media fields or null (optional). Returns {created, existing, failed:[{packageId,error}]}.
  */
-export async function createCalendarBatch(clientId, plan, { ensureDraft, batchId = null } = {}) {
+export async function createCalendarBatch(clientId, plan, { ensureDraft, mediaFor = null, batchId = null } = {}) {
   if (typeof ensureDraft !== 'function') throw new Error('createCalendarBatch: ensureDraft is required');
   const out = { created: 0, existing: 0, failed: [] };
   const rows = [...(plan?.rows || [])];
   const worker = async () => {
     for (let r = rows.shift(); r; r = rows.shift()) {
       try {
+        // The item's own video/image (signed like create-draft-from-item); a media failure never blocks the draft.
+        const media = typeof mediaFor === 'function' ? await Promise.resolve(mediaFor(r.packageId)).catch(() => null) : null;
         const res = await ensureDraft(clientId, {
+          ...(media || {}),
           idempotencyKey: `calendar-batch:${r.packageId}`,
           content: r.content, source: 'calendar-batch', packageId: r.packageId, engine: r.engine, bucketId: r.bucketId,
           needsStory: r.needsStory, reviewOn: r.reviewOn, ...(batchId ? { runId: batchId } : {}),

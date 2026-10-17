@@ -19,7 +19,7 @@ const flyer = (id, facets, extra = {}) => ({ id, engine: 'record', bucketId: 'na
 const PACKAGES = [
   flyer('nas-a', { eventDate: '2014-12-17', eventMonthDay: '12-17', partyNames: ['an evening of deep rhythms'], venues: ['1195 w folsom st | sf'] }, { title: 'An Evening of Deep Rhythms' }),
   flyer('nas-b', { eventMonthDay: '03-02' }, { title: 'Spring warehouse' }),
-  flyer('nas-c', { eventMonthDay: '10-16' }, { title: 'Same day', story: 'I played the closing set and the sound cut out twice.' }),
+  flyer('nas-c', { eventMonthDay: '10-16' }, { title: 'Same day', humanEdits: { story: 'I played the closing set and the sound cut out twice.' } }),
   flyer('nas-d', { decade: '2000s' }, { title: 'No date at all' }),
   { id: 'disc-1', engine: 'record', title: 'A record', facets: { eventMonthDay: '11-01' } },
 ];
@@ -50,6 +50,11 @@ test('draftTextFor: facts + placeholder when no story, the owner story otherwise
   assert.match(t, /^Dec 17, 2014 · An Evening of Deep Rhythms\n1195 w folsom st \| sf\n\n\[add your memory\]$/);
   assert.match(draftTextFor(PACKAGES[2]), /I played the closing set/);
   assert.ok(draftTextFor({ ...PACKAGES[0], title: 'x'.repeat(400) }).length <= 280);
+  // A generated facts story (birthday) keeps its facts minus the source link, and still waits for the owner's line.
+  const bday = { id: 'birthday-dj-sneak', title: 'DJ Sneak birthday (11-05)', eventDate: '1969-11-05', engine: 'record', source: { kind: 'discogs', externalId: '15399' },
+    story: 'DJ Sneak was born 1969-11-05. On my shelf: Recycled Loops (1995), AV8 Records AV09. Source: https://en.wikipedia.org/wiki/DJ_Sneak' };
+  assert.equal(draftTextFor(bday), 'Nov 5, 1969 · DJ Sneak birthday (11-05)\nDJ Sneak was born 1969-11-05. On my shelf: Recycled Loops (1995), AV8 Records AV09.\n\n[add your memory]');
+  assert.equal(eventMonthDay(bday), '11-05');
   assert.ok(draftTextFor({ ...PACKAGES[0], title: 'x'.repeat(400) }).endsWith(MEMORY_PLACEHOLDER));
 });
 
@@ -106,6 +111,12 @@ test('createCalendarBatch: one draft per item via the create-once writer; a re-r
     assert.match(post.reviewOn, /^\d{4}-\d{2}-\d{2}$/);
   }
   assert.equal(store.get('calendar-batch:nas-a').needsStory, true);
+  // mediaFor: the item's media rides on the draft; a media failure still creates the draft.
+  const withMedia = new Map();
+  const ensure2 = async (c, p) => { withMedia.set(p.packageId, p); return { post: p, existing: false }; };
+  await createCalendarBatch('c1', plan, { ensureDraft: ensure2, mediaFor: async (id) => { if (id === 'nas-a') throw new Error('sign failed'); return { mediaUrl: `https://m/${id}.mp4`, mediaType: 'video' }; } });
+  assert.equal(withMedia.get('nas-c').mediaUrl, 'https://m/nas-c.mp4');
+  assert.equal(withMedia.get('nas-a').mediaUrl, undefined);
 });
 
 test('agent: propose_calendar_batch previews through toolDeps, refuses an empty batch; the proposal executes the spec', async () => {

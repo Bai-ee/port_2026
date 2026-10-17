@@ -555,6 +555,25 @@ test('createStrategyHandlersFromDb passes loadCommitted to its corpus store (no 
   assert.equal(own.rowsMeta.rowCount, 4);
 });
 
+test('createStrategyHandlersFromDb forwards route deps: a calendar batch drafts with the item media from mediaForItem', async () => {
+  const chain = { where: () => chain, select: () => chain, limit: () => chain, get: async () => ({ docs: [], empty: true, forEach: () => {} }), doc: () => ({ get: async () => ({ exists: false, data: () => undefined }), collection: () => chain }) };
+  const db = { collection: () => chain };
+  const drafts = [];
+  const h = createStrategyHandlersFromDb(db, {
+    env: {},
+    readPackages: async () => [{ id: 'birthday-x', clientId: 'c1', title: 'X birthday (12-31)', eventDate: '1970-12-31', engine: 'record', story: 'X was born 1970-12-31.' }],
+    mediaForItem: async (cid, pkg) => ({ mediaUrl: `https://m/${cid}/${pkg.id}.mp4`, mediaType: 'video' }),
+    ensureDraft: async (cid, payload) => { drafts.push(payload); return { post: payload, existing: false }; },
+  });
+  const r = await h.handle('strategy-calendar-batch-create', { clientId: 'c1', spec: { select: { ids: ['birthday-x'] }, dateRule: { kind: 'anniversary' } } }, CTX, AUTH);
+  assert.equal(r.ok, true, r.error);
+  assert.equal(r.created, 1);
+  assert.equal(drafts[0].mediaUrl, 'https://m/c1/birthday-x.mp4');
+  assert.match(drafts[0].content, /\[add your memory\]$/);
+  assert.equal(drafts[0].needsStory, true);
+  assert.match(drafts[0].reviewOn, /-12-31$/);
+});
+
 test('chat-send resolves `selected` only for its own client and passes a labelled selectedContext', async () => {
   const readCalls = [];
   const s = chatSetup({ extra: {

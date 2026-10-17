@@ -196,6 +196,7 @@ export function createStrategyHandlers({
   readBucketEngine = null, // (clientId, bucketId) -> engine of one item in that bucket | null (first-sync migration only)
   readOpenPackageIds = null, // (clientId) -> Set of package ids that already have an open post (calendar batch skips them)
   ensureDraft = null, // (clientId, payload) -> {post, existing}; twitter-service ensureDraftPost. Absent => batch create answers 503
+  mediaForItem = null, // (clientId, pkg) -> {mediaUrl, mediaType, mediaContentType, mediaStoragePath} | null; calendar-batch drafts carry the item's media
   linkItemMedia = null, // (clientId, links) -> {linked, failed, results}; the quote-targets link-item-media writer. Absent => item-media confirm fails clearly
   env = {}, // explicit on purpose: only createStrategyHandlersFromDb passes process.env, so a bare handler can never reach a real model
 } = {}) {
@@ -286,14 +287,17 @@ export function createStrategyHandlers({
     const profile = await loadProfile(clientId);
     const planDoc = await planStore.get(clientId);
     const open = typeof readOpenPackageIds === 'function' ? await readOpenPackageIds(clientId) : new Set();
+    const packages = await readPackages(clientId);
     const plan = planCalendarBatch({
-      packages: await readPackages(clientId), tracks: tracksOf(planDoc), spec: norm.spec,
+      packages, tracks: tracksOf(planDoc), spec: norm.spec,
       today: localDate(clock(), profile.timezone), openPackageIds: open,
     });
     if (!plan.ok) return { ok: false, status: 400, error: plan.error };
     if (!execute) return { ok: true, spec: norm.spec, ...plan };
     if (typeof ensureDraft !== 'function') return { ok: false, status: 503, error: 'Creating drafts is not available on this deployment.' };
-    const written = await createCalendarBatch(clientId, plan, { ensureDraft, batchId });
+    const byId = new Map((packages || []).map((p) => [p.id, p]));
+    const mediaFor = typeof mediaForItem === 'function' ? (id) => mediaForItem(clientId, byId.get(id)) : null;
+    const written = await createCalendarBatch(clientId, plan, { ensureDraft, mediaFor, batchId });
     return { ok: true, spec: norm.spec, counts: plan.counts, firstDate: plan.firstDate, lastDate: plan.lastDate, ...written };
   }
   // Preview rows for the agent: first 20, text shortened. `previewCalendarBatch` keeps nasSha for the card thumbnails.
@@ -1070,6 +1074,7 @@ export function createStrategyHandlersFromDb(db, {
   readQueueSummary, readPost, readOpportunities, readResults, readMarketSignals, editPost, runPaidSync,
   onXGrowthSaved, onBrainOwnedSaved, readBrainTrackTargets, saveXGrowthProfile = createXGrowthProfileSaver(db, { onSaved: onXGrowthSaved }), chatStore = createFirestoreChatStore(db, { env }),
   agentLoopFactory, callModel, logUsage, loadCommitted, docStore = createFirestoreStrategyDocStore(db),
+  ...passThrough // any other createStrategyHandlers dep (linkItemMedia, mediaForItem from the quote-targets route; test overrides), forwarded as-is
 } = {}) {
   // `loadCommitted` (handle -> rows|null) lets a serverless host supply the committed corpora from static imports.
   const corpusStore = createFirestoreCorpusStore(db, loadCommitted ? { loadCommitted } : {});
@@ -1105,6 +1110,7 @@ export function createStrategyHandlersFromDb(db, {
       const snap = await db.collection('client_configs').doc(clientId).get();
       return snap.exists ? snap.data()?.marketingBriefConfig?.xGrowth ?? null : null;
     },
+    ...passThrough, // last: a caller's dep wins over the defaults above
   });
 }
 

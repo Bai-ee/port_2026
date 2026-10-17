@@ -28,7 +28,7 @@ import { normalizeFacets } from '../../../../features/x-content-inventory/facets
 import { resolveMediaUrls } from '../../../../features/rendered-videos/media-url.js';
 import { syncRenderedVideos } from '../../../../features/rendered-videos/sync.js';
 import { resolveMediaUrlsBatch, MEDIA_URLS_MAX_IDS, MEDIA_KINDS, tokenUrlFor } from '../../../../features/x-content-inventory/thumbs.js';
-import { setRights, saveThumb, createDraftFromItem } from '../../../../features/x-content-inventory/item-actions.js';
+import { setRights, saveThumb, createDraftFromItem, pickMedia } from '../../../../features/x-content-inventory/item-actions.js';
 import { NAS_ACTIONS, handleNasAction } from '../../../../features/x-content-inventory/nas.js';
 import { runDailyLoop, localDateOf, LOOP_VERSION } from '../../../../features/x-content-inventory/daily-loop.js';
 import { assertClientReady, resolveClientXHandle } from '../../../../features/client-readiness/index.js';
@@ -978,6 +978,7 @@ function getStrategyHandlers() {
       loadCommitted: committedCorpusRows,
       readPackages: async (clientId) => (await readInventory({ clientId })).packages,
       linkItemMedia: (clientId, links) => linkItemMediaFor(clientId, links),
+      mediaForItem: (clientId, pkg) => (pkg && pkg.clientId === clientId ? pickMedia(pkg, mediaSigners()) : null),
       runDailyAction: (context, action, body) => handleDailyRun(context, action, body),
       runUpdateItemFacets: (context, body) => handleUpdateItemFacets(context, body),
       readTodayRun: (clientId) => latestDailyRun(createFirestoreRunStore(fb.adminDb), clientId),
