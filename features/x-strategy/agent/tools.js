@@ -2,7 +2,10 @@
 // No I/O: every read goes through injected `toolDeps`. Safe to import anywhere.
 // Propose tools never write; they validate a payload and hand back a proposal for the owner to confirm.
 
-import { PROPOSAL_KINDS, PLAN_LIMITS, KNOWN_SLOT_TYPES } from '../contracts.js';
+import { PROPOSAL_KINDS, PLAN_LIMITS, KNOWN_SLOT_TYPES, BULK_LIMITS, DAILY_FILL_INCLUDES, QUEUE_BULK_ACTIONS, BUCKET_EDIT_OPS, REFRESH_GROUP_IDS } from '../contracts.js';
+import { estimateFor, REFRESH_GROUPS } from '../../../components/dashboard/marketing/refresh-groups.js';
+import { SOURCE_KINDS } from '../../x-content-inventory/buckets.js';
+import { validateProposal } from './proposals.js';
 import { PLAN_FIELDS, HANDLE_RE, applyChange } from '../plan-state.js';
 import { tracksOf } from '../content-tracks.js';
 import { normalizeBatchSpec, MAX_BATCH, MAX_PER_DAY, MEMORY_PLACEHOLDER } from '../../x-content-inventory/calendar-batch.js';
@@ -65,6 +68,10 @@ export const PROPOSE_TOOL_BY_KIND = Object.freeze({
   'post-unschedule': 'propose_post_unschedule',
   'calendar-batch': 'propose_calendar_batch',
   'item-media': 'propose_item_media',
+  'daily-fill': 'propose_daily_fill',
+  refresh: 'propose_refresh',
+  'queue-bulk': 'propose_queue_bulk',
+  'bucket-edit': 'propose_bucket_edit',
 });
 export const KIND_BY_PROPOSE_TOOL = Object.freeze(
   Object.fromEntries(Object.entries(PROPOSE_TOOL_BY_KIND).map(([k, v]) => [v, k])),
@@ -307,6 +314,36 @@ export const PROPOSE_TOOLS = Object.freeze([
       items: { type: 'object', properties: { targetId: str('Item that needs media'), sourceId: str('Item whose media it takes') }, required: ['targetId', 'sourceId'] },
     },
   }, ['links']),
+  propose('daily-fill', `Propose filling the calendar with review DRAFTS for a run of days (up to ${BULK_LIMITS.dailyFillMaxDays}): baseline content per bucket track (records, mixes, birthdays, throwbacks, design, video), open quote opportunities (same-day drafts), live narratives from Market Signals and client-work suggestions. include picks the sources (default all). Use this for ANY multi-day or bulk calendar request. Drafts only: nothing is approved, scheduled or published, items already on the queue are skipped and re-runs add nothing. The tool result shows the counts; report them to the owner.`, {
+    from: str('First day, YYYY-MM-DD (today or later)'),
+    days: int('How many days', { minimum: 1, maximum: BULK_LIMITS.dailyFillMaxDays }),
+    include: { type: 'array', items: { type: 'string', enum: [...DAILY_FILL_INCLUDES] }, description: `Sources to include (default all): ${DAILY_FILL_INCLUDES.join(', ')}` },
+  }, ['from', 'days']),
+  propose('refresh', `Propose refreshing stale data groups through the dashboard's Refresh panel (the same system as the Refresh button). Use get_freshness to pick the stale groups. The card shows each group's cost estimate; paid groups spend real money, so say which ones are paid. Confirming starts the run in the Refresh panel; this tool and the server run nothing.`, {
+    groups: { type: 'array', minItems: 1, items: { type: 'string', enum: [...REFRESH_GROUP_IDS] }, description: `Refresh group ids: ${REFRESH_GROUPS.map((g) => `${g.id} (${g.label}${g.paid ? ', paid' : ', free'})`).join('; ')}` },
+    reason: str('Why these groups, e.g. which parts are stale', { maxLength: BULK_LIMITS.refreshReasonMax }),
+  }, ['groups', 'reason']),
+  propose('queue-bulk', `Propose ONE action on up to ${BULK_LIMITS.queueBulkMax} queued posts at once: approve (draft -> approved only; posts still carrying "${MEMORY_PLACEHOLDER}" or flagged needing a story fail individually), unschedule (scheduled -> not scheduled), delete-draft (removes drafts from the queue; they are kept as rejected, not erased) or set-review-date (move unscheduled drafts to a calendar day; pass date). Take post ids from get_queue. It never schedules or publishes.`, {
+    action: { type: 'string', enum: [...QUEUE_BULK_ACTIONS] },
+    postIds: { type: 'array', minItems: 1, maxItems: BULK_LIMITS.queueBulkMax, items: str('Post id from get_queue') },
+    date: str('set-review-date only: YYYY-MM-DD'),
+  }, ['action', 'postIds']),
+  propose('bucket-edit', `Propose adding, changing or deleting ONE Content Center bucket (a content source and its content track). upsert: send bucket {name, sourceKind, optional id/color/active/order/share}; omit id to create, send the existing id to change. delete: send bucket {id}; items still in it block the delete unless reassignTo names another bucket. Tracks re-sync after the change. Only the bucket changes; no post is touched.`, {
+    op: { type: 'string', enum: [...BUCKET_EDIT_OPS] },
+    bucket: {
+      type: 'object',
+      properties: {
+        id: str('Bucket id (lowercase kebab-case); required to change or delete an existing bucket'),
+        name: str('Display name, at most 60 characters'),
+        sourceKind: { type: 'string', enum: [...SOURCE_KINDS] },
+        color: str('#rrggbb'),
+        active: { type: 'boolean' },
+        order: int('Display order', { minimum: 0 }),
+        share: { type: 'object', description: 'Posting share: perDayMin, perDayMax, targetPerDay, perWeekMin, perWeekMax, maxSharePct (non-negative numbers)' },
+      },
+    },
+    reassignTo: str('delete only: bucket id that receives the deleted bucket\'s items'),
+  }, ['op', 'bucket']),
   propose('strategy-doc-edit', `Propose new text for ONE section of the owner's Strategy document. Send the WHOLE new section text (it replaces the section), keep the owner's own wording wherever it still holds, and change only what the conversation or the data supports. Call get_strategy_doc first and pass its version as expectedVersion. Sections: ${STRATEGY_DOC_SECTIONS.map((x) => `${x.key} (${x.hint})`).join('; ')}`, {
     section: { type: 'string', enum: [...SECTION_KEYS], description: 'Which section to replace' },
     text: str('The complete new text of that section', { maxLength: SECTION_MAX }),
@@ -746,6 +783,63 @@ export async function prepareProposal(toolName, input, { toolDeps, userMessages 
           spec: spec.spec,
           preview: { ...pre.counts, firstDate: pre.firstDate, lastDate: pre.lastDate, sample: pre.rows.slice(0, 5).map((r) => ({ reviewOn: r.reviewOn, title: r.title ?? r.packageId, packageId: r.packageId, ...(r.nasSha ? { nasSha: r.nasSha } : {}) })) },
         };
+        break;
+      }
+      case 'daily-fill': {
+        const spec = { from: input.from, days: input.days, ...(input.include !== undefined ? { include: input.include } : {}) };
+        const v = validateProposal({ kind, payload: spec });
+        if (!v.ok) return fail(v.errors.join('; '));
+        if (typeof toolDeps?.previewDailyFill !== 'function') return fail('daily fill is not available');
+        const pre = await toolDeps.previewDailyFill(v.proposal.payload);
+        if (!pre || pre.ok === false) return fail(pre?.error || 'could not plan the fill');
+        const rows = Array.isArray(pre.rows) ? pre.rows : [];
+        if (!rows.length) return fail(`nothing to create for ${v.proposal.payload.from} (${v.proposal.payload.days} days): ${JSON.stringify(pre.counts ?? {}).slice(0, 300)}`);
+        const byKind = {};
+        for (const r of rows) byKind[r.kind] = (byKind[r.kind] || 0) + 1;
+        payload = {
+          ...v.proposal.payload,
+          preview: {
+            total: rows.length, byKind, ...(pre.counts ? { counts: pre.counts } : {}),
+            skipped: Array.isArray(pre.skipped) ? pre.skipped.length : Number(pre.skipped) || 0,
+            sample: rows.slice(0, 8).map((r) => ({ date: r.date, kind: r.kind, text: String(r.text ?? '').slice(0, 140), ...(r.packageId ? { packageId: r.packageId } : {}), ...(r.nasSha ? { nasSha: r.nasSha } : {}) })),
+          },
+        };
+        break;
+      }
+      case 'refresh': {
+        const v = validateProposal({ kind, payload: { groups: input.groups, reason: input.reason } });
+        if (!v.ok) return fail(v.errors.join('; '));
+        const estimate = v.proposal.payload.groups.map((id) => {
+          const g = REFRESH_GROUPS.find((x) => x.id === id);
+          return { id, label: g?.label ?? id, paid: g?.paid === true, text: String(estimateFor(id, {})?.text ?? g?.cost ?? '').slice(0, 200) };
+        });
+        payload = { ...v.proposal.payload, estimate };
+        break;
+      }
+      case 'queue-bulk': {
+        const v = validateProposal({ kind, payload: { action: input.action, postIds: input.postIds, ...(input.date !== undefined ? { date: input.date } : {}) } });
+        if (!v.ok) return fail(v.errors.join('; '));
+        if (typeof toolDeps?.readPost !== 'function') return fail('post reading is not available');
+        const { action, postIds } = v.proposal.payload;
+        const okStatus = { approve: ['draft', 'approved'], unschedule: ['scheduled'], 'delete-draft': ['draft'], 'set-review-date': ['draft'] }[action];
+        const rows = [];
+        const problems = [];
+        for (const postId of postIds) {
+          const post = await toolDeps.readPost(postId);
+          if (!isPlain(post)) { problems.push(`${postId}: unknown post id`); continue; }
+          if (!okStatus.includes(post.status) || (action === 'set-review-date' && post.scheduledAt)) { problems.push(`${postId}: is ${post.status}, cannot ${action}`); continue; }
+          const text = String(post.content ?? post.text ?? '');
+          const blocked = action === 'approve' && post.status === 'draft' && (post.needsStory === true || text.includes(MEMORY_PLACEHOLDER)) ? 'needs its story' : undefined;
+          rows.push({ postId, status: post.status, text: text.slice(0, 100), ...(blocked ? { blocked } : {}) });
+        }
+        if (problems.length) return fail(`cannot ${action} these posts: ${problems.join('; ').slice(0, 600)}`);
+        payload = { ...v.proposal.payload, rows };
+        break;
+      }
+      case 'bucket-edit': {
+        const v = validateProposal({ kind, payload: { op: input.op, bucket: input.bucket, ...(input.reassignTo !== undefined ? { reassignTo: input.reassignTo } : {}) } });
+        if (!v.ok) return fail(v.errors.join('; '));
+        payload = v.proposal.payload;
         break;
       }
       default: return fail(`unsupported kind: ${kind}`);

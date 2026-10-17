@@ -184,6 +184,13 @@ function ProposalCard({ call, proposal, currentPlan, history, planVersion, decid
               ))}
             </div>
           ) : null}
+          {proposal.kind === 'daily-fill' && Array.isArray(proposal.payload?.preview?.sample) && proposal.payload.preview.sample.some((r) => r.packageId) ? (
+            <div id={`x-strategy-proposal-daily-fill-thumbs-${id}`} data-section="chat-proposal-daily-fill" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {proposal.payload.preview.sample.filter((r) => r.packageId).map((r) => (
+                <MiniThumb key={`${r.date}-${r.packageId}`} id={r.packageId} call={call} nasSha={r.nasSha || null} size={44} label={`${r.date}: ${r.text}`} />
+              ))}
+            </div>
+          ) : null}
           {st.detail ? (
             <p id={`x-strategy-proposal-result-${id}`} role="status" style={st.tone === 'error' ? { ...S.err, margin: 0 } : st.tone === 'ok' ? S.ok : S.note}>{st.detail}</p>
           ) : null}
@@ -412,6 +419,10 @@ export default function StrategyChat({
         if (next.kind === 'plan-change' && typeof onPlanChanged === 'function') onPlanChanged();
         if (next.kind === 'refresh-handles' && typeof onRefreshed === 'function') onRefreshed();
         if (next.kind === 'strategy-doc-edit' && typeof onDocChanged === 'function') onDocChanged();
+        // The server ran nothing for a refresh: hand the groups to the dashboard's Refresh panel (one refresh system).
+        if (next.kind === 'refresh' && next.result?.clientAction === 'marketing-refresh' && Array.isArray(next.result.groups) && typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('hitloop:marketing-refresh', { detail: { ids: next.result.groups, todayWithModel: false, source: 'agent' } }));
+        }
       }
     } catch (err) {
       if (!mounted.current || clientIdRef.current !== startedFor) return;

@@ -989,6 +989,8 @@ function getStrategyHandlers() {
       loadCommitted: committedCorpusRows,
       readPackages: async (clientId) => (await readInventory({ clientId })).packages,
       linkItemMedia: (clientId, links) => linkItemMediaFor(clientId, links),
+      upsertBucket: (clientId, bucket) => bucketStore.upsertBucket(clientId, bucket),
+      deleteBucket: (clientId, bucketId, opts) => bucketStore.deleteBucket(clientId, bucketId, opts),
       mediaForItem: (clientId, pkg) => (pkg && pkg.clientId === clientId ? pickMedia(pkg, mediaSigners()) : null),
       runDailyAction: (context, action, body) => handleDailyRun(context, action, body),
       runUpdateItemFacets: (context, body) => handleUpdateItemFacets(context, body),

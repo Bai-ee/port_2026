@@ -4,7 +4,8 @@
 // an injected executor. Reject executes nothing.
 
 import { randomUUID } from 'node:crypto';
-import { PROPOSAL_KINDS, PROPOSAL_STATUSES, PLAN_LIMITS, DEFAULT_PLAN, PAID_SYNC_KINDS } from '../contracts.js';
+import { PROPOSAL_KINDS, PROPOSAL_STATUSES, PLAN_LIMITS, DEFAULT_PLAN, PAID_SYNC_KINDS, BULK_LIMITS, DAILY_FILL_INCLUDES, QUEUE_BULK_ACTIONS, BUCKET_EDIT_OPS, REFRESH_GROUP_IDS } from '../contracts.js';
+import { SOURCE_KINDS } from '../../x-content-inventory/buckets.js';
 import { normalizePlan, validatePlan, HANDLE_RE } from '../plan-state.js';
 import { StrategyPlanError } from '../plan-store.js';
 import { SECTION_KEYS, SECTION_MAX } from '../strategy-doc.js';
@@ -23,6 +24,9 @@ export const POST_TEXT_MAX = 280; // X limit; matches updateSocialPost
 export const EDITABLE_POST_STATUSES = Object.freeze(['draft', 'approved', 'scheduled']);
 const RESULT_MAX_CHARS = 4000;
 const ID_RE = /^[A-Za-z0-9_.:-]{1,128}$/;
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const BUCKET_ID_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
+const BUCKET_SHARE_KEYS = ['perDayMin', 'perDayMax', 'targetPerDay', 'perWeekMin', 'perWeekMax', 'maxSharePct'];
 
 const isPlain = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const clone = (v) => (v === undefined ? v : JSON.parse(JSON.stringify(v)));
@@ -225,6 +229,89 @@ export function validateProposal(raw, { currentPlan } = {}) {
       norm = { links: l.links, ...(Array.isArray(payload.rows) ? { rows: clone(payload.rows).slice(0, l.links.length) } : {}) };
       break;
     }
+    // Multi-day fill of the calendar (x-content-inventory/daily-fill.js): DRAFTS only. `preview` = propose-time counts + sample rows, display only.
+    case 'daily-fill': {
+      const from = typeof payload.from === 'string' ? payload.from.trim() : '';
+      if (!DAY_RE.test(from) || Number.isNaN(Date.parse(`${from}T00:00:00Z`))) errors.push('from must be a YYYY-MM-DD date');
+      const days = Number(payload.days);
+      if (!Number.isInteger(days) || days < 1 || days > BULK_LIMITS.dailyFillMaxDays) errors.push(`days must be a whole number 1-${BULK_LIMITS.dailyFillMaxDays}`);
+      let include = DAILY_FILL_INCLUDES.slice();
+      if (payload.include !== undefined) {
+        const inc = Array.isArray(payload.include) ? [...new Set(payload.include.map((x) => String(x ?? '').trim()))] : null;
+        if (!inc || !inc.length || inc.some((x) => !DAILY_FILL_INCLUDES.includes(x))) errors.push(`include must be a non-empty list from ${DAILY_FILL_INCLUDES.join(', ')}`);
+        else include = inc;
+      }
+      if (errors.length) break;
+      norm = { from, days, include, ...(isPlain(payload.preview) ? { preview: clone(payload.preview) } : {}) };
+      break;
+    }
+    // Runs NOTHING on the server: confirm hands the group ids to the dashboard, whose Refresh panel runs them.
+    case 'refresh': {
+      const groups = Array.isArray(payload.groups) ? [...new Set(payload.groups.map((g) => String(g ?? '').trim()))] : [];
+      if (!groups.length) errors.push('groups must be a non-empty list');
+      else if (groups.some((g) => !REFRESH_GROUP_IDS.includes(g))) errors.push(`groups must be from ${REFRESH_GROUP_IDS.join(', ')}`);
+      if (errors.length) break;
+      norm = {
+        groups, reason: str(payload.reason, BULK_LIMITS.refreshReasonMax),
+        ...(Array.isArray(payload.estimate) ? { estimate: payload.estimate.slice(0, REFRESH_GROUP_IDS.length).filter(isPlain).map((e) => ({ id: str(e.id, 40), label: str(e.label, 80), text: str(e.text, 200), paid: e.paid === true })) } : {}),
+      };
+      break;
+    }
+    // Drafts / queue only. Never schedules or publishes. `rows` = propose-time snapshot, display only.
+    case 'queue-bulk': {
+      const action = typeof payload.action === 'string' ? payload.action.trim() : '';
+      if (!QUEUE_BULK_ACTIONS.includes(action)) errors.push(`action must be one of ${QUEUE_BULK_ACTIONS.join(', ')}`);
+      const ids = Array.isArray(payload.postIds) ? [...new Set(payload.postIds.map((x) => String(x ?? '').trim()))] : [];
+      if (!ids.length) errors.push('postIds must be a non-empty list');
+      else if (ids.length > BULK_LIMITS.queueBulkMax) errors.push(`at most ${BULK_LIMITS.queueBulkMax} posts`);
+      else if (ids.some((x) => !ID_RE.test(x))) errors.push('postIds contains an invalid id');
+      norm = { action, postIds: ids };
+      if (action === 'set-review-date') {
+        const date = typeof payload.date === 'string' ? payload.date.trim() : '';
+        if (!DAY_RE.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`))) errors.push('date must be a YYYY-MM-DD date');
+        norm.date = date;
+      }
+      if (Array.isArray(payload.rows)) norm.rows = clone(payload.rows).slice(0, BULK_LIMITS.queueBulkMax);
+      break;
+    }
+    // Content Center bucket upsert/delete (the quote-targets bucket store), then the tracks re-sync.
+    case 'bucket-edit': {
+      const op = typeof payload.op === 'string' ? payload.op.trim() : '';
+      if (!BUCKET_EDIT_OPS.includes(op)) { errors.push(`op must be one of ${BUCKET_EDIT_OPS.join(', ')}`); break; }
+      const b = isPlain(payload.bucket) ? payload.bucket : null;
+      if (!b) { errors.push('bucket must be an object'); break; }
+      const id = typeof b.id === 'string' ? b.id.trim() : '';
+      if (id && !BUCKET_ID_RE.test(id)) errors.push('bucket.id must be lowercase kebab-case, at most 40 characters');
+      if (op === 'delete') {
+        if (!id) errors.push('bucket.id is required to delete');
+        const reassignTo = typeof payload.reassignTo === 'string' ? payload.reassignTo.trim() : '';
+        if (reassignTo && !BUCKET_ID_RE.test(reassignTo)) errors.push('reassignTo must be a bucket id');
+        norm = { op, bucket: { id, ...(typeof b.name === 'string' ? { name: str(b.name, BULK_LIMITS.bucketLabelMax) } : {}) }, ...(reassignTo ? { reassignTo } : {}) };
+        break;
+      }
+      const name = str(b.name, 60);
+      if (!name && !id) errors.push('bucket.name is required');
+      const bucket = { ...(id ? { id } : {}), ...(name ? { name } : {}) };
+      if (b.sourceKind !== undefined) { if (!SOURCE_KINDS.includes(b.sourceKind)) errors.push(`sourceKind must be one of ${SOURCE_KINDS.join(', ')}`); else bucket.sourceKind = b.sourceKind; }
+      else if (!id) bucket.sourceKind = 'manual';
+      if (b.color !== undefined) { if (typeof b.color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(b.color.trim())) errors.push('color must be a #rrggbb value'); else bucket.color = b.color.trim(); }
+      if (b.active !== undefined) bucket.active = b.active === true;
+      if (b.order !== undefined) { if (!Number.isInteger(b.order) || b.order < 0) errors.push('order must be a non-negative integer'); else bucket.order = b.order; }
+      if (b.share !== undefined) {
+        if (!isPlain(b.share)) errors.push('share must be an object');
+        else {
+          const share = {};
+          for (const [k, v] of Object.entries(b.share)) {
+            if (!BUCKET_SHARE_KEYS.includes(k)) errors.push(`unknown share field ${k}`);
+            else if (!(Number.isFinite(v) && v >= 0)) errors.push(`share.${k} must be a non-negative number`);
+            else share[k] = v;
+          }
+          bucket.share = share;
+        }
+      }
+      norm = { op, bucket };
+      break;
+    }
     default: break;
   }
   if (errors.length) return { ok: false, errors };
@@ -272,9 +359,15 @@ export function compactResult(res) {
  * @param {(a:{clientId:string, postId:string, content?:string, scheduledAt?:string})=>Promise<object>} [deps.editPost]  the existing update path (updateSocialPost)
  * @param {(clientId:string, postId:string, o:{reviewedBy:string, expectedRevision?:number})=>Promise<object>} [deps.approvePost]  existing approveDraft (default: lazy import of twitter-service)
  * @param {(clientId:string, postId:string, o:{scheduledAt:string, reviewedBy:string, expectedRevision?:number})=>Promise<object>} [deps.approveAndSchedulePost]  existing approveAndSchedule (ledger/reservation path; default: lazy import)
+ * @param {(a:{clientId:string, spec:object, proposalId?:string})=>Promise<object>} [deps.runDailyFill]  daily-fill executor (execute=true: creates drafts only)
+ * @param {(clientId:string, postId:string, o:{reviewedBy:string, expectedRevision?:number})=>Promise<object>} [deps.rejectPost]  existing rejectDraft (queue-bulk delete-draft; default: lazy import)
+ * @param {(clientId:string, postId:string, patch:{reviewOn:string})=>Promise<boolean>} [deps.placeDraft]  sets an unscheduled draft's review day (queue-bulk set-review-date)
+ * @param {(clientId:string, bucket:object)=>Promise<object>} [deps.upsertBucket]  bucket-store upsertBucket
+ * @param {(clientId:string, bucketId:string, o:{reassignTo?:string})=>Promise<object>} [deps.deleteBucket]  bucket-store deleteBucket
+ * @param {(clientId:string)=>Promise<object>} [deps.syncTracks]  re-sync content tracks after a bucket change
  * @param {(a:{clientId:string, kind:string, params:object, by:string, auth:object, context:object})=>Promise<object>} [deps.runPaidSync]  features/mcp/paid-syncs.js executor (daily cap enforced inside)
  */
-export function buildExecutors({ planStore, runDailyAction, runUpdateItemFacets, saveXGrowthProfile, refreshHandles, docStore, docBase, readPost, editPost, approvePost, approveAndSchedulePost, runPaidSync, runCalendarBatch, runItemMedia, clock = Date.now }) {
+export function buildExecutors({ planStore, runDailyAction, runUpdateItemFacets, saveXGrowthProfile, refreshHandles, docStore, docBase, readPost, editPost, approvePost, approveAndSchedulePost, runPaidSync, runCalendarBatch, runItemMedia, runDailyFill, rejectPost, placeDraft, upsertBucket, deleteBucket, syncTracks, clock = Date.now }) {
   const need = (fn, name) => { if (typeof fn !== 'function') throw new ProposalExecutionError(`${name} is not available on this deployment`); return fn; };
   const social = () => import('../../social-posting/twitter-service.js');
   const readOwnedPost = async (clientId, payload) => {
@@ -417,6 +510,68 @@ export function buildExecutors({ planStore, runDailyAction, runUpdateItemFacets,
       const res = await need(runCalendarBatch, 'calendar batch')({ clientId, spec: payload.spec, proposalId });
       if (res && res.ok === false) throw new ProposalExecutionError(res.error || 'calendar batch refused');
       return compactResult({ created: res.created, existing: res.existing, failed: (res.failed || []).length, counts: res.counts, firstDate: res.firstDate, lastDate: res.lastDate });
+    },
+    // Multi-day fill: DRAFTS only (review day set, never approved/scheduled/published); re-runs add nothing (idempotent keys).
+    async 'daily-fill'({ clientId, payload, proposalId }) {
+      const res = await need(runDailyFill, 'daily fill')({ clientId, spec: { from: payload.from, days: payload.days, include: payload.include }, proposalId });
+      if (res && res.ok === false) throw new ProposalExecutionError(res.error || 'daily fill refused');
+      const failed = Array.isArray(res?.failed) ? res.failed.length : Number(res?.failed) || 0;
+      return compactResult({ created: res?.created ?? 0, existing: res?.existing ?? 0, placed: res?.placed ?? 0, failed, counts: res?.counts, firstDate: res?.firstDate, lastDate: res?.lastDate });
+    },
+    // Runs NOTHING here. The dashboard (StrategyChat) sees clientAction and fires the Refresh panel's own run.
+    async refresh({ payload }) {
+      return { clientAction: 'marketing-refresh', groups: payload.groups.filter((g) => REFRESH_GROUP_IDS.includes(g)) };
+    },
+    // Per-post results; a post that cannot take the action fails alone with a reason. Never schedules or publishes.
+    async 'queue-bulk'({ clientId, payload, by }) {
+      const read = need(readPost, 'post read');
+      const results = [];
+      for (const postId of payload.postIds) {
+        try {
+          const post = await read(clientId, postId);
+          if (!post || (post.clientId && post.clientId !== clientId)) throw Object.assign(new Error('post not found for this client'), { code: 'not-found' });
+          const rev = Number.isInteger(post.revision) ? { expectedRevision: post.revision } : {};
+          if (payload.action === 'approve') {
+            if (post.status === 'approved') { results.push({ postId, ok: true, status: 'approved', note: 'already approved' }); continue; }
+            if (post.status !== 'draft') throw Object.assign(new Error(`post is ${post.status}; only a draft can be approved`), { code: 'not-approvable' });
+            // approveDraft runs the story gate: "[add your memory]" / needsStory posts are refused here.
+            const saved = await (approvePost ?? (await social()).approveDraft)(clientId, postId, { reviewedBy: by, ...rev });
+            results.push({ postId, ok: true, status: saved?.status ?? 'approved' });
+          } else if (payload.action === 'unschedule') {
+            if (post.status !== 'scheduled') throw Object.assign(new Error(`post is ${post.status}; only a scheduled post can be unscheduled`), { code: 'not-scheduled' });
+            const saved = await need(editPost, 'post edit')({ clientId, postId, scheduledAt: '', ...rev });
+            results.push({ postId, ok: true, status: saved?.status ?? null });
+          } else if (payload.action === 'delete-draft') {
+            if (post.status !== 'draft') throw Object.assign(new Error(`post is ${post.status}; only a draft can be deleted`), { code: 'not-draft' });
+            // rejectDraft keeps the doc as 'rejected' (it leaves the queue and calendar); nothing is hard-deleted.
+            const saved = await (rejectPost ?? (await social()).rejectDraft)(clientId, postId, { reviewedBy: by, ...rev });
+            results.push({ postId, ok: true, status: saved?.status ?? 'rejected' });
+          } else {
+            if (post.status !== 'draft' || post.scheduledAt) throw Object.assign(new Error('only an unscheduled draft can get a review date'), { code: 'not-draft' });
+            const done = await need(placeDraft, 'draft placement')(clientId, postId, { reviewOn: payload.date });
+            if (!done) throw Object.assign(new Error('draft changed or is no longer an unscheduled draft'), { code: 'stale' });
+            results.push({ postId, ok: true, reviewOn: payload.date });
+          }
+        } catch (err) {
+          if (err instanceof ProposalExecutionError) throw err;
+          const reason = err?.code === 'needs-story' ? 'still needs its story (add your memory) before it can be approved'
+            : err?.code === 'revision-conflict' ? 'changed since this was proposed' : String(err?.message || err).slice(0, 160);
+          results.push({ postId, ok: false, error: err?.code || 'failed', reason });
+        }
+      }
+      const done = results.filter((r) => r.ok).length;
+      const failedRows = results.filter((r) => !r.ok);
+      if (!done) throw new ProposalExecutionError('no post could be changed', { results: failedRows.slice(0, 10) });
+      return compactResult({ action: payload.action, done, failed: failedRows.length, results: failedRows.slice(0, 10) });
+    },
+    // Upsert/delete one Content Center bucket through the same store as the bucket UI, then re-sync the tracks.
+    async 'bucket-edit'({ clientId, payload }) {
+      let out;
+      if (payload.op === 'delete') out = await need(deleteBucket, 'bucket delete')(clientId, payload.bucket.id, { reassignTo: payload.reassignTo });
+      else out = await need(upsertBucket, 'bucket save')(clientId, payload.bucket);
+      let synced = false;
+      if (typeof syncTracks === 'function') { try { synced = !!(await syncTracks(clientId))?.changed; } catch { /* a sync failure never fails the bucket write */ } }
+      return compactResult({ op: payload.op, bucketId: out?.bucket?.id ?? payload.bucket.id ?? null, ...(out?.created !== undefined ? { created: out.created } : {}), tracksSynced: synced });
     },
     async 'refresh-handles'({ clientId, payload, context, auth }) {
       const res = await need(refreshHandles, 'refresh')({ clientId, handles: payload.handles, context, auth });
