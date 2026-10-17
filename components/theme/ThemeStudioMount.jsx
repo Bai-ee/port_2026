@@ -18,6 +18,7 @@ import { syncSiteDraft } from '../../lib/theme-runtime/site-draft';
 const ThemeStudio = dynamic(() => import('../theme-studio/ThemeStudio'), { ssr: false, loading: () => null });
 
 const LAUNCHER_ID = 'theme-studio-launcher';
+const OPEN_EVENT = 'theme-studio:open'; // dispatched by #dev-theme-editor-button in HomePage.jsx
 
 // Fixed, theme-independent colours on purpose (same values as the locked Studio chrome tokens,
 // contract §11.3): the launcher must stay readable whatever palette is being drafted.
@@ -75,6 +76,19 @@ export default function ThemeStudioMount() {
       } catch { /* storage blocked: nothing was applied from here either */ }
     }
   }, [isAdmin, adminReady]);
+
+  // Development only: the homepage editor bar opens the Studio without the ?theme-studio=1 query.
+  // Writes the same session flag the query does, so a later gate re-evaluation keeps it enabled.
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return undefined;
+    const onOpen = () => {
+      try { window.sessionStorage.setItem(STORAGE_KEYS.devStudio, '1'); } catch { /* ignore */ }
+      setEnabled(true);
+      setOpen(true);
+    };
+    window.addEventListener(OPEN_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_EVENT, onOpen);
+  }, []);
 
   const toggle = useCallback(() => setOpen((v) => !v), []);
   const close = useCallback(() => setOpen(false), []);

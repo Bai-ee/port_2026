@@ -13,6 +13,7 @@ import DeliverableHoverCard from './components/home/DeliverableHoverCards';
 import AnchorLavaShader from './components/home/AnchorLavaShader';
 import { easeInOutCubic, poolFromWords, scrambleMask, scrambleTextTo } from './components/home/scrambleText';
 import UpRightArrow from './components/UpRightArrow';
+import CalendlyIcon from './components/CalendlyIcon';
 import { internalPageCreamPaperBackground } from './pageSurfaceSystem';
 import CreateCaseStudyModal from './CreateCaseStudyModal';
 import {
@@ -1298,6 +1299,13 @@ const StackedSlidesSection = () => {
     }
     const href = email ? `${calendlyUrl}?email=${encodeURIComponent(email)}` : calendlyUrl;
     window.open(href, '_blank', 'noopener,noreferrer');
+  };
+
+  // Hero input books a call instead of starting onboarding. An email prefills the
+  // Calendly form; a website or free text just opens the booking modal.
+  const handleHeroBookCall = () => {
+    const input = classifyHomepageInput(homepageUrl);
+    openCalendlyBooking(input.kind === 'email' ? input.value : '');
   };
 
   const handleCreateDashboard = () => {
@@ -3087,11 +3095,11 @@ const StackedSlidesSection = () => {
                     <div id="panel-hero-intro-centering" style={{ ...textCenteringStyle, marginTop: 'clamp(1.5rem, 3vw, 3rem)', marginBottom: 'clamp(1.5rem, 3vw, 3rem)' }}>
                       <div id="panel-hero-text-row" style={{ ...textRowStyle, display: 'flex', alignItems: 'center', gap: 'clamp(0.5rem, 1.5vw, 1rem)', width: '100%' }}>
                         <div id="hero-url-input-row" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flex: 1, minWidth: 0, height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'color-mix(in srgb, var(--t-surface) 45%, transparent)', border: '1px solid var(--t-border-subtle)', borderRadius: '999px', boxShadow: '0 1px 4px color-mix(in srgb, var(--t-text) 7%, transparent)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
-                          <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'color-mix(in srgb, var(--t-text) 60%, transparent)' : 'color-mix(in srgb, var(--t-text) 40%, transparent)' }} />
-                          <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'color-mix(in srgb, var(--t-text) 75%, transparent)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
+                          <CalendlyIcon id="hero-url-input-calendly-icon" size={21} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'color-mix(in srgb, var(--t-text) 60%, transparent)' : 'color-mix(in srgb, var(--t-text) 40%, transparent)' }} />
+                          <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter email to set up time" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'color-mix(in srgb, var(--t-text) 75%, transparent)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
                           {/* Primary on-load CTA: loud gradient + comet border while empty,
                               calm white "ready" state once a valid site/email is entered. */}
-                          <button id="hero-onboard-cta" className="cta-pill-btn" data-cta-state={urlIsValid ? 'ready' : 'idle'} onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaSecondaryStyle, flexShrink: 0, opacity: 1, padding: '0.75rem 0.75rem' } : { ...ctaStyle, flexShrink: 0, opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="hero-onboard-label">Connect</span><UpRightArrow style={ctaIconStyle} /></button>
+                          <button id="hero-onboard-cta" className="cta-pill-btn" data-cta-state={urlIsValid ? 'ready' : 'idle'} onClick={handleHeroBookCall} disabled={!urlIsValid} style={urlIsValid ? { ...ctaSecondaryStyle, flexShrink: 0, opacity: 1, padding: '0.75rem 0.75rem' } : { ...ctaStyle, flexShrink: 0, opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="hero-onboard-label">Let's Connect</span><UpRightArrow style={ctaIconStyle} /></button>
                         </div>
                         <a
                           id="panel-hero-cta"

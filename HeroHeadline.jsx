@@ -1,7 +1,8 @@
-import React, { useLayoutEffect, useRef } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import gsap from 'gsap';
 import { easeOutQuart, scrambleChurn, scrambleMask, scrambleTextTo } from './components/home/scrambleText';
+import { DEFAULT_HERO_TYPE, HERO_MAX_LINES, fontStackFor, getHeroType, subscribeHeroType } from './lib/hero-type/store';
 // Hidden for now — hero card deck.
 // import HeroDeliverableDeck from './components/home/HeroDeliverableDeck';
 
@@ -9,11 +10,10 @@ gsap.registerPlugin(ScrollTrigger);
 
 const SIMPLE_SCROLL_MEDIA_QUERY = '(max-width: 680px) and (pointer: coarse)';
 
-// Lines the subheadline cycles through. A single entry means the line only
-// scrambles under the cursor and always resolves back to it.
-const SUBHEADLINE_PHRASES = [
-  'BRYAN BALLI',
-];
+// Headline lines, subheadline phrases and the type styling all come from
+// lib/hero-type/store.js (defaults + the dev-only Type panel's live draft).
+// subPhrases are the lines the subheadline cycles through; a single entry means
+// the line only scrambles under the cursor and always resolves back to it.
 
 // The subheadline is cursor-driven on fine-pointer devices: it churns while the
 // pointer moves and resolves into the next phrase once the pointer holds still
@@ -26,15 +26,6 @@ const SCRAMBLE_MS = 100;     // time spent scrambling into the next phrase
 const CHURN_IN_MS = 200;     // left-to-right sweep as the scramble starts
 const IDLE_REVEAL_MS = 50;   // cursor stillness that triggers the reveal (≈3 frames)
 
-// The last headline line can swap to shorter copy on narrow viewports (same
-// 620px breakpoint as the phone type-scale override — keep the two in step).
-// CONSULTANT is the longest line (10 chars); both type scales are capped so it
-// fits the panel, so the narrow copy currently matches the wide copy.
-const HEADLINE_NARROW_QUERY = '(max-width: 620px)';
-const HEADLINE_LINES_WIDE = ['DIGITAL', 'MEDIA', 'CONSULTANT'];
-const HEADLINE_LINES_NARROW = ['DIGITAL', 'MEDIA', 'CONSULTANT'];
-
-const headlineLinesFor = (narrow) => (narrow ? HEADLINE_LINES_NARROW : HEADLINE_LINES_WIDE);
 
 // Poster fit. The headline is sized so its widest line spans the panel
 // (the 810px content column the hero input row sits in) and the block still
@@ -42,13 +33,9 @@ const headlineLinesFor = (narrow) => (narrow ? HEADLINE_LINES_NARROW : HEADLINE_
 // canvas text metrics in the headline's own face, so the ratio holds for any
 // copy and re-fits once the webfont lands. Phones (≤620px) keep their own
 // clamp via the !important rule below.
-const HEADLINE_FONT_STACK = "'Doto', 'Space Mono', monospace";
-const HEADLINE_WEIGHT = 900;              // Doto 900 is loaded in app/layout.jsx
-const HEADLINE_LINE_HEIGHT = 0.8;
-const HEADLINE_TRACKING = -0.02;          // letterSpacing in em, mirrored in measurement
+// Font, weight, tracking (em) and stroke (em) come from the hero type settings
+// and are mirrored in measurement (the stroke widens each line by its own width).
 // Doto tops out at 900; a same-colour stroke thickens the dots past that.
-// Mirrored in measurement (the stroke widens each line by its own width).
-const HEADLINE_STROKE_EM = 0.03;
 const HEADLINE_SUB_LINES_EM = 1.3;        // subheadline + its margin, in headline ems
 // Same column as #hero-url-input-row (StackedSlidesSection) and the nav strip:
 // max(10vw, centred 810px), so the headline's left edge lines up with the input.
@@ -56,33 +43,27 @@ const HEADLINE_COLUMN_PX = 810;
 const HEADLINE_GUTTER_VW = 0.1;
 const HEADLINE_MIN_PX = 20;
 let headlineMeasureCtx = null;
-const measureHeadlineUnitWidth = (lines) => {
+const measureHeadlineUnitWidth = (lines, type) => {
   if (typeof document === 'undefined') return 0;
   if (!headlineMeasureCtx) headlineMeasureCtx = document.createElement('canvas').getContext('2d');
   const ctx = headlineMeasureCtx;
   if (!ctx) return 0;
-  ctx.font = `${HEADLINE_WEIGHT} 100px ${HEADLINE_FONT_STACK}`;
+  ctx.font = `${type.headlineWeight} 100px ${fontStackFor(type.headlineFont)}`;
   let widest = 0;
   for (const line of lines) {
-    const w = ctx.measureText(line).width + line.length * HEADLINE_TRACKING * 100 + HEADLINE_STROKE_EM * 100;
+    const w = ctx.measureText(line).width + line.length * type.headlineTrackingEm * 100 + type.headlineStrokeEm * 100;
     if (w > widest) widest = w;
   }
   return widest / 100; // width of the widest line per 1px of font size
 };
 
-// Blend: the hero text is painted white and composited with mix-blend-mode
-// difference, so it inverts whatever sits behind it — near-black over the
-// light page, shifting colour where it crosses the loop and gradient. Set
-// HEADLINE_BLEND_MODE to null to fall back to the plain textColor prop.
+// Blend: by default the hero text is painted white and composited with
+// mix-blend-mode difference, so it inverts whatever sits behind it — near-black
+// over the light page, shifting colour where it crosses the loop and gradient.
+// Both are type settings (headlineBlend / headlineInk; 'page' = textColor prop).
 // The blend sits on #hero-panel-top-left (not the lines) because applyLayout
 // writes a filter on the inner content node, which would isolate child blends.
-const HEADLINE_BLEND_MODE = 'difference';
-const HEADLINE_BLEND_INK = '#ffffff';
-
-const matchesNarrowHeadline = () =>
-  typeof window !== 'undefined' &&
-  typeof window.matchMedia === 'function' &&
-  window.matchMedia(HEADLINE_NARROW_QUERY).matches;
+const resolveInk = (value, textColor) => (value === 'page' ? textColor : value);
 
 // Hero text load sequence. This component owns the whole thing on ONE gsap
 // timeline — panel reveal, headline scramble, then the subheadline — so the
@@ -133,28 +114,21 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
   const topLeftRef = useRef(null);
   const headlineContentRef = useRef(null);
   const scrambleTextRef = useRef(null);
+  // Render starts from the defaults (matches the server markup); the first layout
+  // effect swaps in the dev draft before anything paints. Styles re-render from
+  // state; text is written imperatively (see the intro effect) like everywhere else.
+  const [type, setType] = useState(DEFAULT_HERO_TYPE);
+  const typeRef = useRef(DEFAULT_HERO_TYPE);
+  const refitRef = useRef(null);
 
-  // The last line's copy is owned imperatively, like every other string in this
-  // component: React renders the wide word, the intro effect below types
-  // whichever word the viewport actually calls for, and this listener swaps it
-  // if the breakpoint is crossed afterwards. Deliberately NOT React state — a
-  // state-driven swap changes the span's identity and remounts it, which leaves
-  // the intro timeline animating a node that is no longer in the document.
-  // No sync on mount: the intro owns the first write.
   useLayoutEffect(() => {
-    const contentEl = headlineContentRef.current;
-    if (!contentEl || typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-      return undefined;
-    }
-    const mq = window.matchMedia(HEADLINE_NARROW_QUERY);
-    const sync = () => {
-      const node = contentEl.querySelector('[data-hero-headline-accent]');
-      if (!node) return;
-      const copy = headlineLinesFor(mq.matches);
-      node.textContent = copy[copy.length - 1];
-    };
-    mq.addEventListener('change', sync);
-    return () => mq.removeEventListener('change', sync);
+    typeRef.current = getHeroType();
+    setType(typeRef.current);
+    return subscribeHeroType((next) => {
+      typeRef.current = next;
+      setType(next);
+      refitRef.current?.();
+    });
   }, []);
 
   // Hero text load sequence + the subheadline's ongoing phrase cycle. Both live
@@ -170,12 +144,14 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
     const subEl = panelEl.querySelector('#hero-subheadline');
     if (!subEl) return;
 
-    const lines = Array.from(contentEl.querySelectorAll('[data-hero-headline-line]'));
-    // Read the breakpoint here rather than closing over render state, so the
-    // intro types the same copy the markup is about to settle on regardless of
-    // which effect resolves the media query first.
-    const introLines = headlineLinesFor(matchesNarrowHeadline());
-    const lineCopy = lines.map((node, i) => introLines[i] ?? node.textContent);
+    // All HERO_MAX_LINES slots; the ones past the current copy are hidden.
+    const slots = Array.from(contentEl.querySelectorAll('[data-hero-headline-line]'));
+    const introLines = typeRef.current.headlineLines;
+    slots.forEach((node, i) => { node.style.display = i < introLines.length ? 'block' : 'none'; });
+    const lines = slots.slice(0, introLines.length);
+    const lineCopy = lines.map((_, i) => introLines[i]);
+    const phrases = () => typeRef.current.subPhrases;
+    const phraseAt = (i) => phrases()[i % phrases().length];
 
     const prefersReducedMotion =
       typeof window !== 'undefined' &&
@@ -184,9 +160,15 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
 
     if (prefersReducedMotion) {
       lines.forEach((node, i) => { node.textContent = lineCopy[i]; });
-      subScrambleEl.textContent = SUBHEADLINE_PHRASES[0];
+      subScrambleEl.textContent = phraseAt(0);
       gsap.set([panelEl, subEl], { autoAlpha: 1 });
-      return;
+      return subscribeHeroType((next) => {
+        slots.forEach((node, i) => {
+          node.textContent = next.headlineLines[i] ?? '';
+          node.style.display = i < next.headlineLines.length ? 'block' : 'none';
+        });
+        subScrambleEl.textContent = next.subPhrases[0];
+      });
     }
 
     // index = phrase currently resolved on screen. targetIndex = the phrase the
@@ -225,7 +207,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
     const revealTarget = (onDone) => {
       stopChurn();
       setStage('reveal');
-      cycleCancel = scrambleTextTo(subScrambleEl, SUBHEADLINE_PHRASES[targetIndex], {
+      cycleCancel = scrambleTextTo(subScrambleEl, phraseAt(targetIndex), {
         durationMs: SCRAMBLE_MS,
         preserveWhitespace: true,
         churnBeforeLock: true,
@@ -252,9 +234,9 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
       }
       if (!churnCancel) {
         if (targetIndex === index) {
-          targetIndex = (index + 1) % SUBHEADLINE_PHRASES.length;
+          targetIndex = (index + 1) % phrases().length;
         }
-        churnCancel = scrambleChurn(subScrambleEl, SUBHEADLINE_PHRASES[targetIndex], {
+        churnCancel = scrambleChurn(subScrambleEl, phraseAt(targetIndex), {
           preserveWhitespace: true,
           staggerInMs: CHURN_IN_MS,
         });
@@ -276,7 +258,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
     };
 
     const advanceTimed = () => {
-      targetIndex = (index + 1) % SUBHEADLINE_PHRASES.length;
+      targetIndex = (index + 1) % phrases().length;
       revealTarget(() => { holdTimer = window.setTimeout(advanceTimed, HOLD_MS); });
     };
 
@@ -286,7 +268,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
         window.addEventListener('pointermove', handlePointerMove, { passive: true });
         window.addEventListener('pointerdown', handlePointerDown, { passive: true });
         pointerBound = true;
-      } else if (SUBHEADLINE_PHRASES.length > 1) {
+      } else if (phrases().length > 1) {
         holdTimer = window.setTimeout(advanceTimed, HOLD_MS);
       }
     };
@@ -294,7 +276,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
     // Headline lines start empty and type themselves in (growIn below); the
     // spans carry a min-height so emptying them doesn't collapse the panel.
     lines.forEach((node) => { node.textContent = ''; });
-    subScrambleEl.textContent = scrambleMask(SUBHEADLINE_PHRASES[0], { preserveWhitespace: true });
+    subScrambleEl.textContent = scrambleMask(phraseAt(0), { preserveWhitespace: true });
     gsap.set(subEl, { autoAlpha: 0 });
 
     const introCancels = [];
@@ -351,7 +333,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
     });
     tl.to(subEl, { autoAlpha: 1, duration: HERO_INTRO.subheadFadeS, ease: 'power2.out' }, subheadCue);
     tl.call(() => {
-      introCancels.push(scrambleTextTo(subScrambleEl, SUBHEADLINE_PHRASES[0], {
+      introCancels.push(scrambleTextTo(subScrambleEl, phraseAt(0), {
         durationMs: HERO_INTRO.subheadScrambleS * 1000,
         preserveWhitespace: true,
         churnBeforeLock: true,
@@ -360,7 +342,23 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
       }));
     }, null, subheadCue);
 
+    // Type panel edits (dev): rewrite the headline slots in place and restart the
+    // subheadline cycle from its first phrase.
+    const unsubscribeType = subscribeHeroType((next) => {
+      slots.forEach((node, i) => {
+        node.textContent = next.headlineLines[i] ?? '';
+        node.style.display = i < next.headlineLines.length ? 'block' : 'none';
+        node.style.filter = '';
+      });
+      stopChurn();
+      stopReveal();
+      index = 0;
+      targetIndex = 0;
+      subScrambleEl.textContent = next.subPhrases[0];
+    });
+
     return () => {
+      unsubscribeType();
       tl.kill();
       introCancels.forEach((cancel) => cancel && cancel());
       stopReveal();
@@ -427,10 +425,11 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
       metrics.gapHeight = gapHeight;
 
       // Poster fit: fill the width, never overflow the gap.
-      const lines = headlineLinesFor(matchesNarrowHeadline());
-      const unit = measureHeadlineUnitWidth(lines);
+      const type = typeRef.current;
+      const lines = type.headlineLines;
+      const unit = measureHeadlineUnitWidth(lines, type);
       const byWidth = unit > 0 ? maxWidth / unit : Infinity;
-      const byHeight = gapHeight / (lines.length * HEADLINE_LINE_HEIGHT + HEADLINE_SUB_LINES_EM);
+      const byHeight = gapHeight / (lines.length * type.headlineLineHeight + HEADLINE_SUB_LINES_EM);
       metrics.fontSize = Math.max(Math.floor(Math.min(byWidth, byHeight)), HEADLINE_MIN_PX);
     };
 
@@ -487,6 +486,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
     });
 
     scheduleRefresh();
+    refitRef.current = scheduleRefresh;
 
     const resizeObserver = typeof ResizeObserver !== 'undefined'
       ? new ResizeObserver(scheduleRefresh)
@@ -527,10 +527,14 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
       window.removeEventListener('focus', scheduleRefresh);
       resizeObserver?.disconnect();
       trigger?.kill();
+      refitRef.current = null;
     };
   }, []);
 
-  const ink = HEADLINE_BLEND_MODE ? HEADLINE_BLEND_INK : textColor;
+  const ink = resolveInk(type.headlineInk, textColor);
+  const accentInk = type.accentInk ? resolveInk(type.accentInk, textColor) : undefined;
+  const subInk = type.subInk ? resolveInk(type.subInk, textColor) : ink;
+  const headlineSlots = Array.from({ length: HERO_MAX_LINES }, (_, i) => DEFAULT_HERO_TYPE.headlineLines[i] ?? '');
   const edge = `max(${HEADLINE_GUTTER_VW * 100}vw, calc((100vw - ${HEADLINE_COLUMN_PX}px) / 2))`;
 
   return (
@@ -564,16 +568,16 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
           border: 'none',
           boxShadow: 'none',
           padding: 0,
-          mixBlendMode: HEADLINE_BLEND_MODE || 'normal',
+          mixBlendMode: type.headlineBlend || 'normal',
         }}
       >
         <div ref={headlineContentRef}>
           <h1 id="hero-headline-primary" style={{
-            fontWeight: HEADLINE_WEIGHT,
-            fontFamily: HEADLINE_FONT_STACK,
-            letterSpacing: `${HEADLINE_TRACKING}em`,
-            WebkitTextStroke: `${HEADLINE_STROKE_EM}em currentColor`,
-            lineHeight: HEADLINE_LINE_HEIGHT,
+            fontWeight: type.headlineWeight,
+            fontFamily: fontStackFor(type.headlineFont),
+            letterSpacing: `${type.headlineTrackingEm}em`,
+            WebkitTextStroke: `${type.headlineStrokeEm}em currentColor`,
+            lineHeight: type.headlineLineHeight,
             color: ink,
             margin: 0,
             textAlign: 'left',
@@ -582,41 +586,39 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
             fontSize: 'var(--hero-headline-size, clamp(1.25rem, min(13vw, calc(var(--hero-gap-height) / 5)), 7.1rem))',
             textTransform: 'none',
           }}>
-            {/* Rendered from the wide copy with index keys so a breakpoint swap
-                rewrites text in place instead of replacing the node the intro
-                timeline holds. The panel is visibility:hidden until the intro
-                runs, so the wide word never paints on a phone. */}
-            {HEADLINE_LINES_WIDE.map((line, i) => {
-              const isAccent = i === HEADLINE_LINES_WIDE.length - 1;
-              return (
-                // minHeight holds the line box while the intro types the text in
-                // from empty, so the panel's centred position never recomputes.
-                <span
-                  key={i}
-                  data-hero-headline-line
-                  {...(isAccent ? { 'data-hero-headline-accent': '' } : null)}
-                  style={{
-                    display: 'block',
-                    minHeight: `${HEADLINE_LINE_HEIGHT}em`,
-                  }}
-                >
-                  {line}
-                </span>
-              );
-            })}
+            {/* HERO_MAX_LINES fixed slots with index keys, rendered from the default
+                copy and never re-rendered with new text: the intro effect owns the
+                text (and which slots show) imperatively, so a Type panel edit
+                rewrites a slot in place instead of replacing the node the intro
+                timeline holds. The panel is visibility:hidden until the intro runs. */}
+            {headlineSlots.map((line, i) => (
+              // minHeight holds the line box while the intro types the text in
+              // from empty, so the panel's centred position never recomputes.
+              <span
+                key={i}
+                data-hero-headline-line
+                style={{
+                  display: i < DEFAULT_HERO_TYPE.headlineLines.length ? 'block' : 'none',
+                  minHeight: `${type.headlineLineHeight}em`,
+                  color: i === type.headlineLines.length - 1 ? accentInk : undefined,
+                }}
+              >
+                {line}
+              </span>
+            ))}
           </h1>
           <p id="hero-subheadline" style={{
             margin: '1rem 0 0',
             textAlign: 'left',
-            // Same face/weight as the HELLO marquee (StackedSlidesSection) —
-            // the thin Doto, without the headline's stroke.
-            fontFamily: HEADLINE_FONT_STACK,
-            fontSize: 'clamp(1.8rem, 5vw, 3.6rem)',
-            letterSpacing: `${HEADLINE_TRACKING}em`,
+            // Defaults match the HELLO marquee (StackedSlidesSection) — the thin
+            // Doto, without the headline's stroke.
+            fontFamily: fontStackFor(type.subFont),
+            fontSize: `calc(clamp(1.8rem, 5vw, 3.6rem) * ${type.subScale})`,
+            letterSpacing: `${type.subTrackingEm}em`,
             lineHeight: 1.5,
-            color: ink,
-            opacity: 0.85,
-            fontWeight: 700,
+            color: subInk,
+            opacity: type.subOpacity,
+            fontWeight: type.subWeight,
             maxWidth: '42ch',
           }}>
             <span

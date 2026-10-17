@@ -672,6 +672,46 @@ export function plainChatText(text) {
     .replace(/`([^`\n]+)`/g, '$1');
 }
 
+/**
+ * Chat display blocks: splits an agent reply into paragraphs, bullet lists, numbered lists and headings so the
+ * chat can render real structure instead of raw "- " / "1. " / "#" text. Each line/item is a list of inline
+ * runs [{text, bold}] ("**x**" = bold; `code` and __x__ markers are dropped like plainChatText). Presentation
+ * only: the stored message and what the model sees are unchanged.
+ * Returns [{type:'p'|'h', runs}] | [{type:'ul'|'ol', items:[runs]}].
+ */
+export function chatBlocks(text) {
+  const runsOf = (line) => {
+    const clean = String(line).replace(/__([^_\n]+)__/g, '$1').replace(/`([^`\n]+)`/g, '$1');
+    return clean.split(/(\*\*[^*\n]+\*\*)/).filter(Boolean).map((part) => (
+      /^\*\*[^*\n]+\*\*$/.test(part) ? { text: part.slice(2, -2), bold: true } : { text: part, bold: false }
+    ));
+  };
+  const blocks = [];
+  let para = [];
+  const flushPara = () => {
+    if (para.length) blocks.push({ type: 'p', runs: runsOf(para.join('\n')) });
+    para = [];
+  };
+  const pushItem = (type, body) => {
+    const last = blocks[blocks.length - 1];
+    if (last && last.type === type) last.items.push(runsOf(body));
+    else blocks.push({ type, items: [runsOf(body)] });
+  };
+  for (const raw of String(text ?? '').split('\n')) {
+    const line = raw.trimEnd();
+    let m;
+    if (!line.trim() || /^\s*([-*_])\1{2,}\s*$/.test(line)) { flushPara(); continue; } // blank line or --- divider
+    if ((m = line.match(/^\s*[-*•]\s+(.*)$/))) { flushPara(); pushItem('ul', m[1]); continue; }
+    if ((m = line.match(/^\s*\d+[.)]\s+(.*)$/))) { flushPara(); pushItem('ol', m[1]); continue; }
+    if ((m = line.match(/^\s*#{1,4}\s+(.*)$/))) { flushPara(); blocks.push({ type: 'h', runs: runsOf(m[1]) }); continue; }
+    if ((m = line.match(/^\s*([A-Z][^:\n]{0,48}):\s*$/))) { flushPara(); blocks.push({ type: 'h', runs: runsOf(m[1]) }); continue; }
+    // A plain line right after a list item belongs to a new paragraph, not the list.
+    para.push(line);
+  }
+  flushPara();
+  return blocks;
+}
+
 
 // ---- content tracks (plan section 4.6) ----------------------------------------------------------------------
 // Draft shape: [{ id, label, engines[], benchmarks[], share: <whole percent number>, promotions:[{id,label,engine,url:string,weeklyTarget}], topics[] }]

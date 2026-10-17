@@ -250,6 +250,25 @@ test('plainChatText strips bold/code markers but keeps text, numbers and lists',
   assert.equal(plainChatText('**unclosed'), '**unclosed');
 });
 
+test('chatBlocks splits a reply into paragraphs, headings and lists with bold runs', async () => {
+  const { chatBlocks } = await import('../ui-model.js');
+  const text = 'No posts today.\n\nBottom line:\n- **@rare_jpg** - window open\n- @SciFiArchives\n\n1. first\n2. `second`\nAfter the list.';
+  assert.deepEqual(chatBlocks(text), [
+    { type: 'p', runs: [{ text: 'No posts today.', bold: false }] },
+    { type: 'h', runs: [{ text: 'Bottom line', bold: false }] },
+    { type: 'ul', items: [
+      [{ text: '@rare_jpg', bold: true }, { text: ' - window open', bold: false }],
+      [{ text: '@SciFiArchives', bold: false }],
+    ] },
+    { type: 'ol', items: [[{ text: 'first', bold: false }], [{ text: 'second', bold: false }]] },
+    { type: 'p', runs: [{ text: 'After the list.', bold: false }] },
+  ]);
+  assert.deepEqual(chatBlocks(''), []);
+  assert.deepEqual(chatBlocks(null), []);
+  assert.deepEqual(chatBlocks('a\n---\nb'), [{ type: 'p', runs: [{ text: 'a', bold: false }] }, { type: 'p', runs: [{ text: 'b', bold: false }] }]);
+  assert.deepEqual(chatBlocks('a\nb'), [{ type: 'p', runs: [{ text: 'a\nb', bold: false }] }]);
+});
+
 import { suggestionMediaState, stageErrorText } from '../ui-model.js';
 
 test('media state: staged media => Save enabled, no Stage button', () => {

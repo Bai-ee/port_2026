@@ -368,7 +368,11 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {},
   const sceneParamsRef = useRef({ hueOffset: 0, saturation: 0, lightness: 0, opacity: 1, hueSpan: 0.8 });
   const appliedSceneVersionRef = useRef(-1);
   const groupRef = useRef();
-  const simTimeRef = useRef(0);
+  // Integrated phases, not elapsed × rate: the rates are scroll-scrubbed, and
+  // elapsed × rate jumps the phase by elapsed × Δrate — after a long session one
+  // scroll sweeps hundreds of sin() cycles and the loop thrashes up and down.
+  const animPhaseRef = useRef(0);
+  const spinPhaseRef = useRef(0);
   const hiddenRef = useRef(typeof document !== 'undefined' ? document.hidden : false);
   const smoothedParamsRef = useRef(null);
   const defaultParams = {
@@ -586,11 +590,12 @@ const ParticleSwarm = ({ params = {}, liveParamsRef = null, runtimeProfile = {},
     }
 
     const speedMult = PARAMS.speedMult * PARAMS.animationSpeed;
-    simTimeRef.current += clampedDelta;
-    const time = simTimeRef.current * speedMult;
+    animPhaseRef.current += clampedDelta * speedMult;
+    const time = animPhaseRef.current;
 
     // Group rotation (static tilt + animated spin)
-    const spinAngle = simTimeRef.current * PARAMS.tireSpinSpeed;
+    spinPhaseRef.current += clampedDelta * PARAMS.tireSpinSpeed;
+    const spinAngle = spinPhaseRef.current;
     let rotX = PARAMS.rotationX;
     let rotY = PARAMS.rotationY;
     let rotZ = PARAMS.rotationZ;
