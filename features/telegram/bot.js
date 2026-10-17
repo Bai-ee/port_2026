@@ -6,8 +6,9 @@
 import { checkBindingAccess } from './access.js';
 import { buildSuggestionBundle, readySummary } from './suggestions.js';
 import {
-  MAX_POST_CHARS, buildHandoffBundle, escapeHtml, localTime, parseLocalTime, tomorrowSameTime, toMs, TERMINAL_STATUSES,
+  MAX_POST_CHARS, buildHandoffBundle, escapeHtml, localTime, localParts, parseLocalTime, tomorrowSameTime, toMs, TERMINAL_STATUSES,
 } from './handoff.js';
+import { hasPlaceholder, selfReplyText, creativeFilename, resolveCreativeMedia, TELEGRAM_URL_FETCH_MAX_BYTES } from './creative.js';
 
 export const MENU_LABELS = Object.freeze({
   happening: "What's happening?", today: "Today's posts", calendar: 'Calendar', upload: 'Upload content', settings: 'Settings',
@@ -16,7 +17,9 @@ export const OUT_OF_DATE = 'This card is out of date.';
 const TICKET_TTL_MS = 24 * 3600000;
 const PENDING_TTL_MS = 30 * 60000;
 const LEAD_CYCLE = [15, 30, 60, 120];
-const NO_REVISION_CHECK = new Set(['show-card', 'show-section', 'settings-toggle', 'cancel-pending']);
+const NO_REVISION_CHECK = new Set(['show-card', 'show-section', 'settings-toggle', 'cancel-pending', 'creative']);
+export const CREATIVE_LABEL = 'Copy + high-res';
+const CREATIVE_ROUTE = /^\/?creative(?:@\w+)?(?:\s+(\d{4}-\d{2}-\d{2}))?$/i;
 const MANUAL_REFUSALS = {
   'auto-delivery-started': 'Too late to take over: HITLOOP has already started posting this. Check its status in Today\'s posts.',
   'already-posted': 'This is already posted, so there is nothing to take over.',
@@ -101,6 +104,9 @@ export function createBot(ctx) {
       const ticket = await mkTicket(binding, { postId: post.id, revision: post.revision ?? 0, action: a.action, params: a.params || {} });
       ticketIds.push(ticket); buttons.push({ text: a.label, ticket });
     }
+    // Read-only: sends the exact copy + the full-resolution creative. Tied to the post but not to a revision (always latest).
+    const creativeTicket = await mkTicket(binding, { postId: post.id, revision: post.revision ?? 0, action: 'creative' });
+    ticketIds.push(creativeTicket); buttons.push({ text: CREATIVE_LABEL, ticket: creativeTicket });
     const sent = await sayHtml(chatId, bundle.metaHtml, buttons.length ? { replyMarkup: keyboard(pack(buttons)) } : {});
     const messageIds = buttons.length && sent?.message_id != null ? [sent.message_id] : [];
     await retirePostCards(binding, post.id, { exceptTickets: ticketIds, exceptMessages: messageIds });
@@ -114,6 +120,66 @@ export function createBot(ctx) {
   async function freshCard(binding, postId) {
     const post = await services.getSocialPost(binding.clientId, postId);
     if (post) await sendCard(binding, post, { headline: 'Latest version of this post' });
+  }
+
+  // ── Copy + high-res ────────────────────────────────────────────────────────
+  // Copy goes out as its own plain messages (no parse mode, no extra words) so a long-press copies exactly the post.
+  // `followup` = the queued send after a drive copy finished: creative only, never queues staging again.
+  async function sendCreative(binding, postId, { followup = false } = {}) {
+    const chatId = binding.chatId;
+    const post = await services.getSocialPost(binding.clientId, postId);
+    if (!post || (post.clientId && post.clientId !== binding.clientId)) return say(chatId, 'That post no longer exists.');
+    if (!followup) {
+      const text = String(post.content ?? '');
+      if (hasPlaceholder(text)) await say(chatId, 'Placeholder still in the text');
+      if (text) await say(chatId, text, { disablePreview: true });
+      const reply = selfReplyText(post);
+      if (hasPlaceholder(reply)) await say(chatId, 'Placeholder still in the self-reply text');
+      if (reply) await say(chatId, reply, { disablePreview: true });
+    }
+    const res = services.creative
+      ? await resolveCreativeMedia(services.creative, post, { clientId: binding.clientId, notify: { telegramUserId: binding.telegramUserId, chatId, bindingVersion: binding.bindingVersion }, stage: !followup })
+      : { state: 'none' };
+    if (res.notice) await say(chatId, res.notice);
+    if (res.state === 'staging') {
+      return say(chatId, `Copying the original from the drive (usually under a minute). I'll send it when it's ready.${res.workerOnline === false ? ' The Mac worker looks offline, so it starts when the worker is back.' : ''}`);
+    }
+    if (res.state === 'none') {
+      if (followup) return undefined;
+      return say(chatId, `No creative on this post.${res.suggestion ? ` The library has a possible match: ${res.suggestion}.` : ''}`);
+    }
+    const media = res.media;
+    const tz = await tzOf(binding.clientId);
+    const filename = creativeFilename(post, media, { dateKey: localParts(toMs(post.scheduledAt) ?? nowMs(), tz).dateKey });
+    if (Number.isFinite(media.size) && media.size > TELEGRAM_URL_FETCH_MAX_BYTES) {
+      return say(chatId, `Too large for Telegram to fetch (${(media.size / 1048576).toFixed(1)} MB). Download ${filename}: ${media.url}`, { disablePreview: true });
+    }
+    try {
+      await transport.sendDocument(chatId, media.url, { caption: filename });
+    } catch {
+      await say(chatId, `Could not send the file. Download ${filename}: ${media.url}`, { disablePreview: true });
+    }
+    return undefined;
+  }
+
+  // Lists a day's posts, each with a ticketed "Copy + high-res" button. Same posts as Today's posts for today.
+  async function showCreative(binding, date) {
+    const tz = await tzOf(binding.clientId);
+    const now = nowMs();
+    let day;
+    if (date && typeof readModels.loadDay === 'function') day = await readModels.loadDay(binding.clientId, date, { now });
+    else {
+      const cal = await readModels.loadCalendar(binding.clientId, { now });
+      day = (cal?.week || []).find((d) => d.date === (date || cal.today));
+    }
+    const rows = (day?.posts || []).filter((r) => r?.id && !TERMINAL_STATUSES.has(r.status)).slice(0, 8);
+    if (!rows.length) return say(binding.chatId, `No posts to show for ${date || 'today'}.`);
+    const buttons = [];
+    for (const r of rows) {
+      const label = `${CREATIVE_LABEL}: ${localTime(r.scheduledAt || r.proposedAt, tz).split(', ').pop()} ${String(r.content || '').replace(/\s+/g, ' ').slice(0, 20)}`.trim();
+      buttons.push({ text: label, ticket: await mkTicket(binding, { postId: r.id, revision: r.revision ?? 0, action: 'creative' }) });
+    }
+    return sayHtml(binding.chatId, `<b>Copy + high-res</b>\n${escapeHtml(date || day?.date || 'Today')}: pick a post.`, { replyMarkup: keyboard(buttons.map((b) => [b])) });
   }
 
   // ── Daily-loop suggestions ─────────────────────────────────────────────────
@@ -414,6 +480,8 @@ export function createBot(ctx) {
           },
         };
       }
+      case 'creative':
+        return { answer: 'Sending.', followup: () => sendCreative(binding, post.id) };
       case 'show-card':
         return { answer: 'Opening.', followup: () => sendCard(binding, post, { headline: 'Post' }) };
       case 'show-section':
@@ -561,6 +629,11 @@ export function createBot(ctx) {
     const chatId = binding.chatId;
     const key = MENU_ROUTES.get(text.toLowerCase().replace(/^\//, '').replace(/@\w+$/, ''));
     const guard = async (fn) => { try { await fn(); } catch { await say(chatId, 'Could not load that right now. Try again, or open HITLOOP.'); } };
+    const creativeCmd = text.match(CREATIVE_ROUTE);
+    if (creativeCmd) {
+      await store.clearPending(db, binding.telegramUserId);
+      return guard(() => showCreative(binding, creativeCmd[1] || null));
+    }
     if (key === 'upload') {
       if (ctx.intake?.handleMessage) return say(chatId, 'Send photos or videos here (several at once is fine), with a caption saying what they show. They go to your HITLOOP library only: nothing is analysed, remixed or posted.');
       return say(chatId, 'Uploading content from Telegram is coming next. For now, add content in HITLOOP.');
@@ -590,5 +663,5 @@ export function createBot(ctx) {
     return undefined;
   }
 
-  return { handleUpdate, handleMessage, handleCallback, sendCard, sendSuggestionsNotice, showHappening, sendMedia, sendTakeover, retirePostCards };
+  return { handleUpdate, handleMessage, handleCallback, sendCard, sendCreative, sendSuggestionsNotice, showHappening, sendMedia, sendTakeover, retirePostCards };
 }

@@ -24,11 +24,13 @@ import {
 import { buildMonthCalendar } from '../x-content-inventory/month-calendar.js';
 import { resolveCalendarEngineConfig } from '../content-context/load-content-context.js';
 import { createFirestorePlanStore } from '../x-strategy/plan-store.js';
-import { upsertPackage, packageGetterFor } from '../x-content-inventory/store.js';
+import { upsertPackage, packageGetterFor, readInventory } from '../x-content-inventory/store.js';
 import { createFirestoreRunStore } from '../x-content-inventory/daily-loop/run-store.js';
 import { saveSuggestionDraft, dismissSuggestion as dismissDailySuggestion, overlayStagedMedia } from '../x-content-inventory/daily-loop/review.js';
 import { handleNasAction } from '../x-content-inventory/nas.js';
 import { tokenUrlFor } from '../x-content-inventory/thumbs.js';
+import { pickMedia, pickMediaRef } from '../x-content-inventory/item-actions.js';
+import { findHiresMedia, useHiresMedia, HIRES_EDITABLE_STATUSES, pendingStageFromDb, readStageStatesFromDb } from '../x-content-inventory/hires-media.js';
 
 const require = createRequire(import.meta.url);
 const fb = require('../../api/_lib/firebase-admin.cjs');
@@ -109,6 +111,68 @@ export function createTelegramRuntime({ env = process.env, db = fb.adminDb, tran
     now, sleep: (ms) => new Promise((r) => setTimeout(r, ms)), randomId: () => crypto.randomUUID(),
   });
 
+  // "Copy + high-res": same readers/writers as the dashboard's find-hires-media / hires-media-use route actions.
+  const readAllPackages = async (clientId) => {
+    const all = [];
+    let cursor = null;
+    for (let page = 0; page < 20; page += 1) {
+      const r = await readInventory({ clientId, pageSize: 1000, ...(cursor ? { startAfter: cursor } : {}) });
+      all.push(...r.packages);
+      cursor = r.nextCursor;
+      if (!cursor) break;
+    }
+    return all;
+  };
+  // A sendable URL (+ byte size when the bucket knows it) for a storage ref ("ev:<path>" or "publish-staging/...").
+  async function mediaFromRef(ref, fallbackUrl, type) {
+    const r = String(ref || '');
+    const ev = /^ev:(.+)$/.exec(r)?.[1];
+    const path = ev || (r.startsWith('publish-staging/') ? r : null);
+    const signers = mediaSigners();
+    const url = path ? await (ev ? signers.signEvLong(path) : signers.hitloopUrl(path)).catch(() => null) : null;
+    const finalUrl = url || fallbackUrl || null;
+    if (!finalUrl) return null;
+    let size;
+    try {
+      let file = null;
+      if (path && ev) { void fb.adminDb; file = require('../../api/_lib/editvideos-bridge.cjs').bridgeBucket().file(path); } else if (path) file = fb.adminStorage.bucket().file(path);
+      if (file) size = Number((await file.getMetadata())[0]?.size) || undefined;
+    } catch { /* size unknown: the sender just tries the URL and falls back to a link */ }
+    return { url: finalUrl, path: path || r, type: type || (/\.(mp4|mov|m4v|webm)$/i.test(path || r) ? 'video' : 'image'), ...(size ? { size } : {}) };
+  }
+  const creative = {
+    findHires: (postId, clientId) => findHiresMedia({
+      readPost: (id) => getSocialPost(clientId, id),
+      readPackages: () => readAllPackages(clientId),
+      readStageStates: (ids) => readStageStatesFromDb(db, ids),
+    }, { postId }),
+    candidateMedia: async (id, clientId) => {
+      const pkg = await packageGetterFor(clientId)(id);
+      const ref = pickMediaRef(pkg);
+      return ref ? mediaFromRef(ref.ref, null, ref.kind) : null;
+    },
+    currentMedia: (post) => mediaFromRef(post.mediaStoragePath, post.mediaUrl, post.mediaType || (String(post.mediaContentType || '').startsWith('video/') ? 'video' : undefined)),
+    useHires: ({ postId, candidateId, notify, clientId }) => useHiresMedia({
+      getPost: (id) => getSocialPost(clientId, id),
+      getPackage: packageGetterFor(clientId),
+      readPackages: () => readAllPackages(clientId),
+      pendingStage: (id) => pendingStageFromDb(db, id),
+      nasStage: (id) => handleNasAction(nasDepsFor(clientId), 'nas-stage', { id }, { email: 'telegram-owner' }),
+      nasStatus: () => handleNasAction(nasDepsFor(clientId), 'nas-status', {}),
+      pickMedia: (pkg) => pickMedia(pkg, mediaSigners()),
+      applyPostMedia: (id, media) => db.runTransaction(async (tx) => {
+        const ref = db.collection('social_posts').doc(id);
+        const snap = await tx.get(ref);
+        const cur = snap.exists ? snap.data() : null;
+        if (!cur || cur.clientId !== clientId || !HIRES_EDITABLE_STATUSES.includes(cur.status)) return false;
+        tx.set(ref, { ...media, revision: (Number(cur.revision) || 0) + 1, updatedAt: new Date().toISOString() }, { merge: true });
+        return true;
+      }),
+      upsertPackage: (pkg) => upsertPackage(pkg, { returnPackages: false, clientId }),
+      now,
+    }, { clientId, postId, candidateId, notify }),
+  };
+
   const services = {
     // Suggestions (daily loop). All writes reuse the web Save/Dismiss functions, so Telegram and the dashboard cannot diverge.
     async saveSuggestion({ clientId, runKey, suggestionId }) {
@@ -141,6 +205,7 @@ export function createTelegramRuntime({ env = process.env, db = fb.adminDb, tran
         return { ok: false, status: 'error', message: String(err?.message || err).slice(0, 200) };
       }
     },
+    creative,
     getSocialPost, updateSocialPost, approveAndSchedule, rejectDraft,
     claimManualDelivery, recordManualPosted, releaseManualClaim, approveAndPostNow,
   };
