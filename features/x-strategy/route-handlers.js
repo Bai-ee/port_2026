@@ -233,23 +233,25 @@ export function createStrategyHandlers({
   };
   // Client Brain write-back: strategy-doc and plan saves (manual card edits AND confirmed chat proposals, which run
   // through these same stores) tell the Brain via onBrainOwnedSaved(clientId, target, prior, next), where prior/next
-  // are the whole stored docs. Fire-and-forget; a hook failure never fails the save. The Brain's own sync
-  // (source 'client-brain') is skipped so it cannot loop. Absent hook => stores are used as-is.
+  // are the whole stored docs. Awaited (a serverless function can end before an un-awaited write, which lost the
+  // 2026-10-17 bucket-track write-back) and run one target at a time (each rewrites the Brain Markdown, so two at
+  // once could drop one). A hook failure never fails the save. The Brain's own sync (source 'client-brain') is
+  // skipped so it cannot loop. Absent hook => stores are used as-is.
   const jsonEq = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
   const fromBrain = (opts) => opts?.source === 'client-brain' || opts?.by === 'client-brain';
-  function notifyBrain(clientId, target, prior, next) {
-    try { Promise.resolve(onBrainOwnedSaved(clientId, target, prior, next)).catch((err) => console.warn('[x-strategy] onBrainOwnedSaved failed:', target, err?.message || err)); }
+  async function notifyBrain(clientId, target, prior, next) {
+    try { await onBrainOwnedSaved(clientId, target, prior, next); }
     catch (err) { console.warn('[x-strategy] onBrainOwnedSaved failed:', target, err?.message || err); }
   }
-  const notifyPlan = (clientId, prior, out, opts) => {
+  const notifyPlan = async (clientId, prior, out, opts) => {
     if (!onBrainOwnedSaved || !out?.changed || fromBrain(opts)) return;
-    if (!jsonEq(prior?.plan?.contentTracks, out.doc?.plan?.contentTracks)) notifyBrain(clientId, 'contentTracks', prior, out.doc);
-    if (!jsonEq(prior?.plan?.engineTargets, out.doc?.plan?.engineTargets)) notifyBrain(clientId, 'trackTargets', prior, out.doc);
+    if (!jsonEq(prior?.plan?.contentTracks, out.doc?.plan?.contentTracks)) await notifyBrain(clientId, 'contentTracks', prior, out.doc);
+    if (!jsonEq(prior?.plan?.engineTargets, out.doc?.plan?.engineTargets)) await notifyBrain(clientId, 'trackTargets', prior, out.doc);
   };
   const withBrainPlan = (write) => async (clientId, ...args) => {
     const prior = onBrainOwnedSaved ? await basePlanStore.get(clientId) : null;
     const out = await write(clientId, ...args);
-    notifyPlan(clientId, prior, out, args[0]);
+    await notifyPlan(clientId, prior, out, args[0]);
     return out;
   };
   const planStore = {
@@ -261,7 +263,7 @@ export function createStrategyHandlers({
   const withBrainDoc = (write) => async (clientId, ...args) => {
     const prior = onBrainOwnedSaved ? await baseDocStore.get(clientId) : null;
     const out = await write(clientId, ...args);
-    if (onBrainOwnedSaved && out?.changed && !fromBrain(args[0])) notifyBrain(clientId, 'strategyDoc', prior, out.doc);
+    if (onBrainOwnedSaved && out?.changed && !fromBrain(args[0])) await notifyBrain(clientId, 'strategyDoc', prior, out.doc);
     return out;
   };
   const docStore = baseDocStore && onBrainOwnedSaved
