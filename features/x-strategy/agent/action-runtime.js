@@ -13,8 +13,9 @@
 // Calls go to the SAME route handlers the dashboard buttons use, with the owner's own authorization header
 // (and `?as=` when impersonating), so every auth / pilot / admin check still applies.
 //
-// MCP: not exposed. The MCP server has its own tool set and OAuth tokens (not Firebase bearer), so run_action is
-// an in-app chat tool only; toolDepsFor() (MCP) builds deps without `actions`, so the tools answer "not available".
+// NO AUTHORIZATION (MCP chat_send: the OAuth identity carries no Firebase bearer): nothing is ever invoked. Tier 0
+// reads answer "use the dedicated read tools", and every write (even tier 1 on autonomy 'auto') becomes a confirm
+// card that the owner confirms in the dashboard, where the bearer exists. Undo is refused for the same reason.
 
 import { randomUUID } from 'node:crypto';
 import { ROUTE_MODULES as DEFAULT_ROUTE_MODULES, ROUTE_FILES, ROUTE_AUTH, getAction as defaultGetAction, findActions as defaultFindActions } from './action-registry.js';
@@ -428,6 +429,10 @@ export function createActionRuntime({ audit, autonomy, docs, invoke, registry, c
         };
       }
 
+      const noAuth = !ctx?.authorization;
+      if (entry.tier === 0 && noAuth) {
+        return { kind: 'error', error: `${entry.title} is a dashboard read that cannot run from this connection. Use the dedicated strategy read tools (get_queue, get_results, get_today_run, ...), or ask the owner to run it in the dashboard Strategy chat.` };
+      }
       if (entry.tier === 0) {
         const rows = [];
         for (const a of clean) {
@@ -439,7 +444,8 @@ export function createActionRuntime({ audit, autonomy, docs, invoke, registry, c
         return { kind: 'result', result: withDropped({ ok: true, actionId: entry.id, data: compactJson(clean.length === 1 ? rows[0] : rows, READ_MAX_CHARS) }) };
       }
 
-      const gate = resolveGate(entry, await getAutonomy(ctx.clientId), { itemCount: clean.length });
+      let gate = resolveGate(entry, await getAutonomy(ctx.clientId), { itemCount: clean.length });
+      if (gate === 'run' && noAuth) gate = 'confirm'; // cannot invoke without the owner's authorization: always a card
       if (gate === 'run') {
         return { kind: 'result', result: withDropped(shaped(await execute(entry, clean, ctx, { via: 'auto' }), entry)) };
       }
@@ -470,6 +476,7 @@ export function createActionRuntime({ audit, autonomy, docs, invoke, registry, c
 
     /** undo_action: native undo when the entry has one, else snapshot restore only if nothing changed since. */
     async undo(ctx, undoId) {
+      if (!ctx?.authorization) return { ok: false, error: 'Undo needs the dashboard session. Ask the owner to undo it from the dashboard Strategy chat (or the action log).' };
       const row = typeof undoId === 'string' && undoId ? await audit.get(ctx.clientId, undoId) : null;
       if (!row) return { ok: false, error: 'No such action in the log.' };
       if (row.undoneAt) return { ok: false, error: `Already undone at ${row.undoneAt}.` };
