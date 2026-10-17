@@ -55,6 +55,9 @@ import { SEED_STRATEGY_SECTIONS } from './strategy-doc-seed.js';
 import { summarizeAlgorithm, scorePosts as shapeScoredPosts, ruleCheck, summarizeAudience } from './insights.js';
 import { buildBriefBundle, freshnessOf, readBriefRaw as readBriefRawFromDb } from './brief-bundle.js';
 import { scoreXPost, getAlgorithmProfile } from '../x-growth/index.js';
+import { normalizeDataSources } from './data-sources.js';
+import { estimateCorporaPull, estimateQuoteScan, DEFAULT_MAX_PER_HANDLE, DEFAULT_MAX_ACCOUNTS, DEFAULT_PER_HANDLE } from './x-api-estimate.js';
+import { normalizeWatchlist } from '../x-quote-targets/client-watchlist.js';
 import { guardXPost } from '../x-content-guard/index.js';
 
 export const STRATEGY_ROUTE_ACTIONS = Object.freeze([
@@ -81,6 +84,9 @@ export const STRATEGY_ROUTE_ACTIONS = Object.freeze([
   'strategy-action-log',
   'strategy-autonomy-get',
   'strategy-autonomy-save',
+  'quote-scan-refresh',
+  'x-data-sources-get',
+  'x-data-sources-save',
 ]);
 
 export const REVIEW_DISPLAY_TEXT = 'Review my strategy against the latest data.';
@@ -221,6 +227,9 @@ export function createStrategyHandlers({
   rejectPost = null, // (clientId, postId, {reviewedBy, expectedRevision}) -> rejectDraft; queue-bulk delete-draft. Absent => lazy import of twitter-service
   readQueuePosts = null, // (clientId) -> raw social_posts rows (newest first); memory-suggest / media-tasks previews. Absent => those tools say not available
   listMediaTaskIds = null, createMediaTasks = null, // (clientId) -> Set of existing task ids; ({clientId, rows, by, proposalId}) -> {created, existing}: the content_tasks store (media-tasks)
+  readDataSources = null, saveDataSources = null, // (clientId) -> normalized dataSources | (clientId, patch) -> saved. Absent => every source is 'mac' and x-data-sources-save answers 503
+  pullCorpora = null, // (clientId, {handles}) -> pullCorporaViaXApi result (the PAID X API). Absent => x-api source answers 503
+  scanQuotes = null, // (clientId, {}) -> scanQuoteTargetsViaXApi result (the PAID X API). Absent => x-api source answers 503
   linkItemMedia = null, // (clientId, links) -> {linked, failed, results}; the quote-targets link-item-media writer. Absent => item-media confirm fails clearly
   env = {}, // explicit on purpose: only createStrategyHandlersFromDb passes process.env, so a bare handler can never reach a real model
 } = {}) {
@@ -551,6 +560,12 @@ export function createStrategyHandlers({
     };
   }
 
+  // Where a data set comes from for this client (client_configs xGrowth.dataSources); 'mac' without a reader.
+  const sourcesOf = async (clientId) => normalizeDataSources(typeof readDataSources === 'function' ? await readDataSources(clientId) : null);
+  // The X API spends real money. It runs only when the caller sets confirmPaid:true (the Refresh panel's confirm row does;
+  // the agent's catalog schema drops the key, so a chat action can never reach it) and the data set's source is 'x-api'.
+  const needPaidConfirm = (what) => fail(409, `${what} uses the paid X API. Run it from the Refresh panel (it shows the estimate and asks you to confirm).`, { code: 'needs-confirmation', needsConfirmation: true });
+
   async function strategyRefresh(body, context, auth) {
     const c = requireClient(body, context);
     if (c.error) return c.error;
@@ -560,9 +575,69 @@ export function createStrategyHandlers({
       handles = [p.ownHandle, ...p.benchmarkHandles].filter(Boolean);
       if (!handles.length) return fail(400, 'No handles to refresh: the X growth profile has no own or benchmark handle.');
     }
+    if ((await sourcesOf(c.clientId)).strategyAccounts === 'x-api') {
+      if (body?.confirmPaid !== true) return needPaidConfirm('Strategy accounts');
+      if (typeof pullCorpora !== 'function') return fail(503, 'The X API pull is not available on this deployment.');
+      const r = await pullCorpora(c.clientId, { handles });
+      return r.ok ? { ...r, ok: true } : fail(r.stopped === 'x-budget' ? 429 : 422, r.error || `X API pull failed${r.stopped ? ` (${r.stopped})` : ''}.`, { source: 'x-api', result: r });
+    }
     // requestRefresh validates (chars, non-empty, <= PLAN_LIMITS.maxHandlesPerRefreshRequest) and throws status-400 errors.
     const out = await refreshService.requestRefresh({ handles, clientId: c.clientId, requestedBy: auth?.decoded?.email || auth?.decoded?.uid || null });
     return { ok: true, requestId: out.requestId, status: out.status, ...(out.merged ? { merged: true } : {}) }; // drain (if any) is intentionally not awaited
+  }
+
+  // Quote-target scan. 'x-api' runs inline (bounded by the scanner's deadline, inside the route's 120 s); 'mac' cannot run on a server.
+  async function quoteScanRefresh(body, context) {
+    const c = requireClient(body, context);
+    if (c.error) return c.error;
+    if ((await sourcesOf(c.clientId)).quoteTargets !== 'x-api') {
+      return { ok: true, status: 'needs-mac', source: 'mac', instructions: `The Mac scan runs locally (bird needs browser cookies): node scripts/x-content/scan-quote-targets.mjs --client ${c.clientId} --write, or let the launchd job run it. Switch Quote targets to the X API to scan from the server (paid).` };
+    }
+    if (body?.confirmPaid !== true) return needPaidConfirm('Quote targets');
+    if (typeof scanQuotes !== 'function') return fail(503, 'The X API scan is not available on this deployment.');
+    const r = await scanQuotes(c.clientId, {});
+    const summary = {
+      source: 'x-api', wrote: r.wrote === true, calls: r.calls, posts: r.posts, stopped: r.stopped ?? null,
+      ...(r.payload ? { scanned: r.payload.scanned, succeeded: r.payload.succeeded, candidates: r.payload.candidates.length, failures: r.payload.failures.length, rateLimited: r.payload.rateLimited.length } : {}),
+    };
+    return r.ok ? { ok: true, ...summary } : fail(r.stopped === 'x-budget' ? 429 : 422, r.error || 'X API scan failed.', summary);
+  }
+
+  // Stored sources + the call/post estimate of one X API run per data set (no network; cached user ids are unknown here, so lookups are an upper bound).
+  async function xDataSourcesGet(body, context) {
+    const c = requireClient(body, context);
+    if (c.error) return c.error;
+    const dataSources = await sourcesOf(c.clientId);
+    const p = await loadProfile(c.clientId);
+    const handles = [p.ownHandle, ...p.benchmarkHandles].filter(Boolean);
+    const raw = await readXGrowthConfig(c.clientId).catch(() => null);
+    const accounts = normalizeWatchlist(raw?.watchlist).length;
+    return {
+      ok: true, dataSources,
+      estimates: {
+        strategyAccounts: { ...estimateCorporaPull({ handles, maxPerHandle: DEFAULT_MAX_PER_HANDLE }), perHandle: DEFAULT_MAX_PER_HANDLE },
+        quoteTargets: { ...estimateQuoteScan({ accounts, perHandle: DEFAULT_PER_HANDLE, maxAccounts: DEFAULT_MAX_ACCOUNTS }), watchlist: accounts },
+      },
+    };
+  }
+
+  async function xDataSourcesSave(body, context) {
+    const c = requireClient(body, context);
+    if (c.error) return c.error;
+    if (typeof saveDataSources !== 'function') return fail(503, 'Saving data sources is not available on this deployment.');
+    const patch = {};
+    for (const k of ['strategyAccounts', 'quoteTargets']) {
+      if (body?.[k] === undefined) continue;
+      if (!['mac', 'x-api'].includes(body[k])) return fail(400, `${k} must be "mac" or "x-api".`);
+      patch[k] = body[k];
+    }
+    if (body?.autoDaily !== undefined) {
+      if (!body.autoDaily || typeof body.autoDaily !== 'object') return fail(400, 'autoDaily must be an object {strategyAccounts?, quoteTargets?}.');
+      patch.autoDaily = {};
+      for (const k of ['strategyAccounts', 'quoteTargets']) if (body.autoDaily[k] !== undefined) patch.autoDaily[k] = body.autoDaily[k] === true;
+    }
+    if (!Object.keys(patch).length) return fail(400, 'Nothing to save: send strategyAccounts, quoteTargets or autoDaily.');
+    return { ok: true, dataSources: await saveDataSources(c.clientId, patch) };
   }
 
   // body.workerOnly:true (+ clientId) returns just the worker heartbeat, no requestId needed (the Inputs strip uses it).
@@ -1173,6 +1248,9 @@ export function createStrategyHandlers({
     'strategy-daily-fill-preview': strategyDailyFillPreview,
     'strategy-daily-fill-create': strategyDailyFillCreate,
     'strategy-freshness': strategyFreshness,
+    'quote-scan-refresh': quoteScanRefresh,
+    'x-data-sources-get': xDataSourcesGet,
+    'x-data-sources-save': xDataSourcesSave,
   };
 
   /** @returns {Promise<object>} result; failures carry {ok:false,status}. Auth is the caller's job. */
@@ -1378,11 +1456,24 @@ export function createStrategyHandlersFromDb(db, {
     return { generatedAt: qt?.generatedAt || null, targets };
   };
   const ensureDraft = async (clientId, payload) => (await import('../social-posting/twitter-service.js')).ensureDraftPost(clientId, payload);
+  // X API data sources (client_configs xGrowth.dataSources). The pullers are lazy: nothing here touches X until a confirmed run.
+  const readDataSources = async (clientId) => (await import('./data-sources.js')).readDataSources(db, clientId);
+  const saveDataSources = async (clientId, patch) => (await import('./data-sources.js')).saveDataSources(db, clientId, patch);
+  const pullCorpora = async (clientId, { handles } = {}) => {
+    const { pullCorporaViaXApi, createFirestoreUserIdCache } = await import('./x-api-pull.js');
+    return pullCorporaViaXApi(clientId, { handles, store: corpusStore, userIdCache: createFirestoreUserIdCache(db) });
+  };
+  const scanQuotes = async (clientId, opts = {}) => {
+    const { scanQuoteTargetsViaXApi, createFirestoreQuotePayloadWriter } = await import('../x-quote-targets/x-api-scan.js');
+    const { createFirestoreUserIdCache } = await import('./x-api-pull.js');
+    return scanQuoteTargetsViaXApi(clientId, { db, userIdCache: createFirestoreUserIdCache(db), writePayload: createFirestoreQuotePayloadWriter(db), ...opts });
+  };
   const taskStore = createContentTaskStore(db);
   const listMediaTaskIds = (clientId) => taskStore.ids(clientId);
   const createMediaTasks = ({ clientId, rows, by, proposalId }) => taskStore.create(clientId, rows, { by, proposalId });
   return createStrategyHandlers({
     corpusStore, planStore, refreshService, readPackages, readAudience, readBuckets, readBucketEngine, readOpenPackageIds, readFillContext, readQuoteTargets, ensureDraft, placeDraft, listMediaTaskIds, createMediaTasks,
+    readDataSources, saveDataSources, pullCorpora, scanQuotes,
     readWorkerHealth: (clientId) => readWorkerHealthFromDb(db, { now: Date.now(), clientId }),
     docStore, onBrainOwnedSaved, readBrainTrackTargets, chatStore, agentLoopFactory, callModel, logUsage, runDailyAction, runUpdateItemFacets, readTodayRun, readContentContext, saveXGrowthProfile, env,
     readQueueSummary, readPost, readOpportunities, readResults, readMarketSignals, editPost, runPaidSync, actionRuntime,

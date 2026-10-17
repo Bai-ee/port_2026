@@ -58,7 +58,7 @@ test('buildBriefBundle: ages, stale flags, groups and unique staleGroups', () =>
   assert.equal(b.parts['platform-searches'].stale, false);
   assert.equal(b.parts.analysis.asOf, hoursAgo(10)); // oldest PRESENT core analyzer
   assert.equal(b.parts['quote-targets'].stale, false);
-  assert.equal(b.parts['quote-targets'].refreshGroup, null);
+  assert.equal(b.parts['quote-targets'].refreshGroup, 'quote-targets');
   assert.equal(b.parts['strategy-accounts'].asOf, hoursAgo(60));
   assert.equal(b.parts['strategy-accounts'].stale, true); // 60h > 48h
   assert.equal(b.parts['x-monitor'].stale, true); // 80h > 72h (newest of sync stamps / updatedAt)
