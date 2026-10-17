@@ -8,8 +8,9 @@ import { STRATEGY_AGENT_MODEL, STRATEGY_DOC_MAX_CHARS, buildSystemPrompt } from 
 import { renderDocText, describeDocChange } from '../strategy-doc.js';
 import { BULK_PROPOSAL_KINDS, MAX_BULK_PROPOSALS_PER_TURN } from '../contracts.js';
 import {
-  TOOL_SCHEMAS, READ_TOOL_NAMES, KIND_BY_PROPOSE_TOOL, runReadTool, prepareProposal, serializeResult,
+  TOOL_SCHEMAS, READ_TOOL_NAMES, KIND_BY_PROPOSE_TOOL, STYLE_TOOL_NAMES, runReadTool, runStyleTool, prepareProposal, serializeResult,
 } from './tools.js';
+import { effectiveResponseStyle } from '../response-style.js';
 import { ACTION_TOOL_NAMES, runActionTool } from './action-runtime.js';
 
 export { STRATEGY_AGENT_MODEL };
@@ -175,7 +176,10 @@ export function createAgentLoop({
           + (changes.length ? `\n\nRECENT STRATEGY CHANGES (oldest first):\n${changes.map((c) => `- ${c}`).join('\n')}` : '');
       }
     } catch { strategyDocText = ''; }
-    const system = buildSystemPrompt({ planSummary: planSummary ?? null, strategyDocText, selectedContext: typeof selectedContext === 'string' ? selectedContext : '' });
+    // The owner's saved reply format (or the default) rides on every turn, outside the capped rule block.
+    let responseStyle;
+    try { responseStyle = effectiveResponseStyle(await toolDeps?.getResponseStyle?.()); } catch { responseStyle = effectiveResponseStyle(null); }
+    const system = buildSystemPrompt({ planSummary: planSummary ?? null, strategyDocText, selectedContext: typeof selectedContext === 'string' ? selectedContext : '', responseStyle });
 
     const account = async (resp, ok) => {
       const u = resp?.usage || {};
@@ -239,6 +243,10 @@ export function createAgentLoop({
         } catch (err) {
           return reply(`Tool failed: ${String(err?.message ?? err).slice(0, 200)}`, true);
         }
+      }
+      if (STYLE_TOOL_NAMES.includes(tu.name)) {
+        const out = await runStyleTool(tu.name, parsed.value, toolDeps);
+        return reply(serializeResult(out), Boolean(out.error));
       }
       if (ACTION_TOOL_NAMES.includes(tu.name)) {
         const out = await runActionTool(tu.name, parsed.value, toolDeps);

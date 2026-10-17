@@ -54,6 +54,8 @@ import { draftDoc, STRATEGY_DOC_SECTIONS, describeDocChange } from './strategy-d
 import { SEED_STRATEGY_SECTIONS } from './strategy-doc-seed.js';
 import { summarizeAlgorithm, scorePosts as shapeScoredPosts, ruleCheck, summarizeAudience } from './insights.js';
 import { buildBriefBundle, freshnessOf, readBriefRaw as readBriefRawFromDb } from './brief-bundle.js';
+import { nextResponseStyle, effectiveResponseStyle, createFirestoreResponseStyleStore } from './response-style.js';
+import { normalizeUnmet, createFirestoreUnmetStore, UNMET_STATUSES } from './unmet-requests.js';
 import { scoreXPost, getAlgorithmProfile } from '../x-growth/index.js';
 import { normalizeDataSources } from './data-sources.js';
 import { estimateCorporaPull, estimateQuoteScan, DEFAULT_MAX_PER_HANDLE, DEFAULT_MAX_ACCOUNTS, DEFAULT_PER_HANDLE } from './x-api-estimate.js';
@@ -87,6 +89,10 @@ export const STRATEGY_ROUTE_ACTIONS = Object.freeze([
   'quote-scan-refresh',
   'x-data-sources-get',
   'x-data-sources-save',
+  'strategy-reply-style-get',
+  'strategy-reply-style-save',
+  'strategy-unmet-list',
+  'strategy-unmet-status',
 ]);
 
 export const REVIEW_DISPLAY_TEXT = 'Review my strategy against the latest data.';
@@ -207,6 +213,8 @@ export function createStrategyHandlers({
   docStore: baseDocStore = null, onBrainOwnedSaved = null, // strategy-doc-store.js; absent => the strategy-doc-* actions answer 503
   readBrainTrackTargets = null, // clientId -> approved Brain Track Targets rows (per-type shares); absent => postsPerDay only
   chatStore = null, agentLoopFactory = null, callModel = null, logUsage = null,
+  responseStyleStore = null, // response-style.js store; absent => the default reply format, nothing saved
+  unmetStore = null, // unmet-requests.js store; absent => log_unmet_request / get_unmet_requests say not available
   runDailyAction = null, runUpdateItemFacets = null, readTodayRun = null, readContentContext = null, saveXGrowthProfile = null,
   readQueueSummary = null, readPostsForQuery = null, readPost = null, readOpportunities = null, readResults = null, // chat read tools: (clientId[, postId]) -> plain JSON | null
   readMarketSignals = null, // (clientId) -> projected brief (features/intelligence/_brief-intel.js projectBrief) | null
@@ -765,6 +773,23 @@ export function createStrategyHandlers({
       ...(readMarketSignals ? { readMarketSignals: () => readMarketSignals(clientId) } : {}),
       // Every brief/market/strategy part with its age + the Refresh group that updates it. Read-only; never refreshes.
       ...(readBriefRaw ? { readBriefBundle: async ({ part } = {}) => buildBriefBundle(await readBriefRaw(clientId, briefReaders(clientId, preloaded)), { now: Date.now(), part }) } : {}),
+      // Requests the agent could not do, for the owner to review (needs code / needs you).
+      ...(unmetStore ? {
+        logUnmetRequest: async (raw) => {
+          const n = normalizeUnmet(raw);
+          return n.ok ? unmetStore.log(clientId, n.entry, { now: new Date(clock()).toISOString(), by: auth?.decoded?.email ?? null }) : n;
+        },
+        listUnmetRequests: ({ status } = {}) => unmetStore.list(clientId, { status, limit: 50 }),
+      } : {}),
+      // The owner's reply format: read every turn (loop + get_response_style), written only by save_response_style.
+      ...(responseStyleStore ? {
+        getResponseStyle: () => responseStyleStore.get(clientId),
+        saveResponseStyle: async ({ text, mode }) => {
+          const next = nextResponseStyle(await responseStyleStore.get(clientId), { text, mode, by: auth?.decoded?.email ?? null, now: new Date(clock()).toISOString() });
+          if (next.ok) await responseStyleStore.save(clientId, next.value);
+          return next;
+        },
+      } : {}),
       searchInventory: async ({ query, limit, track } = {}) => {
         const max = Math.min(Math.max(1, Number(limit) || 10), 20);
         const tokens = String(query ?? '').toLowerCase().split(/\s+/).filter(Boolean).slice(0, 8);
@@ -1234,7 +1259,43 @@ export function createStrategyHandlers({
     return { ok: true, autonomy: await actionRuntime.saveAutonomy(c.clientId, next), xFloor: 'typed' };
   }
 
+  // The owner's reply format and the "could not do" log, for the Agent permissions panel. The agent has its own tools.
+  async function strategyReplyStyleGet(body, context) {
+    const c = requireClient(body, context);
+    if (c.error) return c.error;
+    if (!responseStyleStore) return fail(503, 'Reply preferences are not available on this deployment.');
+    return { ok: true, style: effectiveResponseStyle(await responseStyleStore.get(c.clientId)) };
+  }
+  async function strategyReplyStyleSave(body, context, auth) {
+    const c = requireClient(body, context);
+    if (c.error) return c.error;
+    if (!responseStyleStore) return fail(503, 'Reply preferences are not available on this deployment.');
+    const next = nextResponseStyle(await responseStyleStore.get(c.clientId), { text: body?.text, mode: 'replace', by: auth?.decoded?.email ?? null, now: new Date(clock()).toISOString() });
+    if (!next.ok) return fail(400, next.error);
+    await responseStyleStore.save(c.clientId, next.value);
+    return { ok: true, style: effectiveResponseStyle(next.value) };
+  }
+  async function strategyUnmetList(body, context) {
+    const c = requireClient(body, context);
+    if (c.error) return c.error;
+    if (!unmetStore) return fail(503, 'The request log is not available on this deployment.');
+    return { ok: true, requests: await unmetStore.list(c.clientId, { status: body?.status || undefined, limit: 100 }) };
+  }
+  async function strategyUnmetStatus(body, context) {
+    const c = requireClient(body, context);
+    if (c.error) return c.error;
+    if (!unmetStore) return fail(503, 'The request log is not available on this deployment.');
+    if (!UNMET_STATUSES.includes(body?.status)) return fail(400, `status must be one of ${UNMET_STATUSES.join(', ')}.`);
+    if (typeof body?.id !== 'string' || !/^[0-9a-f]{20}$/.test(body.id)) return fail(400, 'id is required.');
+    await unmetStore.setStatus(c.clientId, body.id, body.status, { now: new Date(clock()).toISOString() });
+    return { ok: true };
+  }
+
   const table = {
+    'strategy-reply-style-get': strategyReplyStyleGet,
+    'strategy-reply-style-save': strategyReplyStyleSave,
+    'strategy-unmet-list': strategyUnmetList,
+    'strategy-unmet-status': strategyUnmetStatus,
     'strategy-action-undo': strategyActionUndo,
     'strategy-action-log': strategyActionLog,
     'strategy-autonomy-get': strategyAutonomyGet,
@@ -1397,6 +1458,8 @@ export function createStrategyHandlersFromDb(db, {
   onXGrowthSaved, onBrainOwnedSaved, readBrainTrackTargets, saveXGrowthProfile = createXGrowthProfileSaver(db, { onSaved: onXGrowthSaved }), chatStore = createFirestoreChatStore(db, { env }),
   agentLoopFactory, callModel, logUsage, loadCommitted, docStore = createFirestoreStrategyDocStore(db),
   actionRuntime = createActionRuntime(createFirestoreActionStores(db)),
+  responseStyleStore = createFirestoreResponseStyleStore(db),
+  unmetStore = createFirestoreUnmetStore(db),
   ...passThrough // any other createStrategyHandlers dep (linkItemMedia, mediaForItem from the quote-targets route; test overrides), forwarded as-is
 } = {}) {
   // `loadCommitted` (handle -> rows|null) lets a serverless host supply the committed corpora from static imports.
@@ -1483,7 +1546,7 @@ export function createStrategyHandlersFromDb(db, {
   const createMediaTasks = ({ clientId, rows, by, proposalId }) => taskStore.create(clientId, rows, { by, proposalId });
   return createStrategyHandlers({
     corpusStore, planStore, refreshService, readPackages, readAudience, readBuckets, readBucketEngine, readOpenPackageIds, readFillContext, readQuoteTargets, ensureDraft, placeDraft, listMediaTaskIds, createMediaTasks,
-    readDataSources, saveDataSources, pullCorpora, scanQuotes,
+    readDataSources, saveDataSources, pullCorpora, scanQuotes, responseStyleStore, unmetStore,
     readWorkerHealth: (clientId) => readWorkerHealthFromDb(db, { now: Date.now(), clientId }),
     docStore, onBrainOwnedSaved, readBrainTrackTargets, chatStore, agentLoopFactory, callModel, logUsage, runDailyAction, runUpdateItemFacets, readTodayRun, readContentContext, saveXGrowthProfile, env,
     readQueueSummary, readPostsForQuery, readPost, readOpportunities, readResults, readMarketSignals, editPost, runPaidSync, actionRuntime,

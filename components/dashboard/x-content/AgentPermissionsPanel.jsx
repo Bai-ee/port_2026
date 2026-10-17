@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { XCE_COLORS, XCE_RADII } from '../content-ui/xce-tokens';
 import UndoChip from './UndoChip.jsx';
+import AgentPreferencesSections from './AgentPreferencesSections.jsx';
 
 // AgentPermissionsPanel - "Agent permissions": how much the strategy agent may do without asking, plus recent actions.
 //   <AgentPermissionsPanel clientId call />
@@ -92,6 +93,7 @@ export default function AgentPermissionsPanel({ clientId, call }) {
           </div>
         ))}
       </div>
+      <AgentPreferencesSections clientId={clientId} call={call} />
     </div>
   );
 }

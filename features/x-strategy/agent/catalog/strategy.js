@@ -2,7 +2,8 @@
 // handlers in features/x-strategy/route-handlers.js, STRATEGY_ROUTE_ACTIONS). Same auth as the rest of that route
 // (bearer + admin + `?as=` + pilot owner). Every strategy handler REQUIRES body.clientId === the resolved client, so the
 // runtime must send clientId (it always does).
-// EXCLUDED here on purpose: strategy-autonomy-save (the agent must never change its own permissions; the runtime also refuses it),
+// EXCLUDED here on purpose: strategy-reply-style-* / strategy-unmet-* (the agent has its own tools: get/save_response_style,
+// get_unmet_requests / log_unmet_request), strategy-autonomy-save (the agent must never change its own permissions; the runtime also refuses it),
 // strategy-action-undo (the agent uses the undo_action tool), strategy-chat-send (recursion), strategy-chat-history (the chat's own transcript),
 // strategy-proposal-decide (the agent must never approve its own proposal cards), strategy-review (starts a model chat).
 import { str, int, bool, arr, obj, open, day } from './_schema.js';

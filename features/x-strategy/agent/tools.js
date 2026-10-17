@@ -15,6 +15,7 @@ import { MAX_LINKS } from '../../x-content-inventory/item-media.js';
 import { MAX_MEMORY_SUGGESTIONS, MEMORY_LINE_MAX } from '../../x-content-inventory/memory-suggest.js';
 import { MAX_MEDIA_TASKS, TASK_KINDS } from '../../x-content-inventory/content-tasks.js';
 import { BRIEF_PARTS, freshnessOf } from '../brief-bundle.js';
+import { RESPONSE_STYLE_MAX_CHARS, effectiveResponseStyle } from '../response-style.js';
 import { SECTION_KEYS, SECTION_MAX, STRATEGY_DOC_SECTIONS, applyDocEdit, normalizeSections } from '../strategy-doc.js';
 
 export const LIMITS = Object.freeze({
@@ -277,7 +278,62 @@ export const READ_TOOLS = Object.freeze([
     description: 'Per brief/market/strategy part: asOf, age in hours, stale or not, and the Refresh group that updates it (null = no Refresh path), plus the staleGroups to refresh. Call before giving action items.',
     input_schema: { type: 'object', properties: {} },
   },
+  {
+    name: 'get_unmet_requests',
+    description: 'Requests the agent could not do (needs code / needs you), newest first, with how often each was asked and its review status (open, planned, done, wont-do). Read-only.',
+    input_schema: { type: 'object', properties: { status: { type: 'string', enum: ['open', 'planned', 'done', 'wont-do'] } } },
+  },
+  {
+    name: 'get_response_style',
+    description: 'How the owner wants replies formatted (their saved instructions, or the default when isDefault). Follow it in every reply. Read-only.',
+    input_schema: { type: 'object', properties: {} },
+  },
 ]);
+
+// The owner's reply-format preferences. Only the in-app agent has this (not MCP): the owner tells the agent how they want
+// answers and the agent saves it; MCP clients read it with get_response_style.
+export const STYLE_TOOLS = Object.freeze([
+  {
+    name: 'save_response_style',
+    description: `Save how the owner wants replies formatted, when they say so ("shorter", "always a table", "lead with the number"...). mode append adds to the saved instructions, replace swaps them. Write the instructions as short imperative lines (max ${RESPONSE_STYLE_MAX_CHARS} chars total). Runs immediately; say what you saved.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'The instructions, one per line' },
+        mode: { type: 'string', enum: ['append', 'replace'], description: 'append (default) or replace' },
+      },
+      required: ['text'],
+    },
+  },
+  {
+    name: 'log_unmet_request',
+    description: 'Every time you answer "needs code: ..." or "needs you: ...", log it here so the owner can review what to build. One call per unmet request; repeats are counted. Runs immediately.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        request: { type: 'string', description: 'What the owner asked for, in their words (short)' },
+        missing: { type: 'string', description: 'What is missing: the capability, data or human step' },
+        kind: { type: 'string', enum: ['needs-code', 'needs-you'] },
+      },
+      required: ['request', 'kind'],
+    },
+  },
+]);
+export const STYLE_TOOL_NAMES = Object.freeze(STYLE_TOOLS.map((t) => t.name));
+
+/** save_response_style. deps.saveResponseStyle({text, mode}) -> stored value. */
+export async function runStyleTool(name, input, deps) {
+  if (name === 'log_unmet_request') {
+    if (typeof deps?.logUnmetRequest !== 'function') return { error: 'The request log is not available here.' };
+    const res = await deps.logUnmetRequest({ request: input?.request, missing: input?.missing, kind: input?.kind });
+    return res?.ok === false ? { error: res.error } : { logged: true, id: res?.id, count: res?.count };
+  }
+  if (name !== 'save_response_style') throw new Error(`unknown style tool: ${name}`);
+  if (typeof deps?.saveResponseStyle !== 'function') return { error: 'Saving reply preferences is not available here.' };
+  const res = await deps.saveResponseStyle({ text: input?.text, mode: input?.mode === 'replace' ? 'replace' : 'append' });
+  if (!res?.ok) return { error: res?.error || 'could not save' };
+  return { saved: true, text: res.value.text };
+}
 
 export const PROPOSE_TOOLS = Object.freeze([
   propose('plan-change', 'Propose a change to the strategy plan. Call get_plan first and pass its version as expectedVersion.', planChangeProps, ['changes', 'expectedVersion']),
@@ -392,7 +448,7 @@ export const PROPOSE_TOOLS = Object.freeze([
   }, ['section', 'text', 'expectedVersion']),
 ]);
 
-export const TOOL_SCHEMAS = Object.freeze([...READ_TOOLS, ...ACTION_TOOLS, ...PROPOSE_TOOLS]);
+export const TOOL_SCHEMAS = Object.freeze([...READ_TOOLS, ...ACTION_TOOLS, ...STYLE_TOOLS, ...PROPOSE_TOOLS]);
 export const READ_TOOL_NAMES = Object.freeze(READ_TOOLS.map((t) => t.name));
 
 const isPlain = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -613,6 +669,11 @@ export async function runReadTool(name, input, toolDeps) {
       if (typeof deps.readBriefBundle !== 'function') return NA();
       return freshnessOf(await deps.readBriefBundle({}));
     }
+    case 'get_unmet_requests':
+      if (typeof deps.listUnmetRequests !== 'function') return NA();
+      return { requests: await deps.listUnmetRequests({ status: input?.status }) };
+    case 'get_response_style':
+      return effectiveResponseStyle(typeof deps.getResponseStyle === 'function' ? await deps.getResponseStyle() : null);
     default: throw new Error(`unknown read tool: ${name}`);
   }
 }

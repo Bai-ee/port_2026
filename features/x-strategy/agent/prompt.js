@@ -74,13 +74,13 @@ export function describeSelected(selected, resolved) {
  * @param {{evaluationSummary?: string, planSummary?: string|object}} input
  * @returns {string}
  */
-export function buildSystemPrompt({ evaluationSummary, planSummary, selectedContext, strategyDocText } = {}) {
+export function buildSystemPrompt({ evaluationSummary, planSummary, selectedContext, strategyDocText, responseStyle } = {}) {
   const plan = typeof planSummary === 'string' ? planSummary : summarizePlan(planSummary);
   const lines = [
     'You are the owner\'s admin-level operator for their Content Engine: you read any of their data, explain their X account against its benchmarks, and can do anything the dashboard can do. You are talking to the owner, one turn at a time.',
     '',
     'FULL CONTROL (hard)',
-    '- NEVER say "I can\'t" or "I have no tool for that". For anything outside your dedicated tools call find_actions (plain words), then run_action. If none exists, say "needs code: <what>" or "needs you: <what>".',
+    '- NEVER say "I can\'t" or "I have no tool for that". For anything outside your dedicated tools call find_actions, then run_action. If none exists, say "needs code: <what>" or "needs you: <what>" and log_unmet_request it.',
     '- Tiers: 0 read runs now. 1 reversible write runs now and returns an undoId: say it ran and that the owner can undo it. 2 destructive and 3 external/spend/X publishing never run from chat: run_action only puts up a card and NOTHING has happened yet. Before a tier 2/3 card say what will change, how many, whether it can be undone, and the cost. X publishing needs the owner to type the confirm text. Never say a card ran.',
     '- Several items of one action: run_action with items (up to 50) = one card and one log entry.',
     '',
@@ -123,7 +123,7 @@ export function buildSystemPrompt({ evaluationSummary, planSummary, selectedCont
     'HOW TO WORK',
     '- Call a tool before answering any data, plan or suggestion question; use few calls.',
     '- Propose at most 2 single-item things per turn (bulk cards do not count), only when the owner asked for a change or the data clearly supports one. Each proposal needs a one-line summary, a short rationale and evidence entries (source + figure) taken from tool results. For a plan change, read get_plan first and pass its version as expectedVersion.',
-    '- If a tool errors, fix the input once or tell the owner why.',
+    '- If a tool errors, fix the input once or say why.',
     '- Keep answers short: a few sentences or a tight list. No preamble, no cheerleading. Plain text only: no markdown tables, headings, bold or horizontal rules (the chat shows them as raw symbols); use short lines or a hyphen list.',
     '',
     `CURRENT PLAN: ${clip(plan, PLAN_SUMMARY_MAX_CHARS)}`,
@@ -131,6 +131,10 @@ export function buildSystemPrompt({ evaluationSummary, planSummary, selectedCont
   lines.push(strategyDocText ? clip(strategyDocText, STRATEGY_DOC_MAX_CHARS) : 'STRATEGY DOCUMENT: none available.');
   if (selectedContext) lines.push(clip(selectedContext, 700));
   if (evaluationSummary) lines.push(`DATA NOTE: ${clip(evaluationSummary, 400)}`);
+  // Last, so it wins over the generic formatting line above. Not part of the capped rule block.
+  if (responseStyle?.text) {
+    lines.push('', `OWNER REPLY FORMAT (${responseStyle.isDefault ? 'default until the owner sets their own' : 'set by the owner'}; follow it in every reply, it overrides the formatting rule above; data and honesty rules still apply). When the owner says how they want replies, call save_response_style.`, clip(responseStyle.text, 1300));
+  }
   return lines.join('\n');
 }
 
