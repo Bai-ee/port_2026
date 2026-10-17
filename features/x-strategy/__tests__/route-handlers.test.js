@@ -43,6 +43,26 @@ test('route actions list matches the T2b scope', () => {
   assert.deepEqual([...STRATEGY_ROUTE_ACTIONS].sort(), ['strategy-calendar-batch-create', 'strategy-calendar-batch-preview', 'strategy-chat-history', 'strategy-chat-send', 'strategy-doc-get', 'strategy-doc-revert', 'strategy-doc-save', 'strategy-evaluate-handle', 'strategy-get', 'strategy-plan-apply', 'strategy-plan-revert', 'strategy-profile-save', 'strategy-proposal-decide', 'strategy-refresh', 'strategy-refresh-status', 'strategy-review']);
 });
 
+test('a plan save waits for the Brain write-back and runs the targets one at a time (serverless-safe)', async () => {
+  const s = setup();
+  const log = [];
+  const h = createStrategyHandlers({
+    corpusStore: createMemoryCorpusStore(), planStore: s.planStore, clock: () => NOW,
+    refreshService: { requestRefresh: async () => ({ requestId: 'r', status: 'queued' }) },
+    readXGrowthConfig: async () => ({ ownHandle: 'me_acct' }), readPackages: async () => [],
+    onBrainOwnedSaved: async (clientId, target) => {
+      log.push(`start:${target}`);
+      await new Promise((r) => setTimeout(r, 15));
+      log.push(`end:${target}`);
+      if (target === 'trackTargets') throw new Error('brain down'); // never fails the save
+    },
+  });
+  const tracks = [{ id: 'a', label: 'A', engines: ['record', 'ue', 'client', 'identity'], share: 1 }];
+  const r = await h.handle('strategy-plan-apply', { clientId: 'c1', changes: { contentTracks: tracks, engineTargets: { engines: { record: { targetPerDay: 1 } } } }, expectedVersion: 0 }, CTX, AUTH);
+  assert.equal(r.ok, true);
+  assert.deepEqual(log, ['start:contentTracks', 'end:contentTracks', 'start:trackTargets', 'end:trackTargets']);
+});
+
 test('strategy-get happy path: profile, rowsMeta + freshness, evaluation, plan, preview', async () => {
   const s = setup();
   await s.corpusStore.writeMergedRows('me_acct', rowsFor(5), { pulledAt: '2026-10-10T12:00:00.000Z' });
