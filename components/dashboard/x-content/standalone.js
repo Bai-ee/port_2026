@@ -131,7 +131,7 @@ export function useCalendarProps(call, clientId) {
     try { await call('content-task-update', { taskId: task.id, status }); await load(); } catch (err) { setError(err.message || 'Could not update the task.'); } finally { setTaskBusyId(null); }
   }, [call, load]);
   return {
-    calendar, loading, error, busyId: actions.busyId || taskBusyId,
+    calendar, loading, error, busyId: actions.busyId || taskBusyId, call,
     onRefresh: () => load(),
     onShiftMonth: (d) => { const next = shiftMonth(monthRef.current, d); setMonth(next); load(next); },
     onToday: () => { const now = todayCT().slice(0, 7); setMonth(now); load(now); },

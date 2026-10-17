@@ -234,6 +234,11 @@ export const READ_TOOLS = Object.freeze([
     input_schema: { type: 'object', properties: { itemId: str('Inventory item id'), limit: int('Max candidates', { minimum: 1, maximum: 20 }) }, required: ['itemId'] },
   },
   {
+    name: 'find_hires_media',
+    description: "High-res / original / full-size file for a post's picture, from the drive (NAS). For a post (postId) or library item (packageId): the item's own size and whether it is a thumbnail, plus ranked bigger copies of the same photo (width, height, why it matches, staged = already copied from the drive and usable, stageState while copying) and whether the Mac NAS worker is online. Read-only. To use one, run_action media.use-hires with postId, packageId (target.id) and candidateId; if it is not staged yet that queues the copy.",
+    input_schema: { type: 'object', properties: { postId: str('Post id (its library item is used)'), packageId: str('Library item id, when there is no post'), limit: int('Max candidates', { minimum: 1, maximum: 20 }) } },
+  },
+  {
     name: 'get_post',
     description: 'One saved post by id: status, full content, scheduledAt, reviewedAt, whether it is a reply, lifecycle flags, provenance (runId, suggestionId, strategyVersion) and any error. Read-only.',
     input_schema: { type: 'object', properties: { postId: str('Post id, e.g. from get_queue') }, required: ['postId'] },
@@ -638,6 +643,13 @@ export async function runReadTool(name, input, toolDeps) {
       const id = typeof input?.itemId === 'string' ? input.itemId.trim().slice(0, 160) : '';
       if (!id) return { error: 'itemId is required' };
       return deps.findItemMedia({ id, limit: clampLimit(input?.limit, 20) });
+    }
+    case 'find_hires_media': {
+      if (typeof deps.findHiresMedia !== 'function') return NA();
+      const postId = typeof input?.postId === 'string' ? input.postId.trim().slice(0, 160) : '';
+      const packageId = typeof input?.packageId === 'string' ? input.packageId.trim().slice(0, 160) : '';
+      if (!postId && !packageId) return { error: 'postId or packageId is required' };
+      return deps.findHiresMedia({ postId, packageId, limit: clampLimit(input?.limit, 20) });
     }
     case 'get_post': {
       if (typeof deps.readPost !== 'function') return NA();

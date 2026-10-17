@@ -157,6 +157,7 @@ function MonthCalendarPanelView({
   onScore,
   onReconcile,
   onTaskToggle,
+  call,
 }) {
   const [view, setView] = useState('month');
   const [pendingOnly, setPendingOnly] = useState(false);
@@ -423,6 +424,7 @@ function MonthCalendarPanelView({
           onScore={onScore}
           onReconcile={onReconcile ? (post, extra) => decide(onReconcile, post, extra) : undefined}
           onRefresh={onRefresh}
+          call={call}
         />,
         sheetHost(),
       ) : null}
