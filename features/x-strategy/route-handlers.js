@@ -198,6 +198,8 @@ export function createStrategyHandlers({
   placeDraft = null, // (clientId, postId, {reviewOn, bucketId, media}) -> bool; sets an unscheduled draft's review day + missing media
   ensureDraft = null, // (clientId, payload) -> {post, existing}; twitter-service ensureDraftPost. Absent => batch create answers 503
   mediaForItem = null, // (clientId, pkg) -> {mediaUrl, mediaType, mediaContentType, mediaStoragePath} | null; calendar-batch drafts carry the item's media
+  upsertBucket = null, deleteBucket = null, // (clientId, bucket) / (clientId, bucketId, {reassignTo}) -> the Content Center bucket-store writers (bucket-edit proposals). Absent => bucket-edit confirm fails clearly
+  rejectPost = null, // (clientId, postId, {reviewedBy, expectedRevision}) -> rejectDraft; queue-bulk delete-draft. Absent => lazy import of twitter-service
   linkItemMedia = null, // (clientId, links) -> {linked, failed, results}; the quote-targets link-item-media writer. Absent => item-media confirm fails clearly
   env = {}, // explicit on purpose: only createStrategyHandlersFromDb passes process.env, so a bare handler can never reach a real model
 } = {}) {
@@ -824,6 +826,7 @@ export function createStrategyHandlers({
     runItemMedia: linkItemMedia ? ({ clientId, links }) => linkItemMedia(clientId, links) : null,
     runCalendarBatch: async ({ clientId, spec, proposalId }) => calendarBatch(clientId, spec, { execute: true, batchId: proposalId ? `calendar-batch-${proposalId}` : null }),
     refreshHandles: async ({ clientId, handles, context, auth }) => strategyRefresh({ clientId, handles }, context, auth),
+    placeDraft, upsertBucket, deleteBucket, syncTracks, ...(rejectPost ? { rejectPost } : {}),
   });
   async function strategyProposalDecide(body, context, auth) {
     const c = requireClient(body, context);
