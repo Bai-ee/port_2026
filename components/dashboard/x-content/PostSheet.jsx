@@ -224,6 +224,12 @@ function PostSheetView({ post, busy, queue, onNavigate, onClose, onApprove, onRe
                 : <img src={post.mediaUrl} alt="" />}
             </div>
           ) : null}
+          {!post.mediaUrl && post.thumbUrl ? (
+            <div id="x-content-post-sheet-item-thumb-row" className="xce-mc-field">
+              <span className="xce-mc-kicker">From library item</span>
+              <span id="x-content-post-sheet-item-thumb" className="xce-mini-thumb" style={{ width: 64, height: 64 }}><img src={post.thumbUrl} alt="" /></span>
+            </div>
+          ) : null}
 
           <div id="x-content-post-sheet-text-field" className="xce-mc-field">
             <label htmlFor="x-content-post-sheet-text" className="xce-mc-kicker">Post</label>
@@ -253,7 +259,13 @@ function PostSheetView({ post, busy, queue, onNavigate, onClose, onApprove, onRe
             </div>
           ) : null}
 
-          {post.needsStory ? <p id="x-content-post-sheet-needs-story" className="xce-mc-notice">This draft still needs its story before it can be approved. Write it in the item drawer.</p> : null}
+          {post.needsStory ? (
+            <p id="x-content-post-sheet-needs-story" className="xce-mc-notice">
+              {post.reviewOn
+                ? 'Replace [add your memory] with your own line, save, then approve. Nothing posts until you do.'
+                : 'This draft still needs its story before it can be approved. Write it in the item drawer.'}
+            </p>
+          ) : null}
           {post.state === 'awaiting' ? <p id="x-content-post-sheet-awaiting-note" className="xce-mc-notice">Awaiting your approval. Nothing posts until you approve it.</p> : null}
           {held ? (
             <div id="x-content-post-sheet-held-panel" className="xce-mc-notice xce-mc-held">

@@ -1180,13 +1180,6 @@
   {
    "file": "components/dashboard/x-content/BucketRail.jsx",
    "literal": "#475569",
-   "count": 2,
-   "exceptionId": "W6-C",
-   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
-  },
-  {
-   "file": "components/dashboard/x-content/BucketsPanel.jsx",
-   "literal": "#475569",
    "count": 1,
    "exceptionId": "W6-C",
    "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
@@ -1197,13 +1190,6 @@
    "count": 2,
    "exceptionId": "W6-C",
    "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I). ALSO: Colour used as data or a status dot/LED value (not a style property), a user/brand fallback colour, or a colour-input default; must stay a literal hex."
-  },
-  {
-   "file": "components/dashboard/x-content/ItemGrid.jsx",
-   "literal": "#475569",
-   "count": 1,
-   "exceptionId": "W6-C",
-   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
   },
   {
    "file": "components/dashboard/x-content/ItemGrid.jsx",

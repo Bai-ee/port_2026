@@ -5,6 +5,7 @@ import { ImageIcon, Film, Disc3, FileText } from 'lucide-react';
 import { NasContext, isNasItem } from './nas-context.js';
 import { rightsLabel, storyStateLabel } from '../../../features/x-strategy/ui-model.js';
 import { requestThumb, getThumbState, subscribeThumb } from './thumb-capture.js';
+import { bucketColorMap } from '../../../features/x-content-inventory/bucket-colors.js';
 
 // ItemGrid — thumbnail grid of content items. Presentational.
 
@@ -162,13 +163,13 @@ function Dot({ color, label, hollow = false }) {
 }
 
 /** One line of dots per tile: bucket · status · story · rights (videos) · daily-auto. */
-function ItemDots({ item, bucket }) {
+function ItemDots({ item, bucket, bucketColor }) {
   const status = STATUS_DOT[item.status] || STATUS_DOT.idea;
   const rights = rightsBadge(item);
   const missing = storyMissing(item);
   return (
     <span className="xce-bk-card-dots">
-      {bucket ? <Dot color={bucket.color || '#475569'} label={`Bucket: ${bucket.name}`} /> : null}
+      {bucket ? <Dot color={bucketColor} label={`Bucket: ${bucket.name}`} /> : null}
       <Dot color={status.color} label={`Status: ${status.label}`} />
       <Dot color={missing ? WARN : OK} hollow={missing} label={missing ? storyStateLabel(item, true) : 'Story written'} />
       {rights ? <Dot color={rights.cls === 'xce-chip-ok' ? OK : BLOCK} label={`Rights: ${rights.label}`} /> : null}
@@ -204,6 +205,7 @@ export default function ItemGrid({ items, bucketById, selectedItemId, onOpen, ca
   // A different list (bucket, view, search) starts over at the first page.
   useEffect(() => { setLimit(GRID_PAGE); }, [items]);
   const shown = items.length > limit ? items.slice(0, limit) : items;
+  const bucketColors = bucketColorMap(Object.values(bucketById || {}));
   return (
     <>
       <ul id="x-content-item-grid" className="xce-bk-grid">
@@ -215,7 +217,7 @@ export default function ItemGrid({ items, bucketById, selectedItemId, onOpen, ca
                 title={item.title || item.id}>
                 <GridThumb item={item} call={call} />
                 <span className="xce-bk-card-title">{item.title || item.id}</span>
-                <ItemDots item={item} bucket={bucket} />
+                <ItemDots item={item} bucket={bucket} bucketColor={bucket ? bucketColors[bucket.id] : undefined} />
               </button>
             </li>
           );

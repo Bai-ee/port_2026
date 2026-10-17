@@ -78,6 +78,8 @@ test('resolveMediaUrlsBatch: shapes per kind and source', async () => {
   assert.match(t['rv-a'].thumbUrl, /^https:\/\/firebasestorage\.googleapis\.com\/v0\/b\/hl-bucket\/o\/content-thumbs%2Fc%2Frv-a\.jpg\?alt=media&token=/);
   assert.equal(t['rv-b'].thumbUrl, 'https://ev/posters/b.jpg');
   assert.deepEqual(t.bare, {});
+  // No stored thumb/poster: the item's own image is its thumb (no capture needed).
+  assert.match(t['discogs-9'].thumbUrl, /image-1x1\.jpg/);
   assert.equal(t['rv-a'].videoUrl, undefined);
   // token URL is stable across calls (cacheable)
   const t2 = await resolveMediaUrlsBatch(pkgs, ['thumb'], deps);

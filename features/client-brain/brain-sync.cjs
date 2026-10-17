@@ -289,7 +289,7 @@ function normalizeTrackRows(rows) {
         .map((h) => String(h).trim().replace(/^@/, '').toLowerCase()).filter(Boolean))].slice(0, 3),
       lists: normalizeListItems(r?.lists),
     };
-  }).filter((r) => r.label).slice(0, 6);
+  }).filter((r) => r.label).slice(0, 12);
 }
 const formatTrackRow = (r) => [
   `label: ${r.label}`,
@@ -337,7 +337,7 @@ function normalizeTargetRows(rows) {
       if (r?.[k] != null && Number.isFinite(n)) out[k] = round(Math.min(100, Math.max(0, n)), 1);
     }
     return out;
-  }).filter((r) => r.track).slice(0, 6);
+  }).filter((r) => r.track).slice(0, 12);
 }
 const formatTargetRow = (r) => [
   `track: ${r.track}`,
@@ -583,18 +583,16 @@ const isInvalid = (err) => err && (err.code === 'invalid' || /^Bad |^Every engin
 const errorWarnings = (err, prefix) => (err.errors?.length ? err.errors : [err.message]).map((m) => `${prefix}: ${m}`);
 
 // Merge Brain track rows into the plan's existing tracks (matched by label,
-// case-insensitive; id slug as fallback). Engines and promotions always stay as
-// they are; tracks the Brain doesn't list are kept (their engines must have an owner).
-// Brain rows carry no engines, so when the client has NO stored tracks every engine
-// (`engineIds`) goes to the first Brain track; the owner reassigns them in the panel.
-function mergeBrainTracks(existing, rows, engineIds = []) {
+// case-insensitive; id slug as fallback). Tracks are the client's Content Center
+// buckets (features/x-strategy/bucket-tracks.js), so the Brain only changes a
+// track's settings: name, engines, buckets and promotions stay as they are, a row
+// naming no existing track is skipped, and tracks the Brain doesn't list are kept.
+const findBrainTrack = (tracks, row) => tracks.find((t) => lower(t.label) === lower(row.label)) || tracks.find((t) => t.id === slugId(row.label));
+function mergeBrainTracks(existing, rows) {
   const tracks = (existing || []).map((t) => ({ ...t }));
-  const adoptEngines = tracks.length === 0;
   for (const row of rows || []) {
-    const hit = tracks.find((t) => lower(t.label) === lower(row.label)) || tracks.find((t) => t.id === slugId(row.label));
-    const patch = { label: row.label, topics: row.topics, benchmarks: row.benchmarks, ...(Array.isArray(row.lists) ? { lists: row.lists } : {}), ...(row.share != null ? { share: row.share } : {}) };
-    if (hit) Object.assign(hit, patch);
-    else tracks.push({ id: slugId(row.label), engines: adoptEngines && tracks.length === 0 ? [...engineIds] : [], promotions: [], share: 0, ...patch });
+    const hit = findBrainTrack(tracks, row);
+    if (hit) Object.assign(hit, { topics: row.topics, benchmarks: row.benchmarks, ...(Array.isArray(row.lists) ? { lists: row.lists } : {}), ...(row.share != null ? { share: row.share } : {}) });
   }
   return tracks;
 }
@@ -604,17 +602,19 @@ function mergeBrainTracks(existing, rows, engineIds = []) {
 async function writeBrainTracksToPlan(planStore, clientId, rows, { tracksOf }) {
   const doc = await planStore.get(clientId);
   const existing = Array.isArray(doc?.plan?.contentTracks) ? doc.plan.contentTracks : tracksOf(doc);
-  const { ENGINE_IDS } = await import('../x-content-inventory/engines.js');
-  const contentTracks = mergeBrainTracks(existing, rows, ENGINE_IDS);
+  const warnings = (rows || []).filter((r) => !findBrainTrack(existing, r))
+    .map((r) => `contentTracks: no track named "${r.label}"; tracks follow Content Center buckets, so rename or add the bucket there`);
+  if (!existing.length) return { warnings };
+  const contentTracks = mergeBrainTracks(existing, rows);
   try {
     // 'client-brain' is not in plan-state's source enum, so it is recorded as the actor + reason.
     await planStore.apply(clientId, {
       changes: { contentTracks }, by: 'client-brain', source: 'manual', reason: 'client-brain: content tracks',
       expectedVersion: doc?.version ?? 0,
     });
-    return { warnings: [] };
+    return { warnings };
   } catch (err) {
-    if (isInvalid(err)) return { warnings: errorWarnings(err, 'contentTracks kept as-is') };
+    if (isInvalid(err)) return { warnings: [...warnings, ...errorWarnings(err, 'contentTracks kept as-is')] };
     throw err;
   }
 }

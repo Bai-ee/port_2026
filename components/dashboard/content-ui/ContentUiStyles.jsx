@@ -322,6 +322,21 @@ export default function ContentUiStyles() {
         .xce-scope .xce-mc-row:first-child { border-top: 0; }
         .xce-scope .xce-mc-row-main { flex: 1 1 auto; min-width: 0; display: grid; grid-template-columns: 46px 10px minmax(0, 1fr); align-items: center; gap: 10px; min-height: 52px; padding: 8px 4px; border: 0; border-radius: 8px; background: transparent; color: var(--t-text); text-align: left; cursor: pointer; transition: background 120ms ease-out; }
         .xce-scope .xce-mc-row-main:hover { background: color-mix(in srgb, var(--t-text) 3.5%, transparent); }
+        /* Bucket colors (features/x-content-inventory/bucket-colors.js): --mc-bucket is a theme hue token set per item. */
+        .xce-scope .xce-mc-chip[data-bucket] { background: color-mix(in srgb, var(--mc-bucket) 22%, transparent); border-color: color-mix(in srgb, var(--mc-bucket) 60%, transparent); color: var(--t-text); }
+        .xce-scope .xce-mc-chip[data-bucket]:hover { background: color-mix(in srgb, var(--mc-bucket) 34%, transparent); border-color: var(--mc-bucket); }
+        .xce-scope .xce-mc-chip.xce-mc-state-posted[data-bucket] { opacity: 0.6; }
+        .xce-scope .xce-mc-chip.xce-mc-state-failed[data-bucket] { border-color: var(--t-danger); }
+        .xce-scope .xce-mc-row-main[data-bucket] { background: color-mix(in srgb, var(--mc-bucket) 12%, transparent); box-shadow: inset 3px 0 0 var(--mc-bucket); }
+        .xce-scope .xce-mc-row-main[data-bucket]:hover { background: color-mix(in srgb, var(--mc-bucket) 20%, transparent); }
+        /* Small previews of a referenced asset (calendar rows, post sheet, chat cards). */
+        .xce-scope .xce-mini-thumb { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 40px; height: 40px; border-radius: 6px; overflow: hidden; background: color-mix(in srgb, var(--t-text) 6%, transparent); color: var(--t-text-muted); }
+        .xce-scope .xce-mini-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .xce-scope .xce-mc-row-main[data-thumb] { grid-template-columns: 46px 10px minmax(0, 1fr) 40px; }
+        .xce-scope .xce-mc-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 8px 0 0; padding: 0; list-style: none; font-size: 12px; color: var(--t-text-secondary); }
+        .xce-scope .xce-mc-legend-item { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+        .xce-scope .xce-mc-legend-swatch { width: 12px; height: 12px; flex: 0 0 auto; border-radius: 3px; background: color-mix(in srgb, var(--mc-bucket) 22%, transparent); border: 1px solid var(--mc-bucket); }
+        .xce-scope .xce-mc-legend-count { font-variant-numeric: tabular-nums; color: var(--t-text-muted); }
         .xce-scope .xce-mc-row-time { font-family: var(--font-mono); font-size: 12px; font-weight: 700; }
         .xce-scope .xce-mc-row-body { display: grid; gap: 2px; min-width: 0; }
         .xce-scope .xce-mc-row-title { font-size: 13px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }

@@ -30,7 +30,10 @@ import { buildDayPlan as buildContentDayPlan } from '../x-content-inventory/plan
 import { hasPlaceholderStory } from '../x-content-inventory/match.js';
 import { projectDayPlan } from '../x-content-inventory/day-plan-projection.js';
 import { resolvePlanInputs } from './plan-inputs.js';
-import { tracksOf } from './content-tracks.js';
+import { tracksOf, trackForPackage } from './content-tracks.js';
+import { syncBucketTracks } from './bucket-tracks.js';
+import { normalizeBatchSpec, planCalendarBatch, createCalendarBatch } from '../x-content-inventory/calendar-batch.js';
+import { findMediaCandidates, linkMediaPatch, normalizeLinks, mediaOf } from '../x-content-inventory/item-media.js';
 import { hasExplicitTracks, trackBenchmarkHandles, newTrackBenchmarkHandles, loadTrackProfiles, profileBenchmarksFromPlan } from './track-profile.js';
 import { normalizeXGrowthProfile } from '../x-benchmark/profile.js';
 import { createFirestoreChatStore, ChatCapError, ChatStoreError, THREAD_ID_RE } from './agent/chat-store.js';
@@ -61,6 +64,8 @@ export const STRATEGY_ROUTE_ACTIONS = Object.freeze([
   'strategy-doc-save',
   'strategy-doc-revert',
   'strategy-review',
+  'strategy-calendar-batch-preview',
+  'strategy-calendar-batch-create',
 ]);
 
 export const REVIEW_DISPLAY_TEXT = 'Review my strategy against the latest data.';
@@ -187,6 +192,11 @@ export function createStrategyHandlers({
   editPost = null, // ({clientId, postId, content?, scheduledAt?}) -> saved post; the existing updateSocialPost path
   runPaidSync = null, // ({clientId, kind, params, by, auth, context}) -> result; the `paid-sync` proposal executor (features/mcp/paid-syncs.js). Absent => confirming one fails with a clear message
   readAudience = null, // (clientId) -> {account, snapshots, events, posts} from THIS client's stored X Monitor account ({account:null} when none); null => tool says unavailable
+  readBuckets = null, // (clientId) -> Content Center buckets (listBuckets rows); absent => tracks are not synced to buckets
+  readBucketEngine = null, // (clientId, bucketId) -> engine of one item in that bucket | null (first-sync migration only)
+  readOpenPackageIds = null, // (clientId) -> Set of package ids that already have an open post (calendar batch skips them)
+  ensureDraft = null, // (clientId, payload) -> {post, existing}; twitter-service ensureDraftPost. Absent => batch create answers 503
+  linkItemMedia = null, // (clientId, links) -> {linked, failed, results}; the quote-targets link-item-media writer. Absent => item-media confirm fails clearly
   env = {}, // explicit on purpose: only createStrategyHandlersFromDb passes process.env, so a bare handler can never reach a real model
 } = {}) {
   if (!corpusStore || !basePlanStore || !refreshService || typeof readXGrowthConfig !== 'function') {
@@ -255,6 +265,51 @@ export function createStrategyHandlers({
   const docStore = baseDocStore && onBrainOwnedSaved
     ? { ...baseDocStore, get: (...a) => baseDocStore.get(...a), apply: withBrainDoc((...a) => baseDocStore.apply(...a)), revert: withBrainDoc((...a) => baseDocStore.revert(...a)) }
     : baseDocStore;
+
+  // Content tracks follow Content Center buckets (bucket-tracks.js). Runs on every Strategy load and after bucket
+  // create/rename/delete; writes through the wrapped planStore so the Brain and the profile mirror hear about it.
+  // Never fails the caller: a conflict or error just leaves the plan as it is until the next sync.
+  async function syncTracks(clientId) {
+    if (typeof readBuckets !== 'function') return { changed: false, skipped: 'no-reader' };
+    try {
+      return await syncBucketTracks(clientId, { planStore, readBuckets, readBucketEngine, now: clock() });
+    } catch (err) {
+      return { changed: false, error: String(err?.message || err).slice(0, 160) };
+    }
+  }
+
+  // Calendar batch (calendar-batch.js): plan review drafts for a set of library items, and write them on `execute`.
+  // Shared by the route actions, the agent's propose tool (preview) and the confirmed proposal (execute).
+  async function calendarBatch(clientId, rawSpec, { execute = false, batchId = null } = {}) {
+    const norm = normalizeBatchSpec(rawSpec);
+    if (!norm.ok) return { ok: false, status: 400, error: norm.errors.join('; ') };
+    const profile = await loadProfile(clientId);
+    const planDoc = await planStore.get(clientId);
+    const open = typeof readOpenPackageIds === 'function' ? await readOpenPackageIds(clientId) : new Set();
+    const plan = planCalendarBatch({
+      packages: await readPackages(clientId), tracks: tracksOf(planDoc), spec: norm.spec,
+      today: localDate(clock(), profile.timezone), openPackageIds: open,
+    });
+    if (!plan.ok) return { ok: false, status: 400, error: plan.error };
+    if (!execute) return { ok: true, spec: norm.spec, ...plan };
+    if (typeof ensureDraft !== 'function') return { ok: false, status: 503, error: 'Creating drafts is not available on this deployment.' };
+    const written = await createCalendarBatch(clientId, plan, { ensureDraft, batchId });
+    return { ok: true, spec: norm.spec, counts: plan.counts, firstDate: plan.firstDate, lastDate: plan.lastDate, ...written };
+  }
+  // Preview rows for the agent: first 20, text shortened. `previewCalendarBatch` keeps nasSha for the card thumbnails.
+  const stripRows = (r) => (r.ok ? { ...r, rows: r.rows.slice(0, 20).map(({ content, ...row }) => ({ ...row, content: content.slice(0, 140) })) } : r);
+  async function strategyCalendarBatchPreview(body, context) {
+    const c = requireClient(body, context);
+    if (c.error) return c.error;
+    const r = await calendarBatch(c.clientId, body?.spec);
+    return r.ok ? stripRows(r) : fail(r.status, r.error);
+  }
+  async function strategyCalendarBatchCreate(body, context) {
+    const c = requireClient(body, context);
+    if (c.error) return c.error;
+    const r = await calendarBatch(c.clientId, body?.spec, { execute: true, batchId: `calendar-batch-${clock()}` });
+    return r.ok ? r : fail(r.status, r.error);
+  }
 
   /** The admin-selected client only: body.clientId must be present and equal context.clientId. */
   function requireClient(body, context) {
@@ -337,6 +392,7 @@ export function createStrategyHandlers({
     const c = requireClient(body, context);
     if (c.error) return c.error;
     const now = clock();
+    await syncTracks(c.clientId);
     const profile = await loadProfile(c.clientId);
     const planDoc = await planStore.get(c.clientId);
     const explicitTracks = hasExplicitTracks(planDoc);
@@ -486,10 +542,12 @@ export function createStrategyHandlers({
         const profile = preloaded.profile ?? (preloaded.profile = await loadProfile(clientId));
         return [profile.ownHandle, ...(profile.benchmarkHandles || [])].map((h) => safeHandle(h)).filter(Boolean);
       },
+      // Each track also reports what is in it (item count, top tags, sample titles), so the model can pick from a track.
       getTracks: async () => {
         const planDoc = await planStore.get(clientId);
         const profile = preloaded.profile ?? (preloaded.profile = await loadProfile(clientId));
-        return { tracks: tracksOf(planDoc), profiles: await safeTrackProfiles(planDoc, profile) };
+        const tracks = tracksOf(planDoc);
+        return { tracks, library: summarizeTrackLibrary(tracks, await readPackages(clientId)), profiles: await safeTrackProfiles(planDoc, profile) };
       },
       getPlan: async () => ((await planStore.get(clientId)) ?? { version: 0, plan: DEFAULT_PLAN, history: [], isDefault: true }),
       // Stored doc or the seeded draft (version 0); absent docStore => null (prompt says none available).
@@ -502,22 +560,48 @@ export function createStrategyHandlers({
       ...(readOpportunities ? { readOpportunities: () => readOpportunities(clientId) } : {}),
       ...(readResults ? { readResults: () => readResults(clientId) } : {}),
       ...(readMarketSignals ? { readMarketSignals: () => readMarketSignals(clientId) } : {}),
-      searchInventory: async ({ query, limit } = {}) => {
+      searchInventory: async ({ query, limit, track } = {}) => {
         const max = Math.min(Math.max(1, Number(limit) || 10), 20);
         const tokens = String(query ?? '').toLowerCase().split(/\s+/).filter(Boolean).slice(0, 8);
+        const tracks = tracksOf(await planStore.get(clientId));
+        const want = track ? String(track).trim().toLowerCase() : '';
+        const only = want ? tracks.find((t) => t.id === want || t.label.toLowerCase() === want) : null;
+        if (want && !only) return { error: `unknown track "${track}"`, tracks: tracks.map((t) => ({ id: t.id, label: t.label })) };
         const pkgs = await readPackages(clientId);
         const scored = [];
         for (const p of pkgs || []) {
+          if (only && trackForPackage(tracks, p)?.id !== only.id) continue;
           const hay = `${p.id} ${p.title ?? ''} ${p.story ?? ''} ${(p.searchTokens || []).join(' ')} ${JSON.stringify(p.facets ?? {})} ${JSON.stringify(p.humanEdits ?? {})}`.toLowerCase();
           const score = tokens.length ? tokens.filter((t) => hay.includes(t)).length : 0;
           if (!tokens.length || score) scored.push({ score, p });
         }
         scored.sort((a, b) => b.score - a.score);
         return scored.slice(0, max).map(({ p }) => ({
-          id: p.id, title: p.title ?? null, story: String(p.story ?? '').slice(0, 160), bucketId: p.bucketId ?? null,
+          id: p.id, title: p.title ?? null, story: String(p.story ?? '').slice(0, 160), bucketId: p.bucketId ?? null, track: trackForPackage(tracks, p)?.id ?? null,
           hasStory: !!String(p.story ?? '').trim() && !hasPlaceholderStory(p), facets: p.humanEdits || p.facets || {},
         }));
       },
+      // Item media (item-media.js): who could lend media to an item, and a dry run of a set of links (no writes).
+      findItemMedia: async ({ id, limit } = {}) => {
+        const pkgs = await readPackages(clientId);
+        const target = (pkgs || []).find((p) => p.id === id);
+        if (!target) return { error: `unknown item ${id}` };
+        return { id, title: target.title ?? null, hasMedia: !!mediaOf(target).kind, candidates: findMediaCandidates(target, pkgs, { limit }) };
+      },
+      previewItemMedia: async (links) => {
+        const norm = normalizeLinks(links);
+        if (!norm.ok) return { ok: false, error: norm.errors.join('; ') };
+        const byId = new Map((await readPackages(clientId) || []).map((p) => [p.id, p]));
+        const rows = norm.links.map((l) => {
+          const t = byId.get(l.targetId);
+          const s = byId.get(l.sourceId);
+          const r = t && s ? linkMediaPatch(t, s) : { error: `${!t ? l.targetId : l.sourceId} not found` };
+          return { ...l, targetTitle: t?.title ?? null, sourceTitle: s?.title ?? null, ...(r.error ? { error: r.error } : { kind: r.patch.mediaFrom.kind }) };
+        });
+        return { ok: true, rows };
+      },
+      // Dry run only (no writes): what a calendar batch would create. The proposal re-plans at confirm time.
+      previewCalendarBatch: async (spec) => stripRows(await calendarBatch(clientId, spec)),
       getAlgorithm: async () => summarizeAlgorithm(getAlgorithmProfile()),
       scorePosts: async ({ handle, days, limit } = {}) => {
         const profile = preloaded.profile ?? (preloaded.profile = await loadProfile(clientId));
@@ -727,6 +811,8 @@ export function createStrategyHandlers({
     planStore, runDailyAction, runUpdateItemFacets, saveXGrowthProfile: saveProfileKeepingTracks, clock,
     docStore, docBase: SEED_STRATEGY_SECTIONS,
     readPost, editPost: editPost ? (a) => editPost(a) : null, runPaidSync,
+    runItemMedia: linkItemMedia ? ({ clientId, links }) => linkItemMedia(clientId, links) : null,
+    runCalendarBatch: async ({ clientId, spec, proposalId }) => calendarBatch(clientId, spec, { execute: true, batchId: proposalId ? `calendar-batch-${proposalId}` : null }),
     refreshHandles: async ({ clientId, handles, context, auth }) => strategyRefresh({ clientId, handles }, context, auth),
   });
   async function strategyProposalDecide(body, context, auth) {
@@ -847,6 +933,8 @@ export function createStrategyHandlers({
     'strategy-doc-save': strategyDocSave,
     'strategy-doc-revert': strategyDocRevert,
     'strategy-review': strategyReview,
+    'strategy-calendar-batch-preview': strategyCalendarBatchPreview,
+    'strategy-calendar-batch-create': strategyCalendarBatchCreate,
   };
 
   /** @returns {Promise<object>} result; failures carry {ok:false,status}. Auth is the caller's job. */
@@ -927,7 +1015,7 @@ export function createStrategyHandlers({
     return { ok: true, threadId: tid, proposals: out, ...(dropped.length ? { dropped } : {}) };
   }
 
-  return { handle, actions: STRATEGY_ROUTE_ACTIONS, toolDepsFor, createProposalInThread };
+  return { handle, actions: STRATEGY_ROUTE_ACTIONS, toolDepsFor, createProposalInThread, syncTracks };
 }
 
 /**
@@ -937,6 +1025,26 @@ export function createStrategyHandlers({
  * NOT called by any code path in the T4b build; reachable only via strategy-profile-save / a confirmed benchmarks-change.
  * @param {object} db firebase-admin Firestore
  */
+/** Per track: how many library items it holds, its most common tags and a few sample titles (no full rows). */
+export function summarizeTrackLibrary(tracks, packages, { tags = 5, samples = 3 } = {}) {
+  const by = new Map((tracks || []).map((t) => [t.id, { trackId: t.id, label: t.label, itemCount: 0, tagCounts: new Map(), sampleTitles: [] }]));
+  for (const p of packages || []) {
+    const row = by.get(trackForPackage(tracks, p)?.id);
+    if (!row) continue;
+    row.itemCount += 1;
+    for (const tag of Array.isArray(p.tags) ? p.tags : []) {
+      const k = String(tag ?? '').trim().toLowerCase();
+      if (k) row.tagCounts.set(k, (row.tagCounts.get(k) || 0) + 1);
+    }
+    const title = String(p.title ?? '').trim();
+    if (title && row.sampleTitles.length < samples) row.sampleTitles.push(title.slice(0, 80));
+  }
+  return [...by.values()].map(({ tagCounts, ...row }) => ({
+    ...row,
+    topTags: [...tagCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, tags).map(([tag, count]) => ({ tag, count })),
+  }));
+}
+
 export function createXGrowthProfileSaver(db, { onSaved } = {}) {
   return async function saveXGrowthProfile(clientId, { ownHandle, benchmarkHandles }) {
     const ref = db.collection('client_configs').doc(clientId);
@@ -975,8 +1083,21 @@ export function createStrategyHandlersFromDb(db, {
   const readAudience = async (clientId) => readClientAudience(db, clientId, {
     resolveAccountId: async (id) => (await import('../x-monitor/sync.js')).resolveAccountId(id),
   });
+  // Content Center buckets drive the tracks (bucket-tracks.js). Lazy imports keep the bare handler pure for tests.
+  const readBuckets = async (clientId) => (await import('../x-content-inventory/bucket-store.js')).listBuckets(clientId, { db });
+  const readBucketEngine = async (clientId, bucketId) => {
+    const snap = await db.collection('x_content_packages').where('clientId', '==', clientId).where('bucketId', '==', bucketId).limit(1).get();
+    return snap.empty ? null : (await import('../x-content-inventory/engines.js')).resolveEngine(snap.docs[0].data());
+  };
+  // Calendar batch: items that already have an open post are skipped; drafts go through the create-once path.
+  const readOpenPackageIds = async (clientId) => {
+    const { OPEN_STATUSES } = await import('../social-posting/lifecycle.js');
+    const snap = await db.collection('social_posts').where('clientId', '==', clientId).select('packageId', 'status').get();
+    return new Set(snap.docs.map((d) => d.data()).filter((r) => r.packageId && OPEN_STATUSES.includes(r.status)).map((r) => r.packageId));
+  };
+  const ensureDraft = async (clientId, payload) => (await import('../social-posting/twitter-service.js')).ensureDraftPost(clientId, payload);
   return createStrategyHandlers({
-    corpusStore, planStore, refreshService, readPackages, readAudience,
+    corpusStore, planStore, refreshService, readPackages, readAudience, readBuckets, readBucketEngine, readOpenPackageIds, ensureDraft,
     readWorkerHealth: (clientId) => readWorkerHealthFromDb(db, { now: Date.now(), clientId }),
     docStore, onBrainOwnedSaved, readBrainTrackTargets, chatStore, agentLoopFactory, callModel, logUsage, runDailyAction, runUpdateItemFacets, readTodayRun, readContentContext, saveXGrowthProfile, env,
     readQueueSummary, readPost, readOpportunities, readResults, readMarketSignals, editPost, runPaidSync,

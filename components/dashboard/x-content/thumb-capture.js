@@ -143,7 +143,10 @@ function isVideo(item) {
 /** Ask for a tile's thumb. Safe to call repeatedly; each id is fetched once per session. */
 export function requestThumb(call, item) {
   if (!item?.id || state.has(item.id) || pending.has(item.id)) return;
-  if (!item.thumbRef) {
+  // The server has a thumb when one is stored, or (thumbs.js) when the item carries an image ref; `serverThumb` lets a
+  // caller that only knows the id (calendar, chat cards) ask anyway.
+  const imageRef = Array.isArray(item.assetRefs) && item.assetRefs.some((r) => /\.(jpe?g|png|webp|gif)$/i.test(String(r)));
+  if (!item.thumbRef && !item.posterRef && !imageRef && !item.serverThumb) {
     // Nothing stored server-side: capture a frame (video) or flag it (image).
     if (isVideo(item)) { setState(item.id, { status: 'capturing' }); enqueueCapture(call, item); }
     else setState(item.id, { status: 'missing' });

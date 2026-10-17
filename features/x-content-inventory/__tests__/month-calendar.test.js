@@ -178,3 +178,39 @@ test('classifyResult separates conflicts, plan rejections and success', () => {
   assert.deepEqual([plan.kind, plan.code, plan.message], ['plan', 'plan-day-cap', 'Too many today']);
   assert.equal(classifyResult({ ok: false, errorClass: 'approval-stale' }).kind, 'error');
 });
+
+// ---- review days (calendar-batch drafts carry reviewOn) ----
+const findRow = (cal, id) => cal.weeks.flat().flatMap((d) => d.posts.map((p) => ({ ...p, date: d.date }))).find((p) => p.id === id);
+
+test('review days: a needs-story draft with reviewOn sits on that date, marked, not in unplaced', () => {
+  const posts = [
+    { id: 'rv1', status: 'draft', content: 'Oct 20 flyer\n\n[add your memory]', needsStory: true, reviewOn: '2026-10-20', createdAt: '2026-10-01T00:00:00Z', engine: 'record' },
+    { id: 'rv2', status: 'draft', content: 'Oct 20 twin', needsStory: false, reviewOn: '2026-10-20', createdAt: '2026-10-01T00:00:00Z', engine: 'record' },
+    { id: 'old', status: 'draft', content: 'missed day', needsStory: true, reviewOn: '2026-10-01', createdAt: '2026-10-01T00:00:00Z' },
+  ];
+  const cal = buildMonthCalendar({ posts, month: '2026-10', now: NOW });
+  const a = findRow(cal, 'rv1');
+  const b = findRow(cal, 'rv2');
+  assert.equal(a.date, '2026-10-20');
+  assert.equal(b.date, '2026-10-20');
+  assert.equal(a.reviewOn, '2026-10-20');
+  assert.equal(a.proposed, true);
+  assert.notEqual(a.time, b.time); // spaced on the same day
+  assert.ok(!cal.unplaced.some((u) => u.id === 'rv1'));
+  // A review day already past falls back to the old handling (needs story => unplaced).
+  assert.deepEqual(cal.unplaced.filter((u) => u.id === 'old').map((u) => u.reason), ['needs-story']);
+  assert.equal(cal.totals.review, 2);
+  assert.equal(cal.totals.needsMemory, 1);
+});
+
+test('review days are placed before undated proposals, which then work around them', () => {
+  const posts = [
+    { id: 'undated', status: 'draft', content: 'plain draft', createdAt: '2026-09-01T00:00:00Z' },
+    { id: 'rv', status: 'draft', content: 'review me', reviewOn: '2026-10-10', createdAt: '2026-10-05T00:00:00Z' },
+  ];
+  const cal = buildMonthCalendar({ posts, month: '2026-10', now: NOW });
+  const rv = findRow(cal, 'rv');
+  const un = findRow(cal, 'undated');
+  assert.equal(rv.date, '2026-10-10');
+  assert.ok(Math.abs(Date.parse(rv.proposedAt) - Date.parse(un.proposedAt)) >= DEFAULT_ENGINE_CONFIG.authored.minSpacingMin * 60_000 || un.date !== rv.date);
+});

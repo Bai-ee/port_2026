@@ -3,10 +3,10 @@
 import React, { useState } from 'react';
 import { Plus, RefreshCw, X } from 'lucide-react';
 import {
-  addDraftTrack, setTrackLabel, setTrackShare, validateTrackBenchmark, addTrackBenchmark, removeTrackBenchmark, validatePromotionUrl, setPromotionUrl,
+  setTrackShare, validateTrackBenchmark, addTrackBenchmark, removeTrackBenchmark, validatePromotionUrl, setPromotionUrl,
   validateTrackList, addTrackList, removeTrackList, trackBenchmarkRow, trackProfileSummary,
 } from '../../../features/x-strategy/ui-model.js';
-import { MAX_BENCHMARKS_PER_TRACK, MAX_LISTS_PER_TRACK, MAX_TRACKS } from '../../../features/x-strategy/content-tracks.js';
+import { MAX_BENCHMARKS_PER_TRACK, MAX_LISTS_PER_TRACK } from '../../../features/x-strategy/content-tracks.js';
 import { XCE_COLORS } from '../content-ui/xce-tokens';
 import Badge from '../content-ui/ui/Badge';
 import Card from '../content-ui/ui/Card';
@@ -107,16 +107,14 @@ function TrackRow({ track, draft, setDraft, savedHandles, rowsMeta, request, ref
   return (
     <div id={`${id}-row`} data-section="content-track" style={S.trackBox}>
       <div id={`${id}-header`} style={{ ...S.row, justifyContent: 'space-between' }}>
-        {track.isNew ? (
-          <input id={`${id}-label-input`} aria-label="Track name" className="xce-input" style={{ flex: 1, minWidth: 0, fontSize: 15 }} value={track.label} placeholder="Track name"
-            onChange={(e) => setDraft(setTrackLabel(draft, track.id, e.target.value))} />
-        ) : <strong id={`${id}-label`} style={{ fontSize: 15 }}>{track.label}</strong>}
+        <strong id={`${id}-label`} title="Rename the bucket in Content Center to rename this track" style={{ flex: 1, minWidth: 0, fontSize: 15, overflowWrap: 'anywhere' }}>{track.label}</strong>
         <Badge id={`${id}-share-badge`} tone="grey">{track.share}%</Badge>
       </div>
 
       <div id={`${id}-engines-row`} style={S.row}>
-        <span style={S.label}>Engines</span>
+        <span style={S.label}>Content type</span>
         {track.engines.map((e) => <span key={e} id={`${id}-engine-${e}`} className="xce-chip">{e}</span>)}
+        {track.engines.length === 0 ? <span id={`${id}-engine-none`} style={{ ...S.note, margin: 0 }}>None. Items join this track by bucket.</span> : null}
       </div>
 
       <div id={`${id}-share-field`} style={{ display: 'grid', gap: 4 }}>
@@ -178,16 +176,13 @@ export default function ContentTracksPanel({ draft, setDraft, savedHandles = [],
         <SectionLabel id="x-strategy-content-tracks-title">Content tracks<ClientBrainOwnedTag /></SectionLabel>
         {check.dirty ? <Badge id="x-strategy-content-tracks-saved-badge" tone="amber">Unsaved</Badge> : <Badge id="x-strategy-content-tracks-saved-badge" tone="green">Saved</Badge>}
       </div>
-      <p id="x-strategy-content-tracks-intro" style={{ ...S.note, margin: '0 0 8px' }}>Each track has its own benchmarks and share of your authored posts. Pace still follows the primary benchmark. Shares always total {total}%.</p>
+      <p id="x-strategy-content-tracks-intro" style={{ ...S.note, margin: '0 0 8px' }}>One track per Content Center bucket, named after it. Add, rename or remove a bucket in Content Center to change the tracks. Each track has its own benchmarks and share of your authored posts. Pace still follows the primary benchmark. Shares always total {total}%.</p>
       <div id="x-strategy-content-tracks-list" style={S.stack}>
-        {draft.length === 0 ? <p id="x-strategy-content-tracks-empty" style={S.note}>No content tracks set for this client. Without tracks there are no per-track targets.</p> : null}
+        {draft.length === 0 ? <p id="x-strategy-content-tracks-empty" style={S.note}>No content tracks yet. They appear once this client has a saved plan; each Content Center bucket becomes a track.</p> : null}
         {draft.map((t) => (
           <TrackRow key={t.id} track={t} draft={draft} setDraft={setDraft} savedHandles={savedHandles} rowsMeta={rowsMeta} request={request} refreshing={refreshing}
             profile={(profiles || []).find((p) => p?.trackId === t.id) || null} onRefreshHandle={onRefreshHandle} hideRefresh={hideRefresh} />
         ))}
-      </div>
-      <div id="x-strategy-content-tracks-add-row" style={{ ...S.row, marginTop: 10 }}>
-        <button type="button" id="x-strategy-content-tracks-add-btn" className="xce-btn xce-btn-ghost" style={{ minHeight: 40 }} disabled={busy || draft.length >= MAX_TRACKS} onClick={() => setDraft(addDraftTrack(draft))}><Plus size={14} /> Add track</button>
       </div>
       {check.dirty && check.errors.length ? <div id="x-strategy-content-tracks-errors" role="alert" style={S.err}>{check.errors.join(' ')}</div> : null}
       <div id="x-strategy-content-tracks-actions-row" style={{ ...S.row, marginTop: 10 }}>

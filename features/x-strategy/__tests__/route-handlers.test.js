@@ -40,7 +40,7 @@ function setup({ config = { ownHandle: 'me_acct', benchmarkHandles: ['bench_a'],
 }
 
 test('route actions list matches the T2b scope', () => {
-  assert.deepEqual([...STRATEGY_ROUTE_ACTIONS].sort(), ['strategy-chat-history', 'strategy-chat-send', 'strategy-doc-get', 'strategy-doc-revert', 'strategy-doc-save', 'strategy-evaluate-handle', 'strategy-get', 'strategy-plan-apply', 'strategy-plan-revert', 'strategy-profile-save', 'strategy-proposal-decide', 'strategy-refresh', 'strategy-refresh-status', 'strategy-review']);
+  assert.deepEqual([...STRATEGY_ROUTE_ACTIONS].sort(), ['strategy-calendar-batch-create', 'strategy-calendar-batch-preview', 'strategy-chat-history', 'strategy-chat-send', 'strategy-doc-get', 'strategy-doc-revert', 'strategy-doc-save', 'strategy-evaluate-handle', 'strategy-get', 'strategy-plan-apply', 'strategy-plan-revert', 'strategy-profile-save', 'strategy-proposal-decide', 'strategy-refresh', 'strategy-refresh-status', 'strategy-review']);
 });
 
 test('strategy-get happy path: profile, rowsMeta + freshness, evaluation, plan, preview', async () => {

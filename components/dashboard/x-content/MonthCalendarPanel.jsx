@@ -56,16 +56,17 @@ function PostRow({ post, busy, onOpen, onApprove, onReject }) {
   const rejectOnly = post.state === 'held';
   return (
     <li id={`x-content-month-row-${post.id}`} className={`xce-mc-row xce-mc-state-${post.state}`}>
-      <button type="button" className="xce-mc-row-main" onClick={() => onOpen(post.id)}>
+      <button type="button" className="xce-mc-row-main" data-bucket={post.bucketColor ? post.bucketId || 'none' : undefined} data-thumb={post.thumbUrl ? '' : undefined}
+        style={post.bucketColor ? { '--mc-bucket': post.bucketColor } : undefined} onClick={() => onOpen(post.id)}>
         <span className="xce-mc-row-time">{post.time || '—'}</span>
         <StateDot state={post.state} />
         <span className="xce-mc-row-body">
           <span className="xce-mc-row-title">{post.title || '(no text)'}</span>
           <span className="xce-mc-row-meta">
             {STATE_LABEL[post.state]}
-            {post.proposed ? ' · proposed' : ''}
+            {post.reviewOn ? ' · review day' : post.proposed ? ' · proposed' : ''}
             {post.engine ? ` · ${ENGINE_TAG[post.engine]}` : ''}
-            {post.needsStory ? ' · needs story' : ''}
+            {post.needsStory ? (post.reviewOn ? ' · needs your memory' : ' · needs story') : ''}
           </span>
           {post.state === 'held' ? (
             <span id={`x-content-month-row-held-${post.id}`} className="xce-mc-row-note">{post.heldReason} {post.heldNext}</span>
@@ -74,6 +75,7 @@ function PostRow({ post, busy, onOpen, onApprove, onReject }) {
             <span id={`x-content-month-row-failed-${post.id}`} className="xce-mc-row-note xce-mc-row-note-failed">{post.error ? `${post.error} · ` : ''}Not retried automatically.</span>
           ) : null}
         </span>
+        {post.thumbUrl ? <span id={`x-content-month-row-thumb-${post.id}`} className="xce-mini-thumb"><img src={post.thumbUrl} alt="" loading="lazy" /></span> : null}
       </button>
       {(pending && onApprove) || (rejectOnly && onReject) ? (
         <span className="xce-mc-row-actions">
@@ -186,11 +188,22 @@ function MonthCalendarPanelView({
             <span><strong>{totals.pending ?? 0}</strong> pending</span>
             {totals.awaiting ? <span><strong>{totals.awaiting}</strong> awaiting approval</span> : null}
             {totals.held ? <span className="xce-mc-summary-held"><strong>{totals.held}</strong> held for review</span> : null}
+            {totals.review ? <span id="x-content-month-summary-review"><strong>{totals.review}</strong> review day{totals.review === 1 ? '' : 's'}{totals.needsMemory ? ` (${totals.needsMemory} need your memory)` : ''}</span> : null}
             <span><strong>{totals.scheduled ?? 0}</strong> scheduled</span>
             <span><strong>{totals.posted ?? 0}</strong> posted</span>
             {totals.failed ? <span className="xce-mc-summary-failed"><strong>{totals.failed}</strong> failed</span> : null}
             <span>CT</span>
           </p>
+          {Array.isArray(calendar?.legend) && calendar.legend.length ? (
+            <ul id="x-content-month-bucket-legend" className="xce-mc-legend" aria-label="Bucket colors">
+              {calendar.legend.map((b) => (
+                <li key={b.id} id={`x-content-month-bucket-legend-${b.id}`} className="xce-mc-legend-item" style={{ '--mc-bucket': b.color }}>
+                  <span className="xce-mc-legend-swatch" aria-hidden="true" />
+                  {b.name}<span className="xce-mc-legend-count">{b.count}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
         <div id="x-content-month-controls-row" className="xce-mc-controls">
           <div id="x-content-month-nav-group" className="xce-mc-nav" role="group" aria-label="Month">
@@ -272,6 +285,8 @@ function MonthCalendarPanelView({
                             type="button"
                             id={`x-content-month-chip-${p.id}`}
                             className={`xce-mc-chip xce-mc-state-${p.state}`}
+                            data-bucket={p.bucketColor ? p.bucketId || 'none' : undefined}
+                            style={p.bucketColor ? { '--mc-bucket': p.bucketColor } : undefined}
                             onClick={(e) => { e.stopPropagation(); setSelected(d.date); setOpenId(p.id); }}
                             title={`${p.time} · ${STATE_LABEL[p.state]}${p.proposed ? ' (proposed)' : ''} · ${p.title}`}
                           >
