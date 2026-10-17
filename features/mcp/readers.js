@@ -39,6 +39,10 @@ const postStatusRow = (p) => ({
   reviewedAt: p.reviewedAt || null, content: p.content, packageId: p.packageId || null, source: p.source || null, updatedAt: p.updatedAt || null,
   errorClass: p.errorClass || null, error: p.error || null, replyTo: !!p.replyTo, revision: p.revision || 0,
   lifecycleVersion: p.lifecycleVersion || null,
+  sourceRef: p.sourceRef || null, kind: p.kind || null, repostOf: p.repostOf || null, twitterId: p.twitterId || null, permalink: p.permalink || null,
+  reviewOn: p.reviewOn || null, bucketId: p.bucketId || null, engine: p.engine || null, fillKind: p.fillKind || null,
+  expiresAt: p.expiresAt || null, needsStory: p.needsStory === true, mediaUrl: p.mediaUrl || null, mediaType: p.mediaType || null,
+  replyToUrl: p.replyTo && typeof p.replyTo === 'object' ? p.replyTo.url || null : null,
   provenance: { runId: p.runId || null, suggestionId: p.suggestionId || null, strategyVersion: p.strategyVersion ?? null, sourceRef: p.sourceRef || null },
 });
 
@@ -76,6 +80,10 @@ export function createReaders(db) {
     const state = snap.data();
     const { projectBrief } = require('../intelligence/_brief-intel.js');
     return projectBrief(state?.marketingBrief, state);
+  }
+
+  async function readPostsForQuery(clientId) {
+    return (await readSocialQueue(clientId, { limit: 1500 })).map(postStatusRow);
   }
 
   async function readPost(clientId, postId) {
@@ -174,7 +182,7 @@ export function createReaders(db) {
       readPackages: async (clientId) => (await readInventory({ clientId })).packages,
       readTodayRun: (clientId) => latestDailyRun(createFirestoreRunStore(db), clientId),
       readContentContext: async (clientId) => summarizeContentContext(await readContentContext(clientId)),
-      readQueueSummary, readPost, readOpportunities, readResults, readMarketSignals,
+      readQueueSummary, readPostsForQuery, readPost, readOpportunities, readResults, readMarketSignals,
     },
     regenerateToday,
     // Same "Today's plan" block the daily email renders (shared reader; never throws).

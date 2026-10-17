@@ -202,7 +202,7 @@ export function createStrategyHandlers({
   readBrainTrackTargets = null, // clientId -> approved Brain Track Targets rows (per-type shares); absent => postsPerDay only
   chatStore = null, agentLoopFactory = null, callModel = null, logUsage = null,
   runDailyAction = null, runUpdateItemFacets = null, readTodayRun = null, readContentContext = null, saveXGrowthProfile = null,
-  readQueueSummary = null, readPost = null, readOpportunities = null, readResults = null, // chat read tools: (clientId[, postId]) -> plain JSON | null
+  readQueueSummary = null, readPostsForQuery = null, readPost = null, readOpportunities = null, readResults = null, // chat read tools: (clientId[, postId]) -> plain JSON | null
   readMarketSignals = null, // (clientId) -> projected brief (features/intelligence/_brief-intel.js projectBrief) | null
   readBriefRaw = null, // (clientId, {readPlanDoc, readStrategyDoc, readCorpora, readXMonitor, readTodayRun}) -> raw brief inputs (brief-bundle.js readBriefRaw); absent => get_brief / get_freshness say not available
   editPost = null, // ({clientId, postId, content?, scheduledAt?}) -> saved post; the existing updateSocialPost path
@@ -683,6 +683,7 @@ export function createStrategyHandlers({
       getTodayRun: async () => summarizeTodayRun(readTodayRun ? await readTodayRun(clientId) : null),
       // Closed over THIS request's clientId; the model never supplies one. Absent reader => key absent => tool says 'not available'.
       ...(readQueueSummary ? { readQueueSummary: () => readQueueSummary(clientId) } : {}),
+      ...(readPostsForQuery ? { readPostsForQuery: () => readPostsForQuery(clientId) } : {}),
       ...(readPost ? { readPost: (postId) => readPost(clientId, postId) } : {}),
       ...(readOpportunities ? { readOpportunities: () => readOpportunities(clientId) } : {}),
       ...(readResults ? { readResults: () => readResults(clientId) } : {}),
@@ -1310,7 +1311,7 @@ export function createXGrowthProfileSaver(db, { onSaved } = {}) {
  */
 export function createStrategyHandlersFromDb(db, {
   readPackages, env = process.env, runDailyAction, runUpdateItemFacets, readTodayRun, readContentContext,
-  readQueueSummary, readPost, readOpportunities, readResults, readMarketSignals, editPost, runPaidSync,
+  readQueueSummary, readPostsForQuery, readPost, readOpportunities, readResults, readMarketSignals, editPost, runPaidSync,
   onXGrowthSaved, onBrainOwnedSaved, readBrainTrackTargets, saveXGrowthProfile = createXGrowthProfileSaver(db, { onSaved: onXGrowthSaved }), chatStore = createFirestoreChatStore(db, { env }),
   agentLoopFactory, callModel, logUsage, loadCommitted, docStore = createFirestoreStrategyDocStore(db),
   actionRuntime = createActionRuntime(createFirestoreActionStores(db)),
@@ -1390,7 +1391,7 @@ export function createStrategyHandlersFromDb(db, {
     corpusStore, planStore, refreshService, readPackages, readAudience, readBuckets, readBucketEngine, readOpenPackageIds, readFillContext, readQuoteTargets, ensureDraft, placeDraft, listMediaTaskIds, createMediaTasks,
     readWorkerHealth: (clientId) => readWorkerHealthFromDb(db, { now: Date.now(), clientId }),
     docStore, onBrainOwnedSaved, readBrainTrackTargets, chatStore, agentLoopFactory, callModel, logUsage, runDailyAction, runUpdateItemFacets, readTodayRun, readContentContext, saveXGrowthProfile, env,
-    readQueueSummary, readPost, readOpportunities, readResults, readMarketSignals, editPost, runPaidSync, actionRuntime,
+    readQueueSummary, readPostsForQuery, readPost, readOpportunities, readResults, readMarketSignals, editPost, runPaidSync, actionRuntime,
     readBriefRaw: (clientId, local) => readBriefRawFromDb(clientId, { db, ...local }),
     readXGrowthConfig: async (clientId) => {
       const snap = await db.collection('client_configs').doc(clientId).get();

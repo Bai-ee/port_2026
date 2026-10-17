@@ -480,6 +480,10 @@ const postStatusRow = (p) => ({
   reviewedAt: p.reviewedAt || null, content: p.content, packageId: p.packageId || null, source: p.source || null, updatedAt: p.updatedAt || null,
   errorClass: p.errorClass || null, error: p.error || null, replyTo: !!p.replyTo, revision: p.revision || 0,
   lifecycleVersion: p.lifecycleVersion || null,
+  sourceRef: p.sourceRef || null, kind: p.kind || null, repostOf: p.repostOf || null, twitterId: p.twitterId || null, permalink: p.permalink || null,
+  reviewOn: p.reviewOn || null, bucketId: p.bucketId || null, engine: p.engine || null, fillKind: p.fillKind || null,
+  expiresAt: p.expiresAt || null, needsStory: p.needsStory === true, mediaUrl: p.mediaUrl || null, mediaType: p.mediaType || null,
+  replyToUrl: p.replyTo && typeof p.replyTo === 'object' ? p.replyTo.url || null : null,
   provenance: { runId: p.runId || null, suggestionId: p.suggestionId || null, strategyVersion: p.strategyVersion ?? null, sourceRef: p.sourceRef || null },
 });
 
@@ -507,6 +511,11 @@ async function readQueueSummary(clientId) {
       id: p.id, status: p.status, scheduledAt: p.scheduledAt || null, source: p.source || null, excerpt: excerptOf(p.content), packageId: p.packageId || null, errorClass: p.errorClass || null,
     })),
   };
+}
+
+const FIND_POSTS_SCAN_LIMIT = 1500; // newest posts scanned by find_posts (bounded read)
+async function readPostsForQuery(clientId) {
+  return (await readSocialQueue(clientId, { limit: FIND_POSTS_SCAN_LIMIT })).map(postStatusRow);
 }
 
 async function readPostForChat(clientId, postId) {
@@ -1012,6 +1021,7 @@ function getStrategyHandlers() {
       readTodayRun: (clientId) => latestDailyRun(createFirestoreRunStore(fb.adminDb), clientId),
       readContentContext: async (clientId) => summarizeContentContext(await readContentContext(clientId)),
       readQueueSummary,
+      readPostsForQuery,
       readQueuePosts: readSocialQueue,
       readPost: readPostForChat,
       readOpportunities,
