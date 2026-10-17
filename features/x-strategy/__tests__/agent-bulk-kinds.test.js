@@ -136,7 +136,8 @@ test('tools: daily-fill uses previewDailyFill; refresh adds the estimate; queue-
   assert.equal(r.proposal.payload.estimate[0].paid, false);
   const q = await prepareProposal('propose_queue_bulk', { ...common, action: 'approve', postIds: ['a', 'b'] }, { toolDeps });
   assert.equal(q.ok, true);
-  assert.equal(q.proposal.payload.rows[0].blocked, 'needs its story');
+  assert.equal(q.proposal.payload.rows[0].note, 'placeholder removed on approve');
+  assert.equal(q.proposal.payload.rows[0].blocked, undefined);
   assert.equal((await prepareProposal('propose_queue_bulk', { ...common, action: 'approve', postIds: ['a', 'nope'] }, { toolDeps })).ok, false);
   const be = await prepareProposal('propose_bucket_edit', { ...common, op: 'upsert', bucket: { name: 'X' } }, { toolDeps });
   assert.equal(be.proposal.payload.bucket.sourceKind, 'manual');
@@ -159,7 +160,7 @@ test('ui-model: labels and previews', () => {
   assert.ok(lines.some((l) => l.includes('1 quote, 1 baseline')));
   assert.ok(lines.some((l) => l.startsWith('2026-10-20 · quote')));
   assert.ok(proposalPayloadPreview('refresh', { groups: ['analysis'], estimate: [{ id: 'analysis', label: 'Analysis', paid: true, text: 'Model calls' }] }).some((l) => l.includes('(paid)')));
-  assert.ok(proposalPayloadPreview('queue-bulk', { action: 'approve', postIds: ['a'], rows: [{ status: 'draft', text: 't', blocked: 'needs its story' }] }).some((l) => l.includes('needs its story')));
+  assert.ok(proposalPayloadPreview('queue-bulk', { action: 'approve', postIds: ['a'], rows: [{ status: 'draft', text: 't', note: 'placeholder removed on approve' }] }).some((l) => l.includes('placeholder removed')));
 });
 
 test('loop: bulk kinds do not use the per-turn proposal cap', async () => {

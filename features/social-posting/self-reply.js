@@ -27,6 +27,24 @@ export function assertNoMemoryPlaceholder(content) {
   }
 }
 
+/**
+ * Remove every blocking placeholder from `text` (approval strips the memory line instead of blocking on it).
+ * A line that is only the placeholder (plus separators) is dropped; a placeholder inside a longer line is cut out.
+ * Blank-line runs collapse and trailing separators are trimmed. @returns {string}
+ */
+export function stripBlockingPlaceholders(text) {
+  if (typeof text !== 'string' || !hasMemoryPlaceholder(text)) return text;
+  const re = new RegExp(BLOCKING_PLACEHOLDERS.map((p) => p.replace(/[[\]]/g, '\\$&')).join('|'), 'gi');
+  const SEP = /^[\s\-\u2013\u2014\u00b7|:,;.\u2022]*$/;
+  const lines = text.split('\n').flatMap((line) => {
+    if (!re.test(line)) { re.lastIndex = 0; return [line]; }
+    re.lastIndex = 0;
+    const cut = line.replace(re, '').replace(/[ \t]{2,}/g, ' ').replace(/[ \t]+$/g, '');
+    return SEP.test(cut) ? [] : [cut];
+  });
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').replace(/[\s\-\u2013\u2014\u00b7|]+$/g, '').replace(/^\s+/, '');
+}
+
 /** Normalise a self-reply payload; null when absent/empty. Media fields mirror extractMedia. */
 export function sanitizeSelfReply(input) {
   if (!input || typeof input !== 'object') return null;

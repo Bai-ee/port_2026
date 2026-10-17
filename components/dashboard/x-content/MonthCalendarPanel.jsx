@@ -8,6 +8,8 @@ import { Skeleton, RetryError } from '../content-ui/Feedback.jsx';
 import PostSheet from './PostSheet.jsx';
 import { classifyResult } from '../../../features/x-content-inventory/month-calendar.js';
 import { ENGINE_TAG, STATE_LABEL, StateDot, dayHeading } from './calendar-bits.jsx';
+import { ApprovalMark, FilterChips, InlineApprovalButtons, SuggestionRow, CalendarApprovalStyles } from './CalendarApprovalBits.jsx';
+import { dayRows, filterRows, withOverride, approveRequest, unapproveRequest, isSuggestionRow, matchesFilter } from './calendar-row-model.js';
 
 // MonthCalendarPanel — the Content Engine's month-to-month calendar over
 // social_posts.
@@ -35,7 +37,7 @@ const UNPLACED_REASON = {
   held: 'Held for review',
   'no-slot': 'No open slot this month',
 };
-const NEEDS_ATTENTION = ['pending', 'awaiting', 'held'];
+const NEEDS_ATTENTION = ['pending', 'awaiting', 'held', 'suggested'];
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const VIEW_KEY = 'xce-cal-view';
 const CHIP_MAX = 3;
@@ -59,16 +61,18 @@ export function isQuoteWindowClosed(post, nowMs = Date.now()) {
   return Number.isFinite(t) && t < nowMs;
 }
 
-function PostRow({ post, busy, onOpen, onApprove, onReject }) {
+function PostRow({ post, busy, onOpen, onApprove, onReject, onApproveOnly, onUnapprove }) {
   const windowClosed = isQuoteWindowClosed(post);
-  const pending = (post.state === 'pending' || post.state === 'awaiting') && !post.needsStory;
+  // Once the data layer sends `approval`, the row's Approve button approves WITHOUT scheduling; the legacy approve-and-schedule check is kept only before that.
+  const approvalAware = !!post.approval && !!onApproveOnly;
+  const pending = (post.state === 'pending' || post.state === 'awaiting') && !approvalAware;
   const rejectOnly = post.state === 'held';
   return (
     <li id={`x-content-month-row-${post.id}`} className={`xce-mc-row xce-mc-state-${post.state}${windowClosed ? ' xce-mc-row-expired' : ''}`}>
       <button type="button" className="xce-mc-row-main" data-bucket={post.bucketColor ? post.bucketId || 'none' : undefined} data-thumb={post.thumbUrl ? '' : undefined}
         style={post.bucketColor ? { '--mc-bucket': post.bucketColor } : undefined} onClick={() => onOpen(post.id)}>
         <span className="xce-mc-row-time">{post.time || '—'}</span>
-        <StateDot state={post.state} />
+        {approvalAware ? <ApprovalMark row={post} id={`x-content-month-row-mark-${post.id}`} /> : <StateDot state={post.state} />}
         <span className="xce-mc-row-body">
           <span className="xce-mc-row-title">{post.title || '(no text)'}</span>
           <span className="xce-mc-row-meta">
@@ -90,6 +94,11 @@ function PostRow({ post, busy, onOpen, onApprove, onReject }) {
         </span>
         {post.thumbUrl ? <span id={`x-content-month-row-thumb-${post.id}`} className="xce-mini-thumb"><img src={post.thumbUrl} alt="" loading="lazy" /></span> : null}
       </button>
+      {approvalAware ? (
+        <span className="xce-mc-row-actions">
+          <InlineApprovalButtons row={post} busy={busy} onApprove={onApproveOnly} onUnapprove={onUnapprove} />
+        </span>
+      ) : null}
       {(pending && onApprove) || (rejectOnly && onReject) ? (
         <span className="xce-mc-row-actions">
           {pending ? <button
@@ -161,6 +170,10 @@ function MonthCalendarPanelView({
 }) {
   const [view, setView] = useState('month');
   const [pendingOnly, setPendingOnly] = useState(false);
+  const [filter, setFilter] = useState('all');
+  const [overrides, setOverrides] = useState({});
+  const [inlineBusyId, setInlineBusyId] = useState(null);
+  const [inlineNote, setInlineNote] = useState('');
   const [selected, setSelected] = useState(null);
   const [openId, setOpenId] = useState(null);
 
@@ -189,7 +202,39 @@ function MonthCalendarPanelView({
     return map;
   }, [days, unplaced]);
 
-  const visible = (posts) => (pendingOnly ? posts.filter((p) => NEEDS_ATTENTION.includes(p.state)) : posts);
+  // Optimistic approve/unapprove marks live only until the next calendar load.
+  useEffect(() => { setOverrides({}); }, [calendar]);
+  const visible = (rows) => (pendingOnly ? rows.filter((p) => NEEDS_ATTENTION.includes(p.state)) : rows);
+  // Everything a day shows: saved posts + suggestions + requotes, with optimistic overrides and the approval filter applied.
+  const rowsFor = (d) => visible(filterRows(dayRows(d).map((r) => withOverride({ ...r, date: r.date || d.date }, overrides)), filter));
+  const chipCounts = useMemo(() => {
+    const all = days.filter((d) => d.inMonth).flatMap((d) => dayRows(d).map((r) => withOverride(r, overrides)));
+    const n = (f) => all.filter((r) => matchesFilter(r, f)).length;
+    return { all: all.length, unapproved: n('unapproved'), approved: n('approved'), suggestions: n('suggestions') };
+  }, [days, overrides]);
+
+  // Inline Approve / Unapprove (never schedules). Optimistic; reverts with a note on failure, reloads on success.
+  const inlineDecide = async (row, req, next) => {
+    if (typeof call !== 'function') return;
+    setInlineNote('');
+    setInlineBusyId(row.id);
+    setOverrides((o) => ({ ...o, [row.id]: next }));
+    try {
+      await call(req.action, req.body);
+      if (onRefresh) await onRefresh();
+    } catch (err) {
+      setOverrides((o) => { const c = { ...o }; delete c[row.id]; return c; });
+      setInlineNote(err?.message || 'Could not update the calendar.');
+    } finally {
+      setInlineBusyId(null);
+    }
+  };
+  const onApproveOnly = (row) => inlineDecide(row, approveRequest(row), 'approved');
+  const onUnapprove = (row) => inlineDecide(row, unapproveRequest(row), 'unapproved');
+  const rowBusy = (id) => busyId === id || inlineBusyId === id;
+  const renderRow = (p) => (isSuggestionRow(p)
+    ? <SuggestionRow key={p.id} row={p} busy={rowBusy(p.id)} onApprove={onApproveOnly} />
+    : <PostRow key={p.id} post={p} busy={rowBusy(p.id)} onOpen={setOpenId} onApprove={quickApprove} onReject={onReject} onApproveOnly={onApproveOnly} onUnapprove={onUnapprove} />);
   const selectedDay = days.find((d) => d.date === selected) || null;
   const openPost = openId ? byId.get(openId) || null : null;
 
@@ -208,7 +253,7 @@ function MonthCalendarPanelView({
   };
   const quickApprove = (post) => onApprove(post, { content: post.content, scheduledAt: post.proposedAt || post.scheduledAt, expectedRevision: post.revision ?? null });
 
-  const agendaDays = days.filter((d) => d.inMonth && (visible(d.posts).length || d.tasks?.length));
+  const agendaDays = days.filter((d) => d.inMonth && (rowsFor(d).length || d.tasks?.length));
 
   return (
     <div id="x-content-month-calendar-panel" className="xce-panel xce-mc">
@@ -221,6 +266,8 @@ function MonthCalendarPanelView({
             {totals.held ? <span className="xce-mc-summary-held"><strong>{totals.held}</strong> held for review</span> : null}
             {totals.review ? <span id="x-content-month-summary-review"><strong>{totals.review}</strong> review day{totals.review === 1 ? '' : 's'}{totals.needsMemory ? ` (${totals.needsMemory} need your memory)` : ''}</span> : null}
             {totals.tasksOpen ? <span id="x-content-month-summary-tasks"><strong>{totals.tasksOpen}</strong> to film</span> : null}
+            {totals.suggested ? <span id="x-content-month-summary-suggested"><strong>{totals.suggested}</strong> suggested</span> : null}
+            {totals.requote ? <span id="x-content-month-summary-requote"><strong>{totals.requote}</strong> requote{totals.requote === 1 ? '' : 's'}</span> : null}
             <span><strong>{totals.scheduled ?? 0}</strong> scheduled</span>
             <span><strong>{totals.posted ?? 0}</strong> posted</span>
             {totals.failed ? <span className="xce-mc-summary-failed"><strong>{totals.failed}</strong> failed</span> : null}
@@ -270,6 +317,11 @@ function MonthCalendarPanelView({
         </div>
       </header>
 
+      <div id="x-content-month-approval-filter-row" className="xce-ap-filter-row">
+        <FilterChips value={filter} onChange={setFilter} counts={chipCounts} />
+      </div>
+      {inlineNote ? <p id="x-content-month-inline-note" className="xce-ap-note" role="alert">{inlineNote}</p> : null}
+
       {error ? <RetryError id="x-content-month-error" message={typeof error === 'string' ? error : 'Could not load the calendar.'} onRetry={onRefresh} busy={!!loading} /> : null}
       {loading && !calendar ? <Skeleton id="x-content-month-loading" rows={5} variant="tile" /> : null}
 
@@ -287,7 +339,7 @@ function MonthCalendarPanelView({
             {weeks.map((week) => (
               <div key={week[0].date} className="xce-mc-week" role="row">
                 {week.map((d) => {
-                  const posts = visible(d.posts);
+                  const posts = rowsFor(d);
                   const extra = posts.length - CHIP_MAX;
                   const cls = [
                     'xce-mc-day',
@@ -319,18 +371,18 @@ function MonthCalendarPanelView({
                             className={`xce-mc-chip xce-mc-state-${p.state}`}
                             data-bucket={p.bucketColor ? p.bucketId || 'none' : undefined}
                             style={p.bucketColor ? { '--mc-bucket': p.bucketColor } : undefined}
-                            onClick={(e) => { e.stopPropagation(); setSelected(d.date); setOpenId(p.id); }}
-                            title={`${p.time} · ${STATE_LABEL[p.state]}${p.proposed ? ' (proposed)' : ''} · ${p.title}`}
+                            onClick={(e) => { e.stopPropagation(); setSelected(d.date); if (!isSuggestionRow(p)) setOpenId(p.id); }}
+                            title={`${p.time || ''} · ${STATE_LABEL[p.state] || (p.kind === 'requote' ? 'Requote' : 'Suggested')}${p.proposed ? ' (proposed)' : ''} · ${p.title || p.text || ''}`}
                           >
-                            <StateDot state={p.state} />
-                            <span className="xce-mc-chip-time">{p.time}</span>
-                            <span className="xce-mc-chip-text">{p.title || '(no text)'}</span>
+                            {p.approval ? <ApprovalMark row={p} /> : <StateDot state={p.state} />}
+                            <span className="xce-mc-chip-time">{p.time || ''}</span>
+                            <span className="xce-mc-chip-text">{p.title || p.text || '(no text)'}</span>
                           </button>
                         ))}
                         {extra > 0 ? <span className="xce-mc-more">+{extra} more</span> : null}
                       </span>
                       <span className="xce-mc-dots" aria-hidden="true">
-                        {posts.slice(0, DOT_MAX).map((p) => <StateDot key={p.id} state={p.state} />)}
+                        {posts.slice(0, DOT_MAX).map((p) => (p.approval ? <ApprovalMark key={p.id} row={p} /> : <StateDot key={p.id} state={p.state} />))}
                         {posts.length > DOT_MAX ? <span className="xce-mc-dots-more">+</span> : null}
                       </span>
                     </div>
@@ -355,11 +407,9 @@ function MonthCalendarPanelView({
                 {selectedDay.tasks.map((t) => <TaskRow key={t.id} task={t} busy={busyId === t.id} onToggle={onTaskToggle} />)}
               </ul>
             ) : null}
-            {selectedDay && visible(selectedDay.posts).length ? (
+            {selectedDay && rowsFor(selectedDay).length ? (
               <ul className="xce-mc-rows">
-                {visible(selectedDay.posts).map((p) => (
-                  <PostRow key={p.id} post={p} busy={busyId === p.id} onOpen={setOpenId} onApprove={quickApprove} onReject={onReject} />
-                ))}
+                {rowsFor(selectedDay).map(renderRow)}
               </ul>
             ) : selectedDay?.tasks?.length ? null : (
               <p className="xce-mc-empty">{pendingOnly ? 'Nothing pending on this day.' : 'Nothing on this day.'}</p>
@@ -375,9 +425,7 @@ function MonthCalendarPanelView({
               <p className="xce-mc-kicker">{dayHeading(d.date)}{d.isToday ? ' · today' : ''}</p>
               <ul className="xce-mc-rows">
                 {(d.tasks || []).map((t) => <TaskRow key={t.id} task={t} busy={busyId === t.id} onToggle={onTaskToggle} />)}
-                {visible(d.posts).map((p) => (
-                  <PostRow key={p.id} post={p} busy={busyId === p.id} onOpen={setOpenId} onApprove={quickApprove} onReject={onReject} />
-                ))}
+                {rowsFor(d).map(renderRow)}
               </ul>
             </div>
           )) : <p className="xce-mc-empty">{pendingOnly ? 'Nothing pending this month.' : 'Nothing on the calendar this month.'}</p>}
@@ -406,6 +454,8 @@ function MonthCalendarPanelView({
           </ul>
         </details>
       ) : null}
+
+      <CalendarApprovalStyles />
 
       {/* Portalled to the card root: `.xce-panel` has backdrop-filter, which
           makes it the containing block for position:fixed and clips the sheet.

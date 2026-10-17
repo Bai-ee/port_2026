@@ -12,7 +12,7 @@ import { storySyncPlan } from '../discogs-ingest/draft-builder.js';
 import { needsApproval } from '../x-content-inventory/schema.js';
 import { reserveInTx, releaseReservations } from './reservations.js';
 import { toMs, contentHash, LIFECYCLE_VERSION, OPEN_STATUSES, MANUAL_CLAIMABLE_STATUSES, APPROVAL_VOID_STATUSES, isV2, packageClearance, replyBlock, findPackageCollision, isMaterialEdit, deliveryBlock } from './lifecycle.js';
-import { assertNoMemoryPlaceholder, hasMemoryPlaceholder, sanitizeMediaVariants, sanitizeSelfReply, sanitizeSourceRef } from './self-reply.js';
+import { assertNoMemoryPlaceholder, hasMemoryPlaceholder, stripBlockingPlaceholders, sanitizeMediaVariants, sanitizeSelfReply, sanitizeSourceRef } from './self-reply.js';
 import { sanitizeRepostOf, repostLabel } from './repost.js';
 
 const require = createRequire(import.meta.url);
@@ -1312,19 +1312,30 @@ async function guardedPatch(postId, { statuses, scheduledAt, claimedAt }, patch)
   });
 }
 
-// draft -> approved. The story gate runs here: a post still carrying the
-// "[add your memory]" placeholder (or flagged needsStory) cannot be approved.
+// draft -> approved. The memory line never blocks approval: a blocking placeholder ("[add your memory]" /
+// "[add your take]") in the text or the self-reply is STRIPPED and needsStory cleared, then the post approves.
+// Publishing guards (post-now / schedule / due sweep) still refuse any text that carries a placeholder.
 // Idempotent for an already-approved post. Approving never schedules anything.
+/** Pure: the post with blocking placeholders removed from content + selfReply and needsStory cleared. */
+function stripPlaceholdersFromPost(post) {
+  const content = stripBlockingPlaceholders(post.content);
+  if (hasMemoryPlaceholder(post.content) && !String(content || '').trim()) {
+    throw Object.assign(new Error('Nothing left to post once the placeholder is removed. Write the post first.'), { status: 409, code: 'empty-after-strip' });
+  }
+  const out = { ...post, content, needsStory: false };
+  if (post.selfReply && hasMemoryPlaceholder(post.selfReply.text)) {
+    const text = stripBlockingPlaceholders(post.selfReply.text);
+    out.selfReply = text.trim() || post.selfReply.mediaUrl ? { ...post.selfReply, text } : null;
+  }
+  return out;
+}
+
 function approveInMemory(post, reviewedBy) {
   if (post.status === 'approved') return post;
   if (post.status !== 'draft') {
     throw Object.assign(new Error(`Only a draft can be approved (this post is ${post.status}).`), { status: 409, code: 'not-draft' });
   }
-  if (post.needsStory === true) {
-    throw Object.assign(new Error('This draft still needs its story before it can be approved.'), { status: 409, code: 'needs-story' });
-  }
-  assertNoMemoryPlaceholder(post.content);
-  assertNoMemoryPlaceholder(post.selfReply?.text);
+  post = stripPlaceholdersFromPost(post);
   const now = new Date().toISOString();
   const approved = {
     ...post,
@@ -1345,6 +1356,19 @@ export async function approveDraft(clientId, postId, { reviewedBy = null, expect
   if (expectedRevision != null && (post.revision || 0) !== Number(expectedRevision)) throw conflict();
   if (post.status === 'approved') return post;
   return commitPostTransition(clientId, post, approveInMemory(post, reviewedBy));
+}
+
+// approved -> draft (the calendar's "leave unapproved"). Only an approved post with no schedule; a scheduled/queued/posted
+// row is refused (unschedule it first). Clears the review stamp and approval hash. Idempotent for a draft.
+export async function unapproveDraft(clientId, postId, { expectedRevision = null } = {}) {
+  const post = await getSocialPost(clientId, postId);
+  if (!post) throw Object.assign(new Error('Post not found.'), { status: 404 });
+  if (post.status === 'draft') return post;
+  if (expectedRevision != null && (post.revision || 0) !== Number(expectedRevision)) throw conflict();
+  if (post.status !== 'approved' || post.scheduledAt) {
+    throw Object.assign(new Error(`Only an approved, unscheduled post can be unapproved (this post is ${post.status}${post.scheduledAt ? ', scheduled' : ''}).`), { status: 409, code: 'not-approved' });
+  }
+  return commitPostTransition(clientId, post, { ...post, status: 'draft', reviewedAt: null, reviewedBy: null, approvedHash: null, updatedAt: new Date().toISOString() });
 }
 
 // draft -> rejected (the calendar's "disapprove"). Only an unpublished draft/needs_review row can be

@@ -33,7 +33,12 @@ test('a calendar-batch draft stores reviewOn, stays an unscheduled draft, and re
   const again = await batchDraft();
   assert.equal(again.existing, true);
   assert.equal(again.post.id, post.id);
-  await assert.rejects(() => svc.approveDraft('c1', post.id, { reviewedBy: 'owner' }), /needs its story/);
+  // The memory line never blocks approval: it is stripped.
+  const ok = await svc.approveDraft('c1', post.id, { reviewedBy: 'owner' });
+  assert.equal(ok.status, 'approved');
+  assert.equal(ok.needsStory, false);
+  assert.ok(!/add your memory/i.test(ok.content));
+  assert.ok(ok.content.length > 0);
 });
 
 test('writing the memory over the placeholder clears needsStory so the draft can be approved; leaving it keeps the gate', async () => {
@@ -55,18 +60,30 @@ const fillDraft = () => svc.ensureDraftPost('c1', {
   content: '@h on this: [add your take]\n\nhttps://x.com/h/status/111', needsStory: true,
 });
 
-test('a daily-fill draft keeps fillKind / fillSource / expiresAt and cannot be approved with [add your take] in it', async () => {
+test('a daily-fill draft keeps fillKind / fillSource / expiresAt and approving strips [add your take] instead of blocking', async () => {
   const { post } = await fillDraft();
   assert.equal(post.fillKind, 'quote');
   assert.deepEqual(post.fillSource, { type: 'quote-target', id: '111', asOf: '2026-10-17T06:00:00Z' });
   assert.equal(post.expiresAt, '2026-10-18T12:00:00.000Z');
   assert.equal(post.status, 'draft');
-  await assert.rejects(() => svc.approveDraft('c1', post.id, { reviewedBy: 'owner' }), /needs its story/);
-  const still = await svc.updateSocialPost('c1', post.id, { content: '@h on this: [add your take] soon\n\nhttps://x.com/h/status/111' });
+  const approvedNow = await svc.approveDraft('c1', post.id, { reviewedBy: 'owner' });
+  assert.equal(approvedNow.status, 'approved');
+  assert.ok(!/add your take/i.test(approvedNow.content));
+  assert.ok(approvedNow.content.includes('https://x.com/h/status/111'));
+});
+
+test('the gate follows the text; approving a still-placeholdered draft strips it; publish guards stay', async () => {
+  const { post } = await svc.ensureDraftPost('c1', { idempotencyKey: 'daily-fill:2026-10-18:quote:222', source: 'daily-fill', fillKind: 'quote', reviewOn: '2026-10-18',
+    content: '@h on this: [add your take]\n\nhttps://x.com/h/status/222', needsStory: true });
+  const still = await svc.updateSocialPost('c1', post.id, { content: '@h on this: [add your take] soon\n\nhttps://x.com/h/status/222' });
   assert.equal(still.needsStory, true);
-  const done = await svc.updateSocialPost('c1', post.id, { content: '@h on this: the pressing plant story is the real one.\n\nhttps://x.com/h/status/111' });
+  const done = await svc.updateSocialPost('c1', post.id, { content: '@h on this: real take.\n\nhttps://x.com/h/status/222' });
   assert.equal(done.needsStory, false);
-  assert.equal((await svc.approveDraft('c1', post.id, { reviewedBy: 'owner' })).status, 'approved');
+  const { assertNoMemoryPlaceholder, stripBlockingPlaceholders } = await import('../self-reply.js');
+  assert.throws(() => assertNoMemoryPlaceholder('x [add your take]'), (e) => e.status === 409);
+  assert.equal(stripBlockingPlaceholders('A – B\n\n[add your memory]'), 'A – B');
+  assert.equal(stripBlockingPlaceholders('clean'), 'clean');
+  await assert.rejects(() => svc.schedulePost('c1', { content: 'x [add your memory]', scheduledAt: new Date(Date.now() + 3600e3).toISOString() }), (e) => e.status === 409);
 });
 
 test('the placeholder gate covers both placeholders, case-insensitively', async () => {
@@ -76,4 +93,33 @@ test('the placeholder gate covers both placeholders, case-insensitively', async 
   assert.equal(hasMemoryPlaceholder('plain text'), false);
   assert.throws(() => assertNoMemoryPlaceholder('x [add your take]'), (e) => e.status === 409 && /add your take/.test(e.message));
   assert.throws(() => assertNoMemoryPlaceholder('x [add your memory]'), (e) => e.status === 409 && /memory/.test(e.message));
+});
+
+test('approve-and-schedule strips the placeholder too; unapprove returns an approved unscheduled post to draft; a scheduled one is refused', async () => {
+  const { post } = await batchDraft();
+  const when = new Date(Date.now() + 2 * 3600e3).toISOString();
+  const scheduled = await svc.approveAndSchedule('c1', post.id, { scheduledAt: when, reviewedBy: 'owner' });
+  assert.ok(['scheduled', 'queued'].includes(scheduled.status));
+  assert.ok(!/add your memory/i.test(scheduled.content));
+  await assert.rejects(() => svc.unapproveDraft('c1', post.id), (e) => e.status === 409);
+});
+
+test('unapprove: approved -> draft, clears the review stamp; draft is idempotent', async () => {
+  const { post } = await svc.ensureDraftPost('c1', { idempotencyKey: 'k-unapprove', content: 'plain post', source: 'calendar-batch', reviewOn: '2026-12-01' });
+  const approved = await svc.approveDraft('c1', post.id, { reviewedBy: 'owner' });
+  assert.equal(approved.status, 'approved');
+  const back = await svc.unapproveDraft('c1', post.id);
+  assert.equal(back.status, 'draft');
+  assert.equal(back.reviewedAt, null);
+  assert.equal(back.approvedHash, null);
+  assert.equal((await svc.unapproveDraft('c1', post.id)).status, 'draft');
+});
+
+test('approving strips a self-reply that is only a placeholder; a post that is only a placeholder is refused', async () => {
+  const { post } = await svc.ensureDraftPost('c1', { idempotencyKey: 'k-sr', content: 'real text', source: 'daily-fill', reviewOn: '2026-12-02', selfReply: { text: '[add your memory]' }, needsStory: true });
+  const a = await svc.approveDraft('c1', post.id, { reviewedBy: 'owner' });
+  assert.equal(a.status, 'approved');
+  assert.equal(a.selfReply ?? null, null);
+  const { post: only } = await svc.ensureDraftPost('c1', { idempotencyKey: 'k-only', content: '[add your memory]', source: 'daily-fill', reviewOn: '2026-12-03', needsStory: true });
+  await assert.rejects(() => svc.approveDraft('c1', only.id, { reviewedBy: 'owner' }), (e) => e.code === 'empty-after-strip');
 });

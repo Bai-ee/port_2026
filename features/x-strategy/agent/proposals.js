@@ -623,7 +623,7 @@ export function buildExecutors({ planStore, runDailyAction, runUpdateItemFacets,
           if (payload.action === 'approve') {
             if (post.status === 'approved') { results.push({ postId, ok: true, status: 'approved', note: 'already approved' }); continue; }
             if (post.status !== 'draft') throw Object.assign(new Error(`post is ${post.status}; only a draft can be approved`), { code: 'not-approvable' });
-            // approveDraft runs the story gate: "[add your memory]" / needsStory posts are refused here.
+            // approveDraft strips any "[add your memory]" / "[add your take]" placeholder line, then approves.
             const saved = await (approvePost ?? (await social()).approveDraft)(clientId, postId, { reviewedBy: by, ...rev });
             results.push({ postId, ok: true, status: saved?.status ?? 'approved' });
           } else if (payload.action === 'unschedule') {
@@ -643,8 +643,7 @@ export function buildExecutors({ planStore, runDailyAction, runUpdateItemFacets,
           }
         } catch (err) {
           if (err instanceof ProposalExecutionError) throw err;
-          const reason = err?.code === 'needs-story' ? 'still needs its story (add your memory) before it can be approved'
-            : err?.code === 'revision-conflict' ? 'changed since this was proposed' : String(err?.message || err).slice(0, 160);
+          const reason = err?.code === 'revision-conflict' ? 'changed since this was proposed' : String(err?.message || err).slice(0, 160);
           results.push({ postId, ok: false, error: err?.code || 'failed', reason });
         }
       }
