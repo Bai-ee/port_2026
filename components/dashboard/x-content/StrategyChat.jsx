@@ -12,6 +12,7 @@ import Accordion from '../content-ui/ui/Accordion';
 import Badge from '../content-ui/ui/Badge';
 import IconButton from '../content-ui/ui/IconButton';
 import SectionLabel from '../content-ui/ui/SectionLabel';
+import MiniThumb from './MiniThumb.jsx';
 
 // StrategyChat - the agent chat in the Strategy tab's right column.
 //
@@ -102,7 +103,7 @@ export function formatDayTime(at) {
 
 const TONE_BY_STATUS = { pending: 'amber', ok: 'green', muted: 'grey', error: 'red' };
 
-function ProposalCard({ proposal, currentPlan, history, planVersion, deciding, onDecide, useModel, onUseModel, onViewPlan, onUndo, undoNote, docSections, onViewDoc }) {
+function ProposalCard({ call, proposal, currentPlan, history, planVersion, deciding, onDecide, useModel, onUseModel, onViewPlan, onUndo, undoNote, docSections, onViewDoc }) {
   const isDocEdit = proposal.kind === 'strategy-doc-edit';
   const id = proposal.id;
   // Cards made by an external assistant over MCP live in `t_mcp_<yyyymmdd>` threads (createProposalInThread).
@@ -165,6 +166,23 @@ function ProposalCard({ proposal, currentPlan, history, planVersion, deciding, o
             <ul id={`x-strategy-proposal-preview-${id}`} style={S.preview}>
               {preview.map((line, i) => <li key={i}>{line}</li>)}
             </ul>
+          ) : null}
+          {proposal.kind === 'item-media' && Array.isArray(proposal.payload?.rows) ? (
+            <ul id={`x-strategy-proposal-item-media-thumbs-${id}`} data-section="chat-proposal-item-media" style={{ ...S.small, listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 6 }}>
+              {proposal.payload.rows.slice(0, 12).map((r) => (
+                <li key={r.targetId} id={`x-strategy-proposal-item-media-row-${id}-${r.targetId}`} style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                  <MiniThumb id={r.sourceId} call={call} kind={r.kind} size={36} label={r.sourceTitle || r.sourceId} />
+                  <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{r.targetTitle || r.targetId}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {proposal.kind === 'calendar-batch' && Array.isArray(proposal.payload?.preview?.sample) ? (
+            <div id={`x-strategy-proposal-calendar-batch-thumbs-${id}`} data-section="chat-proposal-calendar-batch" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {proposal.payload.preview.sample.filter((r) => r.packageId).map((r) => (
+                <MiniThumb key={r.packageId} id={r.packageId} call={call} nasSha={r.nasSha || null} size={44} label={`${r.reviewOn}: ${r.title}`} />
+              ))}
+            </div>
           ) : null}
           {st.detail ? (
             <p id={`x-strategy-proposal-result-${id}`} role="status" style={st.tone === 'error' ? { ...S.err, margin: 0 } : st.tone === 'ok' ? S.ok : S.note}>{st.detail}</p>
@@ -492,6 +510,7 @@ export default function StrategyChat({
                   {ids.map((pid) => (
                     <div key={pid} style={{ display: 'grid', gap: 4, minWidth: 0 }}>
                       <ProposalCard
+                        call={call}
                         proposal={proposals[pid]}
                         currentPlan={currentPlan}
                         history={history}

@@ -1,11 +1,16 @@
 // Content tracks — the shared contract for the multi-benchmark plan (docs/plans/CONTENT-TRACKS-PROMOTION-MASTER-PLAN.md §4.1).
-// A track owns a set of content engines, its own benchmark handles, a share of authored originals and its
-// promotions. Benchmarks are never averaged across tracks. `plan.benchmarkPrimary` still sets overall pace.
+// Since 2026-10-16 every track is one Content Center bucket (features/x-strategy/bucket-tracks.js keeps them in step):
+// the track lists that bucket (which wins over engines when deciding which track a library item belongs to) and owns
+// the engine of the same id when the bucket is a built-in one. It has its own benchmark handles, a share of authored
+// originals and its promotions. Benchmarks are never averaged across tracks. `plan.benchmarkPrimary` still sets overall pace.
 // Pure: no I/O. Other modules import this file and never redefine these shapes.
 
-import { ENGINE_IDS } from '../x-content-inventory/engines.js';
+import { ENGINE_IDS, resolveEngine } from '../x-content-inventory/engines.js';
 
-export const MAX_TRACKS = 6;
+export const MAX_TRACKS = 12;
+export const MAX_BUCKETS_PER_TRACK = 8;
+const BUCKET_ID_RE = /^[a-z0-9][a-z0-9-]{0,39}$/;
+export const isBucketId = (v) => BUCKET_ID_RE.test(String(v ?? ''));
 export const MAX_BENCHMARKS_PER_TRACK = 3;
 export const MAX_DISTINCT_BENCHMARKS = 8;
 export const MAX_LISTS_PER_TRACK = 3;
@@ -15,7 +20,7 @@ const SHARE_EPSILON = 0.001;
 
 /** @typedef {{id:string,label:string,engine:'ue'|'record'|'client'|'identity',url:string|null,weeklyTarget:number}} Promotion */
 /** @typedef {{id:string,label:string}} TrackList */
-/** @typedef {{id:string,label:string,engines:string[],benchmarks:string[],lists:TrackList[],share:number,promotions:Promotion[],topics:string[]}} ContentTrack */
+/** @typedef {{id:string,label:string,engines:string[],buckets:string[],benchmarks:string[],lists:TrackList[],share:number,promotions:Promotion[],topics:string[]}} ContentTrack */
 
 // No code-default tracks: a client with no saved contentTracks has no tracks (and no track targets). The home client's
 // former two tracks live in its own plan doc (seeded by scripts/x-content/seed-home-priors.mjs), never here.
@@ -88,11 +93,20 @@ function normalizeLists(input, trackId) {
   return [...seen.values()];
 }
 
+// Content Center bucket ids (content_buckets/{clientId}/buckets) this track draws its library items from.
+function normalizeBuckets(input, trackId) {
+  const ids = [...new Set((Array.isArray(input) ? input : []).map((b) => String(b ?? '').trim().toLowerCase()).filter(Boolean))];
+  for (const id of ids) if (!BUCKET_ID_RE.test(id)) throw bad(`Track ${trackId} has a bad bucket id: ${id}`);
+  if (ids.length > MAX_BUCKETS_PER_TRACK) throw bad(`Track ${trackId}: at most ${MAX_BUCKETS_PER_TRACK} buckets.`);
+  return ids;
+}
+
 /**
  * Validate a full contentTracks list. Throws 400. An empty list is valid (no tracks => no track targets) and returns [].
  * Rules for a non-empty list: ≤MAX_TRACKS tracks; unique ids; every engine in exactly one track (disjoint + complete);
  * ≤MAX_BENCHMARKS_PER_TRACK handles per track and ≤`maxDistinctBenchmarks` distinct overall; optional `lists`
  * (≤MAX_LISTS_PER_TRACK per track, ≤MAX_DISTINCT_LISTS distinct ids overall; always returned, [] when absent);
+ * optional `buckets` (bucket ids, each in at most one track; always returned, [] when absent);
  * shares ≥0 and normalized to sum 1.
  */
 export function normalizeContentTracks(input, { maxDistinctBenchmarks = MAX_DISTINCT_BENCHMARKS } = {}) {
@@ -101,6 +115,7 @@ export function normalizeContentTracks(input, { maxDistinctBenchmarks = MAX_DIST
   if (input.length > MAX_TRACKS) throw bad(`At most ${MAX_TRACKS} tracks.`);
   const ids = new Set();
   const engineOwner = new Map();
+  const bucketOwner = new Map();
   const distinct = new Set();
   const distinctLists = new Set();
   const tracks = input.map((raw) => {
@@ -116,6 +131,11 @@ export function normalizeContentTracks(input, { maxDistinctBenchmarks = MAX_DIST
       if (engineOwner.has(e)) throw bad(`Engine ${e} is in both ${engineOwner.get(e)} and ${id}.`);
       engineOwner.set(e, id);
     }
+    const buckets = normalizeBuckets(raw?.buckets, id);
+    for (const b of buckets) {
+      if (bucketOwner.has(b)) throw bad(`Bucket ${b} is in both ${bucketOwner.get(b)} and ${id}.`);
+      bucketOwner.set(b, id);
+    }
     const benchmarks = [...new Set((Array.isArray(raw?.benchmarks) ? raw.benchmarks : []).map(normalizeHandle))];
     if (benchmarks.length > MAX_BENCHMARKS_PER_TRACK) throw bad(`Track ${id}: at most ${MAX_BENCHMARKS_PER_TRACK} benchmarks.`);
     benchmarks.forEach((h) => distinct.add(h));
@@ -125,7 +145,7 @@ export function normalizeContentTracks(input, { maxDistinctBenchmarks = MAX_DIST
     if (!Number.isFinite(share) || share < 0 || share > 1) throw bad(`Track ${id} share must be 0–1.`);
     const topics = [...new Set((Array.isArray(raw?.topics) ? raw.topics : []).map((t) => String(t).trim().slice(0, 40)).filter(Boolean))].slice(0, 12);
     const promotions = normalizePromotions(raw?.promotions ?? [], engines);
-    return { id, label, engines, benchmarks, lists, share, promotions, topics };
+    return { id, label, engines, buckets, benchmarks, lists, share, promotions, topics };
   });
   const missing = ENGINE_IDS.filter((e) => !engineOwner.has(e));
   if (missing.length) throw bad(`Every engine must belong to a track; missing: ${missing.join(', ')}.`);
@@ -151,6 +171,18 @@ export function tracksOf(planOrDoc, opts) {
 /** The track that owns an engine, or null. */
 export function trackForEngine(tracks, engine) {
   return (tracks || []).find((t) => t.engines.includes(engine)) || null;
+}
+
+/** The bucket a package belongs to: its own `bucketId`, else its engine (default bucket ids equal engine ids). */
+export function bucketOfPackage(pkg) {
+  const own = String(pkg?.bucketId ?? '').trim();
+  return BUCKET_ID_RE.test(own) ? own : resolveEngine(pkg);
+}
+
+/** The track that owns a package (or post): the track listing its bucket, else the track owning its engine, else null. */
+export function trackForPackage(tracks, pkg) {
+  const bucket = bucketOfPackage(pkg);
+  return (tracks || []).find((t) => (t.buckets || []).includes(bucket)) || trackForEngine(tracks, resolveEngine(pkg));
 }
 
 /** All promotions across tracks, each tagged with its `trackId`. */

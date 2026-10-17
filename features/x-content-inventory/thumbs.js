@@ -112,13 +112,18 @@ export async function resolveMediaUrlsBatch(pkgs, kinds, deps, { concurrency = 1
     if (want.has('thumb')) {
       if (pkg.thumbRef) jobs.push(async () => { const u = await tokenUrlFor(deps.hitloopBucket, pkg.thumbRef); if (u) entry.thumbUrl = u; });
       else if (evPath(pkg.posterRef)) jobs.push(async () => { const u = await deps.signEv(evPath(pkg.posterRef)); if (u) entry.thumbUrl = u; });
+      else {
+        // No stored thumb or poster: the item's own image (e.g. a Discogs cover) is the preview, so no capture is needed.
+        const img = refs.find((r) => IMAGE_EXT.test(String(r)) && (evPath(r) || hitloopPath(r)));
+        if (img) jobs.push(async () => { const u = await resolve(img); if (u) entry.thumbUrl = u; });
+      }
     }
-    const resolve = async (ref) => {
+    async function resolve(ref) {
       const e = evPath(ref);
       if (e) return deps.signEv(e);
       const h = hitloopPath(ref);
       return h ? tokenUrlFor(deps.hitloopBucket, h) : null;
-    };
+    }
     if (want.has('video')) {
       const ref = refs.find((r) => VIDEO_EXT.test(String(r)) && (evPath(r) || hitloopPath(r)));
       if (ref) jobs.push(async () => { const u = await resolve(ref); if (u) entry.videoUrl = u; });

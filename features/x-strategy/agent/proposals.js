@@ -9,6 +9,8 @@ import { normalizePlan, validatePlan, HANDLE_RE } from '../plan-state.js';
 import { StrategyPlanError } from '../plan-store.js';
 import { SECTION_KEYS, SECTION_MAX } from '../strategy-doc.js';
 import { StrategyDocError } from '../strategy-doc-store.js';
+import { normalizeBatchSpec } from '../../x-content-inventory/calendar-batch.js';
+import { normalizeLinks } from '../../x-content-inventory/item-media.js';
 
 export const SUMMARY_MAX = 200;
 export const RATIONALE_MAX = 800;
@@ -208,6 +210,21 @@ export function validateProposal(raw, { currentPlan } = {}) {
       norm = { kind: syncKind, params: isPlain(payload.params) ? clone(payload.params) : {}, estimate };
       break;
     }
+    // Bulk review drafts (calendar-batch.js). The spec is re-planned against live data at confirm time; `preview` is
+    // the propose-time dry run, display only.
+    case 'calendar-batch': {
+      const spec = normalizeBatchSpec(payload.spec);
+      if (!spec.ok) { errors.push(...spec.errors); break; }
+      norm = { spec: spec.spec, ...(isPlain(payload.preview) ? { preview: clone(payload.preview) } : {}) };
+      break;
+    }
+    // Item media links (item-media.js). `rows` = the propose-time titles/kinds, display only.
+    case 'item-media': {
+      const l = normalizeLinks(payload.links);
+      if (!l.ok) { errors.push(...l.errors); break; }
+      norm = { links: l.links, ...(Array.isArray(payload.rows) ? { rows: clone(payload.rows).slice(0, l.links.length) } : {}) };
+      break;
+    }
     default: break;
   }
   if (errors.length) return { ok: false, errors };
@@ -257,7 +274,7 @@ export function compactResult(res) {
  * @param {(clientId:string, postId:string, o:{scheduledAt:string, reviewedBy:string, expectedRevision?:number})=>Promise<object>} [deps.approveAndSchedulePost]  existing approveAndSchedule (ledger/reservation path; default: lazy import)
  * @param {(a:{clientId:string, kind:string, params:object, by:string, auth:object, context:object})=>Promise<object>} [deps.runPaidSync]  features/mcp/paid-syncs.js executor (daily cap enforced inside)
  */
-export function buildExecutors({ planStore, runDailyAction, runUpdateItemFacets, saveXGrowthProfile, refreshHandles, docStore, docBase, readPost, editPost, approvePost, approveAndSchedulePost, runPaidSync, clock = Date.now }) {
+export function buildExecutors({ planStore, runDailyAction, runUpdateItemFacets, saveXGrowthProfile, refreshHandles, docStore, docBase, readPost, editPost, approvePost, approveAndSchedulePost, runPaidSync, runCalendarBatch, runItemMedia, clock = Date.now }) {
   const need = (fn, name) => { if (typeof fn !== 'function') throw new ProposalExecutionError(`${name} is not available on this deployment`); return fn; };
   const social = () => import('../../social-posting/twitter-service.js');
   const readOwnedPost = async (clientId, payload) => {
@@ -388,6 +405,18 @@ export function buildExecutors({ planStore, runDailyAction, runUpdateItemFacets,
     async 'paid-sync'({ clientId, payload, by, context, auth }) {
       const res = await need(runPaidSync, 'paid syncs')({ clientId, kind: payload.kind, params: payload.params, by, auth, context });
       return compactResult(res);
+    },
+    // Copies media refs between library items of this client. Never touches a post; each link succeeds or fails alone.
+    async 'item-media'({ clientId, payload }) {
+      const res = await need(runItemMedia, 'item media')({ clientId, links: payload.links });
+      if (!res?.linked && res?.failed) throw new ProposalExecutionError('no link could be made', { results: (res.results || []).slice(0, 10) });
+      return compactResult({ linked: res.linked, failed: res.failed, results: (res.results || []).filter((r) => !r.ok).slice(0, 10) });
+    },
+    // Writes review DRAFTS only (status draft, no schedule); items already on the queue are skipped, re-runs add nothing.
+    async 'calendar-batch'({ clientId, payload, proposalId }) {
+      const res = await need(runCalendarBatch, 'calendar batch')({ clientId, spec: payload.spec, proposalId });
+      if (res && res.ok === false) throw new ProposalExecutionError(res.error || 'calendar batch refused');
+      return compactResult({ created: res.created, existing: res.existing, failed: (res.failed || []).length, counts: res.counts, firstDate: res.firstDate, lastDate: res.lastDate });
     },
     async 'refresh-handles'({ clientId, payload, context, auth }) {
       const res = await need(refreshHandles, 'refresh')({ clientId, handles: payload.handles, context, auth });

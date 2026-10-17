@@ -8,6 +8,7 @@ import { mergeBuckets, resolveBucket } from '../../../features/x-content-invento
 import { itemsInFolder, folderCounts, suggestFolders } from '../../../features/x-content-inventory/folders.js';
 import { onThisDay, hasEventDate } from '../../../features/x-content-inventory/throwback.js';
 import { buildIndex, search } from '../../../features/x-content-inventory/search-index.js';
+import { bucketColorFor } from '../../../features/x-content-inventory/bucket-colors.js';
 import BucketRail from './BucketRail.jsx';
 import BucketToolbar from './BucketToolbar.jsx';
 import ItemGrid, { isAutoDaily } from './ItemGrid.jsx';
@@ -288,7 +289,7 @@ export default function BucketsPanel({ call, packages, loading, error, onReload 
                   if (!hits.length) return null;
                   return (
                     <section key={b.id} id={`x-content-search-group-${b.id}`} className="xce-bk-result-group">
-                      <h4 className="xce-bk-result-head"><span className="xce-bk-dot" style={{ background: b.color || '#475569' }} />{b.name}<span className="xce-bk-count">{hits.length}</span></h4>
+                      <h4 className="xce-bk-result-head"><span className="xce-bk-dot" style={{ background: bucketColorFor(b.id, buckets) }} />{b.name}<span className="xce-bk-count">{hits.length}</span></h4>
                       <ItemGrid items={hits} bucketById={bucketById} selectedItemId={openId} onOpen={setOpenId} call={call} />
                     </section>
                   );

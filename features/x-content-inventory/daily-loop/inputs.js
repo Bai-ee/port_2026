@@ -13,7 +13,7 @@ import { mergeListCandidates } from '../../x-quote-targets/day-plan.js';
 // --- inputs ----------------------------------------------------------------
 
 const PACKAGE_FIELDS = ['series', 'pillar', 'title', 'story', 'mediaState', 'effort', 'rights', 'status', 'platforms', 'approval',
-  'expiresAt', 'priority', 'source', 'facets', 'tags', 'entities', 'assetRefs', 'thumbRef', 'engine', 'updatedAt', 'lastPostedAt', 'searchTokens'];
+  'expiresAt', 'priority', 'source', 'facets', 'tags', 'entities', 'assetRefs', 'thumbRef', 'engine', 'bucketId', 'updatedAt', 'lastPostedAt', 'searchTokens'];
 
 function corpusRange(rows) {
   const ts = rows.map((r) => r.utc).filter(Boolean).sort();

@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { ArrowDown, ArrowUp, EyeOff, Eye, Pencil, Plus, Check, X, MoreHorizontal } from 'lucide-react';
 import { SOURCE_KINDS, bucketIdFromName } from '../../../features/x-content-inventory/buckets.js';
 import Popover from '../content-ui/Popover.jsx';
+import { bucketColorFor } from '../../../features/x-content-inventory/bucket-colors.js';
 
 // BucketRail — the bucket list (a bucket is a SOURCE). Presentational: every
 // change is handed to the parent as an `onUpsert(bucket)` call.
@@ -108,7 +109,7 @@ export default function BucketRail({ buckets, counts, selectedId, onSelect, onUp
               <span className="xce-bk-row" id={`x-content-bucket-row-${b.id}`}>
                 <button type="button" id={`x-content-bucket-chip-${b.id}`} className={`xce-bk-chip${selectedId === b.id ? ' is-active' : ''}`} onClick={() => onSelect(b.id)}
                   title={`${b.name} · ${b.active === false ? 'inactive · ' : ''}${shareSummary(b.share)}`}>
-                  <span className="xce-bk-dot" style={{ background: b.color || '#475569' }} />
+                  <span className="xce-bk-dot" style={{ background: bucketColorFor(b.id, buckets) }} />
                   <span className="xce-bk-name">{b.name}</span>
                   <span className="xce-bk-count">{counts[b.id] ?? 0}</span>
                 </button>

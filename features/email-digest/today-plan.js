@@ -10,7 +10,7 @@
 
 import { createFirestorePlanStore } from '../x-strategy/plan-store.js';
 import { createFirestoreChatStore } from '../x-strategy/agent/chat-store.js';
-import { tracksOf, trackForEngine } from '../x-strategy/content-tracks.js';
+import { tracksOf, trackForPackage } from '../x-strategy/content-tracks.js';
 
 const POSTS_COLLECTION = 'social_posts';
 const EXCERPT_MAX = 120;
@@ -52,14 +52,15 @@ export function shapeTodayPlan(raw = {}) {
   const planDoc = raw.planDoc || null;
   const perDay = Number(planDoc?.plan?.authoredPerDay ?? planDoc?.authoredPerDay);
 
+  const allTracks = planDoc ? tracksOf(planDoc) : [];
   const tracks = planDoc
-    ? tracksOf(planDoc).map((t) => {
+    ? allTracks.map((t) => {
         const share = Number(t.share);
         const scheduledToday = posts
           ? posts.filter((p) => {
               const ms = toMs(p.scheduledAt);
               return ms != null && dayKey(ms, timeZone) === today && TODAY_COUNTED.has(p.status)
-                && trackForEngine([t], p.engine)?.id === t.id;
+                && Boolean(p.engine || p.bucketId) && trackForPackage(allTracks, p)?.id === t.id;
             }).length
           : null;
         return {

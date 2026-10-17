@@ -16,8 +16,7 @@ import { fillShowcaseSlot, fillTextSlot, fillSelfQuoteSlot } from './fill-origin
 import { fillReplySlot } from './fill-reply.js';
 import { suggestionIdFor, zonedTimeToIso } from './time-ids.js';
 import { pickMediaRef } from '../item-actions.js';
-import { resolveEngine } from '../engines.js';
-import { tracksOf, trackForEngine } from '../../x-strategy/content-tracks.js';
+import { tracksOf, trackForEngine, trackForPackage } from '../../x-strategy/content-tracks.js';
 import { promotionFor, promotionsOf } from '../../x-strategy/promotions.js';
 
 // --- content match -------------------------------------------------------------
@@ -55,13 +54,16 @@ function trackCtx({ contentTracks, promotions } = {}) {
   return { tracks, promotions: Array.isArray(promotions) ? promotions : promotionsOf({ contentTracks: tracks }) };
 }
 
-/** Adds `track` (id) and `promotion` ({id,label,url}|null). Package-less suggestions (reactions, replies) belong to the identity engine's track. */
+/**
+ * Adds `track` (id) and `promotion` ({id,label,url}|null). A package belongs to the track that lists its bucket, else
+ * the track owning its engine. Package-less suggestions (reactions, replies) belong to the slot engine's track.
+ */
 function withTrack(suggestion, pkg, { tracks, promotions }) {
-  const engine = pkg ? resolveEngine(pkg) : (suggestion.slot?.engine || 'identity');
+  const track = pkg ? trackForPackage(tracks, pkg) : trackForEngine(tracks, suggestion.slot?.engine || 'identity');
   const p = pkg ? promotionFor(pkg, promotions) : null;
   return {
     ...suggestion,
-    track: trackForEngine(tracks, engine)?.id || null,
+    track: track?.id || null,
     promotion: p ? { id: p.id, label: p.label, url: p.url ?? null } : null,
   };
 }
@@ -260,7 +262,7 @@ export function selectSuggestions(input = {}) {
     r.best = pick;
     let contribution = pickContributionType(r.n, { quotesUsed, maxQuotes: decisions.maxQuotes });
     // A strong (named) match to a track item with media becomes an original with that media, not a quote with a video.
-    const strong = contribution.type === 'quote' && r.best.m.tier === 'specific' && pickMediaRef(r.best.pkg) && trackForEngine(ctx.tracks, resolveEngine(r.best.pkg));
+    const strong = contribution.type === 'quote' && r.best.m.tier === 'specific' && pickMediaRef(r.best.pkg) && trackForPackage(ctx.tracks, r.best.pkg);
     if (strong) contribution = { type: 'original', why: `strong match to "${r.best.pkg.title}" — an original with its media, related to @${r.n.anchor.author}'s post` };
     if (contribution.type === 'quote') quotesUsed += 1;
     used.add(r.best.pkg.id);
@@ -443,7 +445,7 @@ export function selectForSlots({
       if (r.gap) { gapFor(slot, r.gap.reason); continue; }
       usedPosts.push(r.post.id);
       // A named match to an unused track item with media: post that item as an original, related to this post.
-      const strongPkg = eligible.filter((p) => !usedPackages.includes(p.id) && pickMediaRef(p) && trackForEngine(ctx.tracks, resolveEngine(p)))
+      const strongPkg = eligible.filter((p) => !usedPackages.includes(p.id) && pickMediaRef(p) && trackForPackage(ctx.tracks, p))
         .map((p) => ({ p, m: matchScore(r.post.text, p) })).filter((x) => x.m?.tier === 'specific')
         .sort((a, b) => b.m.score - a.m.score || String(a.p.id).localeCompare(String(b.p.id)))[0];
       if (strongPkg) {

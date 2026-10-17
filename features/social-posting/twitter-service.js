@@ -1008,6 +1008,11 @@ function buildSocialPostRecord(clientId, payload, id) {
     ...(Number.isFinite(Number(payload.strategyVersion)) && payload.strategyVersion !== null ? { strategyVersion: Number(payload.strategyVersion) } : {}),
     ...(cleanStr(payload.channel, 40) ? { channel: cleanStr(payload.channel, 40) } : {}),
     ...(cleanStr(payload.expiresAt, 40) ? { expiresAt: cleanStr(payload.expiresAt, 40) } : {}),
+    // Calendar batch (features/x-content-inventory/calendar-batch.js): the day this draft is meant to be reviewed for.
+    // A plain date, not a schedule: nothing publishes from it.
+    ...(/^\d{4}-\d{2}-\d{2}$/.test(String(payload.reviewOn || '')) ? { reviewOn: payload.reviewOn } : {}),
+    // Content Center bucket of the source item (calendar colors). Absent => resolved from the package at read time.
+    ...(/^[a-z0-9][a-z0-9-]{0,39}$/.test(String(payload.bucketId || '')) ? { bucketId: payload.bucketId } : {}),
   };
 }
 
@@ -1685,6 +1690,10 @@ async function prepareUpdate(clientId, post, payload = {}) {
   };
   const plan = storySyncPlan(post, content, null);
   if (plan?.postPatch) Object.assign(updated, plan.postPatch);
+  // Calendar-batch drafts: the story gate follows the text, so writing the memory over the placeholder unblocks approval.
+  if (post.source === 'calendar-batch' && content !== post.content && typeof payload.needsStory !== 'boolean') {
+    updated.needsStory = hasMemoryPlaceholder(content) || hasMemoryPlaceholder(updated.selfReply?.text);
+  }
   return { updated };
 }
 

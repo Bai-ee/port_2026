@@ -373,6 +373,11 @@ writes it back here.
 `share` is a percent of authored posts; `topics` and `benchmarks` are `;`-separated (handles without `@`); `topics` and
 `benchmarks` may be omitted.
 
+Tracks are the client's Content Center buckets (one track per active bucket, named after it; since 2026-10-16). `label`
+must match a bucket name. Sync only changes a matching track's share, topics, benchmarks and lists: a row with an unknown
+label is skipped with a warning, and a track missing from the Brain is kept. Add, rename or remove tracks by changing
+buckets in Content Center; the plan then rewrites these rows. Up to 12 tracks.
+
 Optional `lists` attaches X lists to the track: `| lists: 1299069903333285888=Design craft; 1275110927726239748=AI builders`.
 Each item is `<list id>=<label>` separated with `;` (a bare id or an `https://x.com/i/lists/<id>` URL without `=label` is
 accepted; the label then defaults to `List <id>`). Max 3 lists per track, 8 distinct across tracks; labels are 40 characters

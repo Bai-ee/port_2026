@@ -13,9 +13,16 @@
 // approves it, and approving is what turns the proposed time into a real
 // schedule. Placement is deterministic (oldest draft first, earliest open
 // slot), so every month view proposes the same slot for the same draft.
+//
+// REVIEW DAYS. A draft carrying `reviewOn` (calendar-batch.js) belongs on THAT
+// date, even when it still needs its story: it is placed there first (earliest
+// open time that day, else the end of the window), never moved to another day,
+// and marked with `reviewOn`. A review day that has passed falls back to the
+// normal undated handling above.
 
 import { DEFAULT_ENGINE_CONFIG } from './engine-quota.js';
 import { isEngine } from './engines.js';
+import { bucketColorMap, bucketOfPost, NEUTRAL_BUCKET_COLOR } from './bucket-colors.js';
 import { CALENDAR_TZ, COUNTED_STATUSES } from './week-calendar.js';
 
 // Local copies of week-calendar.js's private helpers (not exported on this
@@ -97,6 +104,8 @@ export const PROPOSAL_WINDOW = { startMin: 9 * 60, endMin: 21 * 60, stepMin: 30,
 
 const DAY_MS = 86_400_000;
 const MONTH_RE = /^(\d{4})-(\d{2})$/;
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const REVIEWABLE = new Set(['draft', 'approved', 'awaiting_approval']);
 
 /** YYYY-MM-DD plus n days. Noon-UTC stepping keeps DST safe. */
 export function addDays(date, n) {
@@ -139,7 +148,8 @@ function slotMs(post) {
   return Number.isFinite(ms) ? ms : null;
 }
 
-function toRow(p) {
+function toRow(p, colors = null) {
+  const bucketId = bucketOfPost(p);
   const held = p.status === 'needs_review' ? reasonText(p.errorClass) : null;
   return {
     id: p.id ?? null,
@@ -167,6 +177,9 @@ function toRow(p) {
     heldAmbiguous: held ? held.ambiguous : false,
     revision: Number.isFinite(p.revision) ? p.revision : (p.revision ?? null),
     expiresAt: p.expiresAt ?? null,
+    reviewOn: DAY_RE.test(String(p.reviewOn ?? '')) ? p.reviewOn : null,
+    bucketId: colors && colors[bucketId] ? bucketId : null,
+    bucketColor: colors ? (colors[bucketId] || NEUTRAL_BUCKET_COLOR) : null,
     proposed: false,
   };
 }
@@ -178,8 +191,10 @@ function toRow(p) {
  * @param {number} input.now       epoch ms (injected so the builder stays pure)
  * @param {object} [input.config]  engine config (defaults to DEFAULT_ENGINE_CONFIG)
  * @param {number} [input.weekStartsOn] 0 = Sunday (default), 1 = Monday
+ * @param {object[]} [input.buckets] Content Center buckets (listBuckets rows); given => rows carry bucketId/bucketColor and a legend is returned
  */
-export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_ENGINE_CONFIG, weekStartsOn = 0 } = {}) {
+export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_ENGINE_CONFIG, weekStartsOn = 0, buckets = null } = {}) {
+  const colors = Array.isArray(buckets) ? bucketColorMap(buckets) : null;
   if (!Number.isFinite(now)) throw new Error('now (epoch ms) is required');
   const dates = monthGridDates(month, { weekStartsOn });
   const gridStart = dates[0];
@@ -192,13 +207,18 @@ export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_EN
   // Every dated row by CT date, across ALL dates — proposals for a future
   // month must see the days between today and that month too.
   const byDate = new Map();
+  const reviewDated = [];
   const undated = [];
   const manualUndated = [];
   for (const p of Array.isArray(posts) ? posts : []) {
     if (!p || !DISPLAY_STATUSES.includes(p.status)) continue;
     if (p.replyTo) continue; // replies sit outside the authored cap
     const ms = slotMs(p);
-    const row = toRow(p);
+    const row = toRow(p, colors);
+    if (ms == null && row.reviewOn && row.reviewOn >= today && REVIEWABLE.has(p.status)) {
+      reviewDated.push(row);
+      continue;
+    }
     if (ms == null) {
       // A manual takeover with no live slot: the owner is posting it, so it is never re-proposed into a slot.
       if (p.status === 'manual') { manualUndated.push({ ...row, reason: 'manual' }); continue; }
@@ -210,6 +230,23 @@ export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_EN
     const date = ctDate(ms);
     if (!byDate.has(date)) byDate.set(date, []);
     byDate.get(date).push({ ...row, ms, time: ctTime(ms) });
+  }
+
+  // ── Review days (placed before proposals, so proposals see them) ─────────
+  reviewDated.sort((a, b) => a.reviewOn.localeCompare(b.reviewOn) || String(a.id).localeCompare(String(b.id)));
+  for (const row of reviewDated) {
+    const date = row.reviewOn;
+    if (!byDate.has(date)) byDate.set(date, []);
+    const slots = byDate.get(date).filter((r) => r.state !== 'failed');
+    let ms = null;
+    for (let m = PROPOSAL_WINDOW.startMin; m <= PROPOSAL_WINDOW.endMin && ms == null; m += PROPOSAL_WINDOW.stepMin) {
+      const at = ctWallToMs(date, m);
+      if (at < now + PROPOSAL_WINDOW.leadMin * 60_000) continue;
+      if (slots.some((s) => Math.abs(s.ms - at) < spacingMs)) continue;
+      ms = at;
+    }
+    if (ms == null) ms = ctWallToMs(date, PROPOSAL_WINDOW.endMin); // a full (or past-window) day: still shown on its day
+    byDate.get(date).push({ ...row, ms, time: ctTime(ms), proposed: true, proposedAt: new Date(ms).toISOString() });
   }
 
   // ── Proposals ────────────────────────────────────────────────────────────
@@ -248,7 +285,7 @@ export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_EN
 
   // ── Grid ─────────────────────────────────────────────────────────────────
   const emptyCounts = () => ({ pending: 0, awaiting: 0, held: 0, approved: 0, scheduled: 0, manual: 0, posted: 0, failed: 0 });
-  const totals = { ...emptyCounts(), proposed: 0 };
+  const totals = { ...emptyCounts(), proposed: 0, review: 0, needsMemory: 0 };
   const reviewQueue = [];
 
   const days = dates.map((date) => {
@@ -260,6 +297,8 @@ export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_EN
       if (inMonth) {
         totals[r.state] += 1;
         if (r.proposed) totals.proposed += 1;
+        if (r.reviewOn) totals.review += 1;
+        if (r.reviewOn && r.needsStory) totals.needsMemory += 1;
         if (r.state === 'pending' || r.state === 'awaiting' || r.state === 'held') reviewQueue.push(r.id);
       }
     }
@@ -288,6 +327,14 @@ export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_EN
   const weeks = [];
   for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
 
+  // Legend: every active bucket (plus any inactive one that still has posts this month), in bucket order.
+  const inMonthRows = days.filter((d) => d.inMonth).flatMap((d) => d.posts);
+  const legend = colors ? [...buckets].sort((a, b) => (a.order ?? 99) - (b.order ?? 99))
+    .map((b) => ({ id: b.id, name: b.name || b.id, color: colors[b.id], count: inMonthRows.filter((r) => r.bucketId === b.id).length, active: b.active !== false }))
+    .filter((b) => b.color && (b.active || b.count > 0)) : [];
+  const unbucketed = colors ? inMonthRows.filter((r) => !r.bucketId).length : 0;
+  if (unbucketed) legend.push({ id: 'none', name: 'No bucket', color: NEUTRAL_BUCKET_COLOR, count: unbucketed, active: true });
+
   return {
     month,
     start: gridStart,
@@ -300,5 +347,6 @@ export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_EN
     totals,
     reviewQueue,
     unplaced,
+    legend,
   };
 }

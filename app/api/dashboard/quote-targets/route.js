@@ -22,11 +22,13 @@ import { recentPostsFromQueue } from '../../../../features/x-content-inventory/a
 import { buildMonthCalendar, ctDate } from '../../../../features/x-content-inventory/month-calendar.js';
 import { joinPerformance, engineStats } from '../../../../features/x-content-inventory/performance.js';
 import * as bucketStore from '../../../../features/x-content-inventory/bucket-store.js';
+import { bucketOfPost } from '../../../../features/x-content-inventory/bucket-colors.js';
+import { findMediaCandidates, linkMediaPatch, normalizeLinks } from '../../../../features/x-content-inventory/item-media.js';
 import { normalizeFacets } from '../../../../features/x-content-inventory/facets.js';
 import { resolveMediaUrls } from '../../../../features/rendered-videos/media-url.js';
 import { syncRenderedVideos } from '../../../../features/rendered-videos/sync.js';
 import { resolveMediaUrlsBatch, MEDIA_URLS_MAX_IDS, MEDIA_KINDS, tokenUrlFor } from '../../../../features/x-content-inventory/thumbs.js';
-import { setRights, saveThumb, createDraftFromItem } from '../../../../features/x-content-inventory/item-actions.js';
+import { setRights, saveThumb, createDraftFromItem, pickMedia } from '../../../../features/x-content-inventory/item-actions.js';
 import { NAS_ACTIONS, handleNasAction } from '../../../../features/x-content-inventory/nas.js';
 import { runDailyLoop, localDateOf, LOOP_VERSION } from '../../../../features/x-content-inventory/daily-loop.js';
 import { assertClientReady, resolveClientXHandle } from '../../../../features/client-readiness/index.js';
@@ -327,6 +329,8 @@ const SUPPORTED_ACTIONS = [
   'sync-rendered-videos',
   'media-urls',
   'save-thumb',
+  'find-item-media',
+  'link-item-media',
   'set-rights',
   'create-draft-from-item',
   ...DAILY_RUN_ACTIONS,
@@ -413,7 +417,43 @@ async function handleMonthCalendar(context, body) {
   const planDoc = await createFirestorePlanStore(fb.adminDb).get(context.clientId).catch(() => null);
   const config = resolveCalendarEngineConfig({ planDoc, legacyOverrides: overrides });
   const posts = await readSocialQueue(context.clientId);
-  return { ok: true, calendar: buildMonthCalendar({ posts, month, now: Date.now(), config }) };
+  const buckets = await bucketStore.listBuckets(context.clientId).catch(() => null);
+  const pkgs = await readStoredPackages([...new Set(posts.map((p) => p.packageId).filter(Boolean))]).catch(() => new Map());
+  // Posts without their own bucketId take it from their library item (bucket colors).
+  const withBuckets = posts.map((p) => (p.bucketId || !pkgs.has(p.packageId) ? p : { ...p, bucketId: bucketOfPost(p, pkgs.get(p.packageId)) }));
+  const calendar = buildMonthCalendar({ posts: withBuckets, month, now: Date.now(), config, buckets });
+  await withRowThumbs(calendar, pkgs, context.clientId);
+  return { ok: true, calendar };
+}
+
+/**
+ * Small preview image per grid row: the library item's thumb (thumbs.js: stored thumb / poster / its image), else a NAS
+ * item's thumb from the local worker while it is online, else the post's own poster or image. Never fails.
+ */
+async function withRowThumbs(calendar, pkgs, clientId) {
+  const rows = calendar.weeks.flat().flatMap((d) => d.posts);
+  let nasBase = null;
+  if (rows.some((r) => pkgs.get(r.packageId)?.nas?.sha256)) {
+    try {
+      const st = await handleNasAction(nasDeps(clientId), 'nas-status', {});
+      nasBase = st?.online && st.localThumbBase ? st.localThumbBase : null;
+    } catch { nasBase = null; }
+  }
+  const ids = [...new Set(rows.map((r) => r.packageId).filter((id) => pkgs.get(id)?.clientId === clientId))];
+  let urls = {};
+  try {
+    if (ids.length) {
+      const bridge = loadBridge();
+      urls = await resolveMediaUrlsBatch(ids.map((id) => pkgs.get(id)), ['thumb'], {
+        hitloopBucket: fb.adminStorage.bucket(), signEv: (p) => bridge.signReadUrl(p),
+      });
+    }
+  } catch { urls = {}; }
+  for (const r of rows) {
+    const sha = pkgs.get(r.packageId)?.nas?.sha256;
+    const nasUrl = nasBase && /^[a-f0-9]{16,128}$/i.test(String(sha || '')) ? `${nasBase}/thumbs/${sha}.jpg` : null;
+    r.thumbUrl = urls[r.packageId]?.thumbUrl || nasUrl || r.posterUrl || (r.mediaType === 'image' ? r.mediaUrl : null) || null;
+  }
 }
 
 // ---- Content Management: status strip, post status, bounded chat readers (all client-scoped, read-only) ----
@@ -731,6 +771,42 @@ async function handleSaveThumb(context, body) {
   }, { clientId: context.clientId, id: String(body?.id || '').trim(), dataUrl: body?.dataUrl });
 }
 
+/** Items that could lend their media to one item (same Discogs release first, then title words). Read-only. */
+async function handleFindItemMedia(context, body) {
+  const id = String(body?.id || '').trim();
+  if (!id) throw badRequest('id is required.');
+  const { packages } = await readInventory({ clientId: context.clientId });
+  const target = packages.find((p) => p.id === id);
+  if (!target) throw badRequest(`Unknown item: ${id}`, 404);
+  return { ok: true, id, candidates: findMediaCandidates(target, packages, { limit: body?.limit }) };
+}
+
+/**
+ * Give items the media of other items of THIS client (item-media.js). Each link is independent: one bad pair fails
+ * alone. Writes package fields only; never touches posts. Used by the route action and the confirmed chat proposal.
+ */
+async function linkItemMediaFor(clientId, rawLinks) {
+  const norm = normalizeLinks(rawLinks);
+  if (!norm.ok) throw badRequest(norm.errors.join('; '));
+  const pkgs = await readStoredPackages([...new Set(norm.links.flatMap((l) => [l.targetId, l.sourceId]))]);
+  const mine = (id) => { const p = pkgs.get(id); return p && p.clientId === clientId ? p : null; };
+  const results = [];
+  for (const l of norm.links) {
+    const target = mine(l.targetId);
+    const source = mine(l.sourceId);
+    if (!target || !source) { results.push({ ...l, ok: false, error: `${!target ? l.targetId : l.sourceId} not found` }); continue; }
+    const r = linkMediaPatch(target, source);
+    if (r.error) { results.push({ ...l, ok: false, error: r.error }); continue; }
+    try {
+      await upsertFor(clientId)({ ...target, ...r.patch });
+      results.push({ ...l, ok: true, kind: r.patch.mediaFrom.kind });
+    } catch (err) {
+      results.push({ ...l, ok: false, error: String(err?.message || err).slice(0, 160) });
+    }
+  }
+  return { linked: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length, results };
+}
+
 async function handleSetRights(context, body) {
   return setRights({ getPackage: getPackageFor(context.clientId), upsertPackage: upsertFor(context.clientId) },
     { id: String(body?.id || '').trim(), rights: body?.rights });
@@ -867,8 +943,13 @@ function stripEnvelope(body = {}) {
 async function handleBucketAction(context, action, body) {
   const cid = context.clientId;
   if (action === 'list-buckets') return { ok: true, buckets: await bucketStore.listBuckets(cid) };
-  if (action === 'upsert-bucket') return { ok: true, ...(await bucketStore.upsertBucket(cid, body?.bucket ?? stripEnvelope(body))) };
-  if (action === 'delete-bucket') return { ok: true, ...(await bucketStore.deleteBucket(cid, body?.bucketId ?? body?.id, { reassignTo: body?.reassignTo })) };
+  // A bucket change re-syncs the content tracks (one track per active bucket); a sync failure never fails the bucket write.
+  const withTrackSync = async (out) => {
+    const sync = await getStrategyHandlers().syncTracks(cid);
+    return { ok: true, ...out, tracksSynced: !!sync?.changed };
+  };
+  if (action === 'upsert-bucket') return withTrackSync(await bucketStore.upsertBucket(cid, body?.bucket ?? stripEnvelope(body)));
+  if (action === 'delete-bucket') return withTrackSync(await bucketStore.deleteBucket(cid, body?.bucketId ?? body?.id, { reassignTo: body?.reassignTo }));
   if (action === 'list-folders') return { ok: true, folders: await bucketStore.listFolders(cid, { bucketId: body?.bucketId || undefined }) };
   if (action === 'upsert-folder') return { ok: true, ...(await bucketStore.upsertFolder(cid, body?.folder ?? stripEnvelope(body))) };
   return { ok: true, ...(await bucketStore.deleteFolder(cid, body?.folderId ?? body?.id)) };
@@ -896,6 +977,8 @@ function getStrategyHandlers() {
       readBrainTrackTargets: (clientId) => require('../../../../features/client-brain/brain-sync.cjs').readApprovedTrackTargets(clientId),
       loadCommitted: committedCorpusRows,
       readPackages: async (clientId) => (await readInventory({ clientId })).packages,
+      linkItemMedia: (clientId, links) => linkItemMediaFor(clientId, links),
+      mediaForItem: (clientId, pkg) => (pkg && pkg.clientId === clientId ? pickMedia(pkg, mediaSigners()) : null),
       runDailyAction: (context, action, body) => handleDailyRun(context, action, body),
       runUpdateItemFacets: (context, body) => handleUpdateItemFacets(context, body),
       readTodayRun: (clientId) => latestDailyRun(createFirestoreRunStore(fb.adminDb), clientId),
@@ -1009,6 +1092,8 @@ export async function POST(request) {
     if (action === 'sync-rendered-videos') return json(await handleSyncRenderedVideos(context, body));
     if (action === 'media-urls') return json(await handleMediaUrls(context, body));
     if (action === 'save-thumb') return json(await handleSaveThumb(context, body));
+    if (action === 'find-item-media') return json(await handleFindItemMedia(context, body));
+    if (action === 'link-item-media') return json({ ok: true, ...(await linkItemMediaFor(context.clientId, body?.links)) });
     if (action === 'set-rights') return json(await handleSetRights(context, body));
     if (action === 'create-draft-from-item') return json(await handleCreateDraftFromItem(context, body));
     if (NAS_ACTIONS.includes(action)) return json(await handleNasAction(nasDeps(context.clientId), action, body, decoded));

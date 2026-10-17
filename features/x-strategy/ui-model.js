@@ -389,6 +389,8 @@ const PROPOSAL_KIND_LABELS = Object.freeze({
   'post-schedule': 'Schedule post',
   'post-unschedule': 'Unschedule post',
   'paid-sync': 'Run a paid sync',
+  'calendar-batch': 'Add drafts to the calendar',
+  'item-media': 'Link videos to items',
 });
 
 /** Plain-words label for a proposal kind. Unknown kinds fall back to a readable form, never throw. */
@@ -429,6 +431,24 @@ const PAID_SYNC_WHAT = Object.freeze({
   x_monitor_sync: 'Refreshes X Monitor from the X API (reads only, no posting).',
   nas_analyze: 'Runs AI analysis on NAS files through the Mac worker (Anthropic batch).',
 });
+
+/** Card lines for a calendar batch: which items, how they are dated, and the propose-time count. */
+function calendarBatchPreview(p) {
+  const sel = p.spec?.select || {};
+  const rule = p.spec?.dateRule || {};
+  const pre = p.preview || {};
+  const which = [sel.track && `track ${sel.track}`, sel.bucketId && `bucket ${sel.bucketId}`, sel.query && `matching "${sel.query}"`, sel.ids?.length && `${sel.ids.length} picked items`].filter(Boolean).join(', ');
+  const when = rule.kind === 'anniversary' ? "on each event's next anniversary" : `${rule.perDay || 1} a day from ${rule.startDate || 'tomorrow'}`;
+  const skipped = Object.entries(pre.skipped || {}).map(([k, n]) => `${n} ${k.replace(/-/g, ' ')}`).join(', ');
+  return [
+    `Items: ${which || 'none'}`,
+    `Dated: ${when}`,
+    ...(Number.isInteger(pre.drafts) ? [`Drafts: ${pre.drafts}${pre.firstDate ? ` (${pre.firstDate} to ${pre.lastDate})` : ''}, ${pre.needsMemory ?? 0} waiting for your memory`] : []),
+    ...(skipped ? [`Skipped: ${skipped}`] : []),
+    ...(Array.isArray(pre.sample) ? pre.sample.map((r) => `${r.reviewOn}: ${r.title}`) : []),
+    'Drafts only: nothing is approved, scheduled or published. The count is re-checked when you confirm.',
+  ];
+}
 
 function paidSyncPreview(p) {
   const params = p.params && typeof p.params === 'object' ? p.params : {};
@@ -478,6 +498,15 @@ export function proposalPayloadPreview(kind, payload, currentPlan) {
     case 'post-schedule': return [`Post: ${clipPostText(p.currentText)}`, `New time: ${localTime(p.scheduledAt)}`, `Current status: ${showVal(p.currentStatus)}`];
     case 'post-unschedule': return [`Post: ${clipPostText(p.currentText)}`, `Time being removed: ${localTime(p.currentScheduledAt)}`, `Current status: ${showVal(p.currentStatus)}`];
     case 'paid-sync': return paidSyncPreview(p);
+    case 'calendar-batch': return calendarBatchPreview(p);
+    case 'item-media': {
+      const rows = Array.isArray(p.rows) ? p.rows : p.links || [];
+      const videos = rows.filter((r) => r.kind === 'video').length;
+      return [
+        `${rows.length} item${rows.length === 1 ? '' : 's'} get media (${videos} video, ${rows.length - videos} image). Each shows the source thumbnail below.`,
+        'Library items only: no post is created, scheduled or published.',
+      ];
+    }
     case 'regenerate-today': return [`Model drafting: ${p.useModel === true ? 'on' : 'off'}`, ...(p.force === true ? ['Replaces the existing run.'] : [])];
     default: return [];
   }
@@ -587,7 +616,7 @@ export function trackDraftFromPlan(planOrDoc) {
   const tracks = tracksOf(planOrDoc);
   const pct = percentsFromWeights(tracks.map((t) => t.share));
   return tracks.map((t, i) => ({
-    id: t.id, label: t.label, engines: [...t.engines], benchmarks: [...t.benchmarks], topics: [...(t.topics || [])],
+    id: t.id, label: t.label, engines: [...t.engines], buckets: [...(t.buckets || [])], benchmarks: [...t.benchmarks], topics: [...(t.topics || [])],
     lists: (t.lists || []).map((l) => ({ id: l.id, label: l.label })),
     share: pct[i],
     promotions: t.promotions.map((p) => ({ id: p.id, label: p.label, engine: p.engine, url: p.url || '', weeklyTarget: p.weeklyTarget })),
@@ -620,7 +649,7 @@ export function addDraftTrack(draft, label = 'New track') {
   let id = base;
   for (let n = 2; ids.has(id); n += 1) id = `${base}-${n}`;
   const first = list.length === 0;
-  return [...list, { id, label, engines: first ? [...ENGINE_IDS] : [], benchmarks: [], lists: [], topics: [], share: first ? 100 : 0, promotions: [], isNew: true }];
+  return [...list, { id, label, engines: first ? [...ENGINE_IDS] : [], buckets: [], benchmarks: [], lists: [], topics: [], share: first ? 100 : 0, promotions: [], isNew: true }];
 }
 
 /** Rename one draft track (the id stays as created). */
@@ -700,7 +729,7 @@ export function setPromotionUrl(draft, trackId, promotionId, url) {
 /** Request body fragment for the plan save: shares become 0..1 fractions, blank links null. */
 export function trackPayloadFromDraft(draft) {
   return (draft || []).map((t) => ({
-    id: t.id, label: t.label, engines: [...t.engines], benchmarks: t.benchmarks.map(cleanHandle), topics: [...(t.topics || [])],
+    id: t.id, label: t.label, engines: [...t.engines], buckets: [...(t.buckets || [])], benchmarks: t.benchmarks.map(cleanHandle), topics: [...(t.topics || [])],
     lists: (t.lists || []).map((l) => ({ id: l.id, label: l.label })),
     share: (Number(t.share) || 0) / 100,
     promotions: t.promotions.map((p) => ({ id: p.id, label: p.label, engine: p.engine, url: String(p.url ?? '').trim() || null, weeklyTarget: p.weeklyTarget })),

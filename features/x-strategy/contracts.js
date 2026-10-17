@@ -87,6 +87,8 @@ export const PROPOSAL_KINDS = Object.freeze([
   'post-schedule',
   'post-unschedule',
   'paid-sync',
+  'calendar-batch',
+  'item-media',
 ]);
 
 /** Kinds only server code may create (the MCP server's request_sync). The in-app agent has no propose tool for them. */
@@ -115,6 +117,8 @@ export const PROPOSAL_KIND_ACTIONS = Object.freeze({
   'post-schedule': 'approve-and-schedule', // social-posting `approve-and-schedule` (approveAndSchedule, ledger/reservation path); the process-due cron publishes
   'post-unschedule': 'update', // social-posting `update` with scheduledAt cleared (updateSocialPost); releases the slot
   'paid-sync': 'paid-sync', // features/mcp/paid-syncs.js via the injected runPaidSync; not a strategy ROUTE_ACTION
+  'calendar-batch': 'strategy-calendar-batch-create', // review drafts only (calendar-batch.js); never approves, schedules or publishes
+  'item-media': 'link-item-media', // quote-targets link-item-media (item-media.js); package media fields only, never a post
 });
 
 export const PROPOSAL_STATUSES = Object.freeze(['pending', 'deciding', 'confirmed', 'rejected', 'failed']);
