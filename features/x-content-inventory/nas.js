@@ -212,7 +212,9 @@ export async function nasUploadUrl(deps, body) {
   }
   const storagePath = `${STAGING_PREFIX}/${packageId}/${sha256.slice(0, 16)}.${ext}`;
   const uploadUrl = await deps.signUpload({ storagePath, contentType });
-  return { uploadUrl, storagePath, headers: { 'Content-Type': contentType } };
+  // Lowercase on purpose: the worker spreads these over its own 'content-type'; a differently-cased key made fetch send
+  // "image/jpeg, image/jpeg", which breaks the v4 signature (GCS 403 on every PUT).
+  return { uploadUrl, storagePath, headers: { 'content-type': contentType } };
 }
 
 /** PATCH hook: STAGE_FOR_PUBLISH COMPLETE -> package.assetRefs += storagePath. */
