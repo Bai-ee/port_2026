@@ -219,7 +219,7 @@ export function createStrategyHandlers({
   readAllPackages = null, // clientId -> every package (paged past READ_LIMIT); the high-res finder prefers it over readPackages
   unmetStore = null, // unmet-requests.js store; absent => log_unmet_request / get_unmet_requests say not available
   runDailyAction = null, runUpdateItemFacets = null, readTodayRun = null, readContentContext = null, saveXGrowthProfile = null,
-  readQueueSummary = null, readPostsForQuery = null, readPost = null, readOpportunities = null, readResults = null, // chat read tools: (clientId[, postId]) -> plain JSON | null
+  readQueueSummary = null, readPostsForQuery = null, readPost = null, readOpportunities = null, readResults = null, readCalendar = null, // readCalendar: (clientId, {from,to}) -> unified calendar days // chat read tools: (clientId[, postId]) -> plain JSON | null
   readMarketSignals = null, // (clientId) -> projected brief (features/intelligence/_brief-intel.js projectBrief) | null
   readBriefRaw = null, // (clientId, {readPlanDoc, readStrategyDoc, readCorpora, readXMonitor, readTodayRun}) -> raw brief inputs (brief-bundle.js readBriefRaw); absent => get_brief / get_freshness say not available
   editPost = null, // ({clientId, postId, content?, scheduledAt?}) -> saved post; the existing updateSocialPost path
@@ -773,6 +773,7 @@ export function createStrategyHandlers({
       ...(readPostsForQuery ? { readPostsForQuery: () => readPostsForQuery(clientId) } : {}),
       ...(readPost ? { readPost: (postId) => readPost(clientId, postId) } : {}),
       ...(readOpportunities ? { readOpportunities: () => readOpportunities(clientId) } : {}),
+      ...(readCalendar ? { readCalendar: (opts) => readCalendar(clientId, opts) } : {}),
       ...(readResults ? { readResults: () => readResults(clientId) } : {}),
       ...(readMarketSignals ? { readMarketSignals: () => readMarketSignals(clientId) } : {}),
       // Every brief/market/strategy part with its age + the Refresh group that updates it. Read-only; never refreshes.
@@ -1469,6 +1470,12 @@ export function createXGrowthProfileSaver(db, { onSaved } = {}) {
 export function createStrategyHandlersFromDb(db, {
   readPackages, env = process.env, runDailyAction, runUpdateItemFacets, readTodayRun, readContentContext,
   readQueueSummary, readPostsForQuery, readPost, readOpportunities, readResults, readMarketSignals, editPost, runPaidSync,
+  // Default: the shared unified-calendar reader (same one the dashboard Month calendar uses). Lazy import keeps node tests light.
+  readCalendar = async (clientId, { from, to } = {}) => {
+    const { readUnifiedCalendar } = await import('../x-content-inventory/calendar-reader.js');
+    const now = Date.now();
+    return readUnifiedCalendar(db, clientId, { from: from || ctDate(now), to: to || undefined, now });
+  },
   onXGrowthSaved, onBrainOwnedSaved, readBrainTrackTargets, saveXGrowthProfile = createXGrowthProfileSaver(db, { onSaved: onXGrowthSaved }), chatStore = createFirestoreChatStore(db, { env }),
   agentLoopFactory, callModel, logUsage, loadCommitted, docStore = createFirestoreStrategyDocStore(db),
   actionRuntime = createActionRuntime(createFirestoreActionStores(db)),
@@ -1564,7 +1571,7 @@ export function createStrategyHandlersFromDb(db, {
     readDataSources, saveDataSources, pullCorpora, scanQuotes, responseStyleStore, unmetStore,
     readWorkerHealth: (clientId) => readWorkerHealthFromDb(db, { now: Date.now(), clientId }),
     docStore, onBrainOwnedSaved, readBrainTrackTargets, chatStore, agentLoopFactory, callModel, logUsage, runDailyAction, runUpdateItemFacets, readTodayRun, readContentContext, saveXGrowthProfile, env,
-    readQueueSummary, readPostsForQuery, readPost, readOpportunities, readResults, readMarketSignals, editPost, runPaidSync, actionRuntime,
+    readQueueSummary, readPostsForQuery, readPost, readOpportunities, readResults, readCalendar, readMarketSignals, editPost, runPaidSync, actionRuntime,
     readBriefRaw: (clientId, local) => readBriefRawFromDb(clientId, { db, ...local }),
     readXGrowthConfig: async (clientId) => {
       const snap = await db.collection('client_configs').doc(clientId).get();
