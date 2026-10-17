@@ -30,6 +30,10 @@ export const POSTS_PER_OCCUPIED_HOUR = 2;
  * daytime, spread, in the account's own local clock. */
 export const DEFAULT_HOURS = [9, 11, 13, 15, 17, 19];
 
+/** Used only when there is neither a gap report nor any own history (e.g. a client whose handle has no corpus yet).
+ * Without it the type sequence is empty and every slot gets `type: undefined`. */
+export const DEFAULT_TARGET_MIX = Object.freeze({ 'original-showcase': 40, 'original-text': 30, 'quote-react': 30 });
+
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const SLOT_LETTERS = 'ABCDEFGHIJKLMNOP';
 
@@ -147,11 +151,12 @@ export function buildCalendar(input = {}) {
   const hoursNeeded = Math.ceil(slotsPerDay / POSTS_PER_OCCUPIED_HOUR);
   const hours = pickHours(ownStats, hoursNeeded);
 
+  const ownMix = Object.fromEntries(Object.entries(ownStats.byType ?? {}).map(([t, v]) => [t, v.share]));
   const targetMix = isObj(report.projection?.targetMix) && Object.keys(report.projection.targetMix).length
     ? report.projection.targetMix
     // No comparison available: fall back to the client's own current mix, which
-    // at least reflects what they can actually produce.
-    : Object.fromEntries(Object.entries(ownStats.byType ?? {}).map(([t, v]) => [t, v.share]));
+    // at least reflects what they can actually produce; with no history either, a neutral default.
+    : (Object.values(ownMix).some((v) => Number(v) > 0) ? ownMix : DEFAULT_TARGET_MIX);
 
   const allocation = allocateSlots(targetMix, slotsPerDay);
 

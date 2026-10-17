@@ -10,6 +10,16 @@ export const CLAIM_LEASE_MS = 5 * 60 * 1000;
 const REVIEWED = new Set(['edited', 'saved', 'dismissed']);
 const LATEST_LOOKBACK_DAYS = 7;
 
+/** Firestore rejects `undefined` field values. A run doc that carried one made complete() AND fail() throw, leaving the
+ * doc stuck at status 'running' with no suggestions. Drop undefined keys (arrays: undefined -> null) before any write. */
+export function stripUndefined(v) {
+  if (Array.isArray(v)) return v.map((x) => (x === undefined ? null : stripUndefined(x)));
+  if (v && typeof v === 'object' && Object.getPrototypeOf(v) === Object.prototype) {
+    return Object.fromEntries(Object.entries(v).filter(([, x]) => x !== undefined).map(([k, x]) => [k, stripUndefined(x)]));
+  }
+  return v;
+}
+
 export const bad = (message, status = 400, extra = {}) => Object.assign(new Error(message), { status, ...extra });
 
 export function runDocId({ clientId, localDate, channel = 'x', version = 1 }) {
@@ -94,7 +104,7 @@ export function createFirestoreRunStore(db, { leaseMs = CLAIM_LEASE_MS } = {}) {
       return db.runTransaction(async (tx) => {
         const snap = await tx.get(ref);
         const merged = mergePreserved(snap.exists ? snap.data() : null, { ...run, status: 'complete', claimedAt: null });
-        tx.set(ref, merged);
+        tx.set(ref, stripUndefined(merged));
         return merged;
       });
     },
@@ -102,7 +112,7 @@ export function createFirestoreRunStore(db, { leaseMs = CLAIM_LEASE_MS } = {}) {
       const ref = col().doc(runDocId(run));
       await db.runTransaction(async (tx) => {
         const snap = await tx.get(ref);
-        tx.set(ref, mergePreserved(snap.exists ? snap.data() : null, { ...run, status: 'partial', claimedAt: null }));
+        tx.set(ref, stripUndefined(mergePreserved(snap.exists ? snap.data() : null, { ...run, status: 'partial', claimedAt: null })));
       });
     },
     async read(key) {

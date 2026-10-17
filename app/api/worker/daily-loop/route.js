@@ -41,6 +41,7 @@ async function buildReadInputsFor() {
   };
   return {
     db: fb.adminDb,
+    committedCorpusRows,
     assertReady: (clientId) => assertClientReady(fb.adminDb, clientId),
     async readInputsFor(clientId) {
       const xGrowth = await readXGrowthConfigFor(clientId).catch(() => null);
@@ -68,6 +69,34 @@ async function buildReadInputsFor() {
   };
 }
 
+// Daily fill (calendar drafts per bucket track): runs AFTER the suggestions step, non-fatal, drafts only (never publishes).
+// Choice: reuse the Strategy handler factory's `dailyFill` (it already wires ensureDraft/placeDraft/readOpenPackageIds)
+// instead of hand-building runDailyFillForCron deps here. Only readPackages is supplied (the content inventory the
+// suggestions step already reads); handlers without `dailyFill` (older build) are reported as skipped, not failed.
+async function runDailyFillStep({ db, committedCorpusRows, readInputsFor }, clientIds, today) {
+  let handlers;
+  try {
+    const { createStrategyHandlersFromDb } = await import('../../../../features/x-strategy/route-handlers.js');
+    handlers = createStrategyHandlersFromDb(db, {
+      loadCommitted: committedCorpusRows,
+      readPackages: async (clientId) => (await readInputsFor(clientId)).packages || [],
+    });
+  } catch (err) {
+    return clientIds.map((clientId) => ({ clientId, ok: false, error: String(err?.message || err).slice(0, 200) }));
+  }
+  if (typeof handlers.dailyFill !== 'function') return clientIds.map((clientId) => ({ clientId, ok: true, skipped: 'daily-fill-unavailable' }));
+  const out = [];
+  for (const clientId of clientIds) {
+    try {
+      const r = await handlers.dailyFill(clientId, { from: today, days: 7 }, { execute: true });
+      out.push({ clientId, ok: true, created: r?.created?.length ?? r?.created ?? 0, existing: r?.existing?.length ?? r?.existing ?? 0, placed: r?.placed?.length ?? r?.placed ?? 0, failed: r?.failed?.length ?? r?.failed ?? 0 });
+    } catch (err) {
+      out.push({ clientId, ok: false, error: String(err?.message || err).slice(0, 200) });
+    }
+  }
+  return out;
+}
+
 async function run(request) {
   const { cronAuthorized, pilotClientIds, runScheduledDailyLoop } = await import('../../../../features/x-content-inventory/daily-loop/scheduled.js');
   if (!cronAuthorized({ authorization: request.headers.get('authorization') || '', vercelCron: request.headers.get('x-vercel-cron') || '' })) {
@@ -78,9 +107,18 @@ async function run(request) {
     return NextResponse.json({ ok: false, error: err.message }, { status: err.status || 503 });
   }
   const { createFirestoreRunStore } = await import('../../../../features/x-content-inventory/daily-run-store.js');
-  const { db, assertReady, readInputsFor } = await buildReadInputsFor();
+  const built = await buildReadInputsFor();
+  const { db, assertReady, readInputsFor } = built;
   const results = await runScheduledDailyLoop({ store: createFirestoreRunStore(db), assertReady, readInputsFor }, { clientIds });
-  return NextResponse.json({ ok: results.every((r) => r.ok), results });
+  // Non-fatal: a fill failure is reported in `dailyFill` and never changes `ok` or the suggestions result.
+  let dailyFill = [];
+  try {
+    const { localDateOf } = await import('../../../../features/x-content-inventory/daily-loop/time-ids.js');
+    dailyFill = await runDailyFillStep(built, results.filter((r) => r.ok).map((r) => r.clientId), localDateOf(Date.now()));
+  } catch (err) {
+    dailyFill = [{ ok: false, error: String(err?.message || err).slice(0, 200) }];
+  }
+  return NextResponse.json({ ok: results.every((r) => r.ok), results, dailyFill });
 }
 
 export const GET = run;
