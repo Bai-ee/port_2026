@@ -51,7 +51,8 @@ test('find: thumbnail post -> the same-photo original (not the same-series flyer
   assert.equal(out.target.id, thumb.id);
   assert.equal(out.target.isThumbnail, true);
   assert.equal(out.target.hasPostMedia, true);
-  assert.deepEqual(out.candidates.map((c) => c.id), [original.id]);
+  assert.deepEqual(out.candidates.filter((c) => !c.self).map((c) => c.id), [original.id]);
+  assert.equal(out.candidates.at(-1).self, true); // the item's own file is always offered last
   const c = out.candidates[0];
   assert.equal(c.width, 2048);
   assert.equal(c.staged, false);
@@ -136,7 +137,7 @@ test('use: refuses wrong inputs without touching anything', async () => {
   const w = world({ stagedRef: STAGED });
   const go = (over, deps = w.deps) => useHiresMedia(deps, { clientId: CLIENT, postId: post.id, packageId: thumb.id, candidateId: original.id, ...over });
   await assert.rejects(go({ candidateId: other.id }), (e) => e.status === 409 && /not a high-res match/.test(e.message));
-  await assert.rejects(go({ candidateId: thumb.id }), (e) => e.status === 409);
+  // candidateId = the post's own item is allowed now (its own original), so it is not a refusal case.
   await assert.rejects(go({ packageId: 'something-else' }), (e) => e.status === 409);
   await assert.rejects(go({ postId: 'nope' }), (e) => e.status === 404);
   await assert.rejects(go({ candidateId: '' }), (e) => e.status === 400);
@@ -249,4 +250,21 @@ test('attachStagedHires puts the staged original on waiting posts, links the ite
   assert.deepEqual(applied, [['p1', 'publish-staging/nas/nas-cand/abc.jpg', true]]);
   assert.deepEqual(pkgs.get('nas-cand').hiresPending, []);
   assert.ok((pkgs.get('nas-thumb').assetRefs || []).includes('publish-staging/nas/nas-cand/abc.jpg'));
+});
+
+test("the item's own original is always offered and usable when no larger copy exists (HUSH case)", async () => {
+  const { findHiresMedia, useHiresMedia } = await import('../hires-media.js');
+  const target = { id: 'nas-hush', clientId: 'c1', mediaState: 'still', title: 'HUSH', nas: { relativePath: 'flyers/hush.jpg', width: 1128, height: 1135, sha256: 'b'.repeat(64) }, assetRefs: [] };
+  const post = { id: 'p1', clientId: 'c1', status: 'draft', packageId: 'nas-hush' };
+  const found = await findHiresMedia({ readPost: async () => post, readPackages: async () => [target] }, { postId: 'p1' });
+  assert.equal(found.bestId, 'nas-hush');
+  const self = found.candidates.find((c) => c.self);
+  assert.ok(self && self.width === 1128 && self.staged === false);
+  let staged = null;
+  const r = await useHiresMedia({
+    getPost: async () => post, getPackage: async (id) => (id === 'nas-hush' ? target : null), readPackages: async () => [target],
+    nasStage: async (id) => { staged = id; return { commandId: 'cmd1' }; }, upsertPackage: async () => {}, now: () => 0,
+  }, { clientId: 'c1', postId: 'p1', candidateId: 'nas-hush' });
+  assert.equal(r.status, 'staging');
+  assert.equal(staged, 'nas-hush');
 });

@@ -54,7 +54,10 @@ export async function findHiresMedia(deps, { postId, packageId, limit = HIRES_CA
   if (!target.nas?.relativePath) return { error: `${id} is not a NAS item, so there is no drive copy to look up` };
   const found = findHiresCandidates(target, packages, { limit: Math.max(1, Math.min(Number(limit) || HIRES_CANDIDATE_LIMIT, USE_CANDIDATE_LIMIT)) });
   const byId = new Map(packages.map((p) => [p.id, p]));
-  const open = found.candidates.filter((c) => !mediaOf(byId.get(c.id)).kind).map((c) => c.id);
+  // The item's OWN original is always an option (last, after any larger copy): a full-size item with no larger copy, or
+  // a thumbnail with nothing better, must still be deliverable — "no larger copy" is not "no image".
+  const selfStaged = !!mediaOf(target).kind;
+  const open = [...found.candidates.filter((c) => !mediaOf(byId.get(c.id)).kind).map((c) => c.id), ...(selfStaged ? [] : [id])];
   let states = new Map();
   if (open.length && typeof deps.readStageStates === 'function') {
     try { states = (await deps.readStageStates(open)) || new Map(); } catch { states = new Map(); }
@@ -70,12 +73,22 @@ export async function findHiresMedia(deps, { postId, packageId, limit = HIRES_CA
       thumbId: c.id, nasSha: pkg?.nas?.sha256 ?? null,
     };
   });
+  const selfState = states.get(id);
+  candidates.push({
+    id, self: true, title: target.title ?? null, ...dims(target), score: null,
+    reasons: [found.target.isThumbnail ? "this item's own file (a small copy; no larger one was found)" : "this item's own original file"],
+    relativePath: target.nas?.relativePath ?? null, rights: target.rights ?? null, staged: selfStaged,
+    ...(selfStaged ? {} : { stageState: selfState?.state ?? 'not-staged', ...(selfState?.error ? { stageError: String(selfState.error).slice(0, 160) } : {}) }),
+    thumbId: id, nasSha: target.nas?.sha256 ?? null,
+  });
   const out = {
     ok: true, postId: post?.id ?? null,
     target: { id, title: target.title ?? null, ...dims(target), isThumbnail: found.target.isThumbnail === true, hasPostMedia: !!(post?.mediaUrl) },
-    candidates, bestId: found.best?.id ?? null,
+    candidates, bestId: found.best?.id ?? id,
+    note: found.best ? 'A larger copy exists (bestId). Use it with media.use-hires.' : "No larger copy on the drive; this item's own original (bestId) can still be put on the post and linked: media.use-hires with candidateId = this item's id.",
   };
-  if (candidates.some((c) => !c.staged)) {
+  // Worker state matters only when the copy we would use (bestId) still has to come off the drive.
+  if (candidates.some((c) => c.id === out.bestId && !c.staged)) {
     const w = await nasWorker(deps);
     if (w) out.nasWorker = w;
   }
@@ -103,7 +116,9 @@ export async function useHiresMedia(deps, { clientId, postId, candidateId, packa
 
   // The candidate must be one the finder offers for THIS item (same client, never-public excluded, strictly larger).
   const packages = (await deps.readPackages()) || [];
-  const offered = findHiresCandidates(target, packages, { limit: USE_CANDIDATE_LIMIT }).candidates.find((c) => c.id === candidateId);
+  // The item's own original (candidateId = the post's item) is always allowed; any other id must be a finder match.
+  const self = candidateId === target.id;
+  const offered = self ? { id: target.id, ...dims(target) } : findHiresCandidates(target, packages, { limit: USE_CANDIDATE_LIMIT }).candidates.find((c) => c.id === candidateId);
   if (!offered) throw bad(`${candidateId} is not a high-res match for ${target.id}. Call find_hires_media for the current list.`, 409);
   const cand = packages.find((p) => p.id === candidateId) || (await deps.getPackage(candidateId));
   if (!cand) throw bad(`No item ${candidateId}.`, 404);
@@ -144,9 +159,11 @@ export async function useHiresMedia(deps, { clientId, postId, candidateId, packa
   // Link onto the post's package so later posts of this item use the original (linkMediaPatch semantics).
   let linked = true;
   let linkWarning;
-  const link = linkMediaPatch(target, cand, { now: deps.now() });
-  if (link.error) { linked = false; linkWarning = link.error; } else {
-    try { await deps.upsertPackage({ ...target, ...link.patch }); } catch (err) { linked = false; linkWarning = String(err?.message || err).slice(0, 160); }
+  if (!self) {
+    const link = linkMediaPatch(target, cand, { now: deps.now() });
+    if (link.error) { linked = false; linkWarning = link.error; } else {
+      try { await deps.upsertPackage({ ...target, ...link.patch }); } catch (err) { linked = false; linkWarning = String(err?.message || err).slice(0, 160); }
+    }
   }
   return {
     ok: true, status: 'done', postId, candidateId, packageId: target.id, width: offered.width, height: offered.height,
@@ -184,7 +201,7 @@ export async function attachStagedHires(deps, { candidateId }) {
       if (!post || (w.clientId && post.clientId !== w.clientId) || !HIRES_EDITABLE_STATUSES.includes(post.status)) { skipped.push({ postId: w.postId, reason: 'post not editable' }); continue; }
       const ok = await deps.applyPostMedia(w.postId, { ...media, mediaFromHires: { candidateId, packageId: w.targetId, at: new Date(deps.now()).toISOString(), auto: true } }, { clientId: w.clientId });
       if (!ok) { skipped.push({ postId: w.postId, reason: 'post changed' }); continue; }
-      const target = w.targetId ? await deps.getPackage(w.targetId) : null;
+      const target = w.targetId && w.targetId !== candidateId ? await deps.getPackage(w.targetId) : null; // own original: nothing to link
       if (target) { const link = linkMediaPatch(target, cand, { now: deps.now() }); if (!link.error) await deps.upsertPackage({ ...target, ...link.patch }); }
       attached.push(w.postId);
       try { await deps.onAttached?.(w, { candidateId }); } catch { /* a notification failure never undoes the attach */ }
