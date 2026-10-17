@@ -6,7 +6,8 @@ import { PROPOSAL_KINDS, PLAN_LIMITS, KNOWN_SLOT_TYPES, BULK_LIMITS, DAILY_FILL_
 import { estimateFor, REFRESH_GROUPS } from '../../../components/dashboard/marketing/refresh-groups.js';
 import { SOURCE_KINDS } from '../../x-content-inventory/buckets.js';
 import { validateProposal } from './proposals.js';
-import { queryPosts, linkFieldsOf, POST_QUERY_KINDS, FIND_POSTS_MAX } from '../post-query.js';
+import { queryPosts, linkFieldsOf, quotedUrlOf, POST_QUERY_KINDS, FIND_POSTS_MAX } from '../post-query.js';
+import { hasMemoryPlaceholder } from '../../social-posting/self-reply.js';
 import { ACTION_TOOLS } from './action-runtime.js';
 import { PLAN_FIELDS, HANDLE_RE, applyChange } from '../plan-state.js';
 import { tracksOf } from '../content-tracks.js';
@@ -34,9 +35,12 @@ export const LIMITS = Object.freeze({
   signalsMaxChars: 5800,
   signalsStaleHours: 72,
   postTextMax: 280,
+  calendarTextMax: 200,
+  calendarCharBudget: 10000, // get_calendar compact rows must fit under resultMaxChars
   briefBundleMaxChars: 9000, // get_brief whole bundle (compact summaries) must stay well under resultMaxChars
 });
 
+const CALENDAR_FILTERS = Object.freeze(['all', 'unapproved', 'approved', 'suggestions']);
 const str = (description, extra = {}) => ({ type: 'string', description, ...extra });
 const int = (description, extra = {}) => ({ type: 'integer', description, ...extra });
 
@@ -191,6 +195,18 @@ export const READ_TOOLS = Object.freeze([
     name: 'get_today_run',
     description: "Today's daily-run suggestions: id, slot, type, status, text.",
     input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'get_calendar',
+    description: "The ONE place for every possible post: saved posts of all statuses (draft, approved, scheduled, posted, held), today's daily suggestions and open requotes, per day. Each item: kind (post | suggestion | requote), id (postId / suggestionId / quoteTargetId), approval (unapproved | held | approved | scheduled | posted | suggested), time, text, quotedUrl, handle, windowOpen, expiresAt, bucket, hasPlaceholder. Approving a post with a [add your memory] / [add your take] placeholder REMOVES the placeholder; it never blocks approval. To approve: run_action calendar.post.approve (postId) or calendar.suggestion.approve (kind + id). Default today..today+6, max 31 days. filter: all | unapproved | approved | suggestions. Read-only.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        from: str('First day, YYYY-MM-DD (default today, America/Chicago)'),
+        to: str('Last day, YYYY-MM-DD (default from + 6 days; max 31 days from `from`)'),
+        filter: { type: 'string', enum: [...CALENDAR_FILTERS], description: 'all (default) | unapproved | approved | suggestions' },
+      },
+    },
   },
   {
     name: 'search_inventory',
@@ -546,7 +562,72 @@ function shapePost(p) {
     provenance: { runId: strOrNull(p.runId), suggestionId: strOrNull(p.suggestionId), strategyVersion: p.strategyVersion ?? null },
     error: strOrNull(p.error) ? String(p.error).slice(0, 300) : null,
     errorClass: strOrNull(p.errorClass),
+    ...(hasMemoryPlaceholder(String(p.content ?? p.text ?? '')) ? { approveNote: PLACEHOLDER_NOTE } : {}),
   };
+}
+
+const PLACEHOLDER_NOTE = 'approving removes the placeholder; it never blocks approval';
+const CAL_APPROVAL_GROUPS = { unapproved: ['unapproved', 'held'], approved: ['approved', 'scheduled', 'posted'] };
+
+/** One calendar row (post | suggestion | requote) -> the compact get_calendar item. */
+function shapeCalendarItem(r) {
+  const kind = r.kind === 'suggestion' || r.kind === 'requote' ? r.kind : 'post';
+  const text = String(r.content ?? r.text ?? '');
+  const placeholder = hasMemoryPlaceholder(text);
+  const out = {
+    kind,
+    id: kind === 'suggestion' ? strOrNull(r.suggestionId) : kind === 'requote' ? strOrNull(r.quoteTargetId) : strOrNull(r.id),
+    approval: strOrNull(r.approval),
+    time: strOrNull(r.time),
+    text: clipTo(text, LIMITS.calendarTextMax),
+    hasPlaceholder: placeholder,
+  };
+  if (kind === 'post') {
+    out.status = strOrNull(r.status);
+    if (r.proposed === true) out.proposed = true;
+    const q = quotedUrlOf({ content: text, status: r.status });
+    if (q) out.quotedUrl = q;
+    const bucket = strOrNull(r.bucketId) || strOrNull(r.engine);
+    if (bucket) out.bucket = bucket;
+  } else {
+    if (strOrNull(r.quotedUrl)) out.quotedUrl = r.quotedUrl;
+    if (strOrNull(r.handle)) out.handle = r.handle;
+    out.windowOpen = r.windowOpen === true;
+    if (strOrNull(r.expiresAt)) out.expiresAt = r.expiresAt;
+    if (kind === 'suggestion' && strOrNull(r.suggestionType)) out.type = r.suggestionType;
+  }
+  if (placeholder && kind === 'post' && r.approval !== 'posted') out.approveNote = PLACEHOLDER_NOTE;
+  return out;
+}
+
+/** Calendar days (month-calendar day objects) -> { from, to, filter, days:[{date,items}], totals, truncated }. */
+export function shapeCalendar(days, { filter = 'all', from = null, to = null } = {}) {
+  const f = CALENDAR_FILTERS.includes(filter) ? filter : 'all';
+  const keep = (r) => {
+    if (f === 'all') return true;
+    if (f === 'suggestions') return r.kind === 'suggestion' || r.kind === 'requote';
+    return CAL_APPROVAL_GROUPS[f].includes(r.approval);
+  };
+  const totals = { posts: 0, suggestions: 0, requotes: 0, unapproved: 0, approved: 0, withPlaceholder: 0 };
+  const out = [];
+  let used = 0;
+  let omitted = 0;
+  for (const d of list(days)) {
+    const items = [];
+    for (const r of list(d.posts).filter(keep)) {
+      const item = shapeCalendarItem(r);
+      totals[item.kind === 'post' ? 'posts' : item.kind === 'suggestion' ? 'suggestions' : 'requotes'] += 1;
+      if (item.approval === 'unapproved' || item.approval === 'held') totals.unapproved += 1;
+      if (item.approval === 'approved' || item.approval === 'scheduled') totals.approved += 1;
+      if (item.hasPlaceholder) totals.withPlaceholder += 1;
+      const size = JSON.stringify(item).length + 1;
+      if (used + size > LIMITS.calendarCharBudget) { omitted += 1; continue; }
+      used += size;
+      items.push(item);
+    }
+    out.push({ date: d.date, items });
+  }
+  return { from, to, filter: f, days: out, totals, ...(omitted ? { truncated: true, omitted, note: 'Output capped; narrow from/to or use filter.' } : {}) };
 }
 
 function shapeOpportunities(res) {
@@ -612,6 +693,15 @@ export async function runReadTool(name, input, toolDeps) {
     }
     case 'get_context': return need('getContext')();
     case 'get_today_run': return need('getTodayRun')();
+    case 'get_calendar': {
+      if (typeof deps.readCalendar !== 'function') return NA();
+      const dayRe = /^\d{4}-\d{2}-\d{2}$/;
+      const from = typeof input?.from === 'string' && dayRe.test(input.from.trim()) ? input.from.trim() : undefined;
+      const to = typeof input?.to === 'string' && dayRe.test(input.to.trim()) ? input.to.trim() : undefined;
+      const res = await deps.readCalendar({ from, to });
+      const days = Array.isArray(res) ? res : list(res?.days);
+      return shapeCalendar(days, { filter: input?.filter, from: res?.from ?? days[0]?.date ?? null, to: res?.to ?? days[days.length - 1]?.date ?? null });
+    }
     case 'search_inventory': {
       const query = String(input?.query ?? '').trim();
       if (!query) throw new Error('query is required');

@@ -10,6 +10,7 @@
 // Published link: `permalink` (manual delivery) else https://x.com/i/status/<twitterId> (API publish).
 
 import { ctDate } from '../x-content-inventory/month-calendar.js';
+import { hasMemoryPlaceholder } from '../social-posting/self-reply.js';
 
 export const POST_QUERY_KINDS = Object.freeze(['quote', 'repost', 'reply', 'original', 'any']);
 export const FIND_POSTS_MAX = 50;
@@ -125,6 +126,7 @@ export function normalizePost(p, { now = Date.now() } = {}) {
     needsStory: p.needsStory === true,
     expiresAt: str(p.expiresAt),
     windowOpen: isQuoteDraft && Number.isFinite(exp) ? exp > now : null,
+    ...(hasMemoryPlaceholder(String(p.content ?? p.text ?? '')) ? { approveNote: 'approving removes the placeholder; it never blocks approval' } : {}),
   };
 }
 

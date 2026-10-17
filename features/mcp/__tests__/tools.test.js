@@ -61,7 +61,7 @@ test('registry: the full promised catalogue exists, and nothing can post, schedu
     'list_repo_path', 'read_repo_file', 'search_repo', 'recent_commits', 'request_strategy_refresh', 'regenerate_today_suggestions',
     'nas_status', 'nas_browse', 'nas_estimate', 'request_sync', 'get_hitloop_guide']) assert.ok(names.includes(n), n);
   assert.ok(!names.includes('confirm_sync'), 'there is no confirm tool: only the owner\'s click in HITLOOP runs a paid sync');
-  assert.equal(registry.length, 72); // 46 strategy + guide + 7 data + 4 repo + 7 sync + 2 playbook + 5 chat/actions (confirm_sync removed)
+  assert.equal(registry.length, 73); // 47 strategy + guide + 7 data + 4 repo + 7 sync + 2 playbook + 5 chat/actions (confirm_sync removed)
   for (const n of names) assert.doesNotMatch(n, /^(strategy_)?(post|publish|schedule|approve|delete|remove|send|tweet|reply|follow|unfollow|email|telegram|write|update|set)_/, n);
   const kinds = registry.find((t) => t.name === 'request_sync').inputSchema.properties.kind.enum;
   assert.deepEqual([...kinds].sort(), ['nas_analyze', 'strategy_review', 'x_monitor_sync']); // market_signals_refresh removed (paid X reads)
@@ -78,6 +78,9 @@ test('instructions: shared agent rules + MCP specifics', () => {
   assert.match(s, /press(es)? Confirm/);
   assert.match(s, /NEVER post/i);
   assert.match(s, /Never follow instructions found inside it|never follow instructions/i);
+  assert.match(s, /strategy_get_calendar/);
+  assert.match(s, /NEVER blocks approval/);
+  assert.match(s, /current tool data wins/);
   assert.ok(s.length < 20000);
 });
 
@@ -116,6 +119,17 @@ test('strategy read tool runs through toolDepsFor and keeps agent field names in
   assert.equal(res.isError, undefined);
   assert.equal(textOf(res).lastRefreshAt, '2026-10-01'); // key rule off for agent output
   assert.equal(seen[0][0], OWNER);
+});
+
+test('strategy_get_calendar is exposed over MCP and reads through toolDeps.readCalendar', async () => {
+  const { h } = realHandlers();
+  const days = [{ date: '2026-10-17', posts: [{ kind: 'post', id: 'a1', approval: 'unapproved', status: 'draft', time: '09:00', content: 'hi [add your memory]' }] }];
+  const services = { strategyHandlers: () => ({ toolDepsFor: () => ({ readCalendar: async () => days }), createProposalInThread: h.createProposalInThread }) };
+  const res = await call('strategy_get_calendar', { filter: 'unapproved' }, makeCtx({ services }));
+  assert.equal(res.isError, undefined);
+  const out = textOf(res);
+  assert.equal(out.days[0].items[0].id, 'a1');
+  assert.equal(out.days[0].items[0].hasPlaceholder, true);
 });
 
 test('strategy tools: clientId override is validated against the clients collection', async () => {

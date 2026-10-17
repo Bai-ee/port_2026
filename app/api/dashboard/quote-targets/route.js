@@ -19,11 +19,11 @@ import { buildClientPackage, applyApproval } from '../../../../features/x-conten
 import { ageHoursOf, DEFAULT_WINDOW_HOURS } from '../../../../features/x-quote-targets/rank.js';
 import { buildPostResults } from '../../../../features/x-content-inventory/results.js';
 import { recentPostsFromQueue } from '../../../../features/x-content-inventory/allocate-slot.js';
-import { buildMonthCalendar, ctDate, toRow as calendarPostRow } from '../../../../features/x-content-inventory/month-calendar.js';
+import { readUnifiedCalendar, readCalendarQuoteTargets as readCalendarQuoteTargetsShared } from '../../../../features/x-content-inventory/calendar-reader.js';
+import { ctDate, toRow as calendarPostRow } from '../../../../features/x-content-inventory/month-calendar.js';
 import { createContentTaskStore } from '../../../../features/x-content-inventory/content-tasks.js';
 import { joinPerformance, engineStats } from '../../../../features/x-content-inventory/performance.js';
 import * as bucketStore from '../../../../features/x-content-inventory/bucket-store.js';
-import { bucketOfPost } from '../../../../features/x-content-inventory/bucket-colors.js';
 import { findMediaCandidates, linkMediaPatch, normalizeLinks } from '../../../../features/x-content-inventory/item-media.js';
 import { normalizeFacets } from '../../../../features/x-content-inventory/facets.js';
 import { resolveMediaUrls } from '../../../../features/rendered-videos/media-url.js';
@@ -44,7 +44,7 @@ import { createContentPlanHandlers } from '../../../../features/x-strategy/conte
 import { createFirestoreCorpusStore } from '../../../../features/x-strategy/corpus-store.js';
 import { createFirestorePlanStore } from '../../../../features/x-strategy/plan-store.js';
 import { createFirestoreStrategyDocStore } from '../../../../features/x-strategy/strategy-doc-store.js';
-import { loadContentContext, summarizeContentContext, resolveCalendarEngineConfig } from '../../../../features/content-context/load-content-context.js';
+import { loadContentContext, summarizeContentContext } from '../../../../features/content-context/load-content-context.js';
 import { loadClientLoopCorpora } from '../../../../features/x-strategy/loop-corpora.js';
 import { resolveXGrowthProfile } from '../../../../features/x-benchmark/profile.js';
 // Committed corpora: bundled here as the fallback for the rows store (getCorpusStore) and the legacy evaluate rows.
@@ -423,53 +423,13 @@ async function handleContentTaskUpdate(context, body) {
  * Month calendar over social_posts, with undated drafts PROPOSED onto days (display only, nothing is written).
  * Read-only like the week view: Approve / Reject / edit go through the social-posting route.
  */
-/** Today's (and any later) daily-run suggestions that are still unsaved: [{id,date,slot,type,text,runId,expiresAt}]. */
-async function readCalendarSuggestions(clientId, now) {
-  const today = ctDate(now);
-  const run = await latestDailyRun(createFirestoreRunStore(fb.adminDb), clientId);
-  if (!run || !(run.localDate >= today)) return [];
-  const runId = `${clientId}__${run.localDate}__${run.channel || 'x'}__v${run.version}`;
-  return (Array.isArray(run.suggestions) ? run.suggestions : [])
-    .filter((s) => s && typeof s.id === 'string' && !s.socialPostId && s.reviewState !== 'dismissed' && s.reviewState !== 'saved')
-    .map((s) => ({ id: s.id, date: run.localDate, slot: s.slot || null, proposedSlot: s.proposedSlot || null, type: s.type || null, runId,
-      text: String(s.edit?.text || s.draft?.text || ''), expiresAt: s.expiresAt || s.package?.expiresAt || null }));
-}
+/** Open quote candidates for the calendar (shared reader, also used by the agent/MCP get_calendar tool). */
+const readCalendarQuoteTargets = (clientId) => readCalendarQuoteTargetsShared(fb.adminDb, clientId);
 
-/** Open (non-dismissed) quote candidates, track-list merged: [{id,url,handle,text,createdAt,trackId}]. */
-async function readCalendarQuoteTargets(clientId) {
-  const { rawQuoteTargets, listSignals } = await readQuoteState(clientId);
-  const qt = mergeListCandidates(rawQuoteTargets, listSignals);
-  const dismissed = new Set(Array.isArray(qt?.dismissed) ? qt.dismissed : []);
-  return (Array.isArray(qt?.candidates) ? qt.candidates : []).filter((c) => c && !dismissed.has(c.id))
-    .map((c) => ({ id: c.id || c.url, url: c.url, text: c.text, handle: c.author?.username || (typeof c.author === 'string' ? c.author : null), createdAt: c.createdAt, trackId: c.trackId }));
-}
-
+/** Dashboard Month calendar = the shared unified reader + row thumbnails (the only route-specific part). */
 async function handleMonthCalendar(context, body) {
-  const raw = typeof body?.month === 'string' ? body.month.trim() : '';
-  const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(raw) ? raw : ctDate(Date.now()).slice(0, 7);
-  let overrides = null;
-  try {
-    const snap = await fb.adminDb.collection('content_system_config').doc('x').get();
-    overrides = snap.exists ? snap.data() : null;
-  } catch {
-    // Config is advisory; defaults keep the calendar usable.
-  }
-  const planDoc = await createFirestorePlanStore(fb.adminDb).get(context.clientId).catch(() => null);
-  const config = resolveCalendarEngineConfig({ planDoc, legacyOverrides: overrides });
-  const posts = await readSocialQueue(context.clientId);
-  const buckets = await bucketStore.listBuckets(context.clientId).catch(() => null);
-  const pkgs = await readStoredPackages([...new Set(posts.map((p) => p.packageId).filter(Boolean))]).catch(() => new Map());
-  // Posts without their own bucketId take it from their library item (bucket colors).
-  const withBuckets = posts.map((p) => (p.bucketId || !pkgs.has(p.packageId) ? p : { ...p, bucketId: bucketOfPost(p, pkgs.get(p.packageId)) }));
-  // "To film" reminders (content_tasks): shown on their dueOn day. Advisory read; a failure never blocks the calendar.
-  const tasks = await createContentTaskStore(fb.adminDb).list(context.clientId).catch(() => []);
-  // Unsaved daily-run suggestions + open quote targets ride the same grid (display only). Advisory reads.
-  const now = Date.now();
-  const [suggestions, quoteTargets] = await Promise.all([
-    readCalendarSuggestions(context.clientId, now).catch(() => []),
-    readCalendarQuoteTargets(context.clientId).catch(() => []),
-  ]);
-  const calendar = buildMonthCalendar({ posts: withBuckets, month, now, config, buckets, tasks, suggestions, quoteTargets });
+  const month = typeof body?.month === 'string' ? body.month.trim() : '';
+  const { calendar, pkgs } = await readUnifiedCalendar(fb.adminDb, context.clientId, { month, now: Date.now() });
   await withRowThumbs(calendar, pkgs, context.clientId);
   return { ok: true, calendar };
 }
