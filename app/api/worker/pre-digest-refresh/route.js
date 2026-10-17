@@ -848,7 +848,8 @@ async function refreshXMarketTalk(clientId, { brandXHandle = '', brandKeywords =
     const queries = [...new Set([`@${handle}`, ...keywords.map((k) => String(k || '').trim())].filter(Boolean))].slice(0, 3);
     const collected = [];
     const errors = [];
-    const results = await Promise.all(queries.map((q) => searchXPosts(q, { limit: 10 })));
+    const { withXUsage } = await import('../../../../features/x-api-usage/index.js');
+    const results = await Promise.all(queries.map((q) => withXUsage({ clientId, source: 'market-talk' }, () => searchXPosts(q, { limit: 10 }))));
     results.forEach((r, i) => {
       if (!r?.ok) { errors.push(`${queries[i]}: ${r?.error || 'failed'}`); return; }
       collected.push(...(r.items || []));

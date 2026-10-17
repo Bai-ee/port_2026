@@ -89,7 +89,26 @@ export const PROPOSAL_KINDS = Object.freeze([
   'paid-sync',
   'calendar-batch',
   'item-media',
+  'daily-fill',
+  'refresh',
+  'queue-bulk',
+  'bucket-edit',
+  'action',
+  'memory-suggest',
+  'media-tasks',
 ]);
+
+/** Bulk kinds: one card covers many items, so they do not count toward the agent's per-turn proposal cap. */
+export const BULK_PROPOSAL_KINDS = Object.freeze(['calendar-batch', 'item-media', 'daily-fill', 'queue-bulk', 'refresh', 'action', 'memory-suggest', 'media-tasks']);
+export const MAX_BULK_PROPOSALS_PER_TURN = 4;
+
+/** Limits for the admin-level bulk kinds. */
+export const BULK_LIMITS = Object.freeze({ dailyFillMaxDays: 31, queueBulkMax: 50, refreshReasonMax: 300, bucketLabelMax: 80 });
+export const DAILY_FILL_INCLUDES = Object.freeze(['baseline', 'quotes', 'narratives', 'client-work']);
+export const QUEUE_BULK_ACTIONS = Object.freeze(['approve', 'unschedule', 'delete-draft', 'set-review-date']);
+export const BUCKET_EDIT_OPS = Object.freeze(['upsert', 'delete']);
+/** Mirror of components/dashboard/marketing/refresh-groups.js REFRESH_GROUPS ids (a test asserts equality). */
+export const REFRESH_GROUP_IDS = Object.freeze(['market-signals', 'x-search', 'analysis', 'strategy-accounts', 'today-queue', 'x-monitor', 'renders', 'quote-targets']);
 
 /** Kinds only server code may create (the MCP server's request_sync). The in-app agent has no propose tool for them. */
 export const SERVER_ONLY_PROPOSAL_KINDS = Object.freeze(['paid-sync']);
@@ -119,6 +138,13 @@ export const PROPOSAL_KIND_ACTIONS = Object.freeze({
   'paid-sync': 'paid-sync', // features/mcp/paid-syncs.js via the injected runPaidSync; not a strategy ROUTE_ACTION
   'calendar-batch': 'strategy-calendar-batch-create', // review drafts only (calendar-batch.js); never approves, schedules or publishes
   'item-media': 'link-item-media', // quote-targets link-item-media (item-media.js); package media fields only, never a post
+  'daily-fill': 'strategy-daily-fill-create', // review drafts only (x-content-inventory/daily-fill.js); never approves, schedules or publishes
+  refresh: 'marketing-refresh', // client-side: the server runs nothing; the dashboard Refresh panel runs the groups (window event)
+  'queue-bulk': 'queue-bulk', // approve (existing approveDraft gate) | unschedule | delete-draft (reject) | set-review-date; never schedules or publishes
+  'bucket-edit': 'upsert-bucket', // quote-targets upsert-bucket / delete-bucket, then syncTracks
+  action: 'run-action', // agent/action-runtime.js: one registry action (or <=50 items of it), snapshot + audit; tier/typed gates enforced on decide
+  'memory-suggest': 'update', // social-posting `update` per post (updateSocialPost, revision-checked): replaces a placeholder with the owner-approved line; never approves or schedules
+  'media-tasks': 'content-task-create', // content_tasks reminders only (x-content-inventory/content-tasks.js); never touches a post or an item
 });
 
 export const PROPOSAL_STATUSES = Object.freeze(['pending', 'deciding', 'confirmed', 'rejected', 'failed']);

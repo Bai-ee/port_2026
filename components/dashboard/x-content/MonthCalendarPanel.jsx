@@ -51,11 +51,20 @@ function readView() {
   }
 }
 
+const FILL_KIND_LABEL = { quote: 'Quote', narrative: 'Narrative', 'client-work': 'Client work', baseline: 'Baseline' };
+
+// A daily-fill quote draft is only useful inside its window; past expiresAt it renders muted.
+export function isQuoteWindowClosed(post, nowMs = Date.now()) {
+  const t = post?.fillKind === 'quote' && post?.expiresAt ? Date.parse(post.expiresAt) : NaN;
+  return Number.isFinite(t) && t < nowMs;
+}
+
 function PostRow({ post, busy, onOpen, onApprove, onReject }) {
+  const windowClosed = isQuoteWindowClosed(post);
   const pending = (post.state === 'pending' || post.state === 'awaiting') && !post.needsStory;
   const rejectOnly = post.state === 'held';
   return (
-    <li id={`x-content-month-row-${post.id}`} className={`xce-mc-row xce-mc-state-${post.state}`}>
+    <li id={`x-content-month-row-${post.id}`} className={`xce-mc-row xce-mc-state-${post.state}${windowClosed ? ' xce-mc-row-expired' : ''}`}>
       <button type="button" className="xce-mc-row-main" data-bucket={post.bucketColor ? post.bucketId || 'none' : undefined} data-thumb={post.thumbUrl ? '' : undefined}
         style={post.bucketColor ? { '--mc-bucket': post.bucketColor } : undefined} onClick={() => onOpen(post.id)}>
         <span className="xce-mc-row-time">{post.time || '—'}</span>
@@ -67,6 +76,10 @@ function PostRow({ post, busy, onOpen, onApprove, onReject }) {
             {post.reviewOn ? ' · review day' : post.proposed ? ' · proposed' : ''}
             {post.engine ? ` · ${ENGINE_TAG[post.engine]}` : ''}
             {post.needsStory ? (post.reviewOn ? ' · needs your memory' : ' · needs story') : ''}
+            {FILL_KIND_LABEL[post.fillKind] ? (
+              <span id={`x-content-month-row-fill-kind-${post.id}`} className="xce-mc-fill-badge" data-fill-kind={post.fillKind}>{FILL_KIND_LABEL[post.fillKind]}</span>
+            ) : null}
+            {windowClosed ? <span id={`x-content-month-row-window-closed-${post.id}`} className="xce-mc-fill-closed">window closed</span> : null}
           </span>
           {post.state === 'held' ? (
             <span id={`x-content-month-row-held-${post.id}`} className="xce-mc-row-note">{post.heldReason} {post.heldNext}</span>
@@ -107,6 +120,22 @@ function PostRow({ post, busy, onOpen, onApprove, onReject }) {
   );
 }
 
+// A "film this" reminder (content_tasks) on its due day. Presentation only: the toggle hands back to the host.
+function TaskRow({ task, busy, onToggle }) {
+  const done = task.status === 'done';
+  return (
+    <li id={`x-content-month-task-${task.id}`} className={`xce-mc-task${done ? ' xce-mc-task-done' : ''}`}>
+      <span id={`x-content-month-task-badge-${task.id}`} className="xce-mc-task-badge">{task.badge}</span>
+      <span className="xce-mc-task-title">{task.title}</span>
+      {onToggle ? (
+        <button type="button" id={`x-content-month-task-toggle-${task.id}`} className="xce-mc-text-btn" disabled={busy} aria-pressed={done} onClick={() => onToggle(task, done ? 'open' : 'done')}>
+          {done ? 'Reopen' : 'Done'}
+        </button>
+      ) : null}
+    </li>
+  );
+}
+
 // Sheet portal target: the Content Center card root when present, else the nearest .xce-scope, else body (standalone host).
 function sheetHost() {
   return document.getElementById('x-content-card') || document.querySelector('.xce-scope') || document.body;
@@ -127,6 +156,7 @@ function MonthCalendarPanelView({
   onUnschedule,
   onScore,
   onReconcile,
+  onTaskToggle,
 }) {
   const [view, setView] = useState('month');
   const [pendingOnly, setPendingOnly] = useState(false);
@@ -177,7 +207,7 @@ function MonthCalendarPanelView({
   };
   const quickApprove = (post) => onApprove(post, { content: post.content, scheduledAt: post.proposedAt || post.scheduledAt, expectedRevision: post.revision ?? null });
 
-  const agendaDays = days.filter((d) => d.inMonth && visible(d.posts).length);
+  const agendaDays = days.filter((d) => d.inMonth && (visible(d.posts).length || d.tasks?.length));
 
   return (
     <div id="x-content-month-calendar-panel" className="xce-panel xce-mc">
@@ -189,6 +219,7 @@ function MonthCalendarPanelView({
             {totals.awaiting ? <span><strong>{totals.awaiting}</strong> awaiting approval</span> : null}
             {totals.held ? <span className="xce-mc-summary-held"><strong>{totals.held}</strong> held for review</span> : null}
             {totals.review ? <span id="x-content-month-summary-review"><strong>{totals.review}</strong> review day{totals.review === 1 ? '' : 's'}{totals.needsMemory ? ` (${totals.needsMemory} need your memory)` : ''}</span> : null}
+            {totals.tasksOpen ? <span id="x-content-month-summary-tasks"><strong>{totals.tasksOpen}</strong> to film</span> : null}
             <span><strong>{totals.scheduled ?? 0}</strong> scheduled</span>
             <span><strong>{totals.posted ?? 0}</strong> posted</span>
             {totals.failed ? <span className="xce-mc-summary-failed"><strong>{totals.failed}</strong> failed</span> : null}
@@ -318,13 +349,18 @@ function MonthCalendarPanelView({
                 {selectedDay.flags.map((f, i) => <li key={`${f.kind}-${i}`}>{f.message}</li>)}
               </ul>
             ) : null}
+            {selectedDay?.tasks?.length ? (
+              <ul id="x-content-month-selected-day-tasks" className="xce-mc-rows">
+                {selectedDay.tasks.map((t) => <TaskRow key={t.id} task={t} busy={busyId === t.id} onToggle={onTaskToggle} />)}
+              </ul>
+            ) : null}
             {selectedDay && visible(selectedDay.posts).length ? (
               <ul className="xce-mc-rows">
                 {visible(selectedDay.posts).map((p) => (
                   <PostRow key={p.id} post={p} busy={busyId === p.id} onOpen={setOpenId} onApprove={quickApprove} onReject={onReject} />
                 ))}
               </ul>
-            ) : (
+            ) : selectedDay?.tasks?.length ? null : (
               <p className="xce-mc-empty">{pendingOnly ? 'Nothing pending on this day.' : 'Nothing on this day.'}</p>
             )}
           </section>
@@ -337,6 +373,7 @@ function MonthCalendarPanelView({
             <div key={d.date} id={`x-content-month-agenda-day-${d.date}`} className={`xce-mc-agenda-day${d.isToday ? ' xce-mc-agenda-today' : ''}`}>
               <p className="xce-mc-kicker">{dayHeading(d.date)}{d.isToday ? ' · today' : ''}</p>
               <ul className="xce-mc-rows">
+                {(d.tasks || []).map((t) => <TaskRow key={t.id} task={t} busy={busyId === t.id} onToggle={onTaskToggle} />)}
                 {visible(d.posts).map((p) => (
                   <PostRow key={p.id} post={p} busy={busyId === p.id} onOpen={setOpenId} onApprove={quickApprove} onReject={onReject} />
                 ))}

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config as loadDotenv } from 'dotenv';
 import { TwitterApi } from 'twitter-api-v2';
+import { instrumentXClient } from '../features/x-api-usage/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
@@ -123,7 +124,7 @@ if (!execute) {
   process.exit(0);
 }
 
-const client = new TwitterApi({ appKey, appSecret, accessToken, accessSecret });
+const client = instrumentXClient(new TwitterApi({ appKey, appSecret, accessToken, accessSecret }));
 const me = await client.v2.me();
 const sourceUserId = me?.data?.id;
 if (!sourceUserId) throw new Error('Could not resolve authenticated X user.');

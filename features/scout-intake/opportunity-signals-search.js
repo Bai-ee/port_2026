@@ -110,8 +110,10 @@ async function refreshOpportunitySignals(clientId, { allowX = false } = {}) {
   // keeps its queryLabel; ScrapeCreators/X bill per query term either way, so
   // this costs the same as merging, it just preserves attribution.
   let searchXPosts = null;
+  let withXUsage = null;
   if (platforms.includes('x')) {
     ({ searchXPosts } = await import('../social-posting/twitter-service.js'));
+    ({ withXUsage } = await import('../x-api-usage/index.js'));
   }
   const jobs = [];
   for (const platform of platforms) {
@@ -122,7 +124,7 @@ async function refreshOpportunitySignals(clientId, { allowX = false } = {}) {
       ? searchReddit({ queries: [row.query], limit: maxItemsPerPlatform, maxQueries: 1 })
       : platform === 'instagram'
         ? searchInstagram({ queries: [row.query], limit: maxItemsPerPlatform, maxQueries: 1 })
-        : searchXPosts(row.query, { limit: Math.max(10, maxItemsPerPlatform) }); // X min max_results is 10
+        : withXUsage({ clientId, source: 'opportunity-signals' }, () => searchXPosts(row.query, { limit: Math.max(10, maxItemsPerPlatform) })); // X min max_results is 10
     const r = await call;
     if (!r.ok) { warnings.push(`${platform} "${row.label || row.query}": ${r.error}`); return []; }
     return r.items.slice(0, maxItemsPerPlatform).map((it) => normalizeItem(it, { platform, queryLabel: row.label, query: row.query }));

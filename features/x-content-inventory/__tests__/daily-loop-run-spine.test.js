@@ -105,3 +105,9 @@ test('inputs: strategy row, Seb-rules voice label, Strategy Builder not used for
   assert.match(rows.find((r) => r.input === 'Strategy Builder plan').detail, /^not used for X/);
   assert.equal(describeInputs(FX, NOW).find((r) => r.input === 'strategy slots').status, 'missing');
 });
+
+test('stripUndefined removes undefined values so a Firestore write cannot be rejected', async () => {
+  const { stripUndefined } = await import('../daily-loop/run-store.js');
+  const out = stripUndefined({ a: 1, b: undefined, gaps: [{ slot: { type: undefined, letter: 'A' } }, undefined] });
+  assert.deepEqual(out, { a: 1, gaps: [{ slot: { letter: 'A' } }, null] });
+});

@@ -214,3 +214,16 @@ test('review days are placed before undated proposals, which then work around th
   assert.equal(rv.date, '2026-10-10');
   assert.ok(Math.abs(Date.parse(rv.proposedAt) - Date.parse(un.proposedAt)) >= DEFAULT_ENGINE_CONFIG.authored.minSpacingMin * 60_000 || un.date !== rv.date);
 });
+
+test('daily-fill fields pass through to rows (fillKind, expiresAt, source, fillSource)', () => {
+  const cal = buildMonthCalendar({ month: '2026-10', now: NOW, posts: [draft('f1', { source: 'daily-fill', fillKind: 'quote', expiresAt: '2026-10-11T00:00:00Z', fillSource: { type: 'quote-target', id: 't1', asOf: '2026-10-10T00:00:00Z', junk: 1 } }), draft('f2')] });
+  const rows = allDays(cal).flatMap((d) => d.posts).concat(cal.undated || [], cal.unplaced || []);
+  const f1 = rows.find((r) => r.id === 'f1');
+  assert.equal(f1.fillKind, 'quote');
+  assert.equal(f1.expiresAt, '2026-10-11T00:00:00Z');
+  assert.equal(f1.source, 'daily-fill');
+  assert.deepEqual(f1.fillSource, { type: 'quote-target', id: 't1', asOf: '2026-10-10T00:00:00Z' });
+  const f2 = rows.find((r) => r.id === 'f2');
+  assert.equal(f2.fillKind, null);
+  assert.equal(f2.fillSource, null);
+});

@@ -6,9 +6,12 @@
 import { createRequire } from 'node:module';
 import { STRATEGY_AGENT_MODEL, STRATEGY_DOC_MAX_CHARS, buildSystemPrompt } from './prompt.js';
 import { renderDocText, describeDocChange } from '../strategy-doc.js';
+import { BULK_PROPOSAL_KINDS, MAX_BULK_PROPOSALS_PER_TURN } from '../contracts.js';
 import {
-  TOOL_SCHEMAS, READ_TOOL_NAMES, KIND_BY_PROPOSE_TOOL, runReadTool, prepareProposal, serializeResult,
+  TOOL_SCHEMAS, READ_TOOL_NAMES, KIND_BY_PROPOSE_TOOL, STYLE_TOOL_NAMES, runReadTool, runStyleTool, prepareProposal, serializeResult,
 } from './tools.js';
+import { effectiveResponseStyle } from '../response-style.js';
+import { ACTION_TOOL_NAMES, runActionTool } from './action-runtime.js';
 
 export { STRATEGY_AGENT_MODEL };
 
@@ -155,6 +158,8 @@ export function createAgentLoop({
   async function runTurn({ clientId, threadId, history = [], userText, selectedContext, maxRounds: roundsCap = maxRounds, maxTokens: tokensCap = maxTokens } = {}) {
     const usage = { calls: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 };
     const proposals = [];
+    const toolResults = []; // action tools used this turn: {tool, undoId?} (the chat shows an Undo chip per undoId)
+    const proposalErrors = []; // propose attempts that made no card this turn (the route tells the owner, never a silent 'card is up')
     const userMessages = [...(Array.isArray(history) ? history : []).filter((m) => m?.role === 'user').map((m) => String(m.text ?? '')), String(userText ?? '')];
     const messages = buildMessages(history, userText);
 
@@ -171,7 +176,10 @@ export function createAgentLoop({
           + (changes.length ? `\n\nRECENT STRATEGY CHANGES (oldest first):\n${changes.map((c) => `- ${c}`).join('\n')}` : '');
       }
     } catch { strategyDocText = ''; }
-    const system = buildSystemPrompt({ planSummary: planSummary ?? null, strategyDocText, selectedContext: typeof selectedContext === 'string' ? selectedContext : '' });
+    // The owner's saved reply format (or the default) rides on every turn, outside the capped rule block.
+    let responseStyle;
+    try { responseStyle = effectiveResponseStyle(await toolDeps?.getResponseStyle?.()); } catch { responseStyle = effectiveResponseStyle(null); }
+    const system = buildSystemPrompt({ planSummary: planSummary ?? null, strategyDocText, selectedContext: typeof selectedContext === 'string' ? selectedContext : '', responseStyle });
 
     const account = async (resp, ok) => {
       const u = resp?.usage || {};
@@ -211,7 +219,7 @@ export function createAgentLoop({
         let text = textOf(content);
         if (capped && !text) text = ROUND_CAP_FALLBACK;
         const stopped = capped ? 'round-cap' : resp?.stop_reason === 'max_tokens' ? 'max-tokens' : 'end';
-        return { text, proposals, usage: { ...usage }, rounds, stopped };
+        return { text, proposals, toolResults, proposalErrors, usage: { ...usage }, rounds, stopped };
       }
 
       rounds += 1;
@@ -236,12 +244,31 @@ export function createAgentLoop({
           return reply(`Tool failed: ${String(err?.message ?? err).slice(0, 200)}`, true);
         }
       }
+      if (STYLE_TOOL_NAMES.includes(tu.name)) {
+        const out = await runStyleTool(tu.name, parsed.value, toolDeps);
+        return reply(serializeResult(out), Boolean(out.error));
+      }
+      if (ACTION_TOOL_NAMES.includes(tu.name)) {
+        const out = await runActionTool(tu.name, parsed.value, toolDeps);
+        if (tu.name === 'run_action' || tu.name === 'undo_action') toolResults.push({ tool: tu.name, ...(typeof out.result?.undoId === 'string' ? { undoId: out.result.undoId } : {}) });
+        if (out.proposal) {
+          // `action` cards are bulk-class: they do not use the per-turn single-proposal cap.
+          if (proposals.filter((p) => BULK_PROPOSAL_KINDS.includes(p.kind)).length >= MAX_BULK_PROPOSALS_PER_TURN) {
+            return reply(`Proposal limit reached (${MAX_BULK_PROPOSALS_PER_TURN} cards per turn). Nothing ran; tell the owner what else you would do.`, true);
+          }
+          proposals.push(out.proposal);
+        }
+        return reply(serializeResult(out.result), out.isError === true);
+      }
       if (KIND_BY_PROPOSE_TOOL[tu.name]) {
-        if (proposals.length >= maxProposals) {
-          return reply(`Proposal limit reached (${maxProposals} per turn). Do not propose more; tell the owner what else you would suggest in text.`, true);
+        // Bulk kinds (one card, many items) have their own small cap and do not use up the per-turn proposal cap.
+        const bulk = BULK_PROPOSAL_KINDS.includes(KIND_BY_PROPOSE_TOOL[tu.name]);
+        if (bulk ? proposals.filter((p) => BULK_PROPOSAL_KINDS.includes(p.kind)).length >= MAX_BULK_PROPOSALS_PER_TURN
+          : proposals.filter((p) => !BULK_PROPOSAL_KINDS.includes(p.kind)).length >= maxProposals) {
+          return reply(`Proposal limit reached (${bulk ? MAX_BULK_PROPOSALS_PER_TURN : maxProposals} per turn). Do not propose more; tell the owner what else you would suggest in text.`, true);
         }
         const prep = await prepareProposal(tu.name, parsed.value, { toolDeps, userMessages });
-        if (!prep.ok) return reply(`Proposal rejected: ${prep.error}`, true);
+        if (!prep.ok) { proposalErrors.push(`${KIND_BY_PROPOSE_TOOL[tu.name]}: ${String(prep.error).slice(0, 160)}`); return reply(`Proposal rejected: ${prep.error}. NO card was created; fix the input and call the tool again, or tell the owner it failed.`, true); }
         proposals.push(prep.proposal);
         return reply('recorded - the owner will confirm or reject');
       }

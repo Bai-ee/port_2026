@@ -42,7 +42,8 @@ async function fetchXTimelineItems(config) {
     const handles = Array.isArray(config?.kols) ? config.kols : [];
     if (!platforms.includes('x') || !handles.length) return [];
     const { fetchHandleTimelines } = await import('../social-posting/twitter-service.js');
-    const tl = await fetchHandleTimelines(handles, { perHandle: 5 });
+    const { withXUsage } = await import('../x-api-usage/index.js');
+    const tl = await withXUsage({ clientId: config?.clientId || null, source: 'other' }, () => fetchHandleTimelines(handles, { perHandle: 5 }));
     if (!tl.ok && tl.errors?.length) {
       console.warn(`[${new Date().toISOString()}] XSCOUT: X timelines unavailable — ${tl.errors.join('; ').slice(0, 160)}`);
     }

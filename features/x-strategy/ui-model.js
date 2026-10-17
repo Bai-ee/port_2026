@@ -375,6 +375,7 @@ export function planErrorView(result) {
 // ---- chat helpers (T4c) ------------------------------------------------------------------------------------
 
 const PROPOSAL_KIND_LABELS = Object.freeze({
+  action: 'Run an action',
   'plan-change': 'Change the plan',
   'benchmarks-change': 'Change the tracked accounts',
   'suggestion-edit': 'Edit a suggestion',
@@ -391,6 +392,12 @@ const PROPOSAL_KIND_LABELS = Object.freeze({
   'paid-sync': 'Run a paid sync',
   'calendar-batch': 'Add drafts to the calendar',
   'item-media': 'Link videos to items',
+  'daily-fill': 'Fill the calendar with drafts',
+  refresh: 'Refresh stale data',
+  'queue-bulk': 'Change several queued posts',
+  'bucket-edit': 'Change a content bucket',
+  'memory-suggest': 'Suggested memory lines',
+  'media-tasks': 'Add "to film" reminders',
 });
 
 /** Plain-words label for a proposal kind. Unknown kinds fall back to a readable form, never throw. */
@@ -450,6 +457,53 @@ function calendarBatchPreview(p) {
   ];
 }
 
+/** Card lines for a daily fill: window, sources, counts by kind and the first rows. */
+const FILL_KIND_LABELS = Object.freeze({ baseline: 'baseline', quote: 'quote', narrative: 'narrative', 'client-work': 'client work' });
+function dailyFillPreview(p) {
+  const pre = p.preview || {};
+  const byKind = Object.entries(pre.byKind || {}).map(([k, n]) => `${n} ${FILL_KIND_LABELS[k] || k}`).join(', ');
+  return [
+    `Window: ${p.from}, ${p.days} day${p.days === 1 ? '' : 's'}`,
+    `Sources: ${(p.include || []).join(', ') || 'all'}`,
+    ...(Number.isInteger(pre.total) ? [`Drafts: ${pre.total}${byKind ? ` (${byKind})` : ''}${pre.skipped ? `, ${pre.skipped} skipped` : ''}`] : []),
+    ...(Array.isArray(pre.sample) ? pre.sample.map((r) => `${r.date} \u00b7 ${FILL_KIND_LABELS[r.kind] || r.kind} \u00b7 ${r.text}`) : []),
+    'Drafts only: nothing is approved, scheduled or published. The plan is re-checked when you confirm.',
+  ];
+}
+
+const QUEUE_BULK_WHAT = Object.freeze({
+  approve: 'Approve these drafts (not scheduled or published). Drafts that still need their story will fail on their own.',
+  unschedule: 'Take these posts off the schedule.',
+  'delete-draft': 'Remove these drafts from the queue (kept as rejected, not erased).',
+  'set-review-date': 'Move these drafts to a new calendar day.',
+});
+function queueBulkPreview(p) {
+  const rows = Array.isArray(p.rows) ? p.rows : [];
+  const blocked = rows.filter((r) => r.blocked).length;
+  return [
+    `${QUEUE_BULK_WHAT[p.action] || p.action}${p.action === 'set-review-date' ? ` Day: ${p.date}.` : ''}`,
+    `Posts: ${(p.postIds || []).length}${blocked ? ` (${blocked} cannot be approved yet: needs its story)` : ''}`,
+    ...rows.slice(0, 8).map((r) => `${r.status}: ${r.text}${r.blocked ? ` [${r.blocked}]` : ''}`),
+    'Never schedules or publishes.',
+  ];
+}
+
+function bucketEditPreview(p) {
+  const b = p.bucket || {};
+  if (p.op === 'delete') return [`Delete bucket ${b.name || b.id}${p.reassignTo ? `, moving its items to ${p.reassignTo}` : ''}.`, 'Its content track goes with it. Posts are not touched.'];
+  const fields = ['sourceKind', 'color', 'active', 'order'].filter((k) => b[k] !== undefined).map((k) => `${k}: ${showVal(b[k])}`);
+  return [`${b.id ? `Change bucket ${b.id}` : 'Add a bucket'}${b.name ? `: ${b.name}` : ''}`, ...fields, ...(b.share ? [`Share: ${JSON.stringify(b.share)}`] : []), 'Tracks re-sync after the change. Posts are not touched.'];
+}
+
+function refreshPreview(p) {
+  const est = Array.isArray(p.estimate) ? p.estimate : (p.groups || []).map((id) => ({ id, label: id }));
+  return [
+    ...(p.reason ? [`Why: ${p.reason}`] : []),
+    ...est.map((e) => `${e.label || e.id}${e.paid ? ' (paid)' : ' (free)'}${e.text ? `: ${e.text}` : ''}`),
+    'Confirming starts the run in the Refresh panel; paid groups spend real money.',
+  ];
+}
+
 function paidSyncPreview(p) {
   const params = p.params && typeof p.params === 'object' ? p.params : {};
   const lines = [PAID_SYNC_WHAT[p.kind] || `Runs a paid sync (${showVal(p.kind)}).`];
@@ -499,6 +553,23 @@ export function proposalPayloadPreview(kind, payload, currentPlan) {
     case 'post-unschedule': return [`Post: ${clipPostText(p.currentText)}`, `Time being removed: ${localTime(p.currentScheduledAt)}`, `Current status: ${showVal(p.currentStatus)}`];
     case 'paid-sync': return paidSyncPreview(p);
     case 'calendar-batch': return calendarBatchPreview(p);
+    case 'daily-fill': return dailyFillPreview(p);
+    case 'refresh': return refreshPreview(p);
+    case 'queue-bulk': return queueBulkPreview(p);
+    case 'bucket-edit': return bucketEditPreview(p);
+    case 'action': return Array.isArray(p.warningLines) && p.warningLines.length ? p.warningLines : [String(p.warning || p.title || 'Run an action')];
+    case 'memory-suggest': return [
+      `${(p.rows || []).length} draft${(p.rows || []).length === 1 ? '' : 's'} still need your memory line. These are SUGGESTIONS: edit or skip each one below.`,
+      'Only replaces the placeholder text. Nothing is approved, scheduled or published.',
+    ];
+    case 'media-tasks': {
+      const rows = p.rows || [];
+      return [
+        `${rows.length} reminder${rows.length === 1 ? '' : 's'}, due ${rows[0]?.dueOn ?? ''}${rows.length > 1 ? ` to ${rows[rows.length - 1]?.dueOn ?? ''}` : ''}, shown on the month calendar.`,
+        ...rows.slice(0, 5).map((r) => `${r.dueOn}: ${r.title}`),
+        'Reminders only: no post or item changes.',
+      ];
+    }
     case 'item-media': {
       const rows = Array.isArray(p.rows) ? p.rows : p.links || [];
       const videos = rows.filter((r) => r.kind === 'video').length;
@@ -513,6 +584,7 @@ export function proposalPayloadPreview(kind, payload, currentPlan) {
 }
 
 const RESULT_LINES = {
+  action: (r) => r?.message || 'Done.',
   'plan-change': (r) => (r?.version ? `Plan updated to v${r.version}.` : 'Plan updated.'),
   'benchmarks-change': () => 'Accounts saved.',
   'suggestion-edit': () => "Today's suggestion updated — open the Today tab.",
@@ -526,6 +598,12 @@ const RESULT_LINES = {
   'post-approve': () => 'Approved.',
   'post-schedule': (r) => (r?.scheduledAt ? `Scheduled for ${localTime(r.scheduledAt)}.` : 'Scheduled.'),
   'post-unschedule': () => 'Unscheduled.',
+  'daily-fill': (r) => `${r?.created ?? 0} draft${r?.created === 1 ? '' : 's'} added to the calendar${r?.existing ? `, ${r.existing} already there` : ''}${r?.failed ? `, ${r.failed} failed` : ''}.`,
+  refresh: (r) => (r?.clientAction === 'marketing-refresh' ? 'Running in Refresh panel' : 'Refresh requested.'),
+  'queue-bulk': (r) => `${r?.done ?? 0} post${r?.done === 1 ? '' : 's'} updated${r?.failed ? `, ${r.failed} could not be (${(r.results || []).slice(0, 2).map((x) => x.reason).filter(Boolean).join('; ')})` : ''}.`,
+  'bucket-edit': (r) => (r?.op === 'delete' ? 'Bucket deleted.' : r?.created ? 'Bucket added.' : 'Bucket saved.'),
+  'memory-suggest': (r) => `${r?.updated ?? 0} draft${r?.updated === 1 ? '' : 's'} updated${r?.skipped ? `, ${r.skipped} skipped` : ''}${r?.failed ? `, ${r.failed} could not be (${(r.results || []).slice(0, 2).map((x) => x.reason).filter(Boolean).join('; ')})` : ''}. They still need your approval.`,
+  'media-tasks': (r) => `${r?.created ?? 0} reminder${r?.created === 1 ? '' : 's'} added to the calendar${r?.existing ? `, ${r.existing} already there` : ''}.`,
   'post-edit': (r) => (r?.status ? `Post updated. It is now ${r.status}${r.scheduledAt ? ` for ${r.scheduledAt}` : ''} \u2014 check the Queue tab.` : 'Post updated \u2014 check the Queue tab.'),
 };
 
@@ -863,4 +941,53 @@ export function stageErrorText(err) {
   const msg = String(err?.message || '');
   if (/analyzer|offline|worker/i.test(msg)) return `The Mac analyzer is offline or not registered, so nothing was queued. ${msg}`.trim();
   return msg || 'Could not queue the staging upload.';
+}
+
+/**
+ * View model for an `action` proposal card (agent/action-runtime.js). tier 2 = danger, tier 3 = warn, tier 1 = info.
+ * needsTyped => the confirm button stays disabled until the owner types confirmText exactly.
+ */
+export function actionCardModel(proposal) {
+  const p = proposal?.payload && typeof proposal.payload === 'object' ? proposal.payload : {};
+  const tier = Number(p.tier) || 1;
+  const lines = Array.isArray(p.warningLines) && p.warningLines.length ? p.warningLines.map(String) : p.warning ? [String(p.warning)] : [];
+  const count = typeof p.affected === 'number' ? p.affected : Array.isArray(p.affected) ? p.affected.length : Array.isArray(p.items) ? p.items.length : 1;
+  const needsTyped = p.typed === true && typeof p.confirmText === 'string' && p.confirmText !== '';
+  return {
+    title: String(p.title || proposal?.summary || 'Run an action'),
+    tone: tier >= 3 ? 'warn' : tier === 2 ? 'danger' : 'info',
+    warningLines: lines,
+    count,
+    irreversible: p.irreversible === true,
+    confirmLabel: needsTyped ? 'Confirm' : tier >= 3 ? `Confirm (${p.external === 'x' ? 'publishes to X' : 'spends or sends'})` : tier === 2 ? `Confirm (${count} ${count === 1 ? 'item' : 'items'})` : 'Confirm',
+    needsTyped,
+    confirmText: needsTyped ? p.confirmText : '',
+  };
+}
+
+/** Undo chip for a run_action/undo_action tool result: null when there is nothing to undo. */
+export function undoChipModel(toolResult) {
+  const undoId = typeof toolResult?.undoId === 'string' ? toolResult.undoId : '';
+  return undoId ? { undoId, label: 'Undo', hint: 'Restores what this action changed, if nothing changed since.' } : null;
+}
+
+/**
+ * Card state for a memory-suggest proposal: per-row text (the owner's edit, else the suggestion), skipped ids, and the
+ * body fields the decide call sends. `state` = {edits:{postId:text}, skip:string[]}.
+ * @returns {{rows:{postId:string,title:string|null,currentText:string,text:string,edited:boolean,skipped:boolean,source:string}[], edits:object, skip:string[], active:number}}
+ */
+export function memorySuggestModel(proposal, state) {
+  const rows = Array.isArray(proposal?.payload?.rows) ? proposal.payload.rows : [];
+  const skip = new Set(Array.isArray(state?.skip) ? state.skip : []);
+  const edits = state?.edits && typeof state.edits === 'object' ? state.edits : {};
+  const out = rows.map((r) => {
+    const text = typeof edits[r.postId] === 'string' ? edits[r.postId] : r.suggestion;
+    return { postId: r.postId, title: r.title ?? null, currentText: r.currentText ?? '', text, edited: text !== r.suggestion, skipped: skip.has(r.postId) || !String(text).trim(), source: r.source };
+  });
+  return {
+    rows: out,
+    edits: Object.fromEntries(out.filter((r) => r.edited && !r.skipped).map((r) => [r.postId, r.text])),
+    skip: out.filter((r) => r.skipped).map((r) => r.postId),
+    active: out.filter((r) => !r.skipped && r.text.trim()).length,
+  };
 }

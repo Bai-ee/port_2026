@@ -143,7 +143,8 @@ async function fetchTimelinesViaXApi({ handles, detail }) {
   let timeline;
   try {
     const { fetchHandleTimelines } = await import('../social-posting/twitter-service.js');
-    timeline = await fetchHandleTimelines(handles, { perHandle: detail?.latestOnly ? 1 : MAX_OWN });
+    const { withXUsage } = await import('../x-api-usage/index.js');
+    timeline = await withXUsage({ clientId, source: 'other' }, () => fetchHandleTimelines(handles, { perHandle: detail?.latestOnly ? 1 : MAX_OWN }));
   } catch (err) {
     return baseResults.map((result) => ({
       ...result,

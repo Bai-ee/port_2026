@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import crypto from 'node:crypto';
 import { config as loadDotenv } from 'dotenv';
 import { TwitterApi } from 'twitter-api-v2';
+import { instrumentXClient, recordXApiCall } from '../x-api-usage/index.js';
 import { saveSocialAccount, getSocialAccount } from './social-accounts.js';
 
 const require = createRequire(import.meta.url);
@@ -205,7 +206,7 @@ export async function completeXOAuthFlow({ code, state }) {
   });
 
   // One users.read call to pin down whose account this token controls.
-  const me = await loggedClient.v2.me();
+  const me = await instrumentXClient(loggedClient).v2.me();
 
   const tokenDoc = {
     accessToken,
@@ -358,7 +359,7 @@ export async function getXOAuth2Client(clientId = null) {
         ) {
           doc = latest.doc;
           sourceClientId = latest.sourceClientId;
-          return { client: new TwitterApi(doc.accessToken), tokens: doc, sourceClientId };
+          return { client: instrumentXClient(new TwitterApi(doc.accessToken)), tokens: doc, sourceClientId };
         }
       }
       throw invalidRefreshError(refreshError);
@@ -374,7 +375,7 @@ export async function getXOAuth2Client(clientId = null) {
     if (servedGlobal) await tokensRef().set(doc);
     else await saveSocialAccount(sourceClientId || clientId, 'x', { ...doc, authMode: 'oauth2' });
   }
-  return { client: new TwitterApi(doc.accessToken), tokens: doc, sourceClientId, tokenSource: servedGlobal ? 'global' : 'client' };
+  return { client: instrumentXClient(new TwitterApi(doc.accessToken)), tokens: doc, sourceClientId, tokenSource: servedGlobal ? 'global' : 'client' };
 }
 
 export async function getXOAuthStatus() {
@@ -442,7 +443,7 @@ function getOAuth1Client() {
     err.status = 503;
     throw err;
   }
-  return new TwitterApi({ appKey, appSecret, accessToken, accessSecret });
+  return instrumentXClient(new TwitterApi({ appKey, appSecret, accessToken, accessSecret }));
 }
 
 // App-only read of the project's monthly request usage. 2 HTTP calls (free
@@ -469,6 +470,7 @@ export async function getXUsage() {
     headers: { Authorization: `Bearer ${tokenData.access_token}` },
   });
   const usage = await usageRes.json();
+  await recordXApiCall({ endpoint: 'usage/tweets', kind: 'read', posts: 0, source: 'other', ok: usageRes.ok, status: usageRes.status });
   if (!usageRes.ok) {
     const err = new Error(usage?.detail || `Usage endpoint failed (HTTP ${usageRes.status}).`);
     err.status = usageRes.status;

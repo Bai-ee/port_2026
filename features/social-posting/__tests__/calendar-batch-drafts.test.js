@@ -47,3 +47,33 @@ test('writing the memory over the placeholder clears needsStory so the draft can
   assert.equal(approved.status, 'approved');
   assert.equal(approved.scheduledAt, null);
 });
+
+// Daily-fill drafts: the fill fields persist, "[add your take]" blocks approval like "[add your memory]", and the gate follows the text.
+const fillDraft = () => svc.ensureDraftPost('c1', {
+  idempotencyKey: 'daily-fill:2026-10-17:quote:111', source: 'daily-fill', fillKind: 'quote', reviewOn: '2026-10-17', bucketId: 'record',
+  expiresAt: '2026-10-18T12:00:00.000Z', fillSource: { type: 'quote-target', id: '111', asOf: '2026-10-17T06:00:00Z' },
+  content: '@h on this: [add your take]\n\nhttps://x.com/h/status/111', needsStory: true,
+});
+
+test('a daily-fill draft keeps fillKind / fillSource / expiresAt and cannot be approved with [add your take] in it', async () => {
+  const { post } = await fillDraft();
+  assert.equal(post.fillKind, 'quote');
+  assert.deepEqual(post.fillSource, { type: 'quote-target', id: '111', asOf: '2026-10-17T06:00:00Z' });
+  assert.equal(post.expiresAt, '2026-10-18T12:00:00.000Z');
+  assert.equal(post.status, 'draft');
+  await assert.rejects(() => svc.approveDraft('c1', post.id, { reviewedBy: 'owner' }), /needs its story/);
+  const still = await svc.updateSocialPost('c1', post.id, { content: '@h on this: [add your take] soon\n\nhttps://x.com/h/status/111' });
+  assert.equal(still.needsStory, true);
+  const done = await svc.updateSocialPost('c1', post.id, { content: '@h on this: the pressing plant story is the real one.\n\nhttps://x.com/h/status/111' });
+  assert.equal(done.needsStory, false);
+  assert.equal((await svc.approveDraft('c1', post.id, { reviewedBy: 'owner' })).status, 'approved');
+});
+
+test('the placeholder gate covers both placeholders, case-insensitively', async () => {
+  const { assertNoMemoryPlaceholder, hasMemoryPlaceholder } = await import('../self-reply.js');
+  assert.equal(hasMemoryPlaceholder('x [Add Your Take]'), true);
+  assert.equal(hasMemoryPlaceholder('x [add your memory]'), true);
+  assert.equal(hasMemoryPlaceholder('plain text'), false);
+  assert.throws(() => assertNoMemoryPlaceholder('x [add your take]'), (e) => e.status === 409 && /add your take/.test(e.message));
+  assert.throws(() => assertNoMemoryPlaceholder('x [add your memory]'), (e) => e.status === 409 && /memory/.test(e.message));
+});

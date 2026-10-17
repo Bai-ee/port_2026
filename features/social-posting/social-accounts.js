@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import { TwitterApi } from 'twitter-api-v2';
+import { instrumentXClient } from '../x-api-usage/index.js';
 import { PLATFORM_KEYS } from './platforms.js';
 import { getXOAuth2Client } from './x-oauth.js';
 
@@ -74,7 +75,7 @@ function getEnvOAuth1Client() {
   const accessToken = stripQuotes(process.env.TWITTER_ACCESS_TOKEN || '');
   const accessSecret = stripQuotes(process.env.TWITTER_ACCESS_SECRET || '');
   if (!appKey || !appSecret || !accessToken || !accessSecret) return null;
-  return new TwitterApi({ appKey, appSecret, accessToken, accessSecret });
+  return instrumentXClient(new TwitterApi({ appKey, appSecret, accessToken, accessSecret }));
 }
 
 // Resolution order for a platform's write client:
@@ -89,12 +90,12 @@ export async function getPlatformClient(clientId, platform) {
   const account = await getSocialAccount(clientId, platform);
   if (account?.oauth1?.appKey && account?.oauth1?.appSecret && account?.oauth1?.accessToken && account?.oauth1?.accessSecret) {
     return {
-      client: new TwitterApi({
+      client: instrumentXClient(new TwitterApi({
         appKey: account.oauth1.appKey,
         appSecret: account.oauth1.appSecret,
         accessToken: account.oauth1.accessToken,
         accessSecret: account.oauth1.accessSecret,
-      }),
+      })),
       authMode: 'oauth1',
       username: account.username || null,
     };

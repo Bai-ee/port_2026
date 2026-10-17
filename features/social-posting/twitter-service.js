@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { config as loadDotenv } from 'dotenv';
 import { TwitterApi } from 'twitter-api-v2';
+import { instrumentXClient } from '../x-api-usage/index.js';
 import { scoreXPost } from '../x-growth/index.js';
 import { compactTwitterError, mapTwitterError } from './twitter-errors.js';
 import { getAdapter } from './adapters/index.js';
@@ -133,7 +134,7 @@ function getTwitterClient() {
   }
 
   if (!twitterClient) {
-    twitterClient = new TwitterApi({ appKey, appSecret, accessToken, accessSecret });
+    twitterClient = instrumentXClient(new TwitterApi({ appKey, appSecret, accessToken, accessSecret }));
   }
   return twitterClient;
 }
@@ -231,11 +232,12 @@ export async function diagnoseTwitterAccess() {
   }
 }
 
-export async function readSocialQueue(clientId) {
-  const snap = await postsCol()
+export async function readSocialQueue(clientId, { limit = 0 } = {}) {
+  let q = postsCol()
     .where('clientId', '==', clientId)
-    .orderBy('createdAt', 'desc')
-    .get();
+    .orderBy('createdAt', 'desc');
+  if (Number.isFinite(limit) && limit > 0) q = q.limit(Math.floor(limit)); // optional bound; default stays unbounded
+  const snap = await q.get();
   return snap.docs.map((doc) => doc.data());
 }
 
@@ -1011,9 +1013,20 @@ function buildSocialPostRecord(clientId, payload, id) {
     // Calendar batch (features/x-content-inventory/calendar-batch.js): the day this draft is meant to be reviewed for.
     // A plain date, not a schedule: nothing publishes from it.
     ...(/^\d{4}-\d{2}-\d{2}$/.test(String(payload.reviewOn || '')) ? { reviewOn: payload.reviewOn } : {}),
+    // Daily fill (features/x-content-inventory/daily-fill.js): what kind of fill this draft is and where it came from.
+    ...(FILL_KINDS.includes(payload.fillKind) ? { fillKind: payload.fillKind } : {}),
+    ...(sanitizeFillSource(payload.fillSource) ? { fillSource: sanitizeFillSource(payload.fillSource) } : {}),
     // Content Center bucket of the source item (calendar colors). Absent => resolved from the package at read time.
     ...(/^[a-z0-9][a-z0-9-]{0,39}$/.test(String(payload.bucketId || '')) ? { bucketId: payload.bucketId } : {}),
   };
+}
+
+const FILL_KINDS = ['baseline', 'quote', 'narrative', 'client-work'];
+function sanitizeFillSource(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const type = cleanStr(v.type, 40);
+  const id = cleanStr(v.id, 200);
+  return type && id ? { type, id, asOf: cleanStr(v.asOf, 40) } : null;
 }
 
 export async function postNow(clientId, payload) {
@@ -1690,8 +1703,8 @@ async function prepareUpdate(clientId, post, payload = {}) {
   };
   const plan = storySyncPlan(post, content, null);
   if (plan?.postPatch) Object.assign(updated, plan.postPatch);
-  // Calendar-batch drafts: the story gate follows the text, so writing the memory over the placeholder unblocks approval.
-  if (post.source === 'calendar-batch' && content !== post.content && typeof payload.needsStory !== 'boolean') {
+  // Calendar-batch and daily-fill drafts: the story gate follows the text, so writing the memory over the placeholder unblocks approval.
+  if ((post.source === 'calendar-batch' || post.source === 'daily-fill') && content !== post.content && typeof payload.needsStory !== 'boolean') {
     updated.needsStory = hasMemoryPlaceholder(content) || hasMemoryPlaceholder(updated.selfReply?.text);
   }
   return { updated };
@@ -1730,7 +1743,7 @@ async function postAndRecord(snapshot) {
     const updated = {
       ...post,
       status: 'draft',
-      error: 'Skipped by due sweep: post still contains "[add your memory]".',
+      error: 'Skipped by due sweep: post still contains an unfilled placeholder ("[add your memory]" / "[add your take]").',
       updatedAt: new Date().toISOString(),
     };
     await settleClaimed(post, updated);
@@ -2177,4 +2190,9 @@ export async function searchXPosts(query, { limit = 10 } = {}) {
       : (err?.message || 'X search failed');
     return { ok: false, items: [], error: message, code };
   }
+}
+
+/** The shared X API client (read paths outside this file: strategy-accounts / quote-targets pullers). Throws when credentials are missing. */
+export function getXReadClient() {
+  return getTwitterClient();
 }

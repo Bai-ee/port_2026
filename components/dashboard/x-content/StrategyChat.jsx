@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUp, ArrowUpRight, BookOpen, Check, FileText, Plus, Sparkles } from 'lucide-react';
+import { ArrowUp, ArrowUpRight, BookOpen, Check, FileText, Plus, Shield, Sparkles } from 'lucide-react';
 import {
+  memorySuggestModel,
   proposalKindLabel, proposalPayloadPreview, proposalStatusText, chatErrorText, costFooterText, plainChatText,
   historyDiffSummary,
 } from '../../../features/x-strategy/ui-model.js';
@@ -13,6 +14,11 @@ import Badge from '../content-ui/ui/Badge';
 import IconButton from '../content-ui/ui/IconButton';
 import SectionLabel from '../content-ui/ui/SectionLabel';
 import MiniThumb from './MiniThumb.jsx';
+import ActionProposalCard from './ActionProposalCard.jsx';
+import UndoChip from './UndoChip.jsx';
+import AgentPermissionsPanel from './AgentPermissionsPanel.jsx';
+import { messageUndoChips } from '../../../features/x-strategy/action-ui-model.js';
+import MemorySuggestRows from './MemorySuggestRows.jsx';
 
 // StrategyChat - the agent chat in the Strategy tab's right column.
 //
@@ -103,7 +109,7 @@ export function formatDayTime(at) {
 
 const TONE_BY_STATUS = { pending: 'amber', ok: 'green', muted: 'grey', error: 'red' };
 
-function ProposalCard({ call, proposal, currentPlan, history, planVersion, deciding, onDecide, useModel, onUseModel, onViewPlan, onUndo, undoNote, docSections, onViewDoc }) {
+function ProposalCard({ call, proposal, currentPlan, history, planVersion, deciding, onDecide, useModel, onUseModel, memoryState, onMemoryState, onViewPlan, onUndo, undoNote, docSections, onViewDoc }) {
   const isDocEdit = proposal.kind === 'strategy-doc-edit';
   const id = proposal.id;
   // Cards made by an external assistant over MCP live in `t_mcp_<yyyymmdd>` threads (createProposalInThread).
@@ -167,6 +173,7 @@ function ProposalCard({ call, proposal, currentPlan, history, planVersion, decid
               {preview.map((line, i) => <li key={i}>{line}</li>)}
             </ul>
           ) : null}
+          {pending && proposal.kind === 'memory-suggest' ? <MemorySuggestRows proposal={proposal} state={memoryState} disabled={deciding} onChange={(next) => onMemoryState(id, next)} /> : null}
           {proposal.kind === 'item-media' && Array.isArray(proposal.payload?.rows) ? (
             <ul id={`x-strategy-proposal-item-media-thumbs-${id}`} data-section="chat-proposal-item-media" style={{ ...S.small, listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 6 }}>
               {proposal.payload.rows.slice(0, 12).map((r) => (
@@ -181,6 +188,13 @@ function ProposalCard({ call, proposal, currentPlan, history, planVersion, decid
             <div id={`x-strategy-proposal-calendar-batch-thumbs-${id}`} data-section="chat-proposal-calendar-batch" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {proposal.payload.preview.sample.filter((r) => r.packageId).map((r) => (
                 <MiniThumb key={r.packageId} id={r.packageId} call={call} nasSha={r.nasSha || null} size={44} label={`${r.reviewOn}: ${r.title}`} />
+              ))}
+            </div>
+          ) : null}
+          {proposal.kind === 'daily-fill' && Array.isArray(proposal.payload?.preview?.sample) && proposal.payload.preview.sample.some((r) => r.packageId) ? (
+            <div id={`x-strategy-proposal-daily-fill-thumbs-${id}`} data-section="chat-proposal-daily-fill" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {proposal.payload.preview.sample.filter((r) => r.packageId).map((r) => (
+                <MiniThumb key={`${r.date}-${r.packageId}`} id={r.packageId} call={call} nasSha={r.nasSha || null} size={44} label={`${r.date}: ${r.text}`} />
               ))}
             </div>
           ) : null}
@@ -277,6 +291,8 @@ export default function StrategyChat({
   const [decidingId, setDecidingId] = useState('');
   const [decideErrors, setDecideErrors] = useState({}); // proposalId -> text
   const [useModelIds, setUseModelIds] = useState({});   // proposalId -> owner ticked 'use the model' (regenerate-today)
+  const [showPermissions, setShowPermissions] = useState(false);
+  const [memoryStates, setMemoryStates] = useState({});   // proposalId -> {edits, skip} (memory-suggest card, sent with decide)
 
   const mounted = useRef(true);
   const listRef = useRef(null);
@@ -368,7 +384,7 @@ export default function StrategyChat({
       setThreadId(res.threadId || threadId);
       setMessages((m) => [
         ...m.map((x) => (x.pending ? { role: x.role, text: x.text } : x)),
-        { role: 'assistant', text: res.text || '', ...(fresh.length ? { proposalIds: fresh.map((p) => p.id) } : {}) },
+        { role: 'assistant', text: res.text || '', ...(fresh.length ? { proposalIds: fresh.map((p) => p.id) } : {}), ...(Array.isArray(res.toolResults) ? { toolResults: res.toolResults } : {}), ...(Array.isArray(res.undoIds) ? { undoIds: res.undoIds } : {}) },
       ]);
       if (fresh.length) setProposals((p) => ({ ...p, ...Object.fromEntries(fresh.map((x) => [x.id, x])) }));
       setUsed(res.turnsUsedToday); setCap(res.cap); setLastUsage(res.usage ?? null);
@@ -397,14 +413,15 @@ export default function StrategyChat({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reviewRequest?.nonce, loading]);
 
-  const decide = useCallback(async (proposal, decision) => {
+  const decide = useCallback(async (proposal, decision, extra) => {
     if (decidingId || typeof call !== 'function') return;
     const startedFor = clientId;
     setDecidingId(proposal.id);
     setDecideErrors((e) => ({ ...e, [proposal.id]: '' }));
     try {
       const options = decision === 'confirm' && proposal.kind === 'regenerate-today' && useModelIds[proposal.id] ? { useModel: true } : undefined;
-      const res = await call('strategy-proposal-decide', { clientId, threadId: proposal.threadId || threadId, proposalId: proposal.id, decision, ...(options ? { options } : {}) });
+      const memory = decision === 'confirm' && proposal.kind === 'memory-suggest' ? memorySuggestModel(proposal, memoryStates[proposal.id]) : null;
+      const res = await call('strategy-proposal-decide', { clientId, threadId: proposal.threadId || threadId, proposalId: proposal.id, decision, ...(options ? { options } : {}), ...(extra?.typed ? { typed: extra.typed } : {}), ...(memory ? { edits: memory.edits, skip: memory.skip } : {}) });
       if (!mounted.current || clientIdRef.current !== startedFor) return;
       const next = res.proposal || { ...proposal, status: decision === 'confirm' ? 'confirmed' : 'rejected' };
       setProposals((p) => ({ ...p, [proposal.id]: next }));
@@ -412,6 +429,10 @@ export default function StrategyChat({
         if (next.kind === 'plan-change' && typeof onPlanChanged === 'function') onPlanChanged();
         if (next.kind === 'refresh-handles' && typeof onRefreshed === 'function') onRefreshed();
         if (next.kind === 'strategy-doc-edit' && typeof onDocChanged === 'function') onDocChanged();
+        // The server ran nothing for a refresh: hand the groups to the dashboard's Refresh panel (one refresh system).
+        if (next.kind === 'refresh' && next.result?.clientAction === 'marketing-refresh' && Array.isArray(next.result.groups) && typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('hitloop:marketing-refresh', { detail: { ids: next.result.groups, todayWithModel: false, source: 'agent' } }));
+        }
       }
     } catch (err) {
       if (!mounted.current || clientIdRef.current !== startedFor) return;
@@ -420,7 +441,7 @@ export default function StrategyChat({
     } finally {
       if (mounted.current) setDecidingId('');
     }
-  }, [decidingId, call, clientId, threadId, useModelIds, onPlanChanged, onRefreshed, onDocChanged]);
+  }, [decidingId, call, clientId, threadId, useModelIds, memoryStates, onPlanChanged, onRefreshed, onDocChanged]);
 
   const newThread = () => {
     if (sending) return;
@@ -445,6 +466,12 @@ export default function StrategyChat({
       <div id="x-strategy-chat-header" style={S.head}>
         <h3 style={S.h}>Strategy</h3>
         <IconButton
+          id="x-strategy-chat-permissions-button"
+          label="Agent permissions"
+          icon={<Shield size={18} />}
+          onClick={() => setShowPermissions((v) => !v)}
+        />
+        <IconButton
           id="x-strategy-chat-new-thread-button"
           label="New thread"
           icon={<Plus size={18} />}
@@ -452,6 +479,8 @@ export default function StrategyChat({
           onClick={newThread}
         />
       </div>
+
+      {showPermissions ? <AgentPermissionsPanel clientId={clientId} call={call} /> : null}
 
       <div id="x-strategy-chat-messages" ref={listRef} role="log" aria-live="polite" style={S.list}>
         {loading ? <div id="x-strategy-chat-loading" className="xce-empty">Loading chat…</div> : null}
@@ -505,10 +534,18 @@ export default function StrategyChat({
             <div key={n} id={`x-strategy-chat-message-${n}`} data-role={m.role} style={{ display: 'grid', minWidth: 0 }}>
               <div id={`x-strategy-chat-message-text-${n}`} style={m.role === 'user' ? S.userBubble : S.botBubble}>{plainChatText(m.text)}</div>
               {clock ? <div id={`x-strategy-chat-message-time-${n}`} style={{ ...S.time, justifySelf: m.role === 'user' ? 'end' : 'start' }}>{clock}</div> : null}
+              {m.role === 'assistant' && messageUndoChips(m).length ? (
+                <div id={`x-strategy-chat-message-undo-${n}`}>
+                  {messageUndoChips(m).map((c) => <UndoChip key={c.undoId} undoId={c.undoId} label={c.label} call={call} clientId={clientId} />)}
+                </div>
+              ) : null}
               {ids.length ? (
                 <div id={`x-strategy-chat-message-proposals-${n}`} style={S.cardsCol}>
                   {ids.map((pid) => (
                     <div key={pid} style={{ display: 'grid', gap: 4, minWidth: 0 }}>
+                      {proposals[pid].kind === 'action' ? (
+                        <ActionProposalCard proposal={proposals[pid]} deciding={decidingId === pid} onDecide={decide} />
+                      ) : (
                       <ProposalCard
                         call={call}
                         proposal={proposals[pid]}
@@ -518,6 +555,8 @@ export default function StrategyChat({
                         deciding={decidingId === pid}
                         onDecide={decide}
                         useModel={useModelIds[pid]}
+                        memoryState={memoryStates[pid]}
+                        onMemoryState={(proposalId, next) => setMemoryStates((m) => ({ ...m, [proposalId]: next }))}
                         onUseModel={(id, on) => setUseModelIds((u) => ({ ...u, [id]: on }))}
                         onViewPlan={onViewPlan}
                         onUndo={onUndo}
@@ -525,6 +564,7 @@ export default function StrategyChat({
                         docSections={docSections}
                         onViewDoc={onViewDoc}
                       />
+                      )}
                       {decideErrors[pid] ? <div id={`x-strategy-proposal-error-${pid}`} role="alert" style={{ ...S.err, margin: 0 }}>{decideErrors[pid]}</div> : null}
                     </div>
                   ))}

@@ -1,15 +1,25 @@
 // Unified Refresh — group catalog + per-viewer "last refreshed" memory.
 // Pure data/helpers (no React). See docs/plans/MARKETING-DIRECTOR-UNIFICATION-MASTER-PLAN.md section 5.
+import { estimateCorporaPull, estimateQuoteScan } from '../../../features/x-strategy/x-api-estimate.js';
 
 export const REFRESH_GROUPS = [
   { id: 'market-signals', n: 1, label: 'Market signals', updates: 'Scout brief, watchlist timelines, analysis skills (no X search)', cost: 'Scout ≈$0.10 + ScrapeCreators credits + model calls', paid: true, defaultOn: false },
   { id: 'x-search', n: 2, label: 'X search', updates: 'Opportunity Signals on X (and Market Talk on X if enabled in the digest)', cost: 'Paid X API — about 1 call per enabled Opportunity query row; if Market Talk is on in the digest it also runs Scout + ScrapeCreators searches', paid: true, defaultOn: false },
   { id: 'analysis', n: 3, label: 'Analysis', updates: 'Reddit / Instagram / opportunity analyzers, strategy and reply targets, brief summaries, hosted brief', cost: 'Model calls', paid: true, defaultOn: false },
-  { id: 'strategy-accounts', n: 4, label: 'Strategy accounts', updates: 'Posts for you and every benchmark account', cost: 'Free — Mac worker via bird', paid: false, defaultOn: false },
+  { id: 'strategy-accounts', n: 4, label: 'Strategy accounts', updates: 'Posts for you and every benchmark account', cost: 'Free — Mac worker via bird (or paid X API when that source is selected)', paid: false, defaultOn: false },
   { id: 'today-queue', n: 5, label: 'Today and queue', updates: "Today's suggestions, month calendar, post results", cost: 'Free (model copy is paid, optional)', paid: false, defaultOn: false },
   { id: 'x-monitor', n: 6, label: 'X Monitor', updates: 'Profile counters, posts, follower roster for the connected account', cost: 'Paid X API — about 2 metered calls plus 1 per 1,000 followers', paid: true, defaultOn: false },
   { id: 'renders', n: 7, label: 'Renders', updates: 'Creative and video modules', cost: 'Render cost (studio/video)', paid: true, defaultOn: false },
+  { id: 'quote-targets', n: 8, label: 'Quote targets', updates: 'Posts worth quote-reacting to, from the watchlist (last 36h)', cost: 'Free — scanned on the Mac (launchd) via bird; paid X API when that source is selected', paid: false, defaultOn: false },
 ];
+
+// Per-client data source of the two X data groups (client_configs xGrowth.dataSources): 'mac' (free, bird) | 'x-api' (paid).
+// The group is paid only when its source is 'x-api'. dataSources comes from ctx.dataSources / selection.dataSources.
+export const SOURCE_KEY_OF_GROUP = Object.freeze({ 'strategy-accounts': 'strategyAccounts', 'quote-targets': 'quoteTargets' });
+export function isXApiSource(groupId, dataSources) {
+  const key = SOURCE_KEY_OF_GROUP[groupId];
+  return !!key && dataSources?.[key] === 'x-api';
+}
 
 // selection = { ids: string[], todayWithModel: boolean } -> [{ id, label, cost }] for the paid groups selected.
 // Group 5 counts as paid only when its "with model copy" option is on.
@@ -19,12 +29,12 @@ export function paidGroupsFor(selection, ctx) {
   const withModel = !!selection?.todayWithModel;
   return REFRESH_GROUPS
     .filter((g) => ids.includes(g.id))
-    .filter((g) => g.paid || (g.id === 'today-queue' && withModel))
+    .filter((g) => g.paid || (g.id === 'today-queue' && withModel) || isXApiSource(g.id, selection?.dataSources ?? ctx?.dataSources))
     .map((g) => ({
       id: g.id,
       label: g.label,
-      cost: g.id === 'today-queue' ? 'Model calls for draft copy' : g.cost,
-      ...(ctx ? { estimate: estimateFor(g.id, { ...ctx, todayWithModel: withModel }) } : {}),
+      cost: g.id === 'today-queue' ? 'Model calls for draft copy' : SOURCE_KEY_OF_GROUP[g.id] ? sourceCostText(g.id, selection?.dataSources ?? ctx?.dataSources) : g.cost,
+      ...(ctx ? { estimate: estimateFor(g.id, { ...ctx, dataSources: selection?.dataSources ?? ctx?.dataSources, todayWithModel: withModel }) } : {}),
     }));
 }
 
@@ -43,6 +53,11 @@ export function paidGroupsFor(selection, ctx) {
 //     per-slot copy cost, render cost.
 // ---------------------------------------------------------------------------
 const SCOUT_RUN_USD = 0.1;
+
+function sourceCostText(groupId, dataSources) {
+  if (isXApiSource(groupId, dataSources)) return 'Paid X API — calls and posts counted in the estimate';
+  return groupId === 'quote-targets' ? 'Free — scanned on the Mac (launchd) via bird' : 'Free — Mac worker via bird';
+}
 const money = (n) => `$${n.toFixed(2)}`;
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
@@ -91,8 +106,19 @@ export function estimateFor(groupId, ctx = {}) {
       if (skills === null) return fallback;
       return { text: `Model calls · ${plural(skills, 'skill', 'skills')} on`, usd: null };
     }
-    case 'strategy-accounts':
-      return { text: 'free', usd: 0 };
+    case 'strategy-accounts': {
+      if (!isXApiSource('strategy-accounts', c.dataSources)) return { text: 'free', usd: 0 };
+      const x = cfg?.xGrowth;
+      const handles = [x?.ownHandle, ...(Array.isArray(x?.benchmarkHandles) ? x.benchmarkHandles : [])].filter(Boolean).length;
+      const e = estimateCorporaPull({ handles });
+      return { text: `paid X API · up to ${plural(e.calls, 'call', 'calls')} · ${e.maxPosts.toLocaleString('en-US')} posts max`, usd: null, calls: e.calls, maxPosts: e.maxPosts };
+    }
+    case 'quote-targets': {
+      if (!isXApiSource('quote-targets', c.dataSources)) return { text: 'free', usd: 0 };
+      const accounts = Array.isArray(cfg?.xGrowth?.watchlist) ? cfg.xGrowth.watchlist.length : 0;
+      const e = estimateQuoteScan({ accounts });
+      return { text: `paid X API · up to ${plural(e.calls, 'call', 'calls')} · ${e.maxPosts.toLocaleString('en-US')} posts max`, usd: null, calls: e.calls, maxPosts: e.maxPosts };
+    }
     case 'today-queue': {
       if (!c.todayWithModel) return { text: 'free', usd: 0 };
       const n = Number(c.todaySlots);
@@ -134,4 +160,26 @@ export function markGroupRefreshed(id) {
   } catch {
     /* storage unavailable — last-refreshed simply isn't remembered */
   }
+}
+
+// ---------------------------------------------------------------------------
+// Freshness per group. Pure. Server asOf (when provided) wins over the per-viewer
+// "last refreshed" memory only if it is newer; with neither, asOf is null.
+// -> { asOf: ISO|null, ageHours: number|null, stale: boolean, source: 'server'|'local'|null }
+// A group with no known asOf is stale. Default threshold is 24h.
+// ---------------------------------------------------------------------------
+export const DEFAULT_STALE_HOURS = 24;
+
+export function groupFreshness(groupId, { lastRefreshed, serverAsOf, now, staleAfterHours } = {}) {
+  const ts = (v) => { const t = v ? Date.parse(v) : NaN; return Number.isFinite(t) ? t : null; };
+  const local = ts(lastRefreshed?.[groupId]);
+  const server = ts(serverAsOf?.[groupId]);
+  const nowMs = Number.isFinite(now) ? now : ts(now) ?? Date.now();
+  let best = null; let source = null;
+  if (server !== null) { best = server; source = 'server'; }
+  if (local !== null && (best === null || local > best)) { best = local; source = 'local'; }
+  if (best === null) return { asOf: null, ageHours: null, stale: true, source: null };
+  const ageHours = Math.max(0, (nowMs - best) / 3600000);
+  const limit = Number(staleAfterHours) > 0 ? Number(staleAfterHours) : DEFAULT_STALE_HOURS;
+  return { asOf: new Date(best).toISOString(), ageHours, stale: ageHours > limit, source };
 }

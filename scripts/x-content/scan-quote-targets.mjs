@@ -41,10 +41,11 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readClientWatchlist, resolveScanClients, selectScanTargets } from '../../features/x-quote-targets/client-watchlist.js';
+import { buildQuoteTargetsPayload } from '../../features/x-quote-targets/scan-core.js';
 import { rankQuoteTargets, DEFAULT_WINDOW_HOURS } from '../../features/x-quote-targets/rank.js';
 import { planListFetches } from '../../features/x-quote-targets/scan-plan.js';
 import {
-  collectTrackLists, toCandidate, toListCandidate, trimListPosts, buildListSignalsPayload,
+  collectTrackLists, toListCandidate, trimListPosts, buildListSignalsPayload,
 } from '../../features/x-quote-targets/list-signals-scan.js';
 import { tracksOf, parseListId, sanitizeListLabel } from '../../features/x-strategy/content-tracks.js';
 import { STRATEGY_COLLECTIONS } from '../../features/x-strategy/contracts.js';
@@ -297,21 +298,11 @@ async function scanHandles(clientId, watchlist, handleBudget) {
     }
   }
 
-  const ranked = rankQuoteTargets(pool, { limit: args.limit, windowHours: args.windowHours, watchlist });
-
-  const candidates = ranked.map(toCandidate);
-
-  const payload = {
-    generatedAt: new Date().toISOString(),
-    method: 'bird user-tweets (local, free)',
-    windowHours: args.windowHours,
-    scanned: targets.length,
-    succeeded: targets.length - failures.length - rateLimited.length,
-    pooled: pool.length,
-    failures,
-    rateLimited,
-    candidates,
-  };
+  const payload = buildQuoteTargetsPayload({
+    pool, watchlist, scanned: targets.length, failures, rateLimited,
+    method: 'bird user-tweets (local, free)', limit: args.limit, windowHours: args.windowHours,
+  });
+  const { candidates } = payload;
 
   console.log(`\n[${clientId}] pooled ${pool.length} posts from ${payload.succeeded}/${targets.length} accounts` +
     `${rateLimited.length ? `, ${rateLimited.length} rate-limited` : ''}` +

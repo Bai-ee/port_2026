@@ -172,7 +172,8 @@ async function runScoutTest({ clientId, platform, clientConfig = {} }) {
     if (xHandles.length) {
       try {
         const { fetchHandleTimelines } = await import('../social-posting/twitter-service.js');
-        const tl = await fetchHandleTimelines(xHandles, { perHandle: 5 });
+        const { withXUsage } = await import('../x-api-usage/index.js');
+        const tl = await withXUsage({ clientId, source: 'other' }, () => fetchHandleTimelines(xHandles, { perHandle: 5 }));
         if (tl.ok && tl.items.length) {
           result = {
             ok: true,
