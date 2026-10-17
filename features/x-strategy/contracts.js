@@ -93,10 +93,12 @@ export const PROPOSAL_KINDS = Object.freeze([
   'refresh',
   'queue-bulk',
   'bucket-edit',
+  'memory-suggest',
+  'media-tasks',
 ]);
 
 /** Bulk kinds: one card covers many items, so they do not count toward the agent's per-turn proposal cap. */
-export const BULK_PROPOSAL_KINDS = Object.freeze(['calendar-batch', 'item-media', 'daily-fill', 'queue-bulk', 'refresh']);
+export const BULK_PROPOSAL_KINDS = Object.freeze(['calendar-batch', 'item-media', 'daily-fill', 'queue-bulk', 'refresh', 'memory-suggest', 'media-tasks']);
 export const MAX_BULK_PROPOSALS_PER_TURN = 4;
 
 /** Limits for the admin-level bulk kinds. */
@@ -139,6 +141,8 @@ export const PROPOSAL_KIND_ACTIONS = Object.freeze({
   refresh: 'marketing-refresh', // client-side: the server runs nothing; the dashboard Refresh panel runs the groups (window event)
   'queue-bulk': 'queue-bulk', // approve (existing approveDraft gate) | unschedule | delete-draft (reject) | set-review-date; never schedules or publishes
   'bucket-edit': 'upsert-bucket', // quote-targets upsert-bucket / delete-bucket, then syncTracks
+  'memory-suggest': 'update', // social-posting `update` per post (updateSocialPost, revision-checked): replaces a placeholder with the owner-approved line; never approves or schedules
+  'media-tasks': 'content-task-create', // content_tasks reminders only (x-content-inventory/content-tasks.js); never touches a post or an item
 });
 
 export const PROPOSAL_STATUSES = Object.freeze(['pending', 'deciding', 'confirmed', 'rejected', 'failed']);

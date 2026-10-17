@@ -296,6 +296,10 @@ export default function ContentUiStyles() {
         .xce-scope .xce-mc-chip-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .xce-scope .xce-mc-fill-badge { margin-left: 6px; padding: 0 6px; border: 1px solid color-mix(in srgb, var(--t-text) 30%, transparent); border-radius: 999px; font-size: 11px; }
         .xce-scope .xce-mc-fill-closed { margin-left: 6px; font-size: 11px; color: var(--t-danger); }
+        .xce-scope .xce-mc-task { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 4px 8px; border: 1px dashed color-mix(in srgb, var(--t-text) 40%, transparent); border-radius: 8px; list-style: none; }
+        .xce-scope .xce-mc-task-done .xce-mc-task-title { text-decoration: line-through; opacity: 0.55; }
+        .xce-scope .xce-mc-task-badge { flex: 0 0 auto; padding: 0 8px; border-radius: 999px; background: var(--t-text); color: var(--t-surface); font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; }
+        .xce-scope .xce-mc-task-title { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; font-size: 13px; }
         .xce-scope .xce-mc-row-expired { opacity: 0.5; }
         .xce-scope .xce-mc-chip.xce-mc-state-pending { border-style: dashed; border-color: color-mix(in srgb, var(--t-text) 30%, transparent); background: transparent; color: color-mix(in srgb, var(--t-text) 50%, transparent); }
         .xce-scope .xce-mc-chip.xce-mc-state-awaiting { border-style: dashed; border-color: color-mix(in srgb, var(--t-text) 30%, transparent); background: transparent; color: color-mix(in srgb, var(--t-text) 50%, transparent); }

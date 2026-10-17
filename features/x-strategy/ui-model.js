@@ -395,6 +395,8 @@ const PROPOSAL_KIND_LABELS = Object.freeze({
   refresh: 'Refresh stale data',
   'queue-bulk': 'Change several queued posts',
   'bucket-edit': 'Change a content bucket',
+  'memory-suggest': 'Suggested memory lines',
+  'media-tasks': 'Add "to film" reminders',
 });
 
 /** Plain-words label for a proposal kind. Unknown kinds fall back to a readable form, never throw. */
@@ -554,6 +556,18 @@ export function proposalPayloadPreview(kind, payload, currentPlan) {
     case 'refresh': return refreshPreview(p);
     case 'queue-bulk': return queueBulkPreview(p);
     case 'bucket-edit': return bucketEditPreview(p);
+    case 'memory-suggest': return [
+      `${(p.rows || []).length} draft${(p.rows || []).length === 1 ? '' : 's'} still need your memory line. These are SUGGESTIONS: edit or skip each one below.`,
+      'Only replaces the placeholder text. Nothing is approved, scheduled or published.',
+    ];
+    case 'media-tasks': {
+      const rows = p.rows || [];
+      return [
+        `${rows.length} reminder${rows.length === 1 ? '' : 's'}, due ${rows[0]?.dueOn ?? ''}${rows.length > 1 ? ` to ${rows[rows.length - 1]?.dueOn ?? ''}` : ''}, shown on the month calendar.`,
+        ...rows.slice(0, 5).map((r) => `${r.dueOn}: ${r.title}`),
+        'Reminders only: no post or item changes.',
+      ];
+    }
     case 'item-media': {
       const rows = Array.isArray(p.rows) ? p.rows : p.links || [];
       const videos = rows.filter((r) => r.kind === 'video').length;
@@ -585,6 +599,8 @@ const RESULT_LINES = {
   refresh: (r) => (r?.clientAction === 'marketing-refresh' ? 'Running in Refresh panel' : 'Refresh requested.'),
   'queue-bulk': (r) => `${r?.done ?? 0} post${r?.done === 1 ? '' : 's'} updated${r?.failed ? `, ${r.failed} could not be (${(r.results || []).slice(0, 2).map((x) => x.reason).filter(Boolean).join('; ')})` : ''}.`,
   'bucket-edit': (r) => (r?.op === 'delete' ? 'Bucket deleted.' : r?.created ? 'Bucket added.' : 'Bucket saved.'),
+  'memory-suggest': (r) => `${r?.updated ?? 0} draft${r?.updated === 1 ? '' : 's'} updated${r?.skipped ? `, ${r.skipped} skipped` : ''}${r?.failed ? `, ${r.failed} could not be (${(r.results || []).slice(0, 2).map((x) => x.reason).filter(Boolean).join('; ')})` : ''}. They still need your approval.`,
+  'media-tasks': (r) => `${r?.created ?? 0} reminder${r?.created === 1 ? '' : 's'} added to the calendar${r?.existing ? `, ${r.existing} already there` : ''}.`,
   'post-edit': (r) => (r?.status ? `Post updated. It is now ${r.status}${r.scheduledAt ? ` for ${r.scheduledAt}` : ''} \u2014 check the Queue tab.` : 'Post updated \u2014 check the Queue tab.'),
 };
 
@@ -922,4 +938,25 @@ export function stageErrorText(err) {
   const msg = String(err?.message || '');
   if (/analyzer|offline|worker/i.test(msg)) return `The Mac analyzer is offline or not registered, so nothing was queued. ${msg}`.trim();
   return msg || 'Could not queue the staging upload.';
+}
+
+/**
+ * Card state for a memory-suggest proposal: per-row text (the owner's edit, else the suggestion), skipped ids, and the
+ * body fields the decide call sends. `state` = {edits:{postId:text}, skip:string[]}.
+ * @returns {{rows:{postId:string,title:string|null,currentText:string,text:string,edited:boolean,skipped:boolean,source:string}[], edits:object, skip:string[], active:number}}
+ */
+export function memorySuggestModel(proposal, state) {
+  const rows = Array.isArray(proposal?.payload?.rows) ? proposal.payload.rows : [];
+  const skip = new Set(Array.isArray(state?.skip) ? state.skip : []);
+  const edits = state?.edits && typeof state.edits === 'object' ? state.edits : {};
+  const out = rows.map((r) => {
+    const text = typeof edits[r.postId] === 'string' ? edits[r.postId] : r.suggestion;
+    return { postId: r.postId, title: r.title ?? null, currentText: r.currentText ?? '', text, edited: text !== r.suggestion, skipped: skip.has(r.postId) || !String(text).trim(), source: r.source };
+  });
+  return {
+    rows: out,
+    edits: Object.fromEntries(out.filter((r) => r.edited && !r.skipped).map((r) => [r.postId, r.text])),
+    skip: out.filter((r) => r.skipped).map((r) => r.postId),
+    active: out.filter((r) => !r.skipped && r.text.trim()).length,
+  };
 }
