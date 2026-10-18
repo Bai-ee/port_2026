@@ -205,8 +205,9 @@ export async function completeXOAuthFlow({ code, state }) {
     redirectUri: pending.redirectUri,
   });
 
-  // One users.read call to pin down whose account this token controls.
-  const me = await instrumentXClient(loggedClient).v2.me();
+  // One users.read call to pin down whose account this token controls (the profile image rides on the same call, so
+  // post previews can show the real account without another metered read).
+  const me = await instrumentXClient(loggedClient).v2.me({ 'user.fields': ['profile_image_url'] });
 
   const tokenDoc = {
     accessToken,
@@ -216,6 +217,8 @@ export async function completeXOAuthFlow({ code, state }) {
     userId: me?.data?.id || null,
     username: me?.data?.username || null,
     name: me?.data?.name || null,
+    // X serves a 48px "_normal" image; the "_400x400" variant of the same file is the crisp one.
+    profileImageUrl: me?.data?.profile_image_url ? String(me.data.profile_image_url).replace('_normal.', '_400x400.') : null,
     connectedBy: pending.startedBy || null,
     updatedAt: Date.now(),
   };

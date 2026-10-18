@@ -3,7 +3,8 @@
 import { useCalendarProps } from './standalone.js';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Check, ChevronLeft, ChevronRight, RefreshCw, X } from 'lucide-react';
-import { Skeleton, RetryError } from '../content-ui/Feedback.jsx';
+import { RetryError } from '../content-ui/Feedback.jsx';
+import LoadingRing from '../content-ui/ui/LoadingRing';
 import StagePostLevel from '../calendar-stage/StagePostLevel.jsx';
 import { ENGINE_TAG, STATE_LABEL, StateDot, dayHeading } from './calendar-bits.jsx';
 import { ApprovalMark, FilterChips, InlineApprovalButtons, SuggestionRow, CalendarApprovalStyles } from './CalendarApprovalBits.jsx';
@@ -401,7 +402,7 @@ function MonthCalendarPanelView({
     return (
       <>
         {error ? <RetryError id="x-content-day-view-error" message={typeof error === 'string' ? error : 'Could not load the calendar.'} onRetry={onRefresh} busy={!!loading} /> : null}
-        {!dayRowsNow && !error ? <Skeleton id="x-content-day-view-loading" rows={4} variant="tile" /> : null}
+        {!dayRowsNow && !error ? <LoadingRing id="x-content-day-view-loading" label="Loading the day" minHeight={240} /> : null}
         {dayRowsNow ? (
           <DayBody
             day={dayRowsNow}
@@ -502,7 +503,7 @@ function MonthCalendarPanelView({
       {inlineNote ? <p id="x-content-month-inline-note" className="xce-ap-note" role="alert">{inlineNote}</p> : null}
 
       {error ? <RetryError id="x-content-month-error" message={typeof error === 'string' ? error : 'Could not load the calendar.'} onRetry={onRefresh} busy={!!loading} /> : null}
-      {loading && !calendar ? <Skeleton id="x-content-month-loading" rows={5} variant="tile" /> : null}
+      {loading && !calendar ? <LoadingRing id="x-content-month-loading" label="Loading the calendar" minHeight={320} /> : null}
 
       {calendar && view === 'month' ? (
         <>

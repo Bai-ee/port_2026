@@ -11,6 +11,7 @@
 // clientName, clientHandle, avatarUrl, timeZone }, onRefresh (reload the calendar after a change).
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import LoadingRing from '../content-ui/ui/LoadingRing';
 import PostEditor from '../x-content/PostEditor.jsx';
 import CreativePicker from '../x-content/CreativePicker.jsx';
 import { MEDIA_CHANGED_MESSAGE } from '../x-content/post-editor-model.js';
@@ -131,7 +132,7 @@ export default function StagePostLevel({ postId, row, calendarReady, stage, onRe
   ) : null;
 
   if (!calendarReady && !editorRow) {
-    return <p id="calendar-stage-post-loading" role="status" className="calendar-stage-post-muted">Loading post…</p>;
+    return <LoadingRing id="calendar-stage-post-loading" label="Loading post" />;
   }
 
   return (

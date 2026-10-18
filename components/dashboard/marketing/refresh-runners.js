@@ -37,6 +37,37 @@ const quoteCall = (ctx, action, body = {}) => request(ctx, QUOTE_TARGETS, { body
 const okLine = (prefix, text) => ({ type: 'ok', prefix, text });
 const dimLine = (prefix, text) => ({ type: 'dim', prefix, text });
 
+// Mac-source groups: the server queues a request the Mac refresh worker (launchd, every 60 s) runs with bird. Follow it
+// live in the run terminal until it finishes; give up waiting (not the request) after a few minutes.
+const MAC_POLL_MS = 5000;
+const MAC_WAIT_MS = 6 * 60 * 1000;
+const MAC_TERMINAL = new Set(['done', 'partial', 'failed', 'rate-limited', 'bird-unavailable']);
+function macLine(health) {
+  const age = health?.ageMinutes;
+  if (health?.state === 'never') return 'Your Mac refresh worker has never checked in. Is the launchd job installed?';
+  if (typeof age === 'number' && age > 3) return `Your Mac last checked in ${age} min ago. Is it awake and logged in?`;
+  return null;
+}
+async function followMacRequest(ctx, { statusAction, requestId, label }) {
+  const note = typeof ctx.note === 'function' ? ctx.note : () => {};
+  const started = Date.now();
+  let last = '';
+  let warned = false;
+  while (Date.now() - started < MAC_WAIT_MS) {
+    // eslint-disable-next-line no-await-in-loop
+    const st = await quoteCall(ctx, statusAction, { clientId: ctx.clientId, requestId }).catch(() => null);
+    const req = st?.request;
+    if (req && MAC_TERMINAL.has(req.status)) return { request: req, health: st.workerHealth };
+    const now = req?.status === 'running' ? `${label}: running on your Mac…` : `${label}: queued — your Mac picks it up within a minute…`;
+    if (now !== last) { note(now); last = now; }
+    const warn = macLine(st?.workerHealth);
+    if (warn && !warned) { note(warn); warned = true; }
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise((r) => setTimeout(r, MAC_POLL_MS));
+  }
+  return { request: null, timedOut: true };
+}
+
 function requireClient(ctx) {
   if (!ctx?.clientId) throw new Error('No client loaded — pre-digest-refresh not wired without a clientId.');
   return ctx.clientId;
@@ -92,7 +123,16 @@ export const GROUP_RUNNERS = {
       return { detail: [okLine('[ACCOUNTS]', `Pulled via the X API — ${done}/${Object.keys(res?.handles || {}).length} account(s), ${res?.calls ?? '?'} call(s), ${res?.posts ?? '?'} post(s)${res?.stopped ? ` — stopped: ${res.stopped}` : ''}`)] };
     }
     const res = await quoteCall(ctx, 'strategy-refresh', { clientId: ctx.clientId });
-    return { detail: [okLine('[ACCOUNTS]', `Queued for the Mac worker${res?.requestId ? ` (request ${res.requestId})` : ''} — status ${res?.status || 'queued'}`)] };
+    if (!res?.requestId) return { detail: [dimLine('[ACCOUNTS]', `Not queued (${res?.status || 'no request id'}).`)] };
+    const out = await followMacRequest(ctx, { statusAction: 'strategy-refresh-status', requestId: res.requestId, label: 'Strategy accounts' });
+    if (out.timedOut) return { detail: [dimLine('[ACCOUNTS]', 'Still waiting on your Mac. It stays queued and runs when the Mac checks in.')] };
+    const handles = Object.values(out.request.results || {});
+    const done = handles.filter((h) => h.status === 'done' || h.status === 'partial').length;
+    const added = handles.reduce((n, h) => n + (Number(h.added) || 0), 0);
+    const line = `Mac pull ${out.request.status} — ${done}/${handles.length} account(s), ${added} new post(s)`;
+    if (out.request.status === 'done' || out.request.status === 'partial') return { detail: [okLine('[ACCOUNTS]', line)] };
+    if (out.request.status === 'rate-limited') return { detail: [dimLine('[ACCOUNTS]', `${line}. X rate-limited the pull; try again in ~15 min.`)] };
+    throw new Error(`Strategy accounts: ${line}${out.request.error ? ` (${out.request.error})` : ''}`);
   },
 
   // Group 8 — quote-target scan. X API source: runs on the server (paid, inline); Mac source: the scan runs locally, nothing to start here.
@@ -104,7 +144,15 @@ export const GROUP_RUNNERS = {
       return { detail: [okLine('[QUOTES]', `Scanned via the X API — ${res?.succeeded ?? '?'}/${res?.scanned ?? '?'} account(s), ${res?.candidates ?? 0} candidate(s), ${res?.calls ?? '?'} call(s), ${res?.posts ?? '?'} post(s)${res?.stopped ? ` — stopped: ${res.stopped}` : ''}`)] };
     }
     const res = await quoteCall(ctx, 'quote-scan-refresh', { clientId: ctx.clientId });
-    return { detail: [dimLine('[QUOTES]', res?.instructions || 'The quote scan runs on your Mac (launchd). Switch this source to the X API to scan from the server.')] };
+    if (!res?.requestId) return { detail: [dimLine('[QUOTES]', res?.instructions || 'The quote scan runs on your Mac (launchd).')] };
+    const out = await followMacRequest(ctx, { statusAction: 'quote-scan-status', requestId: res.requestId, label: 'Quote targets' });
+    if (out.timedOut) return { detail: [dimLine('[QUOTES]', 'Still waiting on your Mac. It stays queued and runs when the Mac checks in.')] };
+    const r = out.request.result || {};
+    const line = `Mac scan ${out.request.status} — ${r.candidates ?? 0} candidate(s) from ${r.succeeded ?? '?'}/${r.scanned ?? '?'} account(s)`;
+    if (r.note) return { detail: [dimLine('[QUOTES]', r.note)] };
+    if (out.request.status === 'done') return { detail: [okLine('[QUOTES]', line)] };
+    if (out.request.status === 'rate-limited') return { detail: [dimLine('[QUOTES]', `${line}. X rate-limited the scan; try again in ~15 min.`)] };
+    throw new Error(`Quote targets: ${line}${out.request.error ? ` (${out.request.error})` : ''}`);
   },
 
   // Group 5 — free; draft copy via model only when the option is on. Results are not stored here.
@@ -116,9 +164,11 @@ export const GROUP_RUNNERS = {
     detail.push(okLine('[TODAY]', run?.skipped ? `Inputs unchanged (${run.reason || 'no change'}) — saved run kept` : `${count} suggestion(s) generated${withModel ? ' with model copy' : ' (no model)'}`));
     const month = new Date().toISOString().slice(0, 7);
     const cal = await quoteCall(ctx, 'month-calendar', { month });
-    detail.push(okLine('[CALENDAR]', `Month ${month} reloaded${Array.isArray(cal?.calendar?.days) ? ` (${cal.calendar.days.length} days)` : ''}`));
+    const days = Array.isArray(cal?.calendar?.weeks) ? cal.calendar.weeks.flat().filter(Boolean).length : null;
+    detail.push(okLine('[CALENDAR]', `Month ${month} reloaded${days ? ` (${days} days)` : ''}`));
     const results = await quoteCall(ctx, 'post-results');
-    detail.push(okLine('[RESULTS]', `Post results reloaded${Array.isArray(results?.posts) ? ` (${results.posts.length})` : ''}`));
+    const list = Array.isArray(results?.results) ? results.results : (Array.isArray(results?.posts) ? results.posts : null);
+    detail.push(okLine('[RESULTS]', `Post results reloaded${list ? ` (${list.length})` : ''}`));
     return { detail };
   },
 

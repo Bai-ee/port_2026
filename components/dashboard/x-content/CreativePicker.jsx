@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Search, X } from 'lucide-react';
+import LoadingRing from '../content-ui/ui/LoadingRing';
 import MiniThumb from './MiniThumb.jsx';
 import { PICKER_FILTERS, pickerTiles } from './creative-picker-model.js';
 
@@ -71,7 +72,7 @@ export default function CreativePicker({ clientId, getIdToken, onPick, onCancel,
         </div>
       </div>
 
-      {loading ? <p id="creative-picker-status" className="creative-picker-note" role="status">Loading your library…</p> : null}
+      {loading ? <LoadingRing id="creative-picker-status" label="Loading your library" size={28} minHeight={120} /> : null}
       {error ? <p id="creative-picker-error" className="creative-picker-note is-error" role="alert">{error}</p> : null}
       {!loading && !error && !tiles.length ? <p id="creative-picker-empty" className="creative-picker-note">Nothing matches. Try another search or filter.</p> : null}
 

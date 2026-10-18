@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import LoadingRing from '../content-ui/ui/LoadingRing';
 import { ChevronDown, ImagePlus } from 'lucide-react';
 import { useMarketingContentCall } from '../marketing/useMarketingContentCall.js';
 import MiniThumb from './MiniThumb.jsx';
 import {
-  MAX_CHARS, MEDIA_CHANGED_MESSAGE, charCount, isOverLimit, initialWhen, whenToIso, zoneLabel, resolveTimeZone,
-  isSuggestion, isLockedRow, statusPill, boundFields, boundFieldsGate, boundFieldsNotice, dirtyState, actionState, isScheduledStatus,
+  MAX_CHARS, MEDIA_CHANGED_MESSAGE, charCount, isOverLimit, initialWhen, zoneLabel, resolveTimeZone,
+  isSuggestion, isLockedRow, boundFields, boundFieldsGate, boundFieldsNotice, dirtyState, actionState, isScheduledStatus,
   buildSaveRequest, buildApproveRequest, buildApproveScheduleRequest, buildSuggestionApproveRequest, buildUnapproveRequest,
   buildRejectRequest, buildUnscheduleRequest, buildReconcileRequest, moreItems, classifyError, approvalVoided, mediaChanged, mergeServerPost,
 } from './post-editor-model.js';
@@ -118,7 +119,7 @@ function HiresPanel({ row, call, onUsed }) {
     } catch (e) { setErr(e?.message || 'Could not use that file.'); } finally { setBusyId(null); }
   };
   if (!eligible) return <p id="post-editor-hires-unavailable" className="pe-muted">High-res is only available for drive (NAS) pictures on an editable post.</p>;
-  if (!info) return <p id="post-editor-hires-loading" className="pe-muted">Looking for bigger copies…</p>;
+  if (!info) return <LoadingRing id="post-editor-hires-loading" label="Looking for bigger copies" size={24} minHeight={64} />;
   if (!info.ok || !info.target?.isThumbnail || !info.candidates?.length) return <p id="post-editor-hires-none" className="pe-muted">No bigger copy found. The current picture is already the original.</p>;
   return (
     <div id="post-editor-hires-panel" className="pe-sub">
@@ -211,7 +212,6 @@ export default function PostEditor({
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(t); }, []);
   const st = useMemo(() => actionState({ row, content, when, tz, now, busy, dirty }), [row, content, when, tz, now, busy, dirty]);
-  const pill = statusPill(row);
   const scheduled = isScheduledStatus(row);
   const effectiveDirty = !!row && !locked && !suggestion ? dirty.dirty : (suggestion ? dirty.contentDirty : false);
 
@@ -290,10 +290,61 @@ export default function PostEditor({
     run(buildApproveScheduleRequest({ row, content, iso: st.iso, planOverride }), { successText: 'Approved and scheduled.' });
   };
 
-  const items = row ? moreItems(row, { busy, hasCall: true }) : [];
+  // Post = publish now through the normal lifecycle, never a separate row: after an inline confirm it approves and
+  // schedules this post ~75 s out (the server needs >= 60 s), shows a countdown with Cancel, then asks the publisher to
+  // send due posts. If the editor closes mid-countdown, the regular publisher (every 15 min) still sends it.
+  const name = clientName || clientId || 'Your account';
+  const handle = clientHandle ? `@${String(clientHandle).replace(/^@/, '')}` : '';
+  const POST_LEAD_MS = 75_000;
+  const [postStep, setPostStep] = useState(null); // null | 'confirm' | { at: ms }
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const posting = postStep && typeof postStep === 'object';
+  useEffect(() => {
+    if (!posting) return undefined;
+    const t = setInterval(() => setNowMs(Date.now()), 500);
+    return () => clearInterval(t);
+  }, [posting]);
+  useEffect(() => {
+    if (!posting || nowMs < postStep.at) return;
+    setPostStep(null);
+    (async () => {
+      setBusy(true);
+      try {
+        await send({ endpoint: 'social', body: { action: 'process-due' } });
+        const fresh = row?.id ? await fetchRow(row.id) : null;
+        if (fresh) { setRow((r) => ({ ...r, ...fresh })); if (onSaved) onSaved(fresh); }
+        const live = fresh && (fresh.status === 'posted' || fresh.state === 'posted');
+        setMessage(live
+          ? { tone: 'ok', text: `Posted to ${handle || 'X'}.` }
+          : { tone: 'info', text: fresh?.heldReason || fresh?.error || 'Sent to the publisher. It will go out within 15 minutes if it was not sent yet.' });
+      } catch (e) {
+        setMessage({ tone: 'info', text: `${e?.message || 'Could not reach the publisher.'} It is scheduled and will go out within 15 minutes.` });
+      } finally { setBusy(false); }
+    })();
+  }, [posting, nowMs]); // eslint-disable-line react-hooks/exhaustive-deps
+  const canPost = !suggestion && st.canApprove && !(override && !overrideReason.trim());
+  const doPostConfirmed = () => {
+    if (!canPost) return;
+    const at = Date.now() + POST_LEAD_MS;
+    run(buildApproveScheduleRequest({ row, content, iso: new Date(at).toISOString(), planOverride }), {
+      onOk: () => { setNowMs(Date.now()); setPostStep({ at }); },
+    }).then((ok) => { if (!ok) setPostStep(null); });
+  };
+  const cancelPost = () => {
+    setPostStep(null);
+    run(buildUnscheduleRequest(row), { successText: 'Cancelled. Nothing was posted.' });
+  };
+  const secondsLeft = posting ? Math.max(0, Math.ceil((postStep.at - nowMs) / 1000)) : 0;
+
+  // Save lives in More (the row is Approve · Schedule · Post · More).
+  const items = row ? [
+    ...(!suggestion ? [{ id: 'save', label: 'Save changes', enabled: st.canSave }] : []),
+    ...moreItems(row, { busy, hasCall: true }),
+  ] : [];
   const doMore = (id) => {
     setMoreOpen(false);
-    if (id === 'reject') run(buildRejectRequest(row), { successText: 'Rejected.', onOk: () => { if (onClose) onClose(); } });
+    if (id === 'save') doSave();
+    else if (id === 'reject') run(buildRejectRequest(row), { successText: 'Rejected.', onOk: () => { if (onClose) onClose(); } });
     else if (id === 'unschedule') run(buildUnscheduleRequest(row), { successText: 'Unscheduled. It is a draft again.' });
     else if (id === 'unapprove') run(buildUnapproveRequest(row), { successText: 'Left unapproved. It is a draft again.' });
     else if (id === 'reconcile') setMorePanel((p) => (p === 'reconcile' ? null : 'reconcile'));
@@ -313,8 +364,6 @@ export default function PostEditor({
     } catch { /* the panel already told the operator */ }
   };
 
-  const name = clientName || clientId || 'Your account';
-  const handle = clientHandle ? `@${String(clientHandle).replace(/^@/, '')}` : '';
   const over = isOverLimit(content);
   const count = charCount(content);
   const quoteUrl = suggestion ? (row?.quotedUrl || row?.url || null) : null;
@@ -323,7 +372,7 @@ export default function PostEditor({
     return (
       <section id="post-editor-root" className="pe-root" aria-busy={!loadError}>
         <PostEditorStyles />
-        <p id="post-editor-loading" className="pe-muted" role={loadError ? 'alert' : 'status'}>{loadError || 'Loading post…'}</p>
+        {loadError ? <p id="post-editor-loading" className="pe-muted" role="alert">{loadError}</p> : <LoadingRing id="post-editor-loading" label="Loading post" />}
       </section>
     );
   }
@@ -331,12 +380,6 @@ export default function PostEditor({
   return (
     <section id="post-editor-root" className="pe-root" aria-label="View and edit post">
       <PostEditorStyles />
-
-      <header id="post-editor-status-row" className="pe-status-row">
-        <span id="post-editor-status-pill" className={`pe-pill pe-pill-${pill.key}`}>{pill.label}</span>
-        {row.proposed ? <span className="pe-muted">Proposed slot</span> : null}
-        {row.fillKind ? <span className="pe-muted">{row.fillKind}</span> : null}
-      </header>
 
       <article id="post-editor-card" className="pe-card">
         <div id="post-editor-card-author-row" className="pe-author">
@@ -387,28 +430,72 @@ export default function PostEditor({
                 <ImagePlus size={15} aria-hidden="true" />
                 {row.mediaUrl || row.thumbUrl ? 'Change creative' : 'Add creative'}
               </button>
+              <div id="post-editor-when-row" className="pe-when-row" role="group" aria-label={`Publish time (${zoneLabel(tz)})`} title={`Publish time · ${zoneLabel(tz)} (${tz.replace(/_/g, ' ')})`}>
+                <input id="post-editor-date" type="date" className="pe-input pe-input-compact" value={when.date} aria-label={`Publish date (${tz})`} onChange={(e) => setWhen((w) => ({ ...w, date: e.target.value }))} />
+                <input id="post-editor-time" type="time" step={300} className="pe-input pe-input-compact" value={when.time} aria-label={`Publish time (${tz})`} onChange={(e) => setWhen((w) => ({ ...w, time: e.target.value }))} />
+              </div>
             </div>
           ) : null}
           {pickerSlot ? <div id="post-editor-picker-slot" className="pe-picker-slot">{pickerSlot}</div> : null}
         </div>
+        {row.needsStory ? <p id="post-editor-needs-story" className="pe-muted pe-card-note">This draft still has a story placeholder. Approving removes that line; add your own first if you want one.</p> : null}
+        <footer id="post-editor-footer" className="pe-footer">
+          <div id="post-editor-footer-actions" className="pe-btn-row">
+            <button type="button" id="post-editor-approve" className="pe-btn pe-btn-primary cta-pill-btn" disabled={!st.canApprove || !!postStep} onClick={doApprove} title={st.canApprove ? 'Approve without scheduling' : st.approveBlockedReason}>
+              {busy ? 'Working…' : 'Approve'}
+            </button>
+            {!suggestion ? (
+              <button type="button" id="post-editor-approve-schedule" className="pe-btn pe-btn-ghost" disabled={!st.canApproveSchedule || (override && !overrideReason.trim()) || !!postStep} onClick={doApproveSchedule} title={st.scheduleBlockedReason || 'Approve and schedule at the time above'}>
+                Schedule
+              </button>
+            ) : null}
+            {!suggestion ? (
+              <button type="button" id="post-editor-post-now" className="pe-btn pe-btn-primary" disabled={!canPost || busy || !!postStep} onClick={() => setPostStep('confirm')} title={canPost ? `Post to ${handle || 'X'} now` : st.approveBlockedReason}>
+                Post
+              </button>
+            ) : null}
+            {items.length ? (
+              <div id="post-editor-more" className="pe-more" ref={moreRef}>
+                <button type="button" id="post-editor-more-button" className="pe-btn pe-btn-plain" aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((v) => !v)}>
+                  More <ChevronDown size={14} aria-hidden="true" />
+                </button>
+                {moreOpen ? (
+                  <ul id="post-editor-more-menu" className="pe-menu" role="menu">
+                    {items.map((it) => (
+                      <li key={it.id} role="none">
+                        <button type="button" role="menuitem" id={`post-editor-more-${it.id}`} className="pe-menu-item" disabled={!it.enabled} onClick={() => doMore(it.id)}>{it.label}</button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+          {postStep === 'confirm' ? (
+            <div id="post-editor-post-confirm-row" className="pe-post-confirm" role="alert">
+              <p className="pe-post-confirm-text">Post to {handle || 'X'} now? This is one live X API write and can&apos;t be undone.</p>
+              <div className="pe-btn-row">
+                <button type="button" id="post-editor-post-cancel" className="pe-btn pe-btn-plain" onClick={() => setPostStep(null)}>Cancel</button>
+                <button type="button" id="post-editor-post-confirm" className="pe-btn pe-btn-primary" disabled={busy} onClick={doPostConfirmed}>Confirm and post</button>
+              </div>
+            </div>
+          ) : null}
+          {posting ? (
+            <div id="post-editor-post-countdown-row" className="pe-post-confirm" role="status">
+              <p className="pe-post-confirm-text">Posting to {handle || 'X'} in {Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, '0')}. Closing this still posts it.</p>
+              <div className="pe-btn-row">
+                <button type="button" id="post-editor-post-countdown-cancel" className="pe-btn pe-btn-plain" disabled={busy} onClick={cancelPost}>Cancel</button>
+              </div>
+            </div>
+          ) : null}
+          {!st.canApprove && st.approveBlockedReason ? <p id="post-editor-footer-hint" className="pe-muted">{st.approveBlockedReason}</p> : null}
+        </footer>
       </article>
 
       <BoundFieldsPanel row={row} gate={gate} />
 
-      {!suggestion && !locked ? (
-        <section id="post-editor-when-panel" className="pe-panel" aria-label="Publish time">
-          <p className="pe-kicker">Publish time · {zoneLabel(tz)} ({tz.replace(/_/g, ' ')})</p>
-          <div id="post-editor-when-row" className="pe-when-row">
-            <input id="post-editor-date" type="date" className="pe-input" value={when.date} aria-label={`Date (${tz})`} onChange={(e) => setWhen((w) => ({ ...w, date: e.target.value }))} />
-            <input id="post-editor-time" type="time" step={300} className="pe-input" value={when.time} aria-label={`Time (${tz})`} onChange={(e) => setWhen((w) => ({ ...w, time: e.target.value }))} />
-          </div>
-          {whenToIso(when, tz) && !st.isFuture ? <p id="post-editor-when-hint" className="pe-note pe-note-warn">Pick a time at least a minute from now to schedule.</p> : null}
-        </section>
-      ) : null}
-
       {children}
 
-      {row.needsStory ? <p id="post-editor-needs-story" className="pe-note">This draft still has a story placeholder. Approving removes that line; add your own first if you want one.</p> : null}
       {row.state === 'held' ? (
         <div id="post-editor-held-panel" className="pe-note pe-note-warn">
           <p>Held for review: {row.heldReason || 'Held for review.'}</p>
@@ -453,43 +540,6 @@ export default function PostEditor({
         </section>
       ) : null}
 
-      <footer id="post-editor-footer" className="pe-footer">
-        <div id="post-editor-footer-actions" className="pe-btn-row">
-          {!suggestion ? (
-            <button type="button" id="post-editor-save" className="pe-btn pe-btn-ghost" disabled={!st.canSave} onClick={doSave}>{busy ? 'Working…' : 'Save'}</button>
-          ) : null}
-          <button type="button" id="post-editor-approve" className="pe-btn pe-btn-primary" disabled={!st.canApprove} onClick={doApprove} title="Approve without scheduling" aria-describedby="post-editor-footer-hint">
-            {busy ? 'Working…' : 'Approve'}
-          </button>
-          {!suggestion ? (
-            <button type="button" id="post-editor-approve-schedule" className="pe-btn pe-btn-primary" disabled={!st.canApproveSchedule || (override && !overrideReason.trim())} onClick={doApproveSchedule} title={st.scheduleBlockedReason || 'Approve and schedule at the time above'}>
-              Approve &amp; schedule
-            </button>
-          ) : null}
-          {items.length ? (
-            <div id="post-editor-more" className="pe-more" ref={moreRef}>
-              <button type="button" id="post-editor-more-button" className="pe-btn pe-btn-ghost" aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((v) => !v)}>
-                More <ChevronDown size={14} aria-hidden="true" />
-              </button>
-              {moreOpen ? (
-                <ul id="post-editor-more-menu" className="pe-menu" role="menu">
-                  {items.map((it) => (
-                    <li key={it.id} role="none">
-                      <button type="button" role="menuitem" id={`post-editor-more-${it.id}`} className="pe-menu-item" disabled={!it.enabled} onClick={() => doMore(it.id)}>{it.label}</button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-        <p id="post-editor-footer-hint" className="pe-muted">
-          {st.canApprove
-            ? (suggestion ? 'Saves this as a draft and approves it. Nothing is scheduled or posted.' : 'Approve needs no time. Approve & schedule posts at the time above.')
-            : st.approveBlockedReason}
-          {st.canApprove && !st.canApproveSchedule && !suggestion && st.scheduleBlockedReason ? ` ${st.scheduleBlockedReason}` : ''}
-        </p>
-      </footer>
     </section>
   );
 }
@@ -503,11 +553,6 @@ function PostEditorStyles() {
       #post-editor-root .pe-kicker { margin: 0 0 6px; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--t-text-muted); }
       #post-editor-root .pe-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
       #post-editor-root a { color: var(--t-info); }
-      #post-editor-root .pe-status-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-      #post-editor-root .pe-pill { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--t-control-border); font-size: 12px; font-weight: 700; background: var(--t-inset); }
-      #post-editor-root .pe-pill-approved { background: var(--t-info-bg); border-color: var(--t-info-border); }
-      #post-editor-root .pe-pill-scheduled, #post-editor-root .pe-pill-posted { background: var(--t-success-bg); border-color: var(--t-success-border); }
-      #post-editor-root .pe-pill-needs-review, #post-editor-root .pe-pill-failed { background: var(--t-danger-bg); border-color: var(--t-danger-border); }
       #post-editor-root .pe-card { border: 1px solid var(--t-control-border); border-radius: 16px; background: var(--t-raised); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
       #post-editor-root .pe-author { display: flex; align-items: center; gap: 10px; }
       #post-editor-root .pe-avatar { width: 40px; height: 40px; border-radius: 999px; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; background: var(--t-accent); color: var(--t-on-accent); font-weight: 700; }
@@ -522,7 +567,8 @@ function PostEditorStyles() {
       #post-editor-root .pe-creative { display: flex; flex-direction: column; gap: 8px; }
       #post-editor-root .pe-media { border-radius: 14px; overflow: hidden; border: 1px solid var(--t-border-subtle); background: var(--t-inset); }
       #post-editor-root .pe-media img, #post-editor-root .pe-media video { display: block; width: 100%; max-height: 420px; object-fit: contain; }
-      #post-editor-root .pe-creative-actions { display: flex; gap: 8px; }
+      #post-editor-root .pe-creative-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+      #post-editor-root .pe-card-note { padding-top: 8px; border-top: 1px solid var(--t-border-faint); }
       #post-editor-root .pe-picker-slot { border-top: 1px solid var(--t-border-subtle); padding-top: 10px; }
       #post-editor-root .pe-panel { border: 1px solid var(--t-border-subtle); border-radius: 12px; padding: 10px 12px; background: var(--t-inset); }
       #post-editor-root .pe-bound { display: flex; gap: 10px; padding: 6px 0; border-top: 1px solid var(--t-border-faint); }
@@ -531,7 +577,8 @@ function PostEditorStyles() {
       #post-editor-root .pe-bound-body { min-width: 0; flex: 1 1 auto; overflow-wrap: anywhere; }
       #post-editor-root .pe-bound-text { margin: 0; font-size: 14px; line-height: 1.4; white-space: pre-wrap; }
       #post-editor-root .pe-list { list-style: none; margin: 0; padding: 0; font-size: 13px; }
-      #post-editor-root .pe-when-row { display: flex; gap: 8px; flex-wrap: wrap; }
+      #post-editor-root .pe-when-row { display: flex; gap: 6px; flex-wrap: nowrap; }
+      #post-editor-root .pe-input-compact { min-height: 36px; padding: 4px 8px; font-size: 13px; }
       #post-editor-root .pe-input { min-height: 40px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--t-control-border); background: var(--t-raised); color: var(--t-text); font: inherit; }
       #post-editor-root .pe-input:focus-visible { outline: 2px solid var(--t-focus); outline-offset: 2px; }
       #post-editor-root .pe-note { margin: 0; padding: 8px 12px; border-radius: 10px; font-size: 13px; line-height: 1.4; border: 1px solid var(--t-border-subtle); background: var(--t-inset); }
@@ -541,11 +588,27 @@ function PostEditorStyles() {
       #post-editor-root .pe-note-warn { background: var(--t-info-bg); border-color: var(--t-info-border); }
       #post-editor-root .pe-note-bad { background: var(--t-danger-bg); border-color: var(--t-danger-border); color: var(--t-danger); }
       #post-editor-root .pe-check { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 6px 0; }
-      #post-editor-root .pe-footer { display: flex; flex-direction: column; gap: 8px; position: sticky; bottom: 0; padding: 10px 0; background: var(--t-glass-soft); }
-      #post-editor-root .pe-btn-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+      /* Actions sit inside the card, under the text; each button shares the card width equally. */
+      #post-editor-root .pe-footer { display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding-top: 10px; border-top: 1px solid var(--t-border-faint); text-align: center; }
+      /* Approve = gradient fill + the homepage comet border (.cta-pill-btn); Save/Schedule = static gradient border;
+         More = plain and compact, pinned right. */
+      #post-editor-root #post-editor-footer-actions { flex-wrap: nowrap; width: 100%; }
+      #post-editor-root #post-editor-footer-actions > .pe-btn { flex: 1 1 0; min-width: 0; }
+      #post-editor-root #post-editor-footer-actions > .pe-more { flex: 0 0 auto; }
+      #post-editor-root .pe-post-confirm { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--t-warning-border); border-radius: 12px; background: var(--t-inset); }
+      #post-editor-root .pe-post-confirm-text { margin: 0; font-size: 13px; line-height: 1.4; }
+      #post-editor-root .pe-post-confirm .pe-btn { width: auto; flex: 0 0 auto; }
+      #post-editor-root .pe-btn-plain { background: transparent; color: var(--t-text-secondary); border-color: var(--t-border-faint); padding: 8px 12px; }
+      #post-editor-root .pe-btn-plain:hover:not(:disabled) { color: var(--t-text-strong); border-color: var(--t-control-border-strong); }
+      #post-editor-root #post-editor-footer-actions .pe-btn { justify-content: center; width: 100%; white-space: nowrap; }
+      #post-editor-root .pe-btn-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; }
       #post-editor-root .pe-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 8px 16px; border-radius: 999px; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; border: 1px solid var(--t-control-border); }
-      #post-editor-root .pe-btn-ghost { background: transparent; color: var(--t-text); }
-      #post-editor-root .pe-btn-primary { background: var(--t-accent); color: var(--t-on-accent); border-color: var(--t-accent); }
+      /* Standard gradient buttons (same as the Queue & Calendar card): primary = full gradient fill, secondary = static
+         gradient border. The mask only reads alpha, so a token stands in for #fff. */
+      #post-editor-root .pe-btn-ghost { position: relative; isolation: isolate; background: var(--t-surface); color: var(--t-text-strong); border-color: transparent; }
+      #post-editor-root .pe-btn-ghost::before { content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; padding: 1px; pointer-events: none; background: linear-gradient(180deg, var(--t-accent-bright) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%); -webkit-mask: linear-gradient(var(--t-text) 0 0) content-box, linear-gradient(var(--t-text) 0 0); -webkit-mask-composite: xor; mask: linear-gradient(var(--t-text) 0 0) content-box, linear-gradient(var(--t-text) 0 0); mask-composite: exclude; }
+      #post-editor-root .pe-btn-primary { background: linear-gradient(135deg, var(--t-accent-bright) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%); color: var(--t-on-solid); border-color: transparent; }
+      #post-editor-root .pe-btn:disabled::before { display: none; }
       #post-editor-root .pe-btn:disabled { opacity: 0.45; cursor: not-allowed; background: var(--t-disabled-bg); color: var(--t-text-muted); border-color: var(--t-control-border); }
       #post-editor-root .pe-btn:focus-visible, #post-editor-root .pe-menu-item:focus-visible { outline: 2px solid var(--t-focus); outline-offset: 2px; }
       #post-editor-root .pe-more { position: relative; }
@@ -561,6 +624,7 @@ function PostEditorStyles() {
         #post-editor-root .pe-bound { flex-direction: column; gap: 2px; }
         #post-editor-root .pe-bound-label { flex-basis: auto; }
         #post-editor-root .pe-btn-row .pe-btn { flex: 1 1 auto; justify-content: center; }
+        #post-editor-root #post-editor-footer-actions .pe-btn { padding: 8px 10px; font-size: 13px; }
       }
       @media (prefers-reduced-motion: reduce) { #post-editor-root * { transition: none !important; animation: none !important; } }
     `}</style>

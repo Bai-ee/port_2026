@@ -28,13 +28,14 @@ export default function CalendarStageHost({
   onOpenCard,
 }) {
   const { call, callSocial } = useMarketingContentCall(getIdToken);
-  // Post identity: the client's CONNECTED X @handle (free Firestore read; no avatar without the paid X API), falling back
-  // to the configured brand handle.
-  const [xHandle, setXHandle] = useState(null);
+  // Post identity: the client's CONNECTED X account (name, @handle, profile image stored at connect — a free Firestore
+  // read), falling back to the client name / configured brand handle / initial. Re-read when the window regains focus so
+  // a connect or disconnect done elsewhere shows up without reopening the stage.
+  const [xAccount, setXAccount] = useState(null);
   useEffect(() => {
     if (!getIdToken || !clientId) return undefined;
     let live = true;
-    (async () => {
+    const load = async () => {
       try {
         const token = await getIdToken();
         const res = await fetch('/api/social-posting/x-oauth', {
@@ -45,23 +46,29 @@ export default function CalendarStageHost({
         const data = await res.json().catch(() => ({}));
         const accounts = data?.accounts;
         const x = Array.isArray(accounts) ? accounts.find((a) => a?.platform === 'x' || a?.platform === 'twitter') : (accounts?.x || accounts?.twitter || null);
-        if (live) setXHandle(x?.username || null);
-      } catch { /* falls back to the configured handle */ }
-    })();
-    return () => { live = false; };
+        if (live) setXAccount(x?.connected ? x : null);
+      } catch { /* keep the last known identity */ }
+    };
+    load();
+    const onVisible = () => { if (document.visibilityState === 'visible') load(); };
+    window.addEventListener('focus', load);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { live = false; window.removeEventListener('focus', load); document.removeEventListener('visibilitychange', onVisible); };
   }, [getIdToken, clientId]);
-  const handle = xHandle || clientHandle;
+  const handle = xAccount?.username || clientHandle;
+  const postName = xAccount?.name || clientName;
+  const postAvatar = xAccount?.profileImageUrl || avatarUrl;
 
   const renderLevel = (nav) => (
     // Month and Day styles are `.xce-scope`-scoped; the Post level (PostEditor) is self-styled, so it skips the scope. Only the
     // className changes, so the panel instance (and its loaded month) is kept across levels.
-    <div id="calendar-stage-content-scope" className={nav.state.level === 'post' ? undefined : 'xce-scope'} style={{ marginTop: 0 }}>
+    <div id="calendar-stage-content-scope" className={nav.state.level === 'post' ? undefined : 'xce-scope'}>
       <ContentUiStyles />
       <MonthCalendarPanel
         clientId={clientId}
         call={call}
         hideRefresh
-        stage={{ nav, getIdToken, clientId, clientName, clientHandle: handle, avatarUrl, timeZone: nav.timeZone }}
+        stage={{ nav, getIdToken, clientId, clientName: postName, clientHandle: handle, avatarUrl: postAvatar, timeZone: nav.timeZone }}
         // Plan | Recommendations on today's Day view. Jumping to another card leaves the stage first.
         renderTodayExtras={() => (
           <StageTodayExtras

@@ -223,7 +223,10 @@ export default function MarketingRefreshControl({ variant = 'popover', running =
               const xRow = sourceGroupIds.includes(g.id) && sourceFor(sources, g.id) === 'x-api';
               const paidNow = g.paid || xRow || (g.id === 'today-queue' && selection.todayWithModel);
               const f = groupFreshness(g.id, { lastRefreshed: last, serverAsOf: freshness?.serverAsOf, staleAfterHours: freshness?.staleAfterHours?.[g.id] });
-              const age = f.asOf ? (f.ageHours < 1 ? '<1H' : f.ageHours < 48 ? `${Math.round(f.ageHours)}H` : `${Math.round(f.ageHours / 24)}D`) : 'NEVER';
+              // Off = nothing in this group is switched on for the client (server freshness `off`), so it is never "stale".
+              const isOff = Array.isArray(freshness?.off) && freshness.off.includes(g.id);
+              if (isOff) f.stale = false;
+              const age = isOff ? 'OFF' : f.asOf ? (f.ageHours < 1 ? '<1H' : f.ageHours < 48 ? `${Math.round(f.ageHours)}H` : `${Math.round(f.ageHours / 24)}D`) : 'NEVER';
               return (
                 <div key={g.id} id={`marketing-refresh-group-row-${g.id}`} className="mr-row" role="listitem" data-paid={paidNow ? 'true' : 'false'} data-on={on ? 'true' : 'false'}>
                   <label className="mr-row-main" htmlFor={`marketing-refresh-toggle-${g.id}`} title={`${g.updates}\n${est.text || g.cost}`}>

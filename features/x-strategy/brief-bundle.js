@@ -114,6 +114,10 @@ const BUILDERS = {
     return { asOf: oldest(core), present: core.length > 0, summary: { reddit: row('reddit'), instagram: row('instagram'), web: row('web'), note: 'asOf = the older of Reddit/Instagram; web is rarely refreshed.' } };
   },
   'x-search': (raw, { n, c }) => {
+    // Off (never stale) when neither paid X search it covers is switched on for this client.
+    if (raw.features && raw.features.opportunitySignals === false && raw.features.xMarketTalk === false) {
+      return { asOf: null, present: false, off: true, summary: { note: 'Opportunity Signals and Market Talk on X are both off for this client.' } };
+    }
     const opp = mb(raw).opportunitySignals;
     const xs = rsOf(raw).platformTests?.x;
     const items = arr(opp?.items);
@@ -135,7 +139,9 @@ const BUILDERS = {
       ['opportunities', rs.opportunitySignalsAnalysis], ['xMarketTalk', rs.xMarketTalkAnalysis],
       ['replyTargets', arr(rs.digestRecipes).find((r) => r?.recipeId === 'reply-targets')],
     ];
-    const present = subs.filter(([, v]) => isObj(v) && toMs(v.generatedAt) != null);
+    const platforms = raw.features?.platforms || {};
+    const switchedOff = new Set(['reddit', 'instagram'].filter((p) => platforms[p] === false));
+    const present = subs.filter(([k, v]) => !switchedOff.has(k) && isObj(v) && toMs(v.generatedAt) != null);
     // Optional analyzers (X market talk, opportunities) are off for many clients: listed, but they never set the age.
     const core = present.filter(([k]) => !['xMarketTalk', 'opportunities'].includes(k));
     return {
@@ -234,10 +240,11 @@ export function buildBriefBundle(raw, { now = Date.now(), part } = {}) {
     try { out = BUILDERS[name](r, ctx); } catch { out = { asOf: null, present: false, summary: { note: 'Could not be read.' } }; }
     const ageHours = ageOf(out.asOf, now);
     // Missing data is stale for parts that have an age rule ("never run" needs a refresh); no-rule parts never go stale.
-    const stale = rule.maxAgeHours == null ? false : (ageHours == null ? true : ageHours > rule.maxAgeHours);
+    // A part the client has switched off is never stale.
+    const stale = out.off ? false : rule.maxAgeHours == null ? false : (ageHours == null ? true : ageHours > rule.maxAgeHours);
     if (stale && rule.refreshGroup && !staleGroups.includes(rule.refreshGroup)) staleGroups.push(rule.refreshGroup);
     parts[name] = {
-      ...(detail ? { label: rule.label, how: rule.how } : {}), asOf: iso(out.asOf), ageHours, stale, maxAgeHours: rule.maxAgeHours, refreshGroup: rule.refreshGroup,
+      ...(detail ? { label: rule.label, how: rule.how } : {}), asOf: iso(out.asOf), ageHours, stale, maxAgeHours: rule.maxAgeHours, refreshGroup: rule.refreshGroup, ...(out.off ? { off: true } : {}),
       ...(names.includes(name) ? { summary: fit(out.summary, detail ? BRIEF_LIMITS.detailChars : BRIEF_LIMITS.compactChars) } : {}),
     };
   }
@@ -248,7 +255,7 @@ export function buildBriefBundle(raw, { now = Date.now(), part } = {}) {
 export function freshnessOf(bundle) {
   const parts = {};
   for (const [k, v] of Object.entries(bundle?.parts || {})) {
-    parts[k] = { label: v.label ?? FRESHNESS_RULES[k]?.label, asOf: v.asOf, ageHours: v.ageHours, maxAgeHours: v.maxAgeHours, stale: v.stale, refreshGroup: v.refreshGroup, how: v.how ?? FRESHNESS_RULES[k]?.how };
+    parts[k] = { label: v.label ?? FRESHNESS_RULES[k]?.label, asOf: v.asOf, ageHours: v.ageHours, maxAgeHours: v.maxAgeHours, stale: v.stale, refreshGroup: v.refreshGroup, how: v.how ?? FRESHNESS_RULES[k]?.how, ...(v.off ? { off: true } : {}) };
   }
   return { generatedAt: bundle?.generatedAt ?? null, parts, staleGroups: bundle?.staleGroups ?? [] };
 }
@@ -265,6 +272,18 @@ export async function readBriefRaw(clientId, deps = {}) {
   const state = await safe(async () => { const s = await db.collection('dashboard_state').doc(clientId).get(); return s.exists ? s.data() : null; });
   const marketingBrief = state?.marketingBrief ?? null;
   const project = deps.projectBrief ?? createRequire(import.meta.url)('../intelligence/_brief-intel.js').projectBrief;
+  const features = await safe(async () => {
+    const [platformState, cfg, digest] = await Promise.all([
+      createRequire(import.meta.url)('../intelligence/_market-insight-platform-state.js').getMarketInsightPlatformState(clientId),
+      db.collection('client_configs').doc(clientId).get(),
+      db.collection('digest_config').doc(clientId).get(),
+    ]);
+    return {
+      platforms: platformState?.platformAvailability || {},
+      opportunitySignals: (cfg.exists ? cfg.data()?.marketingBriefConfig?.opportunitySignals?.enabled : false) === true,
+      xMarketTalk: (digest.exists ? digest.data()?.include?.xMarketTalk : false) === true,
+    };
+  });
   const [planDoc, strategyDoc, corpora, xMonitor, todayRun, brain, publishedBrief] = await Promise.all([
     safe(deps.readPlanDoc ? () => deps.readPlanDoc(clientId) : null),
     safe(deps.readStrategyDoc ? () => deps.readStrategyDoc(clientId) : null),
@@ -285,6 +304,6 @@ export async function readBriefRaw(clientId, deps = {}) {
     marketingBrief, signals: marketingBrief ? await safe(() => project(marketingBrief, state)) : null,
     quoteTargets: marketingBrief?.quoteTargets ?? null, listSignals: marketingBrief?.listSignals ?? null,
     moduleBriefs: state?.moduleBriefs ?? null,
-    planDoc, strategyDoc, corpora, xMonitor, todayRun, brain, publishedBrief,
+    planDoc, strategyDoc, corpora, xMonitor, todayRun, brain, publishedBrief, ...(features ? { features } : {}),
   };
 }

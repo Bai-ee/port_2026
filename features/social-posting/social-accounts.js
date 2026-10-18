@@ -31,6 +31,9 @@ export function toPublicAccount(platformDoc) {
     connected: Boolean(platformDoc.accessToken || platformDoc.oauth1),
     authMode: platformDoc.authMode || null,
     username: platformDoc.username || null,
+    // Public profile bits for post previews (stored at connect; absent on accounts connected before 2026-10-18).
+    name: platformDoc.name || null,
+    profileImageUrl: platformDoc.profileImageUrl || null,
     userId: platformDoc.userId || null,
     scope: Array.isArray(platformDoc.scope) ? platformDoc.scope : [],
     updatedAt: platformDoc.updatedAt || null,

@@ -112,7 +112,9 @@ function todaysAgenda(calendar) {
   const openTasks = (day.tasks || []).filter((t) => t.status === 'open').length;
   const rows = [...groups.values()].sort((a, b) => (a.key === 'requote' ? -1 : b.key === 'requote' ? 1 : b.total - a.total));
   const sum = (k) => rows.reduce((n, g) => n + g[k], 0);
-  return { date: day.date, rows, openTasks, total: sum('total'), drafts: sum('drafts'), scheduled: sum('scheduled'), posted: sum('posted') };
+  // Requotes on today's calendar at any time (open quote opportunities + quote posts), from the 'requote' group.
+  const requotes = groups.get('requote')?.total || 0;
+  return { date: day.date, rows, openTasks, total: sum('total'), drafts: sum('drafts'), scheduled: sum('scheduled'), posted: sum('posted'), requotes };
 }
 
 function readDone() {
@@ -169,6 +171,7 @@ export default function OnboardingFlowPanel({ onOpenCard, onOpenTodayDay, availa
           { label: 'DRAFTS', value: num(agenda?.drafts) },
           { label: 'SCHEDULED', value: num(agenda?.scheduled) },
           { label: 'POSTED', value: num(agenda?.posted) },
+          { label: 'REQUOTES', value: num(agenda?.requotes) },
         ],
         agenda: true,
       };
