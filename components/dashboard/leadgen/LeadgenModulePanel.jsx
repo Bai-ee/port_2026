@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { marqueeCardEdgeStyle, marqueeEdgeFadeStyle } from '../../../pageSurfaceSystem';
 
 // Reuses the exact BrandSystemChat visual shell:
 //   #lgmc-shell → #lgmc-header (avatar + online dot + name + step count)
@@ -281,23 +282,22 @@ export default function LeadgenModulePanel({
           position: 'relative', zIndex: 2, width: '100%', maxWidth: '52rem',
           padding: 'clamp(1.25rem, 5vw, 2rem)', borderRadius: '10px', boxSizing: 'border-box',
           background: 'var(--t-surface)',
-          boxShadow: '0px 5px 10px rgba(0,0,0,0.1), 0px 15px 30px rgba(0,0,0,0.1), 0px 20px 40px rgba(0,0,0,0.15)',
-          border: '1px solid var(--t-glass-soft)',
+          ...marqueeCardEdgeStyle,
         }}
       >
-        {/* Brand row */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', justifyContent: 'space-between' }}>
-          <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid color-mix(in srgb, var(--t-surface) 35%, transparent)', display: 'block' }} />
+        {/* Brand row — avatar + label hidden (marquee-only header); keeps its height and the status dot. */}
+        <div id="leadgen-module-modal-brand-row" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', justifyContent: 'flex-end', height: '2.75rem' }}>
+          {/* <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid color-mix(in srgb, var(--t-surface) 35%, transparent)', display: 'block' }} />
           <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'color-mix(in srgb, var(--t-text) 44%, transparent)', fontWeight: 700, fontFamily: '"Space Mono", monospace' }}>
             {moduleLabel || moduleId}
-          </span>
+          </span> */}
           <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '2.4rem', height: '2.4rem', borderRadius: '999px', background: 'color-mix(in srgb, var(--t-surface) 34%, transparent)', border: '1px solid var(--t-border-subtle)' }} aria-hidden="true">
             <span style={{ width: '0.46rem', height: '0.46rem', borderRadius: '999px', background: statusDotColor, animation: statusPulse }} />
           </span>
         </div>
 
         {/* Marquee */}
-        <div style={{ width: '100%', overflow: 'hidden', margin: '0 0 0.7rem' }}>
+        <div id="leadgen-module-modal-marquee-viewport" style={{ width: '100%', overflow: 'hidden', margin: '0 0 0.7rem', ...marqueeEdgeFadeStyle }}>
           <div style={{ display: 'flex', alignItems: 'center', width: 'max-content', animation: 'lgm-marquee 14s linear infinite', willChange: 'transform' }}>
             {['a', 'b'].map((k) => (
               <span key={k} aria-hidden={k === 'b' ? 'true' : undefined} style={{ flexShrink: 0, whiteSpace: 'nowrap', color: 'var(--t-text)', fontSize: 'clamp(1.5rem, 5vw, 3.4rem)', lineHeight: 1.05, letterSpacing: '-0.04em', fontFamily: '"Doto", "Space Mono", monospace', fontWeight: 700 }}>

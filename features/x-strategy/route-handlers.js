@@ -25,6 +25,7 @@ import { evaluate as defaultEvaluate } from './evaluate.js';
 import { StrategyPlanError, createFirestorePlanStore } from './plan-store.js';
 import { createFirestoreCorpusStore, normalizeHandle, CorpusStoreError } from './corpus-store.js';
 import { createRefreshService, createFirestoreRefreshQueue, readWorkerHealth as readWorkerHealthFromDb } from './refresh.js';
+import { createFirestoreQuoteScanQueue } from '../x-quote-targets/scan-queue.js';
 import { resolveXGrowthProfile } from '../x-benchmark/profile.js';
 import { buildDayPlan as buildContentDayPlan } from '../x-content-inventory/plan-day.js';
 import { hasPlaceholderStory } from '../x-content-inventory/match.js';
@@ -90,6 +91,7 @@ export const STRATEGY_ROUTE_ACTIONS = Object.freeze([
   'strategy-autonomy-get',
   'strategy-autonomy-save',
   'quote-scan-refresh',
+  'quote-scan-status',
   'x-data-sources-get',
   'x-data-sources-save',
   'strategy-reply-style-get',
@@ -242,6 +244,7 @@ export function createStrategyHandlers({
   readDataSources = null, saveDataSources = null, // (clientId) -> normalized dataSources | (clientId, patch) -> saved. Absent => every source is 'mac' and x-data-sources-save answers 503
   pullCorpora = null, // (clientId, {handles}) -> pullCorporaViaXApi result (the PAID X API). Absent => x-api source answers 503
   scanQuotes = null, // (clientId, {}) -> scanQuoteTargetsViaXApi result (the PAID X API). Absent => x-api source answers 503
+  quoteScanQueue = null, // features/x-quote-targets/scan-queue.js: Mac-source Refresh queues a scan the Mac worker runs. Absent => instructions only
   signMediaRef = null, readMediaCaptures = null, // ({bucket,path}) -> url|null; (clientId) -> render captures. get_media_link only
   readStageStates = null, readNasStatus = null, // (ids) -> Map id -> {state,commandId} of NAS stage commands; (clientId) -> nas-status. find_hires_media only; absent => no stage progress / worker info
   linkItemMedia = null, // (clientId, links) -> {linked, failed, results}; the quote-targets link-item-media writer. Absent => item-media confirm fails clearly
@@ -412,14 +415,20 @@ export function createStrategyHandlers({
     const f = freshnessOf(buildBriefBundle(await readBriefRaw(c.clientId, briefReaders(c.clientId, {})), { now: Date.now() }));
     const serverAsOf = {};
     const staleAfterHours = {};
+    // A group whose every age-ruled part is switched off for this client shows as off, not stale.
+    const offCount = {};
+    const ruledCount = {};
     for (const p of Object.values(f.parts)) {
       const g = p.refreshGroup;
       if (!g || !Number.isFinite(p.maxAgeHours)) continue;
+      ruledCount[g] = (ruledCount[g] || 0) + 1;
+      if (p.off) { offCount[g] = (offCount[g] || 0) + 1; continue; }
       staleAfterHours[g] = Math.min(staleAfterHours[g] ?? Infinity, p.maxAgeHours);
       if (!(g in serverAsOf)) serverAsOf[g] = p.asOf ?? null;
       else if (serverAsOf[g] && (!p.asOf || Date.parse(p.asOf) < Date.parse(serverAsOf[g]))) serverAsOf[g] = p.asOf ?? null;
     }
-    return { ok: true, ...f, groups: { serverAsOf, staleAfterHours } };
+    const off = Object.keys(ruledCount).filter((g) => offCount[g] === ruledCount[g]);
+    return { ok: true, ...f, groups: { serverAsOf, staleAfterHours, off } };
   }
   async function strategyDailyFillPreview(body, context) {
     const c = requireClient(body, context);
@@ -601,10 +610,15 @@ export function createStrategyHandlers({
   }
 
   // Quote-target scan. 'x-api' runs inline (bounded by the scanner's deadline, inside the route's 120 s); 'mac' cannot run on a server.
-  async function quoteScanRefresh(body, context) {
+  async function quoteScanRefresh(body, context, auth) {
     const c = requireClient(body, context);
     if (c.error) return c.error;
     if ((await sourcesOf(c.clientId)).quoteTargets !== 'x-api') {
+      // Mac source: queue it for the Mac refresh worker (free, bird); the panel polls quote-scan-status.
+      if (quoteScanQueue) {
+        const q = await quoteScanQueue.request({ clientId: c.clientId, requestedBy: auth?.decoded?.email || auth?.decoded?.uid || null });
+        return { ok: true, source: 'mac', ...q, ...(await workerHealthFor(c.clientId)) };
+      }
       return { ok: true, status: 'needs-mac', source: 'mac', instructions: `The Mac scan runs locally (bird needs browser cookies): node scripts/x-content/scan-quote-targets.mjs --client ${c.clientId} --write, or let the launchd job run it. Switch Quote targets to the X API to scan from the server (paid).` };
     }
     if (body?.confirmPaid !== true) return needPaidConfirm('Quote targets');
@@ -615,6 +629,19 @@ export function createStrategyHandlers({
       ...(r.payload ? { scanned: r.payload.scanned, succeeded: r.payload.succeeded, candidates: r.payload.candidates.length, failures: r.payload.failures.length, rateLimited: r.payload.rateLimited.length } : {}),
     };
     return r.ok ? { ok: true, ...summary } : fail(r.stopped === 'x-budget' ? 429 : 422, r.error || 'X API scan failed.', summary);
+  }
+
+  // Progress of a queued Mac quote scan + the Mac worker heartbeat (free reads).
+  async function quoteScanStatus(body, context) {
+    const c = requireClient(body, context);
+    if (c.error) return c.error;
+    if (!quoteScanQueue) return fail(503, 'Quote scan requests are not available on this deployment.');
+    const id = typeof body?.requestId === 'string' ? body.requestId.trim() : '';
+    if (!REQUEST_ID_RE.test(id)) return fail(400, 'requestId is required.');
+    const request = await quoteScanQueue.get(id);
+    if (!request || request.clientId !== c.clientId) return fail(404, 'Quote scan request not found.');
+    const { leaseId, ...visible } = request;
+    return { ok: true, request: visible, ...(await workerHealthFor(c.clientId)) };
   }
 
   // Stored sources + the call/post estimate of one X API run per data set (no network; cached user ids are unknown here, so lookups are an upper bound).
@@ -1284,6 +1311,7 @@ export function createStrategyHandlers({
     const next = {
       tier1: given?.tier1 === undefined ? current.tier1 : given.tier1,
       tier3: given?.tier3 === undefined ? current.tier3 : given.tier3,
+      trustedSchedule: given?.trustedSchedule === undefined ? current.trustedSchedule : given.trustedSchedule,
     };
     if (!['auto', 'confirm'].includes(next.tier1)) return fail(400, "tier1 must be 'auto' or 'confirm'.");
     if (!['confirm', 'typed'].includes(next.tier3)) return fail(400, "tier3 must be 'confirm' or 'typed'. X publishing is always typed.");
@@ -1351,6 +1379,7 @@ export function createStrategyHandlers({
     'strategy-daily-fill-create': strategyDailyFillCreate,
     'strategy-freshness': strategyFreshness,
     'quote-scan-refresh': quoteScanRefresh,
+    'quote-scan-status': quoteScanStatus,
     'x-data-sources-get': xDataSourcesGet,
     'x-data-sources-save': xDataSourcesSave,
   };
@@ -1588,6 +1617,7 @@ export function createStrategyHandlersFromDb(db, {
     corpusStore, planStore, refreshService, readPackages, readAudience, readBuckets, readBucketEngine, readOpenPackageIds, readFillContext, readQuoteTargets, ensureDraft, placeDraft, listMediaTaskIds, createMediaTasks,
     readStageStates: (ids) => readStageStatesFromDb(db, ids), readNasStatus: () => handleNasAction({ db, now: () => Date.now() }, 'nas-status', {}),
     readDataSources, saveDataSources, pullCorpora, scanQuotes, responseStyleStore, unmetStore,
+    quoteScanQueue: createFirestoreQuoteScanQueue(db),
     readWorkerHealth: (clientId) => readWorkerHealthFromDb(db, { now: Date.now(), clientId }),
     docStore, onBrainOwnedSaved, readBrainTrackTargets, chatStore, agentLoopFactory, callModel, logUsage, runDailyAction, runUpdateItemFacets, readTodayRun, readContentContext, saveXGrowthProfile, env,
     readQueueSummary, readPostsForQuery, readPost, readOpportunities, readResults, readCalendar, readMarketSignals, editPost, runPaidSync, actionRuntime,

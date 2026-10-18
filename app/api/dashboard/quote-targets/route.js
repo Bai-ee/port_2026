@@ -16,6 +16,8 @@ import { buildDayPlan as buildContentDayPlan } from '../../../../features/x-cont
 import { validateInventory } from '../../../../features/x-content-inventory/schema.js';
 import { readInventory, upsertPackage, deletePackage, packageGetterFor } from '../../../../features/x-content-inventory/store.js';
 import { buildClientPackage, applyApproval } from '../../../../features/x-content-inventory/client-capture.js';
+import { quotedUrlOf } from '../../../../features/x-strategy/post-query.js';
+import { parseStatusUrl, findQuotedCandidate, buildQuotedPreview } from '../../../../features/x-quote-targets/quoted-preview.js';
 import { ageHoursOf, DEFAULT_WINDOW_HOURS } from '../../../../features/x-quote-targets/rank.js';
 import { buildPostResults } from '../../../../features/x-content-inventory/results.js';
 import { recentPostsFromQueue } from '../../../../features/x-content-inventory/allocate-slot.js';
@@ -31,6 +33,7 @@ import { syncRenderedVideos } from '../../../../features/rendered-videos/sync.js
 import { resolveMediaUrlsBatch, MEDIA_URLS_MAX_IDS, MEDIA_KINDS, tokenUrlFor } from '../../../../features/x-content-inventory/thumbs.js';
 import { setRights, saveThumb, createDraftFromItem, pickMedia } from '../../../../features/x-content-inventory/item-actions.js';
 import { NAS_ACTIONS, handleNasAction } from '../../../../features/x-content-inventory/nas.js';
+import { attachItemMedia } from '../../../../features/x-content-inventory/attach-item-media.js';
 import { findHiresMedia, useHiresMedia, HIRES_EDITABLE_STATUSES, pendingStageFromDb, readStageStatesFromDb } from '../../../../features/x-content-inventory/hires-media.js';
 import { runDailyLoop, localDateOf, LOOP_VERSION } from '../../../../features/x-content-inventory/daily-loop.js';
 import { assertClientReady, resolveClientXHandle } from '../../../../features/client-readiness/index.js';
@@ -319,6 +322,7 @@ const SUPPORTED_ACTIONS = [
   'content-task-update',
   'content-context',
   'post-status',
+  'quoted-post-preview',
   'post-results',
   'capture-client-story',
   'approve-package',
@@ -338,6 +342,7 @@ const SUPPORTED_ACTIONS = [
   'find-item-media',
   'find-hires-media',
   'hires-media-use',
+  'post-attach-item-media',
   'link-item-media',
   'set-rights',
   'create-draft-from-item',
@@ -490,7 +495,37 @@ async function handlePostResults(context) {
 async function handlePostStatus(context, body) {
   const ids = (Array.isArray(body?.postIds) ? body.postIds : []).map((x) => String(x || '').trim()).filter(Boolean).slice(0, 20);
   const rows = (await Promise.all(ids.map((id) => getSocialPost(context.clientId, id)))).filter(Boolean);
+  // `full: true` (the calendar editor): also return the approval-bound objects. `replyTo` is then the full object, not the
+  // boolean other callers (chat agent, status strip) rely on, so it is strictly opt-in. Read-only.
+  if (body?.full === true) {
+    const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+    return { ok: true, posts: rows.map((p) => ({
+      ...postStatusRow(p),
+      replyTo: isObj(p.replyTo) ? p.replyTo : null,
+      selfReply: isObj(p.selfReply) ? p.selfReply : null,
+      mediaVariants: isObj(p.mediaVariants) ? p.mediaVariants : null,
+    })) };
+  }
   return { ok: true, posts: rows.map(postStatusRow) };
+}
+
+/**
+ * Read-only preview of the tweet a quote post (or a url) quotes, for the post editor. Firestore only: the quoted URL comes
+ * from the saved post (sourceRef / trailing status URL), the text/author from the client's stored quote-target scan.
+ * No X API, no ScrapeCreators. `preview` is null when the post quotes nothing; `found:false` when only the URL is known.
+ */
+async function handleQuotedPostPreview(context, body) {
+  let url = typeof body?.url === 'string' ? body.url.trim() : '';
+  if (body?.postId) {
+    const post = await getSocialPost(context.clientId, String(body.postId).trim());
+    if (!post) throw Object.assign(new Error('Post not found.'), { status: 404 });
+    url = quotedUrlOf(post) || '';
+  }
+  const parsed = parseStatusUrl(url);
+  if (!parsed) return { ok: true, preview: null };
+  const { rawQuoteTargets, listSignals } = await readQuoteState(context.clientId);
+  const qt = mergeListCandidates(rawQuoteTargets, listSignals);
+  return { ok: true, preview: buildQuotedPreview({ url: parsed.url, candidate: findQuotedCandidate(qt?.candidates, parsed.id) }) };
 }
 
 async function readQueueSummary(clientId) {
@@ -863,6 +898,20 @@ async function handleHiresMediaUse(context, body, decoded) {
 }
 
 /**
+ * Put a Content Center item's media on a post (calendar editor creative picker). Same lifecycle swap as hi-res:
+ * on an approved/scheduled v2 row the new creative voids approval + schedule. Format/staging checks live in attach-item-media.js.
+ */
+async function handleAttachItemMedia(context, body) {
+  const clientId = context.clientId;
+  return attachItemMedia({
+    getPackage: getPackageFor(clientId),
+    pickMedia: (pkg) => pickMedia(pkg, mediaSigners()),
+    swapPostMedia: (postId, media) => swapPostMedia(clientId, postId, media, { statuses: HIRES_EDITABLE_STATUSES }),
+    rowOf: async (postId) => { const post = await getSocialPost(clientId, postId); return post ? calendarRowOf(post) : null; },
+  }, { clientId, postId: body?.postId, packageId: body?.packageId });
+}
+
+/**
  * Give items the media of other items of THIS client (item-media.js). Each link is independent: one bad pair fails
  * alone. Writes package fields only; never touches posts. Used by the route action and the confirmed chat proposal.
  */
@@ -1228,6 +1277,7 @@ export async function POST(request) {
       return json({ ok: true, context: summarizeContentContext(await readContentContext(context.clientId)) });
     }
     if (action === 'post-status') return json(await handlePostStatus(context, body));
+    if (action === 'quoted-post-preview') return json(await handleQuotedPostPreview(context, body));
     if (action === 'post-results') return json(await handlePostResults(context));
     if (action === 'month-calendar') {
       return json(await handleMonthCalendar(context, body));
@@ -1266,6 +1316,10 @@ export async function POST(request) {
     if (action === 'find-item-media') return json(await handleFindItemMedia(context, body));
     if (action === 'find-hires-media') return json(await handleFindHiresMedia(context, body));
     if (action === 'hires-media-use') return json(await handleHiresMediaUse(context, body, decoded));
+    if (action === 'post-attach-item-media') {
+      const result = await handleAttachItemMedia(context, body);
+      return json(result, result.ok === false ? (result.status || 422) : 200);
+    }
     if (action === 'link-item-media') return json({ ok: true, ...(await linkItemMediaFor(context.clientId, body?.links)) });
     if (action === 'set-rights') return json(await handleSetRights(context, body));
     if (action === 'create-draft-from-item') return json(await handleCreateDraftFromItem(context, body));

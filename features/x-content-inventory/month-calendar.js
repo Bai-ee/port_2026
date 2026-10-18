@@ -169,6 +169,8 @@ function slotMs(post) {
   return Number.isFinite(ms) ? ms : null;
 }
 
+const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+
 export function toRow(p, colors = null) {
   const bucketId = bucketOfPost(p);
   const held = p.status === 'needs_review' ? reasonText(p.errorClass) : null;
@@ -205,6 +207,11 @@ export function toRow(p, colors = null) {
     source: typeof p.source === 'string' ? p.source : null,
     fillSource: p.fillSource && typeof p.fillSource === 'object' ? { type: p.fillSource.type ?? null, id: p.fillSource.id ?? null, asOf: p.fillSource.asOf ?? null } : null,
     reviewOn: DAY_RE.test(String(p.reviewOn ?? '')) ? p.reviewOn : null,
+    // Approval locks these in (lifecycle contentHash), so the editor must see the full objects, not booleans.
+    // Always present (null when absent) so "unknown" and "none" stay distinguishable. Read-only.
+    selfReply: isPlainObject(p.selfReply) ? p.selfReply : null,
+    mediaVariants: isPlainObject(p.mediaVariants) ? p.mediaVariants : null,
+    replyTo: isPlainObject(p.replyTo) ? p.replyTo : null,
     bucketId: colors && colors[bucketId] ? bucketId : null,
     bucketColor: colors ? (colors[bucketId] || NEUTRAL_BUCKET_COLOR) : null,
     proposed: false,
@@ -368,7 +375,7 @@ export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_EN
       const ms = date === today ? now : ctWallToMs(date, 0);
       addExtra(date, {
         kind: 'requote', state: 'suggested', approval: 'suggested', id: `requote:${id}`, quoteTargetId: id, date, ms, time: '',
-        handle, quotedUrl: url, title: excerpt(t?.text, 80), content: String(t?.text ?? ''), text: String(t?.text ?? ''), quotedHandle: handle, createdAt: new Date(created).toISOString(),
+        handle, quotedUrl: url, title: excerpt(t?.text, 80), content: String(t?.text ?? ''), text: String(t?.text ?? ''), quotedHandle: handle, quotedText: String(t?.text ?? ''), quotedAuthorName: t?.authorName ?? null, quotedHasMedia: t?.hasMedia === true, quotedMediaUrl: t?.mediaUrl ?? null, createdAt: new Date(created).toISOString(),
         expiresAt: new Date(expiresMs).toISOString(), windowOpen: true, trackId: t?.trackId ?? null,
         status: 'suggested', needsStory: false, bucketId: null, bucketColor: null, proposed: false,
       });

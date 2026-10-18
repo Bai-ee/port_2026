@@ -77,7 +77,7 @@ export function usePlanProps(call, clientId, onNavigate) {
   };
 }
 
-// Handlers PostSheet/MonthCalendarPanel expect, backed by social-posting. `onDone` runs after each successful write.
+// Handlers MonthCalendarPanel expects, backed by social-posting. `onDone` runs after each successful write.
 export function useCalendarActions(callSocial, onDone) {
   const [busyId, setBusyId] = useState(null);
   const run = useCallback(async (post, body) => {
@@ -135,6 +135,7 @@ export function useCalendarProps(call, clientId) {
     onRefresh: () => load(),
     onShiftMonth: (d) => { const next = shiftMonth(monthRef.current, d); setMonth(next); load(next); },
     onToday: () => { const now = todayCT().slice(0, 7); setMonth(now); load(now); },
+    onSetMonth: (m) => { if (!/^\d{4}-\d{2}$/.test(String(m))) return; setMonth(m); load(m); },
     onApprove: actions.onApprove, onReject: actions.onReject, onSave: actions.onSave,
     onUnschedule: actions.onUnschedule, onReconcile: actions.onReconcile, onScore: actions.onScore, onTaskToggle,
   };

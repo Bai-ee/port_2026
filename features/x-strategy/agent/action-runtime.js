@@ -7,7 +7,8 @@
 //   tier 1  reversible write          -> run now when autonomy.tier1 === 'auto' (default), else a confirm card.
 //                                        Snapshot before + audit row; the result carries an `undoId`.
 //   tier 2  destructive               -> always a confirm card (danger tone)
-//   tier 3  external / spend          -> always a card; typed confirm ("post 3") when the entry publishes to X
+//   tier 3  external / spend          -> always a card; typed confirm ("post 3") when the entry publishes to X.
+//           One exception: queue.post.schedule-approved (trusted:'schedule-approved') runs while the owner has trusted scheduling on.
 //                                        (floor, can never be lowered) or the owner set autonomy.tier3 = 'typed'.
 // The model never writes the card payload: it is rebuilt here from the registry entry (warning, count, confirmText).
 // Calls go to the SAME route handlers the dashboard buttons use, with the owner's own authorization header
@@ -57,12 +58,27 @@ export function compactJson(v, max = RESULT_MAX_CHARS) {
 export const DEFAULT_AUTONOMY = Object.freeze({ tier1: 'auto', tier2: 'confirm', tier3: 'confirm' });
 
 /** Stored client_configs.agentAutonomy -> a full, valid setting. Anything unknown falls back to the safe default. */
+// Trusted scheduling (owner opt-in, default off): the agent may schedule a post the OWNER already approved and that is
+// unchanged since, at least minLeadMinutes ahead, at most dailyCap a day, without a card. The server re-checks all of it
+// (social-posting 'trusted-schedule'). Every other X write keeps the typed floor.
+export const TRUSTED_SCHEDULE_DEFAULTS = Object.freeze({ enabled: false, minLeadMinutes: 10, dailyCap: 3 });
+const clampInt = (v, lo, hi, dflt) => (Number.isInteger(v) ? Math.min(hi, Math.max(lo, v)) : dflt);
+export function normalizeTrustedSchedule(raw) {
+  const r = isPlain(raw) ? raw : {};
+  return {
+    enabled: r.enabled === true,
+    minLeadMinutes: clampInt(r.minLeadMinutes, 10, 1440, TRUSTED_SCHEDULE_DEFAULTS.minLeadMinutes),
+    dailyCap: clampInt(r.dailyCap, 1, 10, TRUSTED_SCHEDULE_DEFAULTS.dailyCap),
+  };
+}
+
 export function normalizeAutonomy(raw) {
   const r = isPlain(raw) ? raw : {};
   return {
     tier1: r.tier1 === 'confirm' ? 'confirm' : 'auto',
     tier2: 'confirm',
     tier3: r.tier3 === 'typed' ? 'typed' : 'confirm',
+    trustedSchedule: normalizeTrustedSchedule(r.trustedSchedule),
   };
 }
 
@@ -72,6 +88,8 @@ export function resolveGate(entry, autonomy, { itemCount = 1 } = {}) {
   if (entry.tier === 0) return 'run';
   if (entry.tier === 1) return a.tier1 === 'auto' && itemCount <= AUTO_BATCH_MAX ? 'run' : 'confirm';
   if (entry.tier === 2) return 'confirm';
+  // The one exception to the X floor: scheduling an owner-approved post, only while the owner has trusted scheduling on.
+  if (entry.trusted === 'schedule-approved' && a.trustedSchedule.enabled && itemCount <= a.trustedSchedule.dailyCap) return 'run';
   return entry.external === 'x' || a.tier3 === 'typed' ? 'typed' : 'confirm'; // X publishing can never go below typed
 }
 
@@ -542,7 +560,7 @@ export const ACTION_TOOLS = Object.freeze([
   },
   {
     name: 'run_action',
-    description: 'Run one registry action (or up to 50 of the same action via items). Tier 0 returns data. Tier 1 runs now and returns an undoId. Tier 2 and 3 never run from here: they put up a confirmation card (typed confirmation for X publishing) and nothing changes until the owner confirms. Never claim a carded action happened.',
+    description: 'Run one registry action (or up to 50 of the same action via items). Tier 0 returns data. Tier 1 runs now and returns an undoId. Tier 2 and 3 never run from here: they put up a confirmation card (typed confirmation for X publishing) and nothing changes until the owner confirms. Exception: queue.post.schedule-approved runs directly when the owner turned on trusted scheduling (approved, unchanged posts only, with a cancel window); tell the owner what you scheduled and when. Never claim a carded action happened.',
     input_schema: {
       type: 'object',
       properties: {

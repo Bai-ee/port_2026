@@ -3,11 +3,11 @@
 import React from 'react';
 import { Check } from 'lucide-react';
 
-// Shared by MonthCalendarPanel and PostSheet (kept here so neither imports the other).
+// Presentation bits for the month / day calendar levels.
 
 export const ENGINE_TAG = { record: 'REC', ue: 'UE', client: 'CLIENT', identity: 'ID' };
 
-/** state -> short label, shared by the grid rows and the sheet header. */
+/** state -> short label, used by the grid and day rows. */
 export const STATE_LABEL = {
   pending: 'Pending approval',
   awaiting: 'Awaiting approval',

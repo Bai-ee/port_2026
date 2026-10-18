@@ -66,6 +66,24 @@ Google Calendar connect/callback, `x-monitor connect-start`), Telegram webhook s
 `strategy-proposal-decide` (the agent must not approve its own cards), `strategy-review`, `save-thumb` (binary), `media-url`.
 Cron-only `social-posting GET ?action=process-due`. See the comment block at the top of `action-registry.js`.
 
+## Media tools (2026-10-17, PRs #23, #24, #29, #30)
+
+Dedicated read tools beside the registry (chat `features/x-strategy/agent/tools.js`; MCP gets `strategy_*` twins):
+- `find_hires_media` (`features/x-content-inventory/hires-finder.js`, pure + conservative): finds the NAS original behind a post's low-res picture. Exact Facebook photo-id match wins; else OCR text ≥60% same, no event-date conflict, aspect within 6%, score ≥50. Reads every NAS package (paged, 60 s memo). The item's **own** file is always listed last (`self:true`) and is the `bestId` fallback — "no larger copy" never means "nothing to give".
+- Catalog action `media.use-hires` (tier 1, snapshot + undo; `hires-media.js`): stages through `nas-stage` (Mac analyzer), swaps the post's media in a transaction, links media to the item, returns a download URL. If the copy is still running it records `hiresPending`; the worker COMPLETE hook (`app/api/archive/commands/worker/route.js` → `attachStagedHires`) attaches it later (editable posts only). Post sheet has a "Get high-res" panel (`HiresMediaPanel.jsx`).
+- `get_media_link` (`media-link.js` pure + `media-signers.js`): itemId | postId | query (+ kind). EditVideos `ev:` → signed 6.9-day URL; Hitloop storage → permanent token URL; http(s)/Arweave pass through; poster + thumbnail too. NAS not copied yet → `needsStaging` (+ `nas.stage`); never-public refused; gone → `missing`.
+- Trap fixed in #24: NAS upload headers must be lowercase `content-type` (the worker spreads server headers over its own; mixed case sent the header twice and broke the GCS v4 signature → 403).
+
+## Calendar Stage, Mac queue and Daily refresh (2026-10-18)
+
+- `queue.post.attach-item-media` (tier 1, snapshot; route action `post-attach-item-media`, `features/x-content-inventory/attach-item-media.js`): a library item's media onto a post, the editor's "Add / change creative". Goes through `swapPostMedia` (approval + schedule cleared on approved/scheduled v2 rows). Refuses never-public and non-X formats (.mov/webm); unstaged NAS → `needs-staging` (then `nas.stage`).
+- `queue.post.quoted-preview` (tier 0; `quoted-post-preview`, `features/x-quote-targets/quoted-preview.js`): the tweet a quote post quotes, from the stored quote scan only (no X call).
+- `calendar.quote-scan.status` (tier 0; `quote-scan-status`): a Mac quote scan queued by Refresh › Quote targets (Mac source) or MCP `request_quote_scan` (queue `x_quote_scan_requests`, `features/x-quote-targets/scan-queue.js`; drained by the Mac refresh worker every 60 s, installer `scripts/x-content/install-refresh-worker.sh`).
+- `refresh.daily.get` (tier 0) / `refresh.daily.save` (tier 3, paid: standing daily spend; snapshot `digest_config/{clientId}.refreshDaily`): route `refresh-daily` (`app/api/admin/refresh-daily`, admin, explicit client). Profile logic `features/intelligence/_refresh-daily.js`.
+- MCP: free syncs `request_quote_scan` + `quote_scan_status` (beside `request_strategy_refresh`); the registry entries above reach MCP through `find_actions` / `chat_send`.
+- Undo never restores a snapshot whose `before` or `after` is on the publishing schedule (`action-runtime.js`); it says to unschedule / schedule instead.
+- Trusted scheduling: `queue.post.schedule-approved` (tier 3, external x, `trusted:'schedule-approved'`) is the only entry that can run without a card — `resolveGate` returns `run` only while `agentAutonomy.trustedSchedule.enabled` (default off) and the batch is within `dailyCap`. Server: social-posting `trusted-schedule` → `trustedSchedulePost` (owner-approved v2 + unchanged hash + lead ≥ `minLeadMinutes` + daily cap; reads the setting from Firestore, never from the request). UI: Agent permissions panel.
+
 ## Runtime contract (action-runtime.js)
 - `fixed` body/query fields are merged AFTER the agent's args. Unknown arg keys are dropped when the schema is closed and reported as `droppedArgs` in the run_action result.
 - `action:null` + `query:{action}` entries send the action in the query string (POST body carries the payload); GET entries pass args as query params.

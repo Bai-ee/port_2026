@@ -35,6 +35,7 @@ import { GLASS, ui, RailCard, Slider } from '../components/rail-ui';
 import { useRailReveal } from '../components/useRailReveal';
 import UpRightArrow from '../../../../components/UpRightArrow';
 import { STANDARD_REMIX_DEFAULTS, buildRemixRecipe } from '../../../../lib/dashboard/video-remix';
+import { marqueeCardEdgeStyle, marqueeEdgeFadeStyle } from '../../../../pageSurfaceSystem';
 
 // DISPLAY ONLY — the artboard ratio, the timeline's second markers, the output
 // chip. The real output is locked server-side by validateRemixRecipe (720/30/30)
@@ -1035,14 +1036,12 @@ export default function RemixStudio({ isNarrow = false, railW = 336, authedFetch
               position: 'relative', width: '100%', maxWidth: '40rem',
               padding: 'clamp(1.1rem, 4vw, 1.6rem)', borderRadius: 10, boxSizing: 'border-box',
               background: '#ffffff',
-              boxShadow: '0px 5px 10px rgba(0,0,0,0.1), 0px 15px 30px rgba(0,0,0,0.1), 0px 20px 40px rgba(0,0,0,0.15)',
-              border: '1px solid rgba(255,255,255,0.5)',
+              ...marqueeCardEdgeStyle,
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', justifyContent: 'space-between' }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/img/circle_logo.png" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', display: 'block' }} />
-              <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.44)', fontWeight: 700, fontFamily: TERM_MONO }}>Video Remix</span>
+            <div id="remix-render-console-brand-row" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', justifyContent: 'flex-end', height: '2.75rem' }}>
+              {/* <img src="/img/circle_logo.png" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.35)', display: 'block' }} />
+              <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(42,36,32,0.44)', fontWeight: 700, fontFamily: TERM_MONO }}>Video Remix</span> */}
               <button
                 type="button"
                 id="remix-render-console-close"
@@ -1052,7 +1051,7 @@ export default function RemixStudio({ isNarrow = false, railW = 336, authedFetch
               >[ ✕ ]</button>
             </div>
 
-            <div style={{ width: '100%', overflow: 'hidden', margin: '0 0 0.7rem' }}>
+            <div id="remix-render-console-marquee-viewport" style={{ width: '100%', overflow: 'hidden', margin: '0 0 0.7rem', ...marqueeEdgeFadeStyle }}>
               <div style={{ display: 'flex', alignItems: 'center', width: 'max-content', animation: 'srt-marquee 18s linear infinite', willChange: 'transform' }}>
                 {['a', 'b'].map((key) => (
                   <span key={key} aria-hidden={key === 'b' ? 'true' : undefined} style={{ margin: 0, flexShrink: 0, whiteSpace: 'nowrap', color: '#2a2420', fontSize: 'clamp(2rem, 8.5vw, 7rem)', lineHeight: 1, letterSpacing: '-0.04em', fontFamily: DOTO, fontWeight: 700 }}>{'RENDERING VIDEO REMIX · '.repeat(2)}</span>

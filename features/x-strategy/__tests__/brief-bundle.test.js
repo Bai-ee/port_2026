@@ -153,3 +153,23 @@ test('get_brief / get_freshness tools: model never supplies clientId, bad part r
   assert.ok(!('summary' in fr.parts['market-signals']));
   for (const n of ['get_brief', 'get_freshness']) assert.deepEqual(await runReadTool(n, {}, {}), { error: 'not available' });
 });
+
+test('switched-off features never pin a group stale: x-search off, analyzers of off platforms ignored', () => {
+  const now = Date.parse('2026-10-18T19:00:00Z');
+  const fresh = '2026-10-18T12:00:00Z';
+  const raw = {
+    marketingBrief: { reportSnapshot: {
+      instagramAnalysis: { generatedAt: '2026-08-13T12:00:00Z' }, // lingering output from when Instagram was on
+      watchlistAnalysis: { generatedAt: fresh },
+    } },
+    features: { platforms: { x: true, reddit: false, instagram: false }, opportunitySignals: false, xMarketTalk: false },
+  };
+  const f = freshnessOf(buildBriefBundle(raw, { now }));
+  assert.equal(f.parts['x-search'].off, true);
+  assert.equal(f.parts['x-search'].stale, false);
+  assert.equal(f.parts.analysis.asOf, new Date(fresh).toISOString(), 'the Aug Instagram output no longer sets the age');
+  assert.equal(f.parts.analysis.stale, false);
+  // Instagram switched back on: its stale output counts again.
+  const on = freshnessOf(buildBriefBundle({ ...raw, features: { ...raw.features, platforms: { instagram: true } } }, { now }));
+  assert.equal(on.parts.analysis.stale, true);
+});

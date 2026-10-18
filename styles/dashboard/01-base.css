@@ -345,7 +345,8 @@
     justify-content: space-between;
     align-items: baseline;
     padding: 14px 0;
-    border-bottom: 1px solid var(--border);
+    /* --border (dash-border) is near-black in dark mode; border-subtle reads as a faint line in both modes. */
+    border-bottom: 1px solid var(--t-border-subtle);
   }
   .meta-row-source {
     display: block;

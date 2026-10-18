@@ -17,6 +17,8 @@ import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import { createRefreshService, createFirestoreRefreshQueue, recordWorkerSeen } from '../../features/x-strategy/refresh.js';
 import { createFirestoreCorpusStore } from '../../features/x-strategy/corpus-store.js';
+import { execFile } from 'node:child_process';
+import { createFirestoreQuoteScanQueue, SCAN_STATUS } from '../../features/x-quote-targets/scan-queue.js';
 
 const require = createRequire(import.meta.url);
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
@@ -37,6 +39,37 @@ function firebase() {
 
 const log = (line) => process.stderr.write(`${line}\n`);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Refresh "Quote targets" (Mac source): run the same free bird scan the 6:30 launchd job runs, for one client.
+const SCAN_TIMEOUT_MS = 10 * 60 * 1000;
+function runQuoteScan(clientId) {
+  return new Promise((resolve) => {
+    execFile(process.execPath, [path.join(REPO, 'scripts/x-content/scan-quote-targets.mjs'), '--client', clientId, '--write'],
+      { cwd: REPO, timeout: SCAN_TIMEOUT_MS, maxBuffer: 8 * 1024 * 1024 },
+      (err, stdout, stderr) => resolve({ ok: !err, code: err?.code ?? 0, output: `${stdout || ''}\n${stderr || ''}` }));
+  });
+}
+
+/** Claim + run queued quote scans (one per pass is plenty: each takes a few minutes and X rate-limits bursts). */
+async function drainQuoteScans(db) {
+  const queue = createFirestoreQuoteScanQueue(db);
+  const job = await queue.claimNext();
+  if (!job) return null;
+  log(`[${new Date().toISOString()}] quote scan ${job.id} for ${job.clientId}`);
+  const run = await runQuoteScan(job.clientId);
+  const snap = await db.collection('dashboard_state').doc(job.clientId).get().catch(() => null);
+  const q = snap?.exists ? snap.data()?.marketingBrief?.quoteTargets || {} : {};
+  const rateLimited = /\b429\b|rate.?limit/i.test(run.output) && !(q.candidates || []).length;
+  const status = run.ok ? (rateLimited ? SCAN_STATUS.RATE_LIMITED : SCAN_STATUS.DONE) : SCAN_STATUS.FAILED;
+  const result = {
+    candidates: Array.isArray(q.candidates) ? q.candidates.length : 0,
+    scanned: q.scanned ?? null, succeeded: q.succeeded ?? null, generatedAt: q.generatedAt || null,
+    note: /no watchlist saved/.test(run.output) ? 'No watchlist saved for this client: add watched accounts first.' : null,
+  };
+  await queue.finish(job.id, job.leaseId, { status, result, ...(run.ok ? {} : { error: run.output.trim().split('\n').slice(-3).join(' ').slice(0, 300) }) });
+  log(`[${new Date().toISOString()}] quote scan ${job.id} -> ${status} (${result.candidates} candidates)`);
+  return { id: job.id, status };
+}
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -61,6 +94,8 @@ async function main() {
     const res = await svc.drainQueue();
     log(`[${new Date().toISOString()}] drained ${res.processed}${res.reason ? ` (${res.reason})` : ''}${res.requests.length ? ` ${JSON.stringify(res.requests)}` : ''}`);
     if (res.requests.length) await beat(res.requests[res.requests.length - 1].id);
+    const scan = await drainQuoteScans(db).catch((err) => { log(`quote scan drain failed: ${err?.message}`); return null; });
+    if (scan) await beat(scan.id);
     if (args.once) break;
     await sleep(args.loop * 1000);
   } while (true); // eslint-disable-line no-constant-condition

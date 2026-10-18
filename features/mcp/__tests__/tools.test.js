@@ -58,10 +58,10 @@ test('registry: strategy tools are generated 1:1 from READ_TOOLS and PROPOSE_TOO
 test('registry: the full promised catalogue exists, and nothing can post, schedule, approve, delete or send', () => {
   const names = registry.map((t) => t.name);
   for (const n of ['list_collections', 'get_document', 'query_collection', 'get_client_overview', 'search_timeline', 'get_operating_costs', 'get_x_monitor',
-    'list_repo_path', 'read_repo_file', 'search_repo', 'recent_commits', 'request_strategy_refresh', 'regenerate_today_suggestions',
+    'list_repo_path', 'read_repo_file', 'search_repo', 'recent_commits', 'request_strategy_refresh', 'request_quote_scan', 'quote_scan_status', 'regenerate_today_suggestions',
     'nas_status', 'nas_browse', 'nas_estimate', 'request_sync', 'get_hitloop_guide']) assert.ok(names.includes(n), n);
   assert.ok(!names.includes('confirm_sync'), 'there is no confirm tool: only the owner\'s click in HITLOOP runs a paid sync');
-  assert.equal(registry.length, 74); // 48 strategy + guide + 7 data + 4 repo + 7 sync + 2 playbook + 5 chat/actions (confirm_sync removed)
+  assert.equal(registry.length, 76); // 48 strategy + guide + 7 data + 4 repo + 9 sync (incl. request_quote_scan, quote_scan_status) + 2 playbook + 5 chat/actions (confirm_sync removed)
   for (const n of names) assert.doesNotMatch(n, /^(strategy_)?(post|publish|schedule|approve|delete|remove|send|tweet|reply|follow|unfollow|email|telegram|write|update|set)_/, n);
   const kinds = registry.find((t) => t.name === 'request_sync').inputSchema.properties.kind.enum;
   assert.deepEqual([...kinds].sort(), ['nas_analyze', 'strategy_review', 'x_monitor_sync']); // market_signals_refresh removed (paid X reads)
@@ -418,4 +418,24 @@ test('regenerate_today_suggestions: resolves the client and surfaces the readine
   assert.equal(none.isError, true);
   assert.match(none.content[0].text, /clientId is required/);
   assert.equal(asked.length, 1);
+});
+
+test('request_quote_scan queues the free Mac scan; quote_scan_status reads it; no queue = a clear error, never a fake success', async () => {
+  const ran = [];
+  const handle = async (action, body) => {
+    ran.push([action, body]);
+    if (action === 'quote-scan-refresh') return { ok: true, source: 'mac', requestId: 'req1', status: 'queued' };
+    if (action === 'quote-scan-status') return { ok: true, request: { id: body.requestId, status: 'done', result: { candidates: 4 } }, workerHealth: { ageMinutes: 0 } };
+    return { ok: false, error: 'unexpected' };
+  };
+  const ctx = makeCtx({ services: { strategyHandlers: () => ({ handle }) } });
+  const q = textOf(await call('request_quote_scan', {}, ctx));
+  assert.equal(q.requestId, 'req1');
+  assert.deepEqual(ran.at(-1), ['quote-scan-refresh', { clientId: OWNER }]);
+  const st = textOf(await call('quote_scan_status', { requestId: 'req1' }, ctx));
+  assert.equal(st.request.result.candidates, 4);
+  const noQueue = makeCtx({ services: { strategyHandlers: () => ({ handle: async () => ({ ok: true, status: 'needs-mac', instructions: 'Run it on the Mac.' }) }) } });
+  const bad = await call('request_quote_scan', {}, noQueue);
+  assert.equal(bad.isError, true);
+  assert.match(bad.content[0].text, /Run it on the Mac/);
 });

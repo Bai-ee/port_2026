@@ -2,11 +2,10 @@
 
 import { useCalendarProps } from './standalone.js';
 import React, { useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { Check, ChevronLeft, ChevronRight, RefreshCw, X } from 'lucide-react';
-import { Skeleton, RetryError } from '../content-ui/Feedback.jsx';
-import PostSheet from './PostSheet.jsx';
-import { classifyResult } from '../../../features/x-content-inventory/month-calendar.js';
+import { RetryError } from '../content-ui/Feedback.jsx';
+import LoadingRing from '../content-ui/ui/LoadingRing';
+import StagePostLevel from '../calendar-stage/StagePostLevel.jsx';
 import { ENGINE_TAG, STATE_LABEL, StateDot, dayHeading } from './calendar-bits.jsx';
 import { ApprovalMark, FilterChips, InlineApprovalButtons, SuggestionRow, CalendarApprovalStyles } from './CalendarApprovalBits.jsx';
 import { dayRows, filterRows, withOverride, approveRequest, unapproveRequest, isSuggestionRow, matchesFilter } from './calendar-row-model.js';
@@ -24,11 +23,15 @@ import { dayRows, filterRows, withOverride, approveRequest, unapproveRequest, is
 // posted = muted + check, failed = the only red. Engines are a mono text tag.
 //
 // Layout: one grid at every width. ≥640 cells list post chips; <640 cells show
-// state dots and the selected day's list below carries the content (the
-// Apple Calendar phone pattern). Clicking a post opens the PostSheet editor.
+// state dots. This panel feeds the three levels of the Calendar Stage
+// (components/dashboard/calendar-stage/): MONTH (the grid below), DAY (that day's
+// items by category; Today also gets the host's Plan / Recommendations via
+// `renderTodayExtras`) and POST (StagePostLevel -> PostEditor). The stage shows one
+// level at a time, so there is no overlay, backdrop or drawer in here. One mounted
+// instance serves all three levels so the loaded month and the filters survive.
 //
-// STYLING: classNames only (`xce-mc-`); the parent card owns the single
-// `<style jsx global>` block, prefixed `.xce-scope`.
+// STYLING: classNames only (`xce-mc-`); the stage host mounts ContentUiStyles
+// (the single `<style jsx global>` block, prefixed `.xce-scope`).
 
 const UNPLACED_REASON = {
   'needs-story': 'Needs its story',
@@ -61,7 +64,8 @@ export function isQuoteWindowClosed(post, nowMs = Date.now()) {
   return Number.isFinite(t) && t < nowMs;
 }
 
-function PostRow({ post, busy, onOpen, onApprove, onReject, onApproveOnly, onUnapprove }) {
+// onView (calendar day view only): the row and its VIEW POST button open the X preview instead of the editor.
+function PostRow({ post, busy, onOpen, onApprove, onReject, onApproveOnly, onUnapprove, onView }) {
   const windowClosed = isQuoteWindowClosed(post);
   // Once the data layer sends `approval`, the row's Approve button approves WITHOUT scheduling; the legacy approve-and-schedule check is kept only before that.
   const approvalAware = !!post.approval && !!onApproveOnly;
@@ -70,7 +74,7 @@ function PostRow({ post, busy, onOpen, onApprove, onReject, onApproveOnly, onUna
   return (
     <li id={`x-content-month-row-${post.id}`} className={`xce-mc-row xce-mc-state-${post.state}${windowClosed ? ' xce-mc-row-expired' : ''}`}>
       <button type="button" className="xce-mc-row-main" data-bucket={post.bucketColor ? post.bucketId || 'none' : undefined} data-thumb={post.thumbUrl ? '' : undefined}
-        style={post.bucketColor ? { '--mc-bucket': post.bucketColor } : undefined} onClick={() => onOpen(post.id)}>
+        style={post.bucketColor ? { '--mc-bucket': post.bucketColor } : undefined} onClick={() => (onView ? onView(post) : onOpen(post.id))}>
         <span className="xce-mc-row-time">{post.time || '—'}</span>
         {approvalAware ? <ApprovalMark row={post} id={`x-content-month-row-mark-${post.id}`} /> : <StateDot state={post.state} />}
         <span className="xce-mc-row-body">
@@ -94,6 +98,11 @@ function PostRow({ post, busy, onOpen, onApprove, onReject, onApproveOnly, onUna
         </span>
         {post.thumbUrl ? <span id={`x-content-month-row-thumb-${post.id}`} className="xce-mini-thumb"><img src={post.thumbUrl} alt="" loading="lazy" /></span> : null}
       </button>
+      {onView ? (
+        <span className="xce-mc-row-actions">
+          <button type="button" id={`x-content-month-row-view-${post.id}`} className="xce-mc-text-btn xce-ap-btn" onClick={() => onView(post)}>View post</button>
+        </span>
+      ) : null}
       {approvalAware ? (
         <span className="xce-mc-row-actions">
           <InlineApprovalButtons row={post} busy={busy} onApprove={onApproveOnly} onUnapprove={onUnapprove} />
@@ -145,9 +154,141 @@ function TaskRow({ task, busy, onToggle }) {
   );
 }
 
-// Sheet portal target: the Content Center card root when present, else the nearest .xce-scope, else body (standalone host).
-function sheetHost() {
-  return document.getElementById('x-content-card') || document.querySelector('.xce-scope') || document.body;
+// Category for a day-view row: quote retweets, suggestions, else the post's Content Center bucket.
+function rowCategory(r, names) {
+  if (r.kind === 'requote') return { key: 'requote', label: 'Quote retweets', color: null };
+  if (r.kind === 'suggestion') return { key: 'suggestion', label: 'Suggestions', color: null };
+  const id = r.bucketId || 'none';
+  return { key: `bucket-${id}`, label: names.get(r.bucketId) || (r.bucketId ? r.bucketId : 'No bucket'), color: r.bucketColor || null };
+}
+
+// DAY LEVEL of the Calendar Stage: one day's items by category. No overlay, backdrop or blur of its own: the stage
+// owns the page and the top bar owns the title / close.
+function DayBody({ day, rows, legend, pendingOnly, renderRow, onTaskToggle, busyId, todayExtras }) {
+  const names = new Map((legend || []).map((b) => [b.id, b.name]));
+  const groups = [];
+  const byKey = new Map();
+  for (const r of rows) {
+    const c = rowCategory(r, names);
+    if (!byKey.has(c.key)) { const g = { ...c, rows: [] }; byKey.set(c.key, g); groups.push(g); }
+    byKey.get(c.key).rows.push(r);
+  }
+  groups.sort((a, b) => (a.key === 'requote' ? -1 : b.key === 'requote' ? 1 : 0));
+  const c = day.counts || {};
+  const stats = [
+    { label: 'DRAFTS', value: (c.pending || 0) + (c.awaiting || 0) + (c.held || 0) },
+    { label: 'SCHEDULED', value: (c.approved || 0) + (c.scheduled || 0) + (c.manual || 0) },
+    { label: 'POSTED', value: c.posted || 0 },
+    { label: 'QUOTES', value: c.requote || 0 },
+  ];
+  const total = rows.length + (day.tasks?.length || 0);
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const openTasks = (day.tasks || []).filter((t) => t.status === 'open');
+
+  return (
+    <div id="x-content-day-view-root" className="xce-panel">
+      <div id="x-content-day-view-content">
+        <div id="x-content-day-view-summary-row">
+          <div id="x-content-day-view-summary-count">
+            <span id="x-content-day-view-summary-count-value">{pad2(total)}</span>
+            <span className="xce-dv-caps">{day.isToday ? 'TODAY' : day.isPast ? 'PAST DAY' : 'UPCOMING'} · ON THIS DAY</span>
+          </div>
+          <div id="x-content-day-view-stats" className="xce-dv-stats">
+            {stats.map((x) => (
+              <span key={x.label} className="xce-dv-stat" data-zero={x.value ? 'false' : 'true'}>
+                <span className="xce-dv-stat-value">{pad2(x.value)}</span> {x.label}
+              </span>
+            ))}
+          </div>
+        </div>
+        {day.flags?.length ? (
+          <ul id="x-content-day-view-flags" className="xce-mc-flags">
+            {day.flags.map((f, i) => <li key={`${f.kind}-${i}`}>{f.message}</li>)}
+          </ul>
+        ) : null}
+        {groups.map((g) => (
+          <section key={g.key} id={`x-content-day-view-group-${g.key.replace(/[^a-z0-9-]/gi, '-')}`} className="xce-dv-group">
+            <h3 className="xce-dv-group-head">
+              <span className="xce-dv-dot" aria-hidden="true" style={g.color ? { background: g.color } : undefined} />
+              {g.label}
+              <span className="xce-dv-group-count">{pad2(g.rows.length)}</span>
+            </h3>
+            <ul className="xce-mc-rows">{g.rows.map((r) => renderRow(r))}</ul>
+          </section>
+        ))}
+        {openTasks.length || day.tasks?.length ? (
+          <section id="x-content-day-view-group-tasks" className="xce-dv-group">
+            <h3 className="xce-dv-group-head">
+              <span className="xce-dv-dot" aria-hidden="true" />
+              Media tasks
+              <span className="xce-dv-group-count">{pad2(day.tasks.length)}</span>
+            </h3>
+            <ul className="xce-mc-rows">
+              {day.tasks.map((t) => <TaskRow key={t.id} task={t} busy={busyId === t.id} onToggle={onTaskToggle} />)}
+            </ul>
+          </section>
+        ) : null}
+        {!groups.length && !day.tasks?.length ? (
+          <p id="x-content-day-view-empty" className="xce-dv-caps xce-dv-empty">{pendingOnly ? '[NOTHING PENDING ON THIS DAY]' : '[NOTHING ON THIS DAY]'}</p>
+        ) : null}
+        {day.isToday ? (todayExtras ? (
+          <section id="x-content-day-view-today-extras" className="xce-dv-today">{todayExtras}</section>
+        ) : null) : (
+          <p id="x-content-day-view-today-only-note" className="xce-dv-caps xce-dv-note">PLAN AND RECOMMENDATIONS ARE BUILT FOR TODAY ONLY</p>
+        )}
+      </div>
+      <style>{`
+        #x-content-day-view-root { width: 100%; max-width: 960px; margin: 0 auto; box-sizing: border-box; }
+        #x-content-day-view-content { display: flex; flex-direction: column; gap: 22px; padding: 6px 8px 10px; }
+        #x-content-day-view-root .xce-dv-caps { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--t-text-secondary); }
+        /* Nothing-style (matches the Refresh modal): one Doto hero, mono caps metadata, flat single-line rows,
+           colour only on values (bucket dot, stale/failed). Overrides below are scoped to this level only. */
+        #x-content-day-view-summary-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--t-border-faint); }
+        #x-content-day-view-summary-count { display: flex; align-items: baseline; gap: 8px; }
+        #x-content-day-view-summary-count-value { font-family: "Doto", var(--font-mono); font-weight: 700; font-size: 56px; line-height: 0.85; letter-spacing: -0.02em; color: var(--t-text-strong); }
+        #x-content-day-view-root .xce-dv-stats { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px 18px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--t-text-secondary); }
+        #x-content-day-view-root .xce-dv-stat-value { color: var(--t-text-strong); }
+        #x-content-day-view-root .xce-dv-stat[data-zero="true"] { color: var(--t-text-disabled); }
+        #x-content-day-view-root .xce-dv-stat[data-zero="true"] .xce-dv-stat-value { color: var(--t-text-disabled); }
+        #x-content-day-view-root .xce-dv-group { display: flex; flex-direction: column; gap: 4px; }
+        #x-content-day-view-root .xce-dv-group-head { display: flex; align-items: center; gap: 8px; margin: 0; padding-bottom: 6px; font-family: var(--font-mono); font-size: 11px; font-weight: 400; letter-spacing: 0.08em; text-transform: uppercase; color: var(--t-text-secondary); }
+        #x-content-day-view-root .xce-dv-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--t-text-secondary); flex-shrink: 0; }
+        #x-content-day-view-root .xce-dv-group-count { margin-left: auto; color: var(--t-text-strong); }
+        #x-content-day-view-root .xce-mc-rows { border-top: 1px solid var(--t-border-faint); }
+        #x-content-day-view-root .xce-mc-row { gap: 10px; border-top: 0; border-bottom: 1px solid var(--t-border-faint); }
+        #x-content-day-view-root .xce-mc-row-main,
+        #x-content-day-view-root .xce-mc-row-main[data-bucket] { min-height: 48px; padding: 6px 0; gap: 12px; grid-template-columns: 44px 12px minmax(0, 1fr); background: transparent; box-shadow: none; border-radius: 0; }
+        #x-content-day-view-root .xce-mc-row-main[data-thumb] { grid-template-columns: 44px 12px minmax(0, 1fr) 32px; }
+        #x-content-day-view-root .xce-mc-row-main:hover { background: transparent; }
+        #x-content-day-view-root .xce-mc-row-main:hover .xce-mc-row-title { color: var(--t-text-strong); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--t-border-subtle); }
+        #x-content-day-view-root .xce-mc-row-time { font-weight: 400; font-size: 11px; letter-spacing: 0.04em; color: var(--t-text-secondary); }
+        #x-content-day-view-root .xce-mc-row-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-ui); font-size: 15px; color: var(--t-text); }
+        #x-content-day-view-root .xce-mc-row-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--t-text-secondary); }
+        #x-content-day-view-root .xce-mc-fill-badge { margin-left: 6px; padding: 0 6px; font-size: 10px; border-color: var(--t-border-subtle); }
+        #x-content-day-view-root .xce-mini-thumb { width: 32px; height: 32px; border-radius: 4px; }
+        #x-content-day-view-root .xce-mc-text-btn,
+        #x-content-day-view-root .xce-mc-icon-btn { min-height: 28px; padding: 0 12px; border: 1px solid var(--t-border-faint); border-radius: 999px; background: transparent; color: var(--t-text-secondary); font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; transition: color 150ms ease-out, border-color 150ms ease-out; }
+        #x-content-day-view-root .xce-mc-text-btn:hover:not(:disabled),
+        #x-content-day-view-root .xce-mc-icon-btn:hover:not(:disabled) { color: var(--t-text-strong); border-color: var(--t-control-border-strong); }
+        #x-content-day-view-root .xce-dv-empty { margin: 0; padding: 8px 0; }
+        #x-content-day-view-root .xce-dv-note { margin: 0; padding-top: 14px; border-top: 1px solid var(--t-border-faint); color: var(--t-text-disabled); }
+        #x-content-day-view-root .xce-dv-today { padding-top: 18px; border-top: 1px solid var(--t-border-faint); }
+        @media (prefers-reduced-motion: reduce) {
+          #x-content-day-view-root .xce-mc-text-btn, #x-content-day-view-root .xce-mc-icon-btn { transition: none; }
+        }
+        @media (max-width: 620px) {
+          #x-content-day-view-summary-row { flex-direction: column; align-items: flex-start; gap: 10px; }
+          #x-content-day-view-root .xce-dv-stats { justify-content: flex-start; }
+          #x-content-day-view-summary-count-value { font-size: 44px; }
+          #x-content-day-view-root .xce-mc-row-main, #x-content-day-view-root .xce-mc-row-main[data-bucket] { grid-template-columns: 40px 12px minmax(0, 1fr); }
+        }
+        @media (max-width: 480px) {
+          #x-content-day-view-root { max-width: none; padding: 8px var(--mobile-gutter, 8px); border-radius: 12px; }
+          #x-content-day-view-content { padding: 4px 0 8px; }
+        }
+      `}</style>
+    </div>
+  );
 }
 
 function MonthCalendarPanelView({
@@ -167,6 +308,9 @@ function MonthCalendarPanelView({
   onReconcile,
   onTaskToggle,
   call,
+  renderTodayExtras,
+  onSetMonth,
+  stage,
 }) {
   const [view, setView] = useState('month');
   const [pendingOnly, setPendingOnly] = useState(false);
@@ -175,7 +319,18 @@ function MonthCalendarPanelView({
   const [inlineBusyId, setInlineBusyId] = useState(null);
   const [inlineNote, setInlineNote] = useState('');
   const [selected, setSelected] = useState(null);
-  const [openId, setOpenId] = useState(null);
+  // Stage navigation: the Calendar Stage owns which level is visible (month | day | post).
+  const nav = stage?.nav;
+  const level = nav?.state?.level || 'month';
+  const stageDate = nav?.state?.date || null;
+  const stagePostId = nav?.state?.postId || null;
+  const setOpenId = (id) => { if (id && nav) nav.openPost(id); };
+  const openDay = (date) => { setSelected(date); if (nav) nav.openDay(date); };
+  // A day / post deep link (reload, Open Today) can be in another month than the one loaded: load that month.
+  const wantMonth = level === 'month' ? null : (stageDate || '').slice(0, 7) || null;
+  useEffect(() => {
+    if (wantMonth && calendar && !loading && calendar.month !== wantMonth && onSetMonth) onSetMonth(wantMonth);
+  }, [wantMonth, calendar?.month]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { setView(readView()); }, []);
   useEffect(() => {
@@ -197,7 +352,7 @@ function MonthCalendarPanelView({
 
   const byId = useMemo(() => {
     const map = new Map();
-    for (const d of days) for (const p of d.posts) map.set(p.id, { ...p, date: d.date });
+    for (const d of days) for (const p of dayRows(d)) if (!map.has(p.id)) map.set(p.id, { ...p, date: p.date || d.date });
     for (const p of unplaced) if (!map.has(p.id)) map.set(p.id, { ...p, date: null });
     return map;
   }, [days, unplaced]);
@@ -232,28 +387,54 @@ function MonthCalendarPanelView({
   const onApproveOnly = (row) => inlineDecide(row, approveRequest(row), 'approved');
   const onUnapprove = (row) => inlineDecide(row, unapproveRequest(row), 'unapproved');
   const rowBusy = (id) => busyId === id || inlineBusyId === id;
+  // A row opens the editor (PostEditor handles saved posts, daily suggestions and requotes alike).
   const renderRow = (p) => (isSuggestionRow(p)
-    ? <SuggestionRow key={p.id} row={p} busy={rowBusy(p.id)} onApprove={onApproveOnly} />
+    ? <SuggestionRow key={p.id} row={p} busy={rowBusy(p.id)} onApprove={onApproveOnly} onView={() => setOpenId(p.id)} />
     : <PostRow key={p.id} post={p} busy={rowBusy(p.id)} onOpen={setOpenId} onApprove={quickApprove} onReject={onReject} onApproveOnly={onApproveOnly} onUnapprove={onUnapprove} />);
-  const selectedDay = days.find((d) => d.date === selected) || null;
-  const openPost = openId ? byId.get(openId) || null : null;
-
-  // Approve/Reject then move on to the next post awaiting review (triage flow).
-  const nextAfter = (id) => {
-    const i = reviewQueue.indexOf(id);
-    if (i === -1) return null;
-    return reviewQueue[i + 1] || reviewQueue[i - 1] || null;
-  };
-  const decide = async (fn, post, extra) => {
-    const next = nextAfter(post.id);
-    const res = await fn(post, extra);
-    // Only a clean result advances; conflicts / plan rejections keep the sheet (and the user's edit) open.
-    if (res && classifyResult(res).kind === 'ok' && openId) setOpenId(next && next !== post.id ? next : null);
-    return res;
-  };
+  const selectedDayFor = (date) => days.find((d) => d.date === date) || null;
   const quickApprove = (post) => onApprove(post, { content: post.content, scheduledAt: post.proposedAt || post.scheduledAt, expectedRevision: post.revision ?? null });
 
   const agendaDays = days.filter((d) => d.inMonth && (rowsFor(d).length || d.tasks?.length));
+
+  // DAY level: that day's items. Waits for the month to load; a failed load shows the same retry as the month.
+  if (level === 'day') {
+    const dayRowsNow = selectedDayFor(stageDate);
+    return (
+      <>
+        {error ? <RetryError id="x-content-day-view-error" message={typeof error === 'string' ? error : 'Could not load the calendar.'} onRetry={onRefresh} busy={!!loading} /> : null}
+        {!dayRowsNow && !error ? <LoadingRing id="x-content-day-view-loading" label="Loading the day" minHeight={240} /> : null}
+        {dayRowsNow ? (
+          <DayBody
+            day={dayRowsNow}
+            rows={rowsFor(dayRowsNow)}
+            legend={calendar?.legend}
+            pendingOnly={pendingOnly}
+            renderRow={renderRow}
+            onTaskToggle={onTaskToggle}
+            busyId={busyId}
+            todayExtras={dayRowsNow.isToday && typeof renderTodayExtras === 'function' ? renderTodayExtras() : null}
+          />
+        ) : null}
+        {inlineNote ? <p id="x-content-day-view-inline-note" className="xce-ap-note" role="alert">{inlineNote}</p> : null}
+        <CalendarApprovalStyles />
+      </>
+    );
+  }
+
+  // POST level: the single View & Edit Post editor (components/dashboard/calendar-stage/StagePostLevel.jsx).
+  if (level === 'post') {
+    return (
+      <StagePostLevel
+        key={stagePostId}
+        postId={stagePostId}
+        row={stagePostId ? byId.get(stagePostId) || null : null}
+        calendarReady={!!calendar || !loading}
+        stage={stage}
+        onRefresh={onRefresh}
+        dayGroups={days.map((d) => ({ date: d.date, rows: rowsFor(d) }))}
+      />
+    );
+  }
 
   return (
     <div id="x-content-month-calendar-panel" className="xce-panel xce-mc">
@@ -323,7 +504,7 @@ function MonthCalendarPanelView({
       {inlineNote ? <p id="x-content-month-inline-note" className="xce-ap-note" role="alert">{inlineNote}</p> : null}
 
       {error ? <RetryError id="x-content-month-error" message={typeof error === 'string' ? error : 'Could not load the calendar.'} onRetry={onRefresh} busy={!!loading} /> : null}
-      {loading && !calendar ? <Skeleton id="x-content-month-loading" rows={5} variant="tile" /> : null}
+      {loading && !calendar ? <LoadingRing id="x-content-month-loading" label="Loading the calendar" minHeight={320} /> : null}
 
       {calendar && view === 'month' ? (
         <>
@@ -357,8 +538,8 @@ function MonthCalendarPanelView({
                       aria-selected={d.date === selected}
                       aria-label={`${dayHeading(d.date)}, ${posts.length} post${posts.length === 1 ? '' : 's'}`}
                       className={cls}
-                      onClick={() => setSelected(d.date)}
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelected(d.date); } }}
+                      onClick={() => openDay(d.date)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDay(d.date); } }}
                     >
                       <span className="xce-mc-date">{Number(d.date.slice(8))}</span>
                       {d.flags?.length ? <span className="xce-mc-flag" title={d.flags.map((f) => f.message).join('\n')}>!</span> : null}
@@ -371,7 +552,7 @@ function MonthCalendarPanelView({
                             className={`xce-mc-chip xce-mc-state-${p.state}`}
                             data-bucket={p.bucketColor ? p.bucketId || 'none' : undefined}
                             style={p.bucketColor ? { '--mc-bucket': p.bucketColor } : undefined}
-                            onClick={(e) => { e.stopPropagation(); setSelected(d.date); if (!isSuggestionRow(p)) setOpenId(p.id); }}
+                            onClick={(e) => { e.stopPropagation(); setSelected(d.date); if (isSuggestionRow(p)) openDay(d.date); else setOpenId(p.id); }}
                             title={`${p.time || ''} · ${STATE_LABEL[p.state] || (p.kind === 'requote' ? 'Requote' : 'Suggested')}${p.proposed ? ' (proposed)' : ''} · ${p.title || p.text || ''}`}
                           >
                             {p.approval ? <ApprovalMark row={p} /> : <StateDot state={p.state} />}
@@ -392,29 +573,6 @@ function MonthCalendarPanelView({
             ))}
           </div>
 
-          <section id="x-content-month-selected-day" className="xce-mc-dayview" aria-live="polite">
-            <p id="x-content-month-selected-day-heading" className="xce-mc-kicker">
-              {selected ? dayHeading(selected) : '—'}
-              {selectedDay?.isToday ? ' · today' : ''}
-            </p>
-            {selectedDay?.flags?.length ? (
-              <ul id="x-content-month-selected-day-flags" className="xce-mc-flags">
-                {selectedDay.flags.map((f, i) => <li key={`${f.kind}-${i}`}>{f.message}</li>)}
-              </ul>
-            ) : null}
-            {selectedDay?.tasks?.length ? (
-              <ul id="x-content-month-selected-day-tasks" className="xce-mc-rows">
-                {selectedDay.tasks.map((t) => <TaskRow key={t.id} task={t} busy={busyId === t.id} onToggle={onTaskToggle} />)}
-              </ul>
-            ) : null}
-            {selectedDay && rowsFor(selectedDay).length ? (
-              <ul className="xce-mc-rows">
-                {rowsFor(selectedDay).map(renderRow)}
-              </ul>
-            ) : selectedDay?.tasks?.length ? null : (
-              <p className="xce-mc-empty">{pendingOnly ? 'Nothing pending on this day.' : 'Nothing on this day.'}</p>
-            )}
-          </section>
         </>
       ) : null}
 
@@ -456,34 +614,12 @@ function MonthCalendarPanelView({
       ) : null}
 
       <CalendarApprovalStyles />
-
-      {/* Portalled to the card root: `.xce-panel` has backdrop-filter, which
-          makes it the containing block for position:fixed and clips the sheet.
-          The card root keeps every `.xce-scope` style applying. */}
-      {openPost && typeof document !== 'undefined' && sheetHost() ? createPortal(
-        <PostSheet
-          post={openPost}
-          busy={busyId === openPost.id}
-          queue={reviewQueue}
-          onNavigate={setOpenId}
-          onClose={() => setOpenId(null)}
-          onApprove={(post, extra) => decide(onApprove, post, extra)}
-          onReject={(post, extra) => decide(onReject, post, extra)}
-          onSave={onSave}
-          onUnschedule={onUnschedule}
-          onScore={onScore}
-          onReconcile={onReconcile ? (post, extra) => decide(onReconcile, post, extra) : undefined}
-          onRefresh={onRefresh}
-          call={call}
-        />,
-        sheetHost(),
-      ) : null}
     </div>
   );
 }
 
-function MonthCalendarPanelStandalone({ clientId, call, hideRefresh }) {
-  return <MonthCalendarPanelView {...useCalendarProps(call, clientId)} hideRefresh={hideRefresh} />;
+function MonthCalendarPanelStandalone({ clientId, call, hideRefresh, renderTodayExtras, stage }) {
+  return <MonthCalendarPanelView {...useCalendarProps(call, clientId)} hideRefresh={hideRefresh} renderTodayExtras={renderTodayExtras} stage={stage} />;
 }
 
 // Content Center passes `calendar` (even null); a standalone host passes only { clientId, call, onNavigate }.

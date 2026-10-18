@@ -46,6 +46,32 @@ const strategyRefresh = defTool({
   },
 });
 
+const quoteScan = defTool({
+  name: 'request_quote_scan',
+  title: 'Queue a quote-target scan',
+  kind: 'sync',
+  description: 'Queue a fresh quote-target scan (posts worth quote-reacting to, last 36h) on the owner\'s Mac with the free `bird` reader: the same as Refresh > Quote targets. No money is spent and nothing is posted. The Mac worker checks every minute; a scan takes 1-5 minutes. Returns a requestId (a second call while one is open returns the same one); poll with quote_scan_status. If the client\'s Quote targets source is the paid X API, this refuses: use the Refresh panel instead.',
+  inputSchema: { type: 'object', properties: { clientId: CLIENT_ID_PROP } },
+  handler: async ({ args, ctx }) => {
+    const clientId = await resolveClientId(ctx, args);
+    const res = await ctx.services.strategyHandlers().handle('quote-scan-refresh', { clientId }, { clientId }, authFor(ctx));
+    if (res && res.ok !== false && !res.requestId) throw new ToolError(res.instructions || 'Quote scans cannot be queued on this deployment.');
+    return unwrap(res, 'Quote scan request');
+  },
+});
+
+const quoteScanStatus = defTool({
+  name: 'quote_scan_status',
+  title: 'Status of a queued quote scan',
+  kind: 'read',
+  description: 'Progress of a quote scan from request_quote_scan (or the Refresh panel): queued / running / done / failed / rate-limited, how many candidates it found, and when the Mac worker last checked in (workerHealth). Free, read-only. Read the candidates with strategy_get_calendar (requote rows).',
+  inputSchema: { type: 'object', properties: { requestId: str('requestId from request_quote_scan'), clientId: CLIENT_ID_PROP }, required: ['requestId'] },
+  handler: async ({ args, ctx }) => {
+    const clientId = await resolveClientId(ctx, args);
+    return unwrap(await ctx.services.strategyHandlers().handle('quote-scan-status', { clientId, requestId: String(args.requestId || '') }, { clientId }, authFor(ctx)), 'Quote scan status');
+  },
+});
+
 const regenerateToday = defTool({
   name: 'regenerate_today_suggestions',
   title: 'Regenerate today\'s suggestions',
@@ -125,4 +151,4 @@ const requestSync = defTool({
   },
 });
 
-export const syncTools = Object.freeze([strategyRefresh, regenerateToday, nasStatus, nasJobs, nasBrowse, nasEstimate, requestSync]);
+export const syncTools = Object.freeze([strategyRefresh, quoteScan, quoteScanStatus, regenerateToday, nasStatus, nasJobs, nasBrowse, nasEstimate, requestSync]);

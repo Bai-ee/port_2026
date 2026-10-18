@@ -8,7 +8,8 @@ import AgentPreferencesSections from './AgentPreferencesSections.jsx';
 // AgentPermissionsPanel - "Agent permissions": how much the strategy agent may do without asking, plus recent actions.
 //   <AgentPermissionsPanel clientId call />
 // Reads/writes strategy-autonomy-get|save; lists strategy-action-log with per-row Undo (strategy-action-undo).
-// Destructive (tier 2) always asks; X publishing is locked to typed confirm.
+// Destructive (tier 2) always asks; X publishing is locked to typed confirm, except trusted scheduling (owner opt-in):
+// the agent may schedule posts the owner already approved, unchanged, with a cancel window and a daily cap.
 
 const S = {
   panel: { padding: '12px 14px', borderRadius: XCE_RADII.md + 2, border: `1px solid ${XCE_COLORS.border}`, background: XCE_COLORS.surface, display: 'grid', gap: 12, minWidth: 0, marginBottom: 10 },
@@ -27,6 +28,7 @@ export default function AgentPermissionsPanel({ clientId, call }) {
   const [tier1, setTier1] = useState('auto');
   const [tier3, setTier3] = useState('confirm');
   const [xLocked, setXLocked] = useState(true);
+  const [trusted, setTrusted] = useState({ enabled: false, minLeadMinutes: 10, dailyCap: 3 });
   const [log, setLog] = useState([]);
   const [msg, setMsg] = useState({ kind: '', text: '' });
   const [busy, setBusy] = useState(false);
@@ -41,6 +43,7 @@ export default function AgentPermissionsPanel({ clientId, call }) {
       const au = a?.autonomy || a || {};
       if (au.tier1 === 'auto' || au.tier1 === 'confirm') setTier1(au.tier1);
       if (au.tier3 === 'confirm' || au.tier3 === 'typed') setTier3(au.tier3);
+      if (au.trustedSchedule && typeof au.trustedSchedule === 'object') setTrusted({ enabled: au.trustedSchedule.enabled === true, minLeadMinutes: au.trustedSchedule.minLeadMinutes ?? 10, dailyCap: au.trustedSchedule.dailyCap ?? 3 });
       setLog(Array.isArray(l?.log) ? l.log : Array.isArray(l?.entries) ? l.entries : []);
     } catch (e) {
       if (mounted.current) setMsg({ kind: 'err', text: e?.data?.error || e?.message || 'Could not load permissions.' });
@@ -51,7 +54,7 @@ export default function AgentPermissionsPanel({ clientId, call }) {
   const save = async (next) => {
     setBusy(true); setMsg({ kind: '', text: '' });
     try {
-      await call('strategy-autonomy-save', { clientId, autonomy: { tier1: next.tier1, tier2: 'confirm', tier3: next.tier3 } });
+      await call('strategy-autonomy-save', { clientId, autonomy: { tier1: next.tier1, tier2: 'confirm', tier3: next.tier3, ...(next.trustedSchedule ? { trustedSchedule: next.trustedSchedule } : {}) } });
       if (mounted.current) setMsg({ kind: 'ok', text: 'Saved.' });
     } catch (e) {
       if (mounted.current) { setMsg({ kind: 'err', text: e?.data?.error || e?.message || 'Could not save.' }); load(); }
@@ -78,7 +81,33 @@ export default function AgentPermissionsPanel({ clientId, call }) {
           <option value="confirm">Ask me first</option>
           <option value="typed">Ask me and make me type to confirm</option>
         </select>
-        <p style={S.help}>Posting to X is locked to type-to-confirm whatever you pick here. Nothing publishes or spends without a card.</p>
+        <p style={S.help}>Posting to X is locked to type-to-confirm whatever you pick here, except the trusted scheduling below.</p>
+      </div>
+      <div id="x-strategy-agent-permissions-trusted-field" style={S.field}>
+        <label htmlFor="x-strategy-agent-permissions-trusted" style={{ fontSize: 13, fontWeight: 600, display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input id="x-strategy-agent-permissions-trusted" type="checkbox" checked={trusted.enabled} disabled={busy}
+            onChange={(e) => { const t = { ...trusted, enabled: e.target.checked }; setTrusted(t); save({ tier1, tier3, trustedSchedule: t }); }} />
+          Let the agent schedule posts I&apos;ve approved
+        </label>
+        <p style={S.help}>Only posts you approved and that haven&apos;t changed since. Never posts right away: at least the lead time ahead, so you can unschedule it. Everything else still asks.</p>
+        {trusted.enabled ? (
+          <div id="x-strategy-agent-permissions-trusted-limits" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <label htmlFor="x-strategy-agent-permissions-trusted-lead" style={{ ...S.field, flex: '1 1 140px', fontSize: 12.5 }}>
+              Minimum lead (minutes)
+              <select id="x-strategy-agent-permissions-trusted-lead" style={S.select} value={trusted.minLeadMinutes} disabled={busy}
+                onChange={(e) => { const t = { ...trusted, minLeadMinutes: Number(e.target.value) }; setTrusted(t); save({ tier1, tier3, trustedSchedule: t }); }}>
+                {[10, 30, 60, 180, 720].map((m) => <option key={m} value={m}>{m >= 60 ? `${m / 60} h` : `${m} min`}</option>)}
+              </select>
+            </label>
+            <label htmlFor="x-strategy-agent-permissions-trusted-cap" style={{ ...S.field, flex: '1 1 140px', fontSize: 12.5 }}>
+              Most per day
+              <select id="x-strategy-agent-permissions-trusted-cap" style={S.select} value={trusted.dailyCap} disabled={busy}
+                onChange={(e) => { const t = { ...trusted, dailyCap: Number(e.target.value) }; setTrusted(t); save({ tier1, tier3, trustedSchedule: t }); }}>
+                {[1, 2, 3, 5, 10].map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </label>
+          </div>
+        ) : null}
       </div>
       {msg.text ? <p id="x-strategy-agent-permissions-message" role={msg.kind === 'err' ? 'alert' : 'status'} style={msg.kind === 'err' ? S.err : S.ok}>{msg.text}</p> : null}
       <div id="x-strategy-agent-recent-actions" data-section="agent-recent-actions">

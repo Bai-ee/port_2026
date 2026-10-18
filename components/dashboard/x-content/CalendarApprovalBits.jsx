@@ -56,7 +56,8 @@ export function InlineApprovalButtons({ row, busy, onApprove, onUnapprove }) {
 }
 
 /** An unsaved daily-run suggestion or an open quote target. Leaving it writes nothing. */
-export function SuggestionRow({ row, busy, onApprove, nowMs }) {
+// onView (calendar day view only): adds VIEW POST, which opens the X preview.
+export function SuggestionRow({ row, busy, onApprove, nowMs, onView }) {
   const requote = row.kind === 'requote';
   const closed = isRowWindowClosed(row, nowMs);
   const left = requote ? windowLeftLabel(row, nowMs) : '';
@@ -78,11 +79,12 @@ export function SuggestionRow({ row, busy, onApprove, nowMs }) {
           </span>
         </span>
       </div>
-      {onApprove ? (
+      {onApprove || onView ? (
         <span className="xce-mc-row-actions">
-          <button type="button" id={`x-content-month-suggestion-approve-${row.id}`} className="xce-mc-text-btn xce-ap-btn" disabled={busy || closed} title="Save as a draft and approve. Nothing is scheduled or posted." onClick={() => onApprove(row)}>
+          {onView ? <button type="button" id={`x-content-month-suggestion-view-${row.id}`} className="xce-mc-text-btn xce-ap-btn" onClick={() => onView(row)}>View post</button> : null}
+          {onApprove ? <button type="button" id={`x-content-month-suggestion-approve-${row.id}`} className="xce-mc-text-btn xce-ap-btn" disabled={busy || closed} title="Save as a draft and approve. Nothing is scheduled or posted." onClick={() => onApprove(row)}>
             {busy ? 'Saving…' : 'Approve'}
-          </button>
+          </button> : null}
         </span>
       ) : null}
     </li>

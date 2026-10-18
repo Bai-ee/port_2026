@@ -375,3 +375,38 @@ test('approveAndSchedule strips the placeholder (edited or stored) and schedules
   assert.equal(s.status, 'scheduled');
   assert.ok(!/add your memory/i.test(s.content));
 });
+
+// ---- trusted scheduling (agent, owner opt-in) ------------------------------------------------------------------
+const ON = { enabled: true, minLeadMinutes: 10, dailyCap: 2 };
+const SOON = (min) => new Date(Date.now() + min * 60 * 1000).toISOString();
+const approvedV2 = async (content) => {
+  const row = await v2(content);
+  return svc.approveDraft('c1', row.id, { reviewedBy: 'owner@x.com' });
+};
+
+test('trusted schedule: an owner-approved, unchanged v2 post is scheduled and marked; nothing is approved or posted', async () => {
+  const p = await approvedV2('Owner approved this.');
+  const out = await svc.trustedSchedulePost('c1', p.id, { scheduledAt: SOON(30), settings: ON, by: 'agent (owner@x.com)' });
+  assert.equal(out.status, 'scheduled');
+  assert.equal(raw(p.id).approvedHash, p.approvedHash, 'approval is the owner\'s, untouched');
+  assert.equal(raw(p.id).reviewedBy, 'owner@x.com');
+  assert.equal(raw(p.id).trustedSchedule.by, 'agent (owner@x.com)');
+  assert.equal(tweets.length, 0);
+});
+
+test('trusted schedule refuses: setting off, drafts, edits after approval, too soon, over the daily cap', async () => {
+  const p = await approvedV2('Approved copy.');
+  await assert.rejects(svc.trustedSchedulePost('c1', p.id, { scheduledAt: SOON(30), settings: { ...ON, enabled: false } }), (e) => e.code === 'trusted-off');
+  await assert.rejects(svc.trustedSchedulePost('c1', p.id, { scheduledAt: SOON(5), settings: ON }), (e) => e.code === 'trusted-lead');
+  const draft = await v2('Never approved.');
+  await assert.rejects(svc.trustedSchedulePost('c1', draft.id, { scheduledAt: SOON(30), settings: ON }), (e) => e.code === 'trusted-not-approved');
+  // Copy changed under the approval without going through an edit (e.g. a direct write): the hash no longer matches.
+  await ctx.adminDb.collection('social_posts').doc(p.id).set({ content: 'Sneaky new copy.' }, { merge: true });
+  await assert.rejects(svc.trustedSchedulePost('c1', p.id, { scheduledAt: SOON(30), settings: ON }), (e) => e.code === 'trusted-stale');
+  const a = await approvedV2('One.');
+  const b = await approvedV2('Two.');
+  const c = await approvedV2('Three.');
+  await svc.trustedSchedulePost('c1', a.id, { scheduledAt: SOON(30), settings: ON });
+  await svc.trustedSchedulePost('c1', b.id, { scheduledAt: SOON(200), settings: ON });
+  await assert.rejects(svc.trustedSchedulePost('c1', c.id, { scheduledAt: SOON(400), settings: ON }), (e) => e.code === 'trusted-cap');
+});

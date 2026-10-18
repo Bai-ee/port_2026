@@ -1,9 +1,10 @@
 'use client';
 
 // Theme Studio entry point (contract §8.4). Renders nothing until the viewer is an admin (or, in
-// development only, opted in with ?theme-studio=1). Then it shows a small fixed launcher
-// (#theme-studio-launcher, shortcut Alt+Shift+T). The Studio and the draft store (with the whole
-// authoring engine) are loaded on first open: non-admin bundles never fetch that chunk.
+// development only, opted in with ?theme-studio=1). There is no floating launcher any more: the
+// Studio opens from the dashboard Admin › Theme Studio card (its button is #theme-studio-launcher and
+// fires OPEN_EVENT) or with Alt+Shift+T. The Studio and the draft store (with the whole authoring
+// engine) are loaded on first open: non-admin bundles never fetch that chunk.
 
 import { useCallback, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
@@ -18,27 +19,9 @@ import { syncSiteDraft } from '../../lib/theme-runtime/site-draft';
 const ThemeStudio = dynamic(() => import('../theme-studio/ThemeStudio'), { ssr: false, loading: () => null });
 
 const LAUNCHER_ID = 'theme-studio-launcher';
-const OPEN_EVENT = 'theme-studio:open'; // dispatched by #dev-theme-editor-button in HomePage.jsx
-
-// Fixed, theme-independent colours on purpose (same values as the locked Studio chrome tokens,
-// contract §11.3): the launcher must stay readable whatever palette is being drafted.
-const launcherStyle = {
-  position: 'fixed',
-  left: 16,
-  bottom: 16,
-  zIndex: 2147483000,
-  minWidth: 44,
-  minHeight: 44,
-  padding: '0 14px',
-  border: '1px solid #c8c8c8',
-  borderRadius: 999,
-  background: '#ffffff',
-  color: '#1a1a1a',
-  font: '600 13px/1 "Space Grotesk", system-ui, sans-serif',
-  letterSpacing: '0.02em',
-  cursor: 'pointer',
-  boxShadow: '0 2px 10px rgba(0, 0, 0, 0.18)',
-};
+// Dispatched by the dashboard Admin › Theme Studio card (#theme-studio-launcher) and, in development,
+// by #dev-theme-editor-button in HomePage.jsx.
+const OPEN_EVENT = 'theme-studio:open';
 
 export default function ThemeStudioMount() {
   const { isAdmin, adminReady } = useAuth();
@@ -77,18 +60,21 @@ export default function ThemeStudioMount() {
     }
   }, [isAdmin, adminReady]);
 
-  // Development only: the homepage editor bar opens the Studio without the ?theme-studio=1 query.
-  // Writes the same session flag the query does, so a later gate re-evaluation keeps it enabled.
+  // OPEN_EVENT opens the Studio for an allowed viewer (the Admin card). In development it also opts in
+  // without the ?theme-studio=1 query (homepage editor bar), writing the same session flag the query does.
   useEffect(() => {
-    if (process.env.NODE_ENV !== 'development') return undefined;
+    const dev = process.env.NODE_ENV === 'development';
+    if (!dev && !enabled) return undefined;
     const onOpen = () => {
-      try { window.sessionStorage.setItem(STORAGE_KEYS.devStudio, '1'); } catch { /* ignore */ }
-      setEnabled(true);
+      if (dev) {
+        try { window.sessionStorage.setItem(STORAGE_KEYS.devStudio, '1'); } catch { /* ignore */ }
+        setEnabled(true);
+      }
       setOpen(true);
     };
     window.addEventListener(OPEN_EVENT, onOpen);
     return () => window.removeEventListener(OPEN_EVENT, onOpen);
-  }, []);
+  }, [enabled]);
 
   const toggle = useCallback(() => setOpen((v) => !v), []);
   const close = useCallback(() => setOpen(false), []);
@@ -121,21 +107,6 @@ export default function ThemeStudioMount() {
 
   if (!enabled) return null;
 
-  return (
-    <>
-      <button
-        id={LAUNCHER_ID}
-        type="button"
-        data-section="theme-studio"
-        style={launcherStyle}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-keyshortcuts="Alt+Shift+T"
-        onClick={toggle}
-      >
-        Theme Studio
-      </button>
-      {open && ready ? <ThemeStudio open onClose={close} launcherId={LAUNCHER_ID} /> : null}
-    </>
-  );
+  // LAUNCHER_ID = the Admin card's button; the Studio returns focus to it on close when it is on the page.
+  return open && ready ? <ThemeStudio open onClose={close} launcherId={LAUNCHER_ID} /> : null;
 }
