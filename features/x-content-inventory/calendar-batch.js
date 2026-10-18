@@ -11,6 +11,7 @@
 import { trackForPackage, bucketOfPackage, isBucketId } from '../x-strategy/content-tracks.js';
 import { resolveEngine } from './engines.js';
 import { hasPlaceholderStory } from './match.js';
+import { mediaOf } from './item-media.js';
 
 export const MAX_BATCH = 366; // one a day for a year
 const WRITE_CONCURRENCY = 10;
@@ -49,6 +50,11 @@ export function normalizeBatchSpec(raw) {
     else if (ids.length) select.ids = ids;
   }
   if (!Object.keys(select).length) errors.push('select needs at least one of track, bucketId, query, ids');
+  // media narrows the selection (it is not a selector on its own): 'video' = only items with a video to post.
+  if (sel.media !== undefined && sel.media !== null && sel.media !== '' && sel.media !== 'any') {
+    if (!['video', 'image', 'some'].includes(sel.media)) errors.push("select.media must be 'video', 'image', 'some' or 'any'");
+    else select.media = sel.media;
+  }
 
   const rule = isPlain(raw.dateRule) ? raw.dateRule : {};
   const kind = String(rule.kind ?? '').trim();
@@ -65,10 +71,14 @@ export function normalizeBatchSpec(raw) {
       else dateRule.startDate = String(rule.startDate);
     }
   }
+  // Spread order: 'title' (default, as before) or 'ids' = exactly the order of select.ids (the chat picked and ordered them).
+  const order = raw.order === undefined || raw.order === null || raw.order === '' ? 'title' : String(raw.order);
+  if (!['title', 'ids'].includes(order)) errors.push("order must be 'title' or 'ids'");
+  else if (order === 'ids' && !select.ids) errors.push("order 'ids' needs select.ids");
   const limit = raw.limit === undefined ? MAX_BATCH : Number(raw.limit);
   if (!Number.isInteger(limit) || limit < 1 || limit > MAX_BATCH) errors.push(`limit must be 1-${MAX_BATCH}`);
   if (errors.length) return { ok: false, errors };
-  return { ok: true, spec: { select, dateRule, limit } };
+  return { ok: true, spec: { select, dateRule, limit, ...(order !== 'title' ? { order } : {}) } };
 }
 
 // ---- dates (plain calendar dates, YYYY-MM-DD; no time zones in here) ----------------------------------------
@@ -150,6 +160,10 @@ function selector(spec, tracks) {
   return {
     match: (p) => {
       if (idSet && !idSet.has(p.id)) return false;
+      if (spec.select.media) {
+        const kind = mediaOf(p).kind || null;
+        if (spec.select.media === 'some' ? !kind : kind !== spec.select.media) return false;
+      }
       if (bucketId && bucketOfPackage(p) !== bucketId) return false;
       if (trackId && trackForPackage(tracks, p)?.id !== trackId) return false;
       if (tokens.length) {
@@ -202,7 +216,12 @@ export function planCalendarBatch({ packages = [], tracks = [], spec, today, ope
     candidates.length = 0;
     candidates.push(...kept);
   } else {
-    candidates.sort((a, b) => String(a.p.title ?? '').localeCompare(String(b.p.title ?? '')) || String(a.p.id).localeCompare(String(b.p.id)));
+    if (spec.order === 'ids') {
+      const pos = new Map(spec.select.ids.map((id, i) => [id, i]));
+      candidates.sort((a, b) => pos.get(a.p.id) - pos.get(b.p.id));
+    } else {
+      candidates.sort((a, b) => String(a.p.title ?? '').localeCompare(String(b.p.title ?? '')) || String(a.p.id).localeCompare(String(b.p.id)));
+    }
     const start = spec.dateRule.startDate && spec.dateRule.startDate > today ? spec.dateRule.startDate : addDays(today, 1);
     candidates.forEach((c, i) => { c.reviewOn = addDays(start, Math.floor(i / spec.dateRule.perDay)); });
   }

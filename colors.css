@@ -196,7 +196,14 @@
 }
 
 /* ── Shared top-nav (normalized across homepage + dashboard) ───────────────── */
-body.cmo-modal-open #founders-top-strip { display: none; }
+/* Top-left logo blend: the --t-logo-blend token (light), color-dodge in dark. Homepage (Header.jsx) and dashboard
+   (DashboardPage.jsx) both tag their logo #founders-brand-logo-image. */
+#founders-brand-logo-image { mix-blend-mode: var(--t-logo-blend); }
+:root[data-theme="dark"] #founders-brand-logo-image { mix-blend-mode: color-dodge !important; }
+/* Hidden behind the Let's Connect modal without leaving layout: display:none zeroed the nav's height, and the
+   hero headline (which centres itself under the nav) jumped. Fades with the modal backdrop. !important beats
+   the intro timeline's inline opacity/visibility. */
+body.cmo-modal-open #founders-top-strip { opacity: 0 !important; visibility: hidden !important; pointer-events: none; transition: opacity 320ms ease-out, visibility 0s linear 320ms; }
 #founders-top-strip {
   position: fixed;
   top: 0;

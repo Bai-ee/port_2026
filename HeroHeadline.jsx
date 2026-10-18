@@ -1,7 +1,8 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import gsap from 'gsap';
-import { easeOutQuart, scrambleChurn, scrambleMask, scrambleTextTo } from './components/home/scrambleText';
+import { scrambleMask, scrambleTextTo } from './components/home/scrambleText';
+import UpRightArrow from './components/UpRightArrow';
 import { DEFAULT_HERO_TYPE, HERO_MAX_LINES, fontStackFor, getHeroType, subscribeHeroType } from './lib/hero-type/store';
 // Hidden for now — hero card deck.
 // import HeroDeliverableDeck from './components/home/HeroDeliverableDeck';
@@ -15,16 +16,19 @@ const SIMPLE_SCROLL_MEDIA_QUERY = '(max-width: 680px) and (pointer: coarse)';
 // subPhrases are the lines the subheadline cycles through; a single entry means
 // the line only scrambles under the cursor and always resolves back to it.
 
-// The subheadline is cursor-driven on fine-pointer devices: it churns while the
-// pointer moves and resolves into the next phrase once the pointer holds still
-// for IDLE_REVEAL_MS. It never advances on its own. Touch/coarse-pointer devices
-// get no pointermove events, so with more than one phrase they fall back to a
-// timed cycle (HOLD_MS between reveals); with one phrase they stay static.
-// A click resets the rotation to the first phrase.
-const HOLD_MS = 1600;        // coarse-pointer fallback: hold between phrases
-const SCRAMBLE_MS = 100;     // time spent scrambling into the next phrase
-const CHURN_IN_MS = 200;     // left-to-right sweep as the scramble starts
-const IDLE_REVEAL_MS = 50;   // cursor stillness that triggers the reveal (≈3 frames)
+// The small line rests on the first sub phrase (HUMAN IN THE LOOP) and swaps to a "LET'S CONNECT ↗" CTA the
+// same way the header LOGIN button does (Header.jsx): the scramble sweeps left to right through a symbols-only
+// pool, each cell shows pink while scrambled and the line's ink once locked, then the arrow fades into the last
+// cell; going back sweeps right to left. It swaps on hover/focus and while the page is scrolled down past
+// SCROLL_SWAP_PX. Clicking opens the homepage Onboarding modal (website or email).
+const CTA_LABEL = "LET'S CONNECT ";        // trailing space = the gap cell before the arrow
+const CTA_ARROW_CELL = CTA_LABEL.length;   // the arrow sits over this cell
+const CTA_SCRAMBLE_POOL = '!<>-\\/[]{}=+*^?#';
+const CTA_MASK_COLOR = 'var(--t-accent)';
+const SWAP_MS = 640;          // the header's 420ms, stretched for a line ~2.5x as long
+const SCROLL_SWAP_PX = 24;    // scrolled further than this = CTA
+const OPEN_ONBOARD_EVENT = 'openOnboardModal'; // StackedSlidesSection opens #cmo-modal-overlay on it
+const isSettledGlyph = (ch) => !ch || /[A-Za-z0-9'\s]/.test(ch); // the pool holds no letters
 
 
 // Poster fit. The headline is sized so its widest line spans the panel
@@ -42,6 +46,9 @@ const HEADLINE_SUB_LINES_EM = 1.3;        // subheadline + its margin, in headli
 const HEADLINE_COLUMN_PX = 810;
 const HEADLINE_GUTTER_VW = 0.1;
 const HEADLINE_MIN_PX = 20;
+// The small line's bottom edge sits this far above the content panel (#content-section) at every width; when it
+// wraps to more lines it grows upward, so its baseline position never moves. 75px = the desktop spot.
+const SUB_ANCHOR_GAP_PX = 75;
 let headlineMeasureCtx = null;
 const measureHeadlineUnitWidth = (lines, type) => {
   if (typeof document === 'undefined') return 0;
@@ -114,6 +121,7 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
   const topLeftRef = useRef(null);
   const headlineContentRef = useRef(null);
   const scrambleTextRef = useRef(null);
+  const ctaArrowRef = useRef(null);
   // Render starts from the defaults (matches the server markup); the first layout
   // effect swaps in the dev draft before anything paints. Styles re-render from
   // state; text is written imperatively (see the intro effect) like everywhere else.
@@ -171,27 +179,64 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
       });
     }
 
-    // index = phrase currently resolved on screen. targetIndex = the phrase the
-    // active churn/reveal is heading to; it only folds back into index when a
-    // reveal actually completes, so a reveal interrupted by more cursor movement
-    // resumes toward the same phrase instead of skipping one.
-    let index = 0;
-    let targetIndex = 0;
-    let cycleCancel = null;   // in-flight reveal
-    let churnCancel = null;   // pointer-driven churn
-    let holdTimer = 0;        // coarse-pointer fallback cycle
-    let idleTimer = 0;
-    let pointerBound = false;
-
-    const cursorDriven =
-      typeof window.matchMedia === 'function' &&
-      window.matchMedia('(hover: hover) and (pointer: fine)').matches;
-
-    const stopChurn = () => {
-      if (churnCancel) { churnCancel(); churnCancel = null; }
+    // The line is a row of one-character cells (Doto is monospaced, so a cell never changes width), which lets
+    // each character carry its own colour during the CTA sweep.
+    const arrowEl = ctaArrowRef.current;
+    const cells = [];
+    const ensureCells = (n) => {
+      if (!cells.length) subScrambleEl.textContent = '';
+      while (cells.length < n) {
+        const cell = document.createElement('span');
+        cell.style.whiteSpace = 'pre';
+        cells.push(cell);
+        subScrambleEl.appendChild(cell);
+      }
     };
-    const stopReveal = () => {
-      if (cycleCancel) { cycleCancel(); cycleCancel = null; }
+    const readCells = (list) => list.map((cell) => cell.textContent || ' ').join('');
+    // Writer for the intro scramble and Type panel edits; scrambled glyphs get the same pink as the CTA sweep.
+    const plainLine = {
+      get textContent() { return readCells(cells).replace(/ +$/, ''); },
+      set textContent(value) {
+        ensureCells(Math.max(value.length, CTA_ARROW_CELL + 1));
+        cells.forEach((cell, c) => {
+          const ch = value[c] ?? '';
+          cell.textContent = ch;
+          cell.style.color = isSettledGlyph(ch) ? '' : CTA_MASK_COLOR;
+        });
+      },
+    };
+
+    let swapCancel = null;
+    const stopSwap = () => { if (swapCancel) { swapCancel(); swapCancel = null; } };
+    // scrambleTextTo only reads/writes textContent and always locks left to right, so this stand-in spreads each
+    // frame across the cells (reversed for a right-to-left sweep). No churnBeforeLock: cells ahead of the wave
+    // hold their glyph, so the sweep reads as a wave.
+    const sweepTo = (target, { rightToLeft = false, onDone } = {}) => {
+      stopSwap();
+      ensureCells(Math.max(target.length, CTA_ARROW_CELL + 1));
+      const order = rightToLeft ? [...cells].reverse() : cells;
+      const goal = target.padEnd(cells.length);
+      const view = {
+        get textContent() { return readCells(order); },
+        set textContent(value) {
+          order.forEach((cell, c) => {
+            const ch = value[c] ?? '';
+            cell.textContent = ch;
+            cell.style.color = isSettledGlyph(ch) ? '' : CTA_MASK_COLOR;
+          });
+        },
+      };
+      swapCancel = scrambleTextTo(view, rightToLeft ? [...goal].reverse().join('') : goal, {
+        durationMs: SWAP_MS,
+        charPool: CTA_SCRAMBLE_POOL,
+        onComplete: () => { swapCancel = null; if (onDone) onDone(); },
+      });
+    };
+
+    const placeArrow = () => {
+      const cell = cells[CTA_ARROW_CELL];
+      if (!arrowEl || !cell) return;
+      arrowEl.style.left = `${cell.getBoundingClientRect().left - subEl.getBoundingClientRect().left}px`;
     };
 
     const setStage = (phase) => {
@@ -200,83 +245,51 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
       stage.phase = phase;
       if (phase === 'reveal') {
         stage.revealAt = performance.now();
-        stage.revealMs = SCRAMBLE_MS;
+        stage.revealMs = SWAP_MS;
       }
     };
 
-    const revealTarget = (onDone) => {
-      stopChurn();
+    let armed = false;        // the intro scramble has handed the line over
+    let ctaShown = false;     // the state the line is sweeping (or has swept) to
+    let hovered = false;
+    let focused = false;
+    let scrolled = window.scrollY > SCROLL_SWAP_PX;
+    const sync = () => {
+      if (!armed) return;
+      const next = hovered || focused || scrolled;
+      if (next === ctaShown) return;
+      ctaShown = next;
       setStage('reveal');
-      cycleCancel = scrambleTextTo(subScrambleEl, phraseAt(targetIndex), {
-        durationMs: SCRAMBLE_MS,
-        preserveWhitespace: true,
-        churnBeforeLock: true,
-        ease: easeOutQuart,
-        onComplete: () => {
-          cycleCancel = null;
-          index = targetIndex;
-          setStage('idle');
-          if (onDone) onDone();
-        },
-      });
-    };
-
-    // Cursor moved: hold the line in a churn keyed to the next phrase's shape
-    // (so resolving causes no reflow) and restart the stillness countdown.
-    const handlePointerMove = (event) => {
-      stopReveal();
-      const stage = cursorStageRef?.current;
-      if (stage) {
-        stage.x = event.clientX;
-        stage.y = event.clientY;
-        stage.seen = true;
-        stage.phase = 'churn';
+      if (next) {
+        sweepTo(CTA_LABEL, { onDone: () => { placeArrow(); if (arrowEl) arrowEl.style.opacity = '1'; setStage('idle'); } });
+      } else {
+        if (arrowEl) arrowEl.style.opacity = '0';
+        sweepTo(phraseAt(0), { rightToLeft: true, onDone: () => setStage('idle') });
       }
-      if (!churnCancel) {
-        if (targetIndex === index) {
-          targetIndex = (index + 1) % phrases().length;
-        }
-        churnCancel = scrambleChurn(subScrambleEl, phraseAt(targetIndex), {
-          preserveWhitespace: true,
-          staggerInMs: CHURN_IN_MS,
-        });
-      }
-      clearTimeout(idleTimer);
-      idleTimer = window.setTimeout(() => revealTarget(), IDLE_REVEAL_MS);
     };
 
-    // Click anywhere: snap the rotation back to the top of the list. Runs the
-    // same reveal as a normal lock (never a hard text swap) so the reset reads
-    // as the readout being re-taken, and re-fires even when phrase 0 is already
-    // on screen — the click should always produce that motion.
-    const handlePointerDown = () => {
-      stopChurn();
-      stopReveal();
-      clearTimeout(idleTimer);
-      targetIndex = 0;
-      revealTarget();
-    };
+    const handleEnter = () => { hovered = true; sync(); };
+    const handleLeave = () => { hovered = false; sync(); };
+    const handleFocus = () => { focused = true; sync(); };
+    const handleBlur = () => { focused = false; sync(); };
+    const handleScroll = () => { scrolled = window.scrollY > SCROLL_SWAP_PX; sync(); };
 
-    const advanceTimed = () => {
-      targetIndex = (index + 1) % phrases().length;
-      revealTarget(() => { holdTimer = window.setTimeout(advanceTimed, HOLD_MS); });
-    };
+    subEl.addEventListener('pointerenter', handleEnter);
+    subEl.addEventListener('pointerleave', handleLeave);
+    subEl.addEventListener('focus', handleFocus);
+    subEl.addEventListener('blur', handleBlur);
+    window.addEventListener('scroll', handleScroll, { passive: true });
 
-    // Handed the subheadline once the intro scramble lands.
+    // Handed the subheadline once the intro scramble lands; catch up if the page loaded scrolled or hovered.
     const armCycle = () => {
-      if (cursorDriven) {
-        window.addEventListener('pointermove', handlePointerMove, { passive: true });
-        window.addEventListener('pointerdown', handlePointerDown, { passive: true });
-        pointerBound = true;
-      } else if (phrases().length > 1) {
-        holdTimer = window.setTimeout(advanceTimed, HOLD_MS);
-      }
+      armed = true;
+      sync();
     };
 
     // Headline lines start empty and type themselves in (growIn below); the
     // spans carry a min-height so emptying them doesn't collapse the panel.
     lines.forEach((node) => { node.textContent = ''; });
-    subScrambleEl.textContent = scrambleMask(phraseAt(0), { preserveWhitespace: true });
+    plainLine.textContent = scrambleMask(phraseAt(0), { preserveWhitespace: true });
     gsap.set(subEl, { autoAlpha: 0 });
 
     const introCancels = [];
@@ -333,11 +346,11 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
     });
     tl.to(subEl, { autoAlpha: 1, duration: HERO_INTRO.subheadFadeS, ease: 'power2.out' }, subheadCue);
     tl.call(() => {
-      introCancels.push(scrambleTextTo(subScrambleEl, phraseAt(0), {
+      introCancels.push(scrambleTextTo(plainLine, phraseAt(0), {
         durationMs: HERO_INTRO.subheadScrambleS * 1000,
         preserveWhitespace: true,
         churnBeforeLock: true,
-        // Hand off to the cursor-driven cycle (or its timed fallback).
+        // Hand off to the hover/scroll CTA swap.
         onComplete: armCycle,
       }));
     }, null, subheadCue);
@@ -350,26 +363,23 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
         node.style.display = i < next.headlineLines.length ? 'block' : 'none';
         node.style.filter = '';
       });
-      stopChurn();
-      stopReveal();
-      index = 0;
-      targetIndex = 0;
-      subScrambleEl.textContent = next.subPhrases[0];
+      stopSwap();
+      ctaShown = false;
+      if (arrowEl) arrowEl.style.opacity = '0';
+      plainLine.textContent = next.subPhrases[0];
     });
 
     return () => {
       unsubscribeType();
       tl.kill();
       introCancels.forEach((cancel) => cancel && cancel());
-      stopReveal();
-      stopChurn();
-      if (pointerBound) {
-        window.removeEventListener('pointermove', handlePointerMove);
-        window.removeEventListener('pointerdown', handlePointerDown);
-      }
+      stopSwap();
+      subEl.removeEventListener('pointerenter', handleEnter);
+      subEl.removeEventListener('pointerleave', handleLeave);
+      subEl.removeEventListener('focus', handleFocus);
+      subEl.removeEventListener('blur', handleBlur);
+      window.removeEventListener('scroll', handleScroll);
       if (cursorStageRef?.current) cursorStageRef.current.phase = 'idle';
-      clearTimeout(holdTimer);
-      clearTimeout(idleTimer);
       lines.forEach((node, i) => {
         node.textContent = lineCopy[i];
         node.style.filter = '';
@@ -418,7 +428,10 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
       // These are fixed viewport coords for position:fixed
       const gapTop = navHeight;
       const gapHeight = Math.max(contentDocTop - navHeight, 180);
-      const centeredTop = gapTop + Math.max((gapHeight - headlineHeight) / 2, 0);
+      // Anchor the small line (the only visible text) above the content panel rather than centring the block.
+      const sub = el.querySelector('#hero-subheadline');
+      const subBottomInPanel = sub ? sub.offsetTop + sub.offsetHeight : headlineHeight;
+      const centeredTop = Math.max(gapTop, contentDocTop - SUB_ANCHOR_GAP_PX - subBottomInPanel);
 
       metrics.centeredTop = centeredTop;
       metrics.maxWidth = maxWidth;
@@ -443,10 +456,6 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
       el.style.maxWidth = `${metrics.maxWidth}px`;
       el.style.setProperty('--hero-gap-height', `${metrics.gapHeight}px`);
       if (metrics.fontSize) el.style.setProperty('--hero-headline-size', `${metrics.fontSize}px`);
-
-      // Hide subheadline when vertical space is too tight to avoid overlap with section 2
-      const sub = el.querySelector('#hero-subheadline');
-      if (sub) sub.style.display = metrics.gapHeight < 240 ? 'none' : '';
 
       if (useSimpleScrollViewport) {
         contentEl.style.transform = `translate3d(0, ${travelY * progress}px, 0)`;
@@ -533,7 +542,6 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
 
   const ink = resolveInk(type.headlineInk, textColor);
   const accentInk = type.accentInk ? resolveInk(type.accentInk, textColor) : undefined;
-  const subInk = type.subInk ? resolveInk(type.subInk, textColor) : ink;
   const headlineSlots = Array.from({ length: HERO_MAX_LINES }, (_, i) => DEFAULT_HERO_TYPE.headlineLines[i] ?? '');
   const edge = `max(${HEADLINE_GUTTER_VW * 100}vw, calc((100vw - ${HEADLINE_COLUMN_PX}px) / 2))`;
 
@@ -568,11 +576,16 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
           border: 'none',
           boxShadow: 'none',
           padding: 0,
-          mixBlendMode: type.headlineBlend || 'normal',
+          // Normal while the headline is hidden: the small line matches the header label exactly (a difference
+          // blend would turn its pink scramble green).
+          mixBlendMode: 'normal',
         }}
       >
         <div ref={headlineContentRef}>
-          <h1 id="hero-headline-primary" style={{
+          {/* Headline hidden: the small line alone reads HUMAN IN THE LOOP and is anchored above the content panel
+              (SUB_ANCHOR_GAP_PX). Kept mounted because the intro timeline holds its line slots. */}
+          <h1 id="hero-headline-primary" aria-hidden="true" style={{
+            display: 'none',
             fontWeight: type.headlineWeight,
             fontFamily: fontStackFor(type.headlineFont),
             letterSpacing: `${type.headlineTrackingEm}em`,
@@ -607,8 +620,21 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
               </span>
             ))}
           </h1>
-          <p id="hero-subheadline" style={{
-            margin: '1rem 0 0',
+          <p
+            id="hero-subheadline"
+            role="button"
+            tabIndex={0}
+            aria-label="Let's connect: enter your website or email"
+            onClick={() => window.dispatchEvent(new Event(OPEN_ONBOARD_EVENT))}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); window.dispatchEvent(new Event(OPEN_ONBOARD_EVENT)); }
+            }}
+            style={{
+            position: 'relative',
+            margin: 0,
+            // The panel is pointer-events:none; the line itself takes hover and clicks.
+            pointerEvents: 'auto',
+            cursor: 'pointer',
             textAlign: 'left',
             // Defaults match the HELLO marquee (StackedSlidesSection) — the thin
             // Doto, without the headline's stroke.
@@ -616,8 +642,9 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
             fontSize: `calc(clamp(1.8rem, 5vw, 3.6rem) * ${type.subScale})`,
             letterSpacing: `${type.subTrackingEm}em`,
             lineHeight: 1.5,
-            color: subInk,
-            opacity: type.subOpacity,
+            // Same ink as the header CLIENTS / LOGIN label (white in dark mode); the scramble glyphs use its pink.
+            color: 'var(--t-text)',
+            opacity: 1,
             fontWeight: type.subWeight,
             maxWidth: '42ch',
           }}>
@@ -630,7 +657,16 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
                 whiteSpace: 'pre',
               }}
             >
-              BRYAN BALLI
+              HUMAN IN THE LOOP
+            </span>
+            {/* Placed over the CTA's arrow cell by the swap (left is set per reveal), so it never shifts the text. */}
+            <span
+              ref={ctaArrowRef}
+              id="hero-subheadline-cta-arrow"
+              aria-hidden="true"
+              style={{ position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)', lineHeight: 0, opacity: 0, transition: 'opacity 160ms ease-out', pointerEvents: 'none' }}
+            >
+              <UpRightArrow size="0.8em" />
             </span>
           </p>
         </div>

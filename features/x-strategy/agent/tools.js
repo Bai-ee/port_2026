@@ -210,15 +210,31 @@ export const READ_TOOLS = Object.freeze([
   },
   {
     name: 'search_inventory',
-    description: `Search the owner's content inventory. Returns summary rows with each item's track (max ${LIMITS.inventoryMax}). Pass track to search one track only.`,
+    description: `Search or list the owner's content inventory. Summary rows (max ${LIMITS.inventoryMax} per page; use offset to page through all): id, title, track, story, hasMedia/mediaKind, and for Discogs records value (USD), have/want, year, artists. Empty query + sort lists everything. For the FULL object of one item use get_item.`,
     input_schema: {
       type: 'object',
       properties: {
-        query: str('Search text'),
+        query: str('Search text (optional; empty = every item, ordered by sort)'),
         limit: int('Max rows', { minimum: 1, maximum: LIMITS.inventoryMax }),
+        offset: int('Skip this many rows (paging)', { minimum: 0, maximum: 5000 }),
         track: str('Optional track id or name (from get_tracks); only items in that track'),
+        media: { type: 'string', enum: ['any', 'video', 'image', 'none'], description: 'Only items with this media (video = has a video it can post)' },
+        sort: { type: 'string', enum: ['relevance', 'value-desc', 'value-asc', 'want-desc', 'year-asc', 'year-desc', 'title'], description: 'Order (default relevance; value = Discogs market value)' },
       },
-      required: ['query'],
+    },
+  },
+  {
+    name: 'get_item',
+    description: 'The FULL stored object of one content item: every field of its library row plus everything linked to it (Discogs records: the full Discogs release, marketplace stats, price suggestions and collection entry). Without path: the whole object if it fits, else its parts with sizes. Pass path to read one part. Read-only.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        itemId: str('Item id (from search_inventory / get_calendar)'),
+        path: str('Optional dot path into the object, e.g. "discogs.release.tracklist" or "item.facets"'),
+        offset: int('For an array at path: first element', { minimum: 0, maximum: 5000 }),
+        limit: int('For an array at path: how many elements', { minimum: 1, maximum: 200 }),
+      },
+      required: ['itemId'],
     },
   },
   {
@@ -398,7 +414,7 @@ export const PROPOSE_TOOLS = Object.freeze([
     postId: str('Post id from get_queue / get_post'),
     expectedUpdatedAt: str('The post updatedAt from get_post'),
   }, ['postId', 'expectedUpdatedAt']),
-  propose('calendar-batch', `Propose putting a SET of library items on the calendar as review drafts (up to ${MAX_BATCH} at once). Pick the items with select (a track id or name from get_tracks, a bucketId, a search query and/or item ids; combined with AND) and date them with dateRule: anniversary = the next time each item's event date comes round, at most perDay per date (default 1; items with no event date are skipped), or spread = perDay items a day from startDate. Each item becomes ONE draft dated for review: the flyer facts plus the owner's story, or "${MEMORY_PLACEHOLDER}" when there is none. Drafts are never approved, scheduled or published by this; items already on the queue are skipped. The tool result shows how many drafts it would create; report that to the owner.`, {
+  propose('calendar-batch', `Propose putting a SET of library items on the calendar as review drafts (up to ${MAX_BATCH} at once). Pick the items with select (a track id or name from get_tracks, a bucketId, a search query and/or item ids; combined with AND) and date them with dateRule: anniversary = the next time each item's event date comes round, at most perDay per date (default 1; items with no event date are skipped), or spread = perDay items a day from startDate (in title order, or your own order with order:'ids'). Each item becomes ONE draft dated for review: the flyer facts plus the owner's story, or "${MEMORY_PLACEHOLDER}" when there is none. Drafts are never approved, scheduled or published by this; items already on the queue are skipped. The tool result shows how many drafts it would create; report that to the owner.`, {
     select: {
       type: 'object',
       description: 'Which items. At least one field; all given fields must match.',
@@ -407,8 +423,10 @@ export const PROPOSE_TOOLS = Object.freeze([
         bucketId: str('Content Center bucket id'),
         query: str('Search words; every word must match'),
         ids: { type: 'array', maxItems: MAX_BATCH, items: str('Inventory item id') },
+        media: { type: 'string', enum: ['any', 'video', 'image', 'some'], description: 'Only items with this media (video = has a video it can post; some = any media)' },
       },
     },
+    order: { type: 'string', enum: ['title', 'ids'], description: "spread only: 'ids' keeps exactly the order of select.ids (e.g. after you sorted them by value with search_inventory/get_item); default title" },
     dateRule: {
       type: 'object',
       description: 'How each draft is dated.',
@@ -487,6 +505,33 @@ export function serializeResult(value, max = LIMITS.resultMaxChars) {
   let s;
   try { s = JSON.stringify(value === undefined ? null : value); } catch { s = JSON.stringify({ error: 'unserializable result' }); }
   return s.length > max ? `${s.slice(0, max)}... [truncated ${s.length - max} chars]` : s;
+}
+
+/**
+ * Whole-object access within the tool result budget: the value at `path` (dot path, numeric parts index arrays) if it
+ * fits; an array is sliced by offset/limit; anything still too big comes back as a map of its parts and their sizes so
+ * the caller can ask for each part. Never silently truncates a value.
+ */
+export function pageObject(root, { path = '', offset = 0, limit = 0, budget = 11000 } = {}) {
+  const parts = String(path || '').split('.').map((x) => x.trim()).filter(Boolean);
+  let v = root;
+  for (const k of parts) {
+    if (v == null || typeof v !== 'object' || !(k in v)) return { error: `no "${parts.join('.')}" in this item`, parts: v && typeof v === 'object' ? Object.keys(v) : [] };
+    v = v[k];
+  }
+  const at = parts.join('.') || '(root)';
+  if (Array.isArray(v) && (offset || limit)) {
+    const start = Math.max(0, Number(offset) || 0);
+    const n = Math.max(1, Math.min(200, Number(limit) || 20));
+    v = { path: at, total: v.length, offset: start, items: v.slice(start, start + n) };
+    return JSON.stringify(v).length <= budget ? v : { path: at, total: v.total, error: 'these elements are too big together; ask for fewer (smaller limit)' };
+  }
+  if (JSON.stringify(v ?? null).length <= budget) return parts.length ? { path: at, value: v } : v;
+  const size = (x) => JSON.stringify(x ?? null).length;
+  const map = Array.isArray(v)
+    ? { kind: 'array', total: v.length, firstElementChars: v.length ? size(v[0]) : 0 }
+    : { kind: 'object', parts: Object.fromEntries(Object.entries(v).map(([k, x]) => [k, Array.isArray(x) ? `array(${x.length}) ${size(x)} chars` : `${typeof x} ${size(x)} chars`])) };
+  return { path: at, tooBigForOneRead: true, ...map, howToRead: Array.isArray(v) ? `pass path "${parts.join('.')}" with offset/limit` : `pass path "${parts.length ? `${parts.join('.')}.` : ''}<part>" for each part` };
 }
 
 function capRows(res, max) {
@@ -710,9 +755,19 @@ export async function runReadTool(name, input, toolDeps) {
     }
     case 'search_inventory': {
       const query = String(input?.query ?? '').trim();
-      if (!query) throw new Error('query is required');
+      const sort = typeof input?.sort === 'string' ? input.sort : 'relevance';
+      if (!query && sort === 'relevance' && !input?.media && !input?.track) throw new Error('give a query, or a sort / media / track to list items');
       const track = String(input?.track ?? '').trim().slice(0, 60) || undefined;
-      return capRows(await need('searchInventory')({ query, limit: clampLimit(input?.limit, LIMITS.inventoryMax), track }), LIMITS.inventoryMax);
+      const offset = Number.isInteger(input?.offset) && input.offset > 0 ? input.offset : 0;
+      return capRows(await need('searchInventory')({ query, limit: clampLimit(input?.limit, LIMITS.inventoryMax), track, offset, sort, media: input?.media || undefined }), LIMITS.inventoryMax);
+    }
+    case 'get_item': {
+      if (typeof deps.readItemFull !== 'function') return NA();
+      const id = typeof input?.itemId === 'string' ? input.itemId.trim().slice(0, 160) : '';
+      if (!id) return { error: 'itemId is required' };
+      const full = await deps.readItemFull(id);
+      if (!full) return { error: `unknown item ${id}` };
+      return pageObject(full, { path: input?.path, offset: input?.offset, limit: input?.limit, budget: LIMITS.resultMaxChars - 800 });
     }
     case 'top_posts': {
       const args = {
@@ -1000,7 +1055,7 @@ export async function prepareProposal(toolName, input, { toolDeps, userMessages 
         break;
       }
       case 'calendar-batch': {
-        const spec = normalizeBatchSpec({ select: input.select, dateRule: input.dateRule, ...(input.limit !== undefined ? { limit: input.limit } : {}) });
+        const spec = normalizeBatchSpec({ select: input.select, dateRule: input.dateRule, ...(input.limit !== undefined ? { limit: input.limit } : {}), ...(input.order !== undefined ? { order: input.order } : {}) });
         if (!spec.ok) return fail(spec.errors.join('; '));
         if (typeof toolDeps?.previewCalendarBatch !== 'function') return fail('calendar batch is not available');
         const pre = await toolDeps.previewCalendarBatch(spec.spec);

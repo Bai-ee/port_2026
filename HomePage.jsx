@@ -135,29 +135,6 @@ const heroTextScrimStyle = {
   background: 'radial-gradient(ellipse at center, var(--t-scrim) 0%, transparent 70%)',
 };
 
-// Development-only editor launchers (Theme Studio + hero scene panel), bottom-centre so they
-// clear both the Theme Studio's bottom-left launcher and the scene panel's right-hand column.
-const devEditorRowStyle = {
-  position: 'fixed',
-  left: '50%',
-  bottom: 16,
-  transform: 'translateX(-50%)',
-  zIndex: 2147482000,
-  display: 'flex',
-  gap: 8,
-};
-
-const devEditorButtonStyle = {
-  minHeight: 40,
-  padding: '0 14px',
-  border: '1px solid var(--t-border-subtle)',
-  borderRadius: 999,
-  background: 'var(--t-surface)',
-  color: 'var(--t-text-strong)',
-  font: '600 13px/1 "Space Grotesk", system-ui, sans-serif',
-  cursor: 'pointer',
-};
-
 const HomePage = () => {
   const [params, setParams] = useState(HERO_PARAMS_START);
 
@@ -194,6 +171,22 @@ const HomePage = () => {
   const heroViewResetRef = useRef(false);
   const lastHeroScatterAtRef = useRef(0);
 
+  // Homepage only: the page does not scroll (everything below the hero stays mounted, just out of reach).
+  // Locks <html> and <body>; restored on leaving the page. Programmatic scrollTo still works.
+  useLayoutEffect(() => {
+    const { documentElement: html, body } = document;
+    const prev = { html: html.style.overflow, body: body.style.overflow, overscroll: html.style.overscrollBehavior };
+    window.scrollTo(0, 0);
+    html.style.overflow = 'hidden';
+    body.style.overflow = 'hidden';
+    html.style.overscrollBehavior = 'none';
+    return () => {
+      html.style.overflow = prev.html;
+      body.style.overflow = prev.body;
+      html.style.overscrollBehavior = prev.overscroll;
+    };
+  }, []);
+
   // Pre-paint so the copy never flashes into the recorded video.
   useLayoutEffect(() => {
     if (new URLSearchParams(window.location.search).has('teaser')) setTeaserCleanMode(true);
@@ -203,6 +196,8 @@ const HomePage = () => {
   useEffect(() => {
     const url = new URL(window.location.href);
     if (url.searchParams.get('scene') === '1' || url.hash === '#scene') setShowSceneSettings(true);
+    // The admin "Hero Type" card opens the homepage with ?type=1 (the on-page launcher row was removed).
+    else if (url.searchParams.get('type') === '1' || url.hash === '#type') setShowTypeSettings(true);
   }, []);
 
   // Panel edits: resolve against the user's base so slider spreads never lock in
@@ -423,7 +418,7 @@ const HomePage = () => {
     <>
     <HomepageAnalytics />
     {/* Header outside overflow-clip container so backdrop-filter composites against the viewport correctly */}
-    <Header logoRef={headerLogoRef} onOpenPage={setActivePageId} logoSrc="/img/circle_logo.png" />
+    <Header logoRef={headerLogoRef} onOpenPage={setActivePageId} logoSrc="/img/circle_logo.png" logoCyclesTheme />
     <div style={{ position: 'relative', width: '100vw', minHeight: '100dvh', background: 'transparent', overflowX: 'clip' }}>
       <style>{`
         #hero-gradient-overlay {
@@ -538,36 +533,6 @@ const HomePage = () => {
         {/* <HorizontalTextSection /> */}
       </section>
       <PortfolioModal activePageId={activePageId} onClose={() => setActivePageId(null)} onOpenPage={setActivePageId} />
-      {process.env.NODE_ENV === 'development' && !teaserCleanMode && (
-        <div id="dev-editor-launch-row" style={devEditorRowStyle}>
-          <button
-            id="dev-theme-editor-button"
-            type="button"
-            style={devEditorButtonStyle}
-            onClick={() => window.dispatchEvent(new Event('theme-studio:open'))}
-          >
-            Theme
-          </button>
-          <button
-            id="dev-scene-editor-button"
-            type="button"
-            style={devEditorButtonStyle}
-            aria-pressed={showSceneSettings}
-            onClick={() => { setShowTypeSettings(false); setShowSceneSettings((v) => !v); }}
-          >
-            3D Scene
-          </button>
-          <button
-            id="dev-type-editor-button"
-            type="button"
-            style={devEditorButtonStyle}
-            aria-pressed={showTypeSettings}
-            onClick={() => { setShowSceneSettings(false); setShowTypeSettings((v) => !v); }}
-          >
-            Type
-          </button>
-        </div>
-      )}
       {showTypeSettings && <HeroTypePanel onClose={handleCloseTypeSettings} />}
       {showSceneSettings && (
         <SceneSettingsPanel

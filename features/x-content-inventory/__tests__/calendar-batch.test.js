@@ -161,3 +161,16 @@ test('agent: propose_calendar_batch previews through toolDeps, refuses an empty 
   assert.deepEqual(calls[0].spec, v.proposal.payload.spec);
   assert.equal(calls[0].proposalId, 'p1');
 });
+
+test('spread in the chat\'s own order (order:"ids") and only items with a video (select.media)', () => {
+  const pk = (id, title, video) => ({ id, title, clientId: 'c1', engine: 'record', ...(video ? { assetRefs: [`publish-staging/discogs/${id}/video-1x1.mp4`] } : {}) });
+  const packages = [pk('discogs-1', 'Alpha', true), pk('discogs-2', 'Bravo', true), pk('discogs-3', 'Charlie', false), pk('discogs-4', 'Delta', true)];
+  const n = normalizeBatchSpec({ select: { ids: ['discogs-4', 'discogs-1', 'discogs-3', 'discogs-2'], media: 'video' }, order: 'ids', dateRule: { kind: 'spread', startDate: '2026-10-19' } });
+  assert.equal(n.ok, true, JSON.stringify(n.errors));
+  const plan = planCalendarBatch({ packages, tracks: [], spec: n.spec, today: TODAY });
+  assert.deepEqual(plan.rows.map((r) => [r.packageId, r.reviewOn]), [['discogs-4', '2026-10-19'], ['discogs-1', '2026-10-20'], ['discogs-2', '2026-10-21']]);
+  assert.equal(normalizeBatchSpec({ select: { track: 'records' }, order: 'ids', dateRule: { kind: 'spread' } }).ok, false, "order 'ids' needs select.ids");
+  assert.equal(normalizeBatchSpec({ select: { track: 'records', media: 'audio' }, dateRule: { kind: 'spread' } }).ok, false);
+  const def = normalizeBatchSpec({ select: { ids: ['discogs-2', 'discogs-1'] }, dateRule: { kind: 'spread', startDate: '2026-10-19' } });
+  assert.deepEqual(planCalendarBatch({ packages, tracks: [], spec: def.spec, today: TODAY }).rows.map((r) => r.packageId), ['discogs-1', 'discogs-2'], 'default stays title order');
+});
