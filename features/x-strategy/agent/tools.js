@@ -255,6 +255,11 @@ export const READ_TOOLS = Object.freeze([
     input_schema: { type: 'object', properties: { postId: str('Post id (its library item is used)'), packageId: str('Library item id, when there is no post'), limit: int('Max candidates', { minimum: 1, maximum: 20 }) } },
   },
   {
+    name: 'get_media_link',
+    description: 'A link that opens a video or image anywhere in the system: a library item (itemId), a post (postId), or a search (query, e.g. artist or title; also studio/remix renders). Each result lists links (role media/poster/thumbnail, kind, url, expires). A drive (NAS) item not copied yet says needsStaging + stage (run_action nas.stage, then ask again). Read-only. Give the url itself; never send the owner to the console.',
+    input_schema: { type: 'object', properties: { itemId: str('Library item id'), postId: str('Post id'), query: str('Search words'), kind: { type: 'string', enum: ['video', 'image', 'any'] }, limit: int('Max results', { minimum: 1, maximum: 10 }) } },
+  },
+  {
     name: 'get_post',
     description: 'One saved post by id: status, full content, scheduledAt, reviewedAt, whether it is a reply, lifecycle flags, provenance (runId, suggestionId, strategyVersion) and any error. Read-only.',
     input_schema: { type: 'object', properties: { postId: str('Post id, e.g. from get_queue') }, required: ['postId'] },
@@ -741,6 +746,13 @@ export async function runReadTool(name, input, toolDeps) {
       const packageId = typeof input?.packageId === 'string' ? input.packageId.trim().slice(0, 160) : '';
       if (!postId && !packageId) return { error: 'postId or packageId is required' };
       return deps.findHiresMedia({ postId, packageId, limit: clampLimit(input?.limit, 20) });
+    }
+    case 'get_media_link': {
+      if (typeof deps.getMediaLink !== 'function') return NA();
+      const pick = (k) => (typeof input?.[k] === 'string' ? input[k].trim().slice(0, 160) : '');
+      const args = { itemId: pick('itemId'), postId: pick('postId'), query: pick('query'), kind: pick('kind') || 'any', limit: clampLimit(input?.limit, 10) };
+      if (!args.itemId && !args.postId && !args.query) return { error: 'itemId, postId or query is required' };
+      return deps.getMediaLink(args);
     }
     case 'get_post': {
       if (typeof deps.readPost !== 'function') return NA();
