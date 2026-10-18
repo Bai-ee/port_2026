@@ -5590,6 +5590,10 @@ export function ContactCapabilitiesPanel() {
     >
       <style>{`
         @keyframes agentMarquee { from { transform: translate3d(0,0,0); } to { transform: translate3d(-50%,0,0); } }
+        /* CONTACT marquee spans the full footer width (matching the top #founders-hero-marquee-shell)
+           instead of the 736px value block it sits in (a centring flex column, so it overflows evenly); the rest of the block is unchanged. */
+        #dashboard-contact-capabilities #stacked-inline-footer { container-type: inline-size; }
+        #dashboard-contact-capabilities #footer-marquee-shell { width: 100cqw !important; align-self: center; }
         @media (max-width: 767px) {
           #dashboard-contact-capabilities #footer-contact-cta { width: 100% !important; justify-content: center !important; box-sizing: border-box !important; }
           #dashboard-contact-capabilities #agency-marquee-shell > div > div { padding-right: 2rem !important; gap: 2rem !important; }

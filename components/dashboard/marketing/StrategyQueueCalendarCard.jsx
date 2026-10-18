@@ -9,7 +9,6 @@ import SocialPostingPanel from '../SocialPostingPanel';
 import XCalendarCard from '../XCalendarCard';
 
 const InputStatusStrip = dynamic(() => import('../x-content/InputStatusStrip'), { ssr: false });
-
 const VIEWS = [
   { value: 'calendar', label: 'Calendar' },
   { value: 'compose', label: 'Compose' },
@@ -57,6 +56,35 @@ export default function StrategyQueueCalendarCard({ getIdToken, activeClientId, 
         </div>
       ) : null}
       <ContentUiStyles />
+      {/* No white buttons in Queue & Calendar (incl. its day view): selected/secondary controls get the static gradient
+          border (the active-bucket look), the primary action the full gradient fill. Scoped here so other cards that share
+          these components keep their look. The mask only reads alpha, so a token stands in for #fff. */}
+      <style>{`
+        #strategy-queue-calendar-root [role="group"] > button[aria-pressed="true"],
+        #strategy-queue-calendar-root .xce-mc-seg-active,
+        #strategy-queue-calendar-root .xce-mc-filter-on,
+        #strategy-queue-calendar-root .sp-mode-on,
+        #strategy-queue-calendar-root .xce-dv-seg-btn[aria-pressed="true"] {
+          position: relative; isolation: isolate;
+          background: var(--t-surface) !important; color: var(--t-text-strong) !important; border-color: transparent !important; box-shadow: none !important;
+        }
+        #strategy-queue-calendar-root [role="group"] > button[aria-pressed="true"]::before,
+        #strategy-queue-calendar-root .xce-mc-seg-active::before,
+        #strategy-queue-calendar-root .xce-mc-filter-on::before,
+        #strategy-queue-calendar-root .sp-mode-on::before,
+        #strategy-queue-calendar-root .xce-dv-seg-btn[aria-pressed="true"]::before {
+          content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; padding: 1px; pointer-events: none;
+          background: linear-gradient(180deg, var(--t-accent-bright) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%);
+          -webkit-mask: linear-gradient(var(--t-text) 0 0) content-box, linear-gradient(var(--t-text) 0 0); -webkit-mask-composite: xor;
+          mask: linear-gradient(var(--t-text) 0 0) content-box, linear-gradient(var(--t-text) 0 0); mask-composite: exclude;
+        }
+        #strategy-queue-calendar-root .sp-primary,
+        #strategy-queue-calendar-root .xc-primary,
+        #strategy-queue-calendar-root #x-content-month-review-button {
+          background: linear-gradient(135deg, var(--t-accent-bright) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%) !important;
+          color: var(--t-on-solid) !important; border-color: transparent !important;
+        }
+      `}</style>
     </div>
   );
 }

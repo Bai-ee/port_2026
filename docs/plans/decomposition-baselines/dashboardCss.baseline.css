@@ -345,7 +345,8 @@
     justify-content: space-between;
     align-items: baseline;
     padding: 14px 0;
-    border-bottom: 1px solid var(--border);
+    /* --border (dash-border) is near-black in dark mode; border-subtle reads as a faint line in both modes. */
+    border-bottom: 1px solid var(--t-border-subtle);
   }
   .meta-row-source {
     display: block;
@@ -7211,6 +7212,26 @@
     z-index: 10;
     flex-wrap: nowrap;
   }
+  /* Header row icons are monochrome, matching #header-refresh-settings-btn:
+     muted at rest, full text colour on hover; the active view gets a faint ring. */
+  #dashboard-source-cta-row .cap-view-btn,
+  #dashboard-dl-all-chip,
+  #dashboard-coverage-chip,
+  #brief-cooldown-icon-btn {
+    color: color-mix(in srgb, var(--t-text) 65%, transparent);
+    transition: color 0.28s ease, background 0.28s ease;
+  }
+  #dashboard-source-cta-row .cap-view-btn:hover,
+  #dashboard-dl-all-chip:not(:disabled):hover,
+  #dashboard-coverage-chip:hover,
+  #brief-cooldown-icon-btn:hover { color: var(--t-text); }
+  #dashboard-source-cta-row .cap-view-btn.is-active,
+  #dashboard-source-cta-row .cap-view-btn.is-active:hover {
+    background: transparent;
+    color: var(--t-text);
+    box-shadow: inset 0 0 0 1px var(--t-border-faint);
+  }
+  #dashboard-coverage-chip .coverage-brain svg path { stroke: currentColor; }
   #dashboard-source-cta-icon {
     flex-shrink: 0;
     color: color-mix(in srgb, var(--t-text) 45%, transparent);

@@ -30,8 +30,8 @@ import {
   Send,
   Settings2,
   Workflow,
-  Globe,
   Images,
+  ListChecks,
   Radar,
   Eye,
   Ear,
@@ -44,7 +44,7 @@ import UpRightArrow from './components/UpRightArrow';
 import { useAuth } from './AuthContext';
 import { collection, doc, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { db } from './firebase';
-import { internalPageGlassCardStyle } from './pageSurfaceSystem';
+import { internalPageGlassCardStyle, marqueeCardEdgeStyle, marqueeEdgeFadeStyle } from './pageSurfaceSystem';
 import InternalPageBackground from './InternalPageBackground';
 import onboardingConfig from './onboarding/questions.config.cjs';
 import { resolveAnalyzerSource, buildCardDescription, buildModuleStateDescription } from './features/scout-intake/card-description-builder.mjs';
@@ -79,6 +79,7 @@ import { _isModularOnlyRun, buildTerminalLog, buildTerminalLines } from './lib/d
 import { ONBOARDING_ENTRY_STEPS, ONBOARDING_CARD_IDS, UI_TEASER_VARIATIONS, NON_ADMIN_UNLOCKED_CARD_IDS, OVERLAY_FOR_ALL_CARD_IDS, NON_ADMIN_LOCKED_NAV_KEYS, isCapStepLocked, HIDE_INTAKE_CHAT, CAP_STEPS, CAP_STEPS_ADMIN, CAP_BUCKET_COLOR, TIER_BRIEF_COOLDOWN_SECONDS, FREE_TIER_BRIEF_COOLDOWN_SECONDS } from './lib/dashboard/tier-access-config';
 import LazyVideoThumb from './components/dashboard/LazyVideoThumb';
 import MarketingRefreshControl from './components/dashboard/marketing/MarketingRefreshControl';
+import OnboardingFlowPanel from './components/dashboard/OnboardingFlowPanel';
 import { markGroupRefreshed } from './components/dashboard/marketing/refresh-groups';
 import { GROUP_RUNNERS } from './components/dashboard/marketing/refresh-runners';
 import GlassTooltipLayer from './components/dashboard/GlassTooltipLayer';
@@ -1679,6 +1680,17 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // Default to Data Visualization immediately so a slow/unavailable bootstrap
   // cannot leave the nav and card shell hidden.
   const [activeCapabilityFilter, setActiveCapabilityFilter] = useState('deliverables'); // default bucket: DELIVERABLES (onboarding gate)
+  // Admins land on Stand Up ('flow') once admin status resolves — one shot, only while still on the initial
+  // Deliverables bucket and not arriving via an ?open=/?view= deep link. Non-admins keep Deliverables.
+  const standUpDefaultAppliedRef = useRef(false);
+  useEffect(() => {
+    if (standUpDefaultAppliedRef.current || !adminReady) return;
+    standUpDefaultAppliedRef.current = true;
+    if (!isAdmin) return;
+    const params = new URLSearchParams(window.location.search || '');
+    if (params.get('open') || params.get('view')) return;
+    setActiveCapabilityFilter((cur) => (cur === 'deliverables' ? 'flow' : cur));
+  }, [adminReady, isAdmin]);
   // Scroll to the top of the page whenever the active bucket changes or a card
   // modal opens, so a nav click always reveals the new cards from the top (and a
   // modal opens in view). Lenis is excluded on /dashboard, so native window
@@ -9508,6 +9520,24 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       footerLeft: 'Live',
       footerRight: 'ADMIN',
       readinessBadge: { tone: 'ok', label: 'Live' },
+    }, {
+      // Theme Studio — the launcher lives here (the floating bottom-left button was removed). The modal button
+      // fires the existing 'theme-studio:open' event that ThemeStudioMount listens for. Alt+Shift+T still works.
+      id: 'theme-studio',
+      category: 'admin',
+      number: 'TS',
+      label: 'THEME STUDIO',
+      title: 'Theme Studio',
+      description: 'Edit the site palette and the hero scene, preview it live, then apply it for this browser or export it. Drafts stay local until exported.',
+      placeholderLabel: 'THEME\nSTUDIO',
+      rows: [
+        { key: 'ts-what', label: 'Edits', value: 'Palette · light/dark · hero scene' },
+        { key: 'ts-where', label: 'Applies', value: 'This browser only until exported' },
+        { key: 'ts-key', label: 'Shortcut', value: 'Alt + Shift + T' },
+        { key: 'ts-access', label: 'Access', value: 'Admin only' },
+      ],
+      footerLeft: 'Studio',
+      footerRight: 'ADMIN',
     }] : []),
 
     {
@@ -10875,15 +10905,16 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               borderRadius: '1.1rem',
               boxSizing: 'border-box',
               ...internalPageGlassCardStyle,
-              boxShadow: '0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4), 0px 5px 10px rgba(0,0,0,0.1), 0px 15px 30px rgba(0,0,0,0.1), 0px 20px 40px rgba(0,0,0,0.15)',
+              ...marqueeCardEdgeStyle,
             }}>
-              <div id="dashboard-associate-brand-row" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', justifyContent: 'space-between' }}>
-                <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid color-mix(in srgb, var(--t-surface) 35%, transparent)', display: 'block' }} />
-                <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'color-mix(in srgb, var(--t-text) 44%, transparent)', fontWeight: 700, fontFamily: '"Space Mono", monospace' }}>Client Access</span>
+              {/* Avatar + label hidden (marquee-only header); the row keeps its height and the back button. */}
+              <div id="dashboard-associate-brand-row" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', justifyContent: 'flex-end', height: '2.75rem' }}>
+                {/* <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', borderRadius: '50%', objectFit: 'cover', border: '2px solid color-mix(in srgb, var(--t-surface) 35%, transparent)', display: 'block' }} />
+                <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'color-mix(in srgb, var(--t-text) 44%, transparent)', fontWeight: 700, fontFamily: '"Space Mono", monospace' }}>Client Access</span> */}
                 <Link href="/" id="dashboard-associate-back-btn" aria-label="Back to site" data-tooltip-disabled="true" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '2.4rem', height: '2.4rem', borderRadius: '999px', background: 'color-mix(in srgb, var(--t-surface) 34%, transparent)', border: '1px solid var(--t-border-subtle)', color: 'color-mix(in srgb, var(--t-text) 58%, transparent)', textDecoration: 'none', fontSize: '1.05rem', fontFamily: '"Space Mono", monospace', lineHeight: 1 }}>✕</Link>
               </div>
 
-              <div id="dashboard-associate-marquee-viewport" style={{ width: '100%', overflow: 'hidden', margin: '0 0 0.7rem' }}>
+              <div id="dashboard-associate-marquee-viewport" style={{ width: '100%', overflow: 'hidden', margin: '0 0 0.7rem', ...marqueeEdgeFadeStyle }}>
                 <div ref={noWorkspaceMarqueeTrackRef} style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform' }}>
                   <span style={{ margin: 0, flexShrink: 0, color: 'var(--t-text)', fontSize: 'clamp(2rem, 8.5vw, 7rem)', lineHeight: 1, letterSpacing: '-0.04em', fontFamily: '"Doto", "Space Mono", monospace', fontWeight: 700, whiteSpace: 'nowrap' }}>
                     LINK YOUR DASHBOARD&nbsp;·&nbsp;ASSOCIATE WEBSITE&nbsp;·&nbsp;
@@ -11139,7 +11170,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                     {(() => {
                       // "DL ALL" — downloads every available deliverable as a zip
                       // (handleDownloadAllDeliverables). Styled like the brain /
-                      // cooldown chips (gradient Doto text + icon, no button chrome),
+                      // cooldown chips (monochrome Doto text + icon, no button chrome),
                       // sits left of the brain coverage chip. Shown only when assets exist.
                       const hasDeliverableAssets = Boolean(
                         latestStudioVideoUrl || homepageDeviceMockupUrl
@@ -11164,13 +11195,13 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                 DOWNLOAD text never shifts when the state flips. */}
                             <span aria-hidden="true" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, flexShrink: 0, marginTop: 1 }}>
                               {dlAllBusy ? (
-                                <span style={{ width: 16, height: 16, borderRadius: '50%', background: 'linear-gradient(135deg, var(--t-accent-bright) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%)', animation: 'run-indicator-pulse 1.4s ease-in-out infinite', flexShrink: 0 }} />
+                                <span style={{ width: 16, height: 16, borderRadius: '50%', background: 'currentColor', animation: 'run-indicator-pulse 1.4s ease-in-out infinite', flexShrink: 0 }} />
                               ) : (
-                                <DownloadCloud size={22} strokeWidth={2} stroke="url(#coverage-grad)" />
+                                <DownloadCloud size={22} strokeWidth={2} stroke="currentColor" />
                               )}
                             </span>
-                            <span className="dl-all-text dl-all-text--full" style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: 'linear-gradient(135deg, var(--t-accent-bright) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>DOWNLOAD</span>
-                            <span className="dl-all-text dl-all-text--short" style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: 'linear-gradient(135deg, var(--t-accent-bright) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>DL</span>
+                            <span className="dl-all-text dl-all-text--full" style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', color: 'inherit' }}>DOWNLOAD</span>
+                            <span className="dl-all-text dl-all-text--short" style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', color: 'inherit' }}>DL</span>
                           </button>
                         </>
                       );
@@ -11181,8 +11212,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       // ("Data Coverage") card's gauge: captured tier-1 fields / total.
                       const auditCard = intakeCapabilityCards.find((c) => c.id === 'audit-summary');
                       const { pct } = computeDataCoverage(auditCard?.rows);
-                      // Primary brand gradient for the value text (background-clip).
-                      const GRAD = 'linear-gradient(135deg, var(--t-accent-bright) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%)';
                       return (
                         <button
                           type="button"
@@ -11217,17 +11246,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                           }}
                           style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0 2px', flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer' }}
                         >
-                          {/* Shared gradient def for sibling icon strokes (Download /
-                              FileText reference url(#coverage-grad)). */}
-                          <svg width="0" height="0" aria-hidden="true" style={{ position: 'absolute' }}>
-                            <defs>
-                              <linearGradient id="coverage-grad" x1="0" y1="0" x2="1" y2="1">
-                                <stop offset="0%" stopColor="var(--t-accent-bright)" />
-                                <stop offset="52%" stopColor="var(--t-support-1)" />
-                                <stop offset="100%" stopColor="var(--t-support-2)" />
-                              </linearGradient>
-                            </defs>
-                          </svg>
                           <BrainIcon
                             ref={() => {}}
                             className="coverage-brain"
@@ -11235,7 +11253,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                             aria-hidden="true"
                             style={{ marginTop: 1 }}
                           />
-                          <span className="cap-source-value" style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', backgroundImage: GRAD, WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>
+                          <span className="cap-source-value" style={{ fontFamily: "'Doto', var(--font-mono)", fontWeight: 900, fontSize: 22, lineHeight: 1, letterSpacing: '-0.01em', color: 'inherit' }}>
                             {pct}<span style={{ fontSize: 13 }}>%</span>
                           </span>
                         </button>
@@ -11260,7 +11278,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                           setActiveTileModal({ title: briefCard.title, description: briefCard.description, dynamicShortDescription: briefCard.dynamicShortDescription || null, rows: briefCard.rows, cardId: briefCard.id, placeholderLabel: briefCard.placeholderLabel, number: briefCard.number, label: briefCard.label, isCapabilityCard: true, vizType: null, recommendation: briefCard.recommendation || null, analyzer: briefCard.analyzer || null, readinessBadge: briefCard.readinessBadge || null });
                         }}
                       >
-                        <FileText size={22} strokeWidth={2} stroke="url(#coverage-grad)" aria-hidden="true" style={{ marginTop: 1 }} />
+                        <FileText size={22} strokeWidth={2} stroke="currentColor" aria-hidden="true" style={{ marginTop: 1 }} />
                       </button>
                     </span>
                     {/* Background-run indicator — always rendered; spins when active, placeholder ring when idle */}
@@ -11289,36 +11307,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       )}
                     </>
                     {isAdmin ? (
-                    <span id="reseed-url-group" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+                    <span id="header-refresh-shell" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
                       <span className="cap-source-divider" aria-hidden="true" />
-                      <Globe id="dashboard-source-cta-icon" size={22} strokeWidth={2} aria-hidden="true" />
-                      <input
-                        id="reseed-url-input"
-                        type="url"
-                        value={reseedUrl}
-                        onChange={(e) => { setReseedUrl(e.target.value); setReseedError(''); setReseedSuccess(false); }}
-                        placeholder="yourbusiness.com"
-                        disabled={reseedLoading || isRunActive}
-                        spellCheck={false}
-                      />
-                      <button
-                        id="reseed-run-btn"
-                        className="cta-pill-btn"
-                        type="button"
-                        onClick={handleReseed}
-                        disabled={reseedLoading || isRunActive || !reseedUrl.trim()}
-                      >
-                        <span className="reseed-run-btn-label-desktop">
-                          {reseedLoading ? 'Connecting…' :
-                           latestRunStatus === 'queued' ? 'Intake Queued' :
-                           latestRunStatus === 'running' ? 'Intake Running' :
-                          'Connect'}
-                        </span>
-                        <span className="reseed-run-btn-label-mobile">
-                          {reseedLoading ? 'Connecting…' : 'Connect'}
-                        </span>
-                        <UpRightArrow id="reseed-run-btn-icon" />
-                      </button>
+                      <MarketingRefreshControl variant="header" running={marketingRefreshRunning || marketingBriefRunning} onRun={runMarketingRefresh} estimateCtx={marketingEstimateCtx} onOpenConfig={openMarketingRefreshConfig} getIdToken={brandSystemGetIdToken} clientId={client?.clientId || client?.id || bootstrap?.effectiveClientId} />
                     </span>
                     ) : null}
                   </div>
@@ -11346,7 +11337,13 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               <LeadGenDashboard />
             </div>
           ) : null}
-          <div id="capability-grid" ref={capabilityGridRef} style={activeCapabilityFilter === 'leadgen' ? { display: 'none' } : undefined}>
+          {/* STAND UP bucket (admin): Content → Strategy → Calendar steps in place of the card grid. */}
+          {isAdmin && activeCapabilityFilter === 'flow' ? (
+            <div id="onboarding-flow-grid-col-shell">
+              <OnboardingFlowPanel onOpenCard={openCapabilityCardById} availableCardIds={new Set(intakeCapabilityCards.map((c) => c.id))} marketingBrief={marketingBrief} getIdToken={brandSystemGetIdToken} clientId={client?.clientId || client?.id || bootstrap?.effectiveClientId} onOpenTodayDay={openCalendarStageToday} />
+            </div>
+          ) : null}
+          <div id="capability-grid" ref={capabilityGridRef} style={activeCapabilityFilter === 'leadgen' || activeCapabilityFilter === 'flow' ? { display: 'none' } : undefined}>
             {/* Overlays the grid (chrome + hidden cards) while first bootstrap
                 resolves; the card-stagger effect fades it out, cardsRevealed
                 unmounts it. ALSO shown during an admin client switch
@@ -12772,6 +12769,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           <div id="capability-nav-col" className={!isAdmin ? 'capability-nav-col--static' : undefined} data-tooltip-disabled="true">
             {[
               // { key: 'onboarding', label: 'Data Visualization',      sub: 'Capture & inspect',       icon: ClipboardList,         color: '#7b5fff' },
+              // STAND UP (admin): the daily Content → Strategy → Calendar flow. Key 'flow' because 'onboarding' is the legacy filter above.
+              ...(isAdmin ? [{ key: 'flow', label: 'Stand Up', sub: 'Content to calendar', icon: ListChecks, color: 'var(--t-text)' }] : []),
               { key: 'deliverables', label: 'Deliverables',          sub: 'What you walk away with',   icon: Images,                 color: '#14b8a6' },
               { key: 'brief',      label: 'Executive Brief',         sub: 'Daily stand up',          icon: ChartColumnIncreasing, color: 'var(--t-text)' },
               { key: 'knowledge',  label: 'Knowledge Officer',       sub: 'Custom data & context',    icon: BrainIcon,             color: '#3b82f6' },
@@ -12810,7 +12809,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   // Skip the fade choreography for leadgen transitions —
                   // the grid is hidden in that view so there are no cards
                   // to animate on either side.
-                  if (key === 'leadgen' || activeCapabilityFilter === 'leadgen' || cards.length === 0) {
+                  if (key === 'leadgen' || activeCapabilityFilter === 'leadgen' || key === 'flow' || activeCapabilityFilter === 'flow' || cards.length === 0) {
                     setActiveCapabilityFilter(key);
                     return;
                   }
@@ -12962,17 +12961,16 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               boxSizing: 'border-box',
               ...internalPageGlassCardStyle,
               background: 'var(--t-surface)',
-              boxShadow: '0px 5px 10px rgba(0, 0, 0, 0.1), 0px 15px 30px rgba(0, 0, 0, 0.1), 0px 20px 40px rgba(0, 0, 0, 0.15)',
-              border: '1px solid var(--t-glass-soft)',
+              ...marqueeCardEdgeStyle,
             }}
           >
 
-            {/* Brand row — exact auth brandStyle */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', justifyContent: 'space-between' }}>
-              <img src="/img/circle_logo.png" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', objectFit: 'contain', overflow: 'visible', display: 'block' }} />
+            {/* Brand row — logo + label hidden (marquee-only header); keeps its height and the close button. */}
+            <div id="intake-modal-brand-row" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', justifyContent: 'flex-end', height: '2.75rem' }}>
+              {/* <img src="/img/circle_logo.png" alt="" aria-hidden="true" style={{ width: '2.75rem', height: '2.75rem', objectFit: 'contain', overflow: 'visible', display: 'block' }} />
               <span style={{ fontSize: '0.82rem', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'color-mix(in srgb, var(--t-text) 44%, transparent)', fontWeight: 700, fontFamily: '"Space Mono", monospace' }}>
                 {adhocActive ? (adhocTerminal.brand || 'Working') : activeModuleCard ? 'Updating Dashboard' : 'Client Access'}
-              </span>
+              </span> */}
               {/* Close — matches the payment modal close button */}
               <button
                 type="button"
@@ -12983,8 +12981,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
               >[ ✕ ]</button>
             </div>
 
-            {/* Marquee — exact auth titleViewport/Track/titleStyle */}
-            <div style={{ width: '100%', overflow: 'hidden', margin: '0 0 0.7rem' }}>
+            {/* Marquee — exact auth titleViewport/Track/titleStyle, with soft edge fade */}
+            <div id="intake-modal-marquee-viewport" style={{ width: '100%', overflow: 'hidden', margin: '0 0 0.7rem', ...marqueeEdgeFadeStyle }}>
               <div ref={modalMarqueeTrackRef} style={{ display: 'flex', alignItems: 'center', width: 'max-content', willChange: 'transform' }}>
                 {(['a', 'b']).map((k) => (
                   <span key={k} aria-hidden={k === 'b' ? 'true' : undefined} style={{ margin: 0, flexShrink: 0, color: 'var(--t-text)', fontSize: 'clamp(2rem, 8.5vw, 7rem)', lineHeight: 1, letterSpacing: '-0.04em', fontFamily: '"Doto", "Space Mono", monospace', fontWeight: 700, whiteSpace: 'nowrap' }}>
@@ -14200,6 +14198,30 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 {/* Admin · Operating Cost — live per-run / per-client expense tracking */}
                 {activeTileModal.cardId === 'operating-cost' && (
                   <AdminOperatingCostView user={user} />
+                )}
+
+                {/* Admin · Theme Studio launcher (replaces the floating bottom-left button) */}
+                {activeTileModal.cardId === 'theme-studio' && (
+                  <div id="theme-studio-card-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
+                    <div className="tile-detail-tab-content">
+                      <div id="theme-studio-card-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 14 }}>
+                        <p id="theme-studio-card-lede" style={{ margin: 0, maxWidth: '52ch', fontSize: 15, lineHeight: 1.45, color: 'var(--t-text-secondary)' }}>
+                          Opens the Studio over this page. Close it to come back here.
+                        </p>
+                        <button
+                          type="button"
+                          id="theme-studio-launcher"
+                          className="cta-pill-btn"
+                          aria-keyshortcuts="Alt+Shift+T"
+                          onClick={() => { setActiveTileModal(null); window.dispatchEvent(new Event('theme-studio:open')); }}
+                          style={{ minHeight: 44, padding: '0 22px', border: '1px solid var(--t-border-faint)', borderRadius: 999, background: 'var(--t-surface)', color: 'var(--t-text-strong)', fontFamily: 'var(--font-ui)', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}
+                        >
+                          Open Theme Studio
+                        </button>
+                        <span id="theme-studio-card-shortcut" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--t-text-disabled)' }}>Shortcut · Alt + Shift + T</span>
+                      </div>
+                    </div>
+                  </div>
                 )}
 
                 {/* Knowledge Officer · Google Calendar — per-client OAuth connection */}
@@ -18590,6 +18612,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         clientId={client?.clientId || client?.id || bootstrap?.effectiveClientId}
         clientName={client?.companyName || client?.name || client?.dashboardTitle || null}
         clientHandle={marketingBriefConfig?.brandXHandle || ''}
+        onOpenCard={openCapabilityCardById}
         onClose={() => setCalendarStage(null)}
       />
     ) : null}
