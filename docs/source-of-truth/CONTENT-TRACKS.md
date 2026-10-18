@@ -74,11 +74,19 @@ X Strategy → Plan tab → "Content tracks" (`#x-strategy-content-tracks-panel`
 - **narrative**: up to one a day (today, tomorrow) from the Market Signals topics/opportunities, text = `topic: detail` + `Where it shows up in my work: [add your take]`.
 - **client-work**: the baseline slots of client-work tracks (engine `client`, or a label like Video Editing / Graphic Design), kind `client-work`, max 1 a day, never added on top of the baseline count.
 
-Gate: `[add your take]` joins `[add your memory]` in `features/social-posting/self-reply.js` (`BLOCKING_PLACEHOLDERS`): approve, schedule, post-now and the due sweep all refuse text that still has either, and `needsStory` follows the text for `daily-fill` drafts like `calendar-batch` ones.
+Gate: `[add your take]` joins `[add your memory]` in `features/social-posting/self-reply.js` (`BLOCKING_PLACEHOLDERS`). **Since 2026-10-17 (PR #25) approval never blocks on them:** every approve path goes through `approveInMemory` (`twitter-service.js`), which strips the placeholder lines (`stripBlockingPlaceholders`, content + self-reply) and clears `needsStory`. Schedule, post-now and the due sweep still refuse text that has either placeholder.
 
 Idempotent: key `daily-fill:<date>:<kind>:<packageId|targetId>` through `ensureDraftPost`; earlier fill drafts on a day/bucket count toward that track's target and a quote/narrative already filled is skipped, so a re-run adds nothing. Rows carry `reason` + `source {type,id,asOf}`.
 
 Wiring: `createStrategyHandlers` deps `readFillContext`, `readQuoteTargets` (plus the existing `readOpenPackageIds`, `readMarketSignals`, `ensureDraft`, `placeDraft`, `mediaForItem`); route actions `strategy-daily-fill-preview` / `strategy-daily-fill-create` (body `{clientId, spec:{from?, days?(1-31, default 7), include?}}`); agent deps `previewDailyFill(spec)` / executor `runDailyFill({clientId, spec, proposalId})`. The cron entry is `runDailyFillForCron(clientId, {today, deps})` (today + 6 days, every kind), with `deps = handlers.dailyFillDeps`.
+
+## One calendar (2026-10-17, PRs #25–#27)
+
+The month calendar is the single review surface for every possible post.
+- **Reader:** `features/x-content-inventory/calendar-reader.js` `readUnifiedCalendar` (dashboard handler `handleMonthCalendar` = reader + `withRowThumbs`; a parity test pins them deep-equal). Per day it returns: saved `social_posts` of every status, today's daily-run suggestions, and open quote targets on every day their 36h window covers (rows already saved as posts are de-duplicated). Rows carry `kind`, `approval`, links, window time left and `hasPlaceholder`; totals include suggested + requote counts. Pure row shaping in `month-calendar.js` and `components/dashboard/x-content/calendar-row-model.js`.
+- **Approve routes (quote-targets, catalogued tier 1):** `calendar-approve` (post, optional edited content, revision-checked), `calendar-unapprove` (approved + unscheduled → draft), `calendar-suggestion-approve` (suggestion via `saveSuggestionDraft`, or quote via `ensureDraftPost` with the daily-fill key, then approve). Approving never schedules.
+- **UI:** `MonthCalendarPanel.jsx` + `CalendarApprovalBits.jsx`: approval marks per row, filter chips All / Unapproved / Approved / Suggestions, inline Approve / Unapprove on rows and in `PostSheet`; quote rows show handle, link, time left. Today card: "Review everything on the calendar".
+- **Agent / MCP:** read tool `get_calendar` (from/to/filter; omit both = today + 6 days; result carries `today` + `timezone`); MCP `strategy_get_calendar`. `get_post` / `find_posts` rows carry `approveNote` when text has a placeholder. The prompt gets a `TODAY: <date> (<tz>)` line every turn (`toolDeps.getToday()`, client profile timezone) — the model has no clock and must never guess dates.
 
 ## Limits
 - Insights → "By content track" renders `evaluation.byTrack` (per-track benchmarks, gaps vs the track lead, "no benchmark yet"); the overall pace section stays labelled separately. Own posts are not tagged by track, so each track's own side is all of your posts (stated in the UI).

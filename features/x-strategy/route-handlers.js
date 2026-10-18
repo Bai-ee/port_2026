@@ -214,6 +214,7 @@ export function describeRows(handle, read, nowMs) {
 export function createStrategyHandlers({
   corpusStore, planStore: basePlanStore, refreshService, readXGrowthConfig,
   readPackages = async () => [], readWorkerHealth = null, evaluate = defaultEvaluate, clock = Date.now,
+  readDiscogsRelease = null, // (releaseId) -> discogs_releases/{id} (full Discogs bundle) | null; get_item links it to a record item
   resolveProfile = resolveXGrowthProfile, buildPreviewPlan = buildContentDayPlan,
   docStore: baseDocStore = null, onBrainOwnedSaved = null, // strategy-doc-store.js; absent => the strategy-doc-* actions answer 503
   readBrainTrackTargets = null, // clientId -> approved Brain Track Targets rows (per-type shares); absent => postsPerDay only
@@ -829,7 +830,7 @@ export function createStrategyHandlers({
           return next;
         },
       } : {}),
-      searchInventory: async ({ query, limit, track } = {}) => {
+      searchInventory: async ({ query, limit, track, offset = 0, sort = 'relevance', media } = {}) => {
         const max = Math.min(Math.max(1, Number(limit) || 10), 20);
         const tokens = String(query ?? '').toLowerCase().split(/\s+/).filter(Boolean).slice(0, 8);
         const tracks = tracksOf(await planStore.get(clientId));
@@ -844,11 +845,46 @@ export function createStrategyHandlers({
           const score = tokens.length ? tokens.filter((t) => hay.includes(t)).length : 0;
           if (!tokens.length || score) scored.push({ score, p });
         }
-        scored.sort((a, b) => b.score - a.score);
-        return scored.slice(0, max).map(({ p }) => ({
-          id: p.id, title: p.title ?? null, story: String(p.story ?? '').slice(0, 160), bucketId: p.bucketId ?? null, track: trackForPackage(tracks, p)?.id ?? null,
-          hasStory: !!String(p.story ?? '').trim() && !hasPlaceholderStory(p), facets: p.humanEdits || p.facets || {},
-        }));
+        const kindOf = (p) => mediaOf(p).kind || null;
+        const filtered = media && media !== 'any' ? scored.filter(({ p }) => (media === 'none' ? !kindOf(p) : kindOf(p) === media)) : scored;
+        const ds = (p) => p.discogsSummary || null;
+        const num = (v) => (Number.isFinite(Number(v)) && v !== null ? Number(v) : null);
+        const cmpNull = (a, b, dir) => (a == null && b == null ? 0 : a == null ? 1 : b == null ? -1 : dir * (a - b)); // no value sorts last
+        const sorters = {
+          relevance: (a, b) => b.score - a.score,
+          'value-desc': (a, b) => cmpNull(num(ds(a.p)?.valueUsd), num(ds(b.p)?.valueUsd), -1),
+          'value-asc': (a, b) => cmpNull(num(ds(a.p)?.valueUsd), num(ds(b.p)?.valueUsd), 1),
+          'want-desc': (a, b) => cmpNull(num(ds(a.p)?.want), num(ds(b.p)?.want), -1),
+          'year-asc': (a, b) => cmpNull(num(ds(a.p)?.year ?? a.p.eraYear), num(ds(b.p)?.year ?? b.p.eraYear), 1),
+          'year-desc': (a, b) => cmpNull(num(ds(a.p)?.year ?? a.p.eraYear), num(ds(b.p)?.year ?? b.p.eraYear), -1),
+          title: (a, b) => String(a.p.title ?? '').localeCompare(String(b.p.title ?? '')),
+        };
+        filtered.sort((a, b) => (sorters[sort] || sorters.relevance)(a, b) || String(a.p.id).localeCompare(String(b.p.id)));
+        const start = Math.max(0, Number(offset) || 0);
+        const rows = filtered.slice(start, start + max).map(({ p }) => {
+          const d = ds(p);
+          return {
+            id: p.id, title: p.title ?? null, story: String(p.story ?? '').slice(0, 160), bucketId: p.bucketId ?? null, track: trackForPackage(tracks, p)?.id ?? null,
+            hasStory: !!String(p.story ?? '').trim() && !hasPlaceholderStory(p), hasMedia: !!kindOf(p), mediaKind: kindOf(p),
+            ...(d ? { discogs: { valueUsd: d.valueUsd, valueBasis: d.valueBasis, have: d.have, want: d.want, year: d.year, artists: d.artists, labels: d.labels, forSale: d.forSale } } : {}),
+            facets: p.humanEdits || p.facets || {},
+          };
+        });
+        return { total: filtered.length, offset: start, rows };
+      },
+      // get_item: the FULL stored object of one of THIS client's items + what is linked to it (Discogs bundle). Read-only.
+      readItemFull: async (id) => {
+        const pkgs = await readPackages(clientId);
+        const item = (pkgs || []).find((p) => p.id === id);
+        if (!item) return null;
+        const { searchTokens, ...visible } = item; // derived search index only; every real field stays
+        const releaseId = /^discogs-(\d+)$/.exec(String(item.id))?.[1] || (item.source?.kind === 'discogs' ? String(item.source.externalId || '') : '');
+        let discogs = null;
+        if (releaseId && typeof readDiscogsRelease === 'function') {
+          const d = await readDiscogsRelease(releaseId).catch(() => null);
+          if (d && (!d.clientId || d.clientId === clientId)) discogs = d;
+        }
+        return { item: visible, ...(discogs ? { discogs } : releaseId ? { discogs: null, discogsNote: 'No Discogs data stored yet: scripts/discogs/refresh-releases.mjs fetches it.' } : {}) };
       },
       // Item media (item-media.js): who could lend media to an item, and a dry run of a set of links (no writes).
       findItemMedia: async ({ id, limit } = {}) => {
@@ -1614,6 +1650,7 @@ export function createStrategyHandlersFromDb(db, {
   const listMediaTaskIds = (clientId) => taskStore.ids(clientId);
   const createMediaTasks = ({ clientId, rows, by, proposalId }) => taskStore.create(clientId, rows, { by, proposalId });
   return createStrategyHandlers({
+    readDiscogsRelease: async (releaseId) => { const s = await db.collection('discogs_releases').doc(String(releaseId)).get(); return s.exists ? s.data() : null; },
     corpusStore, planStore, refreshService, readPackages, readAudience, readBuckets, readBucketEngine, readOpenPackageIds, readFillContext, readQuoteTargets, ensureDraft, placeDraft, listMediaTaskIds, createMediaTasks,
     readStageStates: (ids) => readStageStatesFromDb(db, ids), readNasStatus: () => handleNasAction({ db, now: () => Date.now() }, 'nas-status', {}),
     readDataSources, saveDataSources, pullCorpora, scanQuotes, responseStyleStore, unmetStore,

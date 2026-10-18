@@ -11,7 +11,9 @@ const EXCLUDED_PREFIXES = ['/dashboard', '/admin', '/login', '/preview', '/captu
 
 export default function SmoothScroll() {
   const pathname = usePathname();
-  const excluded = EXCLUDED_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+  // The homepage ('/') is scroll-locked (HomePage.jsx), so it gets no Lenis either: Lenis scrolls in script and
+  // would ignore the overflow lock.
+  const excluded = pathname === '/' || EXCLUDED_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 
   useEffect(() => {
     if (excluded) return;

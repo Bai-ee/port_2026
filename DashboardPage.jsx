@@ -1735,6 +1735,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   });
   const capabilityGridRef = useRef(null);
   const dashboardVisibleRef = useRef(false);
+  // performance.now() when the page-load intro timeline starts; the Stand Up panel reveal times itself against it.
+  const introStartAtRef = useRef(0);
   // First bootstrap resolved — the card stagger waits for it so cards animate
   // against real data. Stays true through later refetches (admin client
   // switch, reseed) so the reveal never replays.
@@ -2041,6 +2043,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // Stand Up > Open Today: the stage at the Day level, today in the client's time zone (no client zone is loaded in this page yet,
   // so the stage falls back to America/Chicago). The Stand Up panel receives this as its `onOpenTodayDay` prop.
   const openCalendarStageToday = useCallback(() => openCalendarStage({ level: 'day', date: todayInZone(undefined) }), [openCalendarStage]);
+  // Stand Up > Open Queue: the month view as Back from Today shows it (focused on today). Open Next Post: that post's editor.
+  const openCalendarStageQueue = useCallback(() => openCalendarStage({ level: 'month', date: todayInZone(undefined) }), [openCalendarStage]);
+  const openCalendarStagePost = useCallback((date, postId) => openCalendarStage({ level: 'post', date, postId }), [openCalendarStage]);
   useDashboardFade(dashboardUiRootRef, !!calendarStage);
   // Reload / browser-forward onto a ?cal= URL reopens the stage at that level.
   useEffect(() => {
@@ -5950,6 +5955,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 
     // Ready — animate dashboard in (initial load OR after processing)
     dashboardVisibleRef.current = true;
+    introStartAtRef.current = performance.now();
     gsap.set(sections, { autoAlpha: 0 });
     if (cards.length) gsap.set(cards, { autoAlpha: 0 });
 
@@ -5969,6 +5975,30 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 
     return () => tl.kill();
   }, [showIntakeModal, entranceReady, creationFailureOpen]);
+
+  // Stand Up panel reveal. The panel replaces the card grid (which the intro fades as #capability-grid), and it
+  // can mount before or after the intro starts, so it runs its own short timeline: the panel shell fades in while
+  // the capability menu lands, then the 3 · 2 · 1 steps stagger in last. Opening the bucket later (intro long
+  // done) plays the same reveal with no lead-in.
+  const FLOW_INTRO_SHELL_AT_S = 0.85; // page-intro time: during the menu fade (0.55 + 0.5)
+  useLayoutEffect(() => {
+    if (activeCapabilityFilter !== 'flow') return undefined;
+    const shell = document.querySelector('#onboarding-flow-shell');
+    if (!shell) return undefined;
+    const steps = gsap.utils.toArray('#onboarding-flow-step-list > li', shell);
+    const targets = [shell, ...steps];
+    if (showIntakeModal || creationFailureOpen || !entranceReady || !introStartAtRef.current) {
+      gsap.set(targets, { autoAlpha: 0 });
+      return undefined;
+    }
+    gsap.set(targets, { autoAlpha: 0 });
+    const elapsedS = (performance.now() - introStartAtRef.current) / 1000;
+    const leadIn = Math.max(0, FLOW_INTRO_SHELL_AT_S - elapsedS);
+    const tl = gsap.timeline({ delay: leadIn });
+    tl.to(shell, { autoAlpha: 1, duration: 0.45, ease: 'power2.out' }, 0)
+      .to(steps, { autoAlpha: 1, duration: 0.45, ease: 'power2.out', stagger: 0.12 }, 0.3);
+    return () => { tl.kill(); gsap.set(targets, { autoAlpha: 1 }); };
+  }, [activeCapabilityFilter, entranceReady, showIntakeModal, creationFailureOpen]);
 
   // Card reveal — runs once the grid shell is on screen AND the first
   // bootstrap has resolved. No stagger: all cards display at once when ready.
@@ -9538,6 +9568,41 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       ],
       footerLeft: 'Studio',
       footerRight: 'ADMIN',
+      readinessBadge: { tone: 'ok', label: 'Live' },
+    }, {
+      // Hero 3D scene tuner — opens the homepage with ?scene=1 (the on-page launcher row was removed).
+      id: 'hero-scene-editor',
+      category: 'admin',
+      number: '3D',
+      label: '3D SCENE',
+      title: '3D Scene',
+      description: 'Tune the homepage hero scene live on the homepage. Templates are saved in this browser.',
+      placeholderLabel: '3D\nSCENE',
+      rows: [
+        { key: 'hs-what', label: 'Edits', value: 'Hero loop scene' },
+        { key: 'hs-where', label: 'Opens', value: 'Homepage · new tab' },
+        { key: 'hs-access', label: 'Access', value: 'Admin only' },
+      ],
+      footerLeft: 'Editor',
+      footerRight: 'ADMIN',
+      readinessBadge: { tone: 'ok', label: 'Live' },
+    }, {
+      // Hero type tuner — opens the homepage with ?type=1. Drafts are read in local dev only (lib/hero-type/store.js).
+      id: 'hero-type-editor',
+      category: 'admin',
+      number: 'TY',
+      label: 'HERO TYPE',
+      title: 'Hero Type',
+      description: 'Tune the homepage hero text live on the homepage. Drafts apply on localhost only.',
+      placeholderLabel: 'HERO\nTYPE',
+      rows: [
+        { key: 'ht-what', label: 'Edits', value: 'Hero headline + small line' },
+        { key: 'ht-where', label: 'Opens', value: 'Homepage · new tab' },
+        { key: 'ht-access', label: 'Access', value: 'Admin only' },
+      ],
+      footerLeft: 'Editor',
+      footerRight: 'ADMIN',
+      readinessBadge: { tone: 'ok', label: 'Live' },
     }] : []),
 
     {
@@ -10824,7 +10889,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       <header id="founders-top-strip" data-tooltip-disabled="true">
         <div id="founders-top-strip-inner">
           <Link href="/" id="founders-brand" aria-label="Back to homepage">
-            <img src="/img/circle_logo.png" alt="" aria-hidden="true" />
+            {/* Same id as the homepage logo, so the shared blend rule in colors.css applies (color-dodge in dark). */}
+            <img id="founders-brand-logo-image" src="/img/circle_logo.png" alt="" aria-hidden="true" />
           </Link>
           <div id="founders-top-actions">
             <button type="button" id="founders-login-link" onClick={handleSignOut}>
@@ -11340,7 +11406,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           {/* STAND UP bucket (admin): Content → Strategy → Calendar steps in place of the card grid. */}
           {isAdmin && activeCapabilityFilter === 'flow' ? (
             <div id="onboarding-flow-grid-col-shell">
-              <OnboardingFlowPanel onOpenCard={openCapabilityCardById} availableCardIds={new Set(intakeCapabilityCards.map((c) => c.id))} marketingBrief={marketingBrief} getIdToken={brandSystemGetIdToken} clientId={client?.clientId || client?.id || bootstrap?.effectiveClientId} onOpenTodayDay={openCalendarStageToday} />
+              <OnboardingFlowPanel onOpenCard={openCapabilityCardById} availableCardIds={new Set(intakeCapabilityCards.map((c) => c.id))} marketingBrief={marketingBrief} getIdToken={brandSystemGetIdToken} clientId={client?.clientId || client?.id || bootstrap?.effectiveClientId} onOpenTodayDay={openCalendarStageToday} onOpenQueue={openCalendarStageQueue} onOpenPost={openCalendarStagePost} />
             </div>
           ) : null}
           <div id="capability-grid" ref={capabilityGridRef} style={activeCapabilityFilter === 'leadgen' || activeCapabilityFilter === 'flow' ? { display: 'none' } : undefined}>
@@ -14219,6 +14285,51 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                           Open Theme Studio
                         </button>
                         <span id="theme-studio-card-shortcut" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--t-text-disabled)' }}>Shortcut · Alt + Shift + T</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Admin · homepage hero editors (replace the homepage's bottom launcher row) */}
+                {activeTileModal.cardId === 'hero-scene-editor' && (
+                  <div id="hero-scene-editor-card-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
+                    <div className="tile-detail-tab-content">
+                      <div id="hero-scene-editor-card-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 14 }}>
+                        <p id="hero-scene-editor-card-lede" style={{ margin: 0, maxWidth: '52ch', fontSize: 15, lineHeight: 1.45, color: 'var(--t-text-secondary)' }}>
+                          Opens the homepage in a new tab with the 3D Scene panel open.
+                        </p>
+                        <a
+                          id="hero-scene-editor-launcher"
+                          className="cta-pill-btn"
+                          href="/?scene=1"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ display: 'inline-flex', alignItems: 'center', minHeight: 44, padding: '0 22px', border: '1px solid var(--t-border-faint)', borderRadius: 999, background: 'var(--t-surface)', color: 'var(--t-text-strong)', fontFamily: 'var(--font-ui)', fontSize: 15, fontWeight: 700, textDecoration: 'none' }}
+                        >
+                          Open 3D Scene editor
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeTileModal.cardId === 'hero-type-editor' && (
+                  <div id="hero-type-editor-card-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
+                    <div className="tile-detail-tab-content">
+                      <div id="hero-type-editor-card-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 14 }}>
+                        <p id="hero-type-editor-card-lede" style={{ margin: 0, maxWidth: '52ch', fontSize: 15, lineHeight: 1.45, color: 'var(--t-text-secondary)' }}>
+                          Opens the homepage in a new tab with the Hero Type panel open. Drafts apply on localhost only.
+                        </p>
+                        <a
+                          id="hero-type-editor-launcher"
+                          className="cta-pill-btn"
+                          href="/?type=1"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ display: 'inline-flex', alignItems: 'center', minHeight: 44, padding: '0 22px', border: '1px solid var(--t-border-faint)', borderRadius: 999, background: 'var(--t-surface)', color: 'var(--t-text-strong)', fontFamily: 'var(--font-ui)', fontSize: 15, fontWeight: 700, textDecoration: 'none' }}
+                        >
+                          Open Hero Type editor
+                        </a>
                       </div>
                     </div>
                   </div>
