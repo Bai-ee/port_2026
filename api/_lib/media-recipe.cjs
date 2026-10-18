@@ -18,7 +18,8 @@
 // Traversal, backslashes, empty segments, and arbitrary deep paths stay rejected.
 const FOLDER_NAME_RE = /^[a-zA-Z0-9_-]{1,120}$/;
 const KEY_RE = /^[a-zA-Z0-9_]{1,80}$/;
-const ARTIST_RE = /^[A-Za-z0-9 _.\-]{1,60}$/;
+// Artist names come from EditVideos system/artists, e.g. "BLUE JAY (AKA Josh Zeitler)": letters (any language), digits, space, _ . - ( ) & ' , ! +
+const ARTIST_RE = /^[\p{L}\p{N} _.\-()&',!+]{1,80}$/u;
 const OVERLAY_EFFECT_RE = /^[a-z0-9_]{1,40}$/;
 const LOGO_NAME_RE = /^[A-Za-z0-9._-]{1,80}$/;
 const VIDEO_ORDER_NAME_RE = /^[A-Za-z0-9._ ()-]{1,180}$/;

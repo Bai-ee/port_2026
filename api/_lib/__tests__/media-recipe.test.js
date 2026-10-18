@@ -261,3 +261,12 @@ test('validateRemixRecipe still strips unknown fields with new optionals absent'
   const out = validateRemixRecipe({ sourceFolders: ['a'], evil: 'x' });
   assert.deepEqual(Object.keys(out).sort(), ['output', 'sourceFolders', 'type']);
 });
+
+test('validateRemixRecipe accepts real artist names with parentheses/accents, rejects markup and quotes', () => {
+  for (const name of ['BLUE JAY (AKA Josh Zeitler)', 'Andrés & Friends', "DJ Rush's Set", 'Chicago Skyway']) {
+    assert.equal(validateRemixRecipe({ sourceFolders: ['a'], artist: name }).artist, name);
+  }
+  for (const bad of ['<script>', 'a"b', 'x;rm -rf', 'a'.repeat(81)]) {
+    assert.throws(() => validateRemixRecipe({ sourceFolders: ['a'], artist: bad }), /artist has invalid characters/);
+  }
+});
