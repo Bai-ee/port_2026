@@ -539,13 +539,6 @@
       "exceptionId": "WS7-A"
     },
     {
-      "file": "HeroHeadline.jsx",
-      "literal": "#ffffff",
-      "count": 1,
-      "reason": "HEADLINE_BLEND_INK: pure-white ink under mix-blend-mode difference so the headline inverts against var(--t-page) in both modes; a blend-math constant, not a theme colour.",
-      "exceptionId": "WS7-B"
-    },
-    {
       "file": "AuthPage.jsx",
       "literal": "#EA4335",
       "count": 1,

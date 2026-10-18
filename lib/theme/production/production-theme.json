@@ -8,30 +8,30 @@
     "status": "draft"
   },
   "defaults": {
-    "viewerPreference": "light"
+    "viewerPreference": "dark"
   },
   "features": {
     "focusRing": false,
     "selection": false
   },
   "master": {
-    "hue": 7,
-    "intensity": 1.11
+    "hue": 270,
+    "intensity": 1.1
   },
   "offsets": {
-    "accentBright": 11,
-    "support1": 9,
-    "support2": -15
+    "accentBright": -15,
+    "support1": -80,
+    "support2": 120
   },
   "neutral": {
-    "tintStrength": 1.2,
-    "hueSource": "fixed",
-    "hue": 190
+    "tintStrength": 1,
+    "hueSource": "master",
+    "hue": 10
   },
   "modes": {
     "light": {
       "settings": {
-        "lightnessShift": 0,
+        "lightnessShift": 0.03,
         "chromaScale": 1,
         "contrast": 1.35
       },
@@ -1085,8 +1085,8 @@
     },
     "dark": {
       "settings": {
-        "lightnessShift": 0,
-        "chromaScale": 1.15,
+        "lightnessShift": -0.04,
+        "chromaScale": 1.05,
         "contrast": 1.35,
         "surfaceDepth": 0.15
       },

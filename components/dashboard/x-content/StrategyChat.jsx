@@ -1,18 +1,16 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUp, ArrowUpRight, BookOpen, Check, FileText, Plus, Shield, Sparkles } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpRight, BookOpen, Check, FileText, Plus, Shield, Sparkles } from 'lucide-react';
 import {
   memorySuggestModel,
-  proposalKindLabel, proposalPayloadPreview, proposalStatusText, chatErrorText, costFooterText, plainChatText,
+  proposalKindLabel, proposalPayloadPreview, proposalStatusText, chatErrorText, costFooterText, plainChatText, chatBlocks,
   historyDiffSummary,
 } from '../../../features/x-strategy/ui-model.js';
 import { describeDocChange, sectionTitle } from '../../../features/x-strategy/strategy-doc.js';
 import { XCE_COLORS, XCE_RADII } from '../content-ui/xce-tokens';
 import Accordion from '../content-ui/ui/Accordion';
-import Badge from '../content-ui/ui/Badge';
 import IconButton from '../content-ui/ui/IconButton';
-import SectionLabel from '../content-ui/ui/SectionLabel';
 import MiniThumb from './MiniThumb.jsx';
 import ActionProposalCard from './ActionProposalCard.jsx';
 import UndoChip from './UndoChip.jsx';
@@ -20,7 +18,7 @@ import AgentPermissionsPanel from './AgentPermissionsPanel.jsx';
 import { messageUndoChips } from '../../../features/x-strategy/action-ui-model.js';
 import MemorySuggestRows from './MemorySuggestRows.jsx';
 
-// StrategyChat - the agent chat in the Strategy tab's right column.
+// StrategyChat - the agent chat in the Strategy panel's Chat tab (full width, one centred reading column).
 //
 //   <StrategyChat clientId call onPlanChanged onRefreshed currentPlan?
 //                 planVersion? history? prefill? onViewPlan? onViewChange? onUndo? undoNote? selected? />
@@ -45,47 +43,85 @@ import MemorySuggestRows from './MemorySuggestRows.jsx';
 
 const INPUT_MAX = 2000;
 
+// Readable secondary text: the shared inkSoft/inkMuted (62% / 50%) read as washed out at chat sizes.
+const INK_SECONDARY = 'color-mix(in srgb, var(--t-text) 74%, transparent)';
+const INK_META = 'color-mix(in srgb, var(--t-text) 64%, transparent)';
+
 const S = {
-  h: { margin: 0, fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: XCE_COLORS.inkSoft },
-  head: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10 },
-  list: { display: 'grid', gap: 12, minWidth: 0, overflowY: 'auto', padding: '2px 2px 8px', alignContent: 'start' },
-  userBubble: { justifySelf: 'end', maxWidth: '88%', padding: '9px 13px', borderRadius: 16, background: XCE_COLORS.ink, color: XCE_COLORS.onInk, fontSize: 14, lineHeight: 1.45, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' },
-  botBubble: { justifySelf: 'start', maxWidth: '100%', padding: '9px 13px', borderRadius: 16, background: XCE_COLORS.surfaceMuted, border: `1px solid ${XCE_COLORS.border}`, fontSize: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' },
-  time: { margin: '3px 4px 0', fontSize: 11, color: XCE_COLORS.inkMuted },
-  cardsCol: { display: 'grid', gap: 8, marginTop: 8, minWidth: 0 },
-  card: { padding: '12px 14px', borderRadius: XCE_RADII.md + 2, background: XCE_COLORS.surface, border: `1px solid ${XCE_COLORS.border}`, display: 'grid', gap: 8, minWidth: 0 },
+  list: { display: 'grid', gap: 18, minWidth: 0, padding: '4px 0 8px', alignContent: 'start' },
+  userBubble: { justifySelf: 'end', maxWidth: '85%', padding: '10px 14px', borderRadius: 18, background: XCE_COLORS.ink, color: XCE_COLORS.onInk, fontSize: 15, lineHeight: 1.5, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' },
+  // Agent replies read as plain text on the page (no grey box), so long answers stay easy to scan.
+  botText: { justifySelf: 'stretch', minWidth: 0, display: 'grid', gap: 10, fontSize: 15, lineHeight: 1.6, color: XCE_COLORS.ink, overflowWrap: 'anywhere' },
+  botP: { margin: 0, whiteSpace: 'pre-wrap' },
+  botH: { margin: '4px 0 0', fontSize: 15, fontWeight: 700 },
+  botList: { margin: 0, paddingLeft: 22, display: 'grid', gap: 4 },
+  time: { margin: '4px 2px 0', fontSize: 12, color: INK_META },
+  thinking: { justifySelf: 'start', display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 14, color: INK_SECONDARY },
+  cardsCol: { display: 'grid', gap: 10, marginTop: 10, minWidth: 0 },
+  card: { padding: '14px 16px', borderRadius: XCE_RADII.md + 2, background: XCE_COLORS.surface, border: `1px solid ${XCE_COLORS.borderStrong}`, display: 'grid', gap: 8, minWidth: 0 },
   cardHead: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
-  kind: { fontFamily: 'var(--font-mono)', fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: XCE_COLORS.inkSoft },
-  summary: { fontSize: 14, fontWeight: 600, lineHeight: 1.4, overflowWrap: 'anywhere' },
-  rationale: { margin: 0, fontSize: 12.5, lineHeight: 1.45, color: XCE_COLORS.inkSoft, overflowWrap: 'anywhere' },
+  kind: { fontSize: 12.5, fontWeight: 600, color: INK_SECONDARY },
+  status: { display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12.5, fontWeight: 600 },
+  summary: { fontSize: 15.5, fontWeight: 700, lineHeight: 1.4, overflowWrap: 'anywhere' },
+  rationale: { margin: 0, fontSize: 13.5, lineHeight: 1.5, color: INK_SECONDARY, overflowWrap: 'anywhere' },
   small: { margin: 0, paddingLeft: 16, fontSize: 12.5, lineHeight: 1.45, overflowWrap: 'anywhere' },
   preview: { margin: 0, padding: '6px 8px', borderRadius: 8, background: XCE_COLORS.greyBg, listStyle: 'none', fontFamily: 'var(--font-mono)', fontSize: 11.5, lineHeight: 1.5, overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' },
-  label: { fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: XCE_COLORS.inkMuted },
+  label: { fontSize: 12, fontWeight: 600, color: INK_SECONDARY },
   row: { display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
   err: { margin: '8px 0 0', fontSize: 12, lineHeight: 1.4, color: XCE_COLORS.red },
-  note: { margin: '6px 0 0', fontSize: 12, lineHeight: 1.45, color: XCE_COLORS.inkSoft },
+  note: { margin: '6px 0 0', fontSize: 12.5, lineHeight: 1.45, color: INK_META },
   ok: { margin: 0, fontSize: 12, lineHeight: 1.4, color: XCE_COLORS.green },
   textLink: { display: 'inline-flex', alignItems: 'center', gap: 4, minHeight: 36, padding: '0 4px', border: 0, background: 'transparent', color: XCE_COLORS.ink, fontSize: 13, textDecoration: 'underline', cursor: 'pointer' },
-  checkDisc: { flex: '0 0 auto', width: 32, height: 32, borderRadius: XCE_RADII.pill, background: XCE_COLORS.greenBg, color: XCE_COLORS.green, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' },
-  historyRow: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: XCE_RADII.md, border: `1px solid ${XCE_COLORS.border}`, background: XCE_COLORS.surface, fontSize: 12.5, color: XCE_COLORS.inkSoft, minWidth: 0 },
-  composer: { display: 'grid', gap: 8, padding: 8, border: `1px solid ${XCE_COLORS.border}`, borderRadius: XCE_RADII.lg, background: XCE_COLORS.surface },
-  input: { flex: '1 1 auto', minWidth: 0, boxSizing: 'border-box', minHeight: 44, maxHeight: 140, resize: 'none', padding: '10px 12px', borderRadius: XCE_RADII.md, border: `1px solid ${XCE_COLORS.border}`, background: XCE_COLORS.surface, color: XCE_COLORS.ink, font: 'inherit', fontSize: 16, lineHeight: 1.4 },
-  promptChip: { minHeight: 36, padding: '0 14px', borderRadius: XCE_RADII.pill, border: `1px solid ${XCE_COLORS.border}`, background: XCE_COLORS.surface, color: XCE_COLORS.ink, fontSize: 13, cursor: 'pointer' },
+  historyRow: { display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0', fontSize: 13, color: INK_SECONDARY, minWidth: 0 },
+  composer: { display: 'grid', gap: 6, padding: 8, border: `1px solid ${XCE_COLORS.borderStrong}`, borderRadius: XCE_RADII.lg, background: XCE_COLORS.surface },
+  input: { flex: '1 1 auto', minWidth: 0, boxSizing: 'border-box', minHeight: 44, maxHeight: 160, resize: 'none', padding: '10px 8px', border: 0, outline: 'none', background: 'transparent', color: XCE_COLORS.ink, font: 'inherit', fontSize: 16, lineHeight: 1.45 },
+  hint: { fontSize: 12, color: INK_META, padding: '0 8px' },
+  starter: { display: 'inline-flex', alignItems: 'center', gap: 6, minHeight: 40, padding: 0, border: 0, background: 'transparent', color: XCE_COLORS.ink, fontSize: 14.5, textAlign: 'left', textDecoration: 'underline', textUnderlineOffset: 3, cursor: 'pointer' },
 };
 
-// Layout only. Every selector is prefixed with the panel id. The composer is IN FLOW (not sticky): the card's
-// phone bottom nav is itself sticky, so a sticky composer slid underneath it and overlapped the messages.
+// Statuses read as plain coloured text (no pill); confirmed adds a check.
+const STATUS_COLOR = { pending: XCE_COLORS.amber, ok: XCE_COLORS.green, muted: INK_SECONDARY, error: XCE_COLORS.red };
+
+// One agent reply rendered from chatBlocks(): paragraphs, headings, bullet and numbered lists, **bold** runs.
+function ChatText({ id, text }) {
+  const runs = (rs) => rs.map((r, i) => (r.bold ? <b key={i}>{r.text}</b> : <React.Fragment key={i}>{r.text}</React.Fragment>));
+  return (
+    <div id={id} style={S.botText}>
+      {chatBlocks(text).map((b, i) => {
+        if (b.type === 'h') return <p key={i} style={S.botH}>{runs(b.runs)}</p>;
+        if (b.type === 'ul' || b.type === 'ol') {
+          const Tag = b.type;
+          return <Tag key={i} style={S.botList}>{b.items.map((item, j) => <li key={j}>{runs(item)}</li>)}</Tag>;
+        }
+        return <p key={i} style={S.botP}>{runs(b.runs)}</p>;
+      })}
+    </div>
+  );
+}
+
+// Layout only. Every selector is prefixed with the panel id. The message list has NO inner scroll: the modal
+// scrolls the whole page. The composer dock is sticky to the bottom of the modal on wider screens; on phones it
+// stays IN FLOW, because the card's phone bottom nav is itself sticky and a sticky composer slid underneath it.
 const CHAT_CSS = `
-  #x-strategy-chat-panel { display: grid; gap: 0; min-width: 0; align-content: start; }
-  #x-strategy-chat-messages { min-height: 200px; max-height: min(58vh, 560px); }
-  #x-strategy-chat-composer { margin-top: 10px; }
+  #x-strategy-chat-panel { display: grid; gap: 0; min-width: 0; width: 100%; max-width: 780px; margin: 0 auto; align-content: start; }
+  #x-strategy-chat-toolbar { display: flex; justify-content: flex-end; gap: 8px; min-height: 36px; }
+  #x-strategy-chat-permissions-button, #x-strategy-chat-new-thread-button { display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 0 6px; border: 0; background: transparent; color: var(--t-text); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+  #x-strategy-chat-new-thread-button:disabled { opacity: 0.4; cursor: default; }
+  #x-strategy-chat-messages { min-height: 120px; }
+  #x-strategy-chat-composer-dock { position: sticky; bottom: 0; z-index: 2; display: grid; gap: 6px; padding: 12px 0 14px; background: linear-gradient(to bottom, transparent, var(--t-surface) 14px); box-shadow: 0 32px 0 0 var(--t-surface); }
   #x-strategy-chat-input-row { display: flex; align-items: flex-end; gap: 8px; }
-  #x-strategy-chat-prompt-chips-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  #x-strategy-chat-send-row { display: flex; justify-content: space-between; gap: 8px; }
+  #x-strategy-chat-jump-latest { justify-self: center; display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 14px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--t-text) 24%, transparent); background: var(--t-surface); color: var(--t-text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px color-mix(in srgb, var(--t-text) 12%, transparent); }
+  #x-strategy-chat-empty { display: grid; gap: 14px; justify-items: start; padding: 8px 0 4px; }
+  #x-strategy-chat-starters { display: grid; gap: 2px; justify-items: start; }
   @media (max-width: 480px) {
-    #x-strategy-chat-messages { min-height: 160px; max-height: 46vh; }
+    #x-strategy-chat-composer-dock { position: static; background: none; padding-bottom: 4px; }
     #x-strategy-chat-hint { display: none; }
   }
 `;
+
+// The char counter only appears near the limit.
+const COUNT_FROM = 1600;
 
 const PROMPT_CHIPS = ['Help me shape my strategy', 'Compare me to my benchmarks', 'What does the algorithm reward?'];
 const REVIEW_TEXT = 'Review my strategy against the latest data.';
@@ -106,8 +142,6 @@ export function formatDayTime(at) {
   const same = d.toDateString() === new Date().toDateString();
   return `${same ? 'Today' : d.toLocaleDateString([], { month: 'short', day: 'numeric' })} · ${formatClock(at)}`;
 }
-
-const TONE_BY_STATUS = { pending: 'amber', ok: 'green', muted: 'grey', error: 'red' };
 
 function ProposalCard({ call, proposal, currentPlan, history, planVersion, deciding, onDecide, useModel, onUseModel, memoryState, onMemoryState, onViewPlan, onUndo, undoNote, docSections, onViewDoc }) {
   const isDocEdit = proposal.kind === 'strategy-doc-edit';
@@ -150,12 +184,15 @@ function ProposalCard({ call, proposal, currentPlan, history, planVersion, decid
   return (
     <div id={`x-strategy-proposal-${id}`} data-section="chat-proposal" style={S.card}>
       <div id={`x-strategy-proposal-body-row-${id}`} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', minWidth: 0 }}>
-        {confirmed ? <span id={`x-strategy-proposal-check-${id}`} style={S.checkDisc}><Check size={18} /></span> : null}
         <div id={`x-strategy-proposal-main-${id}`} style={{ display: 'grid', gap: 6, flex: 1, minWidth: 0 }}>
           <div id={`x-strategy-proposal-header-${id}`} style={S.cardHead}>
-            <span style={S.kind}>{confirmed && isPlanChange ? 'Plan updated' : confirmed && isDocEdit ? 'Strategy updated' : proposalKindLabel(proposal.kind)}</span>
-            {fromMcp ? <Badge id={`x-strategy-proposal-from-mcp-badge-${id}`} tone="blue">From MCP</Badge> : null}
-            <Badge id={`x-strategy-proposal-status-${id}`} tone={TONE_BY_STATUS[st.tone] || 'grey'}>{badgeLabel}</Badge>
+            <span style={S.kind}>
+              {confirmed && isPlanChange ? 'Plan updated' : confirmed && isDocEdit ? 'Strategy updated' : proposalKindLabel(proposal.kind)}
+              {fromMcp ? <span id={`x-strategy-proposal-from-mcp-badge-${id}`} style={{ color: XCE_COLORS.blue }}> · from MCP</span> : null}
+            </span>
+            <span id={`x-strategy-proposal-status-${id}`} style={{ ...S.status, color: STATUS_COLOR[st.tone] || INK_SECONDARY }}>
+              {confirmed ? <Check size={14} /> : null}{badgeLabel}
+            </span>
           </div>
           {proposal.summary ? <div id={`x-strategy-proposal-summary-${id}`} style={S.summary}>{proposal.summary}</div> : null}
           {diffLine ? <div id={`x-strategy-proposal-diff-${id}`} style={{ ...S.rationale, fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>{diffLine}</div> : null}
@@ -295,7 +332,9 @@ export default function StrategyChat({
   const [memoryStates, setMemoryStates] = useState({});   // proposalId -> {edits, skip} (memory-suggest card, sent with decide)
 
   const mounted = useRef(true);
-  const listRef = useRef(null);
+  const endRef = useRef(null);        // sentinel after the composer: visible = the owner is at the latest message
+  const atBottomRef = useRef(true);
+  const [unseen, setUnseen] = useState(false); // a reply arrived while the owner was scrolled up
   const inputRef = useRef(null);
   const clientIdRef = useRef(clientId);
   clientIdRef.current = clientId;
@@ -329,10 +368,39 @@ export default function StrategyChat({
     return () => { cancelled = true; };
   }, [clientId, call]);
 
+  // Smart scroll. The page (the modal) scrolls, not the list, so "at the bottom" = the end sentinel is in view.
   useEffect(() => {
-    const el = listRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [messages.length, sending]);
+    const el = endRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return undefined;
+    const io = new IntersectionObserver(([entry]) => {
+      atBottomRef.current = entry.isIntersecting;
+      if (entry.isIntersecting) setUnseen(false);
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  const scrollToLatest = useCallback((smooth = true) => {
+    const el = endRef.current;
+    // offsetParent is null while the Chat tab is hidden: never scroll the modal for a pane the owner cannot see.
+    if (el && el.offsetParent !== null) el.scrollIntoView({ block: 'end', behavior: smooth ? 'smooth' : 'auto' });
+    setUnseen(false);
+  }, []);
+  // Open on the latest message once the thread loads.
+  useEffect(() => {
+    if (!loading && messages.length) scrollToLatest(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
+  // New messages follow only when the owner is already at the bottom; otherwise offer "New message".
+  // The owner's own send always follows (runTurn sets atBottomRef first).
+  const prevCount = useRef(0);
+  useEffect(() => {
+    const grew = messages.length > prevCount.current;
+    prevCount.current = messages.length;
+    if (!grew || loading) return;
+    if (atBottomRef.current) scrollToLatest();
+    else setUnseen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages.length]);
 
   // Fill-only: an "Ask in chat" button in the Details pane drops text into the composer; the owner presses Send.
   useEffect(() => {
@@ -372,6 +440,7 @@ export default function StrategyChat({
     const sel = selected && typeof selected === 'object' && typeof selected.kind === 'string' && typeof selected.id === 'string' && selected.id ? { kind: selected.kind, id: selected.id } : null;
     setSending(true);
     setError('');
+    atBottomRef.current = true; // the owner's own message always scrolls into view
     setMessages((m) => [...m, { role: 'user', text: body, pending: true }]);
     if (!review) setText('');
     try {
@@ -461,35 +530,53 @@ export default function StrategyChat({
   };
 
   return (
-    <section id="x-strategy-chat-panel" className="xce-panel" data-section="chat">
+    <section id="x-strategy-chat-panel" data-section="chat">
       <style>{CHAT_CSS}</style>
-      <div id="x-strategy-chat-header" style={S.head}>
-        <h3 style={S.h}>Strategy</h3>
-        <IconButton
+      <div id="x-strategy-chat-toolbar">
+        <button
+          type="button"
           id="x-strategy-chat-permissions-button"
-          label="Agent permissions"
-          icon={<Shield size={18} />}
+          aria-label="Agent permissions"
+          aria-expanded={showPermissions}
           onClick={() => setShowPermissions((v) => !v)}
-        />
-        <IconButton
+        >
+          <Shield size={16} /> Permissions
+        </button>
+        <button
+          type="button"
           id="x-strategy-chat-new-thread-button"
-          label="New thread"
-          icon={<Plus size={18} />}
           disabled={sending || (!messages.length && !threadId)}
           onClick={newThread}
-        />
+        >
+          <Plus size={16} /> New thread
+        </button>
       </div>
 
       {showPermissions ? <AgentPermissionsPanel clientId={clientId} call={call} /> : null}
 
-      <div id="x-strategy-chat-messages" ref={listRef} role="log" aria-live="polite" style={S.list}>
-        {loading ? <div id="x-strategy-chat-loading" className="xce-empty">Loading chat…</div> : null}
+      <div id="x-strategy-chat-messages" role="log" aria-live="polite" style={S.list}>
+        {loading ? <div id="x-strategy-chat-loading" style={S.thinking}>Loading chat…</div> : null}
         {!loading && !messages.length ? (
-          <div id="x-strategy-chat-empty" className="xce-empty" style={{ display: 'grid', gap: 10, justifyItems: 'start' }}>
-            <span>Talk through your strategy: your account against your benchmarks, read against the X algorithm. The agent can propose edits to your strategy and plan; nothing changes until you confirm a card.</span>
+          <div id="x-strategy-chat-empty">
+            <p style={{ ...S.botP, fontSize: 15, lineHeight: 1.6 }}>Talk through your strategy: your account against your benchmarks, read against the X algorithm. The agent can propose edits to your strategy and plan; nothing changes until you confirm a card.</p>
             <button type="button" id="x-strategy-chat-start-session-button" className="xce-btn" disabled={sending} onClick={() => runTurn({ review: true })}>
               <Sparkles size={15} /> Start strategy session
             </button>
+            <div id="x-strategy-chat-starters">
+              <span style={S.label}>Or ask</span>
+              {PROMPT_CHIPS.map((label) => (
+                <button
+                  key={label}
+                  type="button"
+                  id={`x-strategy-chat-prompt-chip-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+                  style={S.starter}
+                  disabled={sending}
+                  onClick={() => fillPrompt(label)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
         ) : null}
         {timeline.map((item) => {
@@ -532,7 +619,9 @@ export default function StrategyChat({
           const clock = formatClock(m.at);
           return (
             <div key={n} id={`x-strategy-chat-message-${n}`} data-role={m.role} style={{ display: 'grid', minWidth: 0 }}>
-              <div id={`x-strategy-chat-message-text-${n}`} style={m.role === 'user' ? S.userBubble : S.botBubble}>{plainChatText(m.text)}</div>
+              {m.role === 'user'
+                ? <div id={`x-strategy-chat-message-text-${n}`} style={S.userBubble}>{plainChatText(m.text)}</div>
+                : <ChatText id={`x-strategy-chat-message-text-${n}`} text={m.text} />}
               {clock ? <div id={`x-strategy-chat-message-time-${n}`} style={{ ...S.time, justifySelf: m.role === 'user' ? 'end' : 'start' }}>{clock}</div> : null}
               {m.role === 'assistant' && messageUndoChips(m).length ? (
                 <div id={`x-strategy-chat-message-undo-${n}`}>
@@ -573,61 +662,53 @@ export default function StrategyChat({
             </div>
           );
         })}
-        {sending ? <div id="x-strategy-chat-thinking" role="status" style={S.botBubble}>thinking…</div> : null}
+        {sending ? <div id="x-strategy-chat-thinking" role="status" style={S.thinking}>Thinking…</div> : null}
       </div>
 
       {error ? <div id="x-strategy-chat-error" role="alert" style={S.err}>{error}</div> : null}
 
-      <div id="x-strategy-chat-composer" style={S.composer}>
-        <div id="x-strategy-chat-input-row">
-          <textarea
-            id="x-strategy-chat-input"
-            ref={inputRef}
-            rows={1}
-            style={S.input}
-            value={text}
-            maxLength={INPUT_MAX}
-            placeholder="Ask or change your strategy…"
-            aria-label="Message to the strategy agent"
-            disabled={sending}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={onKeyDown}
-          />
-          <IconButton
-            id="x-strategy-chat-send-button"
-            label={sending ? 'Thinking' : 'Send message'}
-            variant="solid"
-            size={44}
-            icon={<ArrowUp size={20} />}
-            disabled={sending || !text.trim()}
-            onClick={send}
-            style={{ borderRadius: XCE_RADII.pill }}
-          />
-        </div>
-        <div id="x-strategy-chat-prompt-chips-row">
-          {PROMPT_CHIPS.map((label) => (
-            <button
-              key={label}
-              type="button"
-              id={`x-strategy-chat-prompt-chip-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
-              style={S.promptChip}
+      <div id="x-strategy-chat-composer-dock">
+        {unseen ? (
+          <button type="button" id="x-strategy-chat-jump-latest" onClick={() => scrollToLatest()}>
+            <ArrowDown size={15} /> New message
+          </button>
+        ) : null}
+        <div id="x-strategy-chat-composer" style={S.composer}>
+          <div id="x-strategy-chat-input-row">
+            <textarea
+              id="x-strategy-chat-input"
+              ref={inputRef}
+              rows={1}
+              style={S.input}
+              value={text}
+              maxLength={INPUT_MAX}
+              placeholder="Ask or change your strategy…"
+              aria-label="Message to the strategy agent"
               disabled={sending}
-              onClick={() => fillPrompt(label)}
-            >
-              {label}
-            </button>
-          ))}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={onKeyDown}
+            />
+            <IconButton
+              id="x-strategy-chat-send-button"
+              label={sending ? 'Thinking' : 'Send message'}
+              variant="solid"
+              size={44}
+              icon={<ArrowUp size={20} />}
+              disabled={sending || !text.trim()}
+              onClick={send}
+              style={{ borderRadius: XCE_RADII.pill }}
+            />
+          </div>
         </div>
-        <SectionLabel
-          id="x-strategy-chat-send-row"
-          right={<span id="x-strategy-chat-char-count" style={S.label}>{text.length}/{INPUT_MAX}</span>}
-          style={{ padding: '0 2px' }}
-        >
-          <span id="x-strategy-chat-hint">Enter to send {'·'} Shift+Enter for a new line</span>
-        </SectionLabel>
+        <div id="x-strategy-chat-send-row" style={S.hint}>
+          <span id="x-strategy-chat-footer">{footer || 'No turns yet today.'}</span>
+          <span>
+            <span id="x-strategy-chat-hint">Enter to send {'·'} Shift+Enter for a new line</span>
+            {text.length >= COUNT_FROM ? <span id="x-strategy-chat-char-count"> {text.length}/{INPUT_MAX}</span> : null}
+          </span>
+        </div>
       </div>
-
-      <div id="x-strategy-chat-footer" style={S.note}>{footer || 'No turns yet today.'}</div>
+      <div id="x-strategy-chat-end-sentinel" ref={endRef} aria-hidden="true" style={{ height: 1 }} />
     </section>
   );
 }

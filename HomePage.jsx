@@ -20,6 +20,7 @@ import SceneBoundary from './components/theme-scene/SceneBoundary';
 const AppCanvas = dynamic(() => import('./ox.jsx'), { ssr: false });
 // Hero particle-shape tuner, opened with ?scene=1 or #scene; its own chunk, never loaded otherwise.
 const SceneSettingsPanel = dynamic(() => import('./SceneSettingsPanel'), { ssr: false });
+const HeroTypePanel = dynamic(() => import('./components/home/HeroTypePanel'), { ssr: false });
 
 const HERO_PARAMS_START = {
   scale: 400,
@@ -27,7 +28,7 @@ const HERO_PARAMS_START = {
   flow: 0.37,
   particleCount: 25000,
   particleSize: 0.2,
-  speedMult: 0.44,
+  speedMult: 0.22,
   bloomThreshold: 0.8,
   bloomStrength: 0,
   bloomRadius: 1,
@@ -55,7 +56,7 @@ const HERO_PARAMS_END = {
   chaos: 1.55,
   flow: 0,
   particleSize: 1,
-  speedMult: 0.43,
+  speedMult: 0.215,
   bloomThreshold: 1,
   hueOffset: 0.5,
   waveAmplitude: 0.5,
@@ -134,6 +135,29 @@ const heroTextScrimStyle = {
   background: 'radial-gradient(ellipse at center, var(--t-scrim) 0%, transparent 70%)',
 };
 
+// Development-only editor launchers (Theme Studio + hero scene panel), bottom-centre so they
+// clear both the Theme Studio's bottom-left launcher and the scene panel's right-hand column.
+const devEditorRowStyle = {
+  position: 'fixed',
+  left: '50%',
+  bottom: 16,
+  transform: 'translateX(-50%)',
+  zIndex: 2147482000,
+  display: 'flex',
+  gap: 8,
+};
+
+const devEditorButtonStyle = {
+  minHeight: 40,
+  padding: '0 14px',
+  border: '1px solid var(--t-border-subtle)',
+  borderRadius: 999,
+  background: 'var(--t-surface)',
+  color: 'var(--t-text-strong)',
+  font: '600 13px/1 "Space Grotesk", system-ui, sans-serif',
+  cursor: 'pointer',
+};
+
 const HomePage = () => {
   const [params, setParams] = useState(HERO_PARAMS_START);
 
@@ -194,6 +218,10 @@ const HomePage = () => {
     setParams(resolved);
   }, []);
   const handleCloseSceneSettings = useCallback(() => setShowSceneSettings(false), []);
+  // Dev-only hero type tuner. It shares the scene panel's right-hand slot, so the
+  // two toggle each other off.
+  const [showTypeSettings, setShowTypeSettings] = useState(false);
+  const handleCloseTypeSettings = useCallback(() => setShowTypeSettings(false), []);
 
   // Keep #content-section.marginTop = -peekHeight so the capabilitySectionStyle
   // borderTop always lands exactly at the 100dvh fold on page load.
@@ -510,6 +538,37 @@ const HomePage = () => {
         {/* <HorizontalTextSection /> */}
       </section>
       <PortfolioModal activePageId={activePageId} onClose={() => setActivePageId(null)} onOpenPage={setActivePageId} />
+      {process.env.NODE_ENV === 'development' && !teaserCleanMode && (
+        <div id="dev-editor-launch-row" style={devEditorRowStyle}>
+          <button
+            id="dev-theme-editor-button"
+            type="button"
+            style={devEditorButtonStyle}
+            onClick={() => window.dispatchEvent(new Event('theme-studio:open'))}
+          >
+            Theme
+          </button>
+          <button
+            id="dev-scene-editor-button"
+            type="button"
+            style={devEditorButtonStyle}
+            aria-pressed={showSceneSettings}
+            onClick={() => { setShowTypeSettings(false); setShowSceneSettings((v) => !v); }}
+          >
+            3D Scene
+          </button>
+          <button
+            id="dev-type-editor-button"
+            type="button"
+            style={devEditorButtonStyle}
+            aria-pressed={showTypeSettings}
+            onClick={() => { setShowSceneSettings(false); setShowTypeSettings((v) => !v); }}
+          >
+            Type
+          </button>
+        </div>
+      )}
+      {showTypeSettings && <HeroTypePanel onClose={handleCloseTypeSettings} />}
       {showSceneSettings && (
         <SceneSettingsPanel
           initialParams={userParamsRef.current}

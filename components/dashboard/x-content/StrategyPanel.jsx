@@ -22,16 +22,13 @@ import Badge from '../content-ui/ui/Badge';
 import Card from '../content-ui/ui/Card';
 import IconButton from '../content-ui/ui/IconButton';
 import SectionLabel from '../content-ui/ui/SectionLabel';
-import SegmentedControl from '../content-ui/ui/SegmentedControl';
 import WarnRow from '../content-ui/ui/WarnRow';
 
 // StrategyPanel - the Strategy tab of the Content Engine card.
 //
-// Layout: header chips (client . @handle . Plan vN), then [chat | Details].
-//   >=900px  two columns (chat left, Details right)
-//   481-899  one column, Details below the chat
-//   <=480    a Chat | Details toggle shows one pane at a time (both stay mounted, so the chat keeps its state)
-// Details has five sub-tabs: Strategy (the owner's Strategy document, StrategyDocPanel.jsx) . Plan . Accounts .
+// Layout: one context line (client . @handle . Plan vN . Strategy vN) + actions, then a full-width tab bar:
+// Chat . Strategy . Plan . Accounts . Insights . History. One pane shows at a time at every width; both panes stay
+// mounted, so the chat keeps its state. The Details tabs are Strategy (the owner's Strategy document, StrategyDocPanel.jsx) . Plan . Accounts .
 // Insights . History. All of it is the SAME data and handlers as
 // before (strategy-get / strategy-plan-apply / strategy-plan-revert / strategy-refresh / strategy-profile-save /
 // strategy-evaluate-handle); this file only arranges them. The "Ask in chat" buttons switch to the chat and
@@ -53,7 +50,7 @@ const errText = (err, fallback) => String(err?.message || fallback || 'Request f
 const S = {
   stack: { display: 'grid', gap: 12, minWidth: 0 },
   row: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, minWidth: 0 },
-  note: { margin: '6px 0 0', fontSize: 12, lineHeight: 1.45, color: XCE_COLORS.inkSoft },
+  note: { margin: '6px 0 0', fontSize: 12.5, lineHeight: 1.45, color: 'color-mix(in srgb, var(--t-text) 72%, transparent)' },
   warn: { margin: '8px 0', padding: '8px 10px', borderRadius: 10, background: XCE_COLORS.amberBg, border: `1px solid ${XCE_COLORS.amberBorder}`, fontSize: 12, lineHeight: 1.45, color: XCE_COLORS.amber },
   err: { margin: '8px 0', fontSize: 12, lineHeight: 1.4, color: XCE_COLORS.red },
   ok: { margin: '8px 0', fontSize: 12, lineHeight: 1.4, color: XCE_COLORS.green },
@@ -65,7 +62,7 @@ const S = {
   label: { fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: XCE_COLORS.inkMuted },
   handleInput: { flex: '1 1 140px', minWidth: 0 },
   caveatBox: { margin: '8px 0', padding: '8px 10px', borderRadius: 10, background: XCE_COLORS.amberBg, border: `1px solid ${XCE_COLORS.amberBorder}` },
-  muted: { fontSize: 12.5, color: XCE_COLORS.inkSoft, lineHeight: 1.4 },
+  muted: { fontSize: 13, color: 'color-mix(in srgb, var(--t-text) 72%, transparent)', lineHeight: 1.4 },
   statRow: { display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', border: `1px solid ${XCE_COLORS.border}`, borderRadius: XCE_RADII.md + 2, background: XCE_COLORS.surface, minWidth: 0 },
   statIcon: { flex: '0 0 auto', color: XCE_COLORS.inkSoft, display: 'inline-flex' },
   fullBtn: { width: '100%', minHeight: 44 },
@@ -73,22 +70,28 @@ const S = {
 
 const LAYOUT_CSS = `
   #x-strategy-root { min-width: 0; }
-  #x-strategy-header-chips-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-  #x-strategy-actions-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  #x-strategy-header-row { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
+  #x-strategy-context-line { margin: 0; font-size: 13.5px; line-height: 1.4; color: color-mix(in srgb, var(--t-text) 78%, transparent); overflow-wrap: anywhere; }
+  #x-strategy-context-line b { color: var(--t-text); font-weight: 600; }
+  #x-strategy-actions-row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
   #x-strategy-actions-row .xce-btn { min-height: 40px; display: inline-flex; align-items: center; gap: 6px; }
+  #x-strategy-tabbar { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid color-mix(in srgb, var(--t-text) 12%, transparent); }
+  #x-strategy-tabbar::-webkit-scrollbar { display: none; }
+  #x-strategy-tabbar button { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; margin-bottom: -1px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: color-mix(in srgb, var(--t-text) 70%, transparent); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; }
+  #x-strategy-tabbar button[aria-selected="true"] { color: var(--t-text); font-weight: 700; border-bottom-color: var(--t-text); }
+  #x-strategy-tabbar button:focus-visible { outline: 2px solid var(--t-text); outline-offset: -2px; }
   #x-strategy-layout { display: grid; gap: 12px; min-width: 0; }
   #x-strategy-chat-column, #x-strategy-details-column { display: grid; gap: 12px; min-width: 0; align-content: start; }
   #x-strategy-details-panel { display: grid; gap: 12px; min-width: 0; align-content: start; }
+  #x-strategy-layout[data-view="chat"] #x-strategy-details-column { display: none; }
+  #x-strategy-layout[data-view="details"] #x-strategy-chat-column { display: none; }
   #x-strategy-root input[type=number] { max-width: 90px; -moz-appearance: textfield; appearance: textfield; }
   #x-strategy-root input[type=number]::-webkit-outer-spin-button,
   #x-strategy-root input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-  @media (min-width: 900px) { #x-strategy-layout { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; } }
-  @media (max-width: 480px) {
-    #x-strategy-layout[data-view="chat"] #x-strategy-details-column { display: none; }
-    #x-strategy-layout[data-view="details"] #x-strategy-chat-column { display: none; }
-  }
+  @media (max-width: 480px) { #x-strategy-tabbar button { padding: 0 10px; font-size: 13.5px; } }
 `;
 
+// One full-width tab bar: Chat plus the five Details tabs. Chat = `view` 'chat'; the rest = `view` 'details' + `detailTab`.
 const DETAIL_TABS = [
   { value: 'strategy', label: 'Strategy' },
   { value: 'plan', label: 'Plan' },
@@ -594,15 +597,29 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
   const reviewDue = !!latestDataAt && !!stratDoc.doc && (!lastReview || !lastReview.dataAsOf || latestDataAt > lastReview.dataAsOf);
   const askReview = () => { setReviewRequest({ nonce: Date.now() }); setView('chat'); };
 
-  const detailTabsBar = (
-    <SegmentedControl
-      id="x-strategy-details-tabs"
-      ariaLabel="Strategy details"
-      value={detailTab}
-      onChange={setDetailTab}
-      options={DETAIL_TABS}
-    />
+  const activeTab = view === 'chat' ? 'chat' : detailTab;
+  const selectTab = (tab) => {
+    if (tab === 'chat') { setView('chat'); return; }
+    setView('details');
+    setDetailTab(tab);
+  };
+  const tabBar = (
+    <div id="x-strategy-tabbar" role="tablist" aria-label="Strategy">
+      {[{ value: 'chat', label: 'Chat', icon: <MessagesSquare size={16} /> }, ...DETAIL_TABS].map((t) => (
+        <button
+          key={t.value}
+          type="button"
+          role="tab"
+          id={`x-strategy-tab-${t.value}`}
+          aria-selected={activeTab === t.value}
+          onClick={() => selectTab(t.value)}
+        >
+          {t.icon || null}{t.label}
+        </button>
+      ))}
+    </div>
   );
+  const docLabel = stratDoc.doc?.version ? `Strategy v${stratDoc.doc.version}${stratDoc.doc.confirmed ? '' : ' (draft)'}` : 'Strategy draft';
 
   return (
     <div id="x-strategy-root" style={S.stack}>
@@ -615,41 +632,31 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
         </div>
       ) : null}
 
-      {/* Phone only: Chat | Details toggle. Both panes stay mounted. */}
-      <div id="x-strategy-mobile-view-toggle-shell" className="xce-mobile-only">
-        <SegmentedControl
-          id="x-strategy-mobile-view-toggle"
-          ariaLabel="Strategy view"
-          value={view}
-          onChange={setView}
-          options={[
-            { value: 'chat', label: 'Chat', icon: <MessagesSquare size={16} /> },
-            { value: 'details', label: 'Details', icon: <BarChart3 size={16} /> },
-          ]}
-        />
-      </div>
+      {/* One plain context line (client · @handle · plan · strategy) instead of a row of chips, actions on the right. */}
+      <div id="x-strategy-header-row">
+        <p id="x-strategy-context-line">
+          {clientName ? <b id="x-strategy-context-client">{clientName}</b> : null}
+          {clientName && chipHandle ? ' · ' : ''}
+          {chipHandle ? <span id="x-strategy-context-handle">@{chipHandle}</span> : null}
+          {' · '}<span id="x-strategy-context-plan-version">{planVersion ? `Plan v${planVersion}` : 'Default plan'}</span>
+          {' · '}<span id="x-strategy-context-doc-version" style={stratDoc.doc?.confirmed ? undefined : { color: XCE_COLORS.amber }}>{docLabel}</span>
+        </p>
 
-      <div id="x-strategy-header-chips-row">
-        {clientName ? <Badge id="x-strategy-chip-client" tone="grey">{clientName}</Badge> : null}
-        {chipHandle ? <Badge id="x-strategy-chip-handle" tone="grey">@{chipHandle}</Badge> : null}
-        <Badge id="x-strategy-chip-plan-version" tone="grey">{planVersion ? `Plan v${planVersion}` : 'Plan default'}</Badge>
-        <Badge id="x-strategy-chip-doc-version" tone={stratDoc.doc?.confirmed ? 'grey' : 'amber'}>{stratDoc.doc?.version ? `Strategy v${stratDoc.doc.version}${stratDoc.doc.confirmed ? '' : ' · draft'}` : 'Strategy draft'}</Badge>
-      </div>
-
-      {/* Refresh pulls fresh posts for you + every benchmark (free, via the Mac worker); Review asks the agent
-          to check the strategy against them and say in the chat what, if anything, should change. */}
-      <div id="x-strategy-actions-row">
-        {!hideRefresh ? (
-          <button type="button" id="x-strategy-refresh-all-button" className="xce-btn xce-btn-ghost" disabled={refreshing || !profile} onClick={() => startRefresh()}>
-            <RefreshCw size={15} /> {refreshing ? 'Refreshing…' : 'Refresh data'}
+        {/* Refresh pulls fresh posts for you + every benchmark (free, via the Mac worker); Review asks the agent
+            to check the strategy against them and say in the chat what, if anything, should change. */}
+        <div id="x-strategy-actions-row">
+          {!hideRefresh ? (
+            <button type="button" id="x-strategy-refresh-all-button" className="xce-btn xce-btn-ghost" disabled={refreshing || !profile} onClick={() => startRefresh()}>
+              <RefreshCw size={15} /> {refreshing ? 'Refreshing…' : 'Refresh data'}
+            </button>
+          ) : null}
+          <button type="button" id="x-strategy-review-button" className="xce-btn" disabled={!stratDoc.doc} onClick={askReview}>
+            <Sparkles size={15} /> Review strategy
           </button>
-        ) : null}
-        <button type="button" id="x-strategy-review-button" className="xce-btn" disabled={!stratDoc.doc} onClick={askReview}>
-          <Sparkles size={15} /> Review strategy
-        </button>
-        <span id="x-strategy-review-status" style={S.muted}>
-          {refreshView?.active ? refreshView.headline : lastReview?.at ? `Last review ${formatDayTime(lastReview.at)}` : 'Not reviewed yet'}
-        </span>
+          <span id="x-strategy-review-status" style={S.muted}>
+            {refreshView?.active ? refreshView.headline : lastReview?.at ? `Last review ${formatDayTime(lastReview.at)}` : 'Not reviewed yet'}
+          </span>
+        </div>
       </div>
       {refresh.error ? <Msg id="x-strategy-refresh-all-error" kind="err">{refresh.error}</Msg> : null}
       {reviewDue && !refreshing ? (
@@ -657,6 +664,8 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
           {lastReview ? 'New data since your last review.' : 'Your strategy has not been reviewed against the data yet.'}
         </WarnRow>
       ) : null}
+
+      {tabBar}
 
       <div id="x-strategy-layout" data-view={view}>
         <div id="x-strategy-chat-column">
@@ -684,9 +693,7 @@ const StrategyPanel = forwardRef(function StrategyPanel({ clientId, call, onPlan
         </div>
 
         <div id="x-strategy-details-column">
-          <section id="x-strategy-details-panel" className="xce-panel" data-section="details">
-            <SectionLabel id="x-strategy-details-header">Details</SectionLabel>
-            {detailTabsBar}
+          <section id="x-strategy-details-panel" data-section="details">
 
             {/* ---------------- STRATEGY DOCUMENT ---------------- */}
             {detailTab === 'strategy' ? (

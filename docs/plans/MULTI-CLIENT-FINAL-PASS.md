@@ -12,7 +12,7 @@ Owner-approved target for this round. Supersedes the open-items lists in `MULTI-
 
 **Explicitly NOT in this round (accepted):** clients operating the system themselves (Phase 5); paywall enforcement; per-client score weights (global, measured on @bai_ee); auto-adding clients to env lists.
 
-## 2. Done (in production since 2026-10-14, deploy `dpl_dxk3LPKZEvggH1SN7hyNUVf3p1B4`, rollback `dpl_2GjpiSoiT96ukt83qs8teubhB6R8`)
+## 2. Done (in production since 2026-10-14, final deploy `dpl_3BV8384uUYG4rXXygcDnHNw1KG6h` (PR #11 + `PILOT_CLIENT_IDS` env redeploy; PR #10 alone was `dpl_dxk3LPKZEvggH1SN7hyNUVf3p1B4`), rollback `dpl_2GjpiSoiT96ukt83qs8teubhB6R8`)
 
 | Area | State |
 |---|---|
