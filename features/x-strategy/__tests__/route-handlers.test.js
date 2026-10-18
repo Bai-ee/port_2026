@@ -43,6 +43,15 @@ test('route actions list matches the T2b scope', () => {
   assert.deepEqual([...STRATEGY_ROUTE_ACTIONS].sort(), ['quote-scan-refresh', 'strategy-action-log', 'strategy-action-undo', 'strategy-autonomy-get', 'strategy-autonomy-save', 'strategy-calendar-batch-create', 'strategy-calendar-batch-preview', 'strategy-chat-history', 'strategy-chat-send', 'strategy-daily-fill-create', 'strategy-daily-fill-preview', 'strategy-doc-get', 'strategy-doc-revert', 'strategy-doc-save', 'strategy-evaluate-handle', 'strategy-freshness', 'strategy-get', 'strategy-plan-apply', 'strategy-plan-revert', 'strategy-profile-save', 'strategy-proposal-decide', 'strategy-refresh', 'strategy-refresh-status', 'strategy-reply-style-get', 'strategy-reply-style-save', 'strategy-review', 'strategy-unmet-list', 'strategy-unmet-status', 'x-data-sources-get', 'x-data-sources-save']);
 });
 
+test('the factory exposes dailyFill for the daily-loop cron (a missing export silently skipped every fill)', async () => {
+  const { h } = setup();
+  assert.equal(typeof h.dailyFill, 'function');
+  assert.equal(typeof h.dailyFillDeps, 'object');
+  // No ensureDraft wired: execute reports a failure instead of pretending it ran.
+  const r = await h.dailyFill('c1', { days: 1 }, { execute: true });
+  assert.equal(r.ok, false);
+});
+
 test('a plan save waits for the Brain write-back and runs the targets one at a time (serverless-safe)', async () => {
   const s = setup();
   const log = [];

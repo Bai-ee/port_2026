@@ -73,7 +73,7 @@ async function buildReadInputsFor() {
 // Daily fill (calendar drafts per bucket track): runs AFTER the suggestions step, non-fatal, drafts only (never publishes).
 // Choice: reuse the Strategy handler factory's `dailyFill` (it already wires ensureDraft/placeDraft/readOpenPackageIds)
 // instead of hand-building runDailyFillForCron deps here. Only readPackages is supplied (the content inventory the
-// suggestions step already reads); handlers without `dailyFill` (older build) are reported as skipped, not failed.
+// suggestions step already reads); handlers without `dailyFill` are reported as failed, never as a healthy skip.
 async function runDailyFillStep({ db, committedCorpusRows, readInputsFor }, clientIds, today) {
   let handlers;
   try {
@@ -106,7 +106,7 @@ async function runDailyFillStep({ db, committedCorpusRows, readInputsFor }, clie
   } catch (err) {
     return clientIds.map((clientId) => ({ clientId, ok: false, error: String(err?.message || err).slice(0, 200) }));
   }
-  if (typeof handlers.dailyFill !== 'function') return clientIds.map((clientId) => ({ clientId, ok: true, skipped: 'daily-fill-unavailable' }));
+  if (typeof handlers.dailyFill !== 'function') return clientIds.map((clientId) => ({ clientId, ok: false, error: 'daily-fill-unavailable' }));
   const out = [];
   for (const clientId of clientIds) {
     try {
@@ -115,7 +115,14 @@ async function runDailyFillStep({ db, committedCorpusRows, readInputsFor }, clie
       const tracks = planSnap.exists ? planSnap.data()?.plan?.contentTracks : null;
       if (!Array.isArray(tracks) || !tracks.length) { out.push({ clientId, ok: true, skipped: 'no-content-tracks' }); continue; }
       const r = await handlers.dailyFill(clientId, { from: today, days: 7 }, { execute: true });
-      out.push({ clientId, ok: true, created: r?.created?.length ?? r?.created ?? 0, existing: r?.existing?.length ?? r?.existing ?? 0, placed: r?.placed?.length ?? r?.placed ?? 0, failed: r?.failed?.length ?? r?.failed ?? 0 });
+      if (r?.ok === false) { out.push({ clientId, ok: false, error: String(r.error || 'daily fill failed').slice(0, 200) }); continue; }
+      // runDailyFill returns ok:true with per-draft write failures in failed[]: any failed write fails this client.
+      const failedRows = Array.isArray(r?.failed) ? r.failed : [];
+      const failed = failedRows.length || (Number.isFinite(r?.failed) ? r.failed : 0);
+      out.push({
+        clientId, ok: failed === 0, created: r?.created?.length ?? r?.created ?? 0, existing: r?.existing?.length ?? r?.existing ?? 0, placed: r?.placed?.length ?? r?.placed ?? 0, failed,
+        ...(failed ? { error: `${failed} draft write(s) failed${failedRows[0]?.error ? `: ${String(failedRows[0].error).slice(0, 160)}` : ''}` } : {}),
+      });
     } catch (err) {
       out.push({ clientId, ok: false, error: String(err?.message || err).slice(0, 200) });
     }
@@ -163,17 +170,30 @@ async function run(request) {
   const { createFirestoreRunStore } = await import('../../../../features/x-content-inventory/daily-run-store.js');
   const built = await buildReadInputsFor();
   const { db, assertReady, readInputsFor } = built;
-  const results = await runScheduledDailyLoop({ store: createFirestoreRunStore(db), assertReady, readInputsFor }, { clientIds });
+  // "Today and queue" is a Daily-profile group (Refresh modal "Daily" tab): clients that untick it (or switch Daily
+  // off) get no suggestions or calendar fill from this cron. No saved profile = ticked, as before.
+  const refreshDaily = require('../../../../features/intelligence/_refresh-daily.js');
+  const todayIds = [];
+  const dailyOff = [];
+  for (const clientId of clientIds) {
+    // eslint-disable-next-line no-await-in-loop
+    const groups = refreshDaily.cronGroupsFor(await refreshDaily.readRefreshDaily(clientId).catch(() => refreshDaily.resolveRefreshDaily({})));
+    (groups.has('today-queue') ? todayIds : dailyOff).push(clientId);
+  }
+  const ran = todayIds.length ? await runScheduledDailyLoop({ store: createFirestoreRunStore(db), assertReady, readInputsFor }, { clientIds: todayIds }) : [];
+  const results = [...ran, ...dailyOff.map((clientId) => ({ clientId, ok: true, skipped: 'not-in-daily-profile' }))];
+  // The X API auto-daily step has its own per-client switch (X source autoDaily), independent of "Today and queue".
   const xApiAuto = await runXApiAutoStep(db, results.filter((r) => r.ok).map((r) => r.clientId));
-  // Non-fatal: a fill failure is reported in `dailyFill` and never changes `ok` or the suggestions result.
+  // A fill failure never blocks or changes the suggestions result (suggestionsOk), but it does fail the top-level ok.
   let dailyFill = [];
   try {
     const { localDateOf } = await import('../../../../features/x-content-inventory/daily-loop/time-ids.js');
-    dailyFill = await runDailyFillStep(built, results.filter((r) => r.ok).map((r) => r.clientId), localDateOf(Date.now()));
+    dailyFill = await runDailyFillStep(built, ran.filter((r) => r.ok).map((r) => r.clientId), localDateOf(Date.now()));
   } catch (err) {
     dailyFill = [{ ok: false, error: String(err?.message || err).slice(0, 200) }];
   }
-  return NextResponse.json({ ok: results.every((r) => r.ok), results, xApiAuto, dailyFill });
+  const suggestionsOk = results.every((r) => r.ok);
+  return NextResponse.json({ ok: suggestionsOk && dailyFill.every((r) => r.ok), suggestionsOk, results, xApiAuto, dailyFill });
 }
 
 export const GET = run;

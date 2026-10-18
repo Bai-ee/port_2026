@@ -3,7 +3,7 @@ import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
 const fb = require('../../../../api/_lib/firebase-admin.cjs');
-const { verifyRequestUser } = require('../../../../api/_lib/auth.cjs');
+const { verifyRequestUser, isAdminEmail } = require('../../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../../api/_lib/client-provisioning.cjs');
 const { runWatchlistPull } = require('../../../../features/scout-intake/watchlist-pull');
 const { checkRateLimit, getClientIp } = require('../../../../api/_lib/rate-limit.cjs');
@@ -71,7 +71,8 @@ export async function POST(request) {
   const detail = (body && typeof body.detail === 'object') ? body.detail : null;
 
   try {
-    const result = await runWatchlistPull({ clientId, clientConfig, detail });
+    // Paid X timeline reads run only for an admin (the owner's X credentials); others get the free path only.
+    const result = await runWatchlistPull({ clientId, clientConfig, detail, allowX: await isAdminEmail(decoded?.email) });
     // Persist to Firestore so downstream consumers (daily digest, the
     // reply-targets analysis skill, Post Me) can read the watchlist data that
     // until now lived only in the browser. Best-effort: a failed write never

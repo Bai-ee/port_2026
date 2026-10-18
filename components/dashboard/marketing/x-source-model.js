@@ -112,9 +112,37 @@ export function formatXSpendLine(usage) {
   return line;
 }
 
+// Per-source caps the rate form edits (ids = features/x-api-usage USAGE_SOURCES that read from X; 'posting' is writes).
+export const X_CAP_SOURCES = Object.freeze([
+  { id: 'quote-targets', label: 'Quote targets' },
+  { id: 'strategy-accounts', label: 'Strategy accounts' },
+  { id: 'opportunity-signals', label: 'Opportunity Signals' },
+  { id: 'market-talk', label: 'Market Talk' },
+  { id: 'x-monitor', label: 'X Monitor' },
+  { id: 'other', label: 'Watchlist and other' },
+]);
+
+// Stored caps -> form strings (blank = no cap for that source).
+export function sourceCapsForm(pricing) {
+  const caps = pricing && typeof pricing.sourceCaps === 'object' && pricing.sourceCaps ? pricing.sourceCaps : {};
+  return Object.fromEntries(X_CAP_SOURCES.map(({ id }) => [id, Number.isFinite(Number(caps[id])) && caps[id] !== null ? String(caps[id]) : '']));
+}
+
 // Rate-form values (strings) -> set-pricing body. Blank = omit; negative/NaN = error.
+// form.sourceCaps (when present) is sent WHOLE (the API replaces the map): blank = that source has no cap.
 export function buildPricingBody(form) {
   const body = { action: 'set-pricing' };
+  if (form?.sourceCaps && typeof form.sourceCaps === 'object') {
+    const caps = {};
+    for (const { id, label } of X_CAP_SOURCES) {
+      const raw = String(form.sourceCaps[id] ?? '').trim();
+      if (!raw) continue;
+      const v = Number(raw);
+      if (!Number.isFinite(v) || v < 0) return { error: `${label} cap must be a number of 0 or more.` };
+      caps[id] = Math.floor(v);
+    }
+    body.sourceCaps = caps;
+  }
   const fields = [['perPostReadUsd', 'Per-post rate'], ['perUserLookupUsd', 'Per-lookup rate'], ['dailyReadCap', 'Daily cap']];
   for (const [key, label] of fields) {
     const raw = String(form?.[key] ?? '').trim();

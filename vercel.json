@@ -12,8 +12,16 @@
       "schedule": "0 6 * * *"
     },
     {
-      "path": "/api/worker/pre-digest-refresh",
-      "schedule": "35 12 * * *"
+      "path": "/api/worker/pre-digest-refresh?phase=modules",
+      "schedule": "5 12 * * *"
+    },
+    {
+      "path": "/api/worker/pre-digest-refresh?phase=signals",
+      "schedule": "20 12 * * *"
+    },
+    {
+      "path": "/api/worker/pre-digest-refresh?phase=analysis",
+      "schedule": "40 12 * * *"
     },
     {
       "path": "/api/admin/daily-digest",

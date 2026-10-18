@@ -18,7 +18,7 @@ import { createIntake } from './intake.js';
 import { createIntakeStorage } from './intake-storage.js';
 import { signContinuationToken, continuationUrlFor, UPLOAD_SECRET_ENV } from './continuation.js';
 import {
-  createDraftPostOnce, getSocialPost, readSocialQueue, updateSocialPost, approveAndSchedule, rejectDraft,
+  createDraftPostOnce, getSocialPost, readSocialQueue, updateSocialPost, swapPostMedia, approveAndSchedule, rejectDraft,
   claimManualDelivery, recordManualPosted, releaseManualClaim, approveAndPostNow,
 } from '../social-posting/twitter-service.js';
 import { buildMonthCalendar } from '../x-content-inventory/month-calendar.js';
@@ -160,14 +160,7 @@ export function createTelegramRuntime({ env = process.env, db = fb.adminDb, tran
       nasStage: (id) => handleNasAction(nasDepsFor(clientId), 'nas-stage', { id }, { email: 'telegram-owner' }),
       nasStatus: () => handleNasAction(nasDepsFor(clientId), 'nas-status', {}),
       pickMedia: (pkg) => pickMedia(pkg, mediaSigners()),
-      applyPostMedia: (id, media) => db.runTransaction(async (tx) => {
-        const ref = db.collection('social_posts').doc(id);
-        const snap = await tx.get(ref);
-        const cur = snap.exists ? snap.data() : null;
-        if (!cur || cur.clientId !== clientId || !HIRES_EDITABLE_STATUSES.includes(cur.status)) return false;
-        tx.set(ref, { ...media, revision: (Number(cur.revision) || 0) + 1, updatedAt: new Date().toISOString() }, { merge: true });
-        return true;
-      }),
+      applyPostMedia: (id, media) => swapPostMedia(clientId, id, media, { statuses: HIRES_EDITABLE_STATUSES }),
       upsertPackage: (pkg) => upsertPackage(pkg, { returnPackages: false, clientId }),
       now,
     }, { clientId, postId, candidateId, notify }),

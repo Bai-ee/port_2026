@@ -116,6 +116,38 @@ test('undo refuses when the doc changed after the action (nothing restored)', as
   assert.equal(stores.files.get('social_posts/p1').content, 'owner edited later');
 });
 
+test('undo never re-arms publishing: restoring a scheduled snapshot is refused (unschedule / media swap)', async () => {
+  const sched = post({ status: 'scheduled', scheduledAt: '2026-10-20T15:00:00.000Z', approvedHash: 'h1', revision: 3 });
+  const { rt, stores } = setup({ files: { 'social_posts/p1': sched } });
+  const out = await rt.run(CTX, { actionId: 'q.update', args: { postId: 'p1', content: 'new' } });
+  // the action under test voided the schedule (what unschedule / attach-media do on v2 rows)
+  stores.files.set('social_posts/p1', { ...stores.files.get('social_posts/p1'), status: 'draft', scheduledAt: null, approvedHash: null });
+  const row = await stores.audit.get(CLIENT, out.result.undoId);
+  row.items[0].snapshots[0].after = stores.files.get('social_posts/p1');
+  await stores.audit.update(CLIENT, out.result.undoId, { items: row.items });
+  const u = await rt.undo(CTX, out.result.undoId);
+  assert.equal(u.ok, false);
+  assert.match(u.error, /publishing schedule/);
+  assert.equal(stores.files.get('social_posts/p1').status, 'draft');
+  assert.equal(stores.files.get('social_posts/p1').scheduledAt, null);
+  assert.equal((await stores.audit.get(CLIENT, out.result.undoId)).undoneAt ?? null, null);
+});
+
+test('undo of a scheduling action (draft -> scheduled) is refused too: the ledger slot would stay reserved', async () => {
+  const { rt, stores } = setup({ files: { 'social_posts/p1': post({ revision: 1 }) } });
+  const out = await rt.run(CTX, { actionId: 'q.update', args: { postId: 'p1', content: 'new' } });
+  const scheduled = { ...stores.files.get('social_posts/p1'), status: 'scheduled', scheduledAt: '2026-10-20T15:00:00.000Z', revision: 2 };
+  stores.files.set('social_posts/p1', scheduled);
+  const row = await stores.audit.get(CLIENT, out.result.undoId);
+  row.items[0].snapshots[0].after = scheduled; // what the action left behind (the stub invoke cannot schedule)
+  await stores.audit.update(CLIENT, out.result.undoId, { items: row.items });
+  const u = await rt.undo(CTX, out.result.undoId);
+  assert.equal(u.ok, false);
+  assert.match(u.error, /publishing schedule/);
+  assert.equal(stores.files.get('social_posts/p1').status, 'scheduled');
+  assert.equal(stores.files.get('social_posts/p1').revision, 2);
+});
+
 test('undo of a created doc removes it; field snapshots restore only that field', async () => {
   const { rt, stores } = setup({ files: { 'dashboard_state/c1': { keep: 1, marketingBrief: { x: 1, other: 2 } } } });
   const out = await rt.run(CTX, { actionId: 'q.cfg', args: { v: 9 } });

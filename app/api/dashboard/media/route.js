@@ -412,9 +412,9 @@ export async function POST(request) {
         recipe,
       });
 
-      // Bridge into the LIVE EditVideos pipeline. If the bridge is unconfigured
-      // we still return the queued job (the backstop cron can pick it up once
-      // creds land), so a missing credential degrades instead of failing.
+      // Bridge into the LIVE EditVideos pipeline. A job that never reached EditVideos has no editJobId, and
+      // nothing can pick it up later (the reconcile sweep skips such jobs), so a failed enqueue fails the job
+      // honestly instead of leaving it "queued" forever.
       let editJobId = null;
       try {
         ({ editJobId } = await enqueueVideoJob(recipe));
@@ -429,6 +429,10 @@ export async function POST(request) {
         }
       } catch (bridgeErr) {
         console.warn(`[media] EditVideos enqueue failed: ${bridgeErr?.message}`);
+      }
+      if (!editJobId) {
+        await mediaJobs.failMediaJob(jobId, 'Could not hand the job to EditVideos (bridge unavailable). Try again.');
+        return json({ ok: false, jobId, error: 'Could not start the render: the EditVideos bridge is unavailable. Try again.' }, 502);
       }
 
       await setVideoPending(context.clientId, {

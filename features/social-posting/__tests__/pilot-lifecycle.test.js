@@ -243,6 +243,29 @@ test('f2. control: an untampered pilot-scheduled row that becomes due IS publish
   assert.equal(raw(row.id).status, 'posted');
 });
 
+test('e3. swapPostMedia (high-res / staged original / Discogs) voids a scheduled v2 row and frees its slot', async () => {
+  const day = safeDay();
+  const row = await svc.schedulePost('c1', { content: 'Has media.', scheduledAt: ctIso(day, 9), mediaUrl: 'https://x/old.jpg', mediaType: 'image' });
+  assert.equal(slotCount('c1', day), 1);
+  const r = await svc.swapPostMedia('c1', row.id, { mediaUrl: 'https://x/original.jpg', mediaStoragePath: 'publish-staging/o.jpg' }, { statuses: ['draft', 'approved', 'awaiting_approval', 'scheduled'] });
+  assert.deepEqual(r, { approvalVoided: true });
+  const after = raw(row.id);
+  assert.equal(after.status, 'draft');
+  assert.equal(after.scheduledAt, null);
+  assert.ok(!after.approvedHash);
+  assert.equal(after.mediaUrl, 'https://x/original.jpg');
+  assert.equal(after.revision, row.revision + 1);
+  assert.equal(slotCount('c1', day), 0);
+});
+
+test('e4. swapPostMedia refuses foreign rows and statuses outside the allow-list (nothing written)', async () => {
+  const row = await svc.schedulePost('c1', { content: 'Mine.', scheduledAt: ctIso(safeDay(), 10) });
+  assert.equal(await svc.swapPostMedia('c2', row.id, { mediaUrl: 'https://x/n.jpg' }), false);
+  assert.equal(await svc.swapPostMedia('c1', row.id, { mediaUrl: 'https://x/n.jpg' }, { statuses: ['draft'] }), false);
+  assert.equal(raw(row.id).status, 'scheduled');
+  assert.equal(raw(row.id).mediaUrl ?? null, row.mediaUrl ?? null);
+});
+
 test('e2. edit that voids a scheduled pilot post clears approvedHash like attachMediaToPost does', async () => {
   const row = await svc.schedulePost('c1', { content: 'Original wording.', scheduledAt: ctIso(safeDay(), 9) });
   const edited = await svc.updateSocialPost('c1', row.id, { content: 'Edited wording.' });

@@ -27,6 +27,7 @@ const { buildAuthRequestShim, getHeaderValue, safeSecretEquals, verifyAdminReque
 const { claimRun, completeRun, failRun, appendRunEvent, updateModuleState } = require('../../../../api/_lib/run-lifecycle.cjs');
 const { logError, logInfo } = require('../../../../api/_lib/observability.cjs');
 const digestConfig = require('../../../../features/intelligence/_digest-config.js');
+const refreshDaily = require('../../../../features/intelligence/_refresh-daily.js');
 const { getMarketInsightPlatformState } = require('../../../../features/intelligence/_market-insight-platform-state.js');
 const { runAnalysisRecipe } = require('../../../../features/intelligence/analysis-recipes/run-recipe.js');
 const { getRecipe } = require('../../../../features/intelligence/analysis-recipes/recipes.js');
@@ -534,12 +535,15 @@ async function publishFreshDigestBrief(clientId, freshnessToken) {
  *  fresh activity (the scout doesn't pull X, so without this the follows go
  *  stale / empty). Best-effort: the X pull can be flaky and never blocks the
  *  email — buildWatchlist falls back to whatever timelines already exist. */
-async function refreshWatchlist(clientId) {
+async function refreshWatchlist(clientId, { allowX = false } = {}) {
   try {
     const cfgSnap = await fb.adminDb.collection('client_configs').doc(clientId).get();
     const clientConfig = cfgSnap.exists ? cfgSnap.data() : {};
     if (!(clientConfig?.marketingBriefConfig?.kols || []).length) return { ok: false, skipped: 'no-kols' };
-    const result = await runWatchlistPull({ clientId, clientConfig, detail: true });
+    // allowX = allowXWatchlist (?allowXWatchlist=1, its own opt-in): never the cron, never ?allowX=1 (Generate & Send /
+    // the x-search Refresh group, whose cost covers Opportunity + Market Talk only) or dailyXSearch. Paid watchlist
+    // reads otherwise come only from the admin's dashboard watchlist pull.
+    const result = await runWatchlistPull({ clientId, clientConfig, detail: true, allowX });
     if (!result?.ok) return { ok: false, error: result?.error || 'pull failed' };
     const generatedAt = new Date().toISOString();
     const compactItem = (it) => ({
@@ -848,7 +852,15 @@ async function refreshXMarketTalk(clientId, { brandXHandle = '', brandKeywords =
     const queries = [...new Set([`@${handle}`, ...keywords.map((k) => String(k || '').trim())].filter(Boolean))].slice(0, 3);
     const collected = [];
     const errors = [];
-    const { withXUsage } = await import('../../../../features/x-api-usage/index.js');
+    const { withXUsage, assertXBudget } = await import('../../../../features/x-api-usage/index.js');
+    // Daily X read budget first (one doc read): over budget = a recorded skip, no X call.
+    try {
+      await assertXBudget({ source: 'market-talk', clientId, estimatePosts: queries.length * 10 });
+    } catch (err) {
+      const reason = err?.code === 'x-budget' ? 'x-budget' : `x-budget-check-failed: ${err?.message || err}`;
+      await saveStatus({ ok: false, reason, detail: err?.message || null, queries });
+      return { ok: false, skipped: true, reason, queries };
+    }
     const results = await Promise.all(queries.map((q) => withXUsage({ clientId, source: 'market-talk' }, () => searchXPosts(q, { limit: 10 }))));
     results.forEach((r, i) => {
       if (!r?.ok) { errors.push(`${queries[i]}: ${r?.error || 'failed'}`); return; }
@@ -892,8 +904,9 @@ async function refreshXMarketTalk(clientId, { brandXHandle = '', brandKeywords =
   }
 }
 
-async function refreshPlatformSignals(clientId, { allowX = false } = {}) {
-  if (!clientId || !scHasApiKey()) return { ok: false, skipped: true, reason: 'no-key' };
+// scrape=false runs only the paid X part (a Daily profile with X search ticked but Market signals off).
+async function refreshPlatformSignals(clientId, { allowX = false, scrape = true } = {}) {
+  if (!clientId || (scrape && !scHasApiKey())) return { ok: false, skipped: true, reason: 'no-key' };
   try {
     const cfgSnap = await fb.adminDb.collection('client_configs').doc(clientId).get();
     const mbc = (cfgSnap.exists ? (cfgSnap.data() || {}) : {}).marketingBriefConfig || {};
@@ -929,8 +942,8 @@ async function refreshPlatformSignals(clientId, { allowX = false } = {}) {
     // Reddit + Instagram pulled concurrently (each already runs its own queries
     // concurrently) so this whole step is ~one slow HTTP call, not the sum.
     const [r, ig] = await Promise.all([
-      sources.has('reddit') ? scSearchReddit({ queries: scRedditQueries({ brand, categoryTerms: cats, searches: mbc.searches }), limit: 12 }) : Promise.resolve(null),
-      sources.has('instagram') ? scSearchInstagram({ queries: [brand, ...cats.slice(0, 1)].filter(Boolean), creators, limit: 12 }) : Promise.resolve(null),
+      scrape && sources.has('reddit') ? scSearchReddit({ queries: scRedditQueries({ brand, categoryTerms: cats, searches: mbc.searches }), limit: 12 }) : Promise.resolve(null),
+      scrape && sources.has('instagram') ? scSearchInstagram({ queries: [brand, ...cats.slice(0, 1)].filter(Boolean), creators, limit: 12 }) : Promise.resolve(null),
     ]);
     const out = {};
     if (r) { if (r.ok && r.items.length) await persist('reddit', r.items, r.meta); out.reddit = r.ok ? r.items.length : `err:${r.error}`; }
@@ -954,8 +967,19 @@ async function refreshPlatformSignals(clientId, { allowX = false } = {}) {
 
 /** Refresh one client's scout brief + watchlist timelines + strategy plan.
  *  Sequential (strategy reads fresh scout). Never throws. */
-export async function refreshDigestClient(clientId, { freshnessToken = '', force = false, source = 'cron-scheduled', actorUid = null, include = {}, briefLinkMode = 'fresh', phase = 'all', allowX = false } = {}) {
+export async function refreshDigestClient(clientId, { freshnessToken = '', force = false, source = 'cron-scheduled', actorUid = null, include = {}, briefLinkMode = 'fresh', phase = 'all', allowX = false, allowXWatchlist = false, groups = null } = {}) {
   if (!clientId) return { ok: false, error: 'no clientId' };
+
+  // groups (a Set of Refresh group ids) = an unattended cron run gated by the client's Daily profile
+  // (features/intelligence/_refresh-daily.js). null = a manual run: every step of the phase, as before.
+  // Decided before the preflight so a phase with nothing ticked creates no delivery record and spends nothing.
+  const inPhase = (p) => phase === 'all' || phase === p;
+  const steps = groups
+    ? { modules: inPhase('modules') && groups.has('renders'), signalsCore: inPhase('signals') && groups.has('market-signals'), signalsX: inPhase('signals') && groups.has('x-search'), analysis: inPhase('analysis') && groups.has('analysis') }
+    : { modules: inPhase('modules'), signalsCore: inPhase('signals'), signalsX: inPhase('signals') && allowX, analysis: inPhase('analysis') };
+  if (groups && !steps.modules && !steps.signalsCore && !steps.signalsX && !steps.analysis) {
+    return { ok: true, sendable: true, skipped: true, reason: 'not-in-daily-profile', phase, clientId, warnings: [] };
+  }
 
   // Delivery identity uses the CLIENT'S configured digest timezone (not
   // UTC) so "today's" record matches the calendar day the client actually
@@ -1024,9 +1048,9 @@ export async function refreshDigestClient(clientId, { freshnessToken = '', force
   // phase=modules | signals | analysis — each comfortably under the limit. Steps
   // outside the requested phase resolve to { ok:true, skipped:'other-phase' } so
   // the ok/sendable math is unchanged. No phase (the cron) = everything, as before.
-  const wantModules = phase === 'all' || phase === 'modules';
-  const wantSignals = phase === 'all' || phase === 'signals';
-  const wantAnalysis = phase === 'all' || phase === 'analysis';
+  const wantModules = steps.modules;
+  const wantSignals = steps.signalsCore;
+  const wantAnalysis = steps.analysis;
   const phaseSkip = () => Promise.resolve({ ok: true, skipped: true, reason: 'other-phase' });
   // Cost gate: only refresh the expensive brief compute a send will actually
   // use. A fresh brief page (briefLinkMode 'fresh' + link shown) renders creative
@@ -1044,15 +1068,16 @@ export async function refreshDigestClient(clientId, { freshnessToken = '', force
       ? refreshSiteCreativeModules(clientId, freshnessToken, { source, actorUid })
       : Promise.resolve({ ok: true, skipped: true, reason: 'creative-sections-off' })),
     wantSignals ? refreshScoutBrief(clientId, { force, source, actorUid, dateKey }) : phaseSkip(),
-    wantSignals ? refreshWatchlist(clientId) : phaseSkip(),
+    wantSignals ? refreshWatchlist(clientId, { allowX: allowXWatchlist }) : phaseSkip(),
     // Reddit/Instagram via the direct ScrapeCreators client → platformTests.
     // Runs here so it completes before the analysis/reply steps read collect*Signals.
     // This is what makes Reddit/IG populate in PRODUCTION (last30days can't run there).
-    wantSignals ? refreshPlatformSignals(clientId, { allowX }) : phaseSkip(),
+    wantSignals || steps.signalsX ? refreshPlatformSignals(clientId, { allowX: steps.signalsX, scrape: wantSignals }) : phaseSkip(),
     // Opportunity Signals search (public buying-signal scan) — its own client
     // toggle gate, own reddit/instagram search, own stored pool. See
     // docs/plans/OPPORTUNITY-SIGNALS-MARKET-SIGNALS-PLAN.md.
-    wantSignals ? refreshOpportunitySignals(clientId) : phaseSkip(),
+    // X part only on a Daily profile with X search ticked (the owner's standing opt-in); manual runs keep X on its own route.
+    wantSignals || (groups && steps.signalsX) ? refreshOpportunitySignals(clientId, { allowX: Boolean(groups && steps.signalsX) }) : phaseSkip(),
   ]);
   const [strategy, replyTargets, redditAnalysis, instagramAnalysis, xMarketTalkAnalysis, opportunitySignalsAnalysis] = await Promise.all([
     wantAnalysis ? refreshStrategyPlan(clientId) : phaseSkip(),
@@ -1152,6 +1177,7 @@ async function handle(request) {
   // interactive Generate & Send sets it; the scheduled cron sends no params, so
   // the cron can never spend X credits. See X-API-AND-PROFILE-OPERATIONS.md.
   const allowX = url.searchParams.get('allowX') === '1';
+  const allowXWatchlist = url.searchParams.get('allowXWatchlist') === '1';
   // phase=modules|signals|analysis splits the refresh across three sub-300s
   // requests (the interactive Run & Send path). No/invalid phase = full refresh.
   const rawPhase = String(url.searchParams.get('phase') || '').trim().toLowerCase();
@@ -1298,8 +1324,15 @@ async function handle(request) {
     // Send passes ?allowX=1 and always runs it. Kept per-client rather than a
     // global flag so enrolling another client can never silently start
     // spending X credits on a schedule. Cost: ≤3 search calls per client/day.
-    const clientAllowX = allowX || clientCfg?.dailyXSearch === true;
-    const result = await refreshDigestClient(clientId, { freshnessToken, force: forceScout, source: triggerSource, actorUid, include: clientCfg?.include || {}, briefLinkMode: clientCfg?.briefLinkMode || 'fresh', phase, allowX: clientAllowX });
+    // Unattended runs follow the client's Daily profile (Refresh modal "Daily" tab): which groups run, and whether
+    // its paid X search runs (that tick replaced the old dailyXSearch flag, which is now only its default).
+    const daily = triggerSource === 'cron-scheduled'
+      // eslint-disable-next-line no-await-in-loop
+      ? refreshDaily.cronGroupsFor(await refreshDaily.readRefreshDaily(clientId).catch(() => refreshDaily.resolveRefreshDaily({ dailyXSearch: clientCfg?.dailyXSearch })))
+      : null;
+    const clientAllowX = daily ? daily.has('x-search') : (allowX || clientCfg?.dailyXSearch === true);
+    // eslint-disable-next-line no-await-in-loop
+    const result = await refreshDigestClient(clientId, { freshnessToken, force: forceScout, source: triggerSource, actorUid, include: clientCfg?.include || {}, briefLinkMode: clientCfg?.briefLinkMode || 'fresh', phase, allowX: clientAllowX, allowXWatchlist, groups: daily });
     results.push(result);
     logInfo('pre_digest_refresh_client_done', {
       clientId,

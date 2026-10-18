@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { REFRESH_GROUPS, paidGroupsFor, estimateFor, readLastRefreshed, groupFreshness } from './refresh-groups.js';
 import { useMarketingContentCall } from './useMarketingContentCall';
 import { XSourceToggle, XSpendLine } from './XSourceControls.jsx';
+import RefreshDailyTab from './RefreshDailyTab.jsx';
 import { normalizeDataSources, sourceFor, autoDailyFor, withSource, withAutoDaily, sourceGroupsPresent, xApiPaidRows, estimatesByGroup, selectionUsesXApi } from './x-source-model.js';
 
 const SELECTION_KEY = 'marketing-refresh-selection-v1';
@@ -56,6 +57,7 @@ function totalsFor(paid) {
 
 export default function MarketingRefreshControl({ running = false, onRun, estimateCtx, onOpenConfig, freshnessCtx, getIdToken, clientId }) {
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState('now'); // 'now' = run now (manual) | 'daily' = what the crons run (RefreshDailyTab)
   // Server freshness (strategy-freshness = the same bundle the strategy agent's get_freshness reads), re-read when the
   // panel opens and after a run ends, so the panel and the agent agree on what is stale. A passed freshnessCtx wins.
   const { call } = useMarketingContentCall(getIdToken);
@@ -150,7 +152,12 @@ export default function MarketingRefreshControl({ running = false, onRun, estima
 
       {open ? (
         <div id="marketing-refresh-panel" role="group" aria-label="Refresh data">
+          <div id="marketing-refresh-tab-row" role="tablist" aria-label="Refresh mode">
+            <button type="button" role="tab" id="marketing-refresh-tab-now" className="mr-source-opt" aria-selected={tab === 'now'} aria-pressed={tab === 'now'} onClick={() => setTab('now')}>Run now</button>
+            <button type="button" role="tab" id="marketing-refresh-tab-daily" className="mr-source-opt" aria-selected={tab === 'daily'} aria-pressed={tab === 'daily'} disabled={!clientId} onClick={() => { setPending(null); setTab('daily'); }}>Daily (automatic)</button>
+          </div>
           <XSpendLine getIdToken={getIdToken} active={open} />
+          {tab === 'daily' ? <RefreshDailyTab getIdToken={getIdToken} clientId={clientId} estimateCtx={estimateCtx} disabled={running} /> : (<>
           <div id="marketing-refresh-group-list">
             {REFRESH_GROUPS.map((g) => {
               const on = selection.ids.includes(g.id);
@@ -257,6 +264,7 @@ export default function MarketingRefreshControl({ running = false, onRun, estima
               Run selected
             </button>
           </div>
+          </>)}
         </div>
       ) : null}
 
@@ -284,7 +292,10 @@ export default function MarketingRefreshControl({ running = false, onRun, estima
         #marketing-refresh-panel .mr-source { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex: 1 1 100%; }
         #marketing-refresh-panel .mr-source-opt { padding: 0 10px; font-size: 13px; }
         #marketing-refresh-panel .mr-source-opt[aria-pressed="true"] { background: var(--t-raised); border-color: var(--t-text-strong); font-weight: 600; }
+        #marketing-refresh-tab-row { display: flex; gap: 6px; margin-bottom: 10px; }
         #marketing-refresh-x-spend-shell { margin-bottom: 8px; font-size: 13px; }
+        #marketing-refresh-x-source-caps { display: flex; flex-direction: column; gap: 8px; }
+        #marketing-refresh-x-source-caps-title { font-size: 12px; opacity: 0.65; }
         #marketing-refresh-x-spend-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
         #marketing-refresh-x-rate-form { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; padding: 10px; border: 1px solid color-mix(in srgb, var(--t-text-strong) 15%, transparent); border-radius: 8px; }
         #marketing-refresh-x-rate-form .mr-rate-field { display: flex; flex-direction: column; gap: 2px; }

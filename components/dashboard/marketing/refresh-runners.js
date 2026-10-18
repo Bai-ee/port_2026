@@ -11,7 +11,8 @@ const OPP_REFRESH = '/api/dashboard/opportunity-signals/refresh';
 const EMAIL_DIGEST = '/api/admin/email-digest';
 const PRE_DIGEST = '/api/worker/pre-digest-refresh';
 
-async function request(ctx, path, { method = 'POST', body } = {}) {
+// allowSkip: a 200 `{ ok:false, skipped:true }` (feature off, no key, over budget) is a skip to report, not a failure.
+async function request(ctx, path, { method = 'POST', body, allowSkip = false } = {}) {
   const token = ctx.getIdToken ? await ctx.getIdToken() : null;
   const url = typeof ctx.apiPath === 'function' ? ctx.apiPath(path) : path;
   const res = await fetch(url, {
@@ -23,6 +24,7 @@ async function request(ctx, path, { method = 'POST', body } = {}) {
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
   const data = await res.json().catch(() => ({}));
+  if (allowSkip && res.ok && data?.skipped) return data;
   if (!res.ok || data?.ok === false) throw new Error(data?.error || `${path} failed (${res.status})`);
   return data;
 }
@@ -51,9 +53,10 @@ export const GROUP_RUNNERS = {
   'x-search': async (ctx) => {
     const clientId = requireClient(ctx);
     const detail = [];
-    const opp = await request(ctx, OPP_REFRESH); // no body; server derives the client from auth and passes allowX:true
+    const opp = await request(ctx, OPP_REFRESH, { allowSkip: true }); // no body; server derives the client; X only for an admin
     // The route returns no X call count; it runs one X search per enabled Opportunity query row when X is a platform.
-    detail.push(okLine('[X SEARCH]', `Opportunity Signals: ${opp?.itemCount ?? 0} item(s) across ${(opp?.platforms || []).join(', ') || 'no platforms'} (one paid X call per enabled query row)`));
+    if (opp?.skipped) detail.push(dimLine('[X SEARCH]', `Opportunity Signals skipped (${opp.reason || 'skipped'}).`));
+    else detail.push(okLine('[X SEARCH]', `Opportunity Signals: ${opp?.itemCount ?? 0} item(s) across ${(opp?.platforms || []).join(', ') || 'no platforms'} (one paid X call per enabled query row)`));
     (opp?.warnings || []).forEach((w) => detail.push(dimLine('[X SEARCH]', w)));
 
     const cfg = await request(ctx, EMAIL_DIGEST, { body: { action: 'config', clientId } });
