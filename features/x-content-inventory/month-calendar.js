@@ -375,7 +375,7 @@ export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_EN
       const ms = date === today ? now : ctWallToMs(date, 0);
       addExtra(date, {
         kind: 'requote', state: 'suggested', approval: 'suggested', id: `requote:${id}`, quoteTargetId: id, date, ms, time: '',
-        handle, quotedUrl: url, title: excerpt(t?.text, 80), content: String(t?.text ?? ''), text: String(t?.text ?? ''), quotedHandle: handle, createdAt: new Date(created).toISOString(),
+        handle, quotedUrl: url, title: excerpt(t?.text, 80), content: String(t?.text ?? ''), text: String(t?.text ?? ''), quotedHandle: handle, quotedText: String(t?.text ?? ''), quotedAuthorName: t?.authorName ?? null, quotedHasMedia: t?.hasMedia === true, quotedMediaUrl: t?.mediaUrl ?? null, createdAt: new Date(created).toISOString(),
         expiresAt: new Date(expiresMs).toISOString(), windowOpen: true, trackId: t?.trackId ?? null,
         status: 'suggested', needsStory: false, bucketId: null, bucketColor: null, proposed: false,
       });

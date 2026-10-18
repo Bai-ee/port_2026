@@ -64,6 +64,13 @@ export const SIGNALS_ACTIONS = [
     { tier: 1, snapshot: [{ path: 'client_configs/{clientId}', field: 'webStatsConfig' }] }),
 ];
 
+export const REFRESH_DAILY_ACTIONS = [
+  R('refresh.daily.get', 'refresh', 'Get the Daily (automatic) refresh profile', 'Refresh groups the daily crons run (Refresh "Daily" tab): enabled + groups. saved:false = no profile yet (shows what the crons ran before).', 'refresh-daily', 'GET', null, obj({}, [])),
+  R('refresh.daily.save', 'refresh', 'Change what refreshes automatically every day', 'Saves the Daily refresh profile: enabled (false = nothing refreshes on its own) + groups. Ticked paid groups spend every day until unticked.', 'refresh-daily', 'POST', null,
+    obj({ enabled: bool('Run automatically every day.'), groups: arr(str('market-signals | x-search | analysis | renders | today-queue'), 'Groups the crons run.') }, ['enabled', 'groups']),
+    { tier: 3, external: 'paid', cost: 'Standing daily spend for every ticked paid group (Scout ~$0.10, model calls, render cost, paid X search) until unticked.', snapshot: [{ path: 'digest_config/{clientId}', field: 'refreshDaily' }] }),
+];
+
 export const DIGEST_ACTIONS = [
   R('digest.config.get', 'digest', 'Get the digest config', 'Email digest settings for a client: includes, schedule, tone, recipient, order, auto-publish.', 'email-digest', 'POST', 'config', obj({}, [])),
   R('digest.status', 'digest', 'Get digest delivery status', 'Durable delivery record + circuit-breaker state for a client/day.', 'email-digest', 'POST', 'status', obj({ dateKey: str('YYYY-MM-DD client-local day; default today.') }, [])),

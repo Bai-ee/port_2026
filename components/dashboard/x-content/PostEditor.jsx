@@ -5,6 +5,7 @@ import LoadingRing from '../content-ui/ui/LoadingRing';
 import { ChevronDown, ImagePlus } from 'lucide-react';
 import { useMarketingContentCall } from '../marketing/useMarketingContentCall.js';
 import MiniThumb from './MiniThumb.jsx';
+import QuotedTweetCard from './QuotedTweetCard.jsx';
 import {
   MAX_CHARS, MEDIA_CHANGED_MESSAGE, charCount, isOverLimit, initialWhen, zoneLabel, resolveTimeZone,
   isSuggestion, isLockedRow, boundFields, boundFieldsGate, boundFieldsNotice, dirtyState, actionState, isScheduledStatus,
@@ -68,7 +69,8 @@ function VariantList({ variants }) {
 
 function BoundFieldsPanel({ row, gate }) {
   const fields = boundFields(row);
-  const shown = fields.filter((f) => f.present);
+  // The quoted post is shown by the quoted card above (QuotedTweetCard), so it is not repeated here.
+  const shown = fields.filter((f) => f.present && f.key !== 'quote');
   const hidden = fields.filter((f) => !f.known);
   if (!shown.length && !hidden.length) return null;
   return (
@@ -366,7 +368,6 @@ export default function PostEditor({
 
   const over = isOverLimit(content);
   const count = charCount(content);
-  const quoteUrl = suggestion ? (row?.quotedUrl || row?.url || null) : null;
 
   if (!row) {
     return (
@@ -409,12 +410,7 @@ export default function PostEditor({
           {locked ? <span className="pe-muted">Locked: this post can't be edited here.</span> : null}
         </p>
 
-        {quoteUrl ? (
-          <div id="post-editor-quote-target" className="pe-quote">
-            <span className="pe-kicker">Quoting</span>
-            <a href={quoteUrl} target="_blank" rel="noopener noreferrer">{quoteUrl}</a>
-          </div>
-        ) : null}
+        <QuotedTweetCard row={row} call={call} timeZone={tz} />
 
         <div id="post-editor-creative-shell" className="pe-creative">
           <MediaBlock row={row} />
@@ -563,7 +559,17 @@ function PostEditorStyles() {
       #post-editor-root .pe-text[readonly] { opacity: 0.8; }
       #post-editor-root .pe-count-row { display: flex; justify-content: space-between; gap: 8px; margin: 0; font-size: 12px; }
       #post-editor-root .pe-over { color: var(--t-danger); font-weight: 700; }
-      #post-editor-root .pe-quote { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--t-border-subtle); border-radius: 12px; font-size: 13px; overflow-wrap: anywhere; }
+      #post-editor-root .pe-quote-shell { display: flex; flex-direction: column; gap: 8px; }
+      #post-editor-root .pe-quote-toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      #post-editor-root .pe-quote-toggle-row .pe-kicker { margin: 0; }
+      #post-editor-root .pe-quote-toggle { min-height: 32px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--t-border-faint); background: transparent; color: var(--t-text-secondary); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+      #post-editor-root .pe-quote-toggle[aria-checked="true"] { color: var(--t-text-strong); border-color: var(--t-control-border-strong); background: var(--t-inset); }
+      #post-editor-root .pe-quote-toggle:focus-visible { outline: 2px solid var(--t-focus); outline-offset: 2px; }
+      #post-editor-root .pe-quoted-card { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--t-border-subtle); border-radius: 14px; background: var(--t-inset); overflow-wrap: anywhere; }
+      #post-editor-root .pe-quoted-header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font-size: 14px; }
+      #post-editor-root .pe-quoted-text { margin: 0; font-size: 14px; line-height: 1.4; white-space: pre-wrap; }
+      #post-editor-root .pe-quoted-media { display: block; width: 100%; max-height: 240px; object-fit: cover; border-radius: 10px; border: 1px solid var(--t-border-subtle); }
+      #post-editor-root .pe-quoted-open, #post-editor-root .pe-quote-target { font-size: 12px; overflow-wrap: anywhere; }
       #post-editor-root .pe-creative { display: flex; flex-direction: column; gap: 8px; }
       #post-editor-root .pe-media { border-radius: 14px; overflow: hidden; border: 1px solid var(--t-border-subtle); background: var(--t-inset); }
       #post-editor-root .pe-media img, #post-editor-root .pe-media video { display: block; width: 100%; max-height: 420px; object-fit: contain; }

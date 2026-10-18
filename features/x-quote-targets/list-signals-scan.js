@@ -47,7 +47,15 @@ export function toCandidate(r) {
     hasMedia: r.hasMedia,
     score: r.score,
     reasons: r.reasons,
+    // The first image (a video's poster frame) bird already returns, so the editor's quoted card can show it.
+    // Only set when the post has media, so a text-only candidate keeps its exact previous shape.
+    ...firstMedia(r.post),
   };
+}
+
+function firstMedia(post) {
+  const m = Array.isArray(post?.media) ? post.media.find((x) => x && typeof x.url === 'string' && /^https:\/\//.test(x.url)) : null;
+  return m ? { mediaUrl: m.url.slice(0, 500), mediaType: m.type === 'video' || m.type === 'animated_gif' ? 'video' : 'image' } : {};
 }
 
 /** A list candidate = the quote-target candidate + trackId/listId/source; vein is the track id. */

@@ -8,16 +8,19 @@
 // Nothing here opens an overlay. Saving / approving / scheduling all stay inside PostEditor's own calls.
 //
 // Props: postId, row (calendar row if the month is loaded, else null), calendarReady, stage { nav, getIdToken, clientId,
-// clientName, clientHandle, avatarUrl, timeZone }, onRefresh (reload the calendar after a change).
+// clientName, clientHandle, avatarUrl, timeZone }, onRefresh (reload the calendar after a change), dayGroups
+// ([{ date, rows }] as the Day view lists them; feeds the post carousel).
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import LoadingRing from '../content-ui/ui/LoadingRing';
 import PostEditor from '../x-content/PostEditor.jsx';
+import PostCarousel from './PostCarousel.jsx';
+import { pickDayPostIds } from './post-carousel-model.js';
 import CreativePicker from '../x-content/CreativePicker.jsx';
 import { MEDIA_CHANGED_MESSAGE } from '../x-content/post-editor-model.js';
 import { useMarketingContentCall } from '../marketing/useMarketingContentCall.js';
 
-export default function StagePostLevel({ postId, row, calendarReady, stage, onRefresh }) {
+export default function StagePostLevel({ postId, row, calendarReady, stage, onRefresh, dayGroups }) {
   const { nav, getIdToken, clientId, clientName, clientHandle, avatarUrl, timeZone } = stage;
   const { call } = useMarketingContentCall(getIdToken);
 
@@ -137,6 +140,7 @@ export default function StagePostLevel({ postId, row, calendarReady, stage, onRe
 
   return (
     <div id="calendar-stage-post-level" onKeyDown={onKeyDown}>
+      <PostCarousel postId={realId} postIds={pickDayPostIds(dayGroups, stage.nav?.state?.date || null, realId)} nav={nav}>
       <PostEditor
         {...(editorRow ? { row: editorRow } : { postId })}
         clientId={clientId}
@@ -169,6 +173,7 @@ export default function StagePostLevel({ postId, row, calendarReady, stage, onRe
           </div>
         ) : null}
       </PostEditor>
+      </PostCarousel>
     </div>
   );
 }

@@ -431,6 +431,7 @@ function MonthCalendarPanelView({
         calendarReady={!!calendar || !loading}
         stage={stage}
         onRefresh={onRefresh}
+        dayGroups={days.map((d) => ({ date: d.date, rows: rowsFor(d) }))}
       />
     );
   }

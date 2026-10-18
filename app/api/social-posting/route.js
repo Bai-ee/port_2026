@@ -3,6 +3,7 @@ import { createRequire } from 'module';
 import { alertOnHeldPosts } from '../../../features/social-posting/publish-alert.js';
 import {
   approveAndSchedule,
+  trustedSchedulePost,
   approveDraft,
   attachMediaToPost,
   createSocialPost,
@@ -307,6 +308,21 @@ export async function POST(request) {
         planOverride: planOverrideFrom(body, decoded),
       });
       return json({ ok: true, post });
+    }
+
+    // Trusted scheduling (agent, owner opt-in): schedule an OWNER-approved, unchanged post with a cancel window. The
+    // setting is read here from client_configs.agentAutonomy, never taken from the request. twitter-service re-checks the rest.
+    if (action === 'trusted-schedule') {
+      requirePilotOwner(context, decoded);
+      const fbAdmin = require('../../../api/_lib/firebase-admin.cjs');
+      const { normalizeTrustedSchedule } = await import('../../../features/x-strategy/agent/action-runtime.js');
+      const cfg = await fbAdmin.adminDb.collection('client_configs').doc(context.clientId).get();
+      const settings = normalizeTrustedSchedule(cfg.exists ? cfg.data()?.agentAutonomy?.trustedSchedule : null);
+      const post = await trustedSchedulePost(context.clientId, body.postId, {
+        scheduledAt: body.scheduledAt, expectedRevision: body.expectedRevision, settings,
+        by: `agent (${decoded?.email || decoded?.uid || 'owner session'})`,
+      });
+      return json({ ok: true, post, trusted: true, cancel: 'Unschedule it in the dashboard calendar (or ask the agent) before it goes out.' });
     }
 
     // Calendar Reject: draft -> rejected. Never touches scheduled/posted rows.

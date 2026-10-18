@@ -16,6 +16,8 @@ import { buildDayPlan as buildContentDayPlan } from '../../../../features/x-cont
 import { validateInventory } from '../../../../features/x-content-inventory/schema.js';
 import { readInventory, upsertPackage, deletePackage, packageGetterFor } from '../../../../features/x-content-inventory/store.js';
 import { buildClientPackage, applyApproval } from '../../../../features/x-content-inventory/client-capture.js';
+import { quotedUrlOf } from '../../../../features/x-strategy/post-query.js';
+import { parseStatusUrl, findQuotedCandidate, buildQuotedPreview } from '../../../../features/x-quote-targets/quoted-preview.js';
 import { ageHoursOf, DEFAULT_WINDOW_HOURS } from '../../../../features/x-quote-targets/rank.js';
 import { buildPostResults } from '../../../../features/x-content-inventory/results.js';
 import { recentPostsFromQueue } from '../../../../features/x-content-inventory/allocate-slot.js';
@@ -320,6 +322,7 @@ const SUPPORTED_ACTIONS = [
   'content-task-update',
   'content-context',
   'post-status',
+  'quoted-post-preview',
   'post-results',
   'capture-client-story',
   'approve-package',
@@ -504,6 +507,25 @@ async function handlePostStatus(context, body) {
     })) };
   }
   return { ok: true, posts: rows.map(postStatusRow) };
+}
+
+/**
+ * Read-only preview of the tweet a quote post (or a url) quotes, for the post editor. Firestore only: the quoted URL comes
+ * from the saved post (sourceRef / trailing status URL), the text/author from the client's stored quote-target scan.
+ * No X API, no ScrapeCreators. `preview` is null when the post quotes nothing; `found:false` when only the URL is known.
+ */
+async function handleQuotedPostPreview(context, body) {
+  let url = typeof body?.url === 'string' ? body.url.trim() : '';
+  if (body?.postId) {
+    const post = await getSocialPost(context.clientId, String(body.postId).trim());
+    if (!post) throw Object.assign(new Error('Post not found.'), { status: 404 });
+    url = quotedUrlOf(post) || '';
+  }
+  const parsed = parseStatusUrl(url);
+  if (!parsed) return { ok: true, preview: null };
+  const { rawQuoteTargets, listSignals } = await readQuoteState(context.clientId);
+  const qt = mergeListCandidates(rawQuoteTargets, listSignals);
+  return { ok: true, preview: buildQuotedPreview({ url: parsed.url, candidate: findQuotedCandidate(qt?.candidates, parsed.id) }) };
 }
 
 async function readQueueSummary(clientId) {
@@ -1255,6 +1277,7 @@ export async function POST(request) {
       return json({ ok: true, context: summarizeContentContext(await readContentContext(context.clientId)) });
     }
     if (action === 'post-status') return json(await handlePostStatus(context, body));
+    if (action === 'quoted-post-preview') return json(await handleQuotedPostPreview(context, body));
     if (action === 'post-results') return json(await handlePostResults(context));
     if (action === 'month-calendar') {
       return json(await handleMonthCalendar(context, body));

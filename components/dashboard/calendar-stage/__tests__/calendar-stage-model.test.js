@@ -79,3 +79,11 @@ test('levelTitle', () => {
   assert.equal(levelTitle({ level: 'day', date: '2026-10-19' }, opts), 'Mon Oct 19');
   assert.equal(levelTitle({ level: 'post', postId: 'p' }, opts), 'Edit post');
 });
+
+test('openPost with replace (post carousel) keeps the date and lands on the new post; Back still targets the day', () => {
+  const p1 = transition({ level: 'day', date: '2026-10-18' }, { type: 'openPost', postId: 'p1' }).state;
+  const p2 = transition(p1, { type: 'openPost', postId: 'p2', replace: true }).state;
+  assert.deepEqual(p2, { level: 'post', date: '2026-10-18', postId: 'p2' });
+  assert.deepEqual(backTarget(p2), { level: 'day', date: '2026-10-18', postId: null });
+  assert.equal(serializeStageParams('', p2), '?cal=post&d=2026-10-18&p=p2');
+});

@@ -18,8 +18,9 @@
 //     syncUrl         bool (default true). Shallow history: ?cal=month|day|post&d=YYYY-MM-DD&p=<postId>.
 //   />
 //
-//   nav = { state, timeZone, today, openDay(date), openPost(postId), back(), close(),
+//   nav = { state, timeZone, today, openDay(date), openPost(postId, { replace }?), back(), close(),
 //           setLeaveGuard(fn) }
+//   openPost(id, { replace: true }) swaps the current post entry in place (post carousel: Back still returns to the Day level).
 //   setLeaveGuard(fn) is for the post level: fn(action) -> boolean | Promise<boolean>. Return false
 //   to stay (the post level shows its own inline "unsaved edits" prompt; no window.confirm).
 //   It returns an unregister function, so call it from an effect and return that cleanup.
@@ -194,7 +195,7 @@ function StageInner(props) {
       window.history.back();
       return;
     }
-    if (mode === 'back') {
+    if (mode === 'back' || mode === 'replace') {
       h.keys[h.idx] = stateKey(next);
       window.history.replaceState({ calStage: true, idx: h.idx }, '', urlFor(next));
       return;
@@ -234,7 +235,7 @@ function StageInner(props) {
     if (sameState(next, viewRef.current)) return;
     if (!(await askLeave(action.type === 'back' ? 'back' : action.type))) return;
     if (closingRef.current || sameState(next, viewRef.current)) return;
-    commitHistory(next, action.type === 'back' ? 'back' : 'push');
+    commitHistory(next, action.type === 'back' ? 'back' : action.replace ? 'replace' : 'push');
     swapTo(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [askLeave, close, swapTo]);
@@ -243,7 +244,7 @@ function StageInner(props) {
   if (!nav.current) {
     nav.current = {
       openDay: (date) => navigate({ type: 'openDay', date }),
-      openPost: (postId) => navigate({ type: 'openPost', postId }),
+      openPost: (postId, opts) => navigate({ type: 'openPost', postId, replace: !!(opts && opts.replace) }),
       back: () => navigate({ type: 'back' }),
       close: () => close(),
       setLeaveGuard: (fn) => {

@@ -1311,6 +1311,7 @@ export function createStrategyHandlers({
     const next = {
       tier1: given?.tier1 === undefined ? current.tier1 : given.tier1,
       tier3: given?.tier3 === undefined ? current.tier3 : given.tier3,
+      trustedSchedule: given?.trustedSchedule === undefined ? current.trustedSchedule : given.trustedSchedule,
     };
     if (!['auto', 'confirm'].includes(next.tier1)) return fail(400, "tier1 must be 'auto' or 'confirm'.");
     if (!['confirm', 'typed'].includes(next.tier3)) return fail(400, "tier3 must be 'confirm' or 'typed'. X publishing is always typed.");

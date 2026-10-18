@@ -44,7 +44,7 @@ import { QUEUE_ACTIONS } from './catalog/queue.js';
 import { CONTENT_ACTIONS } from './catalog/content.js';
 import { STRATEGY_ACTIONS } from './catalog/strategy.js';
 import {
-  BRAIN_ACTIONS, SIGNALS_ACTIONS, DIGEST_ACTIONS, REFRESH_ACTIONS, XMONITOR_ACTIONS, MEDIA_ACTIONS, OTHER_ACTIONS,
+  BRAIN_ACTIONS, SIGNALS_ACTIONS, DIGEST_ACTIONS, REFRESH_ACTIONS, REFRESH_DAILY_ACTIONS, XMONITOR_ACTIONS, MEDIA_ACTIONS, OTHER_ACTIONS,
 } from './catalog/ops.js';
 
 export const GROUPS = Object.freeze(['queue', 'calendar', 'content', 'buckets', 'strategy', 'brain', 'signals', 'digest', 'refresh', 'xmonitor', 'media', 'nas', 'clients', 'other']);
@@ -63,6 +63,7 @@ export const ROUTE_MODULES = Object.freeze({
   'marketing-brief-config': () => import('../../../app/api/dashboard/marketing-brief/config/route.js'),
   'marketing-brief-run': () => import('../../../app/api/dashboard/marketing-brief/run/route.js'),
   'digest-config': () => import('../../../app/api/admin/digest-config/route.js'),
+  'refresh-daily': () => import('../../../app/api/admin/refresh-daily/route.js'),
   'email-digest': () => import('../../../app/api/admin/email-digest/route.js'),
   'cost-report': () => import('../../../app/api/admin/cost-report/route.js'),
   'pre-digest-refresh': () => import('../../../app/api/worker/pre-digest-refresh/route.js'),
@@ -89,6 +90,7 @@ export const ROUTE_FILES = Object.freeze({
   'marketing-brief-config': 'app/api/dashboard/marketing-brief/config/route.js',
   'marketing-brief-run': 'app/api/dashboard/marketing-brief/run/route.js',
   'digest-config': 'app/api/admin/digest-config/route.js',
+  'refresh-daily': 'app/api/admin/refresh-daily/route.js',
   'email-digest': 'app/api/admin/email-digest/route.js',
   'cost-report': 'app/api/admin/cost-report/route.js',
   'pre-digest-refresh': 'app/api/worker/pre-digest-refresh/route.js',
@@ -123,6 +125,7 @@ export const ROUTE_AUTH = Object.freeze({
   'marketing-brief-config': { bearer: true, admin: false, pilotOwner: false, impersonation: true, clientFrom: 'context' },
   'marketing-brief-run': { bearer: true, admin: false, pilotOwner: false, impersonation: true, clientFrom: 'context', note: 'maxDuration 300 s; runs the whole pipeline in the request.' },
   'digest-config': { bearer: true, admin: true, pilotOwner: false, impersonation: false, clientFrom: 'explicit' },
+  'refresh-daily': { bearer: true, admin: true, pilotOwner: false, impersonation: false, clientFrom: 'explicit' },
   'email-digest': { bearer: true, admin: true, pilotOwner: false, impersonation: false, clientFrom: 'explicit', note: 'preview/send-now forward to the legacy daily-digest route through an internal fetch (needs a reachable origin).' },
   'cost-report': { bearer: true, admin: true, pilotOwner: false, impersonation: false, clientFrom: 'explicit' },
   'pre-digest-refresh': { bearer: true, admin: true, pilotOwner: false, impersonation: false, clientFrom: 'explicit', note: 'accepts admin bearer OR CRON_SECRET; the agent uses the admin bearer. May run up to ~270 s.' },
@@ -139,7 +142,7 @@ export const ROUTE_AUTH = Object.freeze({
 
 const ALL = [
   ...QUEUE_ACTIONS, ...CONTENT_ACTIONS, ...STRATEGY_ACTIONS,
-  ...BRAIN_ACTIONS, ...SIGNALS_ACTIONS, ...DIGEST_ACTIONS, ...REFRESH_ACTIONS, ...XMONITOR_ACTIONS, ...MEDIA_ACTIONS, ...OTHER_ACTIONS,
+  ...BRAIN_ACTIONS, ...SIGNALS_ACTIONS, ...DIGEST_ACTIONS, ...REFRESH_ACTIONS, ...REFRESH_DAILY_ACTIONS, ...XMONITOR_ACTIONS, ...MEDIA_ACTIONS, ...OTHER_ACTIONS,
 ];
 
 function deepFreeze(o) {

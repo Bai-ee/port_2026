@@ -62,7 +62,20 @@ test('gates: tier resolution, X floor can never drop below typed', () => {
   assert.equal(resolveGate(e('m.sync'), {}), 'confirm');
   assert.equal(resolveGate(e('m.sync'), { tier3: 'typed' }), 'typed');
   assert.equal(resolveGate(e('q.schedule'), { tier3: 'confirm' }), 'typed');
-  assert.deepEqual(normalizeAutonomy({ tier1: 'x', tier2: 'auto', tier3: 'auto' }), { tier1: 'auto', tier2: 'confirm', tier3: 'confirm' });
+  assert.deepEqual(normalizeAutonomy({ tier1: 'x', tier2: 'auto', tier3: 'auto' }), { tier1: 'auto', tier2: 'confirm', tier3: 'confirm' , trustedSchedule: { enabled: false, minLeadMinutes: 10, dailyCap: 3 } });
+});
+
+test('trusted scheduling: the only X exception, off by default, needs the explicit marker and stays within the daily cap', () => {
+  const trusted = { id: 'q.trusted', tier: 3, external: 'x', trusted: 'schedule-approved' };
+  const plainX = { id: 'q.x', tier: 3, external: 'x' };
+  assert.equal(resolveGate(trusted, {}), 'typed', 'off by default');
+  const on = { trustedSchedule: { enabled: true, dailyCap: 2 } };
+  assert.equal(resolveGate(trusted, on), 'run');
+  assert.equal(resolveGate(trusted, on, { itemCount: 3 }), 'typed', 'a batch over the daily cap asks');
+  assert.equal(resolveGate(plainX, on), 'typed', 'every other X write keeps the typed floor');
+  assert.equal(resolveGate({ ...trusted, trusted: 'something-else' }, on), 'typed');
+  const n = normalizeAutonomy({ trustedSchedule: { enabled: true, minLeadMinutes: 1, dailyCap: 99 } }).trustedSchedule;
+  assert.deepEqual(n, { enabled: true, minLeadMinutes: 10, dailyCap: 10 }, 'lead never under 10 min, cap never over 10');
 });
 
 test('args: schema checks, reserved keys refused', () => {
@@ -213,7 +226,7 @@ test('autonomy tier3=typed makes non-X spend typed; X stays typed with tier3=con
   const loose = setup({ autonomy: { tier3: 'confirm' } });
   assert.equal((await loose.rt.run(CTX, { actionId: 'q.schedule', args: { postId: 'p' } })).proposal.payload.typed, true);
   const saved = await loose.rt.saveAutonomy(CLIENT, { tier1: 'confirm', tier3: 'bogus' });
-  assert.deepEqual(saved, { tier1: 'confirm', tier2: 'confirm', tier3: 'confirm' });
+  assert.deepEqual(saved, { tier1: 'confirm', tier2: 'confirm', tier3: 'confirm' , trustedSchedule: { enabled: false, minLeadMinutes: 10, dailyCap: 3 } });
 });
 
 test('bulk: items => one card with count; >50 refused; tier-1 batch runs as ONE audit row with one undo', async () => {
@@ -479,9 +492,9 @@ function handlers(extra = {}) {
 
 test('route: autonomy get/save (X floor stays), log, undo, 503 without a runtime', async () => {
   const s = handlers();
-  assert.deepEqual((await s.call('strategy-autonomy-get', {})).autonomy, { tier1: 'auto', tier2: 'confirm', tier3: 'confirm' });
+  assert.deepEqual((await s.call('strategy-autonomy-get', {})).autonomy, { tier1: 'auto', tier2: 'confirm', tier3: 'confirm' , trustedSchedule: { enabled: false, minLeadMinutes: 10, dailyCap: 3 } });
   const saved = await s.call('strategy-autonomy-save', { autonomy: { tier1: 'confirm', tier2: 'auto', tier3: 'typed' } });
-  assert.deepEqual(saved.autonomy, { tier1: 'confirm', tier2: 'confirm', tier3: 'typed' });
+  assert.deepEqual(saved.autonomy, { tier1: 'confirm', tier2: 'confirm', tier3: 'typed' , trustedSchedule: { enabled: false, minLeadMinutes: 10, dailyCap: 3 } });
   assert.equal((await s.call('strategy-autonomy-save', { tier3: 'auto' })).status, 400);
   await s.stores.audit.append(CLIENT, 'u1', { at: '2026-10-11T00:00:00Z', by: 'o', actionId: 'q.update', tier: 1, status: 'ok', undoable: false, items: [{}] });
   const log = await s.call('strategy-action-log', {});

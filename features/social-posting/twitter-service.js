@@ -1432,6 +1432,39 @@ export async function approveAndSchedule(clientId, postId, { scheduledAt, conten
   return commitPostTransition(clientId, snapshot, updated, { planOverride });
 }
 
+/**
+ * Trusted scheduling (agent, owner opt-in): schedule a post the OWNER already approved, unchanged since that approval.
+ * Never approves anything and never posts now. Refuses unless ALL hold:
+ *   - settings.enabled (client_configs.agentAutonomy.trustedSchedule, read by the caller) is true
+ *   - lifecycle v2 row, status 'approved', not scheduled, reviewed by a person, approvedHash === contentHash (unchanged)
+ *   - scheduledAt >= now + settings.minLeadMinutes (the owner's window to cancel)
+ *   - fewer than settings.dailyCap trusted schedules made for this client today (UTC day)
+ * Slot / plan / collision rules apply exactly as for any schedule (prepareUpdate + commitPostTransition).
+ */
+export async function trustedSchedulePost(clientId, postId, { scheduledAt, expectedRevision = null, settings = {}, by = 'agent', now = Date.now() } = {}) {
+  const refuse = (message, code) => { throw Object.assign(new Error(message), { status: 409, code }); };
+  if (settings?.enabled !== true) refuse('Trusted scheduling is off for this client. Ask the owner to turn it on in Agent permissions, or send a confirm card.', 'trusted-off');
+  const when = scheduledAt ? new Date(scheduledAt) : null;
+  if (!when || Number.isNaN(when.getTime())) throw Object.assign(new Error('A valid scheduled time is required.'), { status: 400 });
+  const lead = Math.max(10, Number(settings.minLeadMinutes) || 10);
+  if (when.getTime() < now + lead * 60_000) refuse(`Pick a time at least ${lead} minutes ahead (the owner's window to cancel).`, 'trusted-lead');
+  const post = await getSocialPost(clientId, postId);
+  if (!post) throw Object.assign(new Error('Post not found.'), { status: 404 });
+  if (expectedRevision != null && (post.revision || 0) !== Number(expectedRevision)) throw conflict();
+  if (!isV2(post)) refuse('Only lifecycle-v2 posts can be trusted-scheduled (their approval is bound to the copy).', 'trusted-legacy');
+  if (post.status !== 'approved' || post.scheduledAt) refuse(`Only an approved, unscheduled post can be trusted-scheduled (this one is ${post.status}${post.scheduledAt ? ', scheduled' : ''}).`, 'trusted-not-approved');
+  if (!post.reviewedAt || !post.reviewedBy || /agent|mcp/i.test(String(post.reviewedBy))) refuse('This post was not approved by the owner.', 'trusted-not-owner');
+  if (!post.approvedHash || post.approvedHash !== contentHash(post)) refuse('The post changed after it was approved; the owner has to approve it again.', 'trusted-stale');
+  const cap = Math.max(1, Number(settings.dailyCap) || 3);
+  const day = new Date(now).toISOString().slice(0, 10);
+  const today = (await readSocialQueue(clientId)).filter((p) => String(p?.trustedSchedule?.at || '').slice(0, 10) === day).length;
+  if (today >= cap) refuse(`The daily limit of ${cap} agent-scheduled post(s) is reached.`, 'trusted-cap');
+  const { updated } = await prepareUpdate(clientId, post, { content: post.content, scheduledAt: when.toISOString() });
+  if (updated.status !== 'scheduled' || updated.approvedHash !== post.approvedHash) refuse('Scheduling would have changed the approved post; nothing was scheduled.', 'trusted-mismatch');
+  const at = new Date(now).toISOString();
+  return commitPostTransition(clientId, post, { ...updated, trustedSchedule: { at, by: String(by || 'agent').slice(0, 200), leadMinutes: lead } });
+}
+
 export async function schedulePost(clientId, payload, opts = {}) {
   assertNoMemoryPlaceholder(normalizePostText(payload.content));
   assertNoMemoryPlaceholder(payload.selfReply?.text);

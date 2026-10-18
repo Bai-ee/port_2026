@@ -61,7 +61,7 @@ export async function readCalendarQuoteTargets(db, clientId, deps = {}) {
   const qt = mergeListCandidates(rawQuoteTargets, listSignals);
   const dismissed = new Set(Array.isArray(qt?.dismissed) ? qt.dismissed : []);
   return (Array.isArray(qt?.candidates) ? qt.candidates : []).filter((c) => c && !dismissed.has(c.id))
-    .map((c) => ({ id: c.id || c.url, url: c.url, text: c.text, handle: c.author?.username || (typeof c.author === 'string' ? c.author : null), createdAt: c.createdAt, trackId: c.trackId }));
+    .map((c) => ({ id: c.id || c.url, url: c.url, text: c.text, handle: c.author?.username || (typeof c.author === 'string' ? c.author : null), createdAt: c.createdAt, trackId: c.trackId, authorName: c.authorName ?? null, hasMedia: c.hasMedia === true, mediaUrl: c.mediaUrl ?? null }));
 }
 
 /** Months (YYYY-MM) touched by a closed date range. */

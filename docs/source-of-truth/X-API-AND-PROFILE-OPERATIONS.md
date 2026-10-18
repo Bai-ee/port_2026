@@ -40,6 +40,8 @@ Reading this doc is not authorization. A task that merely *mentions* X is not au
 
 ---
 
+**Owner-opt-in exception (2026-10-18): trusted scheduling.** With Agent permissions › "Let the agent schedule posts I've approved" on (`client_configs.agentAutonomy.trustedSchedule`, default off), the dashboard agent / MCP chat may schedule — never post now, never approve — a lifecycle-v2 post the owner approved and that is unchanged since (approvedHash), at least the lead time ahead (≥10 min; cancel by unscheduling), within a daily cap. The write itself still happens later through the normal publisher. Code: social-posting `trusted-schedule` → `trustedSchedulePost`; registry `queue.post.schedule-approved`. Every other X write keeps the typed confirm.
+
 ## 1. Account & credentials
 (The values below are the home/global credential only; other clients connect their own via the Social Accounts card.)
 

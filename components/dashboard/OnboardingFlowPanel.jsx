@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowUpRight, CalendarDays, Check, Compass, FolderOpen } from 'lucide-react';
 import { REFRESH_GROUPS, readLastRefreshed, groupFreshness } from './marketing/refresh-groups.js';
 import { useMarketingContentCall } from './marketing/useMarketingContentCall';
+import LoadingRing from './content-ui/ui/LoadingRing';
 
 // STAND UP bucket (admin; file/ids keep the original onboarding-flow name): the three-step daily flow — Content → Strategy → Calendar — shown all at once.
 // Each step opens the existing card modals through onOpenCard. Status lines read what the last brief/refresh saved:
@@ -128,6 +129,7 @@ export default function OnboardingFlowPanel({ onOpenCard, onOpenTodayDay, availa
   const [done, setDone] = useState([]);
   const [serverFreshness, setServerFreshness] = useState(null);
   const [calendar, setCalendar] = useState(null);
+  const [calendarFailed, setCalendarFailed] = useState(false); // a failed read shows "—" stats instead of a ring forever
   const { call } = useMarketingContentCall(getIdToken);
 
   useEffect(() => { setDone(readDone()); }, []);
@@ -137,7 +139,9 @@ export default function OnboardingFlowPanel({ onOpenCard, onOpenTodayDay, availa
     if (!getIdToken || !clientId) return undefined;
     let live = true;
     call('strategy-freshness', { clientId }).then((r) => { if (live) setServerFreshness(r?.groups || null); }).catch(() => {});
-    call('month-calendar', { month: monthKey() }).then((r) => { if (live) setCalendar(r?.calendar || null); }).catch(() => {});
+    call('month-calendar', { month: monthKey() })
+      .then((r) => { if (!live) return; if (r?.calendar) setCalendar(r.calendar); else setCalendarFailed(true); })
+      .catch(() => { if (live) setCalendarFailed(true); });
     return () => { live = false; };
   }, [getIdToken, clientId, call]);
 
@@ -223,20 +227,21 @@ export default function OnboardingFlowPanel({ onOpenCard, onOpenTodayDay, availa
                           <span className="of-insight-text">{st.quote.text}</span>
                         </blockquote>
                       ) : null}
-                      {st.stats.length ? <div className="of-stat-row">
-                        {st.stats.map((x) => (
-                          <div key={x.label} className="of-stat">
+                      {/* Today's Agenda waits on the calendar: the standard loading ring, then stats + rows fade up in sequence. */}
+                      {st.agenda && !calendar && !calendarFailed ? <LoadingRing id="onboarding-flow-agenda-loading" label="Loading today's agenda" size={28} minHeight={96} /> : null}
+                      {st.stats.length && !(st.agenda && !calendar && !calendarFailed) ? <div className={`of-stat-row${st.agenda ? ' of-reveal' : ''}`}>
+                        {st.stats.map((x, i) => (
+                          <div key={x.label} className="of-stat" style={st.agenda ? { '--of-i': i } : undefined}>
                             <span className="of-stat-value">{x.value}</span>
                             <span className="of-caps">{x.label}{x.hint ? ` · ${x.hint}` : ''}</span>
                           </div>
                         ))}
                       </div> : null}
-                      {st.agenda ? (
-                        <ul id="onboarding-flow-agenda-list" className="of-agenda" aria-label="Today by category">
-                          {!calendar ? <li className="of-agenda-empty of-caps">[LOADING…]</li> : null}
-                          {calendar && !agenda?.rows.length ? <li className="of-agenda-empty of-caps">[NOTHING ON THE CALENDAR TODAY]</li> : null}
-                          {(agenda?.rows || []).map((g) => (
-                            <li key={g.key} id={`onboarding-flow-agenda-${g.key.replace(/[^a-z0-9-]/gi, '-')}`} className="of-agenda-row">
+                      {st.agenda && calendar ? (
+                        <ul id="onboarding-flow-agenda-list" className="of-agenda of-reveal" aria-label="Today by category">
+                          {!agenda?.rows.length ? <li className="of-agenda-empty of-caps" style={{ '--of-i': 5 }}>[NOTHING ON THE CALENDAR TODAY]</li> : null}
+                          {(agenda?.rows || []).map((g, i) => (
+                            <li key={g.key} id={`onboarding-flow-agenda-${g.key.replace(/[^a-z0-9-]/gi, '-')}`} className="of-agenda-row" style={{ '--of-i': 5 + i }}>
                               <span className="of-agenda-dot" aria-hidden="true" style={g.color ? { background: g.color } : undefined} />
                               <span className="of-agenda-label">{g.label}</span>
                               <span className="of-agenda-meta of-caps">
@@ -246,7 +251,7 @@ export default function OnboardingFlowPanel({ onOpenCard, onOpenTodayDay, availa
                             </li>
                           ))}
                           {agenda?.openTasks ? (
-                            <li id="onboarding-flow-agenda-tasks" className="of-agenda-row">
+                            <li id="onboarding-flow-agenda-tasks" className="of-agenda-row" style={{ '--of-i': 5 + (agenda?.rows?.length || 0) }}>
                               <span className="of-agenda-dot" aria-hidden="true" />
                               <span className="of-agenda-label">Media tasks</span>
                               <span className="of-agenda-meta of-caps">OPEN</span>
@@ -315,6 +320,10 @@ export default function OnboardingFlowPanel({ onOpenCard, onOpenTodayDay, availa
         #onboarding-flow-shell .of-agenda-meta { text-align: right; }
         #onboarding-flow-shell .of-agenda-count { font-family: var(--of-mono); font-size: 15px; text-align: right; color: var(--t-text-strong); }
         #onboarding-flow-shell .of-agenda-empty { padding: 12px 0; }
+        /* Same feel as the dashboard reveal (opacity, power2.out ~0.45 s), staggered per item via --of-i. */
+        #onboarding-flow-shell .of-reveal > * { animation: of-reveal-in 450ms cubic-bezier(0.33, 1, 0.68, 1) both; animation-delay: calc(var(--of-i, 0) * 60ms); }
+        @keyframes of-reveal-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+        @media (prefers-reduced-motion: reduce) { #onboarding-flow-shell .of-reveal > * { animation: none; } }
         #onboarding-flow-shell button:focus-visible { outline: 2px solid var(--t-focus); outline-offset: 2px; }
 
         @media (max-width: 620px) {

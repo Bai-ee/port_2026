@@ -110,7 +110,7 @@ export default function CalendarStageStyles() {
       }
       #calendar-stage-root #calendar-stage-level-month > * { max-width: 1100px; }
       #calendar-stage-root #calendar-stage-level-day > * { max-width: 820px; }
-      #calendar-stage-root #calendar-stage-level-post > * { max-width: 640px; }
+      #calendar-stage-root #calendar-stage-level-post > * { max-width: 752px; } /* 640px card + side arrows */
       #calendar-stage-root .calendar-stage-level[data-phase='out'] {
         opacity: 0;
         transition: opacity 180ms ease-out;
