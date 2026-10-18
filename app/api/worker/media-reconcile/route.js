@@ -72,3 +72,8 @@ export async function POST(request) {
 
   return json({ ok: true, ...summary });
 }
+
+// Vercel cron invokes with GET (vercel.json); without this the daily backstop answered 405 and never ran.
+export async function GET(request) {
+  return POST(request);
+}

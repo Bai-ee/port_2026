@@ -1433,7 +1433,7 @@ export function createStrategyHandlers({
     return { ok: true, threadId: tid, proposals: out, ...(dropped.length ? { dropped } : {}) };
   }
 
-  return { handle, actions: STRATEGY_ROUTE_ACTIONS, toolDepsFor, createProposalInThread, syncTracks, dailyFillDeps };
+  return { handle, actions: STRATEGY_ROUTE_ACTIONS, toolDepsFor, createProposalInThread, syncTracks, dailyFill, dailyFillDeps };
 }
 
 /**

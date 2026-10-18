@@ -97,7 +97,7 @@ export async function findHiresMedia(deps, { postId, packageId, limit = HIRES_CA
 
 /**
  * Tier 1. deps: { getPost(postId), getPackage(id), readPackages(), pendingStage?(id)->{state,commandId}|null, nasStage(id)->{commandId},
- *   nasStatus?(), pickMedia(pkg)->{mediaUrl,mediaType,mediaContentType,mediaStoragePath}|null, applyPostMedia(postId,patch,{clientId})->bool,
+ *   nasStatus?(), pickMedia(pkg)->{mediaUrl,mediaType,mediaContentType,mediaStoragePath}|null, applyPostMedia(postId,patch,{clientId})->false|{approvalVoided},
  *   upsertPackage(pkg), now() }.
  * Staged -> { ok, status:'done', ... }. Not staged -> { ok, status:'staging', commandId, ... }. Throws {status} on a bad request.
  */
@@ -169,6 +169,8 @@ export async function useHiresMedia(deps, { clientId, postId, candidateId, packa
     ok: true, status: 'done', postId, candidateId, packageId: target.id, width: offered.width, height: offered.height,
     mediaType: media.mediaType, mediaStoragePath: media.mediaStoragePath, downloadUrl: media.mediaUrl,
     replacedMedia: prev, linkedToItem: linked, ...(linkWarning ? { linkWarning } : {}),
+    // The post was approved/scheduled: the new original voided that (it is a draft again and must be re-approved).
+    ...(ok?.approvalVoided ? { approvalVoided: true, note: 'The post was approved or scheduled; the new media cleared that. Approve and schedule it again.' } : {}),
   };
 }
 
@@ -194,6 +196,7 @@ export async function attachStagedHires(deps, { candidateId }) {
   const media = await deps.pickMedia(cand);
   const attached = [];
   const skipped = [];
+  const reapprove = [];
   for (const w of waiting) {
     try {
       if (!media) { skipped.push({ postId: w.postId, reason: 'no staged media' }); continue; }
@@ -201,6 +204,7 @@ export async function attachStagedHires(deps, { candidateId }) {
       if (!post || (w.clientId && post.clientId !== w.clientId) || !HIRES_EDITABLE_STATUSES.includes(post.status)) { skipped.push({ postId: w.postId, reason: 'post not editable' }); continue; }
       const ok = await deps.applyPostMedia(w.postId, { ...media, mediaFromHires: { candidateId, packageId: w.targetId, at: new Date(deps.now()).toISOString(), auto: true } }, { clientId: w.clientId });
       if (!ok) { skipped.push({ postId: w.postId, reason: 'post changed' }); continue; }
+      if (ok?.approvalVoided) reapprove.push(w.postId);
       const target = w.targetId && w.targetId !== candidateId ? await deps.getPackage(w.targetId) : null; // own original: nothing to link
       if (target) { const link = linkMediaPatch(target, cand, { now: deps.now() }); if (!link.error) await deps.upsertPackage({ ...target, ...link.patch }); }
       attached.push(w.postId);
@@ -211,7 +215,7 @@ export async function attachStagedHires(deps, { candidateId }) {
   }
   const latest = (await deps.getPackage(candidateId)) || cand;
   await deps.upsertPackage({ ...latest, hiresPending: [] });
-  return { attached, skipped };
+  return { attached, skipped, ...(reapprove.length ? { reapprove } : {}) };
 }
 
 export { isThumbnailPath };

@@ -288,6 +288,11 @@ const setPath = (obj, dotted, value) => {
  * @param {{audit:object, autonomy:object, docs:object, invoke?:Function, registry?:object, clock?:()=>number, idGen?:()=>string}} deps
  *   audit {append,get,update,recent}  autonomy {get,save}  docs {get(path),put(path,data),remove(path)}
  */
+// social_posts states that publish (or are mid-publish) without another owner step.
+const ARMED_POST_STATUSES = new Set(['scheduled', 'queued', 'manual', 'posting', 'awaiting_approval']);
+const isArmedPost = (path, before) => String(path).startsWith('social_posts/') && !!before
+  && (ARMED_POST_STATUSES.has(before.status) || !!before.scheduledAt);
+
 export function createActionRuntime({ audit, autonomy, docs, invoke, registry, clock = Date.now, idGen = () => randomUUID().replace(/-/g, '').slice(0, 20) } = {}) {
   const reg = { getAction: defaultGetAction, findActions: defaultFindActions, ...(registry || {}) };
   const call = invoke || ((entry, args, ctx) => invokeAction(entry, args, ctx, { routeModules: reg.ROUTE_MODULES || DEFAULT_ROUTE_MODULES }));
@@ -495,6 +500,11 @@ export function createActionRuntime({ audit, autonomy, docs, invoke, registry, c
 
       const snaps = done.flatMap((i) => i.snapshots || []).reverse();
       if (!snaps.length) return { ok: false, error: 'No snapshot was kept for this action.' };
+      // A raw restore never touches a publishing post: restoring a scheduled snapshot would skip the owner's typed
+      // schedule confirm and the slot ledger/collision checks (commitPostTransition); restoring over a scheduled row
+      // (undo of approve-and-schedule) would leave its ledger slot reserved. Either way: use unschedule / schedule.
+      const armed = snaps.find((s) => !s.field && (isArmedPost(s.path, s.before) || isArmedPost(s.path, s.after)));
+      if (armed) return { ok: false, error: `Not undone: ${armed.path} is or was on the publishing schedule, so a raw restore would bypass the schedule checks. Unschedule or schedule it instead (scheduling asks for your confirmation).` };
       for (const s of snaps) { // verify EVERY doc first: all or nothing
         const current = await readRef(s);
         if (!sameState(current, s.after)) return { ok: false, error: `Not undone: ${s.path}${s.field ? ` (${s.field})` : ''} changed since the action ran, so restoring it would overwrite newer edits.` };

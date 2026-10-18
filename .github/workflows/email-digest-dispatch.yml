@@ -1,5 +1,6 @@
 name: Email Digest Dispatch
 
+# SCHEDULE REMOVED (see the note above `on:`). Historical header follows.
 # NOT ENABLED — this file only takes effect once committed to the DEFAULT
 # branch and GitHub Actions picks up the schedule from there. It currently
 # lives on fix/email-digest-phase-0-1, a feature branch, so it is inert by
@@ -32,9 +33,10 @@ name: Email Digest Dispatch
 # until this dispatcher canaries clean — re-pointing away from it is a
 # separate, explicitly gated step, not part of enabling this file.
 
+# DISABLED 2026-10-18: GitHub ran this every 2-5 h (not every 30 min), so it could not honour send times, and it
+# ran full refreshes that hit the 300 s limit next to the Vercel crons. The Vercel crons (phased refresh +
+# 13:00 send, gated by each client's Refresh "Daily" profile) are the only scheduler. Manual dispatch stays.
 on:
-  schedule:
-    - cron: '*/30 * * * *'
   workflow_dispatch:
 
 jobs:

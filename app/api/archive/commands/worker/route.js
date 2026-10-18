@@ -3,8 +3,13 @@ import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
 const fb = require('../../../../../api/_lib/firebase-admin.cjs');
-const { handleCommandComplete } = require('../../../../../api/_lib/archive-permanent-archive.cjs');
+const { handleCommandComplete, readPermanenceSettings } = require('../../../../../api/_lib/archive-permanent-archive.cjs');
 const token = process.env.HITLOOP_ARCHIVE_WORKER_TOKEN;
+
+// Paid Arweave writes. The kill switch (archive_settings/permanence.autoUpload) gates them at enqueue AND here at
+// claim, so uploads queued while it was on are held (left QUEUED, not cancelled) once it is switched off.
+const ARWEAVE_UPLOAD_TYPES = new Set(['UPLOAD_ASSET_ARWEAVE', 'UPLOAD_JSON']);
+const TERMINAL_STATES = new Set(['COMPLETE', 'FAILED']);
 
 function authorized(request) { return token && request.headers.get('authorization') === `Bearer ${token}`; }
 
@@ -37,6 +42,9 @@ export async function GET(request) {
   let commands = snap.docs.map(d => ({ id:d.id, ...d.data(), createdAt:d.data().createdAt?.toDate?.().toISOString?.() || null }));
   if (types) commands = commands.filter(c => types.includes(c.type));
   if (excludeTypes) commands = commands.filter(c => !excludeTypes.includes(c.type));
+  if (commands.some(c => ARWEAVE_UPLOAD_TYPES.has(c.type)) && !(await readPermanenceSettings()).autoUpload) {
+    commands = commands.filter(c => !ARWEAVE_UPLOAD_TYPES.has(c.type));
+  }
   commands = commands.slice(0, 10);
   return NextResponse.json({ commands }, { headers:{'cache-control':'no-store'} });
 }
@@ -49,11 +57,20 @@ export async function PATCH(request) {
 
   // Read the command before overwriting its state — handleCommandComplete
   // needs its type/workerId/refs, which the incoming PATCH body doesn't carry.
+  // Transactional and terminal-idempotent: a COMPLETE/FAILED command never changes again, so a retried COMPLETE
+  // PATCH cannot re-run the completion handlers (duplicate paid archive-record version, repeated high-res attach).
   const cmdRef = fb.adminDb.collection('archive_commands').doc(commandId);
-  const cmdSnap = await cmdRef.get();
-  const cmdData = cmdSnap.exists ? cmdSnap.data() : null;
-
-  await cmdRef.set({ state, jobId, error, result, updatedAt: fb.FieldValue.serverTimestamp() }, { merge: true });
+  const tx = await fb.adminDb.runTransaction(async (t) => {
+    const snap = await t.get(cmdRef);
+    if (!snap.exists) return { missing: true };
+    const data = snap.data();
+    if (TERMINAL_STATES.has(data.state)) return { data, unchanged: true };
+    t.set(cmdRef, { state, jobId, error, result, updatedAt: fb.FieldValue.serverTimestamp() }, { merge: true });
+    return { data };
+  });
+  if (tx.missing) return NextResponse.json({ error: 'Unknown command' }, { status: 404 });
+  if (tx.unchanged) return NextResponse.json({ ok: true, unchanged: true, state: tx.data.state });
+  const cmdData = tx.data;
 
   // UPLOAD_ASSET_ARWEAVE COMPLETE -> archive_uploads write + versions the
   // asset's archive-record JSON. UPLOAD_JSON COMPLETE -> upserts
@@ -76,7 +93,7 @@ export async function PATCH(request) {
       ]);
       await applyStageComplete({ getPackage, upsertPackage: (pkg) => upsertPackage(pkg, { returnPackages: false }), now: () => Date.now() }, { command: cmdData, result });
       // Posts that asked for this original (chat / post sheet "use high-res") get it now, without asking again.
-      const [{ attachStagedHires, HIRES_EDITABLE_STATUSES }, { pickMedia }, { tokenUrlFor }, { getSocialPost }, telegramStore, { enqueueCreativeFollowup }] = await Promise.all([
+      const [{ attachStagedHires, HIRES_EDITABLE_STATUSES }, { pickMedia }, { tokenUrlFor }, { getSocialPost, swapPostMedia }, telegramStore, { enqueueCreativeFollowup }] = await Promise.all([
         import('../../../../../features/x-content-inventory/hires-media.js'),
         import('../../../../../features/x-content-inventory/item-actions.js'),
         import('../../../../../features/x-content-inventory/thumbs.js'),
@@ -90,14 +107,8 @@ export async function PATCH(request) {
         getPost: (clientId, postId) => getSocialPost(clientId, postId),
         // Staged NAS files live in the HITLOOP bucket: a token URL is all that is needed (publish re-signs anyway).
         pickMedia: (pkg) => pickMedia(pkg, { hitloopUrl: (p) => tokenUrlFor(fb.adminStorage.bucket(), p), signEvLong: async () => null }),
-        applyPostMedia: (postId, media, { clientId } = {}) => fb.adminDb.runTransaction(async (tx) => {
-          const ref = fb.adminDb.collection('social_posts').doc(postId);
-          const snap = await tx.get(ref);
-          const cur = snap.exists ? snap.data() : null;
-          if (!cur || (clientId && cur.clientId !== clientId) || !HIRES_EDITABLE_STATUSES.includes(cur.status)) return false;
-          tx.set(ref, { ...media, revision: (Number(cur.revision) || 0) + 1, updatedAt: new Date().toISOString() }, { merge: true });
-          return true;
-        }),
+        // Lifecycle swap: an approved/scheduled v2 row gets its approval + schedule voided (re-approve to publish).
+        applyPostMedia: (postId, media, { clientId } = {}) => swapPostMedia(clientId, postId, media, { statuses: HIRES_EDITABLE_STATUSES }),
         now: () => Date.now(),
         // A Telegram "Copy + high-res" tap is waiting on this original: queue the follow-up send (binding re-checked at send time).
         onAttached: (w, { candidateId }) => enqueueCreativeFollowup({ db: fb.adminDb, store: telegramStore, now: Date.now() }, w, { candidateId }),

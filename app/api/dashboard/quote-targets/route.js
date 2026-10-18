@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 import { randomUUID } from 'crypto';
-import { createSocialPost, readSocialQueue, getSocialPost, createDraftPostOnce, ensureDraftPost, findOpenPostForPackage, updateSocialPost, runPostingAgents, approveDraft, unapproveDraft } from '../../../../features/social-posting/twitter-service.js';
+import { createSocialPost, readSocialQueue, getSocialPost, createDraftPostOnce, ensureDraftPost, findOpenPostForPackage, updateSocialPost, runPostingAgents, approveDraft, unapproveDraft, swapPostMedia } from '../../../../features/social-posting/twitter-service.js';
 import { buildDayPlan, mergeListCandidates } from '../../../../features/x-quote-targets/day-plan.js';
 // Static import so Next bundles the calendar — docs/audits/ is NOT in
 // .vercelignore, but a runtime fs read of a repo path is fragile on serverless.
@@ -855,14 +855,8 @@ async function handleHiresMediaUse(context, body, decoded) {
     nasStage: (id) => handleNasAction(nasDeps(clientId), 'nas-stage', { id }, decoded),
     nasStatus: () => handleNasAction(nasDeps(clientId), 'nas-status', {}),
     pickMedia: (pkg) => pickMedia(pkg, mediaSigners()),
-    applyPostMedia: (postId, media) => fb.adminDb.runTransaction(async (tx) => {
-      const ref = fb.adminDb.collection('social_posts').doc(postId);
-      const snap = await tx.get(ref);
-      const cur = snap.exists ? snap.data() : null;
-      if (!cur || cur.clientId !== clientId || !HIRES_EDITABLE_STATUSES.includes(cur.status)) return false;
-      tx.set(ref, { ...media, revision: (Number(cur.revision) || 0) + 1, updatedAt: new Date().toISOString() }, { merge: true });
-      return true;
-    }),
+    // Lifecycle swap: on an approved/scheduled v2 row a new original voids approval + schedule (re-approve to publish).
+    applyPostMedia: (postId, media) => swapPostMedia(clientId, postId, media, { statuses: HIRES_EDITABLE_STATUSES }),
     upsertPackage: upsertFor(clientId),
     now: () => Date.now(),
   }, { clientId, postId: body?.postId, candidateId: body?.candidateId, packageId: body?.packageId });

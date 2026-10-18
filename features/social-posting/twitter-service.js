@@ -777,7 +777,23 @@ async function publishStoredPost(post, now) {
       return { ...result, selfReplyTwitterId: null, selfReplyError: error.message || 'Self-reply failed.' };
     }
   }
-  return postToTwitter(post.content, postMedia(post), { clientId: post.clientId, platform, selfReply: post.selfReply || null, idempotencyKey: post.id });
+  return postToTwitter(post.content, await freshPostMedia(post), { clientId: post.clientId, platform, selfReply: post.selfReply || null, idempotencyKey: post.id });
+}
+
+// Publish-time media: an EditVideos ref (mediaStoragePath 'ev:<path>') is re-signed, because the stored signed URL
+// expires (~6.9 days) and drafts are filled up to 31 days ahead. Never written back: approval binds the stored row.
+// Any other media (Hitloop download-token URLs, studio renders) is used as stored; a failed re-sign keeps the stored URL.
+async function freshPostMedia(post) {
+  const media = postMedia(post);
+  const ev = /^ev:(.+)$/.exec(String(post?.mediaStoragePath || ''))?.[1];
+  if (!media || !ev) return media;
+  try {
+    const { signMediaRef } = await import('../x-content-inventory/media-signers.js');
+    const url = await signMediaRef({ bucket: 'ev', path: ev });
+    return url ? { ...media, mediaUrl: url } : media;
+  } catch {
+    return media;
+  }
 }
 
 // Pull the media descriptor off a stored post (null when text-only).
@@ -1489,6 +1505,32 @@ export async function attachMediaToPost(clientId, postId, payload) {
     Object.assign(updated, { status: 'draft', scheduledAt: null, reviewedAt: null, reviewedBy: null, approvedHash: null });
   }
   return commitPostTransition(clientId, post, updated);
+}
+
+/**
+ * System media swap (high-res original, staged-original completion, Telegram, Discogs re-ingest): merges a media
+ * patch through the shared lifecycle, so on a v2 row a changed media voids approval + schedule (and frees the slot)
+ * exactly like attachMediaToPost, instead of leaving a "scheduled" row that delivery later parks as approval-stale.
+ * Returns false when the row is gone, foreign, not in `statuses`, or changed concurrently; else { approvalVoided }.
+ */
+export async function swapPostMedia(clientId, postId, patch, { statuses = null } = {}) {
+  if (!clientId || !postId) return false;
+  const post = await getSocialPost(clientId, postId);
+  if (!post || post.clientId !== clientId) return false;
+  if (statuses ? !statuses.includes(post.status) : (post.status === 'posted' || post.status === 'posting' || post.status === 'manual')) return false;
+  const updated = { ...post, ...patch, updatedAt: new Date().toISOString() };
+  let approvalVoided = false;
+  if (isV2(post) && APPROVAL_VOID_STATUSES.includes(post.status) && isMaterialEdit(post, updated)) {
+    Object.assign(updated, { status: 'draft', scheduledAt: null, reviewedAt: null, reviewedBy: null, approvedHash: null });
+    approvalVoided = true;
+  }
+  try {
+    await commitPostTransition(clientId, post, updated);
+  } catch (err) {
+    if (err?.status === 409) return false;
+    throw err;
+  }
+  return { approvalVoided };
 }
 
 // Approval-page remix lifecycle. These mutations are deliberately restricted

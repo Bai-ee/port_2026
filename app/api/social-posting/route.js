@@ -33,7 +33,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const require = createRequire(import.meta.url);
-const { verifyRequestUser } = require('../../../api/_lib/auth.cjs');
+const { verifyRequestUser, isAdminEmail } = require('../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../api/_lib/client-provisioning.cjs');
 const { revokeApprovalsForClient, revokeApprovalsForPost } = require('../../../api/_lib/social-approval.cjs');
 const { getHeaderValue, safeSecretEquals } = require('../../../api/_lib/auth.cjs');
@@ -121,18 +121,22 @@ export async function GET(request) {
   }
 
   let context;
+  let decoded;
   try {
-    ({ context } = await resolveContext(request));
+    ({ context, decoded } = await resolveContext(request));
   } catch (err) {
     return json({ error: err.message || 'Unauthorized.' }, err.status || 401);
   }
 
   try {
     const posts = await readSocialQueue(context.clientId);
+    // Env names + key/token previews are the global @bai_ee credentials: admins only. Others get the booleans.
+    const { envNames, previews, ...credentialFlags } = getTwitterCredentialStatus();
+    const credentials = (await isAdminEmail(decoded?.email)) ? { ...credentialFlags, envNames, previews } : credentialFlags;
     return json({
       ok: true,
       posts,
-      credentials: getTwitterCredentialStatus(),
+      credentials,
     });
   } catch (err) {
     return json({ error: err.message || 'Failed to load social posts.' }, err.status || 500);
@@ -252,6 +256,8 @@ export async function POST(request) {
     }
 
     if (action === 'diagnose') {
+      // Uses (and spends X calls on) the global @bai_ee token and returns its identity: admins only.
+      if (!(await isAdminEmail(decoded?.email))) return json({ error: 'Admin only.' }, 403);
       const result = await diagnoseTwitterAccess();
       return json({ ok: true, diagnostics: result });
     }

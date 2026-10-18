@@ -2,7 +2,8 @@
 // Never posts to X: it only creates drafts and stages media.
 import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { createSocialPost } from '../social-posting/twitter-service.js';
+import { createSocialPost, swapPostMedia } from '../social-posting/twitter-service.js';
+import { isV2 } from '../social-posting/lifecycle.js';
 import { getPackage, upsertPackage } from '../x-content-inventory/store.js';
 import {
   DISCOGS_SOURCE, buildContentPackage, buildDraftMediaPatch, buildDraftPayload, buildMediaVariants, buildPostText, isBuilderContent, packageId, packageIdPatch, variantPaths,
@@ -86,8 +87,12 @@ export async function ingestDiscogsDraft(req) {
       if (isBuilderContent(post.content)) patch.content = buildPostText(req);
       // ACS join key; createSocialPost's whitelist drops it, so it is set via the merge patch.
       if (!post.packageId) Object.assign(patch, packageIdPatch(req.releaseId));
-      await fb.adminDb.collection('social_posts').doc(post.id).set(patch, { merge: true });
-      post = { ...post, ...patch };
+      // Through the lifecycle: a re-ingest that changes an approved/scheduled v2 row voids its approval + schedule.
+      // Legacy rows have no approval hash to catch the change, so only their drafts are refreshed.
+      if (isV2(post) || post.status === 'draft') {
+        const swapped = await swapPostMedia(post.clientId, post.id, patch);
+        if (swapped) post = { ...post, ...patch, ...(swapped.approvalVoided ? { status: 'draft', scheduledAt: null, approvedHash: null } : {}) };
+      }
     }
   } else {
     post = await createSocialPost(discogsClientId(), buildDraftPayload(req, { videoUrl, imageUrl, mediaVariants }));

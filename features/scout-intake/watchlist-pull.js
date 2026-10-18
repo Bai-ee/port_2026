@@ -119,7 +119,7 @@ function mapXApiItem(item, fallbackHandle) {
   };
 }
 
-async function fetchTimelinesViaXApi({ handles, detail }) {
+async function fetchTimelinesViaXApi({ clientId, handles, detail }) {
   const t0 = Date.now();
   const baseResults = handles.map((handle) => ({
     handle,
@@ -143,8 +143,11 @@ async function fetchTimelinesViaXApi({ handles, detail }) {
   let timeline;
   try {
     const { fetchHandleTimelines } = await import('../social-posting/twitter-service.js');
-    const { withXUsage } = await import('../x-api-usage/index.js');
-    timeline = await withXUsage({ clientId, source: 'other' }, () => fetchHandleTimelines(handles, { perHandle: detail?.latestOnly ? 1 : MAX_OWN }));
+    const { withXUsage, assertXBudget } = await import('../x-api-usage/index.js');
+    const perHandle = detail?.latestOnly ? 1 : MAX_OWN;
+    // Paid X timeline reads: check the daily X read budget first (one doc read). Over budget = every handle errors.
+    await assertXBudget({ source: 'other', clientId, estimatePosts: handles.length * perHandle });
+    timeline = await withXUsage({ clientId, source: 'other' }, () => fetchHandleTimelines(handles, { perHandle }));
   } catch (err) {
     return baseResults.map((result) => ({
       ...result,
@@ -188,7 +191,9 @@ async function fetchTimelinesViaXApi({ handles, detail }) {
  *
  * @returns {Promise<{ ok, handles: Array<{handle,items,count,error,ms}>, count, ms, error }>}
  */
-async function runWatchlistPull({ clientId, clientConfig = {}, lookbackDays, detail }) {
+// allowX: the X API timeline path is paid, so it runs only when the caller opts in (an admin dashboard pull, or the
+// interactive Generate & Send signals phase). The unattended cron never sets it; it still uses last30days where local.
+async function runWatchlistPull({ clientId, clientConfig = {}, lookbackDays, detail, allowX = false }) {
   const t0 = Date.now();
   let cfg;
   try {
@@ -235,8 +240,13 @@ async function runWatchlistPull({ clientId, clientConfig = {}, lookbackDays, det
   let results;
   if (resolvedDetail.mentions && localLast30DaysAllowed()) {
     results = await pullViaLast30Days();
+  } else if (!allowX) {
+    results = localLast30DaysAllowed() ? await pullViaLast30Days() : handles.map((handle) => ({
+      handle, ownPosts: [], mentions: [], featured: null, engagementTotal: 0, count: 0, ms: 0,
+      error: 'X watchlist pull is paid: it runs only from an admin dashboard pull or Generate & Send, never the scheduled cron.',
+    }));
   } else {
-    results = await fetchTimelinesViaXApi({ handles, detail: resolvedDetail });
+    results = await fetchTimelinesViaXApi({ clientId, handles, detail: resolvedDetail });
     if (!results.some((r) => r.count > 0) && localLast30DaysAllowed()) {
       results = await pullViaLast30Days();
     }

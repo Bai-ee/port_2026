@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { formatXSpendLine, buildPricingBody } from './x-source-model.js';
+import { formatXSpendLine, buildPricingBody, X_CAP_SOURCES, sourceCapsForm } from './x-source-model.js';
 
 const USAGE_ENDPOINT = '/api/admin/x-usage';
 
@@ -27,6 +27,7 @@ export function XSpendLine({ getIdToken, active }) {
   const [hidden, setHidden] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState({ perPostReadUsd: '', perUserLookupUsd: '', dailyReadCap: '' });
+  const [caps, setCaps] = useState(() => sourceCapsForm(null));
   const [msg, setMsg] = useState('');
 
   const authHeaders = useCallback(async () => {
@@ -46,7 +47,7 @@ export function XSpendLine({ getIdToken, active }) {
   useEffect(() => { if (active) load(); }, [active, load]);
 
   const save = async () => {
-    const built = buildPricingBody(form);
+    const built = buildPricingBody({ ...form, sourceCaps: caps });
     if (built.error) { setMsg(built.error); return; }
     setMsg('Saving…');
     try {
@@ -70,13 +71,26 @@ export function XSpendLine({ getIdToken, active }) {
     <div id="marketing-refresh-x-spend-shell">
       <div id="marketing-refresh-x-spend-line">
         <span>{usage ? formatXSpendLine(usage) : 'X API today: loading…'}</span>
-        <button type="button" id="marketing-refresh-x-rate-link" className="mr-config-link" onClick={() => { setFormOpen((v) => !v); setMsg(''); }}>Set rate</button>
+        <button type="button" id="marketing-refresh-x-rate-link" className="mr-config-link" onClick={() => { setFormOpen((v) => !v); setMsg(''); setCaps(sourceCapsForm(usage?.pricing)); }}>Set rate</button>
       </div>
       {formOpen ? (
         <div id="marketing-refresh-x-rate-form">
           {field('perPostReadUsd', 'USD per post read')}
           {field('perUserLookupUsd', 'USD per user lookup')}
           {field('dailyReadCap', 'Daily read cap (posts)')}
+          <div id="marketing-refresh-x-source-caps" role="group" aria-label="Per-source daily caps">
+            <span id="marketing-refresh-x-source-caps-title">Per-source daily caps (reads today / cap; blank = no cap)</span>
+            {X_CAP_SOURCES.map(({ id, label }) => {
+              const used = usage?.today?.bySource?.[id];
+              const reads = used ? (Number(used.readPosts) || 0) + (Number(used.userReads) || 0) : 0;
+              return (
+                <label key={id} className="mr-rate-field" htmlFor={`marketing-refresh-x-cap-${id}`}>
+                  {label} · {reads} today
+                  <input id={`marketing-refresh-x-cap-${id}`} type="number" min="0" step="1" inputMode="numeric" value={caps[id]} onChange={(e) => setCaps({ ...caps, [id]: e.target.value })} />
+                </label>
+              );
+            })}
+          </div>
           <div id="marketing-refresh-x-rate-actions">
             <button type="button" id="marketing-refresh-x-rate-save" onClick={save}>Save rate</button>
             <span id="marketing-refresh-x-rate-msg" role="status">{msg}</span>

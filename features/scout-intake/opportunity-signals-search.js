@@ -90,7 +90,7 @@ async function refreshOpportunitySignals(clientId, { allowX = false } = {}) {
   let platforms = requestedPlatforms.filter((p) => SUPPORTED_PLATFORMS.has(p));
   if (platforms.includes('x') && !allowX) {
     platforms = platforms.filter((p) => p !== 'x');
-    warnings.push('X is enabled but this run is not a manual dashboard trigger — X search only runs from the "Refresh Now" button (paid, kept out of the automated cron).');
+    warnings.push('X is enabled but this run is not an admin dashboard trigger — X search only runs from an admin\'s "Refresh Now" (paid, kept out of the automated cron).');
   }
 
   const maxQueriesPerRun = Number.isFinite(cfg.maxQueriesPerRun) ? Math.max(1, Math.min(8, cfg.maxQueriesPerRun)) : DEFAULT_MAX_QUERIES_PER_RUN;
@@ -104,6 +104,18 @@ async function refreshOpportunitySignals(clientId, { allowX = false } = {}) {
   if (!rows.length) return { ok: false, skipped: true, reason: 'no-enabled-queries', warnings };
 
   const queriesTried = rows.map((row) => ({ label: row.label || '', query: row.query, enabled: true }));
+
+  // Paid X: check the daily X read budget first (one doc read). Over budget drops X with a warning; Reddit/IG still run.
+  if (platforms.includes('x')) {
+    try {
+      const { assertXBudget } = await import('../x-api-usage/index.js');
+      await assertXBudget({ source: 'opportunity-signals', clientId, estimatePosts: rows.length * Math.max(10, maxItemsPerPlatform) });
+    } catch (err) {
+      platforms = platforms.filter((p) => p !== 'x');
+      warnings.push(`X skipped: ${err?.code === 'x-budget' ? err.message : `budget check failed (${err?.message || err})`}`);
+      if (!platforms.length) return { ok: false, skipped: true, reason: 'x-budget', warnings };
+    }
+  }
 
   // One search call per (platform, enabled row) pair, all concurrent — wall-clock
   // = the slowest single call, not the sum. Per-row (not merged) so each result
@@ -131,6 +143,11 @@ async function refreshOpportunitySignals(clientId, { allowX = false } = {}) {
   }));
   const collected = settled.flat();
   const items = dedupeItems(collected, maxItemsPerPlatform);
+  // Every search failed (warnings, nothing back): keep the last good pool instead of overwriting it with [].
+  const failedSearches = warnings.filter((w) => /^(reddit|instagram|x) "/.test(w)).length;
+  if (!items.length && failedSearches >= jobs.length) {
+    return { ok: false, error: `every search failed; kept the previous results (${warnings[warnings.length - 1] || 'no detail'})`.slice(0, 300), itemCount: 0, platforms, warnings };
+  }
 
   const payload = {
     generatedAt: new Date().toISOString(),

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  normalizeDataSources, sourceFor, withSource, withAutoDaily, sourceGroupsPresent, xApiPaidRows, formatXSpendLine, buildPricingBody, estimatesByGroup, selectionUsesXApi,
+  normalizeDataSources, sourceFor, withSource, withAutoDaily, sourceGroupsPresent, xApiPaidRows, formatXSpendLine, buildPricingBody, estimatesByGroup, selectionUsesXApi, sourceCapsForm,
 } from '../x-source-model.js';
 
 test('normalize defaults to mac / false and accepts the envelope', () => {
@@ -47,6 +47,16 @@ test('pricing body validates', () => {
   assert.deepEqual(buildPricingBody({ perPostReadUsd: '0.005', dailyReadCap: '500.7', perUserLookupUsd: '' }).body, { action: 'set-pricing', perPostReadUsd: 0.005, dailyReadCap: 500 });
   assert.ok(buildPricingBody({ perPostReadUsd: '-1' }).error);
   assert.ok(buildPricingBody({}).error);
+});
+
+test('per-source caps: sent whole (blank = no cap), validated, and round-trip from stored pricing', () => {
+  const form = { sourceCaps: { 'opportunity-signals': '150', 'market-talk': '', other: '40.9' } };
+  assert.deepEqual(buildPricingBody(form).body, { action: 'set-pricing', sourceCaps: { 'opportunity-signals': 150, other: 40 } });
+  assert.deepEqual(buildPricingBody({ sourceCaps: {} }).body, { action: 'set-pricing', sourceCaps: {} }, 'all blank clears every source cap');
+  assert.ok(buildPricingBody({ sourceCaps: { 'x-monitor': '-2' } }).error);
+  const back = sourceCapsForm({ sourceCaps: { 'opportunity-signals': 150 } });
+  assert.equal(back['opportunity-signals'], '150');
+  assert.equal(back['market-talk'], '');
 });
 
 test('spend line reads the real readXUsage shape (today.readPosts, cap.dailyReadCap)', () => {
