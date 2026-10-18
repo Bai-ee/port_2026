@@ -512,20 +512,8 @@
    "exceptionId": "X6",
    "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
   },
-  {
-   "file": "components/dashboard/DashboardCreationFailedModal.jsx",
-   "literal": "rgba(255,255,255,0.4)",
-   "count": 1,
-   "exceptionId": "X6",
-   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
-  },
-  {
-   "file": "components/dashboard/DashboardCreationFailedModal.jsx",
-   "literal": "rgba(255,255,255,0.65)",
-   "count": 1,
-   "exceptionId": "X6",
-   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
-  },
+  
+  
   {
    "file": "components/dashboard/DashboardCreationFailedModal.jsx",
    "literal": "rgba(255,255,255,0)",
@@ -533,20 +521,8 @@
    "exceptionId": "W6-B",
    "reason": "Light hairline / wash on a dark-styled surface or gradient highlight (legacy dark-era chrome); invisible on light, correct on dark, so it stays literal."
   },
-  {
-   "file": "components/dashboard/DashboardLoadingOverlay.jsx",
-   "literal": "rgba(255,255,255,0.4)",
-   "count": 1,
-   "exceptionId": "X6",
-   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
-  },
-  {
-   "file": "components/dashboard/DashboardLoadingOverlay.jsx",
-   "literal": "rgba(255,255,255,0.65)",
-   "count": 1,
-   "exceptionId": "X6",
-   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
-  },
+  
+  
   {
    "file": "components/dashboard/InvoiceBuilderCard.jsx",
    "literal": "#888",
@@ -799,13 +775,7 @@
    "exceptionId": "X6",
    "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
   },
-  {
-   "file": "components/dashboard/marketing/MarketingRefreshControl.jsx",
-   "literal": "#b45309",
-   "count": 1,
-   "exceptionId": "W6-C",
-   "reason": "Mid-tone saturated status/categorical solid (LED dots, chips, icons). No token within the closeness threshold; readable on both light and dark backgrounds, so it stays a fixed hue (coverage map section I)."
-  },
+  
   {
    "file": "components/dashboard/MarketSignalsReportBlocks.jsx",
    "literal": "rgba(0,0,0,0.02)",
@@ -1709,20 +1679,8 @@
    "exceptionId": "X6",
    "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
   },
-  {
-   "file": "DashboardPage.jsx",
-   "literal": "rgba(255,255,255,0.4)",
-   "count": 1,
-   "exceptionId": "X6",
-   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
-  },
-  {
-   "file": "DashboardPage.jsx",
-   "literal": "rgba(255,255,255,0.65)",
-   "count": 1,
-   "exceptionId": "X6",
-   "reason": "Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
-  },
+  
+  
   {
    "file": "DashboardPage.jsx",
    "literal": "rgba(255,255,255,0)",

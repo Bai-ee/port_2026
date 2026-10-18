@@ -5,16 +5,16 @@ import { formatXSpendLine, buildPricingBody } from './x-source-model.js';
 
 const USAGE_ENDPOINT = '/api/admin/x-usage';
 
-// Per-row "Mac (free) | X API (paid)" toggle + "Auto daily" checkbox (shown only for X API). Presentational.
+// Per-row "Mac | X API" segmented toggle + "Daily" chip (auto daily, shown only for X API). Presentational; full wording in titles.
 export function XSourceToggle({ groupId, source, autoDaily, disabled, onSource, onAutoDaily }) {
   return (
     <div id={`marketing-refresh-source-${groupId}`} className="mr-source" role="group" aria-label="Data source">
-      <button type="button" className="mr-source-opt" aria-pressed={source === 'mac'} disabled={disabled} onClick={() => onSource('mac')}>Mac (free)</button>
-      <button type="button" className="mr-source-opt" aria-pressed={source === 'x-api'} disabled={disabled} onClick={() => onSource('x-api')}>X API (paid)</button>
+      <button type="button" className="mr-source-opt" title="Mac worker via bird (free)" aria-label="Mac (free)" aria-pressed={source === 'mac'} disabled={disabled} onClick={() => onSource('mac')}>MAC</button>
+      <button type="button" className="mr-source-opt" title="Paid X API" aria-label="X API (paid)" aria-pressed={source === 'x-api'} disabled={disabled} onClick={() => onSource('x-api')}>X API</button>
       {source === 'x-api' ? (
-        <label id={`marketing-refresh-autodaily-${groupId}`} className="mr-row-option" htmlFor={`marketing-refresh-autodaily-checkbox-${groupId}`}>
+        <label id={`marketing-refresh-autodaily-${groupId}`} className="mr-chip" title="Auto daily (paid X API)" data-on={autoDaily ? 'true' : 'false'} htmlFor={`marketing-refresh-autodaily-checkbox-${groupId}`}>
           <input type="checkbox" id={`marketing-refresh-autodaily-checkbox-${groupId}`} checked={!!autoDaily} disabled={disabled} onChange={(e) => onAutoDaily(e.target.checked)} />
-          Auto daily
+          DAILY
         </label>
       ) : null}
     </div>

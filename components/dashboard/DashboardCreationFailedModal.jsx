@@ -26,6 +26,7 @@ import {
   trackDashboardCreationFailedContinuedAnyway,
 } from '../../lib/analytics';
 import { buildCreationFailureReport } from '../../lib/dashboard/creation-failure-report';
+import { marqueeCardEdgeStyle } from '../../pageSurfaceSystem';
 
 const CALENDLY_URL = 'https://calendly.com/bballi/30min';
 const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), textarea, input, select, summary, [tabindex]:not([tabindex="-1"])';
@@ -174,9 +175,10 @@ export default function DashboardCreationFailedModal({ creationFailure, websiteU
         tabIndex={-1}
         style={modalStyle}
       >
-        <div id="dashboard-creation-failed-header-row" style={headerRowStyle}>
-          <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={headerLogoStyle} />
-          <span id="dashboard-creation-failed-eyebrow" style={headerLabelStyle}>Dashboard</span>
+        {/* Avatar + label hidden (marquee-only header); the row keeps its height so the modal stays the same size. */}
+        <div id="dashboard-creation-failed-header-row" style={{ ...headerRowStyle, minHeight: '2.75rem' }}>
+          {/* <img src="/img/profile2_400x400.png?v=1774582808" alt="" aria-hidden="true" style={headerLogoStyle} />
+          <span id="dashboard-creation-failed-eyebrow" style={headerLabelStyle}>Dashboard</span> */}
         </div>
 
         <div id="dashboard-creation-failed-body" style={bodyStyle}>
@@ -284,8 +286,7 @@ const modalStyle = {
   overflowY: 'auto',
   color: 'var(--t-text)',
   background: 'var(--t-surface)',
-  boxShadow: '0 1px 0 rgba(255,255,255,0.65), inset 0 1px 0 rgba(255,255,255,0.4), 0px 5px 10px rgba(0,0,0,0.1), 0px 15px 30px rgba(0,0,0,0.1), 0px 20px 40px rgba(0,0,0,0.15)',
-  border: '1px solid var(--t-border-subtle)',
+  ...marqueeCardEdgeStyle,
   borderRadius: '1.5rem',
   outline: 'none',
 };
