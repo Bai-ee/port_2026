@@ -31,6 +31,7 @@ import { syncRenderedVideos } from '../../../../features/rendered-videos/sync.js
 import { resolveMediaUrlsBatch, MEDIA_URLS_MAX_IDS, MEDIA_KINDS, tokenUrlFor } from '../../../../features/x-content-inventory/thumbs.js';
 import { setRights, saveThumb, createDraftFromItem, pickMedia } from '../../../../features/x-content-inventory/item-actions.js';
 import { NAS_ACTIONS, handleNasAction } from '../../../../features/x-content-inventory/nas.js';
+import { attachItemMedia } from '../../../../features/x-content-inventory/attach-item-media.js';
 import { findHiresMedia, useHiresMedia, HIRES_EDITABLE_STATUSES, pendingStageFromDb, readStageStatesFromDb } from '../../../../features/x-content-inventory/hires-media.js';
 import { runDailyLoop, localDateOf, LOOP_VERSION } from '../../../../features/x-content-inventory/daily-loop.js';
 import { assertClientReady, resolveClientXHandle } from '../../../../features/client-readiness/index.js';
@@ -338,6 +339,7 @@ const SUPPORTED_ACTIONS = [
   'find-item-media',
   'find-hires-media',
   'hires-media-use',
+  'post-attach-item-media',
   'link-item-media',
   'set-rights',
   'create-draft-from-item',
@@ -863,6 +865,20 @@ async function handleHiresMediaUse(context, body, decoded) {
 }
 
 /**
+ * Put a Content Center item's media on a post (calendar editor creative picker). Same lifecycle swap as hi-res:
+ * on an approved/scheduled v2 row the new creative voids approval + schedule. Format/staging checks live in attach-item-media.js.
+ */
+async function handleAttachItemMedia(context, body) {
+  const clientId = context.clientId;
+  return attachItemMedia({
+    getPackage: getPackageFor(clientId),
+    pickMedia: (pkg) => pickMedia(pkg, mediaSigners()),
+    swapPostMedia: (postId, media) => swapPostMedia(clientId, postId, media, { statuses: HIRES_EDITABLE_STATUSES }),
+    rowOf: async (postId) => { const post = await getSocialPost(clientId, postId); return post ? calendarRowOf(post) : null; },
+  }, { clientId, postId: body?.postId, packageId: body?.packageId });
+}
+
+/**
  * Give items the media of other items of THIS client (item-media.js). Each link is independent: one bad pair fails
  * alone. Writes package fields only; never touches posts. Used by the route action and the confirmed chat proposal.
  */
@@ -1266,6 +1282,10 @@ export async function POST(request) {
     if (action === 'find-item-media') return json(await handleFindItemMedia(context, body));
     if (action === 'find-hires-media') return json(await handleFindHiresMedia(context, body));
     if (action === 'hires-media-use') return json(await handleHiresMediaUse(context, body, decoded));
+    if (action === 'post-attach-item-media') {
+      const result = await handleAttachItemMedia(context, body);
+      return json(result, result.ok === false ? (result.status || 422) : 200);
+    }
     if (action === 'link-item-media') return json({ ok: true, ...(await linkItemMediaFor(context.clientId, body?.links)) });
     if (action === 'set-rights') return json(await handleSetRights(context, body));
     if (action === 'create-draft-from-item') return json(await handleCreateDraftFromItem(context, body));
