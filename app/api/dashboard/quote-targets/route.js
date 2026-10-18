@@ -492,6 +492,17 @@ async function handlePostResults(context) {
 async function handlePostStatus(context, body) {
   const ids = (Array.isArray(body?.postIds) ? body.postIds : []).map((x) => String(x || '').trim()).filter(Boolean).slice(0, 20);
   const rows = (await Promise.all(ids.map((id) => getSocialPost(context.clientId, id)))).filter(Boolean);
+  // `full: true` (the calendar editor): also return the approval-bound objects. `replyTo` is then the full object, not the
+  // boolean other callers (chat agent, status strip) rely on, so it is strictly opt-in. Read-only.
+  if (body?.full === true) {
+    const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+    return { ok: true, posts: rows.map((p) => ({
+      ...postStatusRow(p),
+      replyTo: isObj(p.replyTo) ? p.replyTo : null,
+      selfReply: isObj(p.selfReply) ? p.selfReply : null,
+      mediaVariants: isObj(p.mediaVariants) ? p.mediaVariants : null,
+    })) };
+  }
   return { ok: true, posts: rows.map(postStatusRow) };
 }
 

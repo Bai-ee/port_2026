@@ -193,7 +193,7 @@
   {
    "file": "components/dashboard/content-ui/ContentUiStyles.jsx",
    "literal": "#2a2420",
-   "count": 4,
+   "count": 3,
    "exceptionId": "X5",
    "reason": "Black letterbox / video backdrop behind user media (fixed art); hover on a primary action handled via --t-text-strong. ALSO: Colour inside a box-shadow / text-shadow / filter drop-shadow (inset hairline, glow or soft shadow): shadows are mode-agnostic or status-glow decoration, not re-themed in v1."
   },

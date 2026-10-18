@@ -3,6 +3,8 @@
 import './styles/dashboard/index.css';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
+import { useDashboardFade } from './components/dashboard/calendar-stage/CalendarStage';
+import { parseStageParams, todayInZone } from './components/dashboard/calendar-stage/calendar-stage-model';
 import { flushSync } from 'react-dom';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -146,6 +148,12 @@ const XContentEngineCard = dynamic(() => import('./components/dashboard/XContent
 });
 
 const StrategyTodayCard = dynamic(() => import('./components/dashboard/marketing/StrategyTodayCard'), {
+  loading: () => null,
+  ssr: false,
+});
+
+// Calendar Stage: Month > Day > Post as one immersive page (the dashboard UI fades out, the gradient stays).
+const CalendarStageHost = dynamic(() => import('./components/dashboard/calendar-stage/CalendarStageHost'), {
   loading: () => null,
   ssr: false,
 });
@@ -2010,6 +2018,25 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   const [marketingRefreshRunning, setMarketingRefreshRunning] = useState(false);
   const marketingRefreshRunningRef = useRef(false);
   const [strategyQueueInitialView, setStrategyQueueInitialView] = useState('calendar');
+  // Calendar Stage: { initialState } while open, else null. The faded element is the dashboard UI root only; the stage is its
+  // sibling and the gradient background (mounted by app/dashboard/page.jsx) stays visible behind both.
+  const dashboardUiRootRef = useRef(null);
+  const [calendarStage, setCalendarStage] = useState(null);
+  const openCalendarStage = useCallback((initialState) => {
+    setActiveTileModal(null); // never a modal behind the stage
+    setCalendarStage({ initialState: initialState || { level: 'month' } });
+  }, []);
+  // Stand Up > Open Today: the stage at the Day level, today in the client's time zone (no client zone is loaded in this page yet,
+  // so the stage falls back to America/Chicago). The Stand Up panel receives this as its `onOpenTodayDay` prop.
+  const openCalendarStageToday = useCallback(() => openCalendarStage({ level: 'day', date: todayInZone(undefined) }), [openCalendarStage]);
+  useDashboardFade(dashboardUiRootRef, !!calendarStage);
+  // Reload / browser-forward onto a ?cal= URL reopens the stage at that level.
+  useEffect(() => {
+    const sync = () => { if (parseStageParams(window.location.search)) setCalendarStage((cur) => cur || { initialState: { level: 'month' } }); };
+    sync();
+    window.addEventListener('popstate', sync);
+    return () => window.removeEventListener('popstate', sync);
+  }, []);
   useEffect(() => { if (activeTileModal?.cardId !== 'strategy-queue-calendar') setStrategyQueueInitialView('calendar'); }, [activeTileModal?.cardId]);
   const [marketingBriefError, setMarketingBriefError] = useState('');
   // Local weather — live forecast for the configured zip (Local Weather card).
@@ -10729,6 +10756,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div data-dashboard-theme={theme} style={shellStyle}>
+    {/* Fade target for the Calendar Stage: the whole dashboard UI. The stage is a sibling of this element (inside the themed root, so it keeps the theme attribute). */}
+    <div id="dashboard-ui-root" ref={dashboardUiRootRef}>
       <GlassTooltipLayer />
       {downloadMenu && (
         <div className="card-dl-menu-overlay" onClick={() => setDownloadMenu(null)}>
@@ -16420,6 +16449,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                           clientName={client?.companyName || client?.name || client?.dashboardTitle || null}
                           onOpenCard={openCapabilityCardById}
                           initialView={strategyQueueInitialView}
+                          onOpenCalendar={() => openCalendarStage({ level: 'month' })}
                           socialPanelProps={{ sourceDraft: socialGeneratedDraft, sourceLabel: hasSocialGeneratedDraft ? 'creative-builder' : 'manual', strategyPostPool }}
                         />
                       </div>
@@ -18551,6 +18581,18 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         </div>
       ) : null}
 
+    </div>
+    {calendarStage ? (
+      <CalendarStageHost
+        open
+        initialState={calendarStage.initialState}
+        getIdToken={brandSystemGetIdToken}
+        clientId={client?.clientId || client?.id || bootstrap?.effectiveClientId}
+        clientName={client?.companyName || client?.name || client?.dashboardTitle || null}
+        clientHandle={marketingBriefConfig?.brandXHandle || ''}
+        onClose={() => setCalendarStage(null)}
+      />
+    ) : null}
     </div>
   );
 };

@@ -243,7 +243,7 @@ export default function ContentUiStyles() {
         .xce-scope .xce-textarea-short { min-height: 64px; }
         .xce-scope .xce-week-slot .xce-input { max-width: 100%; }
 
-        /* ── Month calendar (MonthCalendarPanel + PostSheet) ─────────────
+        /* ── Month calendar (MonthCalendarPanel) ─────────────
            Status is weight, never a colour strip: scheduled = solid outline +
            filled dot, pending = grey dashed + hollow dot, posted = muted +
            check, failed = the only red. Grid lines are neutral structure. */
@@ -269,8 +269,7 @@ export default function ContentUiStyles() {
         .xce-scope .xce-mc-seg { min-height: 30px; padding: 0 12px; border: 0; border-radius: 999px; background: transparent; color: color-mix(in srgb, var(--t-text) 55%, transparent); }
         .xce-scope .xce-mc-seg-active { background: var(--t-text); color: var(--t-surface); }
         .xce-scope .xce-mc-review { min-height: 34px; border-radius: 999px; }
-        .xce-scope .xce-mc button:focus-visible,
-        .xce-scope .xce-mc-sheet button:focus-visible { outline: 2px solid color-mix(in srgb, var(--t-text) 55%, transparent); outline-offset: 2px; }
+        .xce-scope .xce-mc button:focus-visible { outline: 2px solid color-mix(in srgb, var(--t-text) 55%, transparent); outline-offset: 2px; }
 
         .xce-scope .xce-mc-grid { display: grid; border-top: 1px solid var(--t-border-subtle); border-bottom: 1px solid var(--t-border-faint); transition: opacity 120ms ease-out; }
         .xce-scope .xce-mc-grid-loading { opacity: 0.5; }
@@ -391,80 +390,13 @@ export default function ContentUiStyles() {
           .xce-scope .xce-mc-day { min-height: 124px; padding: 6px; }
         }
 
-        /* PostSheet: full-screen on phones, right sheet from 481px. */
-        .xce-scope .xce-mc-sheet-backdrop { position: fixed; inset: 0; z-index: 70; display: flex; justify-content: flex-end; background: color-mix(in srgb, var(--t-text) 32%, transparent); animation: xce-mc-fade 140ms ease-out; }
-        .xce-scope .xce-mc-sheet { width: 100%; height: 100%; display: flex; flex-direction: column; background: var(--t-raised); outline: none; animation: xce-mc-rise 180ms cubic-bezier(0.2, 0, 0, 1); }
-        .xce-scope .xce-mc-sheet-head { display: flex; align-items: center; gap: 6px; padding: 8px var(--mobile-gutter, 8px); border-bottom: 1px solid color-mix(in srgb, var(--t-text) 10%, transparent); }
-        .xce-scope .xce-mc-sheet-state { margin-right: auto; display: inline-flex; align-items: center; gap: 8px; min-width: 0; font-family: var(--font-mono); font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--t-text); }
-        .xce-scope .xce-mc-sheet-state.xce-mc-state-pending { color: color-mix(in srgb, var(--t-text) 55%, transparent); }
-        .xce-scope .xce-mc-sheet-state.xce-mc-state-awaiting { color: color-mix(in srgb, var(--t-text) 55%, transparent); }
-        .xce-scope .xce-mc-sheet-state.xce-mc-state-held { color: color-mix(in srgb, var(--t-text) 55%, transparent); }
-        .xce-scope .xce-mc-sheet-state.xce-mc-state-failed { color: var(--t-danger); }
-        .xce-scope .xce-mc-sheet-queue { display: inline-flex; align-items: center; }
-        .xce-scope .xce-mc-sheet-queue-pos { min-width: 44px; text-align: center; font-family: var(--font-mono); font-size: 11px; color: color-mix(in srgb, var(--t-text) 55%, transparent); }
-        .xce-scope .xce-mc-sheet-body { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; padding: 18px var(--mobile-gutter, 8px) 24px; display: grid; gap: 18px; align-content: start; }
-        .xce-scope .xce-mc-sheet-when { margin: 0; font-size: 22px; line-height: 1.15; font-weight: 500; letter-spacing: -0.01em; color: var(--t-text); }
-        .xce-scope .xce-mc-sheet-media { border-radius: 10px; overflow: hidden; background: #2a2420; }
-        .xce-scope .xce-mc-sheet-media video,
-        .xce-scope .xce-mc-sheet-media img { display: block; width: 100%; max-height: 360px; object-fit: contain; }
-        .xce-scope .xce-mc-field { display: grid; gap: 6px; min-width: 0; }
-        .xce-scope .xce-mc-sheet-body > * { min-width: 0; }
-        .xce-scope .xce-mc-sheet textarea,
-        .xce-scope .xce-mc-sheet input { box-sizing: border-box; width: 100%; max-width: 100%; min-width: 0; }
-        .xce-scope .xce-mc-sheet-text { min-height: 168px; font-size: 15px; line-height: 1.5; }
         .xce-scope .xce-mc-sheet-meta-line { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-family: var(--font-mono); font-size: 10.5px; color: color-mix(in srgb, var(--t-text) 55%, transparent); }
-        .xce-scope .xce-mc-over { margin: 0; font-size: 12px; font-weight: 700; color: var(--t-danger); }
-        .xce-scope .xce-mc-sheet-meta-line .xce-mc-over { font-size: inherit; }
-        .xce-scope .xce-mc-when-row { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 8px; }
-        .xce-scope .xce-mc-notice { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--t-warning); }
-        .xce-scope .xce-mc-facts { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; }
-        .xce-scope .xce-mc-facts dt { padding-top: 1px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: color-mix(in srgb, var(--t-text) 45%, transparent); }
-        .xce-scope .xce-mc-facts dd { margin: 0; font-family: var(--font-mono); font-size: 11.5px; color: var(--t-text); overflow-wrap: anywhere; }
-        .xce-scope .xce-mc-facts a { color: inherit; }
-        .xce-scope .xce-mc-sheet-foot { display: grid; gap: 8px; padding: 12px var(--mobile-gutter, 8px) calc(12px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid color-mix(in srgb, var(--t-text) 10%, transparent); background: var(--t-raised); }
-        .xce-scope .xce-mc-sheet-consequence { margin: 0; font-size: 12px; line-height: 1.4; color: color-mix(in srgb, var(--t-text) 65%, transparent); }
-        .xce-scope .xce-mc-sheet-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
-        .xce-scope .xce-mc-sheet-buttons .xce-btn-primary { margin-left: auto; }
-        .xce-scope .xce-mc-sheet-keys { display: none; margin: 0; font-family: var(--font-mono); font-size: 10px; color: color-mix(in srgb, var(--t-text) 40%, transparent); }
-        @media (max-width: 480px) {
-          .xce-scope .xce-mc-sheet-buttons > button { flex: 1 1 0; min-height: 44px; }
-          .xce-scope .xce-mc-sheet-buttons .xce-btn-primary { order: -1; flex-basis: 100%; margin-left: 0; }
-        }
-        @media (min-width: 481px) {
-          .xce-scope .xce-mc-sheet { max-width: 480px; border-left: 1px solid color-mix(in srgb, var(--t-text) 14%, transparent); animation-name: xce-mc-slide; }
-          .xce-scope .xce-mc-sheet-head { padding: 10px 16px; }
-          .xce-scope .xce-mc-sheet-body { padding: 22px 20px 28px; }
-          .xce-scope .xce-mc-sheet-foot { padding: 14px 20px; }
-        }
-        @media (min-width: 1024px) and (pointer: fine) {
-          .xce-scope .xce-mc-sheet-keys { display: block; }
-        }
-        @keyframes xce-mc-fade { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes xce-mc-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
-        @keyframes xce-mc-slide { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: none; } }
-        @media (prefers-reduced-motion: reduce) {
-          .xce-scope .xce-mc-sheet,
-          .xce-scope .xce-mc-sheet-backdrop { animation: none; }
-        }
-
-        /* ---- Pilot calendar states: awaiting / held, row notes, conflict + override + reconcile (PostSheet / MonthCalendarPanel) ---- */
+        /* ---- Pilot calendar states: awaiting / held, row notes, conflict + override + reconcile (MonthCalendarPanel) ---- */
         .xce-scope .xce-mc-summary-held { color: var(--t-warning); font-weight: 700; }
-        .xce-scope .xce-mc-chip.xce-mc-state-held, .xce-scope .xce-mc-sheet-state.xce-mc-state-held { border-color: color-mix(in srgb, var(--t-warning) 60%, transparent); color: var(--t-warning); }
+        .xce-scope .xce-mc-chip.xce-mc-state-held { border-color: color-mix(in srgb, var(--t-warning) 60%, transparent); color: var(--t-warning); }
         .xce-scope .xce-mc-dot-held { box-shadow: inset 0 0 0 1.5px rgba(196,128,20,0.9); }
         .xce-scope .xce-mc-row-note { display: block; margin-top: 2px; font-size: 11.5px; line-height: 1.4; color: color-mix(in srgb, var(--t-text) 60%, transparent); overflow-wrap: anywhere; }
         .xce-scope .xce-mc-row-note-failed { color: var(--t-danger); }
-        .xce-scope .xce-mc-held { margin: 0; padding: 8px 10px; border-left: 3px solid color-mix(in srgb, var(--t-warning) 80%, transparent); background: var(--t-warning-bg); }
-        .xce-scope .xce-mc-held-reason { margin: 0; font-weight: 700; font-size: 12.5px; }
-        .xce-scope .xce-mc-held-next { margin: 2px 0 0; font-size: 12px; color: color-mix(in srgb, var(--t-text) 70%, transparent); }
-        .xce-scope .xce-mc-held-detail { margin: 4px 0 0; font-family: var(--font-mono); font-size: 11px; color: color-mix(in srgb, var(--t-text) 55%, transparent); overflow-wrap: anywhere; }
-        .xce-scope .xce-mc-failed { padding: 8px 10px; border-left: 3px solid var(--t-danger); font-size: 12.5px; overflow-wrap: anywhere; }
-        .xce-scope .xce-mc-conflict { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--t-warning) 50%, transparent); border-radius: 8px; background: var(--t-warning-bg); }
-        .xce-scope .xce-mc-conflict-text { flex: 1 1 200px; font-size: 12.5px; min-width: 0; }
-        .xce-scope .xce-mc-override { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid color-mix(in srgb, var(--t-text) 12%, transparent); }
-        .xce-scope .xce-mc-override-check { display: flex; align-items: center; gap: 8px; font-size: 12.5px; min-height: 32px; }
-        .xce-scope .xce-mc-override-note { font-size: 11.5px; color: color-mix(in srgb, var(--t-text) 60%, transparent); }
-        .xce-scope .xce-mc-discard { padding: 8px 10px; background: var(--t-warning-bg); font-size: 12.5px; font-weight: 700; border-radius: 8px; }
-        .xce-scope .xce-mc-reconcile { display: flex; flex-direction: column; gap: 8px; padding-bottom: 8px; }
 
         /* ── Results (performance) ────────────────────────────────────── */
         .xce-scope .xce-perf-list { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 8px; }

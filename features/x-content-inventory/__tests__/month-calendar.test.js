@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildMonthCalendar, monthGridDates, ctWallToMs, addDays, reasonText, classifyResult, STATE_BY_STATUS, DISPLAY_STATUSES } from '../month-calendar.js';
+import { buildMonthCalendar, toRow, monthGridDates, ctWallToMs, addDays, reasonText, classifyResult, STATE_BY_STATUS, DISPLAY_STATUSES } from '../month-calendar.js';
 import { DEFAULT_ENGINE_CONFIG } from '../engine-quota.js';
 
 // October 2026 is CDT (UTC-5): 14:00Z = 09:00 CT. Oct 1 is a Thursday.
@@ -285,4 +285,25 @@ test('a quote target that already has a saved post shows only as that post', () 
   const viaText = draft('d2', { reviewOn: '2026-10-10', content: 'take\n\nhttps://x.com/h/status/222' });
   const cal = buildMonthCalendar({ posts: [viaRef, viaText], month: '2026-10', now: NOW, quoteTargets: [qtgt('111', created), qtgt('222', created), qtgt('333', created)] });
   assert.deepEqual(day(cal, '2026-10-10').posts.filter((r) => r.kind === 'requote').map((r) => r.quoteTargetId), ['333']);
+});
+
+test('post rows carry selfReply / mediaVariants / replyTo as full objects (null when absent), so approval-bound fields are visible', () => {
+  const selfReply = { text: 'more here', mediaUrl: 'https://example.test/r.png' };
+  const mediaVariants = { image: { large: { url: 'https://example.test/l.jpg' } } };
+  const replyTo = { id: '99', author: 'someone', url: 'https://x.com/someone/status/99', text: 'hi' };
+  const cal = buildMonthCalendar({ posts: [
+    post('full', '2026-10-12T14:00:00Z', { selfReply, mediaVariants }),
+    post('bare', '2026-10-13T14:00:00Z'),
+    post('junk', '2026-10-14T14:00:00Z', { selfReply: true, mediaVariants: [] }),
+  ], month: '2026-10', now: NOW });
+  const by = Object.fromEntries(allDays(cal).flatMap((d) => d.posts).map((r) => [r.id, r]));
+  assert.deepEqual(by.full.selfReply, selfReply);
+  assert.deepEqual(by.full.mediaVariants, mediaVariants);
+  for (const k of ['selfReply', 'mediaVariants', 'replyTo']) {
+    assert.ok(Object.prototype.hasOwnProperty.call(by.bare, k) && by.bare[k] === null, `${k} present as null`);
+    assert.equal(by.junk[k], null, `${k} non-object collapses to null`);
+  }
+  // Replies never appear on the grid (outside the authored cap), but the same projection serves calendar-approve / attach rows.
+  assert.deepEqual(toRow({ id: 'r', status: 'draft', content: 'x', replyTo }).replyTo, replyTo);
+  assert.equal(toRow({ id: 'r', status: 'draft', content: 'x', replyTo: 'https://x' }).replyTo, null);
 });
