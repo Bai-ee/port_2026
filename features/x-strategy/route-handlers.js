@@ -251,6 +251,7 @@ export function createStrategyHandlers({
   signMediaRef = null, readMediaCaptures = null, // ({bucket,path}) -> url|null; (clientId) -> render captures. get_media_link only
   readStageStates = null, readNasStatus = null, // (ids) -> Map id -> {state,commandId} of NAS stage commands; (clientId) -> nas-status. find_hires_media only; absent => no stage progress / worker info
   linkItemMedia = null, // (clientId, links) -> {linked, failed, results}; the quote-targets link-item-media writer. Absent => item-media confirm fails clearly
+  decideCalendarItems = null, // ({clientId, items:[{decision,item}], proposalId}) -> {ok, results:[...]}; injected by the integration step (x-content-inventory/calendar-decide.js). Absent => propose_calendar_decide / its confirm say not available
   env = {}, // explicit on purpose: only createStrategyHandlersFromDb passes process.env, so a bare handler can never reach a real model
 } = {}) {
   if (!corpusStore || !basePlanStore || !refreshService || typeof readXGrowthConfig !== 'function') {
@@ -406,7 +407,7 @@ export function createStrategyHandlers({
   };
   async function dailyFill(clientId, spec, { execute = false, batchId = null } = {}) {
     if (execute && typeof ensureDraft !== 'function') return { ok: false, status: 503, error: 'Creating drafts is not available on this deployment.' };
-    return runDailyFill(clientId, { from: spec?.from, days: spec?.days, include: spec?.include, execute, batchId, deps: dailyFillDeps });
+    return runDailyFill(clientId, { from: spec?.from, days: spec?.days, include: spec?.include, excludePackageIds: spec?.excludePackageIds, replace: spec?.replace, execute, batchId, deps: dailyFillDeps });
   }
   // Preview rows: text shortened (the agent's context is small); counts and skip examples are unchanged.
   const stripFillRows = (r) => (r.ok ? { ...r, rows: r.rows.map(({ text, ...row }) => ({ ...row, text: text.slice(0, 140) })) } : r);
@@ -961,6 +962,7 @@ export function createStrategyHandlers({
       previewCalendarBatch: async (spec) => stripRows(await calendarBatch(clientId, spec)),
       // Dry run only (no writes): what a daily fill would create. The proposal re-plans at confirm time.
       previewDailyFill: async (spec) => stripFillRows(await dailyFill(clientId, spec)),
+      ...(decideCalendarItems ? { decideCalendarItems: true } : {}), // capability flag; the proposal executor runs the real dep
       getAlgorithm: async () => summarizeAlgorithm(getAlgorithmProfile()),
       scorePosts: async ({ handle, days, limit } = {}) => {
         const profile = preloaded.profile ?? (preloaded.profile = await loadProfile(clientId));
@@ -1209,6 +1211,7 @@ export function createStrategyHandlers({
     runItemMedia: linkItemMedia ? ({ clientId, links }) => linkItemMedia(clientId, links) : null,
     runCalendarBatch: async ({ clientId, spec, proposalId }) => calendarBatch(clientId, spec, { execute: true, batchId: proposalId ? `calendar-batch-${proposalId}` : null }),
     runDailyFill: async ({ clientId, spec, proposalId }) => dailyFill(clientId, spec, { execute: true, batchId: proposalId ? `daily-fill-${proposalId}` : null }),
+    decideCalendarItems: decideCalendarItems ? (a) => decideCalendarItems(a) : null,
     refreshHandles: async ({ clientId, handles, context, auth }) => strategyRefresh({ clientId, handles }, context, auth),
     placeDraft, upsertBucket, deleteBucket, syncTracks, ...(rejectPost ? { rejectPost } : {}),
     runAction: actionRuntime ? ({ clientId, payload, by: who, auth, context, proposalId }) => actionRuntime.executeApproved({ ...actionCtx(clientId, context, auth), by: who }, payload, { proposalId }) : null,

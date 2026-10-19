@@ -223,3 +223,23 @@ test('trackRules: two renders of the same mix never fill two days of one window'
   const p = planDailyFill({ tracks, packages, from: TODAY, days: 3, today: TODAY, include: ['baseline'], trackRules: { ue: DAILY_MIX_RULE } });
   assert.deepEqual(p.rows.filter((r) => r.trackId === 'ue').map((r) => r.packageId), ['rv-1', 'rv-3']);
 });
+
+test('excludePackageIds: an excluded package is never picked; spec carries it only when given', () => {
+  const base = plan({ days: 1, include: ['baseline'] });
+  const first = where(base, 'baseline').find((r) => r.trackId === 'record');
+  const p = plan({ days: 1, include: ['baseline'], excludePackageIds: [first.packageId] });
+  assert.ok(!p.rows.some((r) => r.packageId === first.packageId));
+  assert.equal('excludePackageIds' in normalizeFillSpec({}, { today: TODAY }).spec, false);
+  assert.deepEqual(normalizeFillSpec({ excludePackageIds: ['a', 'a', 'b'] }, { today: TODAY }).spec.excludePackageIds, ['a', 'b']);
+  assert.equal(normalizeFillSpec({ excludePackageIds: [1] }, { today: TODAY }).ok, false);
+  assert.equal(normalizeFillSpec({ excludePackageIds: Array.from({ length: 201 }, (_, i) => `p${i}`) }, { today: TODAY }).ok, false);
+});
+
+test('replace mode: a rejected fill no longer holds its slot, only that bucket is filled, one row max', () => {
+  const rejected = [{ postId: 'x', status: 'rejected', reviewOn: TODAY, fillKind: 'baseline', bucketId: 'record', idempotencyKey: 'k' }];
+  // Normal re-run: the rejected draft still counts, so the record track gets nothing today.
+  assert.equal(where(plan({ days: 1, include: ['baseline'], fillPosts: rejected }), 'baseline').filter((r) => r.trackId === 'record').length, 0);
+  const p = plan({ days: 1, include: ['baseline'], fillPosts: rejected, replace: { bucketId: 'record' } });
+  assert.deepEqual(p.rows.map((r) => r.trackId), ['record']);
+  assert.equal(normalizeFillSpec({ replace: { bucketId: 5 } }, { today: TODAY }).ok, false);
+});

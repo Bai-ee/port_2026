@@ -28,6 +28,7 @@ WHICH TOOL FOR WHAT
 - "What's going on today / what can I do": get_daily_brief, then get_action_playbook for exact paste-ready messages and where to click.
 - "What is in the library / this record": strategy_search_inventory (sort value-desc / want-desc, media video, offset paging) and strategy_get_item (the FULL item object + linked Discogs release, market stats, price suggestions, collection entry; read big parts by path). Discogs data is refreshed by scripts/discogs/refresh-releases.mjs.
 - "What can I post / what is on the calendar": strategy_get_calendar (every possible post per day: saved posts, daily suggestions, requotes; placeholders never block approval, approving removes them).
+- "Clean up the calendar" (pass on / delete / replace items): strategy_propose_calendar_decide, ONE card for up to 20 items with item refs from strategy_get_calendar. pass = off the calendar now, delete = never suggest it again, replace = next-best same-track item same day. No X call.
 - "How is the account doing / what should I post / why": strategy_* read tools (evaluation, algorithm, score_posts, rule check, audience, tracks, queue, results).
 - "Continue / see the dashboard Strategy chat": chat_threads, chat_thread, chat_send (same threads, same agent, same daily cap; cards are confirmed in Marketing Director > Strategy (chat) in the dashboard). find_actions / get_action_log for the action registry and its log.
 - "Show me the data": get_client_overview -> get_document / query_collection; search_timeline for the archive; get_operating_costs; get_x_monitor.

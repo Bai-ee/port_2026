@@ -7,7 +7,8 @@ import { RetryError } from '../content-ui/Feedback.jsx';
 import LoadingRing from '../content-ui/ui/LoadingRing';
 import StagePostLevel from '../calendar-stage/StagePostLevel.jsx';
 import { ENGINE_TAG, STATE_LABEL, StateDot, dayHeading } from './calendar-bits.jsx';
-import { ApprovalMark, FilterChips, InlineApprovalButtons, SuggestionRow, CalendarApprovalStyles } from './CalendarApprovalBits.jsx';
+import { ApprovalMark, FilterChips, InlineApprovalButtons, PassRowButton, SuggestionRow, CalendarApprovalStyles } from './CalendarApprovalBits.jsx';
+import { buildDecideRequest, decideItems } from './post-editor-model.js';
 import { dayRows, filterRows, withOverride, approveRequest, unapproveRequest, isSuggestionRow, matchesFilter } from './calendar-row-model.js';
 
 // MonthCalendarPanel — the Content Engine's month-to-month calendar over
@@ -65,7 +66,7 @@ export function isQuoteWindowClosed(post, nowMs = Date.now()) {
 }
 
 // onView (calendar day view only): the row and its VIEW POST button open the X preview instead of the editor.
-function PostRow({ post, busy, onOpen, onApprove, onReject, onApproveOnly, onUnapprove, onView }) {
+function PostRow({ post, busy, onOpen, onApprove, onReject, onApproveOnly, onUnapprove, onView, onPass }) {
   const windowClosed = isQuoteWindowClosed(post);
   // Once the data layer sends `approval`, the row's Approve button approves WITHOUT scheduling; the legacy approve-and-schedule check is kept only before that.
   const approvalAware = !!post.approval && !!onApproveOnly;
@@ -134,6 +135,7 @@ function PostRow({ post, busy, onOpen, onApprove, onReject, onApproveOnly, onUna
           </button>
         </span>
       ) : null}
+      {onPass ? <span className="xce-mc-row-actions"><PassRowButton row={post} busy={busy} onPass={onPass} /></span> : null}
     </li>
   );
 }
@@ -387,10 +389,26 @@ function MonthCalendarPanelView({
   const onApproveOnly = (row) => inlineDecide(row, approveRequest(row), 'approved');
   const onUnapprove = (row) => inlineDecide(row, unapproveRequest(row), 'unapproved');
   const rowBusy = (id) => busyId === id || inlineBusyId === id;
+  // Quick Pass (Day level only): calendar-item-decide with 'pass', no confirm, then reload the month.
+  const onPassRow = async (row) => {
+    if (typeof call !== 'function') return;
+    setInlineNote('');
+    setInlineBusyId(row.id);
+    try {
+      const req = buildDecideRequest(row, 'pass');
+      await call(req.action, req.body);
+      if (onRefresh) await onRefresh();
+    } catch (err) {
+      setInlineNote(err?.message || 'Could not pass that one.');
+    } finally {
+      setInlineBusyId(null);
+    }
+  };
+  const passFor = (row) => (nav && level === 'day' && decideItems(row).pass ? onPassRow : undefined);
   // A row opens the editor (PostEditor handles saved posts, daily suggestions and requotes alike).
   const renderRow = (p) => (isSuggestionRow(p)
-    ? <SuggestionRow key={p.id} row={p} busy={rowBusy(p.id)} onApprove={onApproveOnly} onView={() => setOpenId(p.id)} />
-    : <PostRow key={p.id} post={p} busy={rowBusy(p.id)} onOpen={setOpenId} onApprove={quickApprove} onReject={onReject} onApproveOnly={onApproveOnly} onUnapprove={onUnapprove} />);
+    ? <SuggestionRow key={p.id} row={p} busy={rowBusy(p.id)} onApprove={onApproveOnly} onView={() => setOpenId(p.id)} onPass={passFor(p)} />
+    : <PostRow key={p.id} post={p} busy={rowBusy(p.id)} onOpen={setOpenId} onApprove={quickApprove} onReject={onReject} onApproveOnly={onApproveOnly} onUnapprove={onUnapprove} onPass={passFor(p)} />);
   const selectedDayFor = (date) => days.find((d) => d.date === date) || null;
   const quickApprove = (post) => onApprove(post, { content: post.content, scheduledAt: post.proposedAt || post.scheduledAt, expectedRevision: post.revision ?? null });
 

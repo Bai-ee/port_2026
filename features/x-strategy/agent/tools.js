@@ -2,7 +2,7 @@
 // No I/O: every read goes through injected `toolDeps`. Safe to import anywhere.
 // Propose tools never write; they validate a payload and hand back a proposal for the owner to confirm.
 
-import { PROPOSAL_KINDS, PLAN_LIMITS, KNOWN_SLOT_TYPES, BULK_LIMITS, DAILY_FILL_INCLUDES, QUEUE_BULK_ACTIONS, BUCKET_EDIT_OPS, REFRESH_GROUP_IDS } from '../contracts.js';
+import { PROPOSAL_KINDS, PLAN_LIMITS, KNOWN_SLOT_TYPES, BULK_LIMITS, DAILY_FILL_INCLUDES, QUEUE_BULK_ACTIONS, BUCKET_EDIT_OPS, REFRESH_GROUP_IDS, CALENDAR_DECISIONS, CALENDAR_ITEM_KINDS } from '../contracts.js';
 import { estimateFor, REFRESH_GROUPS } from '../../../components/dashboard/marketing/refresh-groups.js';
 import { SOURCE_KINDS } from '../../x-content-inventory/buckets.js';
 import { validateProposal } from './proposals.js';
@@ -83,6 +83,7 @@ export const PROPOSE_TOOL_BY_KIND = Object.freeze({
   'bucket-edit': 'propose_bucket_edit',
   'memory-suggest': 'propose_memory_suggestions',
   'media-tasks': 'propose_media_tasks',
+  'calendar-decide': 'propose_calendar_decide',
 });
 export const KIND_BY_PROPOSE_TOOL = Object.freeze(
   Object.fromEntries(Object.entries(PROPOSE_TOOL_BY_KIND).map(([k, v]) => [v, k])),
@@ -459,6 +460,30 @@ export const PROPOSE_TOOLS = Object.freeze([
     postIds: { type: 'array', minItems: 1, maxItems: BULK_LIMITS.queueBulkMax, items: str('Post id from get_queue') },
     date: str('set-review-date only: YYYY-MM-DD'),
   }, ['action', 'postIds']),
+  propose('calendar-decide', `Propose cleaning up the calendar: ONE card for up to ${BULK_LIMITS.calendarDecideMax} items, one decision each. pass = off the calendar now (the content can come back later). delete = pass AND never suggest this content again. replace = pass and the next-best item for the same track lands the same day (posts/requotes only; a suggestion cannot be replaced). Build each item from a get_calendar row: post {kind:'post', postId=id, expectedRevision=revision}; suggestion {kind:'suggestion', suggestionId=id, runId, date=the day}; requote {kind:'requote', targetId=id, url=quotedUrl, date=the day}. Never touches X; nothing is posted or spent.`, {
+    items: {
+      type: 'array', minItems: 1, maxItems: BULK_LIMITS.calendarDecideMax,
+      items: {
+        type: 'object',
+        properties: {
+          decision: { type: 'string', enum: [...CALENDAR_DECISIONS] },
+          item: {
+            type: 'object',
+            properties: {
+              kind: { type: 'string', enum: [...CALENDAR_ITEM_KINDS] },
+              postId: str('post: the row id'), expectedRevision: int('post: the row revision', { minimum: 0 }),
+              suggestionId: str('suggestion: the row id'), runId: str('suggestion: the row runId'),
+              targetId: str('requote: the row id'), url: str('requote: the row quotedUrl'),
+              date: str('suggestion/requote: the calendar day, YYYY-MM-DD'),
+            },
+            required: ['kind'],
+          },
+          title: str('Short label shown on the card (the row text, clipped)', { maxLength: 100 }),
+        },
+        required: ['decision', 'item'],
+      },
+    },
+  }, ['items']),
   propose('bucket-edit', `Propose adding, changing or deleting ONE Content Center bucket (a content source and its content track). upsert: send bucket {name, sourceKind, optional id/color/active/order/share}; omit id to create, send the existing id to change. delete: send bucket {id}; items still in it block the delete unless reassignTo names another bucket. Tracks re-sync after the change. Only the bucket changes; no post is touched.`, {
     op: { type: 'string', enum: [...BUCKET_EDIT_OPS] },
     bucket: {
@@ -634,6 +659,7 @@ function shapeCalendarItem(r) {
   };
   if (kind === 'post') {
     out.status = strOrNull(r.status);
+    if (Number.isInteger(r.revision)) out.revision = r.revision; // expectedRevision for propose_calendar_decide
     if (r.proposed === true) out.proposed = true;
     const q = quotedUrlOf({ content: text, status: r.status });
     if (q) out.quotedUrl = q;
@@ -645,6 +671,7 @@ function shapeCalendarItem(r) {
     out.windowOpen = r.windowOpen === true;
     if (strOrNull(r.expiresAt)) out.expiresAt = r.expiresAt;
     if (kind === 'suggestion' && strOrNull(r.suggestionType)) out.type = r.suggestionType;
+    if (kind === 'suggestion' && strOrNull(r.runId)) out.runId = r.runId; // item ref for propose_calendar_decide (id = suggestionId; requote id = targetId, quotedUrl = url)
   }
   if (placeholder && kind === 'post' && r.approval !== 'posted') out.approveNote = PLACEHOLDER_NOTE;
   return out;
@@ -1154,6 +1181,28 @@ export async function prepareProposal(toolName, input, { toolDeps, userMessages 
         }
         if (problems.length) return fail(`cannot ${action} these posts: ${problems.join('; ').slice(0, 600)}`);
         payload = { ...v.proposal.payload, rows };
+        break;
+      }
+      case 'calendar-decide': {
+        const v = validateProposal({ kind, payload: { items: input.items } });
+        if (!v.ok) return fail(v.errors.join('; '));
+        if (!toolDeps?.decideCalendarItems) return fail('calendar cleanup is not available');
+        // Posts are checked against the stored row (exists, still on the calendar); suggestions/requotes carry the model's label.
+        const items = [];
+        const problems = [];
+        for (const row of v.proposal.payload.items) {
+          let { title, date } = row;
+          if (row.item.kind === 'post' && typeof toolDeps?.readPost === 'function') {
+            const post = await toolDeps.readPost(row.item.postId);
+            if (!isPlain(post)) { problems.push(`${row.item.postId}: unknown post id`); continue; }
+            if (['posted', 'rejected'].includes(post.status)) { problems.push(`${row.item.postId}: is ${post.status}, nothing to clean up`); continue; }
+            title = String(post.content ?? post.text ?? '').slice(0, 100) || title;
+            date = strOrNull(post.reviewOn) || (post.scheduledAt ? String(post.scheduledAt).slice(0, 10) : date);
+          }
+          items.push({ ...row, ...(title ? { title } : {}), ...(date || row.item.date ? { date: date || row.item.date } : {}) });
+        }
+        if (problems.length) return fail(`cannot clean up these items: ${problems.join('; ').slice(0, 600)}`);
+        payload = { items };
         break;
       }
       case 'bucket-edit': {

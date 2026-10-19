@@ -188,3 +188,75 @@ test('loop: bulk kinds do not use the per-turn proposal cap', async () => {
   assert.deepEqual(r.proposals.map((p) => p.kind), ['daily-fill', 'refresh', 'queue-bulk', 'bucket-edit', 'bucket-edit']);
   assert.ok(BULK_PROPOSAL_KINDS.includes('refresh') && !BULK_PROPOSAL_KINDS.includes('bucket-edit'));
 });
+
+// ---- calendar-decide (pass / delete / replace) ----
+
+const post = { decision: 'pass', item: { kind: 'post', postId: 'p1', expectedRevision: 3 } };
+const sug = { decision: 'delete', item: { kind: 'suggestion', suggestionId: 's1', runId: 'r1', date: '2026-10-20' } };
+const rq = { decision: 'replace', item: { kind: 'requote', targetId: 't1', url: 'https://x.com/a/status/1', date: '2026-10-20' } };
+
+test('validate calendar-decide: shapes, replace-on-suggestion, duplicates, empty, cap', () => {
+  const ok = v('calendar-decide', { items: [post, sug, rq] });
+  assert.equal(ok.ok, true);
+  assert.deepEqual(ok.proposal.payload.items[0].item, { kind: 'post', postId: 'p1', expectedRevision: 3 });
+  assert.equal(v('calendar-decide', { items: [] }).ok, false);
+  assert.equal(v('calendar-decide', {}).ok, false);
+  assert.equal(v('calendar-decide', { items: [{ decision: 'nuke', item: post.item }] }).ok, false);
+  assert.equal(v('calendar-decide', { items: [{ decision: 'pass', item: { kind: 'tweet', postId: 'p1' } }] }).ok, false);
+  assert.match(v('calendar-decide', { items: [{ decision: 'replace', item: sug.item }] }).errors.join(), /cannot be replaced/);
+  assert.match(v('calendar-decide', { items: [post, { decision: 'delete', item: { kind: 'post', postId: 'p1' } }] }).errors.join(), /duplicate/);
+  assert.equal(v('calendar-decide', { items: [{ decision: 'pass', item: { kind: 'requote', targetId: 't1' } }] }).ok, false); // date required
+  const many = Array.from({ length: 21 }, (_, i) => ({ decision: 'pass', item: { kind: 'post', postId: `p${i}` } }));
+  assert.equal(v('calendar-decide', { items: many }).ok, false);
+});
+
+test('executor calendar-decide: needs its dep; per-item results; one failure does not stop the rest', async () => {
+  const missing = await run(buildExecutors({ planStore: createMemoryPlanStore() }), 'calendar-decide', { items: [post] });
+  assert.equal(missing.status, 'failed');
+  assert.match(missing.result.message, /calendar cleanup is not available/);
+  const seen = [];
+  const ex = buildExecutors({
+    planStore: createMemoryPlanStore(),
+    decideCalendarItems: async (a) => { seen.push(a); return { ok: true, results: [{ ok: true }, { ok: false, error: 'stale', reason: 'changed' }, { ok: true }] }; },
+  });
+  const res = await run(ex, 'calendar-decide', { items: [post, sug, rq] });
+  assert.equal(res.status, 'confirmed');
+  assert.deepEqual([res.result.done, res.result.failed, res.result.passed, res.result.deleted, res.result.replaced], [2, 1, 1, 0, 1]);
+  assert.equal(res.result.results[0].reason, 'changed');
+  assert.deepEqual(seen[0].items.map((i) => i.decision), ['pass', 'delete', 'replace']);
+  assert.equal(seen[0].clientId, 'c1');
+  const none = buildExecutors({ planStore: createMemoryPlanStore(), decideCalendarItems: async () => ({ ok: true, results: [{ ok: false, error: 'gone' }] }) });
+  assert.equal((await run(none, 'calendar-decide', { items: [post] })).status, 'failed');
+});
+
+test('tools: propose_calendar_decide checks posts, needs the dep, and the card previews each item', async () => {
+  const toolDeps = { decideCalendarItems: true, readPost: async (id) => ({ p1: { id: 'p1', status: 'draft', content: 'hello world', reviewOn: '2026-10-20' }, p2: { id: 'p2', status: 'posted', content: 'old' } }[id] || null) };
+  const d = await prepareProposal('propose_calendar_decide', { ...common, items: [post, sug] }, { toolDeps });
+  assert.equal(d.ok, true);
+  assert.equal(d.proposal.payload.items[0].title, 'hello world');
+  assert.equal(d.proposal.payload.items[0].date, '2026-10-20');
+  assert.equal((await prepareProposal('propose_calendar_decide', { ...common, items: [post] }, { toolDeps: {} })).ok, false);
+  assert.equal((await prepareProposal('propose_calendar_decide', { ...common, items: [{ decision: 'pass', item: { kind: 'post', postId: 'nope' } }] }, { toolDeps })).ok, false);
+  assert.equal((await prepareProposal('propose_calendar_decide', { ...common, items: [{ decision: 'pass', item: { kind: 'post', postId: 'p2' } }] }, { toolDeps })).ok, false);
+  const lines = proposalPayloadPreview('calendar-decide', d.proposal.payload);
+  assert.match(lines.join('\n'), /Pass post.*hello world/);
+  assert.match(lines.join('\n'), /Delete suggestion/);
+  assert.equal(proposalKindLabel('calendar-decide'), 'Clean up the calendar');
+});
+
+test('calendar-decide is a bulk kind (exempt from the per-turn cap) with a mapped action', () => {
+  assert.ok(BULK_PROPOSAL_KINDS.includes('calendar-decide') && PROPOSE_TOOL_BY_KIND['calendar-decide'] === 'propose_calendar_decide');
+});
+
+test('get_calendar rows expose the refs propose_calendar_decide needs', async () => {
+  const { shapeCalendar } = await import('../agent/tools.js');
+  const out = shapeCalendar([{ date: '2026-10-20', posts: [
+    { kind: 'post', id: 'social_1', revision: 4, status: 'draft', approval: 'unapproved', content: 'a post' },
+    { kind: 'suggestion', id: 'suggestion:s1', suggestionId: 's1', runId: 'run__1', approval: 'suggested', text: 'idea' },
+    { kind: 'requote', id: 'requote:t1', quoteTargetId: 't1', quotedUrl: 'https://x.com/a/status/1', approval: 'suggested', text: 'q' },
+  ] }]);
+  const [p, s, r] = out.days[0].items;
+  assert.deepEqual([p.id, p.revision], ['social_1', 4]);
+  assert.deepEqual([s.id, s.runId], ['s1', 'run__1']);
+  assert.deepEqual([r.id, r.quotedUrl], ['t1', 'https://x.com/a/status/1']);
+});

@@ -398,6 +398,7 @@ const PROPOSAL_KIND_LABELS = Object.freeze({
   'bucket-edit': 'Change a content bucket',
   'memory-suggest': 'Suggested memory lines',
   'media-tasks': 'Add "to film" reminders',
+  'calendar-decide': 'Clean up the calendar',
 });
 
 /** Plain-words label for a proposal kind. Unknown kinds fall back to a readable form, never throw. */
@@ -488,6 +489,16 @@ function queueBulkPreview(p) {
   ];
 }
 
+const CALENDAR_DECIDE_WHAT = Object.freeze({ pass: 'Pass', delete: 'Delete', replace: 'Replace' });
+function calendarDecidePreview(p) {
+  const rows = Array.isArray(p.items) ? p.items : [];
+  return [
+    `${rows.length} calendar item${rows.length === 1 ? '' : 's'}. Pass = off the calendar now; Delete = also never suggested again; Replace = swapped for the next-best item that day.`,
+    ...rows.slice(0, 20).map((r) => `${CALENDAR_DECIDE_WHAT[r.decision] || r.decision} ${r.item?.kind || 'item'}${r.date || r.item?.date ? ` (${r.date || r.item.date})` : ''}: ${r.title || r.item?.postId || r.item?.suggestionId || r.item?.targetId || ''}`),
+    'Nothing is posted or sent to X.',
+  ];
+}
+
 function bucketEditPreview(p) {
   const b = p.bucket || {};
   if (p.op === 'delete') return [`Delete bucket ${b.name || b.id}${p.reassignTo ? `, moving its items to ${p.reassignTo}` : ''}.`, 'Its content track goes with it. Posts are not touched.'];
@@ -557,6 +568,7 @@ export function proposalPayloadPreview(kind, payload, currentPlan) {
     case 'refresh': return refreshPreview(p);
     case 'queue-bulk': return queueBulkPreview(p);
     case 'bucket-edit': return bucketEditPreview(p);
+    case 'calendar-decide': return calendarDecidePreview(p);
     case 'action': return Array.isArray(p.warningLines) && p.warningLines.length ? p.warningLines : [String(p.warning || p.title || 'Run an action')];
     case 'memory-suggest': return [
       `${(p.rows || []).length} draft${(p.rows || []).length === 1 ? '' : 's'} still need your memory line. These are SUGGESTIONS: edit or skip each one below.`,
@@ -601,6 +613,7 @@ const RESULT_LINES = {
   'daily-fill': (r) => `${r?.created ?? 0} draft${r?.created === 1 ? '' : 's'} added to the calendar${r?.existing ? `, ${r.existing} already there` : ''}${r?.failed ? `, ${r.failed} failed` : ''}.`,
   refresh: (r) => (r?.clientAction === 'marketing-refresh' ? 'Running in Refresh panel' : 'Refresh requested.'),
   'queue-bulk': (r) => `${r?.done ?? 0} post${r?.done === 1 ? '' : 's'} updated${r?.failed ? `, ${r.failed} could not be (${(r.results || []).slice(0, 2).map((x) => x.reason).filter(Boolean).join('; ')})` : ''}.`,
+  'calendar-decide': (r) => `${r?.done ?? 0} calendar item${r?.done === 1 ? '' : 's'} cleaned up${r?.failed ? `, ${r.failed} could not be (${(r.results || []).slice(0, 2).map((x) => x.reason).filter(Boolean).join('; ')})` : ''}.`,
   'bucket-edit': (r) => (r?.op === 'delete' ? 'Bucket deleted.' : r?.created ? 'Bucket added.' : 'Bucket saved.'),
   'memory-suggest': (r) => `${r?.updated ?? 0} draft${r?.updated === 1 ? '' : 's'} updated${r?.skipped ? `, ${r.skipped} skipped` : ''}${r?.failed ? `, ${r.failed} could not be (${(r.results || []).slice(0, 2).map((x) => x.reason).filter(Boolean).join('; ')})` : ''}. They still need your approval.`,
   'media-tasks': (r) => `${r?.created ?? 0} reminder${r?.created === 1 ? '' : 's'} added to the calendar${r?.existing ? `, ${r.existing} already there` : ''}.`,

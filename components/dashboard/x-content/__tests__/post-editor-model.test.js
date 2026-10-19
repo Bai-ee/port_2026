@@ -4,6 +4,7 @@ import {
   MAX_CHARS, charCount, isOverLimit, formatInZone, zonedWallToMs, whenToIso, initialWhen, isFutureEnough, resolveTimeZone,
   statusPill, boundFields, boundFieldsGate, dirtyState, actionState, buildApproveRequest, buildApproveScheduleRequest,
   buildSaveRequest, buildSuggestionApproveRequest, classifyError, approvalVoided, mergeServerPost, moreItems, OWNER_ONLY_MESSAGE,
+  decideItems, buildDecideRequest, decideResultText, replacementRowId,
 } from '../post-editor-model.js';
 
 const FULL = { selfReply: null, mediaVariants: null, replyTo: null };
@@ -200,4 +201,31 @@ test('status pill and More items', () => {
   assert.equal(items(draft({ status: 'needs_review', state: 'held' })).reconcile, true);
   assert.equal(items(draft({ packageId: 'nas-1' })).hires, true);
   assert.deepEqual(moreItems({ kind: 'suggestion' }), []);
+});
+
+test('decideItems: per kind and status', () => {
+  assert.deepEqual(decideItems(draft()), { pass: true, replace: true, delete: true });
+  assert.deepEqual(decideItems(draft({ status: 'posted', state: 'posted' })), { pass: false, replace: false, delete: false });
+  assert.deepEqual(decideItems(draft({ status: 'posting' })), { pass: false, replace: false, delete: false });
+  assert.deepEqual(decideItems({ id: 'suggestion:s1', kind: 'suggestion' }), { pass: true, replace: false, delete: true });
+  assert.deepEqual(decideItems({ id: 'requote:t1', kind: 'requote' }), { pass: true, replace: false, delete: true });
+  assert.deepEqual(decideItems(draft(), { busy: true }), { pass: false, replace: false, delete: false });
+  assert.deepEqual(decideItems(null), { pass: false, replace: false, delete: false });
+});
+
+test('buildDecideRequest: item fields per kind', () => {
+  assert.deepEqual(buildDecideRequest(draft(), 'pass'), { endpoint: 'content', action: 'calendar-item-decide', body: { decision: 'pass', item: { kind: 'post', postId: 'p1', expectedRevision: 3 } } });
+  assert.deepEqual(buildDecideRequest({ id: 'suggestion:s1', kind: 'suggestion', date: '2026-10-20', runId: 'r1' }, 'delete').body, { decision: 'delete', item: { kind: 'suggestion', suggestionId: 's1', runId: 'r1', date: '2026-10-20' } });
+  assert.deepEqual(buildDecideRequest({ id: 'requote:t9', kind: 'requote', quotedUrl: 'https://x.com/a/status/1', date: '2026-10-20' }, 'pass').body.item, { kind: 'requote', targetId: 't9', url: 'https://x.com/a/status/1', date: '2026-10-20' });
+  assert.equal(buildDecideRequest(draft({ revision: undefined }), 'replace').body.item.expectedRevision, null);
+});
+
+test('decideResultText and replacementRowId', () => {
+  assert.equal(decideResultText('pass', {}), 'Passed.');
+  assert.equal(decideResultText('delete', {}), 'Deleted.');
+  assert.equal(decideResultText('replace', { replacement: null, note: 'no-eligible-item' }), 'Passed. Nothing else fits this day.');
+  assert.match(decideResultText('replace', { replacement: { kind: 'post', postId: 'p2', row: { title: 'Next one' } } }), /Replaced with Next one/);
+  assert.equal(replacementRowId({ replacement: { kind: 'post', postId: 'p2' } }), 'p2');
+  assert.equal(replacementRowId({ replacement: { kind: 'requote', targetId: 't3' } }), 'requote:t3');
+  assert.equal(replacementRowId({ replacement: null }), null);
 });

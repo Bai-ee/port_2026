@@ -96,14 +96,17 @@ export const PROPOSAL_KINDS = Object.freeze([
   'action',
   'memory-suggest',
   'media-tasks',
+  'calendar-decide',
 ]);
 
 /** Bulk kinds: one card covers many items, so they do not count toward the agent's per-turn proposal cap. */
-export const BULK_PROPOSAL_KINDS = Object.freeze(['calendar-batch', 'item-media', 'daily-fill', 'queue-bulk', 'refresh', 'action', 'memory-suggest', 'media-tasks']);
+export const BULK_PROPOSAL_KINDS = Object.freeze(['calendar-batch', 'item-media', 'daily-fill', 'queue-bulk', 'refresh', 'action', 'memory-suggest', 'media-tasks', 'calendar-decide']);
 export const MAX_BULK_PROPOSALS_PER_TURN = 4;
 
 /** Limits for the admin-level bulk kinds. */
-export const BULK_LIMITS = Object.freeze({ dailyFillMaxDays: 31, queueBulkMax: 50, refreshReasonMax: 300, bucketLabelMax: 80 });
+export const BULK_LIMITS = Object.freeze({ dailyFillMaxDays: 31, queueBulkMax: 50, refreshReasonMax: 300, bucketLabelMax: 80, calendarDecideMax: 20 });
+export const CALENDAR_DECISIONS = Object.freeze(['pass', 'delete', 'replace']);
+export const CALENDAR_ITEM_KINDS = Object.freeze(['post', 'suggestion', 'requote']);
 export const DAILY_FILL_INCLUDES = Object.freeze(['baseline', 'quotes', 'narratives', 'client-work']);
 export const QUEUE_BULK_ACTIONS = Object.freeze(['approve', 'unschedule', 'delete-draft', 'set-review-date']);
 export const BUCKET_EDIT_OPS = Object.freeze(['upsert', 'delete']);
@@ -144,6 +147,7 @@ export const PROPOSAL_KIND_ACTIONS = Object.freeze({
   'bucket-edit': 'upsert-bucket', // quote-targets upsert-bucket / delete-bucket, then syncTracks
   action: 'run-action', // agent/action-runtime.js: one registry action (or <=50 items of it), snapshot + audit; tier/typed gates enforced on decide
   'memory-suggest': 'update', // social-posting `update` per post (updateSocialPost, revision-checked): replaces a placeholder with the owner-approved line; never approves or schedules
+  'calendar-decide': 'calendar-item-decide', // quote-targets calendar-item-decide (x-content-inventory/calendar-decide.js) per item: pass | delete | replace; rejects/dismisses/creates drafts, no X call
   'media-tasks': 'content-task-create', // content_tasks reminders only (x-content-inventory/content-tasks.js); never touches a post or an item
 });
 
