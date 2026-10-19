@@ -49,7 +49,9 @@ const DEFAULT_DAILY_VIDEO_SOURCE_FOLDERS = ['skyline'];
 const DAILY_EMAIL_VIDEO_PRODUCTION = Object.freeze({
   name: 'hitloop-daily-email-v1',
   sourceFolderCount: 1,
-  randomAudio: { enabled: true },
+  // Audio = a random mix from these artists only (system/artists in EditVideos). BAI-EE's mixes live on Arweave
+  // and, for ones not archived yet, in EditVideos Firebase Storage — the worker plays both (worker/lib/mix-audio.js).
+  randomAudio: { enabled: true, artists: ['BAI-EE'] },
   // antiRepeatLookback: clips used by the last N video-remix jobs are only
   // re-picked after every unused eligible clip has had a turn, so runs cycle
   // through the folder instead of re-rolling the same favorites.
@@ -117,21 +119,23 @@ function buildDailyEmailSourceFolders(allFolders, production = DAILY_EMAIL_VIDEO
   return [...preferred, ...pickRandomFolders(pool, needed)].slice(0, Math.max(1, Number(production.sourceFolderCount || 6)));
 }
 
-async function pickRandomArtistMix() {
+async function pickRandomArtistMix(allowedArtists = []) {
   const options = await listOptions();
+  const allowed = new Set(uniqueStrings(allowedArtists).map((name) => name.toUpperCase()));
   // Only pick artists whose names survive validateRemixRecipe's ARTIST_RE —
   // a roll onto a name with e.g. "&" or "'" used to fail the whole recipe
   // and cost that day's email its fresh video.
   const artists = Array.isArray(options?.artists)
     ? options.artists.filter((artist) => (
       artist?.name
+      && (!allowed.size || allowed.has(String(artist.name).toUpperCase()))
       && mediaRecipe.isValidArtistName(artist.name)
       && Array.isArray(artist.mixes)
       && artist.mixes.length
     ))
     : [];
   if (!artists.length) {
-    throw new Error('random artist/mix requested but no artists with mixes are available');
+    throw new Error(`random artist/mix requested but no ${allowed.size ? [...allowed].join('/') + ' ' : ''}mixes are available`);
   }
 
   const artist = artists[Math.floor(Math.random() * artists.length)];
@@ -173,7 +177,7 @@ async function buildDailyEmailVideoOrder(sourceFolders, clientId, production = D
 
 async function buildDailyEmailRecipe(sourceFolders, clientId, production = DAILY_EMAIL_VIDEO_PRODUCTION) {
   const [audio, videoOrder] = await Promise.all([
-    production.randomAudio?.enabled ? pickRandomArtistMix() : {},
+    production.randomAudio?.enabled ? pickRandomArtistMix(production.randomAudio.artists) : {},
     buildDailyEmailVideoOrder(sourceFolders, clientId, production),
   ]);
   return mediaRecipe.validateRemixRecipe({
