@@ -29,7 +29,7 @@ import * as bucketStore from '../../../../features/x-content-inventory/bucket-st
 import { findMediaCandidates, linkMediaPatch, normalizeLinks } from '../../../../features/x-content-inventory/item-media.js';
 import { normalizeFacets } from '../../../../features/x-content-inventory/facets.js';
 import { resolveMediaUrls } from '../../../../features/rendered-videos/media-url.js';
-import { syncRenderedVideos } from '../../../../features/rendered-videos/sync.js';
+import { syncRenderedVideosForClient } from '../../../../features/rendered-videos/firestore-sync.js';
 import { resolveMediaUrlsBatch, MEDIA_URLS_MAX_IDS, MEDIA_KINDS, tokenUrlFor } from '../../../../features/x-content-inventory/thumbs.js';
 import { setRights, saveThumb, createDraftFromItem, pickMedia } from '../../../../features/x-content-inventory/item-actions.js';
 import { NAS_ACTIONS, handleNasAction } from '../../../../features/x-content-inventory/nas.js';
@@ -392,9 +392,6 @@ const handleContentPlan = (context, body) => getContentPlanHandlers().contentPla
 // client is refused (409). Item actions resolve by id through getPackageFor, which hides a foreign row (404).
 const upsertFor = (clientId) => (pkg) => upsertPackage(pkg, { returnPackages: false, clientId });
 const getPackageFor = (clientId) => packageGetterFor(clientId);
-// Rendered videos come from ONE shared EditVideos feed, owned by the NAS/archive client. Any other client's sync is a
-// no-op (it would otherwise create home's renders under that client, or 409 on home's rows).
-const mediaOwnerClientId = () => process.env.NAS_INVENTORY_CLIENT_ID || null;
 
 async function handleInventoryList(context) {
   const { packages, updatedAt, seeded } = await readInventory({ clientId: context.clientId });
@@ -768,46 +765,15 @@ async function readStoredPackages(ids) {
   return out;
 }
 
-const rvMetaRef = (clientId) => fb.adminDb.collection('content_buckets').doc(clientId).collection('meta').doc('rendered-videos');
-
+// Same wiring as the daily-loop cron (features/rendered-videos/firestore-sync.js).
 async function handleSyncRenderedVideos(context, body) {
-  const clientId = context.clientId;
-  if (clientId !== mediaOwnerClientId()) {
-    return { ok: true, skipped: 'not-owner', created: 0, updated: 0, unchanged: 0, total: 0, lastSyncAt: null };
-  }
-  const bridge = loadBridge();
-  return syncRenderedVideos({
-    async listVideos() {
-      const videos = [];
-      let cursor = null;
-      let complete = false;
-      for (let i = 0; i < 50; i += 1) {
-        const page = await bridge.listRenderedVideos({ limit: 200, startAfter: cursor });
-        videos.push(...page.videos);
-        cursor = page.nextCursor;
-        if (!cursor) { complete = true; break; }
-      }
-      return { videos, complete }; // complete only when the cursor ran out (enables retire-on-missing)
-    },
-    async listStored() {
-      const snap = await fb.adminDb.collection('x_content_packages').where('clientId', '==', clientId).where('source.kind', '==', 'rendered-video').get();
-      return snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
-    },
-    async listMediaJobs(jobIds) {
-      const map = new Map();
-      for (let i = 0; i < jobIds.length; i += 30) {
-        const snap = await fb.adminDb.collection('media_jobs').where('editJobId', 'in', jobIds.slice(i, i + 30)).get();
-        for (const d of snap.docs) { const j = d.data(); if (j.editJobId) map.set(String(j.editJobId), j); }
-      }
-      return map;
-    },
-    readExisting: readStoredPackages,
-    upsert: upsertFor(clientId),
-    async readMeta() { const s = await rvMetaRef(clientId).get(); return s.exists ? s.data() : null; },
-    async writeMeta(m) { await rvMetaRef(clientId).set(m, { merge: true }); },
-    now: () => Date.now(),
-    ueArtists: [], // artists.json is a local file; sync keeps stored genres/era (see sync.js)
-  }, { force: body?.force === true });
+  return syncRenderedVideosForClient({
+    db: fb.adminDb,
+    bridge: loadBridge(),
+    upsert: upsertFor(context.clientId),
+    clientId: context.clientId,
+    force: body?.force === true,
+  });
 }
 
 async function handleMediaUrls(context, body) {
