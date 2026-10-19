@@ -93,6 +93,25 @@ const mediaReady = (p) => (p?.mediaState === 'video' || p?.mediaState === 'still
 
 function daysBetween(a, b) { return Math.abs(dayNumber(a) - dayNumber(b)); }
 
+// trackRules (daily-mix-rule.js): a rule applies to the track that lists its bucket.
+const ruleForTrack = (track, rules) => {
+  if (!isPlain(rules)) return null;
+  const hit = (track?.buckets || []).map((b) => rules[b]).find((r) => isPlain(r) && Number(r.perDay) >= 0);
+  return hit ? { ...hit, perDay: Number(hit.perDay) } : null;
+};
+const matchesRule = (p, rule) => {
+  const artists = Array.isArray(rule.artists) ? rule.artists.map((a) => String(a).toLowerCase()) : [];
+  if (!artists.length) return true;
+  if (p?.status === 'retired' || p?.mediaState !== 'video') return false;
+  return (p.entities || []).some((e) => artists.includes(String(e).toLowerCase()));
+};
+// Never-used first, newest render first (the morning's render leads); then least recently used, oldest use first.
+const newestUnusedFirst = (a, b) => (a.prior ? 1 : 0) - (b.prior ? 1 : 0)
+  || (a.prior
+    ? a.prior.localeCompare(b.prior)
+    : String(b.p.renderedAt || '').localeCompare(String(a.p.renderedAt || '')))
+  || String(a.p.id).localeCompare(String(b.p.id));
+
 /**
  * Pure plan. `today` = YYYY-MM-DD in the client's time zone; `nowMs` (default = midnight UTC of today) only dates quote
  * windows. Inputs:
@@ -104,11 +123,15 @@ function daysBetween(a, b) { return Math.abs(dayNumber(a) - dayNumber(b)); }
  *   lastUsed                   Map packageId -> 'YYYY-MM-DD' last posted / dated day (the 30-day spread)
  *   quoteTargets               [{id,url,text,author|handle,createdAt,trackId?}] open quote candidates; asOf.quotes
  *   marketSignals              shapeMarketSignals output (topics/opportunities); asOf.signals
+ *   trackRules                 { [bucketId]: {perDay, artists?, newestFirst?} } overrides for a bucket's track (daily-mix-rule.js):
+ *                              perDay replaces the engine target; artists limits the pool to non-retired videos by those
+ *                              artists; newestFirst ranks never-used items newest render first, then least recently used
  * @returns {{ok:true, from, days, rows, skipped, counts}|{ok:false, error}}
  */
 export function planDailyFill({
   tracks = [], engineTargets = {}, packages = [], clientWork = null, openPosts = new Set(), fillPosts = [], lastUsed = new Map(),
   quoteTargets = [], marketSignals = null, asOf = {}, from, days = DEFAULT_FILL_DAYS, today, nowMs, include = FILL_KINDS,
+  trackRules = {},
 } = {}) {
   if (!DAY_RE.test(String(today || ''))) return { ok: false, error: 'today must be YYYY-MM-DD' };
   if (!DAY_RE.test(String(from || ''))) return { ok: false, error: 'from must be YYYY-MM-DD' };
@@ -125,12 +148,16 @@ export function planDailyFill({
 
   // ---- baseline + client-work: per track, per date ----------------------------------------------------------
   const clientWorkDay = new Map(); // date -> client-work rows placed (cap 1 a day across tracks)
+  const ruleTitles = new Set(); // titles placed by a trackRules track in this window
+  const titleKey = (p) => String(p?.title ?? p?.id).toLowerCase().trim();
   for (const track of tracks || []) {
     const kind = isClientWorkTrack(track) ? 'client-work' : 'baseline';
     if (!want.has(kind)) continue;
-    const perDay = trackPostsPerDay(track, engineTargets);
+    const rule = ruleForTrack(track, trackRules);
+    const perDay = rule ? rule.perDay : trackPostsPerDay(track, engineTargets);
     if (perDay <= 0) continue;
-    const pool = (kind === 'client-work' && Array.isArray(clientWork) ? clientWork : packages).filter((p) => p?.id && trackForPackage(tracks, p)?.id === track.id);
+    const pool = (kind === 'client-work' && Array.isArray(clientWork) ? clientWork : packages)
+      .filter((p) => p?.id && trackForPackage(tracks, p)?.id === track.id && (!rule || matchesRule(p, rule)));
     const buckets = new Set(track.buckets || []);
     for (const date of dates) {
       let slots = slotsOn(perDay, date);
@@ -152,9 +179,13 @@ export function planDailyFill({
         const tier = dated ? 0 : mediaReady(p) ? 1 : 2;
         ranked.push({ p, dated: !!dated, tier, prior, existingPostId: placeable ? open.postId : null });
       }
-      ranked.sort((a, b) => a.tier - b.tier || (a.prior || '').localeCompare(b.prior || '') || String(a.p.id).localeCompare(String(b.p.id)));
-      for (const c of ranked.slice(0, slots)) {
+      if (rule?.newestFirst) ranked.sort(newestUnusedFirst);
+      else ranked.sort((a, b) => a.tier - b.tier || (a.prior || '').localeCompare(b.prior || '') || String(a.p.id).localeCompare(String(b.p.id)));
+      // A rule track holds many renders of the same mix: one title per fill window, so days don't repeat a mix.
+      const picks = rule ? ranked.filter((c) => !ruleTitles.has(titleKey(c.p))) : ranked;
+      for (const c of picks.slice(0, slots)) {
         used.add(c.p.id);
+        if (rule) ruleTitles.add(titleKey(c.p));
         if (kind === 'client-work') clientWorkDay.set(date, (clientWorkDay.get(date) || 0) + 1);
         rows.push({
           date, kind, trackId: track.id, bucketId: bucketOfPackage(c.p), packageId: c.p.id, title: c.p.title ?? null,

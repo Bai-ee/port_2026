@@ -80,6 +80,14 @@ Idempotent: key `daily-fill:<date>:<kind>:<packageId|targetId>` through `ensureD
 
 Wiring: `createStrategyHandlers` deps `readFillContext`, `readQuoteTargets` (plus the existing `readOpenPackageIds`, `readMarketSignals`, `ensureDraft`, `placeDraft`, `mediaForItem`); route actions `strategy-daily-fill-preview` / `strategy-daily-fill-create` (body `{clientId, spec:{from?, days?(1-31, default 7), include?}}`); agent deps `previewDailyFill(spec)` / executor `runDailyFill({clientId, spec, proposalId})`. The cron entry is `runDailyFillForCron(clientId, {today, deps})` (today + 6 days, every kind), with `deps = handlers.dailyFillDeps`.
 
+## Daily mix video (2026-10-19)
+
+One BAI-EE mix video draft a day on the calendar, from the daily email render.
+- **Render:** `app/api/worker/pre-digest-video` (06:00 UTC) renders a random BAI-EE mix (`randomAudio.artists`); the EditVideos worker plays Arweave and Firebase-hosted mixes (`worker/lib/mix-audio.js` in arweave-video-generator) and cuts a random 30 s clip.
+- **Into the bucket:** the 11:30 daily-loop runs the rendered-video sync first (`features/rendered-videos/firestore-sync.js`, also the Content Engine's `sync-rendered-videos`), so that render is an `rv-` item in Dj Mix Videos (`ue`) the same day.
+- **Onto the calendar:** `features/x-content-inventory/daily-mix-rule.js` hands the daily fill a `trackRules` override for `ue`, media owner client only (`NAS_INVENTORY_CLIENT_ID`): 1 a day (replaces the engine target), BAI-EE only, not retired, video only; never-used first, newest render first, then least recently used; one mix title per fill window. Drafts only, for owner approval.
+- Code-owned on purpose: tracks round-trip through the Client Brain, which would drop a track-level field. Insights still shows the `ue` engine target from the plan; set it to 1/day in Strategy to match.
+
 ## One calendar (2026-10-17, PRs #25–#27)
 
 The month calendar is the single review surface for every possible post.
