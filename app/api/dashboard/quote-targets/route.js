@@ -1186,6 +1186,20 @@ function getStrategyHandlers() {
       deleteBucket: (clientId, bucketId, opts) => bucketStore.deleteBucket(clientId, bucketId, opts),
       mediaForItem: (clientId, pkg) => (pkg && pkg.clientId === clientId ? pickMedia(pkg, mediaSigners()) : null),
       runDailyAction: (context, action, body) => handleDailyRun(context, action, body),
+      // Agent / MCP calendar cleanup card (propose_calendar_decide), run on the owner's Confirm: one item at a time,
+      // a failed item is reported in its row and never stops the rest.
+      decideCalendarItems: async ({ clientId, items }) => {
+        const results = [];
+        for (const { decision, item } of Array.isArray(items) ? items : []) {
+          try {
+            // eslint-disable-next-line no-await-in-loop
+            results.push(await decideCalendarItem(calendarItemDecideDeps({ clientId }, null), { clientId, decision, item, by: 'agent-card' }));
+          } catch (err) {
+            results.push({ ok: false, decision, kind: item?.kind ?? null, error: String(err?.message || err).slice(0, 200), reason: err?.code ?? null });
+          }
+        }
+        return { ok: results.some((r) => r.ok), results };
+      },
       runUpdateItemFacets: (context, body) => handleUpdateItemFacets(context, body),
       readTodayRun: (clientId) => latestDailyRun(createFirestoreRunStore(fb.adminDb), clientId),
       readContentContext: async (clientId) => summarizeContentContext(await readContentContext(clientId)),

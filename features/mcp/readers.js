@@ -183,6 +183,9 @@ export function createReaders(db) {
       readTodayRun: (clientId) => latestDailyRun(createFirestoreRunStore(db), clientId),
       readContentContext: async (clientId) => summarizeContentContext(await readContentContext(clientId)),
       readQueueSummary, readPostsForQuery, readPost, readOpportunities, readResults, readMarketSignals,
+      // Capability only: MCP files the calendar cleanup card; it runs when the owner confirms it inside HITLOOP
+      // (the dashboard route wires the real decideCalendarItems). Never executed from MCP.
+      decideCalendarItems: async () => { throw new Error('Confirm this calendar card inside HITLOOP.'); },
     },
     regenerateToday,
     // Same "Today's plan" block the daily email renders (shared reader; never throws).
