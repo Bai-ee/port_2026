@@ -41,6 +41,7 @@ import {
 } from 'lucide-react';
 import { BrainIcon } from './components/ui/brain';
 import UpRightArrow from './components/UpRightArrow';
+import ScrambleCta from './components/home/ScrambleCta';
 import { useAuth } from './AuthContext';
 import { collection, doc, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { db } from './firebase';
@@ -10893,19 +10894,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
             <img id="founders-brand-logo-image" src="/img/circle_logo.png" alt="" aria-hidden="true" />
           </Link>
           <div id="founders-top-actions">
-            <button type="button" id="founders-login-link" onClick={handleSignOut}>
-              Logout
-            </button>
-            <a
-              id="founders-chat-cta"
-              href="https://calendly.com/bballi/30min"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <span className="founders-chat-label-full">Contact</span>
-              <span className="founders-chat-label-short">Contact</span>
-              <UpRightArrow id="founders-chat-cta-icon" />
-            </a>
+            {/* Same CTA as the homepage (components/home/ScrambleCta.jsx): CLIENTS at rest, scrambles to LOGOUT on
+                desktop hover; touch screens just show LOGOUT. */}
+            <ScrambleCta restLabel="CLIENTS" revealLabel="LOGOUT" touchLabel="LOGOUT" ariaLabel="Log out" onClick={handleSignOut} />
           </div>
           {/* Visually-hidden power-user controls (theme preference + sign out). `inert` (not aria-hidden) keeps the focusable buttons out of the tab order and the accessibility tree; the Studio preview switch is the supported setter. */}
           <div id="founders-hidden-controls" inert>
@@ -11246,10 +11237,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       if (!hasDeliverableAssets) return null;
                       return (
                         <>
-                          <span className="cap-source-divider" aria-hidden="true" />
+                          <span className="cap-source-divider dash-source-desktop-only" aria-hidden="true" />
                           <button
                             type="button"
                             id="dashboard-dl-all-chip"
+                            className="dash-source-desktop-only"
                             title="Download all deliverable assets as a zip"
                             aria-label="Download all deliverable assets as a zip"
                             onClick={handleDownloadAllDeliverables}
@@ -11282,6 +11274,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         <button
                           type="button"
                           id="dashboard-coverage-chip"
+                          className="dash-source-desktop-only"
                           title="Open Data Quality"
                           aria-label="Open Data Quality"
                           onClick={() => {
@@ -11325,10 +11318,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         </button>
                       );
                     })()}
-                    <span className="cap-source-divider" aria-hidden="true" />
+                    <span className="cap-source-divider dash-source-desktop-only" aria-hidden="true" />
                     {/* Two affordances share the chip: the icon opens the latest
                         brief; the countdown time opens the cooldown / payment modal. */}
-                    <span id="brief-cooldown-chip" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0 2px', flexShrink: 0 }}>
+                    <span id="brief-cooldown-chip" className="dash-source-desktop-only" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0 2px', flexShrink: 0 }}>
                       <button
                         type="button"
                         id="brief-cooldown-icon-btn"
