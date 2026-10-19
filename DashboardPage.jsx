@@ -69,7 +69,7 @@ import ScoutTestMetaRow from './components/dashboard/ScoutTestMetaRow';
 import MarketSignalsTermControl from './components/dashboard/MarketSignalsTermControl';
 import { ReplyTargetsBlock, RedditAnalysisBlock, InstagramAnalysisBlock, OpportunitySignalsBlock, RecipeBriefBlock, WatchlistAnalysisBlock } from './components/dashboard/MarketSignalsReportBlocks';
 
-import { VIDEO_REMIX_FOLDER_FILE_CACHE_TTL_MS, VIDEO_REMIX_FOLDER_PAGE_SIZE, VIDEO_REMIX_FOLDER_PAGE_STEP, VIDEO_REMIX_FOLDER_PAGE_MAX, SAVED_REMIX_PAGE_SIZE, VIDEO_REMIX_MAX_COUNT, STANDARD_REMIX_DEFAULTS, buildRemixRecipe, sanitizeVideoRemixFolderPreview, formatVideoRemixBytes, readVideoRemixPendingJob, writeVideoRemixPendingJob, normalizeVideoRemixFolderDetails, uploadVideoRemixFileToSignedUrl } from './lib/dashboard/video-remix';
+import { VIDEO_REMIX_FOLDER_FILE_CACHE_TTL_MS, VIDEO_REMIX_FOLDER_PAGE_SIZE, VIDEO_REMIX_FOLDER_PAGE_STEP, VIDEO_REMIX_FOLDER_PAGE_MAX, SAVED_REMIX_PAGE_SIZE, VIDEO_REMIX_MAX_COUNT, STANDARD_REMIX_DEFAULTS, buildRemixRecipe, sanitizeVideoRemixFolderPreview, formatVideoRemixBytes, readVideoRemixPendingJob, writeVideoRemixPendingJob, readVideoRemixLastUploadFolder, writeVideoRemixLastUploadFolder, normalizeVideoRemixFolderDetails, uploadVideoRemixFileToSignedUrl } from './lib/dashboard/video-remix';
 import { parseBriefSuggestedPost, sanitizeBriefHtmlForStandalone, parseEstimateLineItems, buildDefaultEstimateBriefDraft, hydrateEstimateBriefDraft, buildEstimateBriefConfigPayload, briefSlugify, titlePdfFileName, withDownloadParam, buildCustomBriefStarterHtml } from './lib/dashboard/brief-drafts';
 import { safeDownloadName, downloadBrowserAsset, termArrCount, termItemLines, cloneJson, appendCacheBust, fsTimestampToDate } from './lib/dashboard/format-utils';
 import { MARKETING_BRIEF_SOURCE_PLATFORMS, UNLOCKED_SOURCE_PLATFORMS, DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS, WATCHLIST_RECIPE_IDS, SEARCH_PLAN_CUSTOM_MAX, BRAND_KEYWORD_RECOMMENDED_MAX, CATEGORY_TERM_RECOMMENDED_MAX, WEB_SEARCH_SOURCES, SOCIAL_SIGNAL_SOURCES, deriveMarketingBriefPerPlatformResults, splitMarketingBriefTerms, getClientHostname, buildRecommendedCustomSearchRows, getMarketingBriefSearchStats, buildDefaultMarketingBriefConfig, joinConfigList } from './lib/dashboard/marketing-brief-config';
@@ -1326,7 +1326,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    setVideoRemixFolders(details.map((item) => item.name));
 	    setVideoRemixUploadDraft((prev) => {
 	      if (prev.existingFolder && details.some((item) => item.name === prev.existingFolder)) return prev;
-	      return { ...prev, existingFolder: details[0]?.name || '' };
+	      // Never default to the first folder (uploads once landed in "72326" by accident): last upload folder or none.
+	      const last = readVideoRemixLastUploadFolder();
+	      return { ...prev, existingFolder: last && details.some((item) => item.name === last) ? last : '' };
 	    });
 	    return details;
 	  }, [user, apiPath]);
@@ -1468,7 +1470,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    const folderMode = videoRemixUploadDraft.folderMode === 'new' ? 'new' : 'existing';
 	    const targetFolder = folderMode === 'new'
 	      ? sanitizeVideoRemixFolderPreview(videoRemixUploadDraft.newFolderName)
-	      : (videoRemixUploadDraft.existingFolder || videoRemixFolders[0] || '');
+	      : (videoRemixUploadDraft.existingFolder || '');
 	    if (!targetFolder) {
 	      setVideoRemixUploadError(folderMode === 'new' ? 'Name the new folder first.' : 'Choose a folder first.');
 	      return;
@@ -1526,6 +1528,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	          : [...prev.selectedFolders, folderName],
 	      }));
 	      setVideoRemixUploadDraft((prev) => ({ ...prev, existingFolder: folderName, folderMode: 'existing' }));
+	      writeVideoRemixLastUploadFolder(folderName);
 	      setVideoRemixFolderFiles({ folder: folderName, files: [] });
 	      if (refreshed.some((item) => item.name === folderName)) {
 	        loadVideoRemixFolderFiles(folderName);
@@ -2943,7 +2946,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           setVideoRemixFolders(details.map((item) => item.name));
           setVideoRemixUploadDraft((prev) => {
             if (prev.existingFolder && details.some((item) => item.name === prev.existingFolder)) return prev;
-            return { ...prev, existingFolder: details[0]?.name || '' };
+            // Never default to the first folder (uploads once landed in "72326" by accident): last upload folder or none.
+            const last = readVideoRemixLastUploadFolder();
+            return { ...prev, existingFolder: last && details.some((item) => item.name === last) ? last : '' };
           });
         }
       } catch {
@@ -17008,7 +17013,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                  const folderFilesLimit = videoRemixFolderFiles.limit || VIDEO_REMIX_FOLDER_PAGE_SIZE;
 	                  const folderFilesMaybeMore = videoRemixFolderFiles.files.length >= folderFilesLimit && folderFilesLimit < VIDEO_REMIX_FOLDER_PAGE_MAX;
 	                  const loadMoreFolderFiles = () => loadVideoRemixFolderFiles(videoRemixFolderFiles.folder, folderFilesLimit + VIDEO_REMIX_FOLDER_PAGE_STEP).catch(() => {});
-	                  const effectiveExistingFolder = videoRemixUploadDraft.existingFolder || folderDetailList[0]?.name || '';
+	                  const effectiveExistingFolder = videoRemixUploadDraft.existingFolder || '';
 	                  const uploadTargetFolder = videoRemixUploadDraft.folderMode === 'new'
 	                    ? sanitizeVideoRemixFolderPreview(videoRemixUploadDraft.newFolderName)
 	                    : effectiveExistingFolder;
@@ -17371,10 +17376,12 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                  <label className="field">
 	                                    <span className="label">Existing folder</span>
 	                                    <select
+	                                      id="video-remix-upload-folder-select"
 	                                      value={effectiveExistingFolder}
 	                                      onChange={(e) => setVideoRemixUploadDraft((prev) => ({ ...prev, existingFolder: e.target.value }))}
 	                                      disabled={!folderDetailList.length}
 	                                    >
+	                                      {folderDetailList.length ? <option value="">Choose a folder…</option> : null}
 	                                      {folderDetailList.length ? folderDetailList.map((folder) => (
 	                                        <option key={folder.name} value={folder.name}>
 	                                          {folder.name}{folder.count != null ? ` (${folder.count})` : ''}
@@ -17439,7 +17446,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                disabled={videoRemixUploadLoading || !uploadQueuedCount || !uploadTargetFolder}
 	                                onClick={runVideoRemixUpload}
 	                              >
-	                                <span className="cta-text">{videoRemixUploadLoading ? 'Uploading…' : 'Upload to Source Folder'}</span>
+	                                <span className="cta-text">{videoRemixUploadLoading ? `Uploading to ${uploadTargetFolder}…` : uploadTargetFolder ? `Upload ${uploadQueuedCount ? `${uploadQueuedCount} ` : ''}to ${uploadTargetFolder}` : 'Choose a folder to upload'}</span>
 	                                <span className="cta-icon">↗</span>
 	                              </button>
 	                            </section>
