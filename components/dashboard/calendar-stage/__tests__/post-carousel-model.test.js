@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   wrapIndex, pickDayPostIds, stepTarget, positionLabel, swipeStep, initialWheelState, wheelStep,
-  isTypingTarget, keyStep, WHEEL_QUIET_MS,
+  isTypingTarget, keyStep, WHEEL_QUIET_MS, targetAfterDecide,
 } from '../post-carousel-model.js';
 
 test('wrapIndex wraps both directions', () => {
@@ -85,4 +85,13 @@ test('keyStep ignores typing targets and modified keys', () => {
   assert.equal(keyStep({ key: 'ArrowRight', target: body, defaultPrevented: true }), 0);
   assert.equal(keyStep({ key: 'a', target: body }), 0);
   assert.equal(isTypingTarget(null), false);
+});
+
+test('targetAfterDecide: replacement wins, else the next slot, else null', () => {
+  assert.equal(targetAfterDecide(['a', 'b', 'c'], 'b', 'z'), 'z');
+  assert.equal(targetAfterDecide(['a', 'b', 'c'], 'b'), 'c');
+  assert.equal(targetAfterDecide(['a', 'b', 'c'], 'c'), 'a');
+  assert.equal(targetAfterDecide(['a', 'b'], 'a', 'a'), 'b');
+  assert.equal(targetAfterDecide(['a'], 'a'), null);
+  assert.equal(targetAfterDecide([], 'a'), null);
 });
