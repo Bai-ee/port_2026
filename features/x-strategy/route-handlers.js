@@ -794,7 +794,18 @@ export function createStrategyHandlers({
         const planDoc = await planStore.get(clientId);
         const profile = preloaded.profile ?? (preloaded.profile = await loadProfile(clientId));
         const tracks = tracksOf(planDoc);
-        return { tracks, library: summarizeTrackLibrary(tracks, await readPackages(clientId)), profiles: await safeTrackProfiles(planDoc, profile) };
+        // Code-owned fill overrides (daily-mix-rule.js): they replace the plan target for that track, so say so.
+        const rules = typeof readTrackRules === 'function' ? readTrackRules(clientId) : {};
+        const dailyRules = Object.entries(rules || {}).map(([bucket, r]) => ({
+          bucket, track: tracks.find((t) => (t.buckets || []).includes(bucket))?.label ?? bucket, perDay: r.perDay,
+          artists: r.artists ?? [], replacesPlanTarget: true,
+          order: 'never-used first, newest render first; then least recently used; one mix title per fill window; drafts only',
+          source: 'the 06:00 UTC daily email video (a random BAI-EE mix), synced into the bucket by the 11:30 daily-loop',
+        }));
+        return {
+          tracks, library: summarizeTrackLibrary(tracks, await readPackages(clientId)), profiles: await safeTrackProfiles(planDoc, profile),
+          ...(dailyRules.length ? { dailyRules } : {}),
+        };
       },
       getPlan: async () => ((await planStore.get(clientId)) ?? { version: 0, plan: DEFAULT_PLAN, history: [], isDefault: true }),
       // Stored doc or the seeded draft (version 0); absent docStore => null (prompt says none available).

@@ -183,7 +183,7 @@ export const READ_TOOLS = Object.freeze([
   },
   {
     name: 'get_tracks',
-    description: 'The content tracks in effect (one per Content Center bucket, named after it): per track its engines, buckets, share, benchmarks, promotions, what its library holds (library: item count, top tags, sample titles; use search_inventory with track to see items), and its own benchmark profile (format mix, median length, link-in-reply rate, best hours, post-type mix, example ids, per-handle breakdown). A track with no benchmark reports status no-benchmark with your own history as the fallback. Never averaged across tracks.',
+    description: 'The content tracks in effect (one per Content Center bucket, named after it): per track its engines, buckets, share, benchmarks, promotions, what its library holds (library: item count, top tags, sample titles; use search_inventory with track to see items), and its own benchmark profile (format mix, median length, link-in-reply rate, best hours, post-type mix, example ids, per-handle breakdown). A track with no benchmark reports status no-benchmark with your own history as the fallback. Never averaged across tracks. dailyRules: fill overrides that replace a track target (e.g. one BAI-EE mix video draft a day in Dj Mix Videos).',
     input_schema: { type: 'object', properties: {} },
   },
   {
