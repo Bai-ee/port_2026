@@ -988,6 +988,9 @@
   #capability-grid .cap-step-group:last-child  .cap-step-grid > .tile-intake-card:last-child:nth-child(odd) { border-bottom-left-radius: 27px; }
   /* 1-col: each edge card rounds both of its corners; drop 2-col middle rounding. */
   @media (max-width: 620px) {
+    /* Phones: the source band keeps the view toggle, run indicator and Refresh; download-all, data coverage and the
+       latest-brief chip (+ their dividers) step aside so Refresh is never pushed off. !important beats inline display. */
+    #dashboard-source-band .dash-source-desktop-only { display: none !important; }
     .cap-bucket-deliverables #capability-grid .cap-step-grid > .tile-intake-card { border-top-right-radius: 0; border-bottom-left-radius: 0; }
     .cap-bucket-deliverables #capability-grid .cap-step-group:first-child .cap-step-grid > .tile-intake-card:first-child { border-top-right-radius: 27px; }
     .cap-bucket-deliverables #capability-grid .cap-step-group:last-child  .cap-step-grid > .tile-intake-card:last-child  { border-bottom-left-radius: 27px; }
