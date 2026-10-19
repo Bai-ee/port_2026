@@ -889,7 +889,10 @@ function useConstantSpeedMarquees() {
   }, []);
 }
 
-const StackedSlidesSection = () => {
+// `aboveFoldOnly` (homepage, 2026-10-18): render only the email/booking row of the first panel. Everything below
+// the fold (HELLO marquee, onboarding table, testimonials, reel, capabilities + footer) is parked, not deleted —
+// see docs/plans/HOMEPAGE-BELOW-FOLD-PARKED.md to bring it back.
+const StackedSlidesSection = ({ aboveFoldOnly = false }) => {
   useConstantSpeedMarquees();
   const wrapperRef = useRef(null);
   const servicesViewportRef = useRef(null);
@@ -2983,6 +2986,11 @@ const StackedSlidesSection = () => {
           font-size: clamp(0.85rem,1.1vw,0.95rem); color: var(--t-text); line-height: 1.2;
         }
         #cmo-modal-url-input::placeholder { color: color-mix(in srgb, var(--t-text) 45%, transparent); }
+        /* iOS zooms the whole page into any field under 16px on focus (and leaves it shifted); touch screens get 16px. */
+        @media (pointer: coarse) {
+          #cmo-modal-url-input,
+          #hero-url-input { font-size: 16px !important; }
+        }
         #cmo-url-pill-submit {
           display: inline-flex; align-items: center; gap: 0.25rem; flex-shrink: 0;
           border-radius: 999px; padding: 0.5rem 0.75rem; line-height: 1;
@@ -3134,7 +3142,7 @@ const StackedSlidesSection = () => {
                       <div id="panel-hero-text-row" style={{ ...textRowStyle, display: 'flex', alignItems: 'center', gap: 'clamp(0.5rem, 1.5vw, 1rem)', width: '100%' }}>
                         <div id="hero-url-input-row" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flex: 1, minWidth: 0, height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'color-mix(in srgb, var(--t-surface) 45%, transparent)', border: '1px solid var(--t-border-subtle)', borderRadius: '999px', boxShadow: '0 1px 4px color-mix(in srgb, var(--t-text) 7%, transparent)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                           <CalendlyIcon id="hero-url-input-calendly-icon" size={21} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'color-mix(in srgb, var(--t-text) 60%, transparent)' : 'color-mix(in srgb, var(--t-text) 40%, transparent)' }} />
-                          <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter email to set up time" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'color-mix(in srgb, var(--t-text) 75%, transparent)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
+                          <input id="hero-url-input" value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter email to set up time" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'color-mix(in srgb, var(--t-text) 75%, transparent)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
                           {/* Hero CTA: calm static gradient border while the input is empty, then the full
                               gradient + comet border once something is entered (same as the Onboarding modal). */}
                           <button id="hero-onboard-cta" className="cta-pill-btn" data-cta-state={urlIsValid ? 'ready' : 'idle'} onClick={handleHeroBookCall} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, opacity: 1, padding: '0.75rem 0.75rem' } : { ...ctaSecondaryStyle, flexShrink: 0, opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="hero-onboard-label">Let's Connect</span><UpRightArrow className="hero-onboard-arrow" style={ctaIconStyle} /></button>
@@ -3155,6 +3163,7 @@ const StackedSlidesSection = () => {
                         </a>
                       </div>
                     </div>
+                    {!aboveFoldOnly && (<>
                     <div data-capability-header style={{ ...capabilitySectionHeaderStyle, maxWidth: 'none', marginBottom: 0 }}>
                       <div id="testimonials-marquee-shell" style={{ width: '100%', overflow: 'hidden',
                         /* Equal gap above and below the HELLO glyphs — measured to the
@@ -3419,6 +3428,7 @@ const StackedSlidesSection = () => {
                         </div>
                       </div>
                     </section>
+                    </>)}
                   </div>
                 ) : null}
               </div>
@@ -3427,6 +3437,7 @@ const StackedSlidesSection = () => {
         ))}
       </div>
 
+      {!aboveFoldOnly && (<>
       {/* reel video section */}
       <div id="section-break-spacer" style={{ width: '100%', boxSizing: 'border-box', padding: 'clamp(3rem, 6vw, 5rem) clamp(1rem, 4vw, 3rem)' }}>
         <ReelPlayer />
@@ -3555,6 +3566,7 @@ const StackedSlidesSection = () => {
           </div>
         </div>
       </section>
+      </>)}
 
       {/* Particle debug panel */}
       {settingsOpen && (
