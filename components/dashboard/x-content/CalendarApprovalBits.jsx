@@ -1,11 +1,20 @@
 'use client';
 
 import React from 'react';
-import { Check, Clock, Quote, Sparkles } from 'lucide-react';
+import { Check, Clock, Quote, Sparkles, X } from 'lucide-react';
 import { FILTERS, APPROVAL_LABEL, rowMark, canApproveRow, canUnapproveRow, isRowWindowClosed, windowLeftLabel } from './calendar-row-model.js';
 
 // One-calendar approval marks, filter chips and the suggestion / requote row.
 // Presentation only: handlers come from MonthCalendarPanel. Tokens only (no colour literals).
+
+/** Quick Pass on a Day-list row: off the calendar now, no confirm (content can come back later). */
+export function PassRowButton({ row, busy, onPass }) {
+  return (
+    <button type="button" id={`stage-day-row-pass-${row.id}`} className="xce-mc-icon-btn xce-ap-pass-btn" disabled={busy} title="Pass: take it off this day. It can come back later." aria-label="Pass" onClick={() => onPass(row)}>
+      <X size={14} />
+    </button>
+  );
+}
 
 const MARK_LABEL = { ...APPROVAL_LABEL, suggestion: 'Suggestion', requote: 'Requote' };
 
@@ -57,7 +66,7 @@ export function InlineApprovalButtons({ row, busy, onApprove, onUnapprove }) {
 
 /** An unsaved daily-run suggestion or an open quote target. Leaving it writes nothing. */
 // onView (calendar day view only): adds VIEW POST, which opens the X preview.
-export function SuggestionRow({ row, busy, onApprove, nowMs, onView }) {
+export function SuggestionRow({ row, busy, onApprove, nowMs, onView, onPass }) {
   const requote = row.kind === 'requote';
   const closed = isRowWindowClosed(row, nowMs);
   const left = requote ? windowLeftLabel(row, nowMs) : '';
@@ -87,6 +96,7 @@ export function SuggestionRow({ row, busy, onApprove, nowMs, onView }) {
           </button> : null}
         </span>
       ) : null}
+      {onPass ? <span className="xce-mc-row-actions"><PassRowButton row={row} busy={busy} onPass={onPass} /></span> : null}
     </li>
   );
 }

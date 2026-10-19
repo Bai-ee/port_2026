@@ -29,6 +29,18 @@ export function stepTarget(ids, currentId, dir) {
   return ids[wrapIndex(at + dir, ids.length)];
 }
 
+// After a Pass / Delete / Replace removes `currentId` from the day: where to go next. The replacement (when the server
+// returned one) wins; otherwise the item that slides into the removed slot (the next one, wrapping to the first).
+// null when nothing is left, which means "step back to the Day level".
+export function targetAfterDecide(ids, currentId, replacementId = null) {
+  if (replacementId && String(replacementId) !== String(currentId)) return String(replacementId);
+  const list = Array.isArray(ids) ? ids.map(String) : [];
+  const at = list.indexOf(String(currentId));
+  const rest = list.filter((id) => id !== String(currentId));
+  if (!rest.length) return null;
+  return rest[(at < 0 ? 0 : at) % rest.length];
+}
+
 // "3 / 7" (1-based); '' when the post is not in the list.
 export function positionLabel(ids, currentId) {
   if (!Array.isArray(ids) || !ids.length) return '';

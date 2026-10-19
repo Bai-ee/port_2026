@@ -10,7 +10,8 @@ import {
   MAX_CHARS, MEDIA_CHANGED_MESSAGE, charCount, isOverLimit, initialWhen, zoneLabel, resolveTimeZone,
   isSuggestion, isLockedRow, boundFields, boundFieldsGate, boundFieldsNotice, dirtyState, actionState, isScheduledStatus,
   buildSaveRequest, buildApproveRequest, buildApproveScheduleRequest, buildSuggestionApproveRequest, buildUnapproveRequest,
-  buildRejectRequest, buildUnscheduleRequest, buildReconcileRequest, moreItems, classifyError, approvalVoided, mediaChanged, mergeServerPost,
+  buildRejectRequest, buildUnscheduleRequest, buildReconcileRequest, moreItems,
+  decideItems, buildDecideRequest, decideResultText, DECISION_LABEL, DELETE_CONFIRM_TEXT, classifyError, approvalVoided, mediaChanged, mergeServerPost,
 } from './post-editor-model.js';
 
 // PostEditor — the single View & Edit Post surface. An X-style card that IS the editor: copy, creative, time, and
@@ -154,6 +155,7 @@ export default function PostEditor({
   timeZone,
   onClose,
   onSaved,
+  onDecided,
   onPickCreative,
   pickerSlot = null,
   onDirtyChange,
@@ -174,6 +176,8 @@ export default function PostEditor({
   const [override, setOverride] = useState(false);
   const [overrideReason, setOverrideReason] = useState('');
   const [moreOpen, setMoreOpen] = useState(false);
+  const [deleteAsk, setDeleteAsk] = useState(false);
+  const [deciding, setDeciding] = useState(null); // 'pass' | 'replace' | 'delete' while a decide call runs
   const [morePanel, setMorePanel] = useState(null); // 'reconcile' | 'hires' | null
   const [platformId, setPlatformId] = useState('');
   const textRef = useRef(null);
@@ -352,6 +356,25 @@ export default function PostEditor({
     else if (id === 'reconcile') setMorePanel((p) => (p === 'reconcile' ? null : 'reconcile'));
     else if (id === 'hires') setMorePanel((p) => (p === 'hires' ? null : 'hires'));
   };
+  // Pass / Replace / Delete: one call, the item leaves this day. The host moves on via onDecided (else onClose).
+  const doDecide = async (decision) => {
+    if (!row) return;
+    setDeleteAsk(false); setDeciding(decision); setBusy(true); setMessage(null); setConflict(false);
+    try {
+      const result = await send(buildDecideRequest(row, decision));
+      setMessage({ tone: 'ok', text: decideResultText(decision, result) });
+      if (onDecided) onDecided({ decision, result, row });
+      else if (onClose) onClose();
+    } catch (e) {
+      const c = classifyError(e);
+      if (c.kind === 'conflict') setConflict(true);
+      else setMessage({ tone: 'bad', text: e?.code === 'not-removable' || e?.data?.code === 'not-removable' ? 'This one already went out, so it cannot be removed.' : c.message });
+    } finally {
+      setBusy(false); setDeciding(null);
+    }
+  };
+  const decide = row ? decideItems(row, { busy: busy || !!postStep }) : { pass: false, replace: false, delete: false };
+
   const doReconcile = (outcome) => run(buildReconcileRequest({ row, outcome, platformId }), { successText: outcome === 'posted' ? 'Marked posted.' : 'Marked not posted.', onOk: () => setMorePanel(null) });
 
   const afterHires = async () => {
@@ -467,6 +490,24 @@ export default function PostEditor({
               </div>
             ) : null}
           </div>
+          {row && (decide.pass || decide.replace || decide.delete || deciding) ? (
+            <div id="post-editor-decide-row" className="pe-decide-row">
+              <button type="button" id="post-editor-pass-btn" className="pe-btn pe-btn-plain pe-btn-small" disabled={!decide.pass} onClick={() => doDecide('pass')} title="Take it off the calendar. It can come back later.">{deciding === 'pass' ? <span className="brief-loader-spinner" aria-hidden="true" /> : null}{DECISION_LABEL.pass}</button>
+              {!suggestion ? (
+                <button type="button" id="post-editor-replace-btn" className="pe-btn pe-btn-plain pe-btn-small" disabled={!decide.replace} onClick={() => doDecide('replace')} title="Take it off and put the next best item for this track on the same day.">{deciding === 'replace' ? <span className="brief-loader-spinner" aria-hidden="true" /> : null}{DECISION_LABEL.replace}</button>
+              ) : null}
+              <button type="button" id="post-editor-delete-btn" className="pe-btn pe-btn-plain pe-btn-small" disabled={!decide.delete || deleteAsk} onClick={() => setDeleteAsk(true)} title="Take it off and never suggest this content again.">{deciding === 'delete' ? <span className="brief-loader-spinner" aria-hidden="true" /> : null}{DECISION_LABEL.delete}</button>
+            </div>
+          ) : null}
+          {deleteAsk ? (
+            <div id="post-editor-delete-confirm" className="pe-note pe-note-warn" role="alertdialog" aria-label="Delete for good">
+              <p>{DELETE_CONFIRM_TEXT}</p>
+              <div className="pe-btn-row">
+                <button type="button" id="post-editor-delete-confirm-btn" className="pe-btn pe-btn-plain pe-btn-small" disabled={busy} onClick={() => doDecide('delete')}>Confirm</button>
+                <button type="button" id="post-editor-delete-cancel-btn" className="pe-btn pe-btn-plain pe-btn-small" disabled={busy} onClick={() => setDeleteAsk(false)}>Cancel</button>
+              </div>
+            </div>
+          ) : null}
           {postStep === 'confirm' ? (
             <div id="post-editor-post-confirm-row" className="pe-post-confirm" role="alert">
               <p className="pe-post-confirm-text">Post to {handle || 'X'} now? This is one live X API write and can&apos;t be undone.</p>
@@ -617,6 +658,9 @@ function PostEditorStyles() {
       #post-editor-root .pe-btn:disabled::before { display: none; }
       #post-editor-root .pe-btn:disabled { opacity: 0.45; cursor: not-allowed; background: var(--t-disabled-bg); color: var(--t-text-muted); border-color: var(--t-control-border); }
       #post-editor-root .pe-btn:focus-visible, #post-editor-root .pe-menu-item:focus-visible { outline: 2px solid var(--t-focus); outline-offset: 2px; }
+      #post-editor-root .pe-decide-row { display: flex; gap: 8px; justify-content: center; }
+      #post-editor-root .pe-btn-small { min-height: 32px; padding: 4px 12px; font-size: 13px; font-weight: 600; }
+      #post-editor-root .pe-btn .brief-loader-spinner { width: 14px; height: 14px; }
       #post-editor-root .pe-more { position: relative; }
       #post-editor-root .pe-menu { position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 5; min-width: 190px; margin: 0; padding: 6px; list-style: none; border: 1px solid var(--t-control-border); border-radius: 12px; background: var(--t-raised); box-shadow: var(--t-shadow-md); }
       #post-editor-root .pe-menu-item { display: block; width: 100%; text-align: left; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--t-text); font: inherit; font-size: 14px; cursor: pointer; }

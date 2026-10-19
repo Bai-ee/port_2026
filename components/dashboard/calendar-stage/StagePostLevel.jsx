@@ -15,9 +15,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import LoadingRing from '../content-ui/ui/LoadingRing';
 import PostEditor from '../x-content/PostEditor.jsx';
 import PostCarousel from './PostCarousel.jsx';
-import { pickDayPostIds } from './post-carousel-model.js';
+import { pickDayPostIds, targetAfterDecide } from './post-carousel-model.js';
 import CreativePicker from '../x-content/CreativePicker.jsx';
-import { MEDIA_CHANGED_MESSAGE } from '../x-content/post-editor-model.js';
+import { MEDIA_CHANGED_MESSAGE, replacementRowId } from '../x-content/post-editor-model.js';
 import { useMarketingContentCall } from '../marketing/useMarketingContentCall.js';
 
 export default function StagePostLevel({ postId, row, calendarReady, stage, onRefresh, dayGroups }) {
@@ -108,6 +108,17 @@ export default function StagePostLevel({ postId, row, calendarReady, stage, onRe
     }
   };
 
+  // Pass / Replace / Delete finished: reload the month, then move to the replacement (or the next item of the day);
+  // an emptied day steps back to the Day level. Unsaved edits on the removed item are moot, so the leave guard is skipped.
+  const dayIds = pickDayPostIds(dayGroups, stage.nav?.state?.date || null, realId);
+  const onDecided = async ({ result }) => {
+    dirtyRef.current = false;
+    const target = targetAfterDecide(dayIds, realId, replacementRowId(result));
+    try { if (onRefresh) await onRefresh(); } catch { /* the stage still moves on; the Day list has its own retry */ }
+    if (target) nav.openPost(target, { replace: true });
+    else nav.back();
+  };
+
   // Escape closes the picker first (the stage's Escape only steps back when nothing handled it).
   const onKeyDown = (e) => {
     if (e.key === 'Escape' && pickerOpen) { e.preventDefault(); setPickerOpen(false); }
@@ -140,7 +151,7 @@ export default function StagePostLevel({ postId, row, calendarReady, stage, onRe
 
   return (
     <div id="calendar-stage-post-level" onKeyDown={onKeyDown}>
-      <PostCarousel postId={realId} postIds={pickDayPostIds(dayGroups, stage.nav?.state?.date || null, realId)} nav={nav}>
+      <PostCarousel postId={realId} postIds={dayIds} nav={nav}>
       <PostEditor
         {...(editorRow ? { row: editorRow } : { postId })}
         clientId={clientId}
@@ -157,6 +168,7 @@ export default function StagePostLevel({ postId, row, calendarReady, stage, onRe
         }}
         onClose={() => nav.back()}
         onSaved={() => { setVoidedNote(false); if (onRefresh) onRefresh(); }}
+        onDecided={onDecided}
         onDirtyChange={onDirtyChange}
         onPickCreative={() => { setAttachError(null); setStageNote(''); setPickerOpen(true); }}
         pickerSlot={pickerSlot}

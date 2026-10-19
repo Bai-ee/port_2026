@@ -251,6 +251,54 @@ export const buildRejectRequest = (row) => ({ endpoint: 'social', body: { action
 export const buildUnscheduleRequest = (row) => ({ endpoint: 'social', body: { action: 'update', postId: row.id, content: row.content, scheduledAt: '', expectedRevision: row.revision ?? null } });
 export const buildReconcileRequest = ({ row, outcome, platformId }) => ({ endpoint: 'social', body: { action: 'reconcile-post', postId: row.id, outcome, platformId: outcome === 'posted' ? (String(platformId || '').trim() || null) : null } });
 
+// ---- Pass / Replace / Delete (one calendar-item-decide call for posts, suggestions and requotes) ----
+
+const NOT_REMOVABLE_STATUSES = new Set(['posted', 'posting']);
+export const DECISION_LABEL = { pass: 'Pass', replace: 'Replace', delete: 'Delete' };
+export const DELETE_CONFIRM_TEXT = "Delete for good? This content won't be suggested again.";
+
+/** Which decisions are enabled for this row. Posted / posting -> none; suggestions and requotes cannot be replaced. */
+export function decideItems(row, { busy = false } = {}) {
+  const off = { pass: false, replace: false, delete: false };
+  if (!row) return off;
+  const gone = NOT_REMOVABLE_STATUSES.has(row.status) || row.state === 'posted' || row.approval === 'posted';
+  if (busy || gone) return off;
+  const suggestion = isSuggestion(row);
+  return { pass: true, replace: !suggestion, delete: true };
+}
+
+/** `calendar-item-decide` on /api/dashboard/quote-targets. Same id derivation as buildSuggestionApproveRequest. */
+export function buildDecideRequest(row, decision) {
+  let item;
+  if (row?.kind === 'requote') {
+    const targetId = row.quoteTargetId ?? String(row.id || '').replace(/^requote:/, '');
+    item = { kind: 'requote', targetId, url: row.quotedUrl || row.url || null, date: row.date || null };
+  } else if (isSuggestion(row)) {
+    const suggestionId = row.suggestionId ?? String(row.id || '').replace(/^suggestion:/, '');
+    item = { kind: 'suggestion', suggestionId, runId: row.runId ?? row.provenance?.runId ?? null, date: row.date || null };
+  } else {
+    item = { kind: 'post', postId: row?.id, expectedRevision: row?.revision ?? null };
+  }
+  return { endpoint: 'content', action: 'calendar-item-decide', body: { decision, item } };
+}
+
+/** Operator-facing line for a decide response. */
+export function decideResultText(decision, result) {
+  if (decision === 'pass') return 'Passed.';
+  if (decision === 'delete') return 'Deleted.';
+  const r = result?.replacement;
+  if (!r || result?.note === 'no-eligible-item') return 'Passed. Nothing else fits this day.';
+  const label = r.row?.title || r.row?.text || r.row?.content;
+  return label ? `Replaced with ${String(label).slice(0, 60)}.` : 'Replaced.';
+}
+
+/** Id of the replacement row to focus on the calendar, or null. */
+export const replacementRowId = (result) => {
+  const r = result?.replacement;
+  if (!r) return null;
+  return r.postId || r.row?.id || (r.targetId ? `requote:${r.targetId}` : null);
+};
+
 // ---- More menu ----
 
 /** Which More items exist for this row, and whether each is enabled. Labels per spec: Reject, Unschedule, Reconcile, Use high-res, Leave unapproved. */
