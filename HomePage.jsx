@@ -180,8 +180,8 @@ const HomePage = () => {
     html.style.overflow = 'hidden';
     body.style.overflow = 'hidden';
     html.style.overscrollBehavior = 'none';
-    // iOS Safari still pans the page on touch despite overflow:hidden. Block touch panning unless the finger is
-    // inside something that scrolls on its own (a modal body, a list).
+    // iOS Safari still pans the page on touch despite overflow:hidden, and pinch-zoom shifts the whole layout.
+    // Block touch panning and pinching unless the finger is inside something that scrolls on its own (a modal body).
     const scrollsItself = (node) => {
       for (let el = node; el && el !== body && el !== html; el = el.parentElement) {
         const { overflowY, overflowX } = getComputedStyle(el);
@@ -191,12 +191,18 @@ const HomePage = () => {
       return false;
     };
     const blockPagePan = (event) => {
-      if (event.touches.length > 1 || scrollsItself(event.target)) return;
+      if (event.touches.length === 1 && scrollsItself(event.target)) return;
       event.preventDefault();
     };
+    // Safari's pinch gestures (gesturestart/change) are separate from touchmove.
+    const blockGesture = (event) => event.preventDefault();
     document.addEventListener('touchmove', blockPagePan, { passive: false });
+    document.addEventListener('gesturestart', blockGesture, { passive: false });
+    document.addEventListener('gesturechange', blockGesture, { passive: false });
     return () => {
       document.removeEventListener('touchmove', blockPagePan);
+      document.removeEventListener('gesturestart', blockGesture);
+      document.removeEventListener('gesturechange', blockGesture);
       html.style.overflow = prev.html;
       body.style.overflow = prev.body;
       html.style.overscrollBehavior = prev.overscroll;
@@ -435,7 +441,9 @@ const HomePage = () => {
     <HomepageAnalytics />
     {/* Header outside overflow-clip container so backdrop-filter composites against the viewport correctly */}
     <Header logoRef={headerLogoRef} onOpenPage={setActivePageId} logoSrc="/img/circle_logo.png" logoCyclesTheme />
-    <div style={{ position: 'relative', width: '100vw', minHeight: '100dvh', background: 'transparent', overflowX: 'clip' }}>
+    {/* One screen: the below-fold content is parked (docs/plans/HOMEPAGE-BELOW-FOLD-PARKED.md), so the page is
+        exactly the viewport and the peek panel's tall glass is clipped at the bottom edge. */}
+    <div id="homepage-viewport-shell" style={{ position: 'relative', width: '100vw', height: '100dvh', background: 'transparent', overflow: 'clip' }}>
       <style>{`
         #hero-gradient-overlay {
           mix-blend-mode: var(--t-blend-deco, multiply);
@@ -543,7 +551,7 @@ const HomePage = () => {
           borderRadius: '1.5rem 1.5rem 0 0',
         }}
       >
-        <StackedSlidesSection />
+        <StackedSlidesSection aboveFoldOnly />
         {/* <HorizontalGallery /> */}
         {/* <HoverRevealList /> */}
         {/* <HorizontalTextSection /> */}
