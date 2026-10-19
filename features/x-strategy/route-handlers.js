@@ -65,6 +65,7 @@ import { normalizeDataSources } from './data-sources.js';
 import { estimateCorporaPull, estimateQuoteScan, DEFAULT_MAX_PER_HANDLE, DEFAULT_MAX_ACCOUNTS, DEFAULT_PER_HANDLE } from './x-api-estimate.js';
 import { normalizeWatchlist } from '../x-quote-targets/client-watchlist.js';
 import { guardXPost } from '../x-content-guard/index.js';
+import { dailyMixRulesFor } from '../x-content-inventory/daily-mix-rule.js';
 
 export const STRATEGY_ROUTE_ACTIONS = Object.freeze([
   'strategy-get',
@@ -234,6 +235,7 @@ export function createStrategyHandlers({
   readOpenPackageIds = null, // (clientId) -> Map packageId -> {postId, status, scheduledAt, reviewOn} of open posts (or a Set); batch skips or places them
   placeDraft = null, // (clientId, postId, {reviewOn, bucketId, media}) -> bool; sets an unscheduled draft's review day + missing media
   readFillContext = null, // (clientId) -> {fillPosts:[{postId,status,reviewOn,fillKind,bucketId,idempotencyKey}], lastUsed: Map packageId -> 'YYYY-MM-DD'}; daily fill re-run accounting + 30-day spread
+  readTrackRules = null, // (clientId) -> {[bucketId]: rule}; daily-fill trackRules (features/x-content-inventory/daily-mix-rule.js)
   readQuoteTargets = null, // (clientId) -> {generatedAt, targets:[{id,url,text,handle,createdAt,trackId?}]} open (non-dismissed) quote candidates; daily fill quotes
   ensureDraft = null, // (clientId, payload) -> {post, existing}; twitter-service ensureDraftPost. Absent => batch create answers 503
   mediaForItem = null, // (clientId, pkg) -> {mediaUrl, mediaType, mediaContentType, mediaStoragePath} | null; calendar-batch drafts carry the item's media
@@ -391,6 +393,7 @@ export function createStrategyHandlers({
         quoteTargets: quotes?.targets ?? [], marketSignals: signals ? shapeMarketSignals(signals) : null,
         asOf: { quotes: quotes?.generatedAt ?? null, signals: signals?.generatedAt ?? null },
         today: localDate(nowMs, profile.timezone), nowMs,
+        trackRules: typeof readTrackRules === 'function' ? readTrackRules(clientId) : {},
       };
     },
     ensureDraft: (clientId, payload) => (typeof ensureDraft === 'function' ? ensureDraft(clientId, payload) : Promise.reject(new Error('Creating drafts is not available on this deployment.'))),
@@ -1651,7 +1654,7 @@ export function createStrategyHandlersFromDb(db, {
   const createMediaTasks = ({ clientId, rows, by, proposalId }) => taskStore.create(clientId, rows, { by, proposalId });
   return createStrategyHandlers({
     readDiscogsRelease: async (releaseId) => { const s = await db.collection('discogs_releases').doc(String(releaseId)).get(); return s.exists ? s.data() : null; },
-    corpusStore, planStore, refreshService, readPackages, readAudience, readBuckets, readBucketEngine, readOpenPackageIds, readFillContext, readQuoteTargets, ensureDraft, placeDraft, listMediaTaskIds, createMediaTasks,
+    corpusStore, planStore, refreshService, readPackages, readAudience, readBuckets, readBucketEngine, readOpenPackageIds, readFillContext, readTrackRules: dailyMixRulesFor, readQuoteTargets, ensureDraft, placeDraft, listMediaTaskIds, createMediaTasks,
     readStageStates: (ids) => readStageStatesFromDb(db, ids), readNasStatus: () => handleNasAction({ db, now: () => Date.now() }, 'nas-status', {}),
     readDataSources, saveDataSources, pullCorpora, scanQuotes, responseStyleStore, unmetStore,
     quoteScanQueue: createFirestoreQuoteScanQueue(db),
