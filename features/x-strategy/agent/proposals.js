@@ -4,7 +4,7 @@
 // an injected executor. Reject executes nothing.
 
 import { randomUUID } from 'node:crypto';
-import { PROPOSAL_KINDS, PROPOSAL_STATUSES, PLAN_LIMITS, DEFAULT_PLAN, PAID_SYNC_KINDS, BULK_LIMITS, DAILY_FILL_INCLUDES, QUEUE_BULK_ACTIONS, BUCKET_EDIT_OPS, REFRESH_GROUP_IDS } from '../contracts.js';
+import { PROPOSAL_KINDS, PROPOSAL_STATUSES, PLAN_LIMITS, DEFAULT_PLAN, PAID_SYNC_KINDS, BULK_LIMITS, DAILY_FILL_INCLUDES, QUEUE_BULK_ACTIONS, BUCKET_EDIT_OPS, REFRESH_GROUP_IDS, CALENDAR_DECISIONS } from '../contracts.js';
 import { SOURCE_KINDS } from '../../x-content-inventory/buckets.js';
 import { normalizePlan, validatePlan, HANDLE_RE } from '../plan-state.js';
 import { StrategyPlanError } from '../plan-store.js';
@@ -34,6 +34,7 @@ const BUCKET_SHARE_KEYS = ['perDayMin', 'perDayMax', 'targetPerDay', 'perWeekMin
 const isPlain = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const clone = (v) => (v === undefined ? v : JSON.parse(JSON.stringify(v)));
 const iso = (now) => { const d = new Date(now ?? Date.now()); return (Number.isNaN(d.getTime()) ? new Date() : d).toISOString(); };
+const slimDecide = (r) => ({ decision: r?.decision ?? null, kind: r?.kind ?? null, error: r?.error ?? 'failed', reason: String(r?.reason ?? r?.note ?? r?.error ?? '').slice(0, 160) });
 const str = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 
 /** Thrown by an executor to record a structured failure result (e.g. stale). */
@@ -320,6 +321,50 @@ export function validateProposal(raw, { currentPlan, registry } = {}) {
       if (Array.isArray(payload.rows)) norm.rows = clone(payload.rows).slice(0, BULK_LIMITS.queueBulkMax);
       break;
     }
+    // Calendar cleanup: pass | delete | replace per item (x-content-inventory/calendar-decide.js). No X call. `title`/`date` = display only.
+    case 'calendar-decide': {
+      const list = Array.isArray(payload.items) ? payload.items : [];
+      if (!list.length) errors.push('items must be a non-empty list');
+      else if (list.length > BULK_LIMITS.calendarDecideMax) errors.push(`at most ${BULK_LIMITS.calendarDecideMax} items`);
+      const out = [];
+      const seen = new Set();
+      list.slice(0, BULK_LIMITS.calendarDecideMax).forEach((row, i) => {
+        const at = `items[${i}]`;
+        const it = isPlain(row?.item) ? row.item : null;
+        const decision = typeof row?.decision === 'string' ? row.decision.trim() : '';
+        if (!CALENDAR_DECISIONS.includes(decision)) { errors.push(`${at}: decision must be one of ${CALENDAR_DECISIONS.join(', ')}`); return; }
+        if (!it) { errors.push(`${at}: item must be an object`); return; }
+        const kind = typeof it.kind === 'string' ? it.kind.trim() : '';
+        const date = typeof it.date === 'string' ? it.date.trim() : '';
+        let item; let key;
+        if (kind === 'post') {
+          const postId = str(it.postId, 128);
+          if (!ID_RE.test(postId)) { errors.push(`${at}: postId is invalid`); return; }
+          item = { kind, postId, ...(Number.isInteger(it.expectedRevision) ? { expectedRevision: it.expectedRevision } : {}) }; key = `post:${postId}`;
+        } else if (kind === 'suggestion' || kind === 'requote') {
+          if (!DAY_RE.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`))) { errors.push(`${at}: date must be a YYYY-MM-DD date`); return; }
+          if (kind === 'suggestion') {
+            if (decision === 'replace') { errors.push(`${at}: a suggestion cannot be replaced (pass or delete it)`); return; }
+            const suggestionId = str(it.suggestionId, 128);
+            if (!ID_RE.test(suggestionId)) { errors.push(`${at}: suggestionId is invalid`); return; }
+            const runId = str(it.runId, 128);
+            if (runId && !ID_RE.test(runId)) { errors.push(`${at}: runId is invalid`); return; }
+            item = { kind, suggestionId, ...(runId ? { runId } : {}), date }; key = `suggestion:${suggestionId}`;
+          } else {
+            const targetId = str(it.targetId, 128);
+            if (!ID_RE.test(targetId)) { errors.push(`${at}: targetId is invalid`); return; }
+            const url = str(it.url, 300);
+            item = { kind, targetId, ...(url ? { url } : {}), date }; key = `requote:${targetId}`;
+          }
+        } else { errors.push(`${at}: item.kind must be one of post, suggestion, requote`); return; }
+        if (seen.has(key)) { errors.push(`${at}: duplicate item ${key}`); return; }
+        seen.add(key);
+        out.push({ decision, item, ...(DAY_RE.test(str(row.date, 10)) ? { date: str(row.date, 10) } : {}), ...(str(row.title, 100) ? { title: str(row.title, 100) } : {}) });
+      });
+      if (errors.length) break;
+      norm = { items: out };
+      break;
+    }
     // Content Center bucket upsert/delete (the quote-targets bucket store), then the tracks re-sync.
     case 'bucket-edit': {
       const op = typeof payload.op === 'string' ? payload.op.trim() : '';
@@ -414,13 +459,14 @@ export function compactResult(res) {
  * @param {(a:{clientId:string, spec:object, proposalId?:string})=>Promise<object>} [deps.runDailyFill]  daily-fill executor (execute=true: creates drafts only)
  * @param {(clientId:string, postId:string, o:{reviewedBy:string, expectedRevision?:number})=>Promise<object>} [deps.rejectPost]  existing rejectDraft (queue-bulk delete-draft; default: lazy import)
  * @param {(clientId:string, postId:string, patch:{reviewOn:string})=>Promise<boolean>} [deps.placeDraft]  sets an unscheduled draft's review day (queue-bulk set-review-date)
+ * @param {(a:{clientId:string, items:{decision:string,item:object}[], proposalId?:string})=>Promise<{ok:boolean,results:object[]}>} [deps.decideCalendarItems]  calendar pass/delete/replace per item (calendar-decide.js); never throws for one item
  * @param {(clientId:string, bucket:object)=>Promise<object>} [deps.upsertBucket]  bucket-store upsertBucket
  * @param {(clientId:string, bucketId:string, o:{reassignTo?:string})=>Promise<object>} [deps.deleteBucket]  bucket-store deleteBucket
  * @param {(a:{clientId:string, rows:object[], by:string, proposalId?:string})=>Promise<{created:number,existing:number}>} [deps.runMediaTasks]  content_tasks writer (media-tasks)
  * @param {(clientId:string)=>Promise<object>} [deps.syncTracks]  re-sync content tracks after a bucket change
  * @param {(a:{clientId:string, kind:string, params:object, by:string, auth:object, context:object})=>Promise<object>} [deps.runPaidSync]  features/mcp/paid-syncs.js executor (daily cap enforced inside)
  */
-export function buildExecutors({ planStore, runDailyAction, runUpdateItemFacets, saveXGrowthProfile, refreshHandles, docStore, docBase, readPost, editPost, approvePost, approveAndSchedulePost, runPaidSync, runCalendarBatch, runItemMedia, runDailyFill, rejectPost, placeDraft, upsertBucket, deleteBucket, syncTracks, runAction, runMediaTasks, clock = Date.now }) {
+export function buildExecutors({ planStore, runDailyAction, runUpdateItemFacets, saveXGrowthProfile, refreshHandles, docStore, docBase, readPost, editPost, approvePost, approveAndSchedulePost, runPaidSync, runCalendarBatch, runItemMedia, runDailyFill, decideCalendarItems, rejectPost, placeDraft, upsertBucket, deleteBucket, syncTracks, runAction, runMediaTasks, clock = Date.now }) {
   const need = (fn, name) => { if (typeof fn !== 'function') throw new ProposalExecutionError(`${name} is not available on this deployment`); return fn; };
   const social = () => import('../../social-posting/twitter-service.js');
   const readOwnedPost = async (clientId, payload) => {
@@ -651,6 +697,19 @@ export function buildExecutors({ planStore, runDailyAction, runUpdateItemFacets,
       const failedRows = results.filter((r) => !r.ok);
       if (!done) throw new ProposalExecutionError('no post could be changed', { results: failedRows.slice(0, 10) });
       return compactResult({ action: payload.action, done, failed: failedRows.length, results: failedRows.slice(0, 10) });
+    },
+    // Pass / delete / replace per item, sequentially; one item's failure is reported on its own row and never stops the rest. No X call.
+    async 'calendar-decide'({ clientId, payload, proposalId }) {
+      const items = payload.items.map(({ decision, item }) => ({ decision, item }));
+      const res = await need(decideCalendarItems, 'calendar cleanup')({ clientId, items, proposalId });
+      if (res && res.ok === false && !Array.isArray(res.results)) throw new ProposalExecutionError(res.error || 'calendar cleanup refused');
+      // Results are in item order; fill decision/kind from the request so failed rows still say what was attempted.
+      const results = (Array.isArray(res?.results) ? res.results : []).map((r, i) => ({ decision: items[i]?.decision, kind: items[i]?.item?.kind, ...r }));
+      const bad = results.filter((r) => r && r.ok === false);
+      const done = results.length - bad.length;
+      if (!done && bad.length) throw new ProposalExecutionError('no item could be changed', { results: bad.slice(0, 10).map(slimDecide) });
+      const count = (d) => results.filter((r) => r && r.ok !== false && r.decision === d).length;
+      return compactResult({ done, failed: bad.length, passed: count('pass'), deleted: count('delete'), replaced: count('replace'), results: bad.slice(0, 10).map(slimDecide) });
     },
     // Upsert/delete one Content Center bucket through the same store as the bucket UI, then re-sync the tracks.
     async 'bucket-edit'({ clientId, payload }) {
