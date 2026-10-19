@@ -199,6 +199,10 @@
 /* Top-left logo blend: the --t-logo-blend token (light), color-dodge in dark. Homepage (Header.jsx) and dashboard
    (DashboardPage.jsx) both tag their logo #founders-brand-logo-image. */
 #founders-brand-logo-image { mix-blend-mode: var(--t-logo-blend); }
+/* Hero headline ink (lib/hero-type DEFAULT headlineInk): soft near-black (the text token, not pure black) in light;
+   in dark the logo's own tinted near-white, sampled from /img/circle_logo.png, instead of pure white. */
+:root { --hero-headline-ink: var(--t-text); }
+:root[data-theme="dark"] { --hero-headline-ink: #dbdae3; }
 :root[data-theme="dark"] #founders-brand-logo-image { mix-blend-mode: color-dodge !important; }
 /* Hidden behind the Let's Connect modal without leaving layout: display:none zeroed the nav's height, and the
    hero headline (which centres itself under the nav) jumped. Fades with the modal backdrop. !important beats
@@ -370,6 +374,11 @@ body.cmo-modal-open #founders-top-strip { opacity: 0 !important; visibility: hid
      dark ink in light, eased with the logo-click theme fade). */
   :root[data-theme="light"] #founders-top-strip[data-nav-variant="home"] { mix-blend-mode: multiply; }
   :root[data-theme="light"] #founders-top-strip[data-nav-variant="home"] #founders-brand-logo-image { filter: invert(1) contrast(1.4); }
+  /* Every other header (dashboard, inner pages) keeps its glass bar, so the scene blend can't reach it; filters match
+     the homepage look instead: dark ink in light, white in dark. */
+  #founders-top-strip:not([data-nav-variant="home"]) #founders-brand-logo-image { mix-blend-mode: normal !important; transition: filter 600ms ease-in-out; }
+  :root[data-theme="light"] #founders-top-strip:not([data-nav-variant="home"]) #founders-brand-logo-image { filter: invert(1) contrast(1.4); }
+  :root[data-theme="dark"] #founders-top-strip:not([data-nav-variant="home"]) #founders-brand-logo-image { filter: grayscale(1) brightness(1.35) contrast(1.1); }
 }
 
 @supports (color: color(display-p3 1 1 1)) {
