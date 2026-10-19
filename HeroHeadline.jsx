@@ -35,8 +35,8 @@ const isSettledGlyph = (ch) => !ch || /[A-Za-z0-9'\s]/.test(ch); // the pool hol
 // (the 810px content column the hero input row sits in) and the block still
 // clears the hero gap. Measured with
 // canvas text metrics in the headline's own face, so the ratio holds for any
-// copy and re-fits once the webfont lands. Phones (≤620px) keep their own
-// clamp via the !important rule below.
+// copy and re-fits once the webfont lands. Phones (≤620px) fit to the width
+// at a tighter line height (MOBILE_HEADLINE_*).
 // Font, weight, tracking (em) and stroke (em) come from the hero type settings
 // and are mirrored in measurement (the stroke widens each line by its own width).
 // Doto tops out at 900; a same-colour stroke thickens the dots past that.
@@ -49,6 +49,11 @@ const HEADLINE_MIN_PX = 20;
 // The small line's bottom edge sits this far above the content panel (#content-section) at every width; when it
 // wraps to more lines it grows upward, so its baseline position never moves. 75px = the desktop spot.
 const SUB_ANCHOR_GAP_PX = 75;
+// Phones (same breakpoint as the style block below): the full headline shows instead of the small line, centred in
+// the nav-to-content gap and poster-fit across the nav's own side padding (max(4vw, 16px), colors.css).
+const MOBILE_HEADLINE_MEDIA_QUERY = '(max-width: 620px)';
+const MOBILE_HEADLINE_LINE_HEIGHT = 0.75; // mirrors the !important line-height below
+const mobileGutterPx = (viewportWidth) => Math.max(viewportWidth * 0.04, 16);
 let headlineMeasureCtx = null;
 const measureHeadlineUnitWidth = (lines, type) => {
   if (typeof document === 'undefined') return 0;
@@ -422,16 +427,22 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
       const navHeight = nav.getBoundingClientRect().height ?? 64;
       const contentDocTop = contentAnchor.getBoundingClientRect().top + scrollY;
       const headlineHeight = contentEl.getBoundingClientRect().height || 0;
-      const sideGutter = Math.max(viewportWidth * HEADLINE_GUTTER_VW, (viewportWidth - HEADLINE_COLUMN_PX) / 2);
+      const mobileHeadline = window.matchMedia(MOBILE_HEADLINE_MEDIA_QUERY).matches;
+      const sideGutter = mobileHeadline
+        ? mobileGutterPx(viewportWidth)
+        : Math.max(viewportWidth * HEADLINE_GUTTER_VW, (viewportWidth - HEADLINE_COLUMN_PX) / 2);
       const maxWidth = Math.max(viewportWidth - (sideGutter * 2), 240);
 
       // These are fixed viewport coords for position:fixed
       const gapTop = navHeight;
       const gapHeight = Math.max(contentDocTop - navHeight, 180);
-      // Anchor the small line (the only visible text) above the content panel rather than centring the block.
+      // Desktop: anchor the small line (the only visible text) above the content panel. Phones: centre the
+      // full headline in the gap.
       const sub = el.querySelector('#hero-subheadline');
       const subBottomInPanel = sub ? sub.offsetTop + sub.offsetHeight : headlineHeight;
-      const centeredTop = Math.max(gapTop, contentDocTop - SUB_ANCHOR_GAP_PX - subBottomInPanel);
+      const centeredTop = mobileHeadline
+        ? gapTop + Math.max((gapHeight - headlineHeight) / 2, 0)
+        : Math.max(gapTop, contentDocTop - SUB_ANCHOR_GAP_PX - subBottomInPanel);
 
       metrics.centeredTop = centeredTop;
       metrics.maxWidth = maxWidth;
@@ -442,7 +453,9 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
       const lines = type.headlineLines;
       const unit = measureHeadlineUnitWidth(lines, type);
       const byWidth = unit > 0 ? maxWidth / unit : Infinity;
-      const byHeight = gapHeight / (lines.length * type.headlineLineHeight + HEADLINE_SUB_LINES_EM);
+      const byHeight = mobileHeadline
+        ? gapHeight / (lines.length * MOBILE_HEADLINE_LINE_HEIGHT)
+        : gapHeight / (lines.length * type.headlineLineHeight + HEADLINE_SUB_LINES_EM);
       metrics.fontSize = Math.max(Math.floor(Math.min(byWidth, byHeight)), HEADLINE_MIN_PX);
     };
 
@@ -549,14 +562,19 @@ const HeroHeadline = ({ headerLogoRef, textColor = 'var(--t-text)', cursorStageR
     <>
       <style>{`
         @media (max-width: 620px) {
-          #hero-panel-top-left h1 {
+          /* Phones show the full headline (poster-fit to the width, see MOBILE_HEADLINE_MEDIA_QUERY) in place of
+             the small line; desktop keeps the small line only. */
+          #hero-panel-top-left {
+            left: max(4vw, 16px) !important;
+            width: calc(100vw - max(4vw, 16px) * 2) !important;
+          }
+          #hero-panel-top-left #hero-headline-primary {
+            display: block !important;
             /* Preserve the Doto face's original proportions; reclaim room
                between lines rather than distorting the letterforms. */
-            font-size: clamp(2.5rem, 13.5vw, 7.1rem) !important;
-            line-height: 0.75 !important;
+            line-height: ${MOBILE_HEADLINE_LINE_HEIGHT} !important;
           }
-          #hero-subheadline { font-size: clamp(1.25rem, 6vw, 1.75rem) !important; }
-          #hero-subheadline-scramble { white-space: normal; word-break: break-word; }
+          #hero-panel-top-left #hero-subheadline { display: none !important; }
         }
       `}</style>
       {/* Top-left — Headline */}

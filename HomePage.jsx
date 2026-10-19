@@ -180,7 +180,23 @@ const HomePage = () => {
     html.style.overflow = 'hidden';
     body.style.overflow = 'hidden';
     html.style.overscrollBehavior = 'none';
+    // iOS Safari still pans the page on touch despite overflow:hidden. Block touch panning unless the finger is
+    // inside something that scrolls on its own (a modal body, a list).
+    const scrollsItself = (node) => {
+      for (let el = node; el && el !== body && el !== html; el = el.parentElement) {
+        const { overflowY, overflowX } = getComputedStyle(el);
+        if ((/(auto|scroll)/.test(overflowY) && el.scrollHeight > el.clientHeight)
+          || (/(auto|scroll)/.test(overflowX) && el.scrollWidth > el.clientWidth)) return true;
+      }
+      return false;
+    };
+    const blockPagePan = (event) => {
+      if (event.touches.length > 1 || scrollsItself(event.target)) return;
+      event.preventDefault();
+    };
+    document.addEventListener('touchmove', blockPagePan, { passive: false });
     return () => {
+      document.removeEventListener('touchmove', blockPagePan);
       html.style.overflow = prev.html;
       body.style.overflow = prev.body;
       html.style.overscrollBehavior = prev.overscroll;
