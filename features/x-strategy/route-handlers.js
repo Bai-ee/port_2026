@@ -406,7 +406,7 @@ export function createStrategyHandlers({
   };
   async function dailyFill(clientId, spec, { execute = false, batchId = null } = {}) {
     if (execute && typeof ensureDraft !== 'function') return { ok: false, status: 503, error: 'Creating drafts is not available on this deployment.' };
-    return runDailyFill(clientId, { from: spec?.from, days: spec?.days, include: spec?.include, execute, batchId, deps: dailyFillDeps });
+    return runDailyFill(clientId, { from: spec?.from, days: spec?.days, include: spec?.include, excludePackageIds: spec?.excludePackageIds, replace: spec?.replace, execute, batchId, deps: dailyFillDeps });
   }
   // Preview rows: text shortened (the agent's context is small); counts and skip examples are unchanged.
   const stripFillRows = (r) => (r.ok ? { ...r, rows: r.rows.map(({ text, ...row }) => ({ ...row, text: text.slice(0, 140) })) } : r);

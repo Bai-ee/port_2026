@@ -31,6 +31,7 @@ const WRITE_CONCURRENCY = 10;
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const DAY_MS = 86_400_000;
 const POST_MAX = 280;
+const MAX_EXCLUDE_IDS = 200;
 const CLIENT_WORK_LABEL_RE = /video editing|graphic design|client work/i;
 
 // A kind in `include` maps to the row kinds it allows.
@@ -65,8 +66,20 @@ export function normalizeFillSpec(raw, { today } = {}) {
       if (!include.length && !bad.length) errors.push('include must name at least one kind');
     }
   }
+  // Replace-one-item options (calendar-decide.js): omitted => the spec is exactly what it was before.
+  let excludePackageIds;
+  if (r.excludePackageIds !== undefined) {
+    if (!Array.isArray(r.excludePackageIds) || r.excludePackageIds.length > MAX_EXCLUDE_IDS || r.excludePackageIds.some((x) => typeof x !== 'string' || !x || x.length > 200)) {
+      errors.push(`excludePackageIds must be an array of up to ${MAX_EXCLUDE_IDS} package ids`);
+    } else excludePackageIds = [...new Set(r.excludePackageIds)];
+  }
+  let replace;
+  if (r.replace !== undefined && r.replace !== null) {
+    if (!isPlain(r.replace) || (r.replace.bucketId != null && typeof r.replace.bucketId !== 'string')) errors.push('replace must be {bucketId?: string}');
+    else replace = { bucketId: r.replace.bucketId ? clip(r.replace.bucketId, 80) : null };
+  }
   if (errors.length) return { ok: false, errors };
-  return { ok: true, spec: { from, days, include } };
+  return { ok: true, spec: { from, days, include, ...(excludePackageIds ? { excludePackageIds } : {}), ...(replace ? { replace } : {}) } };
 }
 
 /** A track's posts/day target: its engines' targets summed (daily target, else weekly minimum / 7), the same rule as the
@@ -126,12 +139,15 @@ const newestUnusedFirst = (a, b) => (a.prior ? 1 : 0) - (b.prior ? 1 : 0)
  *   trackRules                 { [bucketId]: {perDay, artists?, newestFirst?} } overrides for a bucket's track (daily-mix-rule.js):
  *                              perDay replaces the engine target; artists limits the pool to non-retired videos by those
  *                              artists; newestFirst ranks never-used items newest render first, then least recently used
+ *   excludePackageIds          package ids that are never picked (the item the owner just replaced)
+ *   replace                    {bucketId} replace-one-item mode: only the track(s) listing that bucket are filled, rejected earlier
+ *                              fills no longer hold their slot, and at most ONE row is planned. Normal fills leave this unset.
  * @returns {{ok:true, from, days, rows, skipped, counts}|{ok:false, error}}
  */
 export function planDailyFill({
   tracks = [], engineTargets = {}, packages = [], clientWork = null, openPosts = new Set(), fillPosts = [], lastUsed = new Map(),
   quoteTargets = [], marketSignals = null, asOf = {}, from, days = DEFAULT_FILL_DAYS, today, nowMs, include = FILL_KINDS,
-  trackRules = {},
+  trackRules = {}, excludePackageIds = [], replace = null,
 } = {}) {
   if (!DAY_RE.test(String(today || ''))) return { ok: false, error: 'today must be YYYY-MM-DD' };
   if (!DAY_RE.test(String(from || ''))) return { ok: false, error: 'from must be YYYY-MM-DD' };
@@ -140,7 +156,7 @@ export function planDailyFill({
   const rows = [];
   const skipped = [];
   const skip = (s) => skipped.push(s);
-  const used = new Set();
+  const used = new Set(excludePackageIds || []);
   const now = Number.isFinite(nowMs) ? nowMs : Date.parse(`${today}T00:00:00Z`);
   const fills = Array.isArray(fillPosts) ? fillPosts : [];
   const lastOf = (id) => (lastUsed instanceof Map ? lastUsed.get(id) : lastUsed?.[id]) || null;
@@ -153,6 +169,7 @@ export function planDailyFill({
   for (const track of tracks || []) {
     const kind = isClientWorkTrack(track) ? 'client-work' : 'baseline';
     if (!want.has(kind)) continue;
+    if (replace?.bucketId && !(track.buckets || []).includes(replace.bucketId)) continue;
     const rule = ruleForTrack(track, trackRules);
     const perDay = rule ? rule.perDay : trackPostsPerDay(track, engineTargets);
     if (perDay <= 0) continue;
@@ -162,7 +179,7 @@ export function planDailyFill({
     for (const date of dates) {
       let slots = slotsOn(perDay, date);
       // Re-runs: drafts an earlier fill already put on this day for this track count toward its target.
-      slots -= fills.filter((f) => f.reviewOn === date && (f.fillKind === 'baseline' || f.fillKind === 'client-work') && buckets.has(f.bucketId)).length;
+      slots -= fills.filter((f) => !(replace && f.status === 'rejected') && f.reviewOn === date && (f.fillKind === 'baseline' || f.fillKind === 'client-work') && buckets.has(f.bucketId)).length;
       if (kind === 'client-work') slots = Math.min(slots, 1 - (clientWorkDay.get(date) || 0));
       if (slots <= 0) continue;
       const md = date.slice(5);
@@ -258,6 +275,7 @@ export function planDailyFill({
     }
   }
 
+  if (replace && rows.length > 1) rows.length = 1; // replace-one-item: never more than one new row (first in plan order)
   rows.sort((a, b) => a.date.localeCompare(b.date) || a.kind.localeCompare(b.kind) || String(a.packageId || a.quoteTarget?.id || '').localeCompare(String(b.packageId || b.quoteTarget?.id || '')));
   const byKind = {};
   for (const r of rows) byKind[r.kind] = (byKind[r.kind] || 0) + 1;
@@ -280,17 +298,17 @@ export const fillKeyOf = (r) => `daily-fill:${r.date}:${r.kind}:${r.packageId ||
  *   mediaFor(clientId, packageId) -> media fields | null   (optional) the item's own video/image
  * Returns {ok, preview, spec, counts, skipped, rows, created, existing, placed, failed}. A media failure never blocks a draft.
  */
-export async function runDailyFill(clientId, { from, days, include, execute = false, batchId = null, deps = {} } = {}) {
+export async function runDailyFill(clientId, { from, days, include, excludePackageIds, replace, execute = false, batchId = null, deps = {} } = {}) {
   if (typeof deps.loadInputs !== 'function') throw new Error('runDailyFill: deps.loadInputs is required');
   const inputs = await deps.loadInputs(clientId);
-  const norm = normalizeFillSpec({ from, days, include }, { today: inputs.today });
+  const norm = normalizeFillSpec({ from, days, include, excludePackageIds, replace }, { today: inputs.today });
   if (!norm.ok) return { ok: false, status: 400, error: norm.errors.join('; ') };
   const plan = planDailyFill({ ...inputs, ...norm.spec });
   if (!plan.ok) return { ok: false, status: 400, error: plan.error };
   const base = { ok: true, spec: norm.spec, counts: plan.counts, skipped: plan.skipped, rows: plan.rows };
   if (!execute) return { ...base, preview: true };
   if (typeof deps.ensureDraft !== 'function') return { ok: false, status: 503, error: 'Creating drafts is not available on this deployment.' };
-  const out = { created: 0, existing: 0, placed: 0, failed: [] };
+  const out = { created: 0, existing: 0, placed: 0, failed: [], posts: [] }; // posts: [{postId,date,kind,packageId}] the fill wrote or placed
   const queue = [...plan.rows];
   const worker = async () => {
     for (let r = queue.shift(); r; r = queue.shift()) {
@@ -300,7 +318,7 @@ export async function runDailyFill(clientId, { from, days, include, execute = fa
         if (r.existingPostId) {
           if (typeof deps.placeDraft !== 'function') throw new Error('placing existing drafts is not available');
           const placed = await deps.placeDraft(clientId, r.existingPostId, { reviewOn: r.date, bucketId: r.bucketId, media });
-          if (placed) out.placed += 1; else out.failed.push({ date: r.date, kind: r.kind, id: label, error: 'draft changed; not placed' });
+          if (placed) { out.placed += 1; out.posts.push({ postId: r.existingPostId, date: r.date, kind: r.kind, packageId: r.packageId || null }); } else out.failed.push({ date: r.date, kind: r.kind, id: label, error: 'draft changed; not placed' });
           continue;
         }
         const res = await deps.ensureDraft(clientId, {
@@ -314,6 +332,8 @@ export async function runDailyFill(clientId, { from, days, include, execute = fa
           ...(batchId ? { runId: batchId } : {}),
         });
         if (res?.existing) out.existing += 1; else out.created += 1;
+        const pid = res?.post?.id ?? res?.post?.postId;
+        if (pid) out.posts.push({ postId: pid, date: r.date, kind: r.kind, packageId: r.packageId || null });
       } catch (err) {
         out.failed.push({ date: r.date, kind: r.kind, id: label, error: String(err?.message || err).slice(0, 160) });
       }

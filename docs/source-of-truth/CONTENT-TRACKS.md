@@ -105,3 +105,15 @@ The month calendar is the single review surface for every possible post.
 - Telegram video by URL caps at 20MB (else poster + link). Staging completion is not pushed — reopen Today's posts.
 - Strategy-chat edits of `contentTracks` are supported by the proposal schema; no dedicated chat UI.
 - Local `npm run build` with the symlinked `node_modules` needs `--webpack` (Turbopack rejects the symlink); Vercel builds normally.
+
+## Pass / Delete / Replace (2026-10-19)
+
+Every calendar row (saved post, daily suggestion, open requote) can be passed, deleted or replaced. Logic: `features/x-content-inventory/calendar-decide.js` (`decideCalendarItem`, pure, deps injected); route wiring: `calendarItemDecideDeps` in `app/api/dashboard/quote-targets/route.js`. No X call is ever made.
+
+- **pass** removes the row; the library item stays eligible for later days. **delete** also rejects the library package (`reject-package`), so no fill offers it again. **replace** = pass + one new review draft for the same day and track.
+- **post**: refused 409 `not-removable` when posted/posting/queued/manual. A scheduled post is unscheduled first (no X call), then rejected (`rejectDraft`; the doc is kept as `rejected`, which the calendar hides). If the post came from a quote target (`sourceRef.kind` or `fillSource.type` = `quote-target`) that target is dismissed too, so the requote does not reappear.
+- **suggestion**: pass/delete dismiss it; replace is 400 `replace-unsupported`.
+- **requote** (unsaved candidate): pass/delete dismiss the target; replace dismisses it and returns the next open candidate id (no draft is created; that candidate is already a requote row).
+- **replace (post)** runs `dailyFill` for that one date with `excludePackageIds: [removed package]` and `replace: {bucketId}`: only that bucket's track is filled, rejected earlier fills no longer hold the day's slot (normal fills still count them), and at most one row is planned. No eligible item gives `replacement: null, note: 'no-eligible-item'`. Quote drafts can only be replaced on today (quotes plan today only).
+
+Action: `POST /api/dashboard/quote-targets` with `{ action: 'calendar-item-decide', decision: 'pass'|'delete'|'replace', item }` (owner-gated like every action on the route). `item` per kind: `post` `{ postId, expectedRevision?, date? }`; `suggestion` `{ suggestionId, runId? }`; `requote` `{ targetId, date? }`. Result `{ ok, decision, kind, removed: { postId?, packageId?, targetId?, suggestionId?, packageRejected? }, replacement: null | { kind: 'post', postId, date, row } | { kind: 'requote', targetId, date }, note? }`. Errors carry `code`: `bad-decision`, `bad-kind`, `bad-item`, `not-found`, `not-removable`, `replace-unsupported`, `replace-failed`.

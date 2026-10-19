@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 import { randomUUID } from 'crypto';
-import { createSocialPost, readSocialQueue, getSocialPost, createDraftPostOnce, ensureDraftPost, findOpenPostForPackage, updateSocialPost, runPostingAgents, approveDraft, unapproveDraft, swapPostMedia } from '../../../../features/social-posting/twitter-service.js';
+import { createSocialPost, readSocialQueue, getSocialPost, createDraftPostOnce, ensureDraftPost, findOpenPostForPackage, updateSocialPost, runPostingAgents, approveDraft, unapproveDraft, rejectDraft, swapPostMedia } from '../../../../features/social-posting/twitter-service.js';
 import { buildDayPlan, mergeListCandidates } from '../../../../features/x-quote-targets/day-plan.js';
 // Static import so Next bundles the calendar — docs/audits/ is NOT in
 // .vercelignore, but a runtime fs read of a repo path is fragile on serverless.
@@ -23,6 +23,7 @@ import { buildPostResults } from '../../../../features/x-content-inventory/resul
 import { recentPostsFromQueue } from '../../../../features/x-content-inventory/allocate-slot.js';
 import { readUnifiedCalendar, readCalendarQuoteTargets as readCalendarQuoteTargetsShared } from '../../../../features/x-content-inventory/calendar-reader.js';
 import { ctDate, toRow as calendarPostRow } from '../../../../features/x-content-inventory/month-calendar.js';
+import { decideCalendarItem } from '../../../../features/x-content-inventory/calendar-decide.js';
 import { createContentTaskStore } from '../../../../features/x-content-inventory/content-tasks.js';
 import { joinPerformance, engineStats } from '../../../../features/x-content-inventory/performance.js';
 import * as bucketStore from '../../../../features/x-content-inventory/bucket-store.js';
@@ -319,6 +320,7 @@ const SUPPORTED_ACTIONS = [
   'calendar-approve',
   'calendar-unapprove',
   'calendar-suggestion-approve',
+  'calendar-item-decide',
   'content-task-update',
   'content-context',
   'post-status',
@@ -1046,6 +1048,35 @@ async function handleCalendarSuggestionApprove(context, decoded, body) {
   return { ok: true, kind, created: true, ...out };
 }
 
+/** Real I/O for decideCalendarItem (calendar-decide.js). Nothing here calls X; a replacement fill writes review drafts only. */
+function calendarItemDecideDeps(context, decoded) {
+  const clientId = context.clientId;
+  return {
+    getPost: (cid, postId) => getSocialPost(cid, postId),
+    rejectPost: (cid, postId, opts) => rejectDraft(cid, postId, { reviewedBy: opts?.by, expectedRevision: opts?.expectedRevision }),
+    unschedulePost: (cid, postId, opts) => updateSocialPost(cid, postId, { scheduledAt: null }, { expectedRevision: opts?.expectedRevision }),
+    dismissQuoteTarget: (cid, targetId) => handleDismiss(cid, { candidateId: targetId }),
+    dismissSuggestion: async (cid, suggestionId) => {
+      const store = createFirestoreRunStore(fb.adminDb);
+      const run = await latestDailyRun(store, cid);
+      if (!run) throw Object.assign(new Error('No daily run found.'), { status: 404 });
+      await dismissSuggestion({ store }, { key: { clientId: run.clientId, localDate: run.localDate, channel: run.channel, version: run.version }, suggestionId });
+    },
+    rejectPackage: (cid, packageId) => handleDecidePackage({ clientId: cid }, decoded, { id: packageId }, 'rejected'),
+    getPackage: (cid, packageId) => getPackageFor(cid)(packageId),
+    fill: (cid, spec, opts) => getStrategyHandlers().dailyFill(cid, spec, opts),
+    openQuoteTargets: (cid) => readCalendarQuoteTargets(cid),
+    rowOf: async (cid, postId) => { const post = await getSocialPost(cid, postId); return post ? calendarRowOf(post) : null; },
+    now: () => Date.now(),
+  };
+}
+
+async function handleCalendarItemDecide(context, decoded, body) {
+  return decideCalendarItem(calendarItemDecideDeps(context, decoded), {
+    clientId: context.clientId, decision: body?.decision, item: body?.item, by: decoded?.email || decoded?.uid || null,
+  });
+}
+
 async function handleDailyRun(context, action, body) {
   // Fails closed with a code naming the missing input (approved Brain / plan doc / connected X, or contentLoop.enabled).
   await assertClientReady(fb.adminDb, context.clientId);
@@ -1209,7 +1240,7 @@ export async function POST(request) {
     return json({ error: 'Invalid JSON body.' }, 400);
   }
 
-  const action = body?.action || '';
+  const action = body?.action || new URL(request.url).searchParams.get('action') || '';
   try {
     if (action === 'draft-quote') {
       const result = await handleDraftQuote(context, body);
@@ -1254,6 +1285,7 @@ export async function POST(request) {
       const result = await handleCalendarSuggestionApprove(context, decoded, body);
       return json(result, result.ok === false ? (result.status || 422) : 200);
     }
+    if (action === 'calendar-item-decide') return json(await handleCalendarItemDecide(context, decoded, body));
     if (action === 'content-task-update') return json(await handleContentTaskUpdate(context, body));
     if (action === 'engine-performance') {
       return json(await handleEnginePerformance(context, body));
