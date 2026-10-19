@@ -216,6 +216,7 @@ const Header = ({ logoRef, onOpenPage, logoSrc = '/img/sig.png', actions = null,
     <>
       <header
         id="founders-top-strip"
+        data-nav-variant={logoCyclesTheme ? 'home' : undefined}
         style={{
           background: 'var(--t-chrome)',
           backdropFilter: 'blur(24px)',
