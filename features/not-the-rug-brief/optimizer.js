@@ -136,6 +136,7 @@ function logCostEstimate(label, inputTokens, outputTokens, model) {
   const pricing = {
     'claude-haiku-4-5-20251001': { input: 1.00, output: 5.00 },
     'claude-sonnet-4-6':         { input: 3.00, output: 15.00 },
+    'claude-sonnet-5-5':         { input: 2.00, output: 10.00 },
   };
   const p = pricing[model] || pricing['claude-sonnet-4-6'];
   const cost = (inputTokens * p.input / 1_000_000) + (outputTokens * p.output / 1_000_000);
@@ -152,6 +153,7 @@ function computeStageCost(stage, inputTokens, outputTokens, model) {
   const pricing = {
     'claude-haiku-4-5-20251001': { input: 1.00, output: 5.00 },
     'claude-sonnet-4-6':         { input: 3.00, output: 15.00 },
+    'claude-sonnet-5-5':         { input: 2.00, output: 10.00 },
   };
   const p = pricing[model] || pricing['claude-sonnet-4-6'];
   const estimatedUsd = (inputTokens * p.input / 1_000_000) + (outputTokens * p.output / 1_000_000);

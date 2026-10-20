@@ -24,6 +24,8 @@ const RATES = {
   // intelligence PSI narrator.
   'claude-haiku-4-5-20251001':  { inputPerToken: 1.00 / 1_000_000, outputPerToken: 5.00  / 1_000_000 },
   'claude-sonnet-4-6':      { inputPerToken: 3.00 / 1_000_000, outputPerToken: 15.00 / 1_000_000 },
+  // Sonnet 5.5 (the X strategy chat agent): $2 / $10 per MTok, cache reads $0.20 (= the 0.1x multiplier below).
+  'claude-sonnet-5-5':      { inputPerToken: 2.00 / 1_000_000, outputPerToken: 10.00 / 1_000_000 },
   // Sonnet 4.5 (Sep 2025) — same family rate. Used by the external-scout
   // web_search paths (reddit / reviews).
   'claude-sonnet-4-5-20250929': { inputPerToken: 3.00 / 1_000_000, outputPerToken: 15.00 / 1_000_000 },

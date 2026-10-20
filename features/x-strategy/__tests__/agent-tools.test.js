@@ -21,9 +21,9 @@ test('prompt carries the likes-only rule and the no-invention rule', () => {
 
 test('prompt stays compact and embeds only a capped plan summary, not the evaluation', () => {
   const p = buildSystemPrompt({ planSummary: 'x'.repeat(10000), evaluationSummary: 'y'.repeat(5000) });
-  assert.ok(p.length < 10500);
+  assert.ok(p.length < 12500); // rules + coaching playbook + capped plan summary
   const withDoc = buildSystemPrompt({ planSummary: 'x', strategyDocText: 'z'.repeat(20000) });
-  assert.ok(withDoc.length < 10500 + 7000, 'the strategy document is capped');
+  assert.ok(withDoc.length < 12500 + 7000, 'the strategy document is capped');
   assert.ok(!/"byType"|"gaps"/.test(p));
   const s = summarizePlan({ version: 2, plan: { authoredPerDay: 4, tier: 1, typeFloors: { 'quote-react': 1 }, typeCaps: {}, benchmarkPrimary: 'seb__design', notes: '' } });
   assert.match(s, /version 2/);
@@ -31,11 +31,11 @@ test('prompt stays compact and embeds only a capped plan summary, not the evalua
   assert.match(summarizePlan(null), /No saved plan/);
 });
 
-test('one propose tool per agent-proposable kind (server-only kinds like paid-sync have none), plus the twenty-two read tools, all with object schemas', () => {
+test('one propose tool per agent-proposable kind (server-only kinds like paid-sync have none), plus the thirty read tools, all with object schemas', () => {
   assert.deepEqual(Object.keys(PROPOSE_TOOL_BY_KIND).sort(), PROPOSAL_KINDS.filter((k) => !SERVER_ONLY_PROPOSAL_KINDS.includes(k) && k !== 'action').sort()); // `action` cards come from run_action, not a propose tool
   assert.ok(PROPOSAL_KINDS.includes('paid-sync') && !('paid-sync' in PROPOSE_TOOL_BY_KIND));
-  assert.deepEqual(READ_TOOL_NAMES, ['get_strategy_doc', 'get_algorithm', 'score_posts', 'get_rule_check', 'get_audience', 'get_x_spend', 'get_evaluation', 'get_plan', 'get_tracks', 'get_context', 'get_today_run', 'get_calendar', 'search_inventory', 'get_item', 'top_posts', 'get_queue', 'get_market_signals', 'find_item_media', 'find_hires_media', 'get_media_link', 'get_post', 'find_posts', 'get_opportunities', 'get_results', 'get_brief', 'get_freshness', 'get_unmet_requests', 'get_response_style']);
-  assert.equal(TOOL_SCHEMAS.length, 56);
+  assert.deepEqual(READ_TOOL_NAMES, ['get_strategy_doc', 'get_algorithm', 'score_posts', 'get_rule_check', 'get_audience', 'get_recent_posts', 'get_x_spend', 'get_evaluation', 'get_plan', 'get_tracks', 'get_context', 'get_today_run', 'get_calendar', 'next_post', 'search_inventory', 'get_item', 'top_posts', 'get_queue', 'get_market_signals', 'find_item_media', 'find_hires_media', 'get_media_link', 'get_post', 'find_posts', 'get_opportunities', 'get_results', 'get_brief', 'get_freshness', 'get_unmet_requests', 'get_response_style']);
+  assert.equal(TOOL_SCHEMAS.length, 59);
   for (const t of TOOL_SCHEMAS) {
     assert.equal(t.input_schema.type, 'object');
     assert.ok(t.description);
@@ -49,7 +49,7 @@ test('one propose tool per agent-proposable kind (server-only kinds like paid-sy
 // ---- Phase 4 chat read tools + selected-item context ----
 
 test('propose-only surface: none of the propose tools can schedule/approve/publish (calendar batch writes drafts only)', () => {
-  assert.equal(PROPOSE_TOOLS.length, 22);
+  assert.equal(PROPOSE_TOOLS.length, 23);
   for (const t of TOOL_SCHEMAS) assert.ok(!/schedule|publish|approve_post|approve|post_now/i.test(t.name) || t.name.startsWith('propose_'), t.name);
   assert.ok(!TOOL_SCHEMAS.some((t) => /^(schedule|publish|approve)/.test(t.name)));
   assert.deepEqual(TOOL_SCHEMAS.filter((t) => !t.name.startsWith('propose_')).map((t) => t.name), [...READ_TOOL_NAMES, 'find_actions', 'run_action', 'undo_action', 'get_action_log', 'save_response_style', 'log_unmet_request']);
@@ -160,4 +160,32 @@ test('get_item: whole object when it fits; otherwise a map of its parts; paths a
   const viaTool = await runReadTool('get_item', { itemId: 'discogs-1' }, { readItemFull: async (id) => (id === 'discogs-1' ? small : null) });
   assert.deepEqual(viaTool, small);
   assert.match((await runReadTool('get_item', { itemId: 'nope' }, { readItemFull: async () => null })).error, /unknown item/);
+});
+
+test('coaching playbook: order, quote-react-by-views, pick-not-offer, viral follow-up; no hardcoded figures', () => {
+  const p = buildSystemPrompt({ planSummary: 'x' });
+  assert.match(p, /COACHING PLAYBOOK/);
+  assert.match(p, /get_recent_posts, then the benchmark for THAT track only/);
+  assert.match(p, /never blend/);
+  assert.match(p, /next_post/);
+  assert.match(p, /Quote-reacts are judged by reach/);
+  assert.match(p, /never judge or cut quote-reacts by it/);
+  assert.match(p, /Pick, do not offer/);
+  assert.match(p, /propose_self_reply/);
+  assert.match(p, /ORIGINAL\'s stats under `quoted`/);
+  const playbook = p.slice(p.indexOf('COACHING PLAYBOOK'), p.indexOf('CURRENT PLAN'));
+  assert.ok(playbook.split('\n').length <= 25, 'playbook stays short');
+  assert.ok(!/\d{2,}/.test(playbook), 'no figures that can go stale (tools supply numbers)');
+});
+
+test('chat agent model is claude-sonnet-5-5 from one config value, with a price entry in the cost ledger', async () => {
+  const { STRATEGY_AGENT_MODEL } = await import('../agent/prompt.js');
+  const { STRATEGY_AGENT_MODEL: fromLoop } = await import('../agent/loop.js');
+  assert.equal(STRATEGY_AGENT_MODEL, 'claude-sonnet-5-5');
+  assert.equal(fromLoop, STRATEGY_AGENT_MODEL);
+  const { createRequire } = await import('node:module');
+  const { computeAnthropicCost } = createRequire(import.meta.url)('../../../api/_lib/usage-logger.cjs');
+  // $2 / $10 per MTok (verified against the claude-api model table), cache reads 0.1x input
+  assert.equal(computeAnthropicCost({ model: STRATEGY_AGENT_MODEL, inputTokens: 1_000_000, outputTokens: 1_000_000 }), 12);
+  assert.equal(computeAnthropicCost({ model: STRATEGY_AGENT_MODEL, cacheReadTokens: 1_000_000 }), 0.2);
 });

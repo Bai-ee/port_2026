@@ -26,7 +26,7 @@
 //   --window <days>    summary window (default 30; 0 = all time)
 //
 // CADENCE: run once daily. Each run is a SNAPSHOT at capture time.
-// KNOWN GAP: the first ~2h decide a post's reach (x-2026-10-03 profile), but a
+// KNOWN GAP: the first ~2h decide a post's reach (x-2026-10-17 profile), but a
 // daily capture lands hours-to-days after posting, so first-2h velocity cannot
 // be measured. `ageHoursAtCapture` records how mature each number is. Measuring
 // velocity would need a capture near post time (not built; needs a separate,

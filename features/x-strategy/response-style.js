@@ -8,11 +8,11 @@ export const RESPONSE_STYLE_HISTORY = 5;
 
 // Used until the owner saves their own. Built for reading in a few seconds; the owner can replace any of it.
 export const DEFAULT_RESPONSE_STYLE = [
-  'Lead with the answer in one sentence.',
-  'Then at most 5 hyphen bullets, one line each, most important first.',
-  'Put each link right next to the item it belongs to.',
-  'Numbers: the figure, then its source and age in brackets.',
-  'End with one line "Next: <the single best action>".',
+  'Verdict line first: the answer in one sentence.',
+  'Then the key numbers: the figure, then its source and age in brackets. Your own figures and a quoted post\'s figures on separate lines.',
+  'When comparing, a few short aligned lines (no markdown table).',
+  'Give the exact copy or slot for any post you recommend. Put each link right next to the item it belongs to.',
+  'End with the card(s) you put up, or one question, or one line "Next: <the single best action>".',
   'No preamble, no recap of the question, no hedging.',
 ].join('\n');
 

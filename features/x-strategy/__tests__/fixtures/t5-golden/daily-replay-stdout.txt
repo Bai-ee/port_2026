@@ -47,7 +47,7 @@ SUGGESTIONS (4)
      history:      original-showcase n=29 lift=1.6092; no topic match — Conversation does not map to any topic in the shared taxonomy — no topic evidence. [2026-07-07 → 2026-09-10]
      draft (fallback (item text, cut to fit)):
         BAI-EE – Fathers Day Jazz Mix (2024)
-     checks:       pass · guard lane unknown · 36 chars · score 0.233 (advisory, x-2026-10-03)
+     checks:       pass · guard lane unknown · 36 chars · score 0.233 (advisory, x-2026-10-17)
      slot:         A · 08:00 CT · original-showcase · P6
      proposed slot: 08:00 America/Chicago — suggestion only — not scheduled
 
@@ -64,7 +64,7 @@ SUGGESTIONS (4)
      history:      reply n=4 lift=1.0145 (weak); no topic match — Conversation does not map to any topic in the shared taxonomy — no topic evidence. [2026-07-07 → 2026-09-10]
      draft (fallback (item text, cut to fit)):
         Glenn Underground, Cei-Bei – House Music Will Never Die (1996)
-     checks:       pass · guard lane music · 62 chars · score 0.284 (advisory, x-2026-10-03)
+     checks:       pass · guard lane music · 62 chars · score 0.284 (advisory, x-2026-10-17)
      slot:         R · anytime today · reply
      proposed slot: anytime today — suggestion only, not scheduled
 

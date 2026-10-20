@@ -149,7 +149,7 @@ function parseToolInput(input) {
  * @param {{callModel?:Function, toolDeps:object, logUsage?:Function, model?:string, maxRounds?:number, maxProposals?:number, maxTokens?:number}} cfg
  */
 export function createAgentLoop({
-  callModel, toolDeps, logUsage, model = STRATEGY_AGENT_MODEL, maxRounds = 4, maxProposals = 2, maxTokens = 1500,
+  callModel, toolDeps, logUsage, model = STRATEGY_AGENT_MODEL, maxRounds = 10, maxProposals = 2, maxTokens = 2200,
 } = {}) {
   const call = callModel || createAnthropicCaller();
   const log = logUsage || createDefaultLogUsage();

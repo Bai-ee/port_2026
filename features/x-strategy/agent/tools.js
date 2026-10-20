@@ -12,11 +12,14 @@ import { ACTION_TOOLS } from './action-runtime.js';
 import { PLAN_FIELDS, HANDLE_RE, applyChange } from '../plan-state.js';
 import { tracksOf } from '../content-tracks.js';
 import { normalizeBatchSpec, MAX_BATCH, MAX_PER_DAY, MEMORY_PLACEHOLDER } from '../../x-content-inventory/calendar-batch.js';
-import { MAX_LINKS } from '../../x-content-inventory/item-media.js';
+import { MAX_LINKS, mediaOf } from '../../x-content-inventory/item-media.js';
 import { MAX_MEMORY_SUGGESTIONS, MEMORY_LINE_MAX } from '../../x-content-inventory/memory-suggest.js';
 import { MAX_MEDIA_TASKS, TASK_KINDS } from '../../x-content-inventory/content-tasks.js';
 import { BRIEF_PARTS, freshnessOf } from '../brief-bundle.js';
 import { RESPONSE_STYLE_MAX_CHARS, effectiveResponseStyle } from '../response-style.js';
+import { baselineSlotsOf } from '../daily-slots.js';
+import { planNextPost, LOOKAHEAD_DAYS } from '../next-post.js';
+import { ctDate, addDays } from '../../x-content-inventory/month-calendar.js';
 import { SECTION_KEYS, SECTION_MAX, STRATEGY_DOC_SECTIONS, applyDocEdit, normalizeSections } from '../strategy-doc.js';
 
 export const LIMITS = Object.freeze({
@@ -84,6 +87,7 @@ export const PROPOSE_TOOL_BY_KIND = Object.freeze({
   'memory-suggest': 'propose_memory_suggestions',
   'media-tasks': 'propose_media_tasks',
   'calendar-decide': 'propose_calendar_decide',
+  'self-reply': 'propose_self_reply',
 });
 export const KIND_BY_PROPOSE_TOOL = Object.freeze(
   Object.fromEntries(Object.entries(PROPOSE_TOOL_BY_KIND).map(([k, v]) => [v, k])),
@@ -164,8 +168,19 @@ export const READ_TOOLS = Object.freeze([
   },
   {
     name: 'get_audience',
-    description: "The owner's stored X Monitor data: followers now, follower trend (needs two snapshots), gained/lost followers, and per-post impressions (real views, not likes) for recent posts. Reads stored data only; never syncs or spends.",
+    description: "The owner's stored X Monitor data: followers now, follower trend (needs two snapshots), gained/lost followers, and per-post impressions (real views, not likes) as of its LAST paid sync (see lastSync). For views of the last few days use get_recent_posts instead - it is fresher and is the number to quote. Reads stored data only; never syncs or spends.",
     input_schema: { type: 'object', properties: { days: int('Impressions window in days (default 30)', { minimum: 1, maximum: 120 }) } },
+  },
+  {
+    name: 'get_recent_posts',
+    description: "The account's OWN posts in the last N hours (default 48, max 168) with VIEWS, likes, reposts, replies, bookmarks, quotes, type, media (+ video seconds), link, Chicago time, a track guess, and the median views of its recent originals/quotes with an outlier flag (views / median >= 10). A quote post's ORIGINAL (author + its likes/views) is under `quoted`: those are NOT the account's numbers - never report them as its own. Every result has a source (bird-live | bird-cache | bird-snapshot | x-monitor) and an as-of time; say how old it is. This is the one source for recent per-post views: get_audience (X Monitor, paid sync) and get_results (captures) can be older and differ. Read-only, free.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        handle: str('Own or benchmark handle, no @. Omit for the owner.'),
+        hours: int('Look-back window in hours (default 48)', { minimum: 1, maximum: 168 }),
+      },
+    },
   },
   {
     name: 'get_x_spend',
@@ -208,6 +223,11 @@ export const READ_TOOLS = Object.freeze([
         filter: { type: 'string', enum: [...CALENDAR_FILTERS], description: 'all (default) | unapproved | approved | suggestions' },
       },
     },
+  },
+  {
+    name: 'next_post',
+    description: "What to post next. Chicago time now -> the next OPEN baseline slot (from the confirmed Strategy document, +-60 min against the calendar; a slot that already passed today is reported and the next occurrence is targeted) -> the drafts waiting for that slot's track, each rule-checked (placeholder, media, video >= 10s, link in self-reply not main post, hashtags per track, length, record-line format) -> the format template for the track -> which draft to pick and which surplus drafts to pass. Pass `track` (e.g. discogs, design, mix) to get the next slot of that track. Read-only: turn the answer into cards (propose_calendar_decide to pass, propose_post_edit to move).",
+    input_schema: { type: 'object', properties: { track: str('Track label, id or word (discogs, design, mix, quote). Omit for the next open slot of any track.') } },
   },
   {
     name: 'search_inventory',
@@ -308,7 +328,7 @@ export const READ_TOOLS = Object.freeze([
   },
   {
     name: 'get_results',
-    description: 'Per-engine performance summary: post count, median views and caveats. A metric that was not captured is null (missing), never 0. Read-only.',
+    description: 'Per-engine performance summary over the last 30 days: post count, median views and caveats. Views are a one-time capture after posting, so recent posts can read low; for the last days use get_recent_posts. A metric that was not captured is null (missing), never 0. Read-only.',
     input_schema: { type: 'object', properties: {} },
   },
   {
@@ -460,6 +480,11 @@ export const PROPOSE_TOOLS = Object.freeze([
     postIds: { type: 'array', minItems: 1, maxItems: BULK_LIMITS.queueBulkMax, items: str('Post id from get_queue') },
     date: str('set-review-date only: YYYY-MM-DD'),
   }, ['action', 'postIds']),
+  propose('self-reply', "Propose a DRAFT reply under one of the OWNER'S OWN posts, carrying a library item's video (the viral follow-up: a showcase under a quote that took off). Give tweetUrl (the post's url from get_recent_posts), itemId (a showcase item with media, from search_inventory) and the reply text (up to 280 characters, no placeholders; the link or credit goes here, not in the main post). It only creates a draft reply: nothing is approved, scheduled or posted, and the owner posts replies by hand from the Queue.", {
+    tweetUrl: str("The owner's own x.com status URL, from get_recent_posts"),
+    itemId: str('Inventory item id whose video/image the reply carries'),
+    text: str('The reply text', { maxLength: LIMITS.postTextMax }),
+  }, ['tweetUrl', 'itemId', 'text']),
   propose('calendar-decide', `Propose cleaning up the calendar: ONE card for up to ${BULK_LIMITS.calendarDecideMax} items, one decision each. pass = off the calendar now (the content can come back later). delete = pass AND never suggest this content again. replace = pass and the next-best item for the same track lands the same day (posts/requotes only; a suggestion cannot be replaced). Build each item from a get_calendar row: post {kind:'post', postId=id, expectedRevision=revision}; suggestion {kind:'suggestion', suggestionId=id, runId, date=the day}; requote {kind:'requote', targetId=id, url=quotedUrl, date=the day}. Never touches X; nothing is posted or spent.`, {
     items: {
       type: 'array', minItems: 1, maxItems: BULK_LIMITS.calendarDecideMax,
@@ -726,6 +751,8 @@ function shapeResults(res) {
   const list = Array.isArray(res.engines) ? res.engines : [];
   return {
     window: res.window ?? null,
+    source: 'posting-queue captures (one view snapshot per post)',
+    note: 'Not live: a post captured soon after posting reads low. For the last days use get_recent_posts.',
     engines: list.filter(isPlain).slice(0, LIMITS.engineRowsMax).map((e) => {
       const medianViews = finiteOrNull(e.medianViews);
       return {
@@ -760,6 +787,26 @@ export async function runReadTool(name, input, toolDeps) {
     });
     case 'get_rule_check': return need('getRuleCheck')({ days: Number.isInteger(input?.days) ? Math.min(Math.max(input.days, 1), 180) : 30 });
     case 'get_audience': return need('getAudience')({ days: Number.isInteger(input?.days) ? Math.min(Math.max(input.days, 1), 120) : 30 });
+    case 'get_recent_posts': return need('getRecentPosts')({
+      handle: input?.handle ? cleanHandle(input.handle) : undefined,
+      hours: Number.isInteger(input?.hours) ? Math.min(Math.max(input.hours, 1), 168) : undefined,
+    });
+    case 'next_post': {
+      if (typeof deps.readCalendar !== 'function' || typeof deps.getStrategyDoc !== 'function') return NA();
+      const nowMs = typeof deps.now === 'function' ? deps.now() : Date.now();
+      const [doc, planDoc] = await Promise.all([deps.getStrategyDoc(), typeof deps.getPlan === 'function' ? deps.getPlan() : null]);
+      const today = ctDate(nowMs);
+      const res = await deps.readCalendar({ from: today, to: addDays(today, LOOKAHEAD_DAYS + 2) });
+      const days = Array.isArray(res) ? res : list(res?.days);
+      const rows = days.flatMap((d) => list(d.posts).map((p) => ({ ...p, date: d.date })));
+      const slots = baselineSlotsOf(doc, { tracks: tracksOf(planDoc) }).slots;
+      const formats = typeof doc?.sections?.formats === 'string' ? doc.sections.formats : '';
+      // The Formats section is capped (SECTION_MAX): a long section can lose its "Daily slot baseline" lines. Say so, never guess slots.
+      if (!slots.length && doc?.confirmed && /Daily slot baseline/i.test(formats)) {
+        return { available: false, reason: `the Strategy document's Formats section (${formats.length} characters, cap ${SECTION_MAX}) has the "Daily slot baseline" header but no slot lines: they were cut off by the section cap. Tell the owner; use get_calendar for the days' actual times and do not invent slots.` };
+      }
+      return planNextPost({ now: nowMs, slots, rows, track: cleanText(input?.track, 60) });
+    }
     case 'get_x_spend': return need('getXSpend')({ days: Number.isInteger(input?.days) ? Math.min(Math.max(input.days, 1), 90) : 30 });
     case 'get_plan': return { plan: await need('getPlan')() };
     case 'get_tracks': {
@@ -1203,6 +1250,25 @@ export async function prepareProposal(toolName, input, { toolDeps, userMessages 
         }
         if (problems.length) return fail(`cannot clean up these items: ${problems.join('; ').slice(0, 600)}`);
         payload = { items };
+        break;
+      }
+      case 'self-reply': {
+        const m = /^https?:\/\/(?:www\.)?(?:x|twitter)\.com\/(\w{1,15})\/status\/(\d{5,25})/i.exec(cleanText(input.tweetUrl, 300));
+        if (!m) return fail("tweetUrl must be an x.com status URL of the owner's own post (get_recent_posts gives each post's url)");
+        if (typeof toolDeps?.getProfileHandles !== 'function' || typeof toolDeps?.readItemFull !== 'function') return fail('self-reply drafts are not available');
+        const own = String((await toolDeps.getProfileHandles())[0] ?? '');
+        if (!own || m[1].toLowerCase() !== own.toLowerCase()) return fail(`the reply must go under the owner's OWN post (@${own || 'unknown'}); this url is @${m[1]}`);
+        const text = cleanText(input.text, LIMITS.postTextMax + 1);
+        if (!text) return fail('text is required');
+        if (text.length > LIMITS.postTextMax) return fail(`text must be at most ${LIMITS.postTextMax} characters`);
+        if (hasMemoryPlaceholder(text)) return fail('text still contains a placeholder');
+        const itemId = cleanText(input.itemId, 160);
+        if (!itemId) return fail('itemId is required (a showcase item with media, from search_inventory)');
+        const full = await toolDeps.readItemFull(itemId);
+        if (!isPlain(full?.item)) return fail(`unknown item ${itemId}`);
+        const media = mediaOf(full.item);
+        if (!media.kind) return fail('that item has no usable video or image to attach; pick one with media');
+        payload = { tweetUrl: `https://x.com/${own}/status/${m[2]}`, tweetId: m[2], ownerHandle: own, text, itemId, itemTitle: strOrNull(full.item.title), mediaKind: media.kind };
         break;
       }
       case 'bucket-edit': {
