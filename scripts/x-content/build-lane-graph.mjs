@@ -27,7 +27,7 @@ import { createFirestoreCorpusStore } from '../../features/x-strategy/corpus-sto
 import { mergeRowsById } from '../../features/x-strategy/corpus-rows.js';
 import { watchlistFromXGrowth } from '../../features/x-quote-targets/client-watchlist.js';
 import {
-  DEFAULT_EXTRA_MODELS, avoidTermsFromTopics, buildLaneGraph, isLaneGraphStale, laneGraphFromXGrowth, laneModels, toStoredLaneGraph,
+  DEFAULT_EXTRA_MODELS, avoidTermsFromTopics, brainAvoidFrom, buildLaneGraph, isLaneGraphStale, laneGraphFromXGrowth, laneModels, toStoredLaneGraph,
 } from '../../features/x-quote-targets/lane-graph.js';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
@@ -141,12 +141,7 @@ async function main() {
 
   // Brain: avoid handles / avoid-topic words (read only).
   const brain = brainSnap.exists ? brainSnap.data() : {};
-  // Brain fields are plain lists or decision objects ({value:[...]}), at the top level or under `domains` / `decisions`.
-  const asText = (x) => (typeof x === 'string' ? x : x?.text || x?.value || x?.name || '');
-  const valueOf = (d) => (Array.isArray(d?.value) ? d.value : Array.isArray(d) ? d : []).map(asText).filter((x) => typeof x === 'string' && x.trim());
-  const fieldOf = (domain, name) => [brain[domain]?.[name], brain.domains?.[domain]?.[name], brain.decisions?.[domain]?.[name]].flatMap(valueOf);
-  const avoidTopics = [...fieldOf('content', 'topicsToAvoid'), ...fieldOf('identity', 'categoryToAvoid')];
-  const avoidHandles = fieldOf('social', 'handlesToAvoid');
+  const { topics: avoidTopics, handles: avoidHandles } = brainAvoidFrom(brain);
   const avoidTerms = avoidTermsFromTopics(avoidTopics);
   console.error(`[${clientId}] brain keys: ${Object.keys(brain).slice(0, 14).join(',') || '(none)'} | avoid topics: ${avoidTopics.length}`);
 

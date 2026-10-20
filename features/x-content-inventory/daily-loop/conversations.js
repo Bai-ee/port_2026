@@ -25,6 +25,8 @@ export function normalizeConversationPost(raw = {}, source) {
     replies: Number(raw.replies ?? raw.replyCount) || 0,
     hasMedia: raw.hasMedia ?? (Array.isArray(raw.media) && raw.media.length > 0),
     vein: raw.vein || null,
+    // Hot picks carry their lane window (design 36h, music 72h); absent = the default quote window.
+    ...(Number(raw.windowHours) > 0 ? { windowHours: Number(raw.windowHours) } : {}),
     isReply: !!raw.inReplyToStatusId,
     source,
   };

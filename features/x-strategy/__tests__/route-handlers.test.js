@@ -822,3 +822,36 @@ test('chat-send: a failed propose attempt with no card says so under the reply',
   const r = await s.call('strategy-chat-send', { text: 'refresh' });
   assert.match(r.text, /No confirm card was created: refresh: groups must be a non-empty list/);
 });
+
+// ---- next_post quote slots read the current unacted hot-scan picks (readHotQuotes dep) ---------------------------
+const hotPick = (id, o = {}) => ({ id, lane: 'design', windowHours: 36, url: `https://x.com/a${id}/status/${id}`, author: `a${id}`, text: `pick ${id}`, createdAt: new Date(Date.now() - 3_600_000).toISOString(), rank: 0.5, momentum: 'new', fit: 0.8, angle: 'craft', why: 'w', ...o });
+function hotDeps({ hot, posts, hotThrows = false, postsThrow = false } = {}) {
+  const corpusStore = createMemoryCorpusStore({ loadCommitted: () => null });
+  const refreshService = createRefreshService({ store: corpusStore, queueStore: createMemoryRefreshQueue(), now: () => NOW, enabled: false, detectBird: async () => ({ available: false }), ingest: async () => ({ rows: [], pull: {} }), runBirdFor: () => () => '' });
+  const h = createStrategyHandlers({
+    corpusStore, planStore: createMemoryPlanStore(), refreshService, clock: () => NOW, readXGrowthConfig: async () => ({ ownHandle: 'me_acct', benchmarkHandles: [] }), readPackages: async () => [],
+    ...(hot === undefined ? {} : { readHotQuotes: async () => { if (hotThrows) throw new Error('boom'); return hot; } }),
+    ...(posts === undefined ? {} : { readQueuePosts: async () => { if (postsThrow) throw new Error('queue down'); return posts; } }),
+  });
+  return h.toolDepsFor('c1', CTX);
+}
+
+test('toolDepsFor.readHotQuotes: absent reader => no dep (next_post degrades cleanly)', () => {
+  assert.equal(hotDeps().readHotQuotes, undefined);
+});
+
+test('toolDepsFor.readHotQuotes: current picks only (not passed, not already drafted, window open), best rank first', async () => {
+  const hot = { picks: { design: [hotPick('1', { rank: 0.4 }), hotPick('2', { rank: 0.9 }), hotPick('3'), hotPick('4', { createdAt: new Date(Date.now() - 50 * 3_600_000).toISOString() })], music: [] }, dismissed: ['1'] };
+  const posts = [{ id: 'p', status: 'draft', sourceRef: { kind: 'quote-target', id: '3' } }, { id: 'q', status: 'rejected', sourceRef: { kind: 'quote-target', id: '2' } }];
+  const picks = await hotDeps({ hot, posts }).readHotQuotes();
+  assert.deepEqual(picks.map((p) => p.id), ['2'], '1 passed, 3 drafted, 4 expired; a rejected draft does not count as acted');
+  assert.equal(picks[0].url, 'https://x.com/a2/status/2');
+});
+
+test('toolDepsFor.readHotQuotes: empty / missing hotQuotes => []; a throwing queue read still returns the picks; a throwing hot read rejects (next_post catches it)', async () => {
+  assert.deepEqual(await hotDeps({ hot: null }).readHotQuotes(), []);
+  assert.deepEqual(await hotDeps({ hot: { picks: { design: [], music: [] } } }).readHotQuotes(), []);
+  const hot = { picks: { design: [hotPick('7')], music: [] } };
+  assert.deepEqual((await hotDeps({ hot, posts: [], postsThrow: true }).readHotQuotes()).map((p) => p.id), ['7']);
+  await assert.rejects(hotDeps({ hot, hotThrows: true }).readHotQuotes(), /boom/);
+});
