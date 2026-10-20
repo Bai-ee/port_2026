@@ -256,6 +256,14 @@ test('ensureDraftPost after the prior row is posted/failed makes a NEW draft (ke
   assert.notEqual(third.post.id, next.post.id);
 });
 
+test('NAS-linked draft cannot be scheduled until its file is attached', async () => {
+  const p = await v2('Throwback flyer.', { nasSha: 'a'.repeat(64) });
+  await svc.approveDraft('c1', p.id);
+  await assert.rejects(svc.updateSocialPost('c1', p.id, { scheduledAt: FUTURE() }), { code: 'media-not-staged' });
+  const u = await svc.updateSocialPost('c1', p.id, { scheduledAt: FUTURE(), mediaUrl: 'https://example.com/flyer.jpg' });
+  assert.equal(u.status, 'scheduled');
+});
+
 test('v2 draft cannot be scheduled without approval; approval is its own step', async () => {
   const p = await v2('Needs approval first.');
   await assert.rejects(svc.updateSocialPost('c1', p.id, { scheduledAt: FUTURE() }), { code: 'approval-required' });

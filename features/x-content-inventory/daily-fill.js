@@ -15,6 +15,7 @@ import { resolveEngine } from './engines.js';
 import { mergeEngineConfig } from './engine-quota.js';
 import { addDays, draftTextFor, eventMonthDay } from './calendar-batch.js';
 import { TAKE_PLACEHOLDER } from '../social-posting/self-reply.js';
+import { mediaOf } from './item-media.js';
 
 export const FILL_KINDS = Object.freeze(['baseline', 'quotes', 'narratives', 'client-work']);
 export const MAX_FILL_DAYS = 31;
@@ -104,6 +105,21 @@ export const isClientWorkTrack = (track) => (track?.engines || []).includes('cli
 
 const mediaReady = (p) => (p?.mediaState === 'video' || p?.mediaState === 'still') && p?.effort === 'ready';
 
+// Throwback track (Throwback Content): the track that lists the 'nas' bucket. It only ever posts a NAS archive item dated
+// to that day (anniversary) that links to a real asset on the drive; no dated item with media => nothing that day.
+export const isThrowbackTrack = (track) => (track?.buckets || []).includes('nas');
+const BLOCKED_RIGHTS = new Set(['never-public', 'client-approval-needed']);
+/** A NAS item that resolves to a real asset (sha + path + source) and is a video/still the owner may post. Staging is
+ *  not required: the draft carries the link (packageId + nasSha) and the file is pulled when the owner schedules it. */
+export const hasNasMediaLink = (p) => !!(p?.nas?.sha256 && p.nas.relativePath && p.nas.sourceId)
+  && (p.mediaState === 'video' || p.mediaState === 'still') && !BLOCKED_RIGHTS.has(p.rights);
+const throwbackOk = (p, md) => !!p && eventMonthDay(p) === md && hasNasMediaLink(p);
+// Video first, then items already staged or thumbnailed (instant preview), then never used / least recently used, then id.
+const throwbackRank = (a, b) => (a.p.mediaState === 'video' ? 0 : 1) - (b.p.mediaState === 'video' ? 0 : 1)
+  || (mediaOf(a.p).kind || a.p.thumbRef ? 0 : 1) - (mediaOf(b.p).kind || b.p.thumbRef ? 0 : 1)
+  || (a.prior ? 1 : 0) - (b.prior ? 1 : 0) || (a.prior || '').localeCompare(b.prior || '')
+  || String(a.p.id).localeCompare(String(b.p.id));
+
 function daysBetween(a, b) { return Math.abs(dayNumber(a) - dayNumber(b)); }
 
 // trackRules (daily-mix-rule.js): a rule applies to the track that lists its bucket.
@@ -132,7 +148,8 @@ const newestUnusedFirst = (a, b) => (a.prior ? 1 : 0) - (b.prior ? 1 : 0)
  *   packages, clientWork       library items (clientWork = optional explicit pool for the client-work tracks)
  *   openPosts                  Map packageId -> {postId,status,scheduledAt,reviewOn} (or a Set): open posts; a bare draft
  *                              with no review day is PLACED (row.existingPostId), the rest are skipped
- *   fillPosts                  [{postId,status,reviewOn,fillKind,bucketId,idempotencyKey}] earlier daily-fill drafts (re-runs)
+ *   fillPosts                  [{postId,status,reviewOn,fillKind,bucketId,idempotencyKey,packageId?}] earlier daily-fill drafts
+ *                              (re-runs); a throwback fill counts only when its item is dated to that day and has media
  *   lastUsed                   Map packageId -> 'YYYY-MM-DD' last posted / dated day (the 30-day spread)
  *   quoteTargets               [{id,url,text,author|handle,createdAt,trackId?}] open quote candidates; asOf.quotes
  *   marketSignals              shapeMarketSignals output (topics/opportunities); asOf.signals
@@ -176,18 +193,23 @@ export function planDailyFill({
     const pool = (kind === 'client-work' && Array.isArray(clientWork) ? clientWork : packages)
       .filter((p) => p?.id && trackForPackage(tracks, p)?.id === track.id && (!rule || matchesRule(p, rule)));
     const buckets = new Set(track.buckets || []);
+    const throwback = isThrowbackTrack(track);
+    const pkgById = throwback ? new Map((packages || []).filter((p) => p?.id).map((p) => [p.id, p])) : null;
     for (const date of dates) {
       let slots = slotsOn(perDay, date);
-      // Re-runs: drafts an earlier fill already put on this day for this track count toward its target.
-      slots -= fills.filter((f) => !(replace && f.status === 'rejected') && f.reviewOn === date && (f.fillKind === 'baseline' || f.fillKind === 'client-work') && buckets.has(f.bucketId)).length;
+      const md = date.slice(5);
+      // Re-runs: drafts an earlier fill already put on this day for this track count toward its target. A throwback
+      // draft without a dated, media-linked item does not hold the day (it is left alone, never deleted).
+      slots -= fills.filter((f) => !(replace && f.status === 'rejected') && f.reviewOn === date && (f.fillKind === 'baseline' || f.fillKind === 'client-work') && buckets.has(f.bucketId)
+        && (!throwback || throwbackOk(pkgById.get(f.packageId), md))).length;
       if (kind === 'client-work') slots = Math.min(slots, 1 - (clientWorkDay.get(date) || 0));
       if (slots <= 0) continue;
-      const md = date.slice(5);
       const ranked = [];
       for (const p of pool) {
         if (used.has(p.id) || /^example/i.test(p.id) || /^todo\b/i.test(String(p.title ?? '')) || JUNK_TITLE_RE.test(String(p.title ?? ''))) continue; // seed/example rows and junk auto-captions are never picked
         const dated = eventMonthDay(p);
         if (dated && dated !== md) continue; // an anniversary item belongs on its own day only
+        if (throwback && !throwbackOk(p, md)) continue; // never an undated item or one without a media link
         const prior = lastOf(p.id);
         if (prior && daysBetween(prior, date) < REPEAT_GAP_DAYS) continue;
         const open = openOf(p.id);
@@ -196,7 +218,8 @@ export function planDailyFill({
         const tier = dated ? 0 : mediaReady(p) ? 1 : 2;
         ranked.push({ p, dated: !!dated, tier, prior, existingPostId: placeable ? open.postId : null });
       }
-      if (rule?.newestFirst) ranked.sort(newestUnusedFirst);
+      if (throwback) ranked.sort(throwbackRank);
+      else if (rule?.newestFirst) ranked.sort(newestUnusedFirst);
       else ranked.sort((a, b) => a.tier - b.tier || (a.prior || '').localeCompare(b.prior || '') || String(a.p.id).localeCompare(String(b.p.id)));
       // A rule track holds many renders of the same mix: one title per fill window, so days don't repeat a mix.
       const picks = rule ? ranked.filter((c) => !ruleTitles.has(titleKey(c.p))) : ranked;
@@ -214,7 +237,7 @@ export function planDailyFill({
           ...(c.existingPostId ? { existingPostId: c.existingPostId } : {}),
         });
       }
-      if (ranked.length < slots && !ranked.length) skip({ date, trackId: track.id, reason: 'no-eligible-item' });
+      if (ranked.length < slots && !ranked.length) skip({ date, trackId: track.id, reason: throwback ? 'no-dated-media' : 'no-eligible-item' });
     }
   }
 
@@ -327,6 +350,7 @@ export async function runDailyFill(clientId, { from, days, include, excludePacka
           content: r.text, source: 'daily-fill', fillKind: r.kind, fillSource: r.source, reviewOn: r.date,
           needsStory: r.needsStory, ...(r.bucketId ? { bucketId: r.bucketId } : {}),
           ...(r.packageId ? { packageId: r.packageId, engine: r.engine } : {}),
+          ...(r.nasSha ? { nasSha: r.nasSha } : {}), // the NAS asset link: the draft has media even before it is staged
           ...(r.expiresAt ? { expiresAt: r.expiresAt } : {}),
           ...(r.quoteTarget ? { sourceRef: { kind: 'quote-target', url: r.quoteTarget.url, id: r.quoteTarget.id, handle: r.quoteTarget.handle } } : {}),
           ...(batchId ? { runId: batchId } : {}),

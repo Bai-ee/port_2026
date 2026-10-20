@@ -243,3 +243,73 @@ test('replace mode: a rejected fill no longer holds its slot, only that bucket i
   assert.deepEqual(p.rows.map((r) => r.trackId), ['record']);
   assert.equal(normalizeFillSpec({ replace: { bucketId: 5 } }, { today: TODAY }).ok, false);
 });
+
+// ---- Throwback track: only a NAS item dated to the day with a real asset link ------------------------------------
+const SHA = (c) => c.repeat(64);
+const nasItem = (id, md, extra = {}) => pkg(id, 'nas', {
+  mediaState: 'still', rights: 'owned', facets: md ? { eventMonthDay: md } : {},
+  nas: { sha256: SHA(id.slice(-1)), relativePath: `2009/${id}.jpg`, sourceId: 'nas-main' }, ...extra,
+});
+const throwbacks = (p, date) => p.rows.filter((r) => r.trackId === 'nas' && (!date || r.date === date));
+
+test('throwback: a dated NAS item with an asset link is picked on its day and carries nasSha; undated never picked', () => {
+  const pkgs = [...PACKAGES, nasItem('nas-1', '10-18'), nasItem('nas-2', null)];
+  const p = planDailyFill({ tracks, packages: pkgs, from: TODAY, days: 3, today: TODAY, include: ['baseline'] });
+  assert.deepEqual(throwbacks(p).map((r) => [r.date, r.packageId]), [['2026-10-18', 'nas-1']]);
+  assert.equal(throwbacks(p)[0].nasSha, SHA('1'));
+  assert.ok(!p.rows.some((r) => ['nas-2', 'nas-a', 'nas-b'].includes(r.packageId)), 'undated / unlinked NAS items never fill');
+  assert.ok(p.skipped.some((s) => s.date === TODAY && s.trackId === 'nas' && s.reason === 'no-dated-media'));
+});
+
+test('throwback: no asset link, wrong mediaState or blocked rights => skipped no-dated-media', () => {
+  const pkgs = [
+    nasItem('nas-3', '10-17', { nas: { sha256: SHA('3') } }), // no path / source: cannot be pulled
+    nasItem('nas-4', '10-17', { mediaState: 'none' }),
+    nasItem('nas-5', '10-17', { rights: 'never-public' }),
+    nasItem('nas-6', '10-17', { rights: 'client-approval-needed' }),
+  ];
+  const p = planDailyFill({ tracks, packages: pkgs, from: TODAY, days: 1, today: TODAY, include: ['baseline'] });
+  assert.equal(throwbacks(p).length, 0);
+  assert.deepEqual(p.skipped.filter((s) => s.trackId === 'nas').map((s) => s.reason), ['no-dated-media']);
+});
+
+test('throwback: video before still, then staged/thumbnailed, then never used, then id', () => {
+  const day = (pkgs, lastUsed) => throwbacks(planDailyFill({ tracks, packages: pkgs, from: TODAY, days: 1, today: TODAY, include: ['baseline'], lastUsed }))[0]?.packageId;
+  assert.equal(day([nasItem('nas-a1', '10-17'), nasItem('nas-b2', '10-17', { mediaState: 'video' })]), 'nas-b2');
+  assert.equal(day([nasItem('nas-a1', '10-17'), nasItem('nas-b2', '10-17', { assetRefs: ['publish-staging/nas/nas-b2/x.jpg'] })]), 'nas-b2');
+  assert.equal(day([nasItem('nas-a1', '10-17'), nasItem('nas-b2', '10-17', { thumbRef: 'content-thumbs/c/nas-b2.jpg' })]), 'nas-b2');
+  assert.equal(day([nasItem('nas-a1', '10-17'), nasItem('nas-b2', '10-17')], new Map([['nas-a1', '2025-10-17']])), 'nas-b2');
+  assert.equal(day([nasItem('nas-b2', '10-17'), nasItem('nas-a1', '10-17')]), 'nas-a1');
+});
+
+test('throwback: other tracks are unchanged by the throwback rule', () => {
+  const base = planDailyFill({ tracks, packages: PACKAGES, from: TODAY, days: 3, today: TODAY, include: ['baseline'] });
+  const withNas = planDailyFill({ tracks, packages: [...PACKAGES, nasItem('nas-1', '10-18')], from: TODAY, days: 3, today: TODAY, include: ['baseline'] });
+  const other = (p) => p.rows.filter((r) => r.trackId !== 'nas').map((r) => `${r.date}:${r.packageId}`);
+  assert.deepEqual(other(withNas), other(base));
+});
+
+test('throwback re-runs: a fill with a dated linked item holds the day; a media-less one does not (and is not removed)', () => {
+  const pkgs = [nasItem('nas-1', '10-17'), nasItem('nas-7', '10-17'), pkg('nas-old', 'nas')];
+  const fill = (packageId) => [{ postId: 'p1', status: 'draft', reviewOn: TODAY, fillKind: 'baseline', bucketId: 'nas', packageId }];
+  const run = (fillPosts) => planDailyFill({ tracks, packages: pkgs, fillPosts, from: TODAY, days: 1, today: TODAY, include: ['baseline'] });
+  assert.equal(throwbacks(run(fill('nas-1'))).length, 0, 'the linked draft already holds the day');
+  const r = run(fill('nas-old'));
+  assert.equal(throwbacks(r).length, 1, 'a media-less earlier draft does not satisfy the day');
+  assert.ok(!r.rows.some((x) => x.existingPostId === 'p1'));
+});
+
+test('runDailyFill: a throwback draft is written with packageId + nasSha (no upload needed)', async () => {
+  const drafts = [];
+  const deps = {
+    loadInputs: async () => ({ tracks, packages: [nasItem('nas-1', '10-17')], today: TODAY, nowMs: NOW }),
+    ensureDraft: async (_c, payload) => { drafts.push(payload); return { post: { id: 'x' }, existing: false }; },
+    mediaFor: async () => null, // not staged yet: pickMedia finds no ref
+  };
+  const r = await runDailyFill('c1', { from: TODAY, days: 1, include: ['baseline'], execute: true, deps });
+  assert.equal(r.failed.length, 0);
+  assert.equal(drafts.length, 1);
+  assert.equal(drafts[0].packageId, 'nas-1');
+  assert.equal(drafts[0].nasSha, SHA('1'));
+  assert.equal(drafts[0].mediaUrl, undefined);
+});

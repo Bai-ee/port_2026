@@ -123,3 +123,16 @@ test('approving strips a self-reply that is only a placeholder; a post that is o
   const { post: only } = await svc.ensureDraftPost('c1', { idempotencyKey: 'k-only', content: '[add your memory]', source: 'daily-fill', reviewOn: '2026-12-03', needsStory: true });
   await assert.rejects(() => svc.approveDraft('c1', only.id, { reviewedBy: 'owner' }), (e) => e.code === 'empty-after-strip');
 });
+
+test('a throwback fill draft stores its NAS asset link (nasSha) and no media; a malformed sha is dropped', async () => {
+  const sha = 'ab'.repeat(32);
+  const { post } = await svc.ensureDraftPost('c1', {
+    idempotencyKey: 'daily-fill:2026-10-17:baseline:nas-1', source: 'daily-fill', fillKind: 'baseline', reviewOn: '2026-10-17', bucketId: 'nas',
+    packageId: 'nas-1', nasSha: sha, content: 'Oct 17, 2009 · Warehouse night\n\n[add your memory]', needsStory: true,
+  });
+  assert.equal(post.nasSha, sha);
+  assert.equal(post.packageId, 'nas-1');
+  assert.equal(post.mediaUrl ?? null, null);
+  const { post: bad } = await svc.ensureDraftPost('c1', { idempotencyKey: 'k-bad', source: 'daily-fill', content: 'x', nasSha: 'not-a-sha' });
+  assert.equal('nasSha' in bad, false);
+});

@@ -480,7 +480,7 @@ const postStatusRow = (p) => ({
   lifecycleVersion: p.lifecycleVersion || null,
   sourceRef: p.sourceRef || null, kind: p.kind || null, repostOf: p.repostOf || null, twitterId: p.twitterId || null, permalink: p.permalink || null,
   reviewOn: p.reviewOn || null, bucketId: p.bucketId || null, engine: p.engine || null, fillKind: p.fillKind || null,
-  expiresAt: p.expiresAt || null, needsStory: p.needsStory === true, mediaUrl: p.mediaUrl || null, mediaStoragePath: p.mediaStoragePath || null, mediaType: p.mediaType || null,
+  expiresAt: p.expiresAt || null, needsStory: p.needsStory === true, mediaUrl: p.mediaUrl || null, mediaStoragePath: p.mediaStoragePath || null, mediaType: p.mediaType || null, nasSha: p.nasSha || null,
   replyToUrl: p.replyTo && typeof p.replyTo === 'object' ? p.replyTo.url || null : null,
   provenance: { runId: p.runId || null, suggestionId: p.suggestionId || null, strategyVersion: p.strategyVersion ?? null, sourceRef: p.sourceRef || null },
 });

@@ -86,3 +86,12 @@ test('find_posts read tool: registered, wired to readPostsForQuery, closed over 
   const p = await runReadTool('get_post', { postId: 'lq' }, { readPost: async () => fixtures.loopQuote });
   assert.equal(p.kind, 'quote'); assert.equal(p.quotedUrl, Q);
 });
+
+test('a draft linked to a NAS archive file (nasSha) counts as having media', () => {
+  const linked = { id: 'tb', status: 'draft', content: 'throwback', source: 'daily-fill', reviewOn: '2026-10-17', packageId: 'nas-1', nasSha: 'a'.repeat(64) };
+  const bare = { id: 'tx', status: 'draft', content: 'text only', reviewOn: '2026-10-17' };
+  assert.deepEqual(normalizePost(linked, { now: NOW }).media, { hasMedia: true, type: 'nas-link' });
+  assert.deepEqual(normalizePost(bare, { now: NOW }).media, { hasMedia: false, type: null });
+  assert.deepEqual(normalizePost({ ...linked, mediaUrl: 'https://m/x.jpg', mediaType: 'image' }, { now: NOW }).media, { hasMedia: true, type: 'image' });
+  assert.deepEqual(queryPosts([linked, bare], { hasMedia: false }, { now: NOW }).rows.map((r) => r.id), ['tx']);
+});
