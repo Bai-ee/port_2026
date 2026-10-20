@@ -99,7 +99,7 @@ export function describeContentInputs({ raw, planDoc, planInputs, brainError = n
   const scanUnknown = !!scan && scanAge == null;
   const scanStale = scanAge != null && scanAge > SCAN_STALE_HOURS;
   out.push(entry('scan', 'Quote/reply scan', {
-    source: 'dashboard_state.marketingBrief.quoteTargets',
+    source: 'dashboard_state.marketingBrief.hotQuotes',
     asOf: scan?.generatedAt,
     usable: !!scan && !scanStale && !scanUnknown,
     caveats: [!scan && 'No scan stored.', scanUnknown && 'Scan has no readable timestamp: age unknown.', scanStale && `Scan is ${Math.round(scanAge)}h old (stale after ${SCAN_STALE_HOURS}h).`],

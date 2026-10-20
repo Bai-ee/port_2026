@@ -18,7 +18,7 @@ import os from 'node:os';
 import { createRefreshService, createFirestoreRefreshQueue, recordWorkerSeen } from '../../features/x-strategy/refresh.js';
 import { createFirestoreCorpusStore } from '../../features/x-strategy/corpus-store.js';
 import { execFile } from 'node:child_process';
-import { createFirestoreQuoteScanQueue, SCAN_STATUS } from '../../features/x-quote-targets/scan-queue.js';
+import { createFirestoreQuoteScanQueue, SCAN_STATUS, SCAN_MODES } from '../../features/x-quote-targets/scan-queue.js';
 
 const require = createRequire(import.meta.url);
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
@@ -42,11 +42,25 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Refresh "Quote targets" (Mac source): run the same free bird scan the 6:30 launchd job runs, for one client.
 const SCAN_TIMEOUT_MS = 10 * 60 * 1000;
-function runQuoteScan(clientId) {
+const HOT_SCAN_TIMEOUT_MS = 25 * 60 * 1000; // includes the --if-stale lane-graph refresh the hot scan runs first
+function runQuoteScan(clientId, mode = SCAN_MODES.QUOTE) {
+  // 'hot' = the hot quote scan (judged breakout picks); anything else = the legacy watchlist scan
+  const script = mode === SCAN_MODES.HOT ? 'hot-quote-scan.mjs' : 'scan-quote-targets.mjs';
   return new Promise((resolve) => {
-    execFile(process.execPath, [path.join(REPO, 'scripts/x-content/scan-quote-targets.mjs'), '--client', clientId, '--write'],
-      { cwd: REPO, timeout: SCAN_TIMEOUT_MS, maxBuffer: 8 * 1024 * 1024 },
+    execFile(process.execPath, [path.join(REPO, 'scripts/x-content/', script), '--client', clientId, '--write'],
+      { cwd: REPO, timeout: mode === SCAN_MODES.HOT ? HOT_SCAN_TIMEOUT_MS : SCAN_TIMEOUT_MS, maxBuffer: 8 * 1024 * 1024 },
       (err, stdout, stderr) => resolve({ ok: !err, code: err?.code ?? 0, output: `${stdout || ''}\n${stderr || ''}` }));
+  });
+}
+
+// Weekly lane-graph refresh: after a finished scan the builder re-runs only when the stored graph is >= 7 days old
+// (--if-stale), so it rides the existing 60s launchd job instead of needing its own. Failure/429 never affects the scan.
+const LANE_GRAPH_TIMEOUT_MS = 15 * 60 * 1000;
+function runLaneGraphRefresh(clientId) {
+  return new Promise((resolve) => {
+    execFile(process.execPath, [path.join(REPO, 'scripts/x-content/build-lane-graph.mjs'), '--client', clientId, '--write', '--if-stale'],
+      { cwd: REPO, timeout: LANE_GRAPH_TIMEOUT_MS, maxBuffer: 8 * 1024 * 1024 },
+      (err, stdout, stderr) => resolve({ ok: !err, output: `${stdout || ''}\n${stderr || ''}` }));
   });
 }
 
@@ -55,19 +69,39 @@ async function drainQuoteScans(db) {
   const queue = createFirestoreQuoteScanQueue(db);
   const job = await queue.claimNext();
   if (!job) return null;
-  log(`[${new Date().toISOString()}] quote scan ${job.id} for ${job.clientId}`);
-  const run = await runQuoteScan(job.clientId);
+  const mode = job.mode === SCAN_MODES.HOT ? SCAN_MODES.HOT : SCAN_MODES.QUOTE;
+  log(`[${new Date().toISOString()}] ${mode} scan ${job.id} for ${job.clientId}`);
+  const startedAt = Date.now();
+  const run = await runQuoteScan(job.clientId, mode);
   const snap = await db.collection('dashboard_state').doc(job.clientId).get().catch(() => null);
-  const q = snap?.exists ? snap.data()?.marketingBrief?.quoteTargets || {} : {};
-  const rateLimited = /\b429\b|rate.?limit/i.test(run.output) && !(q.candidates || []).length;
-  const status = run.ok ? (rateLimited ? SCAN_STATUS.RATE_LIMITED : SCAN_STATUS.DONE) : SCAN_STATUS.FAILED;
-  const result = {
-    candidates: Array.isArray(q.candidates) ? q.candidates.length : 0,
-    scanned: q.scanned ?? null, succeeded: q.succeeded ?? null, generatedAt: q.generatedAt || null,
-    note: /no watchlist saved/.test(run.output) ? 'No watchlist saved for this client: add watched accounts first.' : null,
-  };
+  const brief = snap?.exists ? snap.data()?.marketingBrief || {} : {};
+  let status;
+  let result;
+  if (mode === SCAN_MODES.HOT) {
+    const h = brief.hotQuotes || {};
+    const fresh = Date.parse(h.scannedAt || '') >= startedAt - 1000;
+    const picks = [...(h.picks?.design || []), ...(h.picks?.music || [])];
+    status = run.ok ? SCAN_STATUS.DONE : (/\b429\b|rate.?limit/i.test(run.output) ? SCAN_STATUS.RATE_LIMITED : SCAN_STATUS.FAILED);
+    result = fresh
+      ? { mode, picks: picks.length, quotesLeftToday: h.quotesLeftToday ?? null, costUsd: h.costUsd ?? null, scannedAt: h.scannedAt }
+      : { mode, picks: 0, scannedAt: null };
+  } else {
+    const q = brief.quoteTargets || {};
+    const rateLimited = /\b429\b|rate.?limit/i.test(run.output) && !(q.candidates || []).length;
+    status = run.ok ? (rateLimited ? SCAN_STATUS.RATE_LIMITED : SCAN_STATUS.DONE) : SCAN_STATUS.FAILED;
+    result = {
+      candidates: Array.isArray(q.candidates) ? q.candidates.length : 0,
+      scanned: q.scanned ?? null, succeeded: q.succeeded ?? null, generatedAt: q.generatedAt || null,
+      note: /no watchlist saved/.test(run.output) ? 'No watchlist saved for this client: add watched accounts first.' : null,
+    };
+  }
   await queue.finish(job.id, job.leaseId, { status, result, ...(run.ok ? {} : { error: run.output.trim().split('\n').slice(-3).join(' ').slice(0, 300) }) });
-  log(`[${new Date().toISOString()}] quote scan ${job.id} -> ${status} (${result.candidates} candidates)`);
+  log(`[${new Date().toISOString()}] ${mode} scan ${job.id} -> ${status} (${mode === SCAN_MODES.HOT ? `${result.picks} picks` : `${result.candidates} candidates`})`);
+  // The hot scan refreshes a stale lane graph itself; only the legacy scan needs the worker to do it.
+  if (status === SCAN_STATUS.DONE && mode === SCAN_MODES.QUOTE) {
+    const graph = await runLaneGraphRefresh(job.clientId);
+    log(`[${new Date().toISOString()}] lane graph ${job.clientId}: ${graph.ok ? graph.output.trim().split('\n').slice(-1)[0] : `failed ${graph.output.trim().split('\n').slice(-1)[0]}`}`);
+  }
   return { id: job.id, status };
 }
 

@@ -13,7 +13,7 @@
 //   rejectPackage(clientId, packageId, by)          -> void
 //   getPackage(clientId, packageId)                 -> pkg | null   (optional; only to find a bucket the post lacks)
 //   fill(clientId, spec, {execute, batchId})        -> runDailyFill result (carries `posts`)
-//   openQuoteTargets(clientId)                      -> [{id,createdAt}] open (non-dismissed) quote candidates
+//   openQuoteTargets(clientId)                      -> [{id,createdAt,windowHours?}] open hot-scan picks (a passed pick is dismissed first)
 //   rowOf(clientId, postId)                         -> calendar row | null
 //   now()                                           -> ms
 
@@ -57,7 +57,7 @@ export async function decideCalendarItem(deps, { clientId, decision, item, by = 
     if (decision !== 'replace') return { ok: true, decision, kind, removed: { targetId }, replacement: null };
     // No draft is created: the next open candidate is already a requote row on the calendar; report which one.
     const now = deps.now();
-    const next = (await deps.openQuoteTargets(clientId)).find((t) => String(t.id) !== targetId && Date.parse(t.createdAt || '') + QUOTE_WINDOW_MS > now);
+    const next = (await deps.openQuoteTargets(clientId)).find((t) => String(t.id) !== targetId && Date.parse(t.createdAt || '') + (Number(t.windowHours) > 0 ? Number(t.windowHours) * 3_600_000 : QUOTE_WINDOW_MS) > now);
     return {
       ok: true, decision, kind, removed: { targetId },
       replacement: next ? { kind: 'requote', targetId: String(next.id), date: DAY_RE.test(str(item.date)) ? str(item.date) : null } : null,

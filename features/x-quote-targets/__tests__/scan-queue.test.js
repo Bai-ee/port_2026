@@ -54,3 +54,15 @@ test('a running request older than 30 min is reclaimable; the old lease can no l
   assert.equal(await q.finish(requestId, first.leaseId, { status: SCAN_STATUS.DONE }), false);
   assert.equal(await q.finish(requestId, second.leaseId, { status: SCAN_STATUS.FAILED }), true);
 });
+
+test('mode: a hot request is separate from a legacy one, is reused only by another hot request, and is stored on the doc', async () => {
+  const { q } = setup();
+  const legacy = await q.request({ clientId: 'c1' });
+  const hot = await q.request({ clientId: 'c1', mode: 'hot' });
+  assert.notEqual(hot.requestId, legacy.requestId);
+  const hotAgain = await q.request({ clientId: 'c1', mode: 'hot' });
+  assert.equal(hotAgain.requestId, hot.requestId);
+  assert.equal(hotAgain.reused, true);
+  assert.equal((await q.get(hot.requestId)).mode, 'hot');
+  assert.equal((await q.get(legacy.requestId)).mode, 'quote');
+});

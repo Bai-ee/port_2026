@@ -4,7 +4,6 @@
 // adds those). Every Firestore-touching dependency is overridable through `deps` so it is testable.
 
 import { readSocialQueue } from '../social-posting/twitter-service.js';
-import { mergeListCandidates } from '../x-quote-targets/day-plan.js';
 import { buildMonthCalendar, ctDate, addDays } from './month-calendar.js';
 import { createContentTaskStore } from './content-tasks.js';
 import * as bucketStore from './bucket-store.js';
@@ -15,18 +14,27 @@ import { createFirestorePlanStore } from '../x-strategy/plan-store.js';
 import { resolveCalendarEngineConfig } from '../content-context/load-content-context.js';
 import { createFirestoreStrategyDocStore } from '../x-strategy/strategy-doc-store.js';
 import { baselineSlotsOf } from '../x-strategy/daily-slots.js';
+import { hotPicksToTargets, quoteSlotTimes, quotesLeftToday, assignQuoteSlots } from '../x-quote-targets/hot-calendar.js';
 import { tracksOf } from '../x-strategy/content-tracks.js';
 
 export const PKG_COLLECTION = 'x_content_packages';
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 export const MAX_RANGE_DAYS = 31;
 
-/** One dashboard_state read: the RAW stored quoteTargets plus the track-list signals (merged in memory by callers). */
+/** One dashboard_state read: the RAW stored quoteTargets, the track-list signals and the hot-scan picks (the calendar reads only `hotQuotes`). */
 export async function readQuoteState(db, clientId) {
   const snap = await db.collection('dashboard_state').doc(clientId).get();
-  if (!snap.exists) return { rawQuoteTargets: null, listSignals: null };
+  if (!snap.exists) return { rawQuoteTargets: null, listSignals: null, hotQuotes: null };
   const brief = snap.data()?.marketingBrief;
-  return { rawQuoteTargets: brief?.quoteTargets ?? null, listSignals: brief?.listSignals ?? null };
+  return { rawQuoteTargets: brief?.quoteTargets ?? null, listSignals: brief?.listSignals ?? null, hotQuotes: brief?.hotQuotes ?? null };
+}
+
+/** Saved quote posts that count against today's allowance (CT day): a quote draft that went to the queue and was not rejected/failed/still a bare draft. */
+const COUNTED_QUOTE_STATUSES = new Set(['approved', 'scheduled', 'queued', 'posting', 'posted', 'published', 'manual']);
+export function quotePostsOnDay(posts, day) {
+  return (Array.isArray(posts) ? posts : []).filter((p) => p && COUNTED_QUOTE_STATUSES.has(p.status)
+    && (p.fillKind === 'quote' || p.sourceRef?.kind === 'quote-target')
+    && (p.reviewOn === day || (typeof p.scheduledAt === 'string' && ctDate(Date.parse(p.scheduledAt)) === day))).length;
 }
 
 /** Latest daily run for today (same key the runner and the dashboard use). */
@@ -58,13 +66,13 @@ export async function readCalendarSuggestions(db, clientId, now, deps = {}) {
       text: String(s.edit?.text || s.draft?.text || ''), expiresAt: s.expiresAt || s.package?.expiresAt || null }));
 }
 
-/** Open (non-dismissed) quote candidates, track-list merged: [{id,url,handle,text,createdAt,trackId}]. */
+/**
+ * Open quote candidates on the calendar = the latest hot-scan picks ONLY (not passed, window open), best first:
+ * [{id,url,handle,text,createdAt,windowHours,hot:{lane,momentum,fit,angle,why},...}]. The legacy watchlist quoteTargets feed is not read here.
+ */
 export async function readCalendarQuoteTargets(db, clientId, deps = {}) {
-  const { rawQuoteTargets, listSignals } = await (deps.readQuoteState ? deps.readQuoteState(clientId) : readQuoteState(db, clientId));
-  const qt = mergeListCandidates(rawQuoteTargets, listSignals);
-  const dismissed = new Set(Array.isArray(qt?.dismissed) ? qt.dismissed : []);
-  return (Array.isArray(qt?.candidates) ? qt.candidates : []).filter((c) => c && !dismissed.has(c.id))
-    .map((c) => ({ id: c.id || c.url, url: c.url, text: c.text, handle: c.author?.username || (typeof c.author === 'string' ? c.author : null), createdAt: c.createdAt, trackId: c.trackId, authorName: c.authorName ?? null, hasMedia: c.hasMedia === true, mediaUrl: c.mediaUrl ?? null }));
+  const { hotQuotes } = await (deps.readQuoteState ? deps.readQuoteState(clientId) : readQuoteState(db, clientId));
+  return hotPicksToTargets(hotQuotes, { now: deps.now ? deps.now() : Date.now() });
 }
 
 /** Months (YYYY-MM) touched by a closed date range. */
@@ -93,14 +101,22 @@ async function loadInputs(db, clientId, now, deps) {
   // "To film" reminders (content_tasks): advisory read; a failure never blocks the calendar.
   const tasks = await (deps.listTasks ? deps.listTasks(clientId) : createContentTaskStore(db).list(clientId)).catch(() => []);
   // Unsaved daily-run suggestions + open quote targets ride the same grid (display only). Advisory reads.
-  const [suggestions, quoteTargets] = await Promise.all([
+  const [suggestions, quoteState] = await Promise.all([
     (deps.readSuggestions ? deps.readSuggestions(clientId, now) : readCalendarSuggestions(db, clientId, now)).catch(() => []),
-    (deps.readQuoteTargets ? deps.readQuoteTargets(clientId) : readCalendarQuoteTargets(db, clientId)).catch(() => []),
+    (deps.readQuoteState ? deps.readQuoteState(clientId) : readQuoteState(db, clientId)).catch(() => ({ hotQuotes: null })),
   ]);
+  const hotQuotes = quoteState?.hotQuotes ?? null;
+  const openTargets = deps.readQuoteTargets ? await deps.readQuoteTargets(clientId).catch(() => []) : hotPicksToTargets(hotQuotes, { now });
   // Daily baseline slots from the CONFIRMED strategy doc (awareness markers only; a draft or missing doc has none).
   const strategyDoc = await (deps.readStrategyDoc ? deps.readStrategyDoc(clientId) : createFirestoreStrategyDocStore(db).get(clientId)).catch(() => null);
   const baselineSlots = baselineSlotsOf(strategyDoc, { tracks: tracksOf(planDoc) });
-  return { config, posts: withBuckets, buckets, tasks, suggestions, quoteTargets, pkgs, baselineSlots };
+  // Hot picks go to the next open baseline quote slot (07:00 / 11:00 CT) or show as extra; "quotes left today" rides along.
+  const today = ctDate(now);
+  const quotePostsToday = quotePostsOnDay(posts, today);
+  const left = quotesLeftToday(hotQuotes, { quotePostsToday, now });
+  const quoteTargets = assignQuoteSlots(openTargets, { slotTimes: quoteSlotTimes(baselineSlots), quotesPostedToday: quotePostsToday, left });
+  const quoteBudget = { left, postedToday: quotePostsToday, scannedAt: hotQuotes?.scannedAt ?? null };
+  return { config, posts: withBuckets, buckets, tasks, suggestions, quoteTargets, quoteBudget, pkgs, baselineSlots };
 }
 
 /**
@@ -126,8 +142,8 @@ export async function readUnifiedCalendar(db, clientId, { month, from, to, now =
       }
     }
     const days = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
-    return { days, from: start, to: end, pkgs: inputs.pkgs, baselineSlots: inputs.baselineSlots };
+    return { days, from: start, to: end, pkgs: inputs.pkgs, baselineSlots: inputs.baselineSlots, quoteBudget: inputs.quoteBudget };
   }
   const valid = typeof month === 'string' && MONTH_RE.test(month.trim()) ? month.trim() : ctDate(now).slice(0, 7);
-  return { calendar: build(valid), pkgs: inputs.pkgs, baselineSlots: inputs.baselineSlots };
+  return { calendar: build(valid), pkgs: inputs.pkgs, baselineSlots: inputs.baselineSlots, quoteBudget: inputs.quoteBudget };
 }

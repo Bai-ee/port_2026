@@ -246,6 +246,7 @@ function DayBody({ day, rows, legend, pendingOnly, renderRow, onTaskToggle, busy
               <span className="xce-dv-dot" aria-hidden="true" style={g.color ? { background: g.color } : undefined} />
               {g.label}
               <span className="xce-dv-group-count">{pad2(g.rows.length)}</span>
+              {g.key === 'requote' && g.rows[0]?.quotesLeftToday != null ? <span id="x-content-day-view-quotes-left" className="xce-dv-caps">{g.rows[0].quotesLeftToday} left today</span> : null}
             </h3>
             <ul className="xce-mc-rows">{g.rows.map((r) => renderRow(r))}</ul>
           </section>

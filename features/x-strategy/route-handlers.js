@@ -93,6 +93,7 @@ export const STRATEGY_ROUTE_ACTIONS = Object.freeze([
   'strategy-autonomy-save',
   'quote-scan-refresh',
   'quote-scan-status',
+  'hot-quotes-find',
   'x-data-sources-get',
   'x-data-sources-save',
   'strategy-reply-style-get',
@@ -248,6 +249,7 @@ export function createStrategyHandlers({
   readDataSources = null, saveDataSources = null, // (clientId) -> normalized dataSources | (clientId, patch) -> saved. Absent => every source is 'mac' and x-data-sources-save answers 503
   pullCorpora = null, // (clientId, {handles}) -> pullCorporaViaXApi result (the PAID X API). Absent => x-api source answers 503
   scanQuotes = null, // (clientId, {}) -> scanQuoteTargetsViaXApi result (the PAID X API). Absent => x-api source answers 503
+  readHotQuotes = null, // (clientId) -> raw marketingBrief.hotQuotes | null; the hot-quotes-find result carries the picks
   quoteScanQueue = null, // features/x-quote-targets/scan-queue.js: Mac-source Refresh queues a scan the Mac worker runs. Absent => instructions only
   signMediaRef = null, readMediaCaptures = null, // ({bucket,path}) -> url|null; (clientId) -> render captures. get_media_link only
   readStageStates = null, readNasStatus = null, // (ids) -> Map id -> {state,commandId} of NAS stage commands; (clientId) -> nas-status. find_hires_media only; absent => no stage progress / worker info
@@ -648,6 +650,29 @@ export function createStrategyHandlers({
     if (!request || request.clientId !== c.clientId) return fail(404, 'Quote scan request not found.');
     const { leaseId, ...visible } = request;
     return { ok: true, request: visible, ...(await workerHealthFor(c.clientId)) };
+  }
+
+  // Hot quote scan (design + music breakouts, judged): always the free Mac bird path, whatever the Quote targets source is.
+  // No requestId -> queue a hot scan (or return the open one). With requestId -> its status, plus the picks once it is done.
+  async function hotQuotesFind(body, context, auth) {
+    const c = requireClient(body, context);
+    if (c.error) return c.error;
+    if (!quoteScanQueue) return fail(503, 'Hot quote scans are not available on this deployment.');
+    const id = typeof body?.requestId === 'string' ? body.requestId.trim() : '';
+    if (!id) {
+      const q = await quoteScanQueue.request({ clientId: c.clientId, requestedBy: auth?.decoded?.email || auth?.decoded?.uid || null, mode: 'hot' });
+      return { ok: true, source: 'mac', mode: 'hot', ...q, note: 'The Mac picks it up within a minute and the scan takes about 4-8 minutes. Call again with this requestId.', ...(await workerHealthFor(c.clientId)) };
+    }
+    if (!REQUEST_ID_RE.test(id)) return fail(400, 'requestId must be a hot scan request id.');
+    const request = await quoteScanQueue.get(id);
+    if (!request || request.clientId !== c.clientId) return fail(404, 'Hot scan request not found.');
+    const { leaseId, ...visible } = request;
+    const out = { ok: true, request: visible, ...(await workerHealthFor(c.clientId)) };
+    if (request.status === 'done' && typeof readHotQuotes === 'function') {
+      const h = (await readHotQuotes(c.clientId)) || {};
+      out.hotQuotes = { scannedAt: h.scannedAt ?? null, quotesLeftToday: h.quotesLeftToday ?? null, costUsd: h.costUsd ?? null, picks: h.picks ?? { design: [], music: [] }, notes: h.notes ?? [] };
+    }
+    return out;
   }
 
   // Stored sources + the call/post estimate of one X API run per data set (no network; cached user ids are unknown here, so lookups are an upper bound).
@@ -1461,6 +1486,7 @@ export function createStrategyHandlers({
     'strategy-freshness': strategyFreshness,
     'quote-scan-refresh': quoteScanRefresh,
     'quote-scan-status': quoteScanStatus,
+    'hot-quotes-find': hotQuotesFind,
     'x-data-sources-get': xDataSourcesGet,
     'x-data-sources-save': xDataSourcesSave,
   };

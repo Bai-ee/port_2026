@@ -366,7 +366,7 @@ export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_EN
     const created = Date.parse(t?.createdAt ?? '');
     if (!sid || !id || !Number.isFinite(created)) continue;
     if (savedQuoteIds.has(id) || savedQuoteIds.has(sid)) continue;
-    const expiresMs = created + REQUOTE_WINDOW_HOURS * 3_600_000;
+    const expiresMs = created + (Number(t?.windowHours) > 0 ? Number(t.windowHours) : REQUOTE_WINDOW_HOURS) * 3_600_000;
     if (expiresMs <= now) continue; // window closed
     const handle = String(t?.handle ?? t?.author?.username ?? (typeof t?.author === 'string' ? t.author : '') ?? '').replace(/^@/, '') || null;
     const first = ctDate(Math.max(now, created));
@@ -374,7 +374,7 @@ export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_EN
     for (let date = first < today ? today : first; date <= last; date = addDays(date, 1)) {
       const ms = date === today ? now : ctWallToMs(date, 0);
       addExtra(date, {
-        kind: 'requote', state: 'suggested', approval: 'suggested', id: `requote:${id}`, quoteTargetId: id, date, ms, time: '',
+        kind: 'requote', state: 'suggested', approval: 'suggested', id: `requote:${id}`, quoteTargetId: id, date, ms, time: date === today ? (t?.slotTime ?? '') : '', slotKind: t?.slotKind ?? null, quotesLeftToday: t?.quotesLeftToday ?? null, hot: t?.hot ?? null,
         handle, quotedUrl: url, title: excerpt(t?.text, 80), content: String(t?.text ?? ''), text: String(t?.text ?? ''), quotedHandle: handle, quotedText: String(t?.text ?? ''), quotedAuthorName: t?.authorName ?? null, quotedHasMedia: t?.hasMedia === true, quotedMediaUrl: t?.mediaUrl ?? null, createdAt: new Date(created).toISOString(),
         expiresAt: new Date(expiresMs).toISOString(), windowOpen: true, trackId: t?.trackId ?? null,
         status: 'suggested', needsStory: false, bucketId: null, bucketColor: null, proposed: false,

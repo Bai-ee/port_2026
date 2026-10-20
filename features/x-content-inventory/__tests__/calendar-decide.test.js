@@ -133,3 +133,10 @@ test('replace with nothing eligible: ok, no replacement, note', async () => {
   assert.equal(r.replacement, null);
   assert.equal(r.note, 'no-eligible-item');
 });
+
+test('requote replace: the next open pick may be a 72h music pick that a 36h rule would have closed', async () => {
+  const old = new Date(NOW - 50 * 3_600_000).toISOString();
+  const h = harness({ quotes: [{ id: 't1', createdAt: old, windowHours: 36 }, { id: 'm1', createdAt: old, windowHours: 72 }] });
+  const r = await run(h, 'replace', { kind: 'requote', targetId: 't1', date: TODAY });
+  assert.deepEqual(r.replacement, { kind: 'requote', targetId: 'm1', date: TODAY });
+});

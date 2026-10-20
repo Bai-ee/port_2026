@@ -8,7 +8,7 @@ import { localDateOf } from './time-ids.js';
 import { resolvePlanInputs } from '../../x-strategy/plan-inputs.js';
 import { tracksOf } from '../../x-strategy/content-tracks.js';
 import { promotionsOf } from '../../x-strategy/promotions.js';
-import { mergeListCandidates } from '../../x-quote-targets/day-plan.js';
+import { hotScanForLoop } from '../../x-quote-targets/hot-calendar.js';
 
 // --- inputs ----------------------------------------------------------------
 
@@ -111,13 +111,13 @@ export async function loadDailyLoopInputs(deps, { clientId, packageIds = null, c
     : null;
 
   const contentTracks = tracksOf(planDoc);
-  // Track-list candidates from the scan join the handle scan; no listSignals => exactly the stored quoteTargets.
+  // Quote slots draw on the hot-scan picks only (the legacy watchlist scan no longer feeds the daily loop); track lists stay as signals.
   const listSignals = state.marketingBrief?.listSignals || null;
   return {
     // Tracks + promotions from the Strategy plan doc (none when absent): run.js threads them into selection.
     contentTracks,
     promotions: promotionsOf({ contentTracks }),
-    scan: mergeListCandidates(state.marketingBrief?.quoteTargets || null, listSignals, { now }),
+    scan: hotScanForLoop(state.marketingBrief?.hotQuotes || null, { now }),
     listSignals,
     search: state.marketingBrief?.conversationSearch || null,
     packages,

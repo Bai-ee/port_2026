@@ -313,3 +313,11 @@ test('runDailyFill: a throwback draft is written with packageId + nasSha (no upl
   assert.equal(drafts[0].nasSha, SHA('1'));
   assert.equal(drafts[0].mediaUrl, undefined);
 });
+
+test('quotes: a hot pick uses its own window (72h music), carries no caption and no take placeholder', () => {
+  const p = plan({ include: ['quotes'], nowMs: NOW, quoteTargets: [target('555', 50, { windowHours: 72, hot: { lane: 'music' } }), target('666', 50, { hot: { lane: 'design' } })] });
+  const q = where(p, 'quote');
+  assert.deepEqual(q.map((r) => r.quoteTarget.id), ['555']);
+  assert.equal(q[0].text, 'https://x.com/h555/status/555');
+  assert.equal(q[0].needsStory, false);
+});

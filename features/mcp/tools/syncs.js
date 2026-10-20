@@ -72,6 +72,19 @@ const quoteScanStatus = defTool({
   },
 });
 
+const findHotQuotes = defTool({
+  name: 'find_hot_quotes',
+  title: 'Find hot quotes (design + music)',
+  kind: 'sync',
+  description: 'Find breakout posts worth quote-tweeting: queues the hot quote scan on the owner\'s Mac (free `bird` reads plus one tiny relevance-judge model call, about $0.002, hard cap $0.04). Returns 4 NEW picks per run (3 design + 1 music, fewer if too few fit, never repeats an earlier pick): link, age, momentum, why it fits, the owner\'s angle, and quotesLeftToday. Call with no requestId to queue (the scan takes about 4-8 minutes), then call again with the returned requestId until status is done; the picks come back in hotQuotes. Nothing is posted; no caption is written.',
+  inputSchema: { type: 'object', properties: { requestId: str('requestId from the first call; omit to queue a new scan.'), clientId: CLIENT_ID_PROP } },
+  handler: async ({ args, ctx }) => {
+    const clientId = await resolveClientId(ctx, args);
+    const requestId = typeof args.requestId === 'string' ? args.requestId.trim() : '';
+    return unwrap(await ctx.services.strategyHandlers().handle('hot-quotes-find', { clientId, ...(requestId ? { requestId } : {}) }, { clientId }, authFor(ctx)), 'Hot quote scan');
+  },
+});
+
 const regenerateToday = defTool({
   name: 'regenerate_today_suggestions',
   title: 'Regenerate today\'s suggestions',
@@ -151,4 +164,4 @@ const requestSync = defTool({
   },
 });
 
-export const syncTools = Object.freeze([strategyRefresh, quoteScan, quoteScanStatus, regenerateToday, nasStatus, nasJobs, nasBrowse, nasEstimate, requestSync]);
+export const syncTools = Object.freeze([strategyRefresh, quoteScan, quoteScanStatus, findHotQuotes, regenerateToday, nasStatus, nasJobs, nasBrowse, nasEstimate, requestSync]);

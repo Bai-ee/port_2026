@@ -36,6 +36,8 @@ export const STRATEGY_ACTIONS = [
     { tier: 1, snapshot: [{ path: 'client_configs/{clientId}', field: 'marketingBriefConfig.xGrowth.dataSources' }] }),
   S('strategy.quote-scan.refresh', 'strategy', 'Scan quote targets', 'Scans the watchlist for posts worth quote-reacting to. Source x-api: paid X API, runs on the server (about 2 calls per account, 15 accounts per run). Source mac: runs locally, nothing to start here.', 'quote-scan-refresh', obj({}, []),
     { tier: 3, external: 'paid', viaRefreshPanel: true, refreshGroups: ['quote-targets'], cost: 'Paid X API: up to 15 accounts x (1 lookup + 1 timeline call), max ~180 posts. Free when the source is the Mac.' }),
+  S('strategy.hot-quotes.find', 'strategy', 'Find hot quotes', 'Queues the hot quote scan on the Mac: 4 NEW design+music picks to quote. No args = queue (returns requestId, ~4-8 min); with requestId = status + picks. Free bird, ~$0.002 judge. No posting.', 'hot-quotes-find',
+    obj({ requestId: str('requestId from the first call; omit to queue a new scan.') }, []), { tier: 1 }),
   S('strategy.plan.apply', 'strategy', 'Change the strategy plan', 'Applies a partial change to the Strategy plan (cadence, floors/caps, engine targets, benchmark, content tracks). Versioned; validated server-side.', 'strategy-plan-apply',
     obj({ changes: open('Partial plan {authoredPerDay?, typeFloors?, typeCaps?, engineTargets?, benchmarkPrimary?, notes?, contentTracks?}.'), expectedVersion: int('Plan version you read; refused if stale.'), reason: str('Why (stored in history).') }, ['changes']),
     { tier: 1, snapshot: PLAN_SNAP, undo: { actionId: 'strategy.plan.revert', argsFrom: { version: 'args.expectedVersion' } } }),
