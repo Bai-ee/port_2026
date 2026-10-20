@@ -121,7 +121,7 @@ export function classifyResult(res) {
 export const TASK_BADGE = { film: 'To film', 'find-media': 'Find media' };
 
 /** Proposal window in CT wall time, and the minimum lead before a proposed slot. */
-export const PROPOSAL_WINDOW = { startMin: 9 * 60, endMin: 21 * 60, stepMin: 30, leadMin: 30 };
+export const PROPOSAL_WINDOW = { startMin: 7 * 60, endMin: 21 * 60, stepMin: 30, leadMin: 30 };
 
 const DAY_MS = 86_400_000;
 const MONTH_RE = /^(\d{4})-(\d{2})$/;
