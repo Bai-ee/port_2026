@@ -27,6 +27,8 @@ function ageHoursOf(c, now) {
   return Number.isFinite(c.ageHours) ? c.ageHours : null;
 }
 
+/** A hot pick's own lane window (music 72h); everything else the default quote window. */
+const windowOf = (c) => (Number(c.windowHours) > 0 ? Number(c.windowHours) : QUOTE_WINDOW_HOURS);
 const scoreOf = (c) => (Number.isFinite(c.score) ? c.score : 0);
 const engagementOf = (c) => (Number(c.likes) || 0) + (Number(c.reposts) || 0) + (Number(c.replies) || 0);
 
@@ -87,7 +89,7 @@ export function fillQuoteSlot({ slot, candidates, now, usedIds = [], related = [
     if (used.has(c.id)) { rejected.used += 1; continue; }
     const age = ageHoursOf(c, now);
     if (age === null) { rejected.unknownAge += 1; continue; }
-    if (age > QUOTE_WINDOW_HOURS) { rejected.stale += 1; continue; }
+    if (age > windowOf(c)) { rejected.stale += 1; continue; }
 
     // Hard blocks (casino, politics) apply even to a post the scan tagged with a vein.
     const verdict = guardXPost({ text: c.text, type: slot.type, media: hasMediaOf(c) ? 'image' : 'none' });

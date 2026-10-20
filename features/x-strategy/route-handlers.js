@@ -64,6 +64,7 @@ import { scoreXPost, getAlgorithmProfile } from '../x-growth/index.js';
 import { normalizeDataSources } from './data-sources.js';
 import { estimateCorporaPull, estimateQuoteScan, DEFAULT_MAX_PER_HANDLE, DEFAULT_MAX_ACCOUNTS, DEFAULT_PER_HANDLE } from './x-api-estimate.js';
 import { normalizeWatchlist } from '../x-quote-targets/client-watchlist.js';
+import { unactedHotPicks } from '../x-quote-targets/hot-calendar.js';
 import { guardXPost } from '../x-content-guard/index.js';
 import { dailyMixRulesFor } from '../x-content-inventory/daily-mix-rule.js';
 
@@ -844,6 +845,8 @@ export function createStrategyHandlers({
       ...(readPostsForQuery ? { readPostsForQuery: () => readPostsForQuery(clientId) } : {}),
       ...(readPost ? { readPost: (postId) => readPost(clientId, postId) } : {}),
       ...(readOpportunities ? { readOpportunities: () => readOpportunities(clientId) } : {}),
+      // next_post quote slots: the current unacted hot-scan picks (not passed, window open, not already drafted). Absent reader => no dep.
+      ...(readHotQuotes ? { readHotQuotes: async () => unactedHotPicks(await readHotQuotes(clientId), readQueuePosts ? await readQueuePosts(clientId).catch(() => []) : []) } : {}),
       ...(readCalendar ? { readCalendar: (opts) => readCalendar(clientId, opts) } : {}),
       ...(readResults ? { readResults: () => readResults(clientId) } : {}),
       ...(readMarketSignals ? { readMarketSignals: () => readMarketSignals(clientId) } : {}),

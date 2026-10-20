@@ -30,6 +30,25 @@ export function hotPicksToTargets(hotQuotes, { now = Date.now() } = {}) {
     }));
 }
 
+const STATUS_ID_RE = /status\/(\d+)/;
+/**
+ * Current unacted hot picks for the agent's next_post quote slots: open picks (not passed, window open) minus those the owner
+ * already acted on (a non-rejected saved post that quotes them, by sourceRef / fillSource / URL in the text).
+ * @param {object|null} hotQuotes raw marketingBrief.hotQuotes
+ * @param {object[]} posts raw social_posts rows (may be empty)
+ */
+export function unactedHotPicks(hotQuotes, posts, { now = Date.now() } = {}) {
+  const acted = new Set();
+  for (const p of Array.isArray(posts) ? posts : []) {
+    if (!p || p.status === 'rejected') continue;
+    const ref = p.sourceRef && typeof p.sourceRef === 'object' ? p.sourceRef : null;
+    if (ref?.kind === 'quote-target') { if (ref.id != null) acted.add(String(ref.id)); const u = STATUS_ID_RE.exec(String(ref.url ?? ''))?.[1]; if (u) acted.add(u); }
+    if (p.fillSource?.type === 'quote-target' && p.fillSource.id != null) acted.add(String(p.fillSource.id));
+    for (const m of String(p.content ?? '').matchAll(/https:\/\/(?:x|twitter)\.com\/\w+\/status\/(\d+)/gi)) acted.add(m[1]);
+  }
+  return hotPicksToTargets(hotQuotes, { now }).filter((t) => !acted.has(t.id));
+}
+
 /** The daily loop's `scan` input from hot picks: same shape as a stored quoteTargets payload ({generatedAt, candidates}). */
 export function hotScanForLoop(hotQuotes, { now = Date.now() } = {}) {
   if (!hotQuotes?.scannedAt) return null;
@@ -37,7 +56,7 @@ export function hotScanForLoop(hotQuotes, { now = Date.now() } = {}) {
     generatedAt: hotQuotes.scannedAt,
     candidates: hotPicksToTargets(hotQuotes, { now }).map((t) => ({
       id: t.id, url: t.url, author: t.author, authorName: t.authorName, text: t.text, createdAt: t.createdAt, hasMedia: t.hasMedia,
-      mediaUrl: t.mediaUrl, vein: t.hot.lane, score: t.hot.fit, reasons: t.hot.why ? [t.hot.why] : [],
+      mediaUrl: t.mediaUrl, windowHours: t.windowHours, vein: t.hot.lane, score: t.hot.fit, reasons: t.hot.why ? [t.hot.why] : [],
     })),
   };
 }
