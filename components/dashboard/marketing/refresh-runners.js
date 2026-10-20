@@ -41,6 +41,7 @@ const dimLine = (prefix, text) => ({ type: 'dim', prefix, text });
 // live in the run terminal until it finishes; give up waiting (not the request) after a few minutes.
 const MAC_POLL_MS = 5000;
 const MAC_WAIT_MS = 6 * 60 * 1000;
+const HOT_WAIT_MS = 12 * 60 * 1000; // the hot scan paces ~35 bird calls (about 4-8 minutes)
 const MAC_TERMINAL = new Set(['done', 'partial', 'failed', 'rate-limited', 'bird-unavailable']);
 function macLine(health) {
   const age = health?.ageMinutes;
@@ -48,12 +49,12 @@ function macLine(health) {
   if (typeof age === 'number' && age > 3) return `Your Mac last checked in ${age} min ago. Is it awake and logged in?`;
   return null;
 }
-async function followMacRequest(ctx, { statusAction, requestId, label }) {
+async function followMacRequest(ctx, { statusAction, requestId, label, waitMs = MAC_WAIT_MS }) {
   const note = typeof ctx.note === 'function' ? ctx.note : () => {};
   const started = Date.now();
   let last = '';
   let warned = false;
-  while (Date.now() - started < MAC_WAIT_MS) {
+  while (Date.now() - started < waitMs) {
     // eslint-disable-next-line no-await-in-loop
     const st = await quoteCall(ctx, statusAction, { clientId: ctx.clientId, requestId }).catch(() => null);
     const req = st?.request;
@@ -153,6 +154,19 @@ export const GROUP_RUNNERS = {
     if (out.request.status === 'done') return { detail: [okLine('[QUOTES]', line)] };
     if (out.request.status === 'rate-limited') return { detail: [dimLine('[QUOTES]', `${line}. X rate-limited the scan; try again in ~15 min.`)] };
     throw new Error(`Quote targets: ${line}${out.request.error ? ` (${out.request.error})` : ''}`);
+  },
+
+  // Group 9 — hot quotes: always the Mac (bird). Picks replace the previous unacted ones on the calendar.
+  'hot-quotes': async (ctx) => {
+    const res = await quoteCall(ctx, 'hot-quotes-find', { clientId: ctx.clientId });
+    if (!res?.requestId) return { detail: [dimLine('[HOT]', res?.instructions || 'The hot scan runs on your Mac.')] };
+    const out = await followMacRequest(ctx, { statusAction: 'quote-scan-status', requestId: res.requestId, label: 'Hot quotes', waitMs: HOT_WAIT_MS });
+    if (out.timedOut) return { detail: [dimLine('[HOT]', 'Still waiting on your Mac. It stays queued and runs when the Mac checks in.')] };
+    const r = out.request.result || {};
+    const line = `Hot scan ${out.request.status} — ${r.picks ?? 0} new pick(s), ${r.quotesLeftToday ?? '?'} quote(s) left today`;
+    if (out.request.status === 'done') return { detail: [okLine('[HOT]', line)] };
+    if (out.request.status === 'rate-limited') return { detail: [dimLine('[HOT]', `${line}. X rate-limited the scan; try again in ~15 min.`)] };
+    throw new Error(`Hot quotes: ${line}${out.request.error ? ` (${out.request.error})` : ''}`);
   },
 
   // Group 5 — free; draft copy via model only when the option is on. Results are not stored here.

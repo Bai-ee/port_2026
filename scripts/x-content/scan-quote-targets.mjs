@@ -43,6 +43,7 @@ import { fileURLToPath } from 'node:url';
 import { readClientWatchlist, resolveScanClients, selectScanTargets } from '../../features/x-quote-targets/client-watchlist.js';
 import { buildQuoteTargetsPayload } from '../../features/x-quote-targets/scan-core.js';
 import { rankQuoteTargets, DEFAULT_WINDOW_HOURS } from '../../features/x-quote-targets/rank.js';
+import { parseBirdJson, tweetsFromBird } from '../../features/x-quote-targets/bird-json.js';
 import { planListFetches } from '../../features/x-quote-targets/scan-plan.js';
 import {
   collectTrackLists, toListCandidate, trimListPosts, buildListSignalsPayload,
@@ -136,9 +137,7 @@ function fetchHandle(handle) {
     ['user-tweets', `@${handle}`, '-n', String(args.perHandle), '--json'],
     { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] },
   );
-  const start = raw.indexOf('[') === -1 ? raw.indexOf('{') : raw.indexOf('[');
-  const parsed = JSON.parse(raw.slice(start));
-  return Array.isArray(parsed) ? parsed : parsed.tweets || [];
+  return tweetsFromBird(parseBirdJson(raw));
 }
 
 /** One list's recent posts (a list is a single fetch: 100 posts per call). Same output shape as fetchHandle. */
@@ -148,9 +147,7 @@ function fetchList(listId) {
     ['list-timeline', String(listId), '-n', '100', '--json'],
     { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] },
   );
-  const start = raw.indexOf('[') === -1 ? raw.indexOf('{') : raw.indexOf('[');
-  const parsed = JSON.parse(raw.slice(start));
-  return Array.isArray(parsed) ? parsed : parsed.tweets || [];
+  return tweetsFromBird(parseBirdJson(raw));
 }
 
 const RATE_LIMIT_BACKOFF_MS = 90_000;

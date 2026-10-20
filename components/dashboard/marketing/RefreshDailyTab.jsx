@@ -14,6 +14,7 @@ const RUN_AT_UTC = { renders: '12:05', 'market-signals': '12:20', 'x-search': '1
 const NOT_DAILY = {
   'strategy-accounts': 'Automatic only through its X source "Auto daily" switch (Run now tab).',
   'quote-targets': 'Automatic only through its X source "Auto daily" switch (Run now tab).',
+  'hot-quotes': 'Automatic: the 06:30 Mac scan runs it every morning. Press Hot now for a fresh set any time.',
   'x-monitor': 'Manual only — no automatic run.',
 };
 

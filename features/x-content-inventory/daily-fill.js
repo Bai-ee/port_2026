@@ -251,7 +251,8 @@ export function planDailyFill({
       if (!id || !/^https:\/\/(x|twitter)\.com\/\w+\/status\/\d+/.test(url)) { skip({ kind: 'quote', targetId: id || null, reason: 'no-url' }); continue; }
       const created = Date.parse(t?.createdAt || '');
       if (!Number.isFinite(created)) { skip({ kind: 'quote', targetId: id, reason: 'no-timestamp' }); continue; }
-      const expiresMs = created + QUOTE_WINDOW_HOURS * 3_600_000;
+      const windowH = Number(t?.windowHours) > 0 ? Number(t.windowHours) : QUOTE_WINDOW_HOURS;
+      const expiresMs = created + windowH * 3_600_000;
       if (expiresMs <= now) { skip({ kind: 'quote', targetId: id, reason: 'window-closed' }); continue; }
       const key = `daily-fill:${today}:quote:${id}`;
       if (fills.some((f) => f.idempotencyKey === key)) { skip({ kind: 'quote', targetId: id, reason: 'already-filled' }); continue; }
@@ -264,8 +265,9 @@ export function planDailyFill({
       rows.push({
         date: today, kind: 'quote', trackId: track?.id ?? t?.trackId ?? null, bucketId: track?.buckets?.[0] ?? null,
         quoteTarget: { id, url, handle: handle || null, text: clip(t?.text, 200) },
-        text: `${caption}\n\n${url}`.slice(0, POST_MAX), needsStory: true,
-        reason: `open quote window: posted ${ageH}h ago, closes after ${QUOTE_WINDOW_HOURS}h`,
+        // A hot pick carries no caption: the owner writes the comment himself.
+        text: (t?.hot ? url : `${caption}\n\n${url}`).slice(0, POST_MAX), needsStory: !t?.hot,
+        reason: `open quote window: posted ${ageH}h ago, closes after ${windowH}h`,
         source: { type: 'quote-target', id, asOf: sourceAsOf }, expiresAt: new Date(expiresMs).toISOString(),
       });
     }

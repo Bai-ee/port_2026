@@ -23,6 +23,7 @@ import { buildPostResults } from '../../../../features/x-content-inventory/resul
 import { recentPostsFromQueue } from '../../../../features/x-content-inventory/allocate-slot.js';
 import { readUnifiedCalendar, readCalendarQuoteTargets as readCalendarQuoteTargetsShared } from '../../../../features/x-content-inventory/calendar-reader.js';
 import { ctDate, toRow as calendarPostRow } from '../../../../features/x-content-inventory/month-calendar.js';
+import { hotPicksToTargets, windowHoursOf } from '../../../../features/x-quote-targets/hot-calendar.js';
 import { decideCalendarItem } from '../../../../features/x-content-inventory/calendar-decide.js';
 import { createContentTaskStore } from '../../../../features/x-content-inventory/content-tasks.js';
 import { joinPerformance, engineStats } from '../../../../features/x-content-inventory/performance.js';
@@ -130,9 +131,9 @@ async function requireAdminContext(request) {
 // Merging happens in memory only; the dismiss POST keeps reading/writing the raw doc.
 async function readQuoteState(clientId) {
   const snap = await fb.adminDb.collection('dashboard_state').doc(clientId).get();
-  if (!snap.exists) return { rawQuoteTargets: null, listSignals: null };
+  if (!snap.exists) return { rawQuoteTargets: null, listSignals: null, hotQuotes: null };
   const brief = snap.data()?.marketingBrief;
-  return { rawQuoteTargets: brief?.quoteTargets ?? null, listSignals: brief?.listSignals ?? null };
+  return { rawQuoteTargets: brief?.quoteTargets ?? null, listSignals: brief?.listSignals ?? null, hotQuotes: brief?.hotQuotes ?? null };
 }
 
 /**
@@ -283,13 +284,18 @@ async function handleDismiss(clientId, body) {
     const existing = Array.isArray(snap.data()?.marketingBrief?.quoteTargets?.dismissed)
       ? snap.data().marketingBrief.quoteTargets.dismissed
       : [];
+    // A hot pick is passed here too (the calendar reads hotQuotes.dismissed); the next hot scan replaces hotQuotes wholesale.
+    const hotDismissed = Array.isArray(snap.data()?.marketingBrief?.hotQuotes?.dismissed) ? snap.data().marketingBrief.hotQuotes.dismissed : [];
     // Dedupe, append, then cap — drop the oldest entries first so the list
     // stays bounded without losing the most recent dismissals.
     const next = existing.filter((id) => id !== candidateId).concat(candidateId);
     const capped = next.length > DISMISSED_CAP ? next.slice(next.length - DISMISSED_CAP) : next;
     tx.set(
       docRef,
-      { marketingBrief: { quoteTargets: { dismissed: capped } }, updatedAt: fb.FieldValue.serverTimestamp() },
+      {
+        marketingBrief: { quoteTargets: { dismissed: capped }, hotQuotes: { dismissed: hotDismissed.filter((id) => id !== candidateId).concat(candidateId).slice(-DISMISSED_CAP) } },
+        updatedAt: fb.FieldValue.serverTimestamp(),
+      },
       { merge: true }
     );
     return capped;
@@ -427,16 +433,16 @@ async function handleContentTaskUpdate(context, body) {
  * Month calendar over social_posts, with undated drafts PROPOSED onto days (display only, nothing is written).
  * Read-only like the week view: Approve / Reject / edit go through the social-posting route.
  */
-/** Open quote candidates for the calendar (shared reader, also used by the agent/MCP get_calendar tool). */
+/** Open quote candidates for the calendar = the latest hot-scan picks (shared reader, also used by the agent/MCP get_calendar tool). */
 const readCalendarQuoteTargets = (clientId) => readCalendarQuoteTargetsShared(fb.adminDb, clientId);
 
 /** Dashboard Month calendar = the shared unified reader + row thumbnails (the only route-specific part). */
 async function handleMonthCalendar(context, body) {
   const month = typeof body?.month === 'string' ? body.month.trim() : '';
-  const { calendar, pkgs, baselineSlots } = await readUnifiedCalendar(fb.adminDb, context.clientId, { month, now: Date.now() });
+  const { calendar, pkgs, baselineSlots, quoteBudget } = await readUnifiedCalendar(fb.adminDb, context.clientId, { month, now: Date.now() });
   await withRowThumbs(calendar, pkgs, context.clientId);
   // Daily baseline slots (confirmed strategy doc) ride on the calendar so the Day view can mark them (display only).
-  return { ok: true, calendar: { ...calendar, baselineSlots } };
+  return { ok: true, calendar: { ...calendar, baselineSlots, quoteBudget } };
 }
 
 /**
@@ -616,15 +622,11 @@ async function readOpportunities(clientId) {
   };
 }
 
-// Daily fill: the same open candidates as readOpportunities (track-list merge, dismissed dropped), with the raw
-// createdAt the 36h window needs.
+// Daily fill: the open hot-scan picks only (the legacy watchlist quoteTargets feed no longer reaches daily-fill), with the raw
+// createdAt and per-pick window the fill needs.
 async function readQuoteTargetsForFill(clientId) {
-  const { rawQuoteTargets, listSignals } = await readQuoteState(clientId);
-  const qt = mergeListCandidates(rawQuoteTargets, listSignals);
-  const dismissed = new Set(Array.isArray(qt?.dismissed) ? qt.dismissed : []);
-  const targets = (Array.isArray(qt?.candidates) ? qt.candidates : []).filter((c) => c && !dismissed.has(c.id))
-    .map((c) => ({ id: c.id || c.url, url: c.url, text: c.text, handle: c.author?.username || (typeof c.author === 'string' ? c.author : null), createdAt: c.createdAt, trackId: c.trackId }));
-  return { generatedAt: qt?.generatedAt || null, targets };
+  const { hotQuotes } = await readQuoteState(clientId);
+  return { generatedAt: hotQuotes?.scannedAt || null, targets: hotPicksToTargets(hotQuotes, { now: Date.now() }) };
 }
 
 async function readResultsForChat(clientId) {
@@ -1031,7 +1033,7 @@ async function handleCalendarSuggestionApprove(context, decoded, body) {
     const t = targets.find((x) => String(x.id) === id || String(x.url).endsWith(`/status/${id}`));
     if (!t) throw Object.assign(new Error('That quote target is no longer open.'), { status: 404 });
     const created = Date.parse(t.createdAt || '');
-    if (!Number.isFinite(created) || created + 36 * 3_600_000 <= Date.now()) throw Object.assign(new Error('The quote window for that post has closed.'), { status: 409, code: 'window-closed' });
+    if (!Number.isFinite(created) || created + windowHoursOf(t) * 3_600_000 <= Date.now()) throw Object.assign(new Error('The quote window for that post has closed.'), { status: 409, code: 'window-closed' });
     if (!QUOTE_URL_RE.test(String(t.url || ''))) throw Object.assign(new Error('That quote target has no valid post URL.'), { status: 422 });
     const handle = String(t.handle || '').replace(/^@/, '');
     const today = ctDate(Date.now());
@@ -1040,7 +1042,7 @@ async function handleCalendarSuggestionApprove(context, decoded, body) {
     const { post } = await ensureDraftPost(context.clientId, {
       idempotencyKey: `daily-fill:${today}:quote:${t.id}`,
       content: t.url, source: 'daily-fill', fillKind: 'quote', fillSource: { type: 'quote-target', id: String(t.id), asOf: today }, reviewOn: today,
-      needsStory: false, expiresAt: new Date(created + 36 * 3_600_000).toISOString(),
+      needsStory: false, expiresAt: new Date(created + windowHoursOf(t) * 3_600_000).toISOString(),
       sourceRef: { kind: 'quote-target', url: t.url, id: String(t.id), handle: handle || null },
     });
     postId = post.id;
@@ -1210,6 +1212,7 @@ function getStrategyHandlers() {
       readPost: readPostForChat,
       readOpportunities,
       readQuoteTargets: readQuoteTargetsForFill,
+      readHotQuotes: async (clientId) => (await readQuoteState(clientId)).hotQuotes,
       readResults: readResultsForChat,
       readMarketSignals,
       editPost: editQueuedPost,

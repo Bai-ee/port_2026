@@ -55,7 +55,7 @@ const byId = (ctx, id) => ctx.inputs.find((i) => i.id === id);
 
 test('1. runner and chat resolve identical hash, plan version and input ids', async () => {
   const db = fakeDb({
-    state: { A: { strategyBuilder: { lastPlan: todayPlan() }, marketingBrief: { quoteTargets: { generatedAt: iso(NOW - HOUR) } } } },
+    state: { A: { strategyBuilder: { lastPlan: todayPlan() }, marketingBrief: { hotQuotes: { scannedAt: iso(NOW - HOUR) } } } },
     brains: { A: approvedBrain() }, packages: { p1: { title: 'x' } },
   });
   const plan = planDoc({ authoredPerDay: 4 }, 7);
@@ -182,7 +182,7 @@ test('8. authoredPerDay 8 notes the runner cap of 7', async () => {
 
 test('9. stale scan, stale own corpus, client inventory scope', async () => {
   const db = fakeDb({
-    state: { A: { marketingBrief: { quoteTargets: { generatedAt: iso(NOW - 49 * HOUR) } } } },
+    state: { A: { marketingBrief: { hotQuotes: { scannedAt: iso(NOW - 49 * HOUR) } } } },
     brains: { A: approvedBrain() },
   });
   const corpora = { own: [{ utc: iso(NOW - 10 * DAY), text: 'old', type: 'original' }] };
@@ -194,7 +194,7 @@ test('9. stale scan, stale own corpus, client inventory scope', async () => {
   assert.equal(byId(ctx, 'inventory').scope, 'client');
   assert.doesNotMatch(byId(ctx, 'inventory').caveats.join(' '), /not client-scoped/);
 
-  const fresh = fakeDb({ state: { A: { marketingBrief: { quoteTargets: { generatedAt: iso(NOW - 47 * HOUR) } } } }, brains: { A: approvedBrain() } });
+  const fresh = fakeDb({ state: { A: { marketingBrief: { hotQuotes: { scannedAt: iso(NOW - 47 * HOUR) } } } }, brains: { A: approvedBrain() } });
   const ctx2 = await loadContentContext(mkDeps({ db: fresh }).deps, { clientId: 'A', now: NOW, corpora: { own: [{ utc: iso(NOW - 6 * DAY), text: 'new', type: 'original' }] } });
   assert.equal(byId(ctx2, 'scan').usable, true);
   assert.doesNotMatch(byId(ctx2, 'corpora').caveats.join(' '), /stale/);

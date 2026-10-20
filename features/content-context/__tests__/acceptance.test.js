@@ -132,7 +132,7 @@ const planDoc = (plan, version = 1) => ({ version, updatedAt: '2026-10-09T00:00:
 const LOADER_NOW = FX_NOW;
 const loaderDeps = (doc) => ({
   db: fakeDb({
-    state: { [OWNER]: { strategyBuilder: { lastPlan: { today: { date: LOCAL }, items: [], generatedAt: new Date(LOADER_NOW - HOUR).toISOString(), postsPerDay: 4 } }, marketingBrief: { quoteTargets: { generatedAt: new Date(LOADER_NOW - HOUR).toISOString() } } } },
+    state: { [OWNER]: { strategyBuilder: { lastPlan: { today: { date: LOCAL }, items: [], generatedAt: new Date(LOADER_NOW - HOUR).toISOString(), postsPerDay: 4 } }, marketingBrief: { hotQuotes: { scannedAt: new Date(LOADER_NOW - HOUR).toISOString() } } } },
     brains: { [OWNER]: { status: 'approved', version: 3, updatedAtIso: '2026-10-01T00:00:00Z' } },
     packages: Object.fromEntries(FX.packages.map((p) => [p.id, p])),
   }),

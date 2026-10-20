@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readUnifiedCalendar } from '../calendar-reader.js';
+import { readUnifiedCalendar, readCalendarQuoteTargets, quotePostsOnDay } from '../calendar-reader.js';
+import { assignQuoteSlots } from '../../x-quote-targets/hot-calendar.js';
 import { buildMonthCalendar } from '../month-calendar.js';
 import { resolveCalendarEngineConfig } from '../../content-context/load-content-context.js';
 import { bucketOfPost } from '../bucket-colors.js';
@@ -25,7 +26,7 @@ test('parity: month shape equals the pre-extraction handler composition on the s
   const { calendar } = await readUnifiedCalendar(db, 'c1', { month: '2026-10', now: NOW, deps });
   const config = resolveCalendarEngineConfig({ planDoc: null, legacyOverrides: null });
   const withBuckets = posts.map((p) => (p.bucketId || !new Map([['pk1', { id: 'pk1' }]]).has(p.packageId) ? p : { ...p, bucketId: bucketOfPost(p, { id: 'pk1' }) }));
-  const old = buildMonthCalendar({ posts: withBuckets, month: '2026-10', now: NOW, config, buckets: [], tasks: [], suggestions, quoteTargets });
+  const old = buildMonthCalendar({ posts: withBuckets, month: '2026-10', now: NOW, config, buckets: [], tasks: [], suggestions, quoteTargets: assignQuoteSlots(quoteTargets, { left: 4 }) });
   assert.deepEqual(calendar, old);
   // Invalid / missing month falls back to the current CT month like the route did.
   assert.equal((await readUnifiedCalendar(db, 'c1', { month: 'nope', now: NOW, deps })).calendar.month, '2026-10');
@@ -104,4 +105,49 @@ test('baselineSlots: parsed from a CONFIRMED strategy doc, tracks mapped from th
     const r = await readUnifiedCalendar(db, 'c1', { month: '2026-10', now: NOW, deps: withDoc(read) });
     assert.deepEqual(r.baselineSlots, { slots: [], replies: null, notes: [] });
   }
+});
+
+// ---- hot picks are the ONLY quote source on the calendar ----------------------------------------------------------
+const pick = (id, rank, o = {}) => ({ id, lane: 'design', windowHours: 36, url: `https://x.com/h${id}/status/${id}`, author: `h${id}`, authorName: 'N', text: `pick ${id}`, createdAt: '2026-10-17T10:00:00Z', mediaUrl: 'https://pbs.twimg.com/a.jpg', momentum: 'climbing', fit: 0.8, angle: 'craft', why: 'because', rank, ...o });
+const stateWith = (hotQuotes, legacy) => async () => ({ rawQuoteTargets: legacy ?? null, listSignals: null, hotQuotes });
+const hotDeps = (hotQuotes, legacy, extra = {}) => ({
+  readQueue: async () => [], listBuckets: async () => [], readPackages: async () => new Map(), listTasks: async () => [], readSuggestions: async () => [],
+  readPlanDoc: async () => null, readQuoteState: stateWith(hotQuotes, legacy), ...extra,
+});
+
+test('hot picks: calendar quote targets come only from hotQuotes (legacy watchlist feed ignored), best rank first, passed picks dropped', async () => {
+  const hot = { scannedAt: '2026-10-17T12:00:00Z', quotesLeftToday: 3, picks: { design: [pick('1', 0.5), pick('2', 0.9)], music: [pick('3', 0.7, { lane: 'music', windowHours: 72 })] }, dismissed: ['1'] };
+  const legacy = { candidates: [{ id: 'L1', url: 'https://x.com/old/status/9', createdAt: '2026-10-17T10:00:00Z', author: 'old', text: 'legacy' }] };
+  const t = await readCalendarQuoteTargets(db, 'c1', { readQuoteState: stateWith(hot, legacy), now: () => NOW });
+  assert.deepEqual(t.map((x) => x.id), ['2', '3']);
+  assert.equal(t[1].windowHours, 72);
+  assert.equal(t[0].hot.why, 'because');
+  assert.deepEqual(await readCalendarQuoteTargets(db, 'c1', { readQuoteState: stateWith(null, legacy), now: () => NOW }), []);
+});
+
+test('hot picks: a music pick stays open past 36h (72h window); a design pick closes at 36h', async () => {
+  const old = '2026-10-15T20:00:00Z'; // 41h before NOW
+  const hot = { scannedAt: '2026-10-17T12:00:00Z', picks: { design: [pick('d', 0.9, { createdAt: old })], music: [pick('m', 0.5, { lane: 'music', windowHours: 72, createdAt: old })] } };
+  const t = await readCalendarQuoteTargets(db, 'c1', { readQuoteState: stateWith(hot), now: () => NOW });
+  assert.deepEqual(t.map((x) => x.id), ['m']);
+});
+
+test('hot picks: requote rows take the next open baseline quote slot, the rest are extra, quotes-left rides along', async () => {
+  const hot = { scannedAt: '2026-10-17T12:00:00Z', quotesLeftToday: 3, picks: { design: [pick('1', 0.9), pick('2', 0.8), pick('3', 0.7)], music: [] } };
+  const posted = [{ id: 'q', status: 'posted', fillKind: 'quote', reviewOn: '2026-10-17', scheduledAt: '2026-10-17T13:00:00Z' }];
+  const r = await readUnifiedCalendar(db, 'c1', { month: '2026-10', now: NOW, deps: hotDeps(hot, null, { readQueue: async () => posted }) });
+  const rows = r.calendar.weeks.flat().find((d) => d.date === '2026-10-17').posts.filter((x) => x.kind === 'requote');
+  assert.deepEqual(rows.map((x) => [x.quoteTargetId, x.time, x.slotKind]), [['1', '11:00', 'baseline'], ['2', '', 'extra'], ['3', '', 'extra']]);
+  assert.equal(rows[0].quotesLeftToday, 3);
+  assert.deepEqual(r.quoteBudget, { left: 3, postedToday: 1, scannedAt: '2026-10-17T12:00:00Z' });
+});
+
+test('quotesLeftToday: a scan from an earlier day does not carry over; saved quote posts today cap it', async () => {
+  const hot = { scannedAt: '2026-10-16T12:00:00Z', quotesLeftToday: 0, picks: { design: [pick('1', 0.9)], music: [] } };
+  const r = await readUnifiedCalendar(db, 'c1', { month: '2026-10', now: NOW, deps: hotDeps(hot, null) });
+  assert.equal(r.quoteBudget.left, 4);
+  const two = [{ status: 'scheduled', fillKind: 'quote', scheduledAt: '2026-10-17T20:00:00Z' }, { status: 'approved', sourceRef: { kind: 'quote-target' }, reviewOn: '2026-10-17' }, { status: 'draft', fillKind: 'quote', reviewOn: '2026-10-17' }];
+  assert.equal(quotePostsOnDay(two, '2026-10-17'), 2);
+  const r2 = await readUnifiedCalendar(db, 'c1', { month: '2026-10', now: NOW, deps: hotDeps(hot, null, { readQueue: async () => two }) });
+  assert.equal(r2.quoteBudget.left, 2);
 });

@@ -81,9 +81,11 @@ export function SuggestionRow({ row, busy, onApprove, nowMs, onView, onPass }) {
           <span id={`x-content-month-suggestion-title-${row.id}`} className="xce-mc-row-title">{row.text || row.title || '(no text)'}</span>
           <span className="xce-mc-row-meta">
             {requote ? 'Requote' : 'Suggested'}
+            {requote && row.hot ? ` · ${row.hot.lane} · ${row.hot.momentum}${row.slotKind === 'extra' ? ' · extra' : ''}` : ''}
             {row.type ? ` · ${row.type}` : ''}
             {requote && handle ? <> · <span id={`x-content-month-suggestion-handle-${row.id}`}>@{String(handle).replace(/^@/, '')}</span></> : null}
             {requote && url ? <> · <a id={`x-content-month-suggestion-link-${row.id}`} href={url} target="_blank" rel="noopener noreferrer">view post</a></> : null}
+            {requote && row.hot?.why ? <span id={`x-content-month-suggestion-why-${row.id}`}> · {row.hot.why}</span> : null}
             {left ? <span id={`x-content-month-suggestion-window-${row.id}`} className={closed ? 'xce-mc-fill-closed' : 'xce-mc-fill-badge'}>{left}</span> : null}
           </span>
         </span>

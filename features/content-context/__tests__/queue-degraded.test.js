@@ -32,7 +32,7 @@ function fakeDb({ state = {}, brains = {}, packages = {} } = {}) {
 
 const mkDeps = (extra = {}) => ({
   db: fakeDb({
-    state: { A: { marketingBrief: { quoteTargets: { generatedAt: new Date(NOW - 3_600_000).toISOString() } } } },
+    state: { A: { marketingBrief: { hotQuotes: { scannedAt: new Date(NOW - 3_600_000).toISOString() } } } },
     brains: { A: { status: 'approved', version: 3 } },
     packages: { p1: { title: 'x' } },
   }),

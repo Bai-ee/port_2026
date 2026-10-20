@@ -8,12 +8,15 @@
 //  - One open request per client: a second Refresh while one is queued/running returns that one (no duplicate scans).
 //  - Claim = transaction queued -> running {leaseId, startedAt}; a 'running' older than 30 min is reclaimable.
 //  - finish() only writes when the lease still matches.
+//  - A request carries a `mode` ('quote' | 'hot'); only an open request of the SAME mode is reused.
 // Single-field equality queries only (no composite index).
 
 import { randomUUID } from 'node:crypto';
 
 export const QUOTE_SCAN_COLLECTION = 'x_quote_scan_requests';
 export const SCAN_STATUS = Object.freeze({ QUEUED: 'queued', RUNNING: 'running', DONE: 'done', FAILED: 'failed', RATE_LIMITED: 'rate-limited' });
+/** 'quote' = the legacy watchlist scan; 'hot' = the hot quote scan (design + music breakouts, judged). Docs without a mode are 'quote'. */
+export const SCAN_MODES = Object.freeze({ QUOTE: 'quote', HOT: 'hot' });
 export const SCAN_STALE_RUNNING_MS = 30 * 60 * 1000;
 export const SCAN_TERMINAL = Object.freeze([SCAN_STATUS.DONE, SCAN_STATUS.FAILED, SCAN_STATUS.RATE_LIMITED]);
 
@@ -25,14 +28,14 @@ export function createFirestoreQuoteScanQueue(db, { now = Date.now, idGen = rand
   const col = () => db.collection(QUOTE_SCAN_COLLECTION);
   const iso = () => new Date(now()).toISOString();
 
-  /** Queue a scan for this client, or return its already-open one. */
-  async function request({ clientId, requestedBy = null } = {}) {
+  /** Queue a scan for this client, or return its already-open one of the same mode. */
+  async function request({ clientId, requestedBy = null, mode = SCAN_MODES.QUOTE } = {}) {
     if (!clientId) throw Object.assign(new Error('clientId is required.'), { status: 400 });
     const open = await col().where('clientId', '==', clientId).limit(20).get();
-    const live = open.docs.map((d) => d.data()).filter((d) => isOpen(d, now())).sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt))[0];
+    const live = open.docs.map((d) => d.data()).filter((d) => isOpen(d, now()) && (d.mode || SCAN_MODES.QUOTE) === mode).sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt))[0];
     if (live) return { requestId: live.id, status: live.status, reused: true };
     const id = idGen();
-    await col().doc(id).set({ id, clientId, status: SCAN_STATUS.QUEUED, requestedBy: requestedBy ? String(requestedBy).slice(0, 200) : null, createdAt: iso() });
+    await col().doc(id).set({ id, clientId, mode, status: SCAN_STATUS.QUEUED, requestedBy: requestedBy ? String(requestedBy).slice(0, 200) : null, createdAt: iso() });
     return { requestId: id, status: SCAN_STATUS.QUEUED };
   }
 

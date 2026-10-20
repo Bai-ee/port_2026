@@ -148,13 +148,12 @@ const fakeDb = (state) => ({
   }),
 });
 
-test('inputs: scan merges list candidates; unchanged without listSignals', async () => {
-  const qt = { generatedAt: fresh, candidates: [{ id: 'h1', author: 'x', text: 't' }], dismissed: [] };
-  const withLists = await loadDailyLoopInputs({ db: fakeDb({ marketingBrief: { quoteTargets: qt, listSignals: raw(posts7()) } }) }, { clientId: OWNER, now: NOW });
-  assert.equal(withLists.scan.candidates.length, 1 + 7);
-  assert.equal(withLists.scan.candidates.filter((c) => c.source === 'list').length, 7);
+test('inputs: scan is the hot-scan picks only; track-list signals stay readable beside it', async () => {
+  const hot = { scannedAt: fresh, picks: { design: [{ id: 'h1', lane: 'design', windowHours: 36, url: 'https://x.com/x/status/1', author: 'x', text: 't', createdAt: fresh, rank: 0.5, fit: 0.8 }], music: [] } };
+  const withLists = await loadDailyLoopInputs({ db: fakeDb({ marketingBrief: { hotQuotes: hot, quoteTargets: { generatedAt: fresh, candidates: [{ id: 'legacy', author: 'y', text: 'old' }] }, listSignals: raw(posts7()) } }) }, { clientId: OWNER, now: NOW });
+  assert.deepEqual(withLists.scan.candidates.map((c) => c.id), ['h1'], 'legacy watchlist candidates and list candidates no longer reach the loop scan');
   assert.ok(withLists.listSignals.byTrack.music);
-  const without = await loadDailyLoopInputs({ db: fakeDb({ marketingBrief: { quoteTargets: qt } }) }, { clientId: OWNER, now: NOW });
-  assert.deepEqual(without.scan, qt);
+  const without = await loadDailyLoopInputs({ db: fakeDb({ marketingBrief: { quoteTargets: { generatedAt: fresh, candidates: [] } } }) }, { clientId: OWNER, now: NOW });
+  assert.equal(without.scan, null);
   assert.equal(without.listSignals, null);
 });
