@@ -128,3 +128,46 @@ test('next_post: a Formats section cut off at the cap (header, no slot lines) sa
   assert.match(r.reason, /cut off by the section cap/);
   assert.match(r.reason, /do not invent slots/);
 });
+
+const QUOTE_FORMATS = `- Daily slot baseline (Chicago time, 2h apart):
+  - 07:00 Graphic Design: quote-react on a hot-scan pick. [model: seb peak 11-12 UTC]
+  - 09:00 Design & Dev: showcase video 10-20s, hitloop.agency in the self-reply. [model]
+  - 18:00 Record Collection Videos: Discogs record video, link in the self-reply. [model]
+  - All day: 5+ replies.`;
+const qSlots = parseDailySlots(QUOTE_FORMATS, { tracks: TRACKS }).slots;
+
+test('quote-react slot: says the pick comes from the hot scan, invents no caption or target, degrades when hotQuotes is absent', () => {
+  const none = planNextPost({ now: NOW, slots: qSlots, rows: [], track: 'quote' });
+  assert.equal(none.target.kind, 'quote-react');
+  assert.equal(none.target.timeCT, '07:00');
+  assert.match(none.template, /HOT-SCAN pick/);
+  assert.equal(none.hotScan.source, 'marketingBrief.hotQuotes');
+  assert.equal(none.hotScan.available, false);
+  assert.match(none.hotScan.note, /get_opportunities/);
+  assert.match(none.hotScan.rule, /Do not invent a target/);
+  assert.equal('caption' in none, false);
+  for (const bad of [null, [], {}, 'x']) assert.equal(planNextPost({ now: NOW, slots: qSlots, rows: [], track: 'quote', hotQuotes: bad }).hotScan.available, false);
+
+  const withPicks = planNextPost({ now: NOW, slots: qSlots, rows: [], track: 'quote', hotQuotes: [{ id: 'h1', handle: 'seb__design', url: 'https://x.com/seb__design/status/1', text: 'a striking object', extra: 'dropped' }, { id: 'h2' }, { id: 'h3' }, { id: 'h4' }] });
+  assert.equal(withPicks.hotScan.available, true);
+  assert.equal(withPicks.hotScan.picks.length, 3);
+  assert.deepEqual(withPicks.hotScan.picks[0], { id: 'h1', handle: 'seb__design', url: 'https://x.com/seb__design/status/1', text: 'a striking object' });
+  // other slot kinds carry no hotScan block
+  assert.equal('hotScan' in planNextPost({ now: NOW, slots: qSlots, rows: [], track: 'discogs' }), false);
+});
+
+test('next_post tool: hot-scan picks come through the optional readHotQuotes dep; a throwing or missing dep degrades cleanly', async () => {
+  const base = { now: () => NOW, getStrategyDoc: async () => ({ confirmed: true, sections: { formats: QUOTE_FORMATS } }), getPlan: async () => null, readCalendar: async () => [] };
+  const ok = await runReadTool('next_post', { track: 'quote' }, { ...base, readHotQuotes: async () => ({ picks: [{ id: 'h1', text: 't' }] }) });
+  assert.equal(ok.hotScan.available, true);
+  assert.equal((await runReadTool('next_post', { track: 'quote' }, base)).hotScan.available, false);
+  assert.equal((await runReadTool('next_post', { track: 'quote' }, { ...base, readHotQuotes: async () => { throw new Error('boom'); } })).hotScan.available, false);
+});
+
+test('record drafts in the generated shape (Artist - Title, then Label . Cat . Year) pass the format check; only drafts up to the target day are candidates', () => {
+  const generated = 'Derrick Jamerson – Got To Give It Up\nHappy Records · HR1001 · 1992';
+  assert.equal(ruleCheckDraft(post('g', { content: generated }), 'record').find((c) => c.code === 'record-format').ok, true);
+  assert.equal(ruleCheckDraft(post('h', { content: 'just a title' }), 'record').find((c) => c.code === 'record-format').ok, false);
+  const r = planNextPost({ now: NOW, slots, rows: [post('today'), post('later', { reviewOn: '2026-10-21', date: '2026-10-21' })], track: 'discogs' });
+  assert.deepEqual(r.candidates.map((c) => c.id), ['today']);
+});

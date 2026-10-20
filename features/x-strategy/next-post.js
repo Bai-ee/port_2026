@@ -14,6 +14,10 @@ const TEXT_MAX = 200;
 const FILLED = new Set(['approved', 'scheduled', 'queued', 'posted', 'published']);
 const OPEN_STATUSES = new Set(['draft', 'approved', 'awaiting_approval', 'needs_review', 'scheduled', 'queued']);
 export const RECORD_LINE_RE = /\S[^\n]*\n\s*\n[^\n]+\s[-–—]\s[^\n]+\[[^\]\n]+,\s*(?:19|20)\d{2}\]/;
+// The record-line shapes we accept: "Artist – Title [Label, Year]" after a first-person line, or the generated draft
+// shape ("Artist – Title", then a "Label · Cat · Year" line).
+export const RECORD_LINE_ALT_RE = /[^\n]+\s[-–—]\s[^\n]+\n[^\n]*(?:19|20)\d{2}/;
+const isRecordFormat = (text) => RECORD_LINE_RE.test(text) || RECORD_LINE_ALT_RE.test(text);
 
 /** What kind of slot is this, from its track label + note. */
 export function slotKind(slot) {
@@ -29,7 +33,7 @@ export function slotKind(slot) {
 /** Format templates per slot kind. No figures: those come from the other tools. */
 export const TEMPLATES = Object.freeze({
   showcase: 'One line, then the screen-captured video of the thing built. No intro, no hashtags. Credits and links go in the first self-reply.',
-  'quote-react': 'A striking post from someone else plus a flat 2-8 word caption. No explaining, no own link, no hashtags.',
+  'quote-react': 'Quote-react on a HOT-SCAN pick (never invent the target): a striking post from someone else plus a flat 2-8 word caption. No explaining, no own link, no hashtags.',
   record: 'One first-person line, a blank line, then "Artist – Title [Label, Year]". Video of the record playing, at least 10s. The Discogs link goes in the self-reply, never the main post. At most 2 hashtags (optional).',
   throwback: 'One first-person line with the year or anniversary, then the dated media (video of at least 10s). Link in the self-reply. At most 2 hashtags (optional).',
   mix: 'A mood line, then the mix video (at least 10s). The listen link goes in the self-reply. At most 2 hashtags (optional).',
@@ -80,8 +84,18 @@ export function ruleCheckDraft(r, kind) {
   }
   checks.push({ code: 'hashtags', ok: tags <= maxTags, ...(tags <= maxTags ? {} : { fix: maxTags ? `Keep at most ${maxTags} hashtags.` : 'Drop the hashtags (design lane).' }) });
   checks.push({ code: 'length', ok: text.length <= 280, ...(text.length <= 280 ? {} : { fix: 'Shorten to 280 characters.' }) });
-  if (kind === 'record') checks.push({ code: 'record-format', ok: RECORD_LINE_RE.test(text), ...(RECORD_LINE_RE.test(text) ? {} : { fix: 'Use: one first-person line, blank line, "Artist – Title [Label, Year]".' }) });
+  if (kind === 'record') checks.push({ code: 'record-format', ok: isRecordFormat(text), ...(isRecordFormat(text) ? {} : { fix: 'Use: one first-person line, blank line, "Artist – Title [Label, Year]".' }) });
   return checks;
+}
+
+
+/** Quote-react slots run on a hot-scan pick: name where it comes from, show the picks if present, never invent a target or caption. */
+function hotScanFor(hotQuotes) {
+  const base = { source: 'marketingBrief.hotQuotes', rule: 'The target comes from the hot scan. Do not invent a target or write a caption until the owner picks one; then a flat 2-8 word caption.' };
+  if (!Array.isArray(hotQuotes) || !hotQuotes.length) {
+    return { ...base, available: false, note: 'No hot-scan picks are available on this deployment yet. Use get_opportunities for open quote targets; do not make one up.' };
+  }
+  return { ...base, available: true, picks: hotQuotes.slice(0, 3).map((q) => ({ id: q.id ?? null, handle: q.handle ?? null, url: q.url ?? null, text: String(q.text ?? '').replace(/\s+/g, ' ').trim().slice(0, 140) })) };
 }
 
 /** Which EXISTING card moves the pick to the slot. Nothing here moves anything; the owner confirms the card. */
@@ -104,8 +118,9 @@ function passCardFor(rest) {
  * @param {Array<{time:string,minutes:number,track:string,trackId:string|null,note:string}>} o.slots baseline slots
  * @param {object[]} o.rows flat calendar rows (kind:'post'), each with `date`
  * @param {string} [o.track] only this track's slot (label, id, or a word like "discogs")
+ * @param {object[]|null} [o.hotQuotes] shaped hot-scan picks (marketingBrief.hotQuotes) when the deployment has them; null/absent degrades cleanly
  */
-export function planNextPost({ now, slots = [], rows = [], track = '' } = {}) {
+export function planNextPost({ now, slots = [], rows = [], track = '', hotQuotes = null } = {}) {
   const q = norm(track);
   const pool = q ? slots.filter((s) => norm(`${s.track} ${s.trackId ?? ''} ${s.note}`).includes(q)) : slots;
   if (!pool.length) return { available: false, reason: q ? `no baseline slot matches "${String(track).slice(0, 40)}"` : 'no baseline slots (the Strategy document must be confirmed and list a "Daily slot baseline")' };
@@ -133,7 +148,8 @@ export function planNextPost({ now, slots = [], rows = [], track = '' } = {}) {
   const kind = slotKind(slot);
   const dayOf = (r) => r.reviewOn || r.date || (rowMs(r) != null ? ctDate(rowMs(r)) : null);
   const open = posts.filter((r) => OPEN_STATUSES.has(r.status) && matchesSlot(r, slot, kind));
-  const inReach = open.filter((r) => { const d = dayOf(r); return d && d >= today && d <= addDays(target.date, 1); });
+  // Drafts dated after the target day belong to later slots: never candidates, never surplus.
+  const inReach = open.filter((r) => { const d = dayOf(r); return d && d >= today && d <= target.date; });
   const scoreOf = (r) => {
     const checks = ruleCheckDraft(r, kind);
     const failed = checks.filter((c) => !c.ok).length;
@@ -161,6 +177,7 @@ export function planNextPost({ now, slots = [], rows = [], track = '' } = {}) {
         : `Next open ${slot.track} slot.`,
     },
     template: TEMPLATES[kind],
+    ...(kind === 'quote-react' ? { hotScan: hotScanFor(hotQuotes) } : {}),
     pick: pick ? { id: pick.id, why: `Best fit for ${target.date} ${slot.time}: ${pick.failing.length ? `needs ${pick.failing.join(', ')}` : 'passes every check'}.` } : null,
     candidates,
     passSurplus: pass.length ? { ids: pass, why: 'Same track, same stretch: one post per slot. Pass or move these (propose_calendar_decide / propose_post_edit).' } : null,

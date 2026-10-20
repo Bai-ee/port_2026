@@ -805,7 +805,10 @@ export async function runReadTool(name, input, toolDeps) {
       if (!slots.length && doc?.confirmed && /Daily slot baseline/i.test(formats)) {
         return { available: false, reason: `the Strategy document's Formats section (${formats.length} characters, cap ${SECTION_MAX}) has the "Daily slot baseline" header but no slot lines: they were cut off by the section cap. Tell the owner; use get_calendar for the days' actual times and do not invent slots.` };
       }
-      return planNextPost({ now: nowMs, slots, rows, track: cleanText(input?.track, 60) });
+      // Hot-scan picks (marketingBrief.hotQuotes) for quote-react slots; the dep is optional and may return null.
+      let hotQuotes = null;
+      if (typeof deps.readHotQuotes === 'function') { try { const hq = await deps.readHotQuotes(); hotQuotes = Array.isArray(hq) ? hq : (Array.isArray(hq?.picks) ? hq.picks : null); } catch { hotQuotes = null; } }
+      return planNextPost({ now: nowMs, slots, rows, track: cleanText(input?.track, 60), hotQuotes });
     }
     case 'get_x_spend': return need('getXSpend')({ days: Number.isInteger(input?.days) ? Math.min(Math.max(input.days, 1), 90) : 30 });
     case 'get_plan': return { plan: await need('getPlan')() };
