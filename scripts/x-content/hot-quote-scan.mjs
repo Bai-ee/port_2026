@@ -112,6 +112,11 @@ async function scanClient(clientId) {
     db.collection('dashboard_state').doc(clientId).get(),
     db.collection('clients').doc(clientId).collection('client_brain').doc('current').get(),
   ]);
+  // A client with no own X handle is not set up for X growth: a skip (exit 0), never a failure, and no lane-graph work.
+  if (!String(cfgSnap.exists ? cfgSnap.data()?.marketingBriefConfig?.xGrowth?.ownHandle || '' : '').replace(/^@/, '')) {
+    console.log(`[${clientId}] skipped: no xGrowth.ownHandle (client not set up for X growth); nothing scanned or written.`);
+    return false;
+  }
 
   // 1. Weekly lane-graph refresh (no-op while < 7 days old). A failure never stops the scan.
   if (args.write && !args.skipGraph) {

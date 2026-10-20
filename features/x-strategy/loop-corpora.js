@@ -8,7 +8,8 @@ const COMMITTED_LABELS = Object.freeze({
   seb__design: 'docs/audits/seb-design-x-corpus.json',
 });
 
-const NO_ROWS = 'no stored rows';
+// Labels name the handle and row count so two readers of the same store can never disagree silently.
+const noRows = (handle) => `no stored rows for @${handle}`;
 const NO_OWN = 'no own X handle on record for this client';
 const NO_BENCH = 'no benchmark handle on record for this client';
 
@@ -19,7 +20,7 @@ function pulledDate(meta) {
 
 function committedLabel(handle, rows) {
   const file = COMMITTED_LABELS[handle];
-  return file && rows.length ? `committed file ${file}` : NO_ROWS;
+  return file && rows.length ? `committed file ${file}` : noRows(handle);
 }
 
 async function readOne(handle, { corpusStore, loadCommitted }) {
@@ -40,7 +41,7 @@ async function readOne(handle, { corpusStore, loadCommitted }) {
       const file = COMMITTED_LABELS[handle];
       return { rows, source: `committed file ${file || handle} (seeded in rows store)` };
     }
-    return { rows, source: `rows store, pulled ${pulledDate(stored.meta)}` };
+    return { rows, source: `rows store, ${rows.length} rows for @${handle}, pulled ${pulledDate(stored.meta)}` };
   }
   return { rows, source: committedLabel(handle, rows) };
 }
@@ -77,8 +78,14 @@ export async function loadLoopCorpora({ corpusStore, profileHandles, loadCommitt
  */
 export async function loadClientLoopCorpora({ ownHandle, profileHandles, ...rest } = {}) {
   const corpora = await loadLoopCorpora({ ...rest, profileHandles: { ...(profileHandles || {}), ownHandle: ownHandle || null } });
-  if (ownHandle) return corpora;
-  return { ...corpora, own: [], ownHandle: null, ownSource: NO_OWN };
+  if (!ownHandle) return { ...corpora, own: [], ownHandle: null, ownSource: NO_OWN };
+  // The connected X account decides the own handle; say so when it is not the handle saved in xGrowth.
+  const configured = profileHandles?.ownHandle ? String(profileHandles.ownHandle).replace(/^@+/, '').toLowerCase() : null;
+  const resolved = String(ownHandle).replace(/^@+/, '').toLowerCase();
+  if (configured && configured !== resolved) {
+    return { ...corpora, ownHandleMismatch: `Own handle @${resolved} comes from the connected X account, but xGrowth.ownHandle is @${configured}: check Social Accounts > X for this client.` };
+  }
+  return corpora;
 }
 
 /**

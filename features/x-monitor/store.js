@@ -18,7 +18,7 @@
 // under the account.
 
 import { createRequire } from 'node:module';
-import { ROSTER_CHUNK_SIZE, chunkUsers, flattenRoster, snapshotDayKey } from './audience-diff.js';
+import { ROSTER_CHUNK_SIZE, chunkUsers, flattenRoster, newestPostsFirst, snapshotDayKey } from './audience-diff.js';
 
 const require = createRequire(import.meta.url);
 const fb = require('../../api/_lib/firebase-admin.cjs');
@@ -177,9 +177,10 @@ export async function listAudienceEvents(accountId, limit = 300) {
 
 // ── Posts ────────────────────────────────────────────────────────────────────
 
+/** Newest `limit` posts. Reads the whole subcollection (hundreds of docs) because doc ids carry no usable order. */
 export async function listPosts(accountId, limit = 300) {
-  const snap = await accountRef(accountId).collection('posts').limit(limit).get();
-  return snap.docs.map((d) => d.data());
+  const snap = await accountRef(accountId).collection('posts').get();
+  return newestPostsFirst(snap.docs.map((d) => d.data()), limit);
 }
 
 /**

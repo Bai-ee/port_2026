@@ -91,7 +91,7 @@ export async function loadDailyLoopInputs(deps, { clientId, packageIds = null, c
     // the loop puts on conversations (the committed rows carry a per-account tagger's labels).
     const retagged = own.map((r) => ({ ...r, topics: tagTopics(r.text, { quotedText: r.quotedText }) }));
     const s = summarizeCorpus(retagged, { handle: ownHandle });
-    ownSummary = { posts: own.length, range: corpusRange(own), source: `${corpora.ownSource || 'own corpus'} (re-tagged with the shared taxonomy)`, byType: s.byType, byTopic: s.byTopic };
+    ownSummary = { posts: own.length, range: corpusRange(own), source: `${corpora.ownSource || 'own corpus'} (re-tagged with the shared taxonomy)`, byType: s.byType, byTopic: s.byTopic, ...(corpora.ownHandleMismatch ? { handleMismatch: corpora.ownHandleMismatch } : {}) };
   }
   if (own && bench) {
     const report = compareToBenchmark({ own: summarizeCorpus(own, { handle: ownHandle }), benchmark: summarizeCorpus(bench, { handle: benchmarkHandle }) });

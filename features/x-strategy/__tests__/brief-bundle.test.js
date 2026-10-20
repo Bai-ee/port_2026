@@ -41,7 +41,8 @@ const raw = () => ({
     },
   },
   signals: { headline: 'H', humanBrief: 'B', narratives: [{ trend: 't', detail: 'd' }], strategyBuilder: { generatedAt: hoursAgo(10), items: [] } },
-  quoteTargets: { generatedAt: hoursAgo(3), candidates: [{ id: 'c', text: 'x', author: { username: 'u' } }] },
+  hotQuotes: { scannedAt: hoursAgo(3), quotesLeftToday: 4, picks: { design: [{ lane: 'design', author: 'u', url: 'https://x.com/u/status/1', fit: 0.7, momentum: 'new', text: 'x' }], music: [] }, notes: [] },
+  quoteTargets: { generatedAt: hoursAgo(9), candidates: [{ id: 'c', text: 'x', author: { username: 'u' } }] },
   planDoc: { version: 3, updatedAt: hoursAgo(500), plan: { authoredPerDay: 3 } },
   corpora: [{ handle: 'me', source: 'firestore', rows: 50, pulledAt: hoursAgo(60) }, { handle: 'seb', source: 'firestore', rows: 80, pulledAt: hoursAgo(5) }],
   xMonitor: { updatedAt: NOW - 100 * 3_600_000, sync: { postsAt: NOW - 80 * 3_600_000 } },
@@ -58,7 +59,10 @@ test('buildBriefBundle: ages, stale flags, groups and unique staleGroups', () =>
   assert.equal(b.parts['platform-searches'].stale, false);
   assert.equal(b.parts.analysis.asOf, hoursAgo(10)); // oldest PRESENT core analyzer
   assert.equal(b.parts['quote-targets'].stale, false);
-  assert.equal(b.parts['quote-targets'].refreshGroup, 'quote-targets');
+  assert.equal(b.parts['quote-targets'].refreshGroup, 'hot-quotes');
+  assert.equal(b.parts['quote-targets'].asOf, hoursAgo(3)); // the hot scan, never the legacy watchlist scan
+  assert.equal(b.parts['quote-targets'].summary.picks, 1);
+  assert.equal(b.parts['quote-targets'].summary.watchlistScan.asOf, hoursAgo(9));
   assert.equal(b.parts['strategy-accounts'].asOf, hoursAgo(60));
   assert.equal(b.parts['strategy-accounts'].stale, true); // 60h > 48h
   assert.equal(b.parts['x-monitor'].stale, true); // 80h > 72h (newest of sync stamps / updatedAt)
@@ -172,4 +176,11 @@ test('switched-off features never pin a group stale: x-search off, analyzers of 
   // Instagram switched back on: its stale output counts again.
   const on = freshnessOf(buildBriefBundle({ ...raw, features: { ...raw.features, platforms: { instagram: true } } }, { now }));
   assert.equal(on.parts.analysis.stale, true);
+});
+
+test('buildBriefBundle: quote part with only a legacy scan is not present (stale), legacy as-of kept apart', () => {
+  const b = buildBriefBundle({ ...raw(), hotQuotes: null }, { now: NOW });
+  assert.equal(b.parts['quote-targets'].asOf, null);
+  assert.equal(b.parts['quote-targets'].stale, true);
+  assert.equal(b.parts['quote-targets'].summary.watchlistScan.asOf, hoursAgo(9));
 });

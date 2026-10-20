@@ -7,8 +7,7 @@
 
 import { createRequire } from 'node:module';
 import { readSocialQueue, getSocialPost } from '../social-posting/twitter-service.js';
-import { mergeListCandidates } from '../x-quote-targets/day-plan.js';
-import { ageHoursOf, DEFAULT_WINDOW_HOURS } from '../x-quote-targets/rank.js';
+import { hotOpportunities } from '../x-quote-targets/hot-calendar.js';
 import { joinPerformance, engineStats } from '../x-content-inventory/performance.js';
 import { buildDayPlan as buildContentDayPlan } from '../x-content-inventory/plan-day.js';
 import { readInventory } from '../x-content-inventory/store.js';
@@ -54,14 +53,6 @@ export function createReaders(db) {
     return snap.exists ? snap.data()?.marketingBriefConfig?.xGrowth ?? null : null;
   };
 
-  const readQuoteTargets = async (clientId) => {
-    const snap = await db.collection('dashboard_state').doc(clientId).get();
-    if (!snap.exists) return null;
-    const brief = snap.data()?.marketingBrief;
-    // Track-list candidates (listSignals) merge in memory; same single read.
-    return mergeListCandidates(brief?.quoteTargets ?? null, brief?.listSignals ?? null);
-  };
-
   async function readQueueSummary(clientId) {
     const posts = await readSocialQueue(clientId);
     const counts = {};
@@ -91,27 +82,10 @@ export function createReaders(db) {
     return p ? postStatusRow(p) : null;
   }
 
+  // Hot picks only: the same source and as-of as the calendar (never the legacy watchlist scan).
   async function readOpportunities(clientId) {
-    const qt = await readQuoteTargets(clientId);
-    const now = Date.now();
-    const generatedMs = Date.parse(qt?.generatedAt || '');
-    const dismissed = new Set(Array.isArray(qt?.dismissed) ? qt.dismissed : []);
-    const open = (Array.isArray(qt?.candidates) ? qt.candidates : []).filter((c) => !dismissed.has(c.id));
-    const targets = open.slice(0, 10).map((c) => {
-      const ageHours = ageHoursOf(c.createdAt, now);
-      return {
-        id: c.id || c.url || null,
-        handle: c.author?.username || (typeof c.author === 'string' ? c.author : null),
-        url: c.url || null,
-        text: excerptOf(c.text),
-        ageHours: ageHours == null ? null : Math.round(ageHours * 10) / 10,
-        windowOpen: ageHours == null ? null : ageHours <= DEFAULT_WINDOW_HOURS,
-        kind: 'quote',
-        ...(c.trackId ? { trackId: c.trackId } : {}),
-        ...(c.source ? { source: c.source } : {}),
-      };
-    });
-    return { generatedAt: qt?.generatedAt || null, stale: Number.isFinite(generatedMs) ? (now - generatedMs) / 3_600_000 > 48 : null, targets };
+    const snap = await db.collection('dashboard_state').doc(clientId).get();
+    return hotOpportunities(snap.exists ? snap.data()?.marketingBrief?.hotQuotes ?? null : null, { now: Date.now() });
   }
 
   async function readResults(clientId) {

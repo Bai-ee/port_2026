@@ -323,7 +323,7 @@ export const READ_TOOLS = Object.freeze([
   },
   {
     name: 'get_opportunities',
-    description: `Top ${LIMITS.opportunitiesMax} quote/reply scan targets with age in hours and whether the window is still open, plus when the scan was generated and whether it is stale. Read-only.`,
+    description: `Top ${LIMITS.opportunitiesMax} open hot quote picks (the same ones on the calendar; design + music) with age in hours, lane, momentum and fit, plus when the hot scan ran, whether it is stale and quotes left today. Read-only.`,
     input_schema: { type: 'object', properties: {} },
   },
   {
@@ -736,12 +736,15 @@ function shapeOpportunities(res) {
   if (!isPlain(res)) return null;
   const list = Array.isArray(res.targets) ? res.targets : Array.isArray(res.rows) ? res.rows : [];
   return {
+    source: strOrNull(res.source),
     generatedAt: res.generatedAt ?? null,
     stale: typeof res.stale === 'boolean' ? res.stale : null,
+    ...(Number.isFinite(res.quotesLeftToday) ? { quotesLeftToday: res.quotesLeftToday } : {}),
     targets: list.filter(isPlain).slice(0, LIMITS.opportunitiesMax).map((t) => ({
       id: strOrNull(t.id), handle: strOrNull(t.handle), url: strOrNull(t.url),
       text: excerpt(t.text ?? t.excerpt), ageHours: finiteOrNull(t.ageHours),
       windowOpen: typeof t.windowOpen === 'boolean' ? t.windowOpen : null, kind: strOrNull(t.kind),
+      ...(t.lane ? { lane: strOrNull(t.lane), momentum: strOrNull(t.momentum), fit: finiteOrNull(t.fit) } : {}),
     })),
   };
 }
