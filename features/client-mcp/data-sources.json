@@ -5,5 +5,12 @@
     "kind": "site-stats",
     "url": "https://nottherug.com/api/stats",
     "keyEnv": "CLIENT_STATS_KEY_NOTTHERUG"
+  },
+  {
+    "clientId": "not-the-rug-WMmA4G9L",
+    "label": "Not The Rug website",
+    "kind": "site-stats",
+    "url": "https://nottherug.com/api/stats",
+    "keyEnv": "CLIENT_STATS_KEY_NOTTHERUG"
   }
 ]
