@@ -89,3 +89,19 @@ test('get_post and find_posts carry approveNote only for placeholder text', asyn
   assert.ok(rows.find((r) => r.id === 'x').approveNote);
   assert.equal(rows.find((r) => r.id === 'y').approveNote, undefined);
 });
+
+test('baselineSlots: parsed from a CONFIRMED strategy doc, tracks mapped from the plan; draft / missing / failing doc -> none', async () => {
+  const formats = '- Daily slot baseline (Chicago time):\n  - 07:00 Graphic Design: quote-react. [model]\n  - 16:00 Dj Mix Videos: UE mix clip.\n  - All day: 5+ replies in the two lanes.';
+  const doc = { confirmed: true, version: 2, sections: { formats } };
+  const planDoc = { plan: { contentTracks: [{ id: 'design', label: 'Graphic Design', engines: ['identity'], share: 1 }] } };
+  const withDoc = (readStrategyDoc, extra = {}) => ({ ...deps, readStrategyDoc, ...extra });
+  const month = await readUnifiedCalendar(db, 'c1', { month: '2026-10', now: NOW, deps: withDoc(async () => doc, { readPlanDoc: async () => planDoc }) });
+  assert.deepEqual(month.baselineSlots.slots.map((s) => [s.time, s.track, s.note]), [['07:00', 'Graphic Design', 'quote-react.'], ['16:00', 'Dj Mix Videos', 'UE mix clip.']]);
+  assert.equal(month.baselineSlots.replies.min, 5);
+  const range = await readUnifiedCalendar(db, 'c1', { from: '2026-10-17', to: '2026-10-18', now: NOW, deps: withDoc(async () => doc) });
+  assert.equal(range.baselineSlots.slots.length, 2);
+  for (const read of [async () => ({ ...doc, confirmed: false }), async () => null, async () => { throw new Error('down'); }]) {
+    const r = await readUnifiedCalendar(db, 'c1', { month: '2026-10', now: NOW, deps: withDoc(read) });
+    assert.deepEqual(r.baselineSlots, { slots: [], replies: null, notes: [] });
+  }
+});

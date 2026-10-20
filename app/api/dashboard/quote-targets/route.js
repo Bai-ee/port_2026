@@ -433,9 +433,10 @@ const readCalendarQuoteTargets = (clientId) => readCalendarQuoteTargetsShared(fb
 /** Dashboard Month calendar = the shared unified reader + row thumbnails (the only route-specific part). */
 async function handleMonthCalendar(context, body) {
   const month = typeof body?.month === 'string' ? body.month.trim() : '';
-  const { calendar, pkgs } = await readUnifiedCalendar(fb.adminDb, context.clientId, { month, now: Date.now() });
+  const { calendar, pkgs, baselineSlots } = await readUnifiedCalendar(fb.adminDb, context.clientId, { month, now: Date.now() });
   await withRowThumbs(calendar, pkgs, context.clientId);
-  return { ok: true, calendar };
+  // Daily baseline slots (confirmed strategy doc) ride on the calendar so the Day view can mark them (display only).
+  return { ok: true, calendar: { ...calendar, baselineSlots } };
 }
 
 /**

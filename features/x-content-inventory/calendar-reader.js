@@ -13,6 +13,9 @@ import { createFirestoreRunStore } from './daily-run-store.js';
 import { localDateOf, LOOP_VERSION } from './daily-loop.js';
 import { createFirestorePlanStore } from '../x-strategy/plan-store.js';
 import { resolveCalendarEngineConfig } from '../content-context/load-content-context.js';
+import { createFirestoreStrategyDocStore } from '../x-strategy/strategy-doc-store.js';
+import { baselineSlotsOf } from '../x-strategy/daily-slots.js';
+import { tracksOf } from '../x-strategy/content-tracks.js';
 
 export const PKG_COLLECTION = 'x_content_packages';
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -94,13 +97,17 @@ async function loadInputs(db, clientId, now, deps) {
     (deps.readSuggestions ? deps.readSuggestions(clientId, now) : readCalendarSuggestions(db, clientId, now)).catch(() => []),
     (deps.readQuoteTargets ? deps.readQuoteTargets(clientId) : readCalendarQuoteTargets(db, clientId)).catch(() => []),
   ]);
-  return { config, posts: withBuckets, buckets, tasks, suggestions, quoteTargets, pkgs };
+  // Daily baseline slots from the CONFIRMED strategy doc (awareness markers only; a draft or missing doc has none).
+  const strategyDoc = await (deps.readStrategyDoc ? deps.readStrategyDoc(clientId) : createFirestoreStrategyDocStore(db).get(clientId)).catch(() => null);
+  const baselineSlots = baselineSlotsOf(strategyDoc, { tracks: tracksOf(planDoc) });
+  return { config, posts: withBuckets, buckets, tasks, suggestions, quoteTargets, pkgs, baselineSlots };
 }
 
 /**
  * The unified calendar. Two shapes:
- *  - { month }           -> { calendar, pkgs }  (exactly what the dashboard Month handler builds, minus thumbnails)
- *  - { from, to }        -> { days, pkgs }      (the grid days inside the closed range, deduped by date, max 31 days)
+ *  - { month }           -> { calendar, pkgs, baselineSlots }  (exactly what the dashboard Month handler builds, minus thumbnails)
+ *  - { from, to }        -> { days, pkgs, baselineSlots }      (the grid days inside the closed range, deduped by date, max 31 days)
+ * `baselineSlots` = daily-slots.js parseDailySlots shape ({slots, replies, notes}); the same for every day.
  * `now` (epoch ms) is injectable. `deps` overrides any reader (tests).
  */
 export async function readUnifiedCalendar(db, clientId, { month, from, to, now = Date.now(), deps = {} } = {}) {
@@ -119,8 +126,8 @@ export async function readUnifiedCalendar(db, clientId, { month, from, to, now =
       }
     }
     const days = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
-    return { days, from: start, to: end, pkgs: inputs.pkgs };
+    return { days, from: start, to: end, pkgs: inputs.pkgs, baselineSlots: inputs.baselineSlots };
   }
   const valid = typeof month === 'string' && MONTH_RE.test(month.trim()) ? month.trim() : ctDate(now).slice(0, 7);
-  return { calendar: build(valid), pkgs: inputs.pkgs };
+  return { calendar: build(valid), pkgs: inputs.pkgs, baselineSlots: inputs.baselineSlots };
 }

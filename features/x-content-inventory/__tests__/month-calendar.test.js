@@ -61,8 +61,8 @@ test('an undated draft is proposed into the next open slot from today, never bef
   const p = d10.posts[0];
   assert.equal(p.proposed, true);
   assert.equal(p.state, 'pending');
-  assert.equal(p.time, '09:00'); // 07:00 now + 30 min lead → 09:00 window start
-  assert.equal(p.proposedAt, '2026-10-10T14:00:00.000Z');
+  assert.equal(p.time, '07:30'); // 07:00 now + 30 min lead → first 07:00-window step after it
+  assert.equal(p.proposedAt, '2026-10-10T12:30:00.000Z');
   assert.deepEqual(cal.reviewQueue, ['d1']);
   assert.equal(cal.totals.proposed, 1);
   assert.equal(cal.unplaced.length, 0);
@@ -83,7 +83,7 @@ test('proposals respect min spacing, the authored target and per-engine max', ()
   // identity maxPerDay is 2: the scheduled one + d1. d2/d3 roll to the next day.
   assert.deepEqual(d10.map((p) => p.id), ['s', 'd1']);
   assert.equal(d10[1].time, '11:00'); // 120 min after 09:00
-  assert.deepEqual(day(cal, '2026-10-11').posts.map((p) => [p.id, p.time]), [['d2', '09:00'], ['d3', '11:00']]);
+  assert.deepEqual(day(cal, '2026-10-11').posts.map((p) => [p.id, p.time]), [['d2', '07:00'], ['d3', '09:00']]);
 
   const target = DEFAULT_ENGINE_CONFIG.authored.targetPerDay;
   const many = Array.from({ length: target + 1 }, (_, i) => draft(`m${i}`, { engine: null, createdAt: `2026-10-0${i + 1}T00:00:00Z` }));
@@ -149,11 +149,11 @@ test('a proposal never lands after expiresAt; the row is unplaced as window-clos
   const expired = buildMonthCalendar({ month: '2026-10', now: NOW, posts: [draft('e', { expiresAt: '2026-10-09T00:00:00Z' })] });
   assert.equal(expired.unplaced[0].reason, 'window-closed');
   assert.equal(allDays(expired).flatMap((d) => d.posts).length, 0);
-  // Expires 10:00 CT today: 09:00 slot still fits, so it is proposed.
+  // Expires 10:00 CT today: the 07:30 slot still fits, so it is proposed.
   const fits = buildMonthCalendar({ month: '2026-10', now: NOW, posts: [draft('e', { expiresAt: '2026-10-10T15:00:00Z' })] });
-  assert.equal(day(fits, '2026-10-10').posts[0].time, '09:00');
-  // Expires before the first open slot (09:00 CT = 14:00Z).
-  const tight = buildMonthCalendar({ month: '2026-10', now: NOW, posts: [draft('e', { expiresAt: '2026-10-10T13:00:00Z' })] });
+  assert.equal(day(fits, '2026-10-10').posts[0].time, '07:30');
+  // Expires before the first open slot (07:30 CT = 12:30Z).
+  const tight = buildMonthCalendar({ month: '2026-10', now: NOW, posts: [draft('e', { expiresAt: '2026-10-10T12:15:00Z' })] });
   assert.equal(tight.unplaced[0].reason, 'window-closed');
 });
 

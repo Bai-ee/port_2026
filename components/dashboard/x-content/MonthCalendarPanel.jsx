@@ -10,6 +10,7 @@ import { ENGINE_TAG, STATE_LABEL, StateDot, dayHeading } from './calendar-bits.j
 import { ApprovalMark, FilterChips, InlineApprovalButtons, PassRowButton, SuggestionRow, CalendarApprovalStyles } from './CalendarApprovalBits.jsx';
 import { buildDecideRequest, decideItems } from './post-editor-model.js';
 import { dayRows, filterRows, withOverride, approveRequest, unapproveRequest, isSuggestionRow, matchesFilter } from './calendar-row-model.js';
+import { baselineSlotStates, repliesReminder } from './baseline-slot-model.js';
 
 // MonthCalendarPanel — the Content Engine's month-to-month calendar over
 // social_posts.
@@ -164,9 +165,39 @@ function rowCategory(r, names) {
   return { key: `bucket-${id}`, label: names.get(r.bucketId) || (r.bucketId ? r.bucketId : 'No bucket'), color: r.bucketColor || null };
 }
 
+// The client's daily baseline slots (confirmed strategy doc) as muted ghost rows: awareness only, never clickable.
+// Filled / open comes from baseline-slot-model.js over EVERY row on the day (filters do not change it).
+function BaselineSlots({ day, baseline }) {
+  const slots = baselineSlotStates(baseline, dayRows(day));
+  const reminder = repliesReminder(baseline);
+  if (!slots.length && !reminder) return null;
+  const pad2 = (n) => String(n).padStart(2, '0');
+  return (
+    <section id="calendar-baseline-slots-panel" data-section="calendar-baseline-slots" className="xce-dv-group">
+      <h3 id="calendar-baseline-slots-header" className="xce-dv-group-head">
+        <span className="xce-dv-dot" aria-hidden="true" />
+        Daily baseline
+        {slots.length ? <span className="xce-dv-group-count">{pad2(slots.filter((x) => x.state === 'filled').length)}/{pad2(slots.length)}</span> : null}
+      </h3>
+      {slots.length ? (
+        <ul id="calendar-baseline-slots-list" className="xce-mc-rows">
+          {slots.map((x) => (
+            <li key={x.time} id={`calendar-baseline-slot-row-${x.time.replace(':', '')}`} data-slot-time={x.time} data-slot-state={x.state} className="xce-dv-slot">
+              <span className="xce-mc-row-time">{x.time}</span>
+              <span className="xce-dv-slot-text">{x.track}{x.note ? ` · ${x.note}` : ''}</span>
+              <span className="xce-dv-slot-state">{x.state === 'filled' ? 'Filled' : 'Open'}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {reminder ? <p id="calendar-baseline-replies-reminder" className="xce-dv-caps xce-dv-slot-reminder">{reminder}</p> : null}
+    </section>
+  );
+}
+
 // DAY LEVEL of the Calendar Stage: one day's items by category. No overlay, backdrop or blur of its own: the stage
 // owns the page and the top bar owns the title / close.
-function DayBody({ day, rows, legend, pendingOnly, renderRow, onTaskToggle, busyId, todayExtras }) {
+function DayBody({ day, rows, legend, pendingOnly, renderRow, onTaskToggle, busyId, todayExtras, baseline }) {
   const names = new Map((legend || []).map((b) => [b.id, b.name]));
   const groups = [];
   const byKey = new Map();
@@ -208,6 +239,7 @@ function DayBody({ day, rows, legend, pendingOnly, renderRow, onTaskToggle, busy
             {day.flags.map((f, i) => <li key={`${f.kind}-${i}`}>{f.message}</li>)}
           </ul>
         ) : null}
+        <BaselineSlots day={day} baseline={baseline} />
         {groups.map((g) => (
           <section key={g.key} id={`x-content-day-view-group-${g.key.replace(/[^a-z0-9-]/gi, '-')}`} className="xce-dv-group">
             <h3 className="xce-dv-group-head">
@@ -275,6 +307,12 @@ function DayBody({ day, rows, legend, pendingOnly, renderRow, onTaskToggle, busy
         #x-content-day-view-root .xce-dv-empty { margin: 0; padding: 8px 0; }
         #x-content-day-view-root .xce-dv-note { margin: 0; padding-top: 14px; border-top: 1px solid var(--t-border-faint); color: var(--t-text-disabled); }
         #x-content-day-view-root .xce-dv-today { padding-top: 18px; border-top: 1px solid var(--t-border-faint); }
+        #calendar-baseline-slots-panel .xce-dv-slot { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 36px; padding: 4px 0; border-bottom: 1px dashed var(--t-border-faint); color: var(--t-text-disabled); }
+        #calendar-baseline-slots-panel .xce-mc-row-time { color: var(--t-text-disabled); }
+        #calendar-baseline-slots-panel .xce-dv-slot-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+        #calendar-baseline-slots-panel .xce-dv-slot-state { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; }
+        #calendar-baseline-slots-panel .xce-dv-slot[data-slot-state="filled"] .xce-dv-slot-state { color: var(--t-text-secondary); }
+        #calendar-baseline-slots-panel .xce-dv-slot-reminder { margin: 0; padding-top: 6px; color: var(--t-text-disabled); }
         @media (prefers-reduced-motion: reduce) {
           #x-content-day-view-root .xce-mc-text-btn, #x-content-day-view-root .xce-mc-icon-btn { transition: none; }
         }
@@ -283,6 +321,7 @@ function DayBody({ day, rows, legend, pendingOnly, renderRow, onTaskToggle, busy
           #x-content-day-view-root .xce-dv-stats { justify-content: flex-start; }
           #x-content-day-view-summary-count-value { font-size: 44px; }
           #x-content-day-view-root .xce-mc-row-main, #x-content-day-view-root .xce-mc-row-main[data-bucket] { grid-template-columns: 40px 12px minmax(0, 1fr); }
+          #calendar-baseline-slots-panel .xce-dv-slot { grid-template-columns: 40px minmax(0, 1fr) auto; }
         }
         @media (max-width: 480px) {
           #x-content-day-view-root { max-width: none; padding: 8px var(--mobile-gutter, 8px); border-radius: 12px; }
@@ -431,6 +470,7 @@ function MonthCalendarPanelView({
             onTaskToggle={onTaskToggle}
             busyId={busyId}
             todayExtras={dayRowsNow.isToday && typeof renderTodayExtras === 'function' ? renderTodayExtras() : null}
+            baseline={calendar?.baselineSlots}
           />
         ) : null}
         {inlineNote ? <p id="x-content-day-view-inline-note" className="xce-ap-note" role="alert">{inlineNote}</p> : null}
