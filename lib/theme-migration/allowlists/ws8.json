@@ -10,14 +10,14 @@
     {
       "file": "app/oauth/authorize/page.jsx",
       "literal": "#0b0b0c",
-      "count": 3,
+      "count": 4,
       "reason": "OAuth consent screen is its own always-dark card (self-contained palette, identical in both modes, never themed); the literals are one coherent dark surface plus its light-on-dark text.",
       "exceptionId": "WS8-A"
     },
     {
       "file": "app/oauth/authorize/page.jsx",
       "literal": "#f2f2f0",
-      "count": 5,
+      "count": 6,
       "reason": "OAuth consent screen is its own always-dark card (self-contained palette, identical in both modes, never themed); the literals are one coherent dark surface plus its light-on-dark text.",
       "exceptionId": "WS8-A"
     },
@@ -38,21 +38,21 @@
     {
       "file": "app/oauth/authorize/page.jsx",
       "literal": "#3a3a40",
-      "count": 2,
+      "count": 3,
       "reason": "OAuth consent screen is its own always-dark card (self-contained palette, identical in both modes, never themed); the literals are one coherent dark surface plus its light-on-dark text.",
       "exceptionId": "WS8-A"
     },
     {
       "file": "app/oauth/authorize/page.jsx",
       "literal": "#a0a0a6",
-      "count": 4,
+      "count": 6,
       "reason": "OAuth consent screen is its own always-dark card (self-contained palette, identical in both modes, never themed); the literals are one coherent dark surface plus its light-on-dark text.",
       "exceptionId": "WS8-A"
     },
     {
       "file": "app/oauth/authorize/page.jsx",
       "literal": "#d98c8c",
-      "count": 2,
+      "count": 3,
       "reason": "OAuth consent screen is its own always-dark card (self-contained palette, identical in both modes, never themed); the literals are one coherent dark surface plus its light-on-dark text.",
       "exceptionId": "WS8-A"
     },

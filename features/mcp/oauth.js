@@ -12,6 +12,9 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
 export const SCOPE = 'hitloop';
+// Client-scoped connectors (features/client-mcp): read-only, one HITLOOP client per token. Codes, refresh tokens and
+// access tokens for it carry a `binding` {aud, scope, hcid, gid}; records without one are owner records (SCOPE, /api/mcp).
+export const CLIENT_SCOPE = 'client:read';
 export const ACCESS_TTL_SEC = 3600;
 export const REFRESH_TTL_SEC = 30 * 24 * 3600;
 export const CODE_TTL_SEC = 600;
@@ -60,10 +63,11 @@ const HEADER = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
 
 const hmac = (secret, data) => createHmac('sha256', secret).update(data).digest('base64url');
 
-export function signAccessToken({ secret, email, aud, scope = SCOPE, clientId = null, now, ttlSec = ACCESS_TTL_SEC, jti = randomToken(12) }) {
+export function signAccessToken({ secret, email, aud, scope = SCOPE, clientId = null, hcid = null, gid = null, now, ttlSec = ACCESS_TTL_SEC, jti = randomToken(12) }) {
   if (!secret) throw new OAuthError('server_error', 'signing secret is not configured', 503);
   const iat = Math.floor(now / 1000);
-  const claims = { sub: String(email).toLowerCase(), aud, scope, jti, iat, exp: iat + ttlSec, ...(clientId ? { cid: clientId } : {}) };
+  // cid = OAuth client id; hcid/gid = HITLOOP client id + connect grant id (client-scoped tokens only).
+  const claims = { sub: String(email).toLowerCase(), aud, scope, jti, iat, exp: iat + ttlSec, ...(clientId ? { cid: clientId } : {}), ...(hcid ? { hcid } : {}), ...(gid ? { gid } : {}) };
   const body = b64url(JSON.stringify(claims));
   return `${HEADER}.${body}.${hmac(secret, `${HEADER}.${body}`)}`;
 }
@@ -154,7 +158,7 @@ export const isVerifiedIdentity = (decoded) => decoded?.email_verified === true 
  * Validate the authorize query against the registered client. Throws OAuthError. The caller must NOT redirect to
  * redirect_uri when this throws for client_id / redirect_uri (those errors are shown to the user instead).
  */
-export async function checkAuthRequest(store, params, { extraHosts = [] } = {}) {
+export async function checkAuthRequest(store, params, { extraHosts = [], scope = SCOPE } = {}) {
   const client = typeof params?.client_id === 'string' && params.client_id ? await store.clients.get(params.client_id) : null;
   if (!client) throw new OAuthError('invalid_client', 'unknown client_id');
   if (!client.redirectUris.includes(params.redirect_uri)) throw new OAuthError('invalid_redirect_uri', 'redirect_uri is not registered for this client');
@@ -163,20 +167,24 @@ export async function checkAuthRequest(store, params, { extraHosts = [] } = {}) 
   if (params.response_type !== 'code') throw new OAuthError('unsupported_response_type', 'response_type must be "code"');
   if (params.code_challenge_method !== 'S256') throw new OAuthError('invalid_request', 'code_challenge_method must be S256');
   if (!isValidChallenge(params.code_challenge)) throw new OAuthError('invalid_request', 'code_challenge is missing or malformed');
-  if (params.scope && String(params.scope).split(/\s+/).some((s) => s && s !== SCOPE)) throw new OAuthError('invalid_scope', `only the "${SCOPE}" scope exists`);
+  if (params.scope && String(params.scope).split(/\s+/).some((s) => s && s !== scope)) throw new OAuthError('invalid_scope', `only the "${scope}" scope exists for this resource`);
   return { client };
 }
 
-/** After the admin allowed it: mint a single-use code bound to client, redirect_uri, challenge and admin email. */
-export async function issueAuthCode(store, { params, email, now, ttlSec = CODE_TTL_SEC, extraHosts = [] }) {
-  const { client } = await checkAuthRequest(store, params, { extraHosts });
+/**
+ * After the admin allowed it: mint a single-use code bound to client, redirect_uri, challenge and admin email.
+ * `binding` ({aud, scope, hcid, gid}) is set only for a client-scoped connect grant; the tokens inherit it.
+ */
+export async function issueAuthCode(store, { params, email, now, ttlSec = CODE_TTL_SEC, extraHosts = [], binding = null }) {
+  const { client } = await checkAuthRequest(store, params, { extraHosts, scope: binding?.scope || SCOPE });
   const code = randomToken(32);
   await store.codes.put(sha256hex(code), {
     clientId: client.clientId,
     redirectUri: params.redirect_uri,
     codeChallenge: params.code_challenge,
     email: String(email).toLowerCase(),
-    scope: SCOPE,
+    scope: binding?.scope || SCOPE,
+    ...(binding ? { aud: binding.aud, hcid: binding.hcid, gid: binding.gid } : {}),
     createdAt: now,
     expiresAt: now + ttlSec * 1000,
   });
@@ -191,20 +199,25 @@ export async function issueAuthCode(store, { params, email, now, ttlSec = CODE_T
 /** Short, non-reversible fingerprint of the signing secret: rotating MCP_OAUTH_SECRET invalidates every refresh token. */
 export const secretVersionOf = (secret) => sha256hex(String(secret ?? '')).slice(0, 16);
 
-async function mintTokens(store, { secret, aud, email, clientId, now, familyId = randomToken(12), familyExpiresAt = now + REFRESH_TTL_SEC * 1000 }) {
+/** The binding a code/refresh record carries, or null for an owner record (old records have none). */
+const bindingOf = (rec) => (rec?.hcid && rec?.gid && rec?.aud ? { aud: rec.aud, scope: rec.scope, hcid: rec.hcid, gid: rec.gid } : null);
+
+async function mintTokens(store, { secret, aud, email, clientId, now, familyId = randomToken(12), familyExpiresAt = now + REFRESH_TTL_SEC * 1000, binding = null }) {
   const refreshToken = randomToken(32);
+  const scope = binding ? binding.scope : SCOPE;
   await store.refresh.put(sha256hex(refreshToken), {
-    clientId, email, scope: SCOPE, createdAt: now,
+    clientId, email, scope, createdAt: now,
+    ...(binding ? { aud: binding.aud, hcid: binding.hcid, gid: binding.gid } : {}),
     // A rotated token never outlives its family: the family clock starts at first issue and is not extended.
     expiresAt: Math.min(now + REFRESH_TTL_SEC * 1000, familyExpiresAt),
     familyId, familyExpiresAt, secretVersion: secretVersionOf(secret), used: false,
   });
   return {
-    access_token: signAccessToken({ secret, email, aud, clientId, now }),
+    access_token: signAccessToken({ secret, email, aud: binding ? binding.aud : aud, scope, clientId, hcid: binding?.hcid, gid: binding?.gid, now }),
     token_type: 'Bearer',
     expires_in: ACCESS_TTL_SEC,
     refresh_token: refreshToken,
-    scope: SCOPE,
+    scope,
   };
 }
 
@@ -218,7 +231,7 @@ export async function exchangeCode(store, { code, clientId, redirectUri, codeVer
   if (rec.clientId !== clientId) throw new OAuthError('invalid_grant', 'authorization code was issued to another client');
   if (rec.redirectUri !== redirectUri) throw new OAuthError('invalid_grant', 'redirect_uri does not match the authorization request');
   if (!verifyPkceS256(codeVerifier, rec.codeChallenge)) throw new OAuthError('invalid_grant', 'PKCE verification failed');
-  return mintTokens(store, { secret, aud, email: rec.email, clientId, now });
+  return mintTokens(store, { secret, aud, email: rec.email, clientId, now, binding: bindingOf(rec) });
 }
 
 /**
@@ -241,7 +254,7 @@ export async function refreshGrant(store, { refreshToken, clientId, secret, aud,
   }
   if (now >= rec.expiresAt || now >= rec.familyExpiresAt) throw new OAuthError('invalid_grant', 'refresh token expired');
   if (rec.clientId !== clientId) throw new OAuthError('invalid_grant', 'refresh token was issued to another client');
-  return mintTokens(store, { secret, aud, email: rec.email, clientId, now, familyId: rec.familyId, familyExpiresAt: rec.familyExpiresAt });
+  return mintTokens(store, { secret, aud, email: rec.email, clientId, now, familyId: rec.familyId, familyExpiresAt: rec.familyExpiresAt, binding: bindingOf(rec) });
 }
 
 /** Dispatch a token request body (already parsed to a plain object). */
