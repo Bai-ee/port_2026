@@ -315,7 +315,7 @@ test('notices: record merges and reads back', async () => {
 test('settings: defaults, default timezone, patch merge, validation', async () => {
   const db = fresh();
   const d = await S.getSettings(db, 'c1');
-  assert.deepEqual(d, { timezone: 'America/Chicago', leadMinutes: 30, briefingEnabled: true, briefingHour: 8, quietHours: { enabled: true, start: 22, end: 7 }, notificationsPaused: false, notifyFailures: true, notifySuccessSummary: false });
+  assert.deepEqual(d, { timezone: 'America/Chicago', leadMinutes: 30, briefingEnabled: true, briefingHour: 8, quietHours: { enabled: true, start: 22, end: 7 }, notificationsPaused: false, notifyFailures: true, notifySuccessSummary: false, slotAlerts: true });
   assert.equal((await S.getSettings(db, 'c1', { defaultTimezone: 'Europe/Paris' })).timezone, 'Europe/Paris');
 
   const s = await S.saveSettings(db, 'c1', { timezone: 'Europe/London', leadMinutes: 45, quietHours: { start: 23 }, notificationsPaused: true }, { now: T0 });

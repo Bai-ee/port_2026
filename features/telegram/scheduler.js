@@ -4,6 +4,7 @@
 import { createBot } from './bot.js';
 import { checkBindingAccess } from './access.js';
 import { TERMINAL_STATUSES, inQuietHours, localParts, quietHoursEnd, toMs } from './handoff.js';
+import { dueSlotAlerts } from './slot-alerts.js';
 
 const HANDOFF_STATUSES = new Set(['draft', 'approved', 'awaiting_approval', 'scheduled', 'queued', 'manual']);
 const APPROVED_STATUSES = new Set(['approved', 'scheduled', 'queued']);
@@ -26,7 +27,7 @@ export async function runDispatch(ctx, { now: nowIn } = {}) {
   const bot = ctx.bot || createBot(c);
   const accessFn = typeof ctx.access === 'function' ? ctx.access : (ctx.access?.checkBindingAccess || checkBindingAccess);
   const check = (b) => accessFn(b, env);
-  const counts = { inbox: 0, handoffs: 0, briefings: 0, failures: 0, outbox: 0 };
+  const counts = { inbox: 0, handoffs: 0, briefings: 0, failures: 0, slots: 0, outbox: 0 };
 
   // (1) Inbox recovery: updates whose webhook processing died.
   for (const u of await store.listReclaimableUpdates(db, { now, limit: 20 })) {
@@ -61,6 +62,16 @@ export async function runDispatch(ctx, { now: nowIn } = {}) {
         if (await enq(`briefing:${clientId}:${local.dateKey}`, 'briefing', { kind: 'briefing', dateKey: local.dateKey })) counts.briefings += 1;
         await store.patchState(db, clientId, { lastBriefingDate: local.dateKey });
       }
+    }
+
+    // "Time to post" for each baseline slot with nothing on it (a slot with a post gets that post's handoff card).
+    if (settings.slotAlerts && typeof readModels.loadSlotDay === 'function') {
+      try {
+        const sd = await readModels.loadSlotDay(clientId, { now });
+        for (const a of dueSlotAlerts({ clientId, day: sd?.day, slots: sd?.slots, now, leadMinutes: settings.leadMinutes })) {
+          if (await enq(a.dedupKey, 'slot', { kind: 'slot', alert: a })) counts.slots += 1;
+        }
+      } catch { /* advisory */ }
     }
 
     // One notice per run (key = clientId/date/channel/version), so a same-day regenerate never re-notifies.
@@ -136,6 +147,10 @@ export async function runDispatch(ctx, { now: nowIn } = {}) {
       } else if (item.payload?.kind === 'suggestions') {
         const r = await bot.sendSuggestionsNotice(binding);
         if (r?.skipped) { await store.supersedeOutbox(db, item.id, { reason: 'no-open-suggestions', now }); continue; }
+        messageIds = r.messageIds;
+      } else if (item.payload?.kind === 'slot') {
+        const r = await bot.sendSlotAlert(binding, item.payload.alert);
+        if (r?.skipped) { await store.supersedeOutbox(db, item.id, { reason: r.skipped, now }); continue; }
         messageIds = r.messageIds;
       } else if (direct) {
         await bot.sendCreative(binding, item.payload.postId, { followup: true });

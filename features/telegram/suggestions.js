@@ -50,6 +50,7 @@ export function normalizeSuggestion(run, s) {
     promotion: p && (p.label || p.id || p.url) ? { id: p.id || null, label: str(p.label) || str(p.id) || null, url: str(p.url) || null } : null,
     media: mediaOf(s),
     needsStaging: needsStagingOf(s),
+    packageId: str(s.package?.id) || null,
     text: str(s.edit?.text) || str(s.draft?.text),
     selfReply: str(s.draft?.selfReply),
     why: str(s.why) || str(s.reason) || str(s.match?.reason),

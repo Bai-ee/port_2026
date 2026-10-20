@@ -46,7 +46,7 @@ export function groupQueue(rows) {
 export function createReadModels(deps = {}) {
   const {
     db, getBriefForClient, readSocialQueue, buildMonthCalendar = defaultBuildMonthCalendar,
-    readEngineConfig, getDigestConfig, getSocialPost, now, runStore, runVersion = LOOP_VERSION,
+    readEngineConfig, getDigestConfig, getSocialPost, now, runStore, runVersion = LOOP_VERSION, readSlotDay,
   } = deps;
 
   async function readQuoteTargets(clientId) {
@@ -170,5 +170,11 @@ export function createReadModels(deps = {}) {
     return rows.find((p) => p && String(p.id) === String(postId)) || null;
   }
 
-  return { loadBriefing, loadCalendar, loadDay, todaySuggestions, loadAccountHandle, loadPost };
+  /** Today's (CT) unified calendar day + the confirmed strategy doc's baseline slots: { day, slots } or null. */
+  async function loadSlotDay(clientId, { now: nowOverride } = {}) {
+    if (typeof readSlotDay !== 'function') return null;
+    return (await readSlotDay(clientId, { now: nowMsOf(nowOverride ?? now) })) || null;
+  }
+
+  return { loadBriefing, loadCalendar, loadDay, loadSlotDay, todaySuggestions, loadAccountHandle, loadPost };
 }
