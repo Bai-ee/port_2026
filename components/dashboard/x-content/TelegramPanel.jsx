@@ -315,6 +315,7 @@ export default function TelegramPanel({ getIdToken: getIdTokenProp, activeClient
 
             <div id="telegram-toggles-row" style={{ display: 'grid', gap: 2 }}>
               <label style={S.check}><input id="telegram-paused-checkbox" type="checkbox" checked={!!form.notificationsPaused} onChange={(e) => set({ notificationsPaused: e.target.checked })} /> Pause notifications</label>
+              <label style={S.check}><input id="telegram-slot-alerts-checkbox" type="checkbox" checked={!!form.slotAlerts} onChange={(e) => set({ slotAlerts: e.target.checked })} /> Time-to-post alerts (empty posting slots, with media)</label>
               <label style={S.check}><input id="telegram-notify-failures-checkbox" type="checkbox" checked={!!form.notifyFailures} onChange={(e) => set({ notifyFailures: e.target.checked })} /> Actionable failure alerts</label>
               <label style={S.check}><input id="telegram-notify-success-checkbox" type="checkbox" checked={!!form.notifySuccessSummary} onChange={(e) => set({ notifySuccessSummary: e.target.checked })} /> Grouped success summary</label>
             </div>

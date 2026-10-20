@@ -455,6 +455,7 @@ function defaultSettings(defaultTimezone) {
     notificationsPaused: false,
     notifyFailures: true,
     notifySuccessSummary: false,
+    slotAlerts: true,
   };
 }
 
@@ -487,7 +488,7 @@ export async function saveSettings(db, clientId, patch = {}, { now = Date.now() 
     if (!isHour(patch.briefingHour)) throw fail('invalid-settings', 'briefingHour must be 0-23');
     next.briefingHour = patch.briefingHour;
   }
-  for (const k of ['briefingEnabled', 'notificationsPaused', 'notifyFailures', 'notifySuccessSummary']) {
+  for (const k of ['briefingEnabled', 'notificationsPaused', 'notifyFailures', 'notifySuccessSummary', 'slotAlerts']) {
     if (k in patch) {
       if (typeof patch[k] !== 'boolean') throw fail('invalid-settings', `${k} must be a boolean`);
       next[k] = patch[k];

@@ -21,7 +21,8 @@ import {
   createDraftPostOnce, getSocialPost, readSocialQueue, updateSocialPost, swapPostMedia, approveAndSchedule, rejectDraft,
   claimManualDelivery, recordManualPosted, releaseManualClaim, approveAndPostNow,
 } from '../social-posting/twitter-service.js';
-import { buildMonthCalendar } from '../x-content-inventory/month-calendar.js';
+import { buildMonthCalendar, ctDate } from '../x-content-inventory/month-calendar.js';
+import { readUnifiedCalendar } from '../x-content-inventory/calendar-reader.js';
 import { resolveCalendarEngineConfig } from '../content-context/load-content-context.js';
 import { createFirestorePlanStore } from '../x-strategy/plan-store.js';
 import { upsertPackage, packageGetterFor, readInventory } from '../x-content-inventory/store.js';
@@ -151,6 +152,12 @@ export function createTelegramRuntime({ env = process.env, db = fb.adminDb, tran
       const ref = pickMediaRef(pkg);
       return ref ? mediaFromRef(ref.ref, null, ref.kind) : null;
     },
+    // The library thumbnail of a NAS item (content-thumbs/...), as a preview photo before the original is staged.
+    thumbMedia: async (packageId, clientId) => {
+      const pkg = await packageGetterFor(clientId)(packageId);
+      const url = pkg?.thumbRef ? await mediaSigners().hitloopUrl(pkg.thumbRef).catch(() => null) : null;
+      return url ? { type: 'photo', url } : null;
+    },
     currentMedia: (post) => mediaFromRef(post.mediaStoragePath, post.mediaUrl, post.mediaType || (String(post.mediaContentType || '').startsWith('video/') ? 'video' : undefined)),
     useHires: ({ postId, candidateId, notify, clientId }) => useHiresMedia({
       getPost: (id) => getSocialPost(clientId, id),
@@ -211,6 +218,11 @@ export function createTelegramRuntime({ env = process.env, db = fb.adminDb, tran
     getDigestConfig: (clientId) => digestConfig.getDigestConfig(clientId),
     getSocialPost,
     runStore: { read: async (key) => withMediaUrls(await runStore.read(key)) },
+    readSlotDay: async (clientId, { now: at }) => {
+      const today = ctDate(at);
+      const r = await readUnifiedCalendar(db, clientId, { from: today, to: today, now: at });
+      return { day: r.days?.[0] || null, slots: r.baselineSlots?.slots || [] };
+    },
     now,
   });
 

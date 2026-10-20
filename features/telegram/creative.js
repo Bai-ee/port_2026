@@ -38,7 +38,8 @@ export async function resolveCreativeMedia(deps, post, { clientId = post?.client
   if (post?.mediaUrl || post?.mediaStoragePath) cur = (await deps.currentMedia?.(post, clientId).catch(() => null)) || null;
   let found = null;
   if (post?.packageId && deps.findHires) found = await deps.findHires(post.id, clientId).catch(() => null);
-  const cands = found?.ok && found.target?.isThumbnail ? (found.candidates || []) : [];
+  // A thumbnail post looks for a larger copy; a NAS draft with no media at all needs its own original off the drive.
+  const cands = found?.ok && (found.target?.isThumbnail || !cur) ? (found.candidates || []) : [];
   let notice = null;
   if (cands.length) {
     const staged = cands.find((c) => c.staged);

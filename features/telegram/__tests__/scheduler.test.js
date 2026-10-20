@@ -108,7 +108,7 @@ test('post turned terminal before the deferred send is superseded too', async ()
 test('notifications paused: nothing enqueued or sent, posts untouched', async () => {
   const h = await setup({ settings: { notificationsPaused: true } });
   const c = await h.run();
-  assert.deepEqual(c, { inbox: 0, handoffs: 0, briefings: 0, failures: 0, outbox: 0 });
+  assert.deepEqual(c, { inbox: 0, handoffs: 0, briefings: 0, failures: 0, slots: 0, outbox: 0 });
   assert.equal(h.sent().length, 0);
   assert.equal(outboxDocs(h).length, 0);
   assert.deepEqual(h.services.writes, []);

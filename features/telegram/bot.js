@@ -9,6 +9,7 @@ import {
   MAX_POST_CHARS, buildHandoffBundle, escapeHtml, localTime, localParts, parseLocalTime, tomorrowSameTime, toMs, TERMINAL_STATUSES,
 } from './handoff.js';
 import { hasPlaceholder, selfReplyText, creativeFilename, resolveCreativeMedia, TELEGRAM_URL_FETCH_MAX_BYTES } from './creative.js';
+import { SLOT_COVER_MS, quotePickFor, slotAlertHtml, slotCovered, suggestionFor } from './slot-alerts.js';
 
 export const MENU_LABELS = Object.freeze({
   happening: "What's happening?", today: "Today's posts", calendar: 'Calendar', upload: 'Upload content', settings: 'Settings',
@@ -76,6 +77,13 @@ export function createBot(ctx) {
       await say(chatId, `Download media: ${media.url}`);
     }
   }
+  // A NAS item with no staged file yet: its library thumbnail as a preview (the original comes on an explicit tap).
+  async function sendNasPreview(chatId, packageId, clientId, caption) {
+    if (!packageId || typeof services.creative?.thumbMedia !== 'function') return false;
+    const thumb = await services.creative.thumbMedia(packageId, clientId).catch(() => null);
+    if (!thumb?.url) return false;
+    try { await transport.sendPhoto(chatId, thumb.url, { caption }); return true; } catch { return false; }
+  }
   // Exact copy, separate message, NO parse mode (so it is copy-pasteable verbatim).
   const sendCopy = (chatId, post) => say(chatId, String(post.content ?? ''), { disablePreview: true });
   async function sendTakeover(chatId, post) {
@@ -98,7 +106,8 @@ export function createBot(ctx) {
     const settings = await store.getSettings(db, binding.clientId);
     const handle = await readModels.loadAccountHandle(binding.clientId).catch(() => null);
     const bundle = buildHandoffBundle({ post, handle, tz: settings.timezone, now: nowMs(), mode, targetAt, headline });
-    if (withMedia) await sendMedia(chatId, bundle.media);
+    if (withMedia && bundle.media) await sendMedia(chatId, bundle.media);
+    else if (withMedia) await sendNasPreview(chatId, post.packageId, binding.clientId, `Preview. The original is on the NAS: tap ${CREATIVE_LABEL} to get it.`);
     const ticketIds = []; const buttons = [];
     for (const a of bundle.actions) {
       const ticket = await mkTicket(binding, { postId: post.id, revision: post.revision ?? 0, action: a.action, params: a.params || {} });
@@ -200,6 +209,8 @@ export function createBot(ctx) {
         if (bundle.media.type === 'video') await transport.sendVideo(chatId, bundle.media.url, {});
         else await transport.sendPhoto(chatId, bundle.media.url, {});
       } catch { await say(chatId, `Open media: ${bundle.media.url}`); }
+    } else if (s.needsStaging) {
+      await sendNasPreview(chatId, s.packageId, binding.clientId, 'Preview from the NAS library.');
     }
     if (bundle.copyText) await say(chatId, bundle.copyText, { disablePreview: true }); // exact copy, no parse mode
     const params = { runKey, suggestionId: s.id, rev: s.rev };
@@ -208,6 +219,28 @@ export function createBot(ctx) {
     else buttons.push({ text: 'Save draft', ticket: await mkTicket(binding, { action: 'suggestion', params: { op: 'save', ...params } }) });
     buttons.push({ text: 'Dismiss', ticket: await mkTicket(binding, { action: 'suggestion', params: { op: 'dismiss', ...params } }) });
     return sayHtml(chatId, bundle.metaHtml, { replyMarkup: keyboard([buttons.map((b) => b)]) });
+  }
+
+  // ── Slot alerts ────────────────────────────────────────────────────────────
+  // Re-checked at send time: a post placed on the slot since it was queued (or a slot long past) drops the alert.
+  async function sendSlotAlert(binding, alert) {
+    const now = nowMs();
+    const at = Date.parse(alert?.at);
+    if (!Number.isFinite(at) || at + SLOT_COVER_MS < now) return { skipped: 'slot-passed', messageIds: [] };
+    const sd = typeof readModels.loadSlotDay === 'function' ? await readModels.loadSlotDay(binding.clientId, { now }).catch(() => null) : null;
+    if (sd?.day && slotCovered(sd.day, at)) return { skipped: 'slot-filled', messageIds: [] };
+    const slot = { time: alert.time, track: alert.track, trackId: alert.trackId };
+    const pick = alert.quote ? quotePickFor(sd?.day, slot) : null;
+    let suggestion = null; let runKey = null;
+    if (!alert.quote) {
+      const sugg = await loadSuggestions(binding.clientId);
+      suggestion = sugg.runKey ? suggestionFor(sugg.suggestions, slot) : null;
+      runKey = sugg.runKey;
+    }
+    // A quote pick keeps the link preview on, so the original post (and its media) shows in the chat.
+    const sent = await sayHtml(binding.chatId, slotAlertHtml(alert, { pick, suggestion }), pick ? { disablePreview: false } : {});
+    if (suggestion) await sendSuggestionCard(binding, runKey, suggestion);
+    return { messageIds: sent?.message_id != null ? [sent.message_id] : [] };
   }
 
   async function sendSuggestionsNotice(binding) {
@@ -330,6 +363,7 @@ export function createBot(ctx) {
       `Lead time: ${s.leadMinutes} min before a post`,
       `Daily briefing: ${s.briefingEnabled ? `on at ${s.briefingHour}:00` : 'off'}`,
       `Quiet hours: ${s.quietHours?.enabled ? `${s.quietHours.start}:00 to ${s.quietHours.end}:00` : 'off'}`,
+      `Slot alerts: ${s.slotAlerts ? 'on (a nudge before each empty posting slot)' : 'off'}`,
       `Notifications: ${s.notificationsPaused ? 'PAUSED (publishing is not paused)' : 'on'}`,
       'Full settings (timezone, quiet hours, alerts) are in HITLOOP.',
     ].join('\n');
@@ -337,6 +371,7 @@ export function createBot(ctx) {
     const buttons = [
       { text: s.notificationsPaused ? 'Resume notifications' : 'Pause notifications', ticket: await t('notificationsPaused') },
       { text: s.briefingEnabled ? 'Briefing off' : 'Briefing on', ticket: await t('briefingEnabled') },
+      { text: s.slotAlerts ? 'Slot alerts off' : 'Slot alerts on', ticket: await t('slotAlerts') },
       { text: `Lead time: ${s.leadMinutes} min (change)`, ticket: await t('leadMinutes') },
     ];
     await sayHtml(binding.chatId, text, { replyMarkup: keyboard(buttons.map((b) => [b])) });
@@ -347,6 +382,7 @@ export function createBot(ctx) {
     let patch;
     if (key === 'notificationsPaused') patch = { notificationsPaused: !s.notificationsPaused };
     else if (key === 'briefingEnabled') patch = { briefingEnabled: !s.briefingEnabled };
+    else if (key === 'slotAlerts') patch = { slotAlerts: !s.slotAlerts };
     else if (key === 'leadMinutes') patch = { leadMinutes: LEAD_CYCLE[(LEAD_CYCLE.indexOf(s.leadMinutes) + 1) % LEAD_CYCLE.length] };
     else return null;
     await store.saveSettings(db, binding.clientId, patch, { now: nowMs() });
@@ -663,5 +699,5 @@ export function createBot(ctx) {
     return undefined;
   }
 
-  return { handleUpdate, handleMessage, handleCallback, sendCard, sendCreative, sendSuggestionsNotice, showHappening, sendMedia, sendTakeover, retirePostCards };
+  return { handleUpdate, handleMessage, handleCallback, sendCard, sendCreative, sendSuggestionsNotice, sendSlotAlert, showHappening, sendMedia, sendTakeover, retirePostCards };
 }
