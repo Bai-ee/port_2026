@@ -201,7 +201,8 @@ test('trackRules (daily mix): one BAI-EE video a day from the Dj Mix Videos buck
     rv('rv-used', 'BAI-EE', '2026-10-14T06:03:00Z'),
   ];
   const lastUsed = new Map([['rv-used', '2026-08-01']]);
-  const p = planDailyFill({ tracks, packages, lastUsed, from: TODAY, days: 4, today: TODAY, include: ['baseline'], trackRules: { ue: DAILY_MIX_RULE } });
+  // sameDay off here so the window shows the full ordering; the sameDay behaviour has its own tests below.
+  const p = planDailyFill({ tracks, packages, lastUsed, from: TODAY, days: 4, today: TODAY, include: ['baseline'], trackRules: { ue: { ...DAILY_MIX_RULE, sameDay: false } } });
   const ue = p.rows.filter((r) => r.trackId === 'ue');
   // Exactly one a day (the rule replaces the engine target), BAI-EE only, never retired or a still.
   assert.deepEqual(ue.map((r) => r.date), ['2026-10-17', '2026-10-18', '2026-10-19', '2026-10-20']);
@@ -220,8 +221,32 @@ test('trackRules: two renders of the same mix never fill two days of one window'
   const { DAILY_MIX_RULE } = await import('../daily-mix-rule.js');
   const rv = (id, title, renderedAt) => pkg(id, 'ue', { ...ready, entities: ['BAI-EE'], title, renderedAt });
   const packages = [rv('rv-1', "BAI-EE – Live @ Viva Acid '24", '2026-10-03'), rv('rv-2', "BAI-EE – Live @ Viva Acid '24", '2026-10-02'), rv('rv-3', 'BAI-EE – Music Mix', '2026-10-01')];
-  const p = planDailyFill({ tracks, packages, from: TODAY, days: 3, today: TODAY, include: ['baseline'], trackRules: { ue: DAILY_MIX_RULE } });
+  const p = planDailyFill({ tracks, packages, from: TODAY, days: 3, today: TODAY, include: ['baseline'], trackRules: { ue: { ...DAILY_MIX_RULE, sameDay: false } } });
   assert.deepEqual(p.rows.filter((r) => r.trackId === 'ue').map((r) => r.packageId), ['rv-1', 'rv-3']);
+});
+
+test('sameDay rule (daily mix): today only; the morning render lands today even when an older or rejected draft holds it', async () => {
+  const { DAILY_MIX_RULE } = await import('../daily-mix-rule.js');
+  assert.equal(DAILY_MIX_RULE.sameDay, true);
+  const rv = (id, renderedAt) => pkg(id, 'ue', { ...ready, entities: ['BAI-EE'], title: id, renderedAt });
+  const packages = [rv('rv-old', '2026-09-01T06:03:00Z'), rv('rv-mid', '2026-10-10T06:03:00Z'), rv('rv-today', '2026-10-17T06:03:00Z')];
+  const fill = (packageId, reviewOn, status = 'draft') => ({ postId: `p-${packageId}`, status, reviewOn, fillKind: 'baseline', bucketId: 'ue', packageId });
+  const run = (extra = {}) => planDailyFill({ tracks, packages, from: TODAY, days: 7, today: TODAY, include: ['baseline'], trackRules: { ue: DAILY_MIX_RULE }, ...extra }).rows.filter((r) => r.trackId === 'ue');
+  // A 7-day window plans the ue track for today only, newest render first.
+  assert.deepEqual(run().map((r) => [r.date, r.packageId]), [[TODAY, 'rv-today']]);
+  // A window that starts tomorrow plans nothing for ue (no pre-fill days ahead).
+  assert.deepEqual(run({ from: '2026-10-18' }), []);
+  // Today held by an OLDER render's draft (yesterday's pre-fill): today's render still gets its own draft.
+  assert.deepEqual(run({ fillPosts: [fill('rv-mid', TODAY)], openPosts: new Set(['rv-mid']) }).map((r) => r.packageId), ['rv-today']);
+  // Today held by a REJECTED older draft: same, the rejection does not block the new render.
+  assert.deepEqual(run({ fillPosts: [fill('rv-old', TODAY, 'rejected')], openPosts: new Set() }).map((r) => r.packageId), ['rv-today']);
+  // Today held by the newest render already: a rerun adds nothing (no duplicate from the next-newest).
+  assert.deepEqual(run({ fillPosts: [fill('rv-today', TODAY)], openPosts: new Set(['rv-today']) }), []);
+  // Today held by an older draft AND the newest render already used before: nothing (only a NEW render overrides).
+  assert.deepEqual(run({ fillPosts: [fill('rv-mid', TODAY)], openPosts: new Set(['rv-mid']), lastUsed: new Map([['rv-today', '2026-10-01']]) }), []);
+  // Other tracks keep the full window.
+  const all = planDailyFill({ tracks, packages: [...packages, ...PACKAGES], from: TODAY, days: 3, today: TODAY, include: ['baseline'], trackRules: { ue: DAILY_MIX_RULE } });
+  assert.ok(all.rows.some((r) => r.trackId === 'record' && r.date === '2026-10-19'));
 });
 
 test('excludePackageIds: an excluded package is never picked; spec carries it only when given', () => {
