@@ -112,8 +112,8 @@ test('round cap forces a final text answer', async () => {
   const { agent, callModel } = mk(() => toolResp(tu(`x${Math.random()}`, 'get_plan', {})));
   const r = await turn(agent);
   assert.equal(r.stopped, 'round-cap');
-  assert.equal(r.rounds, 4);
-  assert.equal(callModel.calls.length, 5);
+  assert.equal(r.rounds, 10);
+  assert.equal(callModel.calls.length, 11);
   assert.ok(r.text.length > 0);
   const finalMsg = callModel.calls.at(-1).messages.at(-1).content;
   assert.ok(finalMsg.some((b) => b.type === 'text' && /Tool limit/.test(b.text)));

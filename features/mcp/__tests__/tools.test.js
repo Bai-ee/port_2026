@@ -61,7 +61,7 @@ test('registry: the full promised catalogue exists, and nothing can post, schedu
     'list_repo_path', 'read_repo_file', 'search_repo', 'recent_commits', 'request_strategy_refresh', 'request_quote_scan', 'quote_scan_status', 'regenerate_today_suggestions',
     'nas_status', 'nas_browse', 'nas_estimate', 'request_sync', 'get_hitloop_guide']) assert.ok(names.includes(n), n);
   assert.ok(!names.includes('confirm_sync'), 'there is no confirm tool: only the owner\'s click in HITLOOP runs a paid sync');
-  assert.equal(registry.length, 78); // 50 strategy (incl. get_item) + guide + 7 data + 4 repo + 9 sync (incl. request_quote_scan, quote_scan_status) + 2 playbook + 5 chat/actions (confirm_sync removed)
+  assert.equal(registry.length, 81); // 53 strategy (incl. get_item) + guide + 7 data + 4 repo + 9 sync (incl. request_quote_scan, quote_scan_status) + 2 playbook + 5 chat/actions (confirm_sync removed)
   for (const n of names) assert.doesNotMatch(n, /^(strategy_)?(post|publish|schedule|approve|delete|remove|send|tweet|reply|follow|unfollow|email|telegram|write|update|set)_/, n);
   const kinds = registry.find((t) => t.name === 'request_sync').inputSchema.properties.kind.enum;
   assert.deepEqual([...kinds].sort(), ['nas_analyze', 'strategy_review', 'x_monitor_sync']); // market_signals_refresh removed (paid X reads)

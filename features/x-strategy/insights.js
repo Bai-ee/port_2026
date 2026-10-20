@@ -149,7 +149,7 @@ export function summarizeAudience({ account = null, snapshots = [], events = [],
     followerTrend: snaps.length >= 2 ? { from: { date: first.date, followers: first.followers }, to: { date: last.date, followers: last.followers }, change: last.followers - first.followers } : null,
     snapshots: snaps.length,
     audienceEvents: { gained, lost, total: events.length },
-    impressions: { window: { days, posts: recent.length, withImpressions: imps.length }, median: median(imps), top },
+    impressions: { source: 'x-monitor', asOf: Number.isFinite(Number(account.sync?.postsAt)) ? new Date(Number(account.sync.postsAt)).toISOString() : null, window: { days, posts: recent.length, withImpressions: imps.length }, median: median(imps), top, note: 'As of the last X Monitor sync; recent posts keep gaining views after it. For views in the last days use get_recent_posts.' },
     lastSync: syncedAt ? new Date(syncedAt).toISOString() : null,
     caveats: [
       ...(snaps.length < 2 ? ['Fewer than two follower snapshots: no follower trend yet. Snapshots only come from a manual X Monitor sync (metered).'] : []),

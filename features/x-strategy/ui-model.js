@@ -399,6 +399,7 @@ const PROPOSAL_KIND_LABELS = Object.freeze({
   'memory-suggest': 'Suggested memory lines',
   'media-tasks': 'Add "to film" reminders',
   'calendar-decide': 'Clean up the calendar',
+  'self-reply': 'Reply under your own post',
 });
 
 /** Plain-words label for a proposal kind. Unknown kinds fall back to a readable form, never throw. */
@@ -569,6 +570,7 @@ export function proposalPayloadPreview(kind, payload, currentPlan) {
     case 'queue-bulk': return queueBulkPreview(p);
     case 'bucket-edit': return bucketEditPreview(p);
     case 'calendar-decide': return calendarDecidePreview(p);
+    case 'self-reply': return [`Under: ${showVal(p.tweetUrl)}`, `Reply: ${showVal(p.text)}`, `Carries: ${showVal(p.itemTitle ?? p.itemId)}${p.mediaKind ? ` (${p.mediaKind})` : ''}`, 'Creates a DRAFT reply only: nothing is approved, scheduled or posted.'];
     case 'action': return Array.isArray(p.warningLines) && p.warningLines.length ? p.warningLines : [String(p.warning || p.title || 'Run an action')];
     case 'memory-suggest': return [
       `${(p.rows || []).length} draft${(p.rows || []).length === 1 ? '' : 's'} still need your memory line. These are SUGGESTIONS: edit or skip each one below.`,
@@ -614,6 +616,7 @@ const RESULT_LINES = {
   refresh: (r) => (r?.clientAction === 'marketing-refresh' ? 'Running in Refresh panel' : 'Refresh requested.'),
   'queue-bulk': (r) => `${r?.done ?? 0} post${r?.done === 1 ? '' : 's'} updated${r?.failed ? `, ${r.failed} could not be (${(r.results || []).slice(0, 2).map((x) => x.reason).filter(Boolean).join('; ')})` : ''}.`,
   'calendar-decide': (r) => `${r?.done ?? 0} calendar item${r?.done === 1 ? '' : 's'} cleaned up${r?.failed ? `, ${r.failed} could not be (${(r.results || []).slice(0, 2).map((x) => x.reason).filter(Boolean).join('; ')})` : ''}.`,
+  'self-reply': (r) => (r?.existing ? 'That reply draft already exists - find it in the Queue.' : 'Reply draft created - find it in the Queue.'),
   'bucket-edit': (r) => (r?.op === 'delete' ? 'Bucket deleted.' : r?.created ? 'Bucket added.' : 'Bucket saved.'),
   'memory-suggest': (r) => `${r?.updated ?? 0} draft${r?.updated === 1 ? '' : 's'} updated${r?.skipped ? `, ${r.skipped} skipped` : ''}${r?.failed ? `, ${r.failed} could not be (${(r.results || []).slice(0, 2).map((x) => x.reason).filter(Boolean).join('; ')})` : ''}. They still need your approval.`,
   'media-tasks': (r) => `${r?.created ?? 0} reminder${r?.created === 1 ? '' : 's'} added to the calendar${r?.existing ? `, ${r.existing} already there` : ''}.`,

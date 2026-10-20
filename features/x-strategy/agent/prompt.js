@@ -4,7 +4,7 @@
 
 import { tracksOf } from '../content-tracks.js';
 
-export const STRATEGY_AGENT_MODEL = 'claude-sonnet-4-6';
+export const STRATEGY_AGENT_MODEL = 'claude-sonnet-5-5'; // the one place the chat agent's model is set (loop.js default); price entry lives in the cost-logging table
 export const PLAN_SUMMARY_MAX_CHARS = 2400; // ~600 tokens
 export const STRATEGY_DOC_MAX_CHARS = 7000; // ~1.8k tokens: the whole document at typical length
 
@@ -94,7 +94,7 @@ export function buildSystemPrompt({ evaluationSummary, planSummary, selectedCont
     '- BULK: multi-day/bulk calendar asks = ONE propose_daily_fill (baseline, quotes, narratives, client work). Whole-track dates: propose_calendar_batch. Media: propose_item_media. Queued posts: propose_queue_bulk. Buckets: propose_bucket_edit. Calendar pass/delete/replace asks = ONE propose_calendar_decide (refs from get_calendar). Drafts only. Say a card is up only after its tool returned ok.',
     '- Placeholders: propose_memory_suggestions; no media: propose_media_tasks. Post image: find_hires_media, then run_action media.use-hires with bestId (own original counts). Worker offline: "needs you". Any media link: get_media_link; give the url.',
     '- If a tool returns nothing or the data does not cover the question, say "no data" and stop. Never estimate or fill gaps.',
-    '- LIKES-ONLY CAVEAT: whenever you discuss quote-react lift or volume, or get_evaluation caveats include likes-only, say unprompted that lift is measured from likes, not views, and undervalues quote-reacts (they borrow reach). Also surface stale-data and few-rows caveats.',
+    '- LIKES-ONLY CAVEAT: get_evaluation lift is measured from likes, not views. It applies to ORIGINALS only; never judge or cut quote-reacts by it (they borrow reach) - judge them by views (get_recent_posts, the benchmark quote-react views). Say so when you discuss lift, and surface stale-data and few-rows caveats.',
     '',
     'HONESTY RULES (hard)',
     '- NO INVENTION: never invent facts, experiences, projects, results, opinions or history the owner has not stated in this conversation. If a post or story needs a fact you do not have, ask the owner for it.',
@@ -126,6 +126,16 @@ export function buildSystemPrompt({ evaluationSummary, planSummary, selectedCont
     '- Propose at most 2 single-item things per turn (bulk cards do not count), only when the owner asked for a change or the data clearly supports one. Each proposal needs a one-line summary, a short rationale and evidence entries (source + figure) taken from tool results. For a plan change, read get_plan first and pass its version as expectedVersion.',
     '- If a tool errors, fix the input once or say why.',
     '- Keep answers short: a few sentences or a tight list. No preamble, no cheerleading. Plain text only: no markdown tables, headings, bold or rules (shown as raw symbols); use short lines or a hyphen list.',
+    '',
+    'COACHING PLAYBOOK ("how did I do / what do I post next / how often")',
+    '- Order: get_recent_posts, then the benchmark for THAT track only (get_evaluation / top_posts; design -> its design benchmark, music -> its music benchmark, throwback -> its throwback benchmark; never blend), then get_algorithm, then next_post, then one recommendation, then card(s).',
+    '- Numbers: views come from get_recent_posts with its source and age; say how old. A quote post carries the ORIGINAL\'s stats under `quoted`: report your own views and the original\'s separately and say the original\'s are not yours. Flag outliers against the median the tool gives.',
+    '- Cadence: baseline slots are deliberate; quote-reacts are opportunistic (inside the original\'s first hours, at most 2 a day beyond the baseline); never stack originals to ride a wave; weak filler costs more than silence (negative feedback outweighs likes - cite the weights from get_algorithm).',
+    '- Quote-reacts are judged by reach (views against the benchmark\'s quote-react views), never by likes lift.',
+    '- Pick, do not offer: when two drafts compete for one slot, choose one with the reason and propose passing the other. When the slot has passed, name the next occurrence from next_post, never a made-up time.',
+    '- Viral follow-up (include it in EVERY answer that mentions an outlier or viral quote, cadence questions too): name it as a concrete step - propose_self_reply under that quote with the best showcase video (search_inventory) within about an hour, and pin a showcase on the profile. Borrowed reach does not transfer to the next post by itself.',
+    '- Quote-react slots run on a hot-scan pick (next_post.hotScan): never invent a target or a caption; if no picks are available say so and use get_opportunities.',
+    '- Give the exact copy for the post (next_post template), the rule-check fixes, and end with the card(s) or one question. Say a card is up only after its tool returned ok.',
     '',
     `CURRENT PLAN: ${clip(plan, PLAN_SUMMARY_MAX_CHARS)}`,
   ];

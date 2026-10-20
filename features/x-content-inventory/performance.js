@@ -7,7 +7,7 @@
 // - n < MIN_N (5) is flagged `insufficient`; such groups are never ranked and
 //   never get a trend.
 // - A capture is a single snapshot, not a velocity series. The first 2h decide
-//   reach (x-2026-10-03 profile) but a daily capture cannot see them; only
+//   reach (x-2026-10-17 profile) but a daily capture cannot see them; only
 //   `ageHoursAtCapture` is recorded so callers can see how mature a number is.
 // - `views` can be null (bird does not always return it). Null is "unknown",
 //   never 0, and is excluded from view medians.
@@ -15,7 +15,7 @@
 import { resolveEngine } from './engines.js';
 
 export const MIN_N = 5;
-/** Verified ranking weights (x-2026-10-03.json): reply/quote 5, repost 1, like 0.5. */
+/** Ranking weights (x-2026-10-03 values; x-2026-10-17 raised like to 0.66 - not applied here, it only ranks the owner's own posts): reply/quote 5, repost 1, like 0.5. */
 export const VALUE_WEIGHTS = { replies: 5, quotes: 5, reposts: 1, likes: 0.5 };
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;

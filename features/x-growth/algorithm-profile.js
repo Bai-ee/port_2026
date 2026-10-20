@@ -1,7 +1,7 @@
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 
-const ACTIVE_PROFILE_ID = 'x-2026-10-03';
+const ACTIVE_PROFILE_ID = 'x-2026-10-17';
 
 let _cached = null;
 

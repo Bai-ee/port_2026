@@ -321,6 +321,20 @@ export function validateProposal(raw, { currentPlan, registry } = {}) {
       if (Array.isArray(payload.rows)) norm.rows = clone(payload.rows).slice(0, BULK_LIMITS.queueBulkMax);
       break;
     }
+    // One reply DRAFT under the owner's own post with a library item's media. Draft only; the executor re-checks everything.
+    case 'self-reply': {
+      const m = /^https:\/\/x\.com\/(\w{1,15})\/status\/(\d{5,25})$/.exec(str(payload.tweetUrl, 300));
+      if (!m) errors.push('tweetUrl must be an https://x.com/<handle>/status/<id> url');
+      const text = str(payload.text, POST_TEXT_MAX + 1);
+      if (!text) errors.push('text is required');
+      else if (text.length > POST_TEXT_MAX) errors.push(`text must be at most ${POST_TEXT_MAX} characters`);
+      const itemId = str(payload.itemId, 160);
+      if (!itemId) errors.push('itemId is required');
+      norm = { tweetUrl: m ? `https://x.com/${m[1]}/status/${m[2]}` : '', tweetId: m ? m[2] : '', ownerHandle: m ? m[1] : '', text, itemId };
+      if (typeof payload.itemTitle === 'string') norm.itemTitle = payload.itemTitle.slice(0, 120);
+      if (typeof payload.mediaKind === 'string') norm.mediaKind = payload.mediaKind.slice(0, 10);
+      break;
+    }
     // Calendar cleanup: pass | delete | replace per item (x-content-inventory/calendar-decide.js). No X call. `title`/`date` = display only.
     case 'calendar-decide': {
       const list = Array.isArray(payload.items) ? payload.items : [];
@@ -459,6 +473,7 @@ export function compactResult(res) {
  * @param {(a:{clientId:string, spec:object, proposalId?:string})=>Promise<object>} [deps.runDailyFill]  daily-fill executor (execute=true: creates drafts only)
  * @param {(clientId:string, postId:string, o:{reviewedBy:string, expectedRevision?:number})=>Promise<object>} [deps.rejectPost]  existing rejectDraft (queue-bulk delete-draft; default: lazy import)
  * @param {(clientId:string, postId:string, patch:{reviewOn:string})=>Promise<boolean>} [deps.placeDraft]  sets an unscheduled draft's review day (queue-bulk set-review-date)
+ * @param {(a:{clientId:string, payload:object})=>Promise<{ok:boolean, postId?:string, existing?:boolean, error?:string}>} [deps.runSelfReply]  creates the self-reply DRAFT (route-handlers: ensureDraft + the item's media)
  * @param {(a:{clientId:string, items:{decision:string,item:object}[], proposalId?:string})=>Promise<{ok:boolean,results:object[]}>} [deps.decideCalendarItems]  calendar pass/delete/replace per item (calendar-decide.js); never throws for one item
  * @param {(clientId:string, bucket:object)=>Promise<object>} [deps.upsertBucket]  bucket-store upsertBucket
  * @param {(clientId:string, bucketId:string, o:{reassignTo?:string})=>Promise<object>} [deps.deleteBucket]  bucket-store deleteBucket
@@ -466,7 +481,7 @@ export function compactResult(res) {
  * @param {(clientId:string)=>Promise<object>} [deps.syncTracks]  re-sync content tracks after a bucket change
  * @param {(a:{clientId:string, kind:string, params:object, by:string, auth:object, context:object})=>Promise<object>} [deps.runPaidSync]  features/mcp/paid-syncs.js executor (daily cap enforced inside)
  */
-export function buildExecutors({ planStore, runDailyAction, runUpdateItemFacets, saveXGrowthProfile, refreshHandles, docStore, docBase, readPost, editPost, approvePost, approveAndSchedulePost, runPaidSync, runCalendarBatch, runItemMedia, runDailyFill, decideCalendarItems, rejectPost, placeDraft, upsertBucket, deleteBucket, syncTracks, runAction, runMediaTasks, clock = Date.now }) {
+export function buildExecutors({ runSelfReply, planStore, runDailyAction, runUpdateItemFacets, saveXGrowthProfile, refreshHandles, docStore, docBase, readPost, editPost, approvePost, approveAndSchedulePost, runPaidSync, runCalendarBatch, runItemMedia, runDailyFill, decideCalendarItems, rejectPost, placeDraft, upsertBucket, deleteBucket, syncTracks, runAction, runMediaTasks, clock = Date.now }) {
   const need = (fn, name) => { if (typeof fn !== 'function') throw new ProposalExecutionError(`${name} is not available on this deployment`); return fn; };
   const social = () => import('../../social-posting/twitter-service.js');
   const readOwnedPost = async (clientId, payload) => {
@@ -697,6 +712,12 @@ export function buildExecutors({ planStore, runDailyAction, runUpdateItemFacets,
       const failedRows = results.filter((r) => !r.ok);
       if (!done) throw new ProposalExecutionError('no post could be changed', { results: failedRows.slice(0, 10) });
       return compactResult({ action: payload.action, done, failed: failedRows.length, results: failedRows.slice(0, 10) });
+    },
+    // Creates ONE reply draft (idempotent per tweet + item). Never approves, schedules or posts; the owner handles it from the Queue.
+    async 'self-reply'({ clientId, payload }) {
+      const res = await need(runSelfReply, 'self-reply drafts')({ clientId, payload });
+      if (!res || res.ok === false) throw new ProposalExecutionError(res?.error || 'could not create the reply draft');
+      return compactResult({ postId: res.postId ?? null, existing: !!res.existing, status: res.status ?? 'draft' });
     },
     // Pass / delete / replace per item, sequentially; one item's failure is reported on its own row and never stops the rest. No X call.
     async 'calendar-decide'({ clientId, payload, proposalId }) {

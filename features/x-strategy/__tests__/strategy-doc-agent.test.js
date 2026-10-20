@@ -165,7 +165,7 @@ test('algorithm, score, rule-check and audience tools return shaped data', async
       useTools(['get_algorithm', {}], ['score_posts', {}], ['get_rule_check', { days: 30 }], ['get_audience', {}], ['score_posts', { handle: 'stranger' }]),
       (req) => {
         const [algo, scored, rules, aud, stranger] = toolResults(req).map((r) => JSON.parse(r.content));
-        assert.equal(algo.profileId, 'x-2026-10-03');
+        assert.equal(algo.profileId, 'x-2026-10-17');
         assert.ok(algo.positive.some((x) => x.signal === 'reply' && x.weight === 5));
         assert.ok(algo.negative.some((x) => x.signal === 'report'));
         assert.equal(scored.handle, 'me_acct');

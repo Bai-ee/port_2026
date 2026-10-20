@@ -97,6 +97,7 @@ export const PROPOSAL_KINDS = Object.freeze([
   'memory-suggest',
   'media-tasks',
   'calendar-decide',
+  'self-reply',
 ]);
 
 /** Bulk kinds: one card covers many items, so they do not count toward the agent's per-turn proposal cap. */
@@ -148,6 +149,7 @@ export const PROPOSAL_KIND_ACTIONS = Object.freeze({
   action: 'run-action', // agent/action-runtime.js: one registry action (or <=50 items of it), snapshot + audit; tier/typed gates enforced on decide
   'memory-suggest': 'update', // social-posting `update` per post (updateSocialPost, revision-checked): replaces a placeholder with the owner-approved line; never approves or schedules
   'calendar-decide': 'calendar-item-decide', // quote-targets calendar-item-decide (x-content-inventory/calendar-decide.js) per item: pass | delete | replace; rejects/dismisses/creates drafts, no X call
+  'self-reply': 'self-reply-draft', // social-posting ensureDraftPost: ONE reply DRAFT under the owner's own post with a library item's media; never approves, schedules or posts (replies go out by the owner's manual flow)
   'media-tasks': 'content-task-create', // content_tasks reminders only (x-content-inventory/content-tasks.js); never touches a post or an item
 });
 

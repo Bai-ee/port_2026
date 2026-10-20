@@ -1,7 +1,7 @@
 # X Algorithm Review
 
-**Profile ID:** `x-2026-10-03` (supersedes `x-2026-05-15`)
-**Reviewed at:** 2026-10-05, against upstream commit `b412112d` (2026-10-03)
+**Profile ID:** `x-2026-10-17` (supersedes `x-2026-10-03`; upstream 10-03 → 10-17 changed only `favorite` 0.5 → 0.66 and `not_interested` −47.52 → −52.272)
+**Reviewed at:** 2026-10-19, against upstream commit `862a1235` (2026-10-17). Tables and source links below still show the 10-03 read (`b412112d`) except where marked.
 **Note:** Since 2026-08-13 X publishes its real ranking weight defaults. The numbers in the 2026-10 section are read from source, not estimated. They are population defaults; X runs A/B arms that override them per user. The Phoenix model's predicted probabilities (what the weights multiply) are not public. Sections below the 2026-10 refresh are the June review, kept for history — where they disagree, the refresh wins.
 
 **How to re-check:** `git clone --depth 1 https://github.com/xai-org/x-algorithm`, then read `home-mixer/params/param.rs` (weights), `vm-ranker/params.rs` (OON + author diversity), and any new `docs/*.md` change notes. Upstream pushes near-daily; re-review monthly or when X announces a change.
@@ -20,7 +20,7 @@
 | `follow_author` | 4.0 | 8× |
 | `share` | 2.0 | 4× |
 | `repost` | 1.0 | 2× |
-| `favorite` (like) | 0.5 | 1× |
+| `favorite` (like) | 0.66 (10-03: 0.5) | 1× |
 | `cont_click_dwell_time` | 0.4 | — |
 | `click` | 0.3 | — |
 | `open_link` | 0.2 | — |
@@ -31,9 +31,9 @@
 ### Negative actions
 | Action | Weight | Likes erased |
 |---|---|---|
-| `report` | −234.0 | 468 |
-| `mute_author` | −58.8 | 118 |
-| `not_interested` | −47.52 | 95 |
+| `report` | −234.0 | 355 |
+| `mute_author` | −58.8 | 89 |
+| `not_interested` | −52.272 (10-03: −47.52) | 79 |
 | `block_author` | −31.2 | 62 |
 | `not_dwelled` | −0.02 | — |
 

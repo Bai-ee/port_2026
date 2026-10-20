@@ -230,6 +230,7 @@ export function createStrategyHandlers({
   editPost = null, // ({clientId, postId, content?, scheduledAt?}) -> saved post; the existing updateSocialPost path
   runPaidSync = null, // ({clientId, kind, params, by, auth, context}) -> result; the `paid-sync` proposal executor (features/mcp/paid-syncs.js). Absent => confirming one fails with a clear message
   readAudience = null, // (clientId) -> {account, snapshots, events, posts} from THIS client's stored X Monitor account ({account:null} when none); null => tool says unavailable
+  readRecentPosts = null, // ({clientId, handle, hours}) -> get_recent_posts result (recent-posts.js createRecentPostsReader); null => tool says unavailable
   readBuckets = null, // (clientId) -> Content Center buckets (listBuckets rows); absent => tracks are not synced to buckets
   readBucketEngine = null, // (clientId, bucketId) -> engine of one item in that bucket | null (first-sync migration only)
   readOpenPackageIds = null, // (clientId) -> Map packageId -> {postId, status, scheduledAt, reviewOn} of open posts (or a Set); batch skips or places them
@@ -832,6 +833,7 @@ export function createStrategyHandlers({
         listUnmetRequests: ({ status } = {}) => unmetStore.list(clientId, { status, limit: 50 }),
       } : {}),
       // Today in the client's timezone: the model has no clock, so every turn and get_calendar carry it (no guessed dates).
+      now: clock,
       getToday: async () => {
         const profile = preloaded.profile ?? (preloaded.profile = await loadProfile(clientId));
         return { date: localDate(clock(), profile.timezone), timezone: profile.timezone || null };
@@ -983,6 +985,14 @@ export function createStrategyHandlers({
         if (typeof readAudience !== 'function') return { available: false, reason: 'X Monitor data is not available on this deployment.' };
         // Resolved by the client's X account id, never by a handle match: no other client's account can answer.
         return summarizeAudience(await readAudience(clientId), { days, nowMs: clock() });
+      },
+      getRecentPosts: async ({ handle, hours } = {}) => {
+        if (typeof readRecentPosts !== 'function') return { available: false, reason: 'Recent posts are not available on this deployment.' };
+        const profile = preloaded.profile ?? (preloaded.profile = await loadProfile(clientId));
+        const allowed = [profile.ownHandle, ...profile.benchmarkHandles].map((h) => safeHandle(h)).filter(Boolean);
+        const h = safeHandle(handle) || safeHandle(profile.ownHandle);
+        if (!h || !allowed.includes(h)) return { error: 'handle must be the own or a benchmark handle', allowed };
+        return readRecentPosts({ clientId, handle: h, hours });
       },
       getXDataSources: async () => {
         const r = await xDataSourcesGet({ clientId }, { clientId });
@@ -1212,6 +1222,24 @@ export function createStrategyHandlers({
     runCalendarBatch: async ({ clientId, spec, proposalId }) => calendarBatch(clientId, spec, { execute: true, batchId: proposalId ? `calendar-batch-${proposalId}` : null }),
     runDailyFill: async ({ clientId, spec, proposalId }) => dailyFill(clientId, spec, { execute: true, batchId: proposalId ? `daily-fill-${proposalId}` : null }),
     decideCalendarItems: decideCalendarItems ? (a) => decideCalendarItems(a) : null,
+    // Self-reply: ONE reply draft (idempotent per tweet + item) carrying the item's own media. Re-checks the item at confirm time.
+    runSelfReply: async ({ clientId, payload }) => {
+      if (typeof ensureDraft !== 'function') return { ok: false, error: 'Creating drafts is not available on this deployment.' };
+      const item = ((await readPackages(clientId)) || []).find((p) => p.id === payload.itemId);
+      if (!item) return { ok: false, error: `item ${payload.itemId} no longer exists` };
+      const media = typeof mediaForItem === 'function' ? await Promise.resolve(mediaForItem(clientId, item)).catch(() => null) : null;
+      if (!media) return { ok: false, error: 'that item has no media that can be attached right now' };
+      const profile = await loadProfile(clientId);
+      if (safeHandle(profile.ownHandle)?.toLowerCase() !== payload.ownerHandle.toLowerCase()) return { ok: false, error: "the reply target is not the owner's own post" };
+      const res = await ensureDraft(clientId, {
+        ...media,
+        idempotencyKey: `self-reply:${payload.tweetId}:${payload.itemId}`,
+        content: payload.text, source: 'self-reply', packageId: payload.itemId,
+        replyTo: { author: payload.ownerHandle, url: payload.tweetUrl, text: '', source: 'self-reply' },
+        reviewOn: localDate(clock(), profile.timezone),
+      });
+      return { ok: true, postId: res?.post?.id ?? null, existing: !!res?.existing, status: res?.post?.status ?? 'draft' };
+    },
     refreshHandles: async ({ clientId, handles, context, auth }) => strategyRefresh({ clientId, handles }, context, auth),
     placeDraft, upsertBucket, deleteBucket, syncTracks, ...(rejectPost ? { rejectPost } : {}),
     runAction: actionRuntime ? ({ clientId, payload, by: who, auth, context, proposalId }) => actionRuntime.executeApproved({ ...actionCtx(clientId, context, auth), by: who }, payload, { proposalId }) : null,
@@ -1596,6 +1624,22 @@ export function createStrategyHandlersFromDb(db, {
   const readAudience = async (clientId) => readClientAudience(db, clientId, {
     resolveAccountId: async (id) => (await import('../x-monitor/sync.js')).resolveAccountId(id),
   });
+  // get_recent_posts: bird only where it can run (Mac / local dev, same X_STRATEGY_LOCAL_INGEST gate as the refresh service);
+  // elsewhere the last Firestore snapshot the Mac wrote, then X Monitor. Lazy imports keep node tests and cold starts light.
+  let recentPostsReader = null;
+  const readRecentPosts = async ({ clientId, handle, hours } = {}) => {
+    if (!recentPostsReader) {
+      const { createRecentPostsReader, createFirestoreRecentPostsStore } = await import('./recent-posts.js');
+      const ingest = await import('./ingest.js');
+      const birdOk = env.X_STRATEGY_LOCAL_INGEST === '1' && (await ingest.probeBirdVersion()).available;
+      recentPostsReader = createRecentPostsReader({
+        runBird: birdOk ? ingest.createAsyncBirdRunner({ cookieSource: env.X_STRATEGY_BIRD_COOKIE_SOURCE || undefined }) : null,
+        store: createFirestoreRecentPostsStore(db),
+        readMonitor: readAudience,
+      });
+    }
+    return recentPostsReader({ clientId, handle, hours });
+  };
   // Content Center buckets drive the tracks (bucket-tracks.js). Lazy imports keep the bare handler pure for tests.
   const readBuckets = async (clientId) => (await import('../x-content-inventory/bucket-store.js')).listBuckets(clientId, { db });
   const readBucketEngine = async (clientId, bucketId) => {
@@ -1668,7 +1712,7 @@ export function createStrategyHandlersFromDb(db, {
   const createMediaTasks = ({ clientId, rows, by, proposalId }) => taskStore.create(clientId, rows, { by, proposalId });
   return createStrategyHandlers({
     readDiscogsRelease: async (releaseId) => { const s = await db.collection('discogs_releases').doc(String(releaseId)).get(); return s.exists ? s.data() : null; },
-    corpusStore, planStore, refreshService, readPackages, readAudience, readBuckets, readBucketEngine, readOpenPackageIds, readFillContext, readTrackRules: dailyMixRulesFor, readQuoteTargets, ensureDraft, placeDraft, listMediaTaskIds, createMediaTasks,
+    corpusStore, planStore, refreshService, readPackages, readAudience, readRecentPosts, readBuckets, readBucketEngine, readOpenPackageIds, readFillContext, readTrackRules: dailyMixRulesFor, readQuoteTargets, ensureDraft, placeDraft, listMediaTaskIds, createMediaTasks,
     readStageStates: (ids) => readStageStatesFromDb(db, ids), readNasStatus: () => handleNasAction({ db, now: () => Date.now() }, 'nas-status', {}),
     readDataSources, saveDataSources, pullCorpora, scanQuotes, responseStyleStore, unmetStore,
     quoteScanQueue: createFirestoreQuoteScanQueue(db),

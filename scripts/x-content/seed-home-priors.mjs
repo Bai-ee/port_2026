@@ -70,7 +70,7 @@ export const HOME_STRATEGY_SECTIONS = Object.freeze({
     '- No audience questions, platform meta or generic hot takes.',
   ].join('\n'),
   algorithm: [
-    'Active ranking profile: x-2026-10-03 (weights public in xai-org/x-algorithm).',
+    'Active ranking profile: x-2026-10-17 (weights public in xai-org/x-algorithm).',
     '- Earned actions outrank likes: copy-link share 20, reply 5, quote 5, DM share 5, follow 4 vs like 0.5.',
     '- Negatives are brutal: one report = -234 (468 likes), mute -58.8, not-interested -47.5. Never bait.',
     '- Mutual follows get +15 on the reply weight for originals: replying daily builds the base that boosts originals.',
