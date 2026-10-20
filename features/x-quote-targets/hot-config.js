@@ -60,7 +60,7 @@ export const JUDGE = Object.freeze({
   maxCandidates: 24,
   maxCostUsd: 0.04,
   maxOutputTokens: 3000,
-  threshold: 0.6,
+  threshold: 0.65,
 });
 
 export const ANGLES = Object.freeze(['credit', 'craft', 'i-was-there', 'builder', 'record', 'none']);

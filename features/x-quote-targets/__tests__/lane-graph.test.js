@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildLaneGraph, laneOfTrack, laneModels, quotedAuthors, musicBioHits, avoidTermsFromTopics,
-  isLaneGraphStale, toStoredLaneGraph, laneGraphFromXGrowth, LANE_GRAPH_MAX_AGE_MS,
+  brainAvoidFrom, isLaneGraphStale, toStoredLaneGraph, laneGraphFromXGrowth, LANE_GRAPH_MAX_AGE_MS,
 } from '../lane-graph.js';
 
 // Fixtures mirror the real plan: record/ue/nas are music tracks, client/identity are design.
@@ -106,4 +106,17 @@ test('stored shape round-trips through xGrowth', () => {
   assert.equal(laneGraphFromXGrowth({ laneGraph: stored }).builtAt, stored.builtAt);
   assert.equal(laneGraphFromXGrowth({ laneGraph: { design: 'x' } }), null);
   assert.equal(laneGraphFromXGrowth(undefined), null);
+});
+
+test('brainAvoidFrom: reads the real Brain doc shape (decisions.intelligence.*) and plain shapes; avoid terms for the music bio filter follow', () => {
+  const real = {
+    positioning: { avoidPositioning: ['Agency (x)'] },
+    decisions: { intelligence: { content: { topicsToAvoid: { value: ['Crypto price and speculation talk', 'Politics not associated with design or music'] } }, identity: { categoryToAvoid: { value: ['AI or SaaS product pitch'] } } }, social: { handlesToAvoid: { value: ['spam_acct'] } } },
+  };
+  const a = brainAvoidFrom(real);
+  assert.deepEqual(a.handles, ['spam_acct']);
+  assert.ok(a.topics.includes('Crypto price and speculation talk') && a.topics.includes('AI or SaaS product pitch') && a.topics.includes('Agency (x)'));
+  assert.deepEqual(avoidTermsFromTopics(a.topics), ['crypto', 'politics']);
+  assert.deepEqual(brainAvoidFrom({ content: { topicsToAvoid: ['Sports'] } }).topics, ['Sports']);
+  assert.deepEqual(brainAvoidFrom(null), { topics: [], handles: [] });
 });

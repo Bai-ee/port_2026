@@ -87,6 +87,27 @@ export function avoidTermsFromTopics(topics) {
   return [...terms].sort();
 }
 
+/**
+ * The Brain's avoid lists from a client_brain/current doc. Approved decisions live at
+ * `decisions.<group>.<domain>.<field>.value` (e.g. decisions.intelligence.content.topicsToAvoid.value); older/simple shapes put a
+ * plain list or {value:[...]} at `<domain>.<field>`. Also folds in positioning.avoidPositioning.
+ * @returns {{topics:string[], handles:string[]}}
+ */
+export function brainAvoidFrom(brain) {
+  const b = brain && typeof brain === 'object' ? brain : {};
+  const asText = (x) => (typeof x === 'string' ? x : x?.text || x?.value || x?.name || '');
+  const valueOf = (d) => (Array.isArray(d?.value) ? d.value : Array.isArray(d) ? d : []).map(asText).filter((x) => typeof x === 'string' && x.trim());
+  const fieldOf = (domain, name) => [
+    b[domain]?.[name], b.domains?.[domain]?.[name], b.decisions?.[domain]?.[name],
+    b.decisions?.intelligence?.[domain]?.[name], b.decisions?.[domain]?.intelligence?.[name],
+  ].flatMap(valueOf);
+  const uniq = (list) => [...new Set(list.map((x) => x.trim()))];
+  return {
+    topics: uniq([...fieldOf('content', 'topicsToAvoid'), ...fieldOf('identity', 'categoryToAvoid'), ...valueOf(b.positioning?.avoidPositioning)]),
+    handles: uniq(fieldOf('social', 'handlesToAvoid')),
+  };
+}
+
 const round2 = (n) => Math.round(n * 100) / 100;
 const byWeight = (a, b) => b.weight - a.weight || a.handle.toLowerCase().localeCompare(b.handle.toLowerCase());
 
