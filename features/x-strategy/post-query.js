@@ -99,9 +99,11 @@ function dayOf(p) {
   return DAY_RE.test(String(p.reviewOn ?? '')) ? p.reviewOn : null;
 }
 
+// A draft linked to a NAS archive file (nasSha) has media too: the file is pulled from the drive when it is scheduled.
 function mediaSummary(p) {
-  const hasMedia = !!(str(p.mediaUrl) || (isPlain(p.mediaVariants) && Object.keys(p.mediaVariants).length));
-  return { hasMedia, type: hasMedia ? (str(p.mediaType) || (isPlain(p.mediaVariants?.video) ? 'video' : isPlain(p.mediaVariants?.image) ? 'image' : 'unknown')) : null };
+  const attached = !!(str(p.mediaUrl) || (isPlain(p.mediaVariants) && Object.keys(p.mediaVariants).length));
+  if (!attached) return str(p.nasSha) ? { hasMedia: true, type: 'nas-link' } : { hasMedia: false, type: null };
+  return { hasMedia: true, type: str(p.mediaType) || (isPlain(p.mediaVariants?.video) ? 'video' : isPlain(p.mediaVariants?.image) ? 'image' : 'unknown') };
 }
 
 /** One normalized row. `now` (ms) is used only for windowOpen. */

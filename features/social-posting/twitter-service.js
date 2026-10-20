@@ -1034,6 +1034,9 @@ function buildSocialPostRecord(clientId, payload, id) {
     ...(sanitizeFillSource(payload.fillSource) ? { fillSource: sanitizeFillSource(payload.fillSource) } : {}),
     // Content Center bucket of the source item (calendar colors). Absent => resolved from the package at read time.
     ...(/^[a-z0-9][a-z0-9-]{0,39}$/.test(String(payload.bucketId || '')) ? { bucketId: payload.bucketId } : {}),
+    // NAS archive asset this draft posts (x_content_packages nas.sha256): a link, not an upload. The file is staged from
+    // the drive (nas-stage) when the owner schedules it; the publish path does not read this field.
+    ...(/^[a-f0-9]{64}$/.test(String(payload.nasSha || '')) ? { nasSha: payload.nasSha } : {}),
   };
 }
 
@@ -1230,6 +1233,14 @@ async function assertSchedulable(post) {
     err.code = 'approval-required';
     throw err;
   }
+}
+
+
+// A NAS-linked draft (nasSha) carries only a pointer to the file on the drive. Until that file is pulled
+// (nas-stage) and attached as mediaUrl it would publish text-only, so scheduling it is refused.
+function assertNasMediaAttached(post) {
+  if (!post?.nasSha || post.mediaUrl) return;
+  throw Object.assign(new Error('Pull this post\'s file from the drive (Stage) before scheduling it; it has no media attached yet.'), { status: 409, code: 'media-not-staged' });
 }
 
 
@@ -1475,6 +1486,7 @@ export async function schedulePost(clientId, payload, opts = {}) {
     throw err;
   }
   await assertSchedulable({ ...payload, status: 'draft' });
+  assertNasMediaAttached(payload);
   await assertSchedulingRules({ ...payload, status: 'draft', ...(isPilotClient(clientId) ? { lifecycleVersion: LIFECYCLE_VERSION } : {}) }, { clientId, scheduledAt: scheduledAt.toISOString() });
   const record = buildSocialPostRecord(clientId, {
     ...payload,
@@ -1770,6 +1782,7 @@ async function prepareUpdate(clientId, post, payload = {}) {
         packageId: hasOwn(payload, 'packageId') ? cleanStr(payload.packageId, 160) : post.packageId,
         needsApproval: payload.needsApproval === true || post.needsApproval === true,
       });
+      assertNasMediaAttached({ nasSha: post.nasSha, mediaUrl: hasOwn(payload, 'mediaUrl') ? payload.mediaUrl : post.mediaUrl });
       await assertSchedulingRules({
         ...post,
         packageId: hasOwn(payload, 'packageId') ? cleanStr(payload.packageId, 160) : post.packageId,

@@ -234,7 +234,7 @@ export function createStrategyHandlers({
   readBucketEngine = null, // (clientId, bucketId) -> engine of one item in that bucket | null (first-sync migration only)
   readOpenPackageIds = null, // (clientId) -> Map packageId -> {postId, status, scheduledAt, reviewOn} of open posts (or a Set); batch skips or places them
   placeDraft = null, // (clientId, postId, {reviewOn, bucketId, media}) -> bool; sets an unscheduled draft's review day + missing media
-  readFillContext = null, // (clientId) -> {fillPosts:[{postId,status,reviewOn,fillKind,bucketId,idempotencyKey}], lastUsed: Map packageId -> 'YYYY-MM-DD'}; daily fill re-run accounting + 30-day spread
+  readFillContext = null, // (clientId) -> {fillPosts:[{postId,status,reviewOn,fillKind,bucketId,idempotencyKey,packageId}], lastUsed: Map packageId -> 'YYYY-MM-DD'}; daily fill re-run accounting + 30-day spread
   readTrackRules = null, // (clientId) -> {[bucketId]: rule}; daily-fill trackRules (features/x-content-inventory/daily-mix-rule.js)
   readQuoteTargets = null, // (clientId) -> {generatedAt, targets:[{id,url,text,handle,createdAt,trackId?}]} open (non-dismissed) quote candidates; daily fill quotes
   ensureDraft = null, // (clientId, payload) -> {post, existing}; twitter-service ensureDraftPost. Absent => batch create answers 503
@@ -1635,7 +1635,7 @@ export function createStrategyHandlersFromDb(db, {
     const lastUsed = new Map();
     for (const d of snap.docs) {
       const r = d.data();
-      if (r.source === 'daily-fill') fillPosts.push({ postId: d.id, status: r.status, source: r.source, reviewOn: r.reviewOn || null, fillKind: r.fillKind || null, bucketId: r.bucketId || null, idempotencyKey: r.idempotencyKey || null });
+      if (r.source === 'daily-fill') fillPosts.push({ postId: d.id, status: r.status, source: r.source, reviewOn: r.reviewOn || null, fillKind: r.fillKind || null, bucketId: r.bucketId || null, idempotencyKey: r.idempotencyKey || null, packageId: r.packageId || null });
       const day = String(r.postedAt || r.scheduledAt || r.reviewOn || '').slice(0, 10);
       if (r.packageId && /^\d{4}-\d{2}-\d{2}$/.test(day) && r.status !== 'rejected' && (lastUsed.get(r.packageId) || '') < day) lastUsed.set(r.packageId, day);
     }
