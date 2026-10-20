@@ -7,7 +7,8 @@ import { McpAuthError } from '../mcp/auth.js';
 import { checkRateLimit, rpcCost } from '../mcp/limits.js';
 import { authenticateClientBearer } from './auth.js';
 import { GRANT_SECRET_RE, clientMetadataUrl } from './grants.js';
-import { clientRegistry, CLIENT_INSTRUCTIONS } from './tools.js';
+import { clientRegistry, clientInstructions } from './tools.js';
+import { siteStatsSourceFor } from './sources.js';
 
 const rpcError = (code, message) => ({ jsonrpc: '2.0', id: null, error: { code, message } });
 
@@ -41,8 +42,10 @@ export async function handleClientMcp({ authorization, body, bodyError = false, 
   if (!limit.allowed) return { status: 429, body: { error: `Rate limit: ${limit.limit} calls per 10 minutes.` }, headers: { 'retry-after': String(limit.retryAfterSec) } };
 
   const ctx = { clientId: auth.clientId, now, services: deps.services };
+  const site = siteStatsSourceFor(auth.clientId, deps.services.sources);
   return handleRpc(body, {
-    registry: clientRegistry, ctx, instructions: CLIENT_INSTRUCTIONS,
+    registry: clientRegistry, ctx, instructions: clientInstructions({ label: auth.label, siteUrl: site?.url || null }),
+    serverInfo: { name: 'client-data', title: `${auth.label} data` },
     onCall: ({ tool, ok, ms }) => deps.audit.write(clientAuditEntry({ now: now(), clientId: auth.clientId, grantId: auth.grantId, tool, ok, ms })),
   });
 }

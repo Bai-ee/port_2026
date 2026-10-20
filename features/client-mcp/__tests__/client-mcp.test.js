@@ -307,3 +307,18 @@ test('audit: one row per call with clientId, tool, ok; no arguments or results',
   assert.equal(audit[1].ok, false);
   assert.ok(!JSON.stringify(audit).includes('30d') && !JSON.stringify(audit).includes(SITE_KEY));
 });
+
+// ---- answer framing ----------------------------------------------------------------------------------------
+
+test('initialize: named after the client, site analytics first, marketing second, HITLOOP kept out', async () => {
+  const { deps } = makeDeps();
+  const out = await rpc({ body: { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } }, deps });
+  const { serverInfo, instructions } = out.body.result;
+  assert.equal(serverInfo.title, 'Client A data');
+  assert.match(instructions, /Client A's business assistant/);
+  assert.match(instructions, /a\.example/);
+  assert.ok(instructions.indexOf('PRIMARY') < instructions.indexOf('SECONDARY'));
+  assert.match(instructions, /call get_site_stats first/);
+  assert.match(instructions, /Do not describe HITLOOP/);
+  assert.match(clientRegistry[0].description, /^PRIMARY SOURCE/);
+});
