@@ -3,6 +3,7 @@
 A remote MCP server so the owner can talk to HITLOOP from ChatGPT and Claude (custom connectors): read client-admin data and the codebase, run free syncs, and propose changes (including paid syncs, which are proposal cards). **It can never post, schedule, approve, delete, send email/Telegram, write to X, or spend money by itself: every paid action needs the owner's Confirm click inside HITLOOP.**
 
 Code: `features/mcp/*` (pure logic + tools), `app/api/mcp/route.js`, `app/api/oauth/{register,authorize,token}/route.js`, `app/oauth/authorize/page.jsx`, `app/.well-known/oauth-*`. Plan: `docs/plans/CONTENT-CENTER-AND-MCP-MASTER-PLAN.md` (WS-B).
+The separate read-only, one-client-per-link server for clients is [CLIENT-MCP-SERVER.md](CLIENT-MCP-SERVER.md); it shares the OAuth code (tokens carry a client binding) but owner tokens and client tokens never cross.
 
 ## Endpoints
 

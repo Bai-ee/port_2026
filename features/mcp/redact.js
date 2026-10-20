@@ -6,7 +6,7 @@
 // collection segment of a path (so a subcollection of the same name is denied too).
 export const DENY_COLLECTIONS = Object.freeze([
   'users', 'admins', 'subscriptions', 'social_accounts', 'account_deletions', 'deleted_account_emails', '_rate_limits',
-  'mcp_oauth_clients', 'mcp_oauth_codes', 'mcp_oauth_refresh', 'mcp_pending_actions', 'mcp_rate_limits',
+  'mcp_oauth_clients', 'mcp_oauth_codes', 'mcp_oauth_refresh', 'mcp_pending_actions', 'mcp_rate_limits', 'mcp_client_grants',
   // Found by grepping where tokens live:
   'system_flags',            // x_oauth_tokens (X access + refresh tokens), x_oauth_pending, other flags
   'social_oauth_pending',    // per-client X OAuth PKCE state

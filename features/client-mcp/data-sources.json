@@ -1,0 +1,9 @@
+[
+  {
+    "clientId": "nottherug-ten-QSMYxuuv",
+    "label": "Not The Rug website",
+    "kind": "site-stats",
+    "url": "https://nottherug.com/api/stats",
+    "keyEnv": "CLIENT_STATS_KEY_NOTTHERUG"
+  }
+]

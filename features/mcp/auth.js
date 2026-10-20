@@ -1,7 +1,7 @@
 // auth.js - bearer authentication for /api/mcp. Pure: env, clock and the admin check are injected.
 // FAILS CLOSED: with MCP_OAUTH_SECRET unset nothing is accepted (503), not even the static owner token.
 
-import { verifyAccessToken, safeEqual } from './oauth.js';
+import { verifyAccessToken, safeEqual, SCOPE } from './oauth.js';
 
 export const OWNER_EMAIL_DEFAULT = 'bryanballi@gmail.com';
 
@@ -56,6 +56,8 @@ export async function authenticateBearer({ header, env, now, origin, isAdmin }) 
   } else {
     const v = verifyAccessToken(token, { secret, aud: resourceUrl(origin), now });
     if (!v.ok) throw new McpAuthError(401, `Invalid token (${v.error}).`, v.error);
+    // A client-scoped token (features/client-mcp) never reaches owner tools, even if its audience somehow matched.
+    if (v.claims.hcid || v.claims.gid || (v.claims.scope && v.claims.scope !== SCOPE)) throw new McpAuthError(401, 'Invalid token (wrong-scope).', 'wrong-scope');
     email = v.claims.sub; via = 'oauth'; tokenId = v.claims.jti || 'no-jti';
   }
   // Re-check on every call: revoking admin access cuts the connector off without waiting for the token to expire.
