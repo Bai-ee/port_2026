@@ -6,7 +6,8 @@
 //   node scripts/x-content/strategy-refresh-worker.mjs --once              # drain whatever is queued, then exit
 //   node scripts/x-content/strategy-refresh-worker.mjs --loop 300          # drain every 300s until killed
 //
-// Reads/writes: x_strategy_refresh_requests/* and (via the corpus store) x_corpora/{handle}/rows/*.
+// Reads/writes: x_strategy_refresh_requests/*, (via the corpus store) x_corpora/{handle}/rows/*, and the own-post
+// metrics snapshots x_recent_posts/{clientId}__{handle} (hourly, or on request from get_recent_posts).
 // bird is the FREE path (browser cookies); no X API, no ScrapeCreators, no model calls. bird detection is
 // `bird --version` only. Cookie source: env X_STRATEGY_BIRD_COOKIE_SOURCE (default 'chrome').
 // A drain that hits 429 stops the request ('rate-limited'); it does not retry within the same run.
@@ -19,6 +20,8 @@ import { createRefreshService, createFirestoreRefreshQueue, recordWorkerSeen } f
 import { createFirestoreCorpusStore } from '../../features/x-strategy/corpus-store.js';
 import { execFile } from 'node:child_process';
 import { createFirestoreQuoteScanQueue, SCAN_STATUS, SCAN_MODES } from '../../features/x-quote-targets/scan-queue.js';
+import { createAsyncBirdRunner, resolveBird, classifyBirdError } from '../../features/x-strategy/ingest.js';
+import { createRecentPostsReader, createFirestoreRecentPostsStore, recentPullDue } from '../../features/x-strategy/recent-posts.js';
 
 const require = createRequire(import.meta.url);
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../');
@@ -105,6 +108,45 @@ async function drainQuoteScans(db) {
   return { id: job.id, status };
 }
 
+// Own-post metrics (get_recent_posts): hourly per client with an X handle, or sooner when a reader asked. One bird
+// user-tweets call per client (free, read-only). Scheduled pulls skip 06:20-06:50 CT so they never compete with the
+// 06:30 hot scan for the bird rate limit; a requested pull always runs.
+const CT = 'America/Chicago';
+function inScanQuietWindow(ms) {
+  const [h, m] = new Intl.DateTimeFormat('en-US', { timeZone: CT, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(ms)).split(':').map(Number);
+  const min = h * 60 + m;
+  return min >= 6 * 60 + 20 && min < 6 * 60 + 50;
+}
+
+async function pullRecentPosts(db) {
+  const snap = await db.collection('client_configs').where('marketingBriefConfig.xGrowth.ownHandle', '>', '').get();
+  const store = createFirestoreRecentPostsStore(db);
+  const runBird = createAsyncBirdRunner({ bird: resolveBird(), cookieSource: process.env.X_STRATEGY_BIRD_COOKIE_SOURCE || 'chrome' });
+  const out = [];
+  for (const doc of snap.docs) {
+    const clientId = doc.id;
+    const handle = String(doc.data()?.marketingBriefConfig?.xGrowth?.ownHandle || '').replace(/^@+/, '').toLowerCase();
+    if (!/^\w{1,15}$/.test(handle)) continue;
+    const key = `${clientId}__${handle}`;
+    const now = Date.now();
+    const prev = await store.get(key).catch(() => null);
+    const due = recentPullDue(prev, now);
+    if (!due || (due === 'scheduled' && inScanQuietWindow(now))) continue;
+    // ttlMs 0: this reader always pulls live; it writes the snapshot (with carried-forward checkpoints) on success.
+    const read = createRecentPostsReader({ runBird, store, ttlMs: 0 });
+    const r = await read({ clientId, handle, hours: 168 }).catch((err) => ({ available: false, reason: String(err?.message || err) }));
+    if (r.source === 'bird-live') {
+      out.push({ clientId, handle, due, ok: true, posts: r.count, needsMetrics: r.needsMetrics?.length ?? 0 });
+    } else {
+      const message = String(r.caveats?.find((c) => /live pull failed/.test(c)) || r.reason || 'pull failed').slice(0, 200);
+      await store.markFailed(key, { at: now, due, kind: classifyBirdError({ message }), message }).catch(() => {});
+      out.push({ clientId, handle, due, ok: false, error: message });
+      if (/rate-limited/.test(message)) break; // one 429 is enough for this pass
+    }
+  }
+  return out;
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.once && !(args.loop > 0)) {
@@ -130,6 +172,8 @@ async function main() {
     if (res.requests.length) await beat(res.requests[res.requests.length - 1].id);
     const scan = await drainQuoteScans(db).catch((err) => { log(`quote scan drain failed: ${err?.message}`); return null; });
     if (scan) await beat(scan.id);
+    const pulls = await pullRecentPosts(db).catch((err) => { log(`recent-posts pull failed: ${err?.message}`); return []; });
+    if (pulls.length) log(`[${new Date().toISOString()}] recent posts ${JSON.stringify(pulls)}`);
     if (args.once) break;
     await sleep(args.loop * 1000);
   } while (true); // eslint-disable-line no-constant-condition
