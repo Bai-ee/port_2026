@@ -117,7 +117,8 @@ function pickContributionType(n, { quotesUsed, maxQuotes }) {
   const anchor = n.anchor;
   const conversational = /\?/.test(anchor.text) || anchor.replies >= 3;
   if (age <= REPLY_WINDOW_HOURS && conversational) return { type: 'reply', why: `thread is ${age}h old and active — a reply joins it directly` };
-  if (age <= DEFAULT_WINDOW_HOURS && quotesUsed < maxQuotes) return { type: 'quote', why: `${age}h old, still being read (quote window ${DEFAULT_WINDOW_HOURS}h) — a quote borrows that audience` };
+  const quoteWindow = Number(anchor.windowHours) > 0 ? Number(anchor.windowHours) : DEFAULT_WINDOW_HOURS;
+  if (age <= quoteWindow && quotesUsed < maxQuotes) return { type: 'quote', why: `${age}h old, still being read (quote window ${quoteWindow}h) — a quote borrows that audience` };
   if (age <= REPLY_WINDOW_HOURS) return { type: 'reply', why: `${age}h old — quote budget used, reply instead` };
   return { type: 'original', why: `${age}h old — past the quote window; contribute an original on the same topic instead` };
 }

@@ -118,3 +118,13 @@ test('a non-empty media array counts as media; a media post from a watchlist acc
   assert.equal(ok.rejected.noMedia, 0);
   assert.equal(ok.rejected.addressesBot, 0);
 });
+
+test('hot picks keep their lane window: a 50h music pick (72h) fills a quote slot, a 50h design pick (36h) and a plain 50h post do not', () => {
+  const music = normalizeConversationPost({ id: 'm1', url: 'https://x.com/dj/status/1', author: 'dj', text: 'Chicago house vinyl set tonight', createdAt: isoAgo(50), windowHours: 72, hasMedia: true, vein: 'music' }, 'watchlist');
+  const design = normalizeConversationPost({ id: 'd1', url: 'https://x.com/de/status/2', author: 'de', text: 'a design craft tip', createdAt: isoAgo(50), windowHours: 36, hasMedia: true, vein: 'design' }, 'watchlist');
+  const plain = normalizeConversationPost({ id: 'p1', url: 'https://x.com/pl/status/3', author: 'pl', text: 'a design craft tip', createdAt: isoAgo(50), hasMedia: true, vein: 'design' }, 'watchlist');
+  assert.equal(music.windowHours, 72);
+  assert.equal('windowHours' in plain, false);
+  assert.equal(fillQuoteSlot({ slot, candidates: [{ ...music, score: 0.5 }], now: NOW }).post?.id, 'm1');
+  assert.equal(fillQuoteSlot({ slot, candidates: [{ ...design, score: 0.5 }, { ...plain, score: 0.5 }], now: NOW }).post, undefined);
+});
