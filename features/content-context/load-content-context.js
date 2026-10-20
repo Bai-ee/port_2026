@@ -117,6 +117,8 @@ export function describeContentInputs({ raw, planDoc, planInputs, brainError = n
     scope: 'handle',
     caveats: [
       !raw.ownSummary && 'No own corpus.',
+      raw.ownSummary?.handleMismatch,
+      raw.ownSummary && !raw.ownSummary.posts && 'Own corpus is empty: no rows stored for that handle.',
       ownTo && ownAge == null && 'Own corpus has no readable end date: age unknown.',
       'Corpora follow the configured X handles (defaults to the owner account), not necessarily this client.',
       ownStale && `Own corpus ends ${Math.round(ownAge)}d ago (stale after ${CORPUS_STALE_DAYS}d).`,

@@ -18,12 +18,11 @@ import { readInventory, upsertPackage, deletePackage, packageGetterFor } from '.
 import { buildClientPackage, applyApproval } from '../../../../features/x-content-inventory/client-capture.js';
 import { quotedUrlOf } from '../../../../features/x-strategy/post-query.js';
 import { parseStatusUrl, findQuotedCandidate, buildQuotedPreview } from '../../../../features/x-quote-targets/quoted-preview.js';
-import { ageHoursOf, DEFAULT_WINDOW_HOURS } from '../../../../features/x-quote-targets/rank.js';
 import { buildPostResults } from '../../../../features/x-content-inventory/results.js';
 import { recentPostsFromQueue } from '../../../../features/x-content-inventory/allocate-slot.js';
 import { readUnifiedCalendar, readCalendarQuoteTargets as readCalendarQuoteTargetsShared } from '../../../../features/x-content-inventory/calendar-reader.js';
 import { ctDate, toRow as calendarPostRow } from '../../../../features/x-content-inventory/month-calendar.js';
-import { hotPicksToTargets, windowHoursOf } from '../../../../features/x-quote-targets/hot-calendar.js';
+import { hotOpportunities, hotPicksToTargets, windowHoursOf } from '../../../../features/x-quote-targets/hot-calendar.js';
 import { decideCalendarItem } from '../../../../features/x-content-inventory/calendar-decide.js';
 import { createContentTaskStore } from '../../../../features/x-content-inventory/content-tasks.js';
 import { joinPerformance, engineStats } from '../../../../features/x-content-inventory/performance.js';
@@ -593,33 +592,10 @@ async function editQueuedPost({ clientId, postId, content, scheduledAt, expected
   return updateSocialPost(clientId, postId, { ...payload, agents }, { expectedRevision });
 }
 
+// Hot picks only, same helper as the MCP reader: the opportunities as-of always matches the calendar's.
 async function readOpportunities(clientId) {
-  // Same merge as the GET and the MCP reader: track-list candidates in memory, dismissed ids dropped.
-  const { rawQuoteTargets, listSignals } = await readQuoteState(clientId);
-  const qt = mergeListCandidates(rawQuoteTargets, listSignals);
-  const now = Date.now();
-  const generatedMs = Date.parse(qt?.generatedAt || '');
-  const dismissed = new Set(Array.isArray(qt?.dismissed) ? qt.dismissed : []);
-  const open = (Array.isArray(qt?.candidates) ? qt.candidates : []).filter((c) => !dismissed.has(c.id));
-  const targets = open.slice(0, 10).map((c) => {
-    const ageHours = ageHoursOf(c.createdAt, now);
-    return {
-      id: c.id || c.url || null,
-      handle: c.author?.username || (typeof c.author === 'string' ? c.author : null),
-      url: c.url || null,
-      text: excerptOf(c.text),
-      ageHours: ageHours == null ? null : Math.round(ageHours * 10) / 10,
-      windowOpen: ageHours == null ? null : ageHours <= DEFAULT_WINDOW_HOURS,
-      kind: 'quote',
-      ...(c.trackId ? { trackId: c.trackId } : {}),
-      ...(c.source ? { source: c.source } : {}),
-    };
-  });
-  return {
-    generatedAt: qt?.generatedAt || null,
-    stale: Number.isFinite(generatedMs) ? (now - generatedMs) / 3_600_000 > 48 : null,
-    targets,
-  };
+  const { hotQuotes } = await readQuoteState(clientId);
+  return hotOpportunities(hotQuotes, { now: Date.now() });
 }
 
 // Daily fill: the open hot-scan picks only (the legacy watchlist quoteTargets feed no longer reaches daily-fill), with the raw

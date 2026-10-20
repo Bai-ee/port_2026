@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   chunkUsers,
+  newestPostsFirst,
   compactUser,
   diffRosters,
   engagementRate,
@@ -98,4 +99,16 @@ test('post deltas compare the two newest history entries', () => {
   assert.equal(out.deltas.likes, 3);
   assert.equal(out.deltas.impressions, 300);
   assert.equal(postMetricDeltas([{ at: 1, likes: 2 }]), null);
+});
+
+test('newestPostsFirst: sorts by createdAt desc (doc-id order is oldest first), unparseable last, then limits', () => {
+  const posts = [
+    { id: '2073162328493674857', createdAt: '2026-07-24T12:26:54.000Z' },
+    { id: 'x', createdAt: 'not a date' },
+    { id: '2112309496848494711', createdAt: '2026-10-19T22:26:43.000Z' },
+    { id: '2112185345882141082', createdAt: '2026-10-19T14:13:23.000Z' },
+  ];
+  assert.deepEqual(newestPostsFirst(posts).map((p) => p.id), ['2112309496848494711', '2112185345882141082', '2073162328493674857', 'x']);
+  assert.deepEqual(newestPostsFirst(posts, 2).map((p) => p.id), ['2112309496848494711', '2112185345882141082']);
+  assert.equal(posts[0].id, '2073162328493674857', 'input is not mutated');
 });

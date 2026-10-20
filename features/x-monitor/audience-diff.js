@@ -157,6 +157,16 @@ export function postMetricDeltas(history = []) {
   return { since: prev?.at || null, deltas };
 }
 
+/**
+ * Posts newest first by createdAt. The posts subcollection is keyed by tweet id with no stored sort, so a bare
+ * `.limit(n)` read returns the OLDEST ids; callers read the collection, then sort and slice here. Unparseable
+ * createdAt sorts last.
+ */
+export function newestPostsFirst(posts = [], limit = Infinity) {
+  const at = (p) => { const t = Date.parse(p?.createdAt); return Number.isFinite(t) ? t : -Infinity; };
+  return [...posts].sort((a, b) => at(b) - at(a)).slice(0, limit);
+}
+
 function num(value) {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;

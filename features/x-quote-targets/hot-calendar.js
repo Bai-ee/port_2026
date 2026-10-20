@@ -49,6 +49,31 @@ export function unactedHotPicks(hotQuotes, posts, { now = Date.now() } = {}) {
   return hotPicksToTargets(hotQuotes, { now }).filter((t) => !acted.has(t.id));
 }
 
+export const HOT_STALE_HOURS = 24; // the 06:30 scan runs daily
+
+/**
+ * get_opportunities from hot picks: the same open picks the calendar shows, with the hot scan's own as-of. The legacy
+ * watchlist scan is never mixed in, so the opportunities timestamp always matches the calendar's.
+ */
+export function hotOpportunities(hotQuotes, { now = Date.now(), max = 10 } = {}) {
+  const scannedMs = Date.parse(hotQuotes?.scannedAt || '');
+  const targets = hotPicksToTargets(hotQuotes, { now }).slice(0, max).map((t) => {
+    const ageHours = (now - Date.parse(t.createdAt || '')) / HOUR;
+    return {
+      id: t.id, handle: t.handle, url: t.url, text: String(t.text ?? '').replace(/\s+/g, ' ').trim().slice(0, 160),
+      ageHours: Number.isFinite(ageHours) ? Math.round(ageHours * 10) / 10 : null, windowOpen: true, kind: 'quote',
+      lane: t.hot.lane ?? null, momentum: t.hot.momentum ?? null, fit: t.hot.fit ?? null,
+    };
+  });
+  return {
+    source: 'marketingBrief.hotQuotes',
+    generatedAt: hotQuotes?.scannedAt || null,
+    stale: Number.isFinite(scannedMs) ? (now - scannedMs) / HOUR > HOT_STALE_HOURS : null,
+    quotesLeftToday: hotQuotes?.quotesLeftToday ?? null,
+    targets,
+  };
+}
+
 /** The daily loop's `scan` input from hot picks: same shape as a stored quoteTargets payload ({generatedAt, candidates}). */
 export function hotScanForLoop(hotQuotes, { now = Date.now() } = {}) {
   if (!hotQuotes?.scannedAt) return null;

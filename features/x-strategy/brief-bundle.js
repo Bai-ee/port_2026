@@ -25,7 +25,7 @@ export const FRESHNESS_RULES = Object.freeze({
   'analysis':          { maxAgeHours: 24, refreshGroup: 'analysis',          label: 'Analyzers (Reddit, Instagram, X talk, watchlist, opportunities, reply targets)', how: 'Refresh group "Analysis"' },
   'executive-brief':   { maxAgeHours: 48, refreshGroup: 'analysis',          label: 'Latest published executive brief page', how: 'Refresh group "Analysis" (hosted brief)' },
   'strategy-builder':  { maxAgeHours: 48, refreshGroup: 'analysis',          label: 'Strategy Builder plan (campaign posts)', how: 'Refresh group "Analysis" (strategy)' },
-  'quote-targets':     { maxAgeHours: 12, refreshGroup: 'quote-targets',     label: 'Quote/reply scan targets + track lists', how: 'Local Mac scan (launchd), or Refresh group "Quote targets" when its source is the X API' },
+  'quote-targets':     { maxAgeHours: 12, refreshGroup: 'hot-quotes',        label: 'Hot quote picks (the only quotes on the calendar)', how: 'The 06:30 Mac hot scan (launchd), or Refresh group "Hot quotes" (Hot now)' },
   'strategy-accounts': { maxAgeHours: 48, refreshGroup: 'strategy-accounts', label: 'Post corpora for you and each benchmark', how: 'Refresh group "Strategy accounts" (Mac worker, or the X API when that source is selected)' },
   'x-monitor':         { maxAgeHours: 72, refreshGroup: 'x-monitor',         label: 'X Monitor (counters, posts, follower roster)', how: 'Refresh group "X Monitor" (paid X API)' },
   'today-run':         { maxAgeHours: 24, refreshGroup: 'today-queue',       label: "Today's suggestions run", how: 'Refresh group "Today and queue"' },
@@ -163,16 +163,24 @@ const BUILDERS = {
     return { asOf: toMs(p.generatedAt), present: true, summary: { campaignId: clip(p.campaignId, 80), intent: clip(p.today?.strategyIntent, c), todayPosts: arr(p.today?.posts).length, items: arr(p.items).length, sample: arr(p.today?.posts).slice(0, n).map((x) => clip(x.content, c)) } };
   },
   'quote-targets': (raw, { n, c }) => {
+    // asOf is the HOT scan only: it is the sole quote source on the calendar. The legacy watchlist scan and track
+    // lists are listed with their own as-of so two timestamps never read as one.
+    const h = raw.hotQuotes;
     const q = raw.quoteTargets;
     const l = raw.listSignals;
-    if (!isObj(q) && !isObj(l)) return { asOf: null, present: false, summary: { note: 'No scan has run.' } };
-    const cand = arr(q?.candidates);
+    const legacy = {
+      watchlistScan: isObj(q) ? { asOf: iso(toMs(q.generatedAt)), candidates: arr(q.candidates).length, note: 'legacy watchlist scan: not on the calendar' } : null,
+      listSignalsAsOf: iso(toMs(l?.generatedAt)),
+    };
+    if (!isObj(h)) return { asOf: null, present: false, summary: { note: 'No hot quote scan has run.', ...legacy } };
+    const picks = [...arr(h.picks?.design), ...arr(h.picks?.music)];
     return {
-      asOf: newest([q?.generatedAt, l?.generatedAt]), present: true,
+      asOf: toMs(h.scannedAt), present: true,
       summary: {
-        candidates: cand.length, scanned: q?.scanned ?? null, rateLimited: q?.rateLimited ?? null, windowHours: q?.windowHours ?? null,
-        listSignalsAsOf: iso(toMs(l?.generatedAt)),
-        top: cand.slice(0, n).map((t) => ({ handle: clip(t.author?.username ?? t.author, 40), text: clip(t.text, c), createdAt: t.createdAt ?? null })),
+        picks: picks.length, quotesLeftToday: h.quotesLeftToday ?? null,
+        top: picks.slice(0, n).map((p) => ({ lane: p.lane ?? null, handle: clip(p.author, 40), url: clip(p.url, 120), fit: p.fit ?? null, momentum: p.momentum ?? null, text: clip(p.text, c) })),
+        notes: arr(h.notes).slice(0, 3).map((x) => clip(x, c)),
+        ...legacy,
         note: 'get_opportunities has ages and window state.',
       },
     };
@@ -302,7 +310,7 @@ export async function readBriefRaw(clientId, deps = {}) {
   ]);
   return {
     marketingBrief, signals: marketingBrief ? await safe(() => project(marketingBrief, state)) : null,
-    quoteTargets: marketingBrief?.quoteTargets ?? null, listSignals: marketingBrief?.listSignals ?? null,
+    hotQuotes: marketingBrief?.hotQuotes ?? null, quoteTargets: marketingBrief?.quoteTargets ?? null, listSignals: marketingBrief?.listSignals ?? null,
     moduleBriefs: state?.moduleBriefs ?? null,
     planDoc, strategyDoc, corpora, xMonitor, todayRun, brain, publishedBrief, ...(features ? { features } : {}),
   };

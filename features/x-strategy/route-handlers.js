@@ -67,6 +67,7 @@ import { normalizeWatchlist } from '../x-quote-targets/client-watchlist.js';
 import { unactedHotPicks } from '../x-quote-targets/hot-calendar.js';
 import { guardXPost } from '../x-content-guard/index.js';
 import { dailyMixRulesFor } from '../x-content-inventory/daily-mix-rule.js';
+import { newestPostsFirst } from '../x-monitor/audience-diff.js';
 
 export const STRATEGY_ROUTE_ACTIONS = Object.freeze([
   'strategy-get',
@@ -1788,7 +1789,7 @@ export async function readClientAudience(db, clientId, { resolveAccountId } = {}
   const [snaps, events, posts] = await Promise.all([
     doc.ref.collection('snapshots').orderBy('date', 'desc').limit(120).get(),
     doc.ref.collection('audience_events').orderBy('detectedAt', 'desc').limit(300).get(),
-    doc.ref.collection('posts').limit(300).get(),
+    doc.ref.collection('posts').get(),
   ]);
-  return { account: doc.data(), snapshots: snaps.docs.map((d) => d.data()), events: events.docs.map((d) => d.data()), posts: posts.docs.map((d) => d.data()) };
+  return { account: doc.data(), snapshots: snaps.docs.map((d) => d.data()), events: events.docs.map((d) => d.data()), posts: newestPostsFirst(posts.docs.map((d) => d.data()), 300) };
 }
