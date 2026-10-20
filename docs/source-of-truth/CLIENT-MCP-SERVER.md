@@ -28,6 +28,12 @@ separate and unaffected.
 | `get_post_results(range)` | `social_posts` posted in the last range with `performance` as recorded |
 | `get_marketing_data(section)` | `dashboard_state/{id}` live — index, `report` (`projectBrief`), any section or dotted path. A brief run shows up on the next call. Internal fields (`HIDDEN_STATE_KEYS` in `tools.js`) and `clientBrain` are left out |
 
+## Answer framing
+`clientInstructions()` in `tools.js` (sent on `initialize`, named after the grant `label`; serverInfo title `<label> data`):
+PRIMARY = the client's website analytics (`get_site_stats` first for any "how are we doing" question); SECONDARY = the
+marketing work in HITLOOP (marketing data, calendar, results, brain). Never describe HITLOOP, its owner or other
+clients; never estimate numbers; always state the range/date; flag reports older than 30 days. Tune the wording there.
+
 ## Website sources
 One row per client in `features/client-mcp/data-sources.json`: `{clientId, label, kind:'site-stats', url, keyEnv}` +
 the env var in Vercel prod (Not The Rug: `CLIENT_STATS_KEY_NOTTHERUG`). The key is only sent as

@@ -93,7 +93,8 @@ export function publicTool(t) {
 
 // ---- dispatcher --------------------------------------------------------------------------------------------
 
-async function handleOne(msg, { registry, ctx, instructions, onCall }) {
+// serverInfo: optional override (the client MCP names itself after the client); default = HITLOOP.
+async function handleOne(msg, { registry, ctx, instructions, onCall, serverInfo }) {
   if (!msg || typeof msg !== 'object' || Array.isArray(msg) || msg.jsonrpc !== '2.0' || typeof msg.method !== 'string') {
     return err(msg?.id, RPC.INVALID_REQUEST, 'Invalid JSON-RPC request');
   }
@@ -110,7 +111,7 @@ async function handleOne(msg, { registry, ctx, instructions, onCall }) {
         return ok(msg.id, {
           protocolVersion: SUPPORTED_PROTOCOLS.includes(asked) ? asked : SUPPORTED_PROTOCOLS[0],
           capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: 'hitloop', title: 'HITLOOP', version: SERVER_VERSION },
+          serverInfo: { name: 'hitloop', title: 'HITLOOP', ...serverInfo, version: SERVER_VERSION },
           instructions,
         });
       }

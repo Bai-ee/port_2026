@@ -7,7 +7,7 @@ import { verifyAccessToken, CLIENT_SCOPE } from '../mcp/oauth.js';
 import { bearerOf, McpAuthError } from '../mcp/auth.js';
 import { clientResourceBase, grantIdOf, isActiveGrant } from './grants.js';
 
-/** @returns {Promise<{clientId:string, grantId:string}>} @throws McpAuthError 401 | 503 */
+/** @returns {Promise<{clientId:string, grantId:string, label:string}>} @throws McpAuthError 401 | 503 */
 export async function authenticateClientBearer({ header, env, now, origin, grantSecret, grants }) {
   const secret = env.MCP_OAUTH_SECRET;
   if (!secret) throw new McpAuthError(503, 'MCP is not configured on this deployment (MCP_OAUTH_SECRET is unset).', 'not-configured');
@@ -20,5 +20,5 @@ export async function authenticateClientBearer({ header, env, now, origin, grant
   if (gid !== grantIdOf(grantSecret)) throw new McpAuthError(401, 'Invalid token (wrong-grant).', 'wrong-grant');
   const grant = await grants.get(gid);
   if (!isActiveGrant(grant) || grant.clientId !== hcid) throw new McpAuthError(401, 'This connect link was revoked.', 'revoked');
-  return { clientId: hcid, grantId: gid };
+  return { clientId: hcid, grantId: gid, label: String(grant.label || hcid) };
 }

@@ -29,7 +29,7 @@ const excerptOf = (t, n = 280) => String(t ?? '').replace(/\s+/g, ' ').trim().sl
 const siteStatsTool = defTool({
   name: 'get_site_stats',
   title: 'Website stats',
-  description: 'Live stats from your website: traffic, sources, pages, CTAs, booking funnel, leads and applicants (counts and trends only). range: today | 7d | 30d (default 7d).',
+  description: 'PRIMARY SOURCE. Live stats from the client\'s own website: visits, traffic sources, top pages, CTA clicks, booking funnel, leads and applicants (counts and trends only). Call this first for any question about how the site or business is doing. range: today | 7d | 30d (default 7d). If stats.degraded lists parts, those parts fell back to zeros.',
   inputSchema: { type: 'object', properties: { range: rangeProp('Time range. Default 7d.') } },
   kind: 'external',
   // Site stats are counts keyed by words like "sessions"; key-name redaction would blank them. Values are still scanned.
@@ -50,7 +50,7 @@ const BRAIN_SECTIONS = Object.freeze(['identity', 'positioning', 'offers', 'audi
 const clientBrainTool = defTool({
   name: 'get_client_brain',
   title: 'Brand brain + strategy',
-  description: 'Your approved brand brain (identity, positioning, offers, audience, proof, voice, content) and your strategy document. part: summary (default) or markdown (the full Brain document text).',
+  description: 'Secondary. The client\'s approved brand profile (identity, positioning, offers, audience, proof, voice) and strategy document. Use for questions about brand, offers or tone. part: summary (default) or markdown (the full document text).',
   inputSchema: { type: 'object', properties: { part: { type: 'string', enum: ['summary', 'markdown'], description: 'summary (default) or markdown.' } } },
   handler: async ({ args, ctx }) => {
     const [brain, strategy] = await Promise.all([
@@ -84,7 +84,7 @@ const postRow = (p) => ({
 const calendarTool = defTool({
   name: 'get_content_calendar',
   title: 'Content calendar',
-  description: 'Planned and queued posts: scheduled in the next range (today = next 24 h, 7d, 30d; default 7d), plus undated drafts, and today\'s plan.',
+  description: 'Secondary. The client\'s planned social posts: scheduled in the next range (today = next 24 h, 7d, 30d; default 7d), plus undated drafts, and today\'s plan.',
   inputSchema: { type: 'object', properties: { range: rangeProp('How far ahead. Default 7d.') } },
   handler: async ({ args, ctx }) => {
     const range = rangeOf(args, '7d');
@@ -107,7 +107,7 @@ const calendarTool = defTool({
 const resultsTool = defTool({
   name: 'get_post_results',
   title: 'Post results',
-  description: 'Posts that went out in the last range (today = last 24 h, 7d, 30d; default 30d) with their performance numbers as recorded. Missing metrics mean not measured, not zero.',
+  description: 'Secondary. The client\'s social posts that went out in the last range (today = last 24 h, 7d, 30d; default 30d) with their performance numbers as recorded. Missing metrics mean not measured, not zero.',
   inputSchema: { type: 'object', properties: { range: rangeProp('How far back. Default 30d.') } },
   handler: async ({ args, ctx }) => {
     const range = rangeOf(args, '30d');
@@ -151,7 +151,7 @@ function sectionIndex(state) {
 const marketingDataTool = defTool({
   name: 'get_marketing_data',
   title: 'Marketing data',
-  description: 'Your marketing data from HITLOOP, live (a new brief run shows up immediately). No section: an index of what exists. section: "report" for the Market Signals report, a top-level section such as "marketingBrief", or a dotted path such as "marketingBrief.reportSnapshot.redditAnalysis".',
+  description: 'Secondary. Marketing research and reports prepared for the client: Market Signals report (local search, social, Reddit/Instagram chatter, competitors), SEO audit and other brief outputs. Check briefGeneratedAt and say how old it is. No section: an index of what exists. section: "report" for the Market Signals report, a top-level section such as "seoAudit", or a dotted path such as "marketingBrief.reportSnapshot.redditAnalysis".',
   inputSchema: { type: 'object', properties: { section: str('Section name or dotted path (up to 4 parts). Omit for the index.', { maxLength: 200 }) } },
   handler: async ({ args, ctx }) => {
     const state = (await ctx.services.readDashboardState(ctx.clientId)) || null;
@@ -172,9 +172,18 @@ const marketingDataTool = defTool({
 
 export const clientRegistry = Object.freeze([siteStatsTool, clientBrainTool, calendarTool, resultsTool, marketingDataTool]);
 
-export const CLIENT_INSTRUCTIONS = [
-  'HITLOOP client data (read-only). Every tool answers for one client only: the one this connection belongs to.',
-  'get_site_stats = live website stats; get_client_brain = brand brain + strategy; get_content_calendar = planned posts;',
-  'get_post_results = what went out and how it did; get_marketing_data = Market Signals reports and every other brief output.',
-  'Nothing here can post, schedule, approve or change anything. Keep answers short and cite the range or section used.',
-].join(' ');
+// Sent on initialize: how the assistant should weigh and phrase answers for this one client.
+export function clientInstructions({ label, siteUrl }) {
+  const name = String(label || 'this client');
+  const site = siteUrl ? new URL(siteUrl).hostname : null;
+  return [
+    `You are ${name}'s business assistant. This connection holds ${name}'s own data only; answer about ${name}${site ? ` and ${site}` : ''}, nothing else.`,
+    site
+      ? `PRIMARY: the website's live analytics. For any question about how the site or business is doing (visits, traffic, sources, pages, bookings, leads, applicants), call get_site_stats first (default 7d; use today or 30d when asked) and lead with those numbers and the trend.`
+      : 'No website stats source is connected for this client yet; say so if asked about visits, leads or applicants.',
+    'SECONDARY: the marketing work prepared for them: get_marketing_data (Market Signals report, SEO audit, brief outputs), get_content_calendar, get_post_results, get_client_brain (brand, offers, voice). Use these after the site numbers, or when asked directly.',
+    'HITLOOP is only the agency service that pipes this data in. Do not describe HITLOOP, its tools, its owner or other clients, and never present HITLOOP\'s own business as the client\'s.',
+    'Never estimate or invent a number: if it is not in the data, say it is not available. Always state the range and the date the data is from (fetchedAt, briefGeneratedAt); call out marketing reports older than 30 days as old. If stats.degraded lists parts, say those parts fell back to zeros.',
+    'Answer style: short and plain. Numbers first, then a one-line takeaway, then at most 3 practical suggestions. Read-only: you cannot post, schedule, approve or change anything.',
+  ].join('\n');
+}
