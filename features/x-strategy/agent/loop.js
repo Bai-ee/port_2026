@@ -20,6 +20,11 @@ const ANTHROPIC_VERSION = '2023-06-01';
 const PURPOSE = 'x-strategy-chat';
 const ROUND_CAP_NOTE = 'Tool limit reached for this turn. Do not call any more tools. Answer the owner now in plain text using what you already have, and say what you could not check.';
 const ROUND_CAP_FALLBACK = 'I hit my tool limit for this turn before finishing. Ask again, a bit narrower, and I will pick up from there.';
+const MAX_TOKENS_FALLBACK = 'I ran out of room before I could answer. Ask again, a bit narrower, and I will pick up from there.';
+const EMPTY_FALLBACK = 'I came back with nothing to say on that. Ask again, a bit narrower.';
+// Sonnet 5.5 thinks by default and its thinking tokens count against max_tokens. A chat turn is interactive, so
+// effort stays at medium (the default, high, spent the whole 2,200-token cap thinking and returned empty text).
+const AGENT_EFFORT = 'medium';
 
 export class AgentError extends Error {
   /** @param {string} code  missing-api-key | transport | rate-limited | api-error | bad-response | model-error */
@@ -80,7 +85,7 @@ const EPHEMERAL = Object.freeze({ type: 'ephemeral' });
  * it from cache at 0.1x instead of paying full input price again. Pure; never mutates its input.
  */
 export function withPromptCache({ model, max_tokens, messages, system, tools }) {
-  const body = { model, max_tokens };
+  const body = { model, max_tokens, output_config: { effort: AGENT_EFFORT } };
   const list = Array.isArray(messages) ? messages.map((m) => ({ ...m })) : [];
   const last = list[list.length - 1];
   if (last) {
@@ -149,7 +154,7 @@ function parseToolInput(input) {
  * @param {{callModel?:Function, toolDeps:object, logUsage?:Function, model?:string, maxRounds?:number, maxProposals?:number, maxTokens?:number}} cfg
  */
 export function createAgentLoop({
-  callModel, toolDeps, logUsage, model = STRATEGY_AGENT_MODEL, maxRounds = 10, maxProposals = 2, maxTokens = 2200,
+  callModel, toolDeps, logUsage, model = STRATEGY_AGENT_MODEL, maxRounds = 10, maxProposals = 2, maxTokens = 8000,
 } = {}) {
   const call = callModel || createAnthropicCaller();
   const log = logUsage || createDefaultLogUsage();
@@ -221,8 +226,9 @@ export function createAgentLoop({
       const toolUses = content.filter((b) => b?.type === 'tool_use');
       if (resp?.stop_reason !== 'tool_use' || !toolUses.length || capped) {
         let text = textOf(content);
-        if (capped && !text) text = ROUND_CAP_FALLBACK;
         const stopped = capped ? 'round-cap' : resp?.stop_reason === 'max_tokens' ? 'max-tokens' : 'end';
+        // Never hand the owner a blank bubble: say what happened instead.
+        if (!text) text = capped ? ROUND_CAP_FALLBACK : stopped === 'max-tokens' ? MAX_TOKENS_FALLBACK : EMPTY_FALLBACK;
         return { text, proposals, toolResults, proposalErrors, usage: { ...usage }, rounds, stopped };
       }
 

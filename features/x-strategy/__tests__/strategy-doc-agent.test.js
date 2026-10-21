@@ -194,7 +194,7 @@ test('get_audience without X Monitor data says so instead of inventing numbers',
 });
 
 test('strategy-review: stores a short line, sends the brief with a bigger budget, stamps lastReview', async () => {
-  const { call, docStore, model } = await build({ steps: [(req) => { assert.equal(req.maxTokens, 2500); return say('Review: rules hold.'); }] });
+  const { call, docStore, model } = await build({ steps: [(req) => { assert.equal(req.maxTokens, 12000); return say('Review: rules hold.'); }] });
   await call('strategy-doc-save', { sections: { thesis: 'Show the work.' }, expectedVersion: 0 });
   const r = await call('strategy-review');
   assert.equal(r.ok, true);
