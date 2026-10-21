@@ -170,7 +170,108 @@ const marketingDataTool = defTool({
   },
 });
 
-export const clientRegistry = Object.freeze([siteStatsTool, clientBrainTool, calendarTool, resultsTool, marketingDataTool]);
+// ---- get_daily_update --------------------------------------------------------------------------------------
+// The opener: one call that answers "what do you know / give me an update / get started". Every part is fail-soft,
+// so one broken source still leaves the rest of the update. Site fields follow nottherug.com/api/stats
+// (lib/server/siteStats.ts there); a site with another shape gets nulls, never guessed numbers.
+
+const BRIEF_STALE_DAYS = 30;
+const numOrNull = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+const settle = (fn) => Promise.resolve().then(fn).then((value) => ({ value }), (e) => ({ error: e?.expose ? e.message : 'not available right now' }));
+
+function localDate(ms, timeZone) {
+  try { return new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short', month: 'short', day: 'numeric' }).format(new Date(ms)); }
+  catch { return new Date(ms).toISOString().slice(0, 10); }
+}
+
+function siteToday(res) {
+  if (res.error) return { error: res.error };
+  const s = res.value?.stats || {};
+  const a = s.analytics || {};
+  return {
+    fetchedAt: res.value.fetchedAt,
+    timeZone: s.leads?.timezone || a.range?.timezone || 'UTC',
+    visits: numOrNull(a.sessions),
+    pageviews: numOrNull(a.pageviews),
+    leadsBooked: numOrNull(a.bookedLeads),
+    inquiries: numOrNull(a.inquiries),
+    leadsToday: numOrNull(s.leads?.today),
+    applicants: s.applicants
+      ? { last7Days: numOrNull(s.applicants.last7Days), total: numOrNull(s.applicants.total), onHold: numOrNull(s.applicants.onHold), note: 'The site counts applicants by 7 days and in total; there is no per-day count.' }
+      : null,
+    degraded: Array.isArray(s.degraded) ? s.degraded : [],
+  };
+}
+
+export const DAILY_UPDATE_FORMAT = [
+  'Reply with exactly this, filled from the data (each line short; "n/a" for a null number, never 0):',
+  '**Today (<date>)**: Visits <visits> · Leads booked <leadsBooked> · New applicants (7 days) <applicants.last7Days>',
+  '**Marketing**: <one line: latest brief date and age, posts out in the last 7 days, anything stale>',
+  '**Scheduled**: <count> posts in the next 7 days, next: <time> "<excerpt>" (or "nothing scheduled")',
+  '**Latest brief (<date>)**: <1-2 sentences from brief.headline / brief.summary>',
+  'Then one line: "Ask me about traffic, leads, posts or the brief." If the user also asked something, answer it after this.',
+  'If a part has an error, say that part is not available and why, in a few words. If site.degraded lists parts, those numbers fell back to zeros: say so.',
+].join('\n');
+
+const dailyUpdateTool = defTool({
+  name: 'get_daily_update',
+  title: 'Daily update (start here)',
+  description: 'START HERE. Call this first, before any other tool, when the user opens a conversation or asks a general question: hi, what do you know, give me an update, what can you tell me, boot up, get started, catch me up, status, how are we doing. One call returns today\'s site numbers (visits, leads booked, applicants), marketing status, scheduled posts and a blurb from the latest brief, plus replyFormat: answer exactly in that format.',
+  inputSchema: { type: 'object', properties: {} },
+  kind: 'external',
+  // Same reason as get_site_stats: counts keyed by words like "sessions" must not be blanked.
+  redactKeys: false,
+  handler: async ({ ctx }) => {
+    const now = ctx.now();
+    const s = ctx.services;
+    const [site, posts, today, state] = await Promise.all([
+      settle(() => fetchSiteStats({ source: siteStatsSourceFor(ctx.clientId, s.sources), range: 'today', env: s.env, fetchImpl: s.fetch, now })),
+      settle(() => s.readPosts(ctx.clientId)),
+      settle(() => s.readTodayPlan(ctx.clientId)),
+      settle(() => s.readDashboardState(ctx.clientId)),
+    ]);
+    const siteOut = siteToday(site);
+
+    let scheduled;
+    let postedLast7Days = null;
+    if (posts.error) scheduled = { error: posts.error };
+    else {
+      const rows = posts.value || [];
+      const planned = rows.filter((p) => !NOT_PLANNED.has(p.status));
+      const upcoming = planned
+        .filter((p) => { const t = msOf(p.scheduledAt); return t != null && t >= now && t <= now + RANGE_MS['7d']; })
+        .sort((a, b) => msOf(a.scheduledAt) - msOf(b.scheduledAt));
+      scheduled = {
+        next7Days: upcoming.length,
+        next: upcoming.slice(0, 3).map((p) => ({ scheduledAt: isoOf(p.scheduledAt), platform: p.platform || null, text: excerptOf(p.content, 120) })),
+        undatedDrafts: planned.filter((p) => msOf(p.scheduledAt) == null).length,
+        todaysPlan: today.error ? null : today.value?.tracks ?? null,
+      };
+      postedLast7Days = rows.filter((p) => p.status === 'posted' && (msOf(p.postedAt) ?? 0) >= now - RANGE_MS['7d']).length;
+    }
+
+    let marketing;
+    let brief = null;
+    if (state.error) { marketing = { error: state.error }; brief = { error: state.error }; }
+    else if (!state.value?.marketingBrief) marketing = { postedLast7Days, note: 'No marketing brief yet. It appears after the first brief run.' };
+    else {
+      const p = s.projectBrief(state.value.marketingBrief, state.value) || {};
+      const generatedAt = isoOf(p.generatedAt || state.value.marketingBrief.generatedAtIso);
+      const ageDays = generatedAt ? Math.floor((now - Date.parse(generatedAt)) / 86_400_000) : null;
+      marketing = {
+        briefGeneratedAt: generatedAt, briefAgeDays: ageDays, briefStale: ageDays != null && ageDays > BRIEF_STALE_DAYS,
+        postedLast7Days,
+        opportunities: Array.isArray(p.opportunities) ? p.opportunities.length : null,
+        competitorFindings: Array.isArray(p.competitors) ? p.competitors.length : null,
+      };
+      brief = { generatedAt, headline: excerptOf(p.headline, 200) || null, summary: excerptOf(p.humanBrief || p.delta, 400) || null };
+    }
+
+    return { date: localDate(now, siteOut.timeZone || 'UTC'), site: siteOut, marketing, scheduled, brief, replyFormat: DAILY_UPDATE_FORMAT };
+  },
+});
+
+export const clientRegistry = Object.freeze([dailyUpdateTool, siteStatsTool, clientBrainTool, calendarTool, resultsTool, marketingDataTool]);
 
 // Sent on initialize: how the assistant should weigh and phrase answers for this one client.
 export function clientInstructions({ label, siteUrl }) {
@@ -178,6 +279,7 @@ export function clientInstructions({ label, siteUrl }) {
   const site = siteUrl ? new URL(siteUrl).hostname : null;
   return [
     `You are ${name}'s business assistant. This connection holds ${name}'s own data only; answer about ${name}${site ? ` and ${site}` : ''}, nothing else.`,
+    'OPENING: when a conversation starts, or the user asks something general (hi, what do you know, give me an update, what can you tell me, boot up, get started, catch me up, status), call get_daily_update first and reply in its replyFormat: short and brief. Then answer any specific question.',
     site
       ? `PRIMARY: the website's live analytics. For any question about how the site or business is doing (visits, traffic, sources, pages, bookings, leads, applicants), call get_site_stats first (default 7d; use today or 30d when asked) and lead with those numbers and the trend.`
       : 'No website stats source is connected for this client yet; say so if asked about visits, leads or applicants.',

@@ -22,6 +22,7 @@ separate and unaffected.
 ## Tools
 | Tool | Reads |
 |---|---|
+| `get_daily_update()` | **The opener.** One call: site stats for `today` (visits = `analytics.sessions`, leads booked = `analytics.bookedLeads`, applicants = `applicants.last7Days`/`total` — the site has no per-day applicant count), marketing status (brief age, stale >30 d, posts out last 7 d), scheduled posts next 7 d + undated drafts + today's plan tracks, a brief blurb (`projectBrief` headline + humanBrief), and `replyFormat` (`DAILY_UPDATE_FORMAT` in `tools.js`). Each part fails soft; an unknown site shape gives nulls |
 | `get_site_stats(range)` | registered site source (`features/client-mcp/data-sources.json`), `range` = today\|7d\|30d passed through; returns the site JSON + `fetchedAt` |
 | `get_client_brain(part)` | `client_brain/current` — contents only when `approved` (summary sections or full markdown) + `x_strategy_docs/{id}` |
 | `get_content_calendar(range)` | `social_posts` for the client: scheduled in the next range + undated drafts + today's plan |
@@ -30,7 +31,9 @@ separate and unaffected.
 
 ## Answer framing
 `clientInstructions()` in `tools.js` (sent on `initialize`, named after the grant `label`; serverInfo title `<label> data`):
-PRIMARY = the client's website analytics (`get_site_stats` first for any "how are we doing" question); SECONDARY = the
+OPENING = on a conversation start or a general ask ("give me an update", "what do you know", "get started", …) call
+`get_daily_update` first and answer in its `replyFormat` (the trigger phrases are also in that tool's description,
+because ChatGPT follows tool descriptions more reliably than `instructions`; edit both together). PRIMARY = the client's website analytics (`get_site_stats` first for any "how are we doing" question); SECONDARY = the
 marketing work in HITLOOP (marketing data, calendar, results, brain). Never describe HITLOOP, its owner or other
 clients; never estimate numbers; always state the range/date; flag reports older than 30 days. Tune the wording there.
 
