@@ -21,9 +21,9 @@ test('prompt carries the likes-only rule and the no-invention rule', () => {
 
 test('prompt stays compact and embeds only a capped plan summary, not the evaluation', () => {
   const p = buildSystemPrompt({ planSummary: 'x'.repeat(10000), evaluationSummary: 'y'.repeat(5000) });
-  assert.ok(p.length < 12500); // rules + coaching playbook + capped plan summary
+  assert.ok(p.length < 13300); // rules + coaching playbook + capped plan summary
   const withDoc = buildSystemPrompt({ planSummary: 'x', strategyDocText: 'z'.repeat(20000) });
-  assert.ok(withDoc.length < 12500 + 7000, 'the strategy document is capped');
+  assert.ok(withDoc.length < 13300 + 7000, 'the strategy document is capped');
   assert.ok(!/"byType"|"gaps"/.test(p));
   const s = summarizePlan({ version: 2, plan: { authoredPerDay: 4, tier: 1, typeFloors: { 'quote-react': 1 }, typeCaps: {}, benchmarkPrimary: 'seb__design', notes: '' } });
   assert.match(s, /version 2/);
@@ -31,11 +31,11 @@ test('prompt stays compact and embeds only a capped plan summary, not the evalua
   assert.match(summarizePlan(null), /No saved plan/);
 });
 
-test('one propose tool per agent-proposable kind (server-only kinds like paid-sync have none), plus the thirty-one read tools, all with object schemas', () => {
+test('one propose tool per agent-proposable kind (server-only kinds like paid-sync have none), plus the thirty-three read tools, all with object schemas', () => {
   assert.deepEqual(Object.keys(PROPOSE_TOOL_BY_KIND).sort(), PROPOSAL_KINDS.filter((k) => !SERVER_ONLY_PROPOSAL_KINDS.includes(k) && k !== 'action').sort()); // `action` cards come from run_action, not a propose tool
   assert.ok(PROPOSAL_KINDS.includes('paid-sync') && !('paid-sync' in PROPOSE_TOOL_BY_KIND));
-  assert.deepEqual(READ_TOOL_NAMES, ['get_strategy_doc', 'get_algorithm', 'score_posts', 'get_rule_check', 'get_audience', 'get_recent_posts', 'get_x_spend', 'get_evaluation', 'get_plan', 'get_tracks', 'get_context', 'get_today_run', 'get_calendar', 'next_post', 'get_bookmark_picks', 'search_inventory', 'get_item', 'top_posts', 'get_queue', 'get_market_signals', 'find_item_media', 'find_hires_media', 'get_media_link', 'get_post', 'find_posts', 'get_opportunities', 'get_results', 'get_brief', 'get_freshness', 'get_unmet_requests', 'get_response_style']);
-  assert.equal(TOOL_SCHEMAS.length, 60);
+  assert.deepEqual(READ_TOOL_NAMES, ['get_strategy_doc', 'get_algorithm', 'score_posts', 'get_rule_check', 'get_audience', 'get_recent_posts', 'get_x_spend', 'get_evaluation', 'get_plan', 'get_tracks', 'get_context', 'get_today_run', 'get_calendar', 'next_post', 'get_bookmark_picks', 'search_inventory', 'get_item', 'top_posts', 'get_queue', 'get_market_signals', 'find_item_media', 'find_hires_media', 'get_media_link', 'get_post', 'find_posts', 'get_opportunities', 'get_results', 'get_brief', 'get_freshness', 'refresh_data', 'refresh_status', 'get_unmet_requests', 'get_response_style']);
+  assert.equal(TOOL_SCHEMAS.length, 62);
   for (const t of TOOL_SCHEMAS) {
     assert.equal(t.input_schema.type, 'object');
     assert.ok(t.description);
@@ -188,4 +188,42 @@ test('chat agent model is claude-sonnet-5-5 from one config value, with a price 
   // $2 / $10 per MTok (verified against the claude-api model table), cache reads 0.1x input
   assert.equal(computeAnthropicCost({ model: STRATEGY_AGENT_MODEL, inputTokens: 1_000_000, outputTokens: 1_000_000 }), 12);
   assert.equal(computeAnthropicCost({ model: STRATEGY_AGENT_MODEL, cacheReadTokens: 1_000_000 }), 0.2);
+});
+
+test('refresh_data / refresh_status: validated, forwarded to the injected deps; x-search is not offered', async () => {
+  const names = TOOL_SCHEMAS.map((t) => t.name);
+  assert.equal(names.indexOf('refresh_data'), names.indexOf('get_freshness') + 1);
+  assert.equal(names.indexOf('refresh_status'), names.indexOf('get_freshness') + 2);
+  const schema = TOOL_SCHEMAS.find((t) => t.name === 'refresh_data').input_schema;
+  assert.ok(!schema.properties.groups.items.enum.includes('x-search'));
+  assert.ok(schema.properties.groups.items.enum.includes('recent-posts'));
+
+  const seen = [];
+  const deps = { refreshData: async (a) => { seen.push(a); return { ok: true, results: [] }; }, refreshStatus: async (a) => { seen.push(a); return { ok: true, requests: [] }; } };
+  assert.deepEqual(await runReadTool('refresh_data', { groups: ['recent-posts', 'recent-posts', 'bookmarks'], reason: 'perf since morning' }, deps), { ok: true, results: [] });
+  assert.deepEqual(seen[0], { groups: ['recent-posts', 'bookmarks'], reason: 'perf since morning' });
+  assert.match((await runReadTool('refresh_data', { groups: ['x-search'] }, deps)).error, /unknown group/);
+  assert.match((await runReadTool('refresh_data', { groups: [] }, deps)).error, /required/);
+  assert.deepEqual(await runReadTool('refresh_status', { requestIds: ['a'] }, deps), { ok: true, requests: [] });
+  assert.deepEqual(seen[1], { requestIds: ['a'] });
+  assert.deepEqual(await runReadTool('refresh_data', { groups: ['analysis'] }, {}), { error: 'not available' });
+});
+
+test('get_freshness annotates each part with agentCanRun when the dep is present, and is unchanged without it', async () => {
+  const bundle = {
+    generatedAt: 'now', staleGroups: ['recent-posts', 'analysis'],
+    parts: {
+      'recent-posts': { asOf: null, ageHours: 29, maxAgeHours: 2, stale: true, refreshGroup: 'recent-posts' },
+      analysis: { asOf: null, ageHours: 40, maxAgeHours: 24, stale: true, refreshGroup: 'analysis' },
+      'strategy-plan': { asOf: null, ageHours: null, maxAgeHours: null, stale: false, refreshGroup: null },
+    },
+  };
+  const base = { readBriefBundle: async () => bundle };
+  const plain = await runReadTool('get_freshness', {}, base);
+  assert.equal(plain.parts['recent-posts'].agentCanRun, undefined);
+  const withDep = await runReadTool('get_freshness', {}, { ...base, agentRefreshAvailability: async (g) => ({ availability: Object.fromEntries(g.map((x) => [x, x === 'analysis' ? 'needs-confirm' : true])), trustedRefresh: false, dailyCapUsd: 1, spentTodayUsd: 0 }) });
+  assert.equal(withDep.parts['recent-posts'].agentCanRun, true);
+  assert.equal(withDep.parts.analysis.agentCanRun, 'needs-confirm');
+  assert.equal(withDep.parts['strategy-plan'].agentCanRun, undefined);
+  assert.deepEqual(withDep.agentRefresh, { trustedRefresh: false, dailyCapUsd: 1, spentTodayUsd: 0 });
 });

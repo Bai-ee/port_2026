@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BRIEF_PARTS, FRESHNESS_RULES, BRIEF_LIMITS, buildBriefBundle, freshnessOf, readBriefRaw, toMs } from '../brief-bundle.js';
+import { AGENT_ONLY_REFRESH_GROUP_IDS } from '../contracts.js';
 import { REFRESH_GROUPS } from '../../../components/dashboard/marketing/refresh-groups.js';
 import { runReadTool, READ_TOOLS, LIMITS, serializeResult } from '../agent/tools.js';
 
@@ -8,7 +9,7 @@ const NOW = Date.parse('2026-10-17T12:00:00Z');
 const hoursAgo = (h) => new Date(NOW - h * 3_600_000).toISOString();
 
 test('every part has a rule; refresh groups are real REFRESH_GROUPS ids or null', () => {
-  const ids = new Set(REFRESH_GROUPS.map((g) => g.id));
+  const ids = new Set([...REFRESH_GROUPS.map((g) => g.id), ...AGENT_ONLY_REFRESH_GROUP_IDS]); // agent-only groups (recent-posts) have no panel card
   assert.deepEqual(Object.keys(FRESHNESS_RULES).sort(), [...BRIEF_PARTS].sort());
   for (const [k, r] of Object.entries(FRESHNESS_RULES)) {
     assert.ok(r.refreshGroup === null || ids.has(r.refreshGroup), k);

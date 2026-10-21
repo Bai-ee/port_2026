@@ -16,6 +16,8 @@ export const PILOT_FREE_ACTIONS = Object.freeze(new Set([
   'strategy-doc-revert', 'strategy-review', 'strategy-freshness', 'strategy-action-log', 'strategy-autonomy-get',
   'strategy-reply-style-get', 'strategy-reply-style-save', 'strategy-unmet-list', 'strategy-unmet-status',
   'x-data-sources-get',
+  // the agent's own refresh: free groups always; paid groups only run when the pilot owner turned on trustedRefresh (autonomy-save stays gated)
+  'agent-refresh', 'agent-refresh-status',
   // draft creation only (unscheduled social_posts rows; no slot, no ledger, no plan enforcement)
   'strategy-calendar-batch-preview', 'strategy-calendar-batch-create', 'strategy-daily-fill-preview', 'strategy-daily-fill-create',
   'draft-quote', 'create-draft-from-item', 'dismiss', 'bookmark-decide',

@@ -336,3 +336,30 @@ The owner's X bookmarks as a free, Mac-sourced content signal, judged against th
 - **Respond kinds** (`judge.respond`): `quote` = a striking object worth a quote-react with a flat 2-8 word caption, only while the post is < 36h old (an older one is downgraded to `swipe` by the judge and again when the picks are built); `reply` = a conversation where he has real standing (age does not matter); `swipe` = a reference for his own future showcase/record/mix post, not for engaging; `skip` = no use (never a pick). `how` (<= 140 chars) rests only on the Brain's authority claims; a quote/reply whose angle has no Brain evidence is demoted to `swipe`. Pick bar: fit >= 0.5 (bookmarks are already his own selection; the hot scan uses 0.65).
 - **Picks payload.** `{ scannedAt, total, newThisRun, judged, costUsd, picks: [<= 12 open judged items, fit desc: { id, url, author, text(<=280), media, likes, ageHours, lane, angle, respond, how, why, fit }], notes }`.
 - **Actions** (POST `/api/dashboard/quote-targets`, admin + client context; pilot-free like the other draft/read actions): `bookmarks-find` queues the scan (returns `{ok, source:'mac', mode:'bookmarks', requestId, status}`; poll with `quote-scan-status`); `bookmarks-list {filter:'open'|'all'|'swipe', limit}` returns `{ok, filter, picks, items, total, scannedAt}`; `bookmark-decide {id, decision:'quote'|'reply'|'dismiss', text?}` creates an unscheduled `social_posts` draft (quote through `handleDraftQuote`, reply with `source:'bookmarks'` and `replyTo {author,url,text,source:'bookmark'}`) and records the decision; a bookmark can be decided once (409 after). `handleNow` passes `freshness.bookmarksAt`.
+
+## Agent self-refresh (2026-10-21)
+
+The strategy chat (and MCP chat) refreshes the data it needs itself instead of telling the owner to run a script or click Refresh. Origin: the owner asked "what's my performance since this morning, should I post a video?" and got a 29-hour-old answer.
+
+**Flow.** `get_freshness` lists stale parts with their Refresh group and `agentCanRun` (`true` | `needs-confirm` | `no-path`). The model calls `refresh_data({groups, reason})`; server groups finish inside the turn (then it re-reads and answers), Mac groups return `queued` + `requestId` + `etaSeconds` and the model answers with what it has, then calls `refresh_status({requestIds})` first on the next turn. Engine: `features/x-strategy/agent/refresh-engine.js` (`runAgentRefresh`, `agentRefreshStatus`, `agentRefreshAvailability`); wired in `route-handlers.js` (`agentRefreshDeps`, `toolDepsFor`); route actions `agent-refresh` and `agent-refresh-status` on `/api/dashboard/quote-targets` (catalogued as `strategy.agent-refresh` tier 1 and `strategy.agent-refresh-status` tier 0; pilot-free, because paid groups are gated by the owner setting below).
+
+**Groups** (`AGENT_REFRESH_GROUP_IDS` in `contracts.js` = the panel groups minus `x-search`, plus agent-only `recent-posts`; `REFRESH_GROUP_IDS` still mirrors `refresh-groups.js`):
+
+| group | runs as | cost |
+|---|---|---|
+| market-signals | `refreshDigestClient` phase `signals`, groups `{market-signals}` | paid (placeholder $0.10) |
+| analysis | phase `analysis` | paid ($0.25) |
+| renders | phase `modules` | paid ($0.50) |
+| x-monitor | `runPaidSync x_monitor_sync` (profile + posts) | paid (calls x $0.01) |
+| strategy-accounts | Mac request (ETA 180 s); paid X API pull only when its source is `x-api` | free / paid |
+| quote-targets / hot-quotes / bookmarks / recent-posts | scan queue modes `quote` / `hot` / `bookmarks` / `recent-posts` (ETA 240 / 480 / 120 / 60 s) | free |
+| today-queue | `daily-run-generate`, no model copy | free |
+| x-search | never offered to the agent | paid X search |
+
+The digest phases are called in-process (lazy import of `app/api/worker/pre-digest-refresh/route.js` `refreshDigestClient`, `source: 'agent-refresh'`), never by calling the worker route. Each server group is capped at 45 s; an overrun reports `running` and the work continues while the turn lives.
+
+**Cost policy.** `client_configs.agentAutonomy.trustedRefresh = { enabled, dailyCapUsd }` (default `{false, 1}`, cap range 0.1 to 20; set via `strategy-autonomy-save`, which stays pilot-gated and is not an agent action). Free groups always run. A paid group runs only when `enabled` and `spentTodayUsd + estimate <= dailyCapUsd`; otherwise `needs-confirm` with the estimate, and the model offers the existing `propose_refresh` card. `quote-targets` on the `x-api` source is always `needs-confirm`. Ledger: `x_agent_refresh_spend/{clientId}/days/{YYYY-MM-DD, UTC}` = `{usd, runs:[{at, group, usd}]}`, written when a paid group starts (a timeout may still have cost money). Dollar figures are conservative placeholders (`PLACEHOLDER_USD`, `X_READ_USD_PER_CALL` in `refresh-engine.js`): only the Scout run has a documented price. `executePaidSync` still takes a slot of the 10/day paid-sync counter.
+
+**New part.** `recent-posts` (own-timeline snapshot as-of, maxAge 2 h, group `recent-posts`) in `brief-bundle.js`; reads the `x_recent_posts` snapshot via `readRecentPosts`.
+
+**Still needs a card / the owner.** x-search; any paid group while the setting is off or over the cap; quote-targets on `x-api`; everything that posts, replies, follows or schedules (unchanged: typed confirm / owner-approved trusted schedule). Mac groups need the launchd refresh worker to be running and handling the `recent-posts` mode (scan-queue + worker side are separate work). The owner-facing toggle ("Let the agent refresh paid sources") is a UI item for `AgentPermissionsPanel.jsx`; the API accepts `trustedRefresh` already.

@@ -12,7 +12,7 @@ import { createRequire } from 'node:module';
 
 export const BRIEF_PARTS = Object.freeze([
   'market-signals', 'watchlist', 'platform-searches', 'x-search', 'analysis', 'executive-brief', 'strategy-builder',
-  'quote-targets', 'strategy-accounts', 'x-monitor', 'today-run', 'creative-modules',
+  'quote-targets', 'strategy-accounts', 'x-monitor', 'recent-posts', 'today-run', 'creative-modules',
   'strategy-plan', 'strategy-doc', 'client-brain', 'proof-builder',
 ]);
 
@@ -28,6 +28,7 @@ export const FRESHNESS_RULES = Object.freeze({
   'quote-targets':     { maxAgeHours: 12, refreshGroup: 'hot-quotes',        label: 'Hot quote picks (the only quotes on the calendar)', how: 'The 06:30 Mac hot scan (launchd), or Refresh group "Hot quotes" (Hot now)' },
   'strategy-accounts': { maxAgeHours: 48, refreshGroup: 'strategy-accounts', label: 'Post corpora for you and each benchmark', how: 'Refresh group "Strategy accounts" (Mac worker, or the X API when that source is selected)' },
   'x-monitor':         { maxAgeHours: 72, refreshGroup: 'x-monitor',         label: 'X Monitor (counters, posts, follower roster)', how: 'Refresh group "X Monitor" (paid X API)' },
+  'recent-posts':      { maxAgeHours: 2,  refreshGroup: 'recent-posts',      label: 'Recent posts with views (your own timeline)', how: 'Agent refresh group "recent-posts" (Mac bird pull, about 1 minute)' },
   'today-run':         { maxAgeHours: 24, refreshGroup: 'today-queue',       label: "Today's suggestions run", how: 'Refresh group "Today and queue"' },
   'creative-modules':  { maxAgeHours: 72, refreshGroup: 'renders',           label: 'Creative / video module briefs', how: 'Refresh group "Renders"' },
   'strategy-plan':     { maxAgeHours: null, refreshGroup: null,              label: 'Strategy plan', how: 'Edited by the owner or via proposals' },
@@ -197,6 +198,11 @@ const BUILDERS = {
     const s = isObj(a.sync) ? a.sync : {};
     return { asOf: newest([s.postsAt, s.audienceAt, s.profileAt, a.updatedAt]), present: true, summary: { postsAt: iso(toMs(s.postsAt)), audienceAt: iso(toMs(s.audienceAt)), profileAt: iso(toMs(s.profileAt)), postsCount: s.postsCount ?? null, rosterSize: s.rosterSize ?? null, rosterComplete: s.rosterComplete ?? null, lastGained: s.lastGained ?? null, lastLost: s.lastLost ?? null, note: 'get_audience has the figures.' } };
   },
+  'recent-posts': (raw) => {
+    const r = raw.recentPosts;
+    if (!isObj(r) || toMs(r.asOf) == null) return { asOf: null, present: false, summary: { note: 'No recent-posts snapshot of the own timeline.' } };
+    return { asOf: toMs(r.asOf), present: true, summary: { asOf: iso(toMs(r.asOf)), source: clip(r.source, 40) || null, note: 'get_recent_posts has the posts and their views.' } };
+  },
   'today-run': (raw, { n, c }) => {
     const r = raw.todayRun;
     if (!isObj(r)) return { asOf: null, present: false, summary: { note: 'No daily run saved today.' } };
@@ -271,7 +277,7 @@ export function freshnessOf(bundle) {
 /**
  * Read the raw inputs. Every sub-read is non-fatal (a failure leaves that key undefined -> part reports "not present").
  * @param {string} clientId
- * @param {{db:object, readPlanDoc?:Function, readStrategyDoc?:Function, readCorpora?:Function, readXMonitor?:Function, readTodayRun?:Function, projectBrief?:Function}} deps
+ * @param {{db:object, readPlanDoc?:Function, readStrategyDoc?:Function, readCorpora?:Function, readXMonitor?:Function, readTodayRun?:Function, readRecentPosts?:Function, projectBrief?:Function}} deps
  */
 export async function readBriefRaw(clientId, deps = {}) {
   const { db } = deps;
@@ -292,7 +298,7 @@ export async function readBriefRaw(clientId, deps = {}) {
       xMarketTalk: (digest.exists ? digest.data()?.include?.xMarketTalk : false) === true,
     };
   });
-  const [planDoc, strategyDoc, corpora, xMonitor, todayRun, brain, publishedBrief] = await Promise.all([
+  const [planDoc, strategyDoc, corpora, xMonitor, todayRun, brain, publishedBrief, recentPosts] = await Promise.all([
     safe(deps.readPlanDoc ? () => deps.readPlanDoc(clientId) : null),
     safe(deps.readStrategyDoc ? () => deps.readStrategyDoc(clientId) : null),
     safe(deps.readCorpora ? () => deps.readCorpora(clientId) : null),
@@ -307,11 +313,12 @@ export async function readBriefRaw(clientId, deps = {}) {
       const seg = (s) => encodeURIComponent(String(s ?? ''));
       return { path: `/briefs/${seg(best.d.publicClientSlug || best.id)}/${seg(best.d.publicBriefSlug || best.id)}`, updatedAtMs: best.ms || null };
     }),
+    safe(deps.readRecentPosts ? () => deps.readRecentPosts(clientId) : null), // {asOf, source} of the own-timeline snapshot
   ]);
   return {
     marketingBrief, signals: marketingBrief ? await safe(() => project(marketingBrief, state)) : null,
     hotQuotes: marketingBrief?.hotQuotes ?? null, quoteTargets: marketingBrief?.quoteTargets ?? null, listSignals: marketingBrief?.listSignals ?? null,
     moduleBriefs: state?.moduleBriefs ?? null,
-    planDoc, strategyDoc, corpora, xMonitor, todayRun, brain, publishedBrief, ...(features ? { features } : {}),
+    planDoc, strategyDoc, corpora, xMonitor, todayRun, brain, publishedBrief, recentPosts, ...(features ? { features } : {}),
   };
 }

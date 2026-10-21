@@ -22,6 +22,8 @@ export const STRATEGY_ACTIONS = [
   S('strategy.autonomy.get', 'strategy', 'Get the agent autonomy setting', 'The owner-set autonomy (tier1 auto|confirm, tier3 confirm|typed). Read-only; only the owner can change it.', 'strategy-autonomy-get', obj({}, [])),
   S('strategy.refresh-status', 'strategy', 'Check a corpus refresh', 'Status of a queued account refresh, or (workerOnly) just the Mac worker heartbeat.', 'strategy-refresh-status',
     obj({ requestId: str('Refresh request id.'), workerOnly: bool('Return only the worker heartbeat.') }, [])),
+  S('strategy.agent-refresh-status', 'strategy', 'Check agent refreshes', 'Status of Mac refreshes queued by refresh_data (same data as the refresh_status tool).', 'agent-refresh-status',
+    obj({ requestIds: arr(str('requestId from refresh_data'), 'Request ids.') }, ['requestIds'])),
   S('strategy.evaluate-handle', 'strategy', 'Evaluate an X handle', 'Compares a handle\'s stored posts to the client\'s own (needs a prior refresh). Read-only.', 'strategy-evaluate-handle', obj({ handle: str('X handle, no @.') }, ['handle'])),
   S('strategy.doc.get', 'strategy', 'Get the strategy document', 'The strategy document sections (or the seeded draft) with section metadata.', 'strategy-doc-get', obj({}, [])),
   S('strategy.freshness', 'strategy', 'Get data freshness', 'Per-part freshness of the brief bundle and per-Refresh-group asOf / stale-after hours.', 'strategy-freshness', obj({}, [])),
@@ -31,6 +33,8 @@ export const STRATEGY_ACTIONS = [
 
   S('strategy.refresh', 'strategy', 'Queue an account refresh', 'Queues a corpus refresh (posts for the own + benchmark handles) for the Mac worker via bird. Free; max 6 handles. Refused (409) when the source is the paid X API; that runs from the Refresh panel.', 'strategy-refresh',
     obj({ handles: arr(str('X handle'), 'Handles; default own + benchmarks.') }, []), { tier: 1 }),
+  S('strategy.agent-refresh', 'strategy', 'Refresh data groups', 'Same as refresh_data: refresh data groups. Free groups run; paid groups only under the owner\'s agent-refresh setting and daily cap, else needs-confirm. Never posts.', 'agent-refresh',
+    obj({ groups: arr(str('Refresh group id'), 'Groups to refresh.'), reason: str('Why.') }, ['groups']), { tier: 1 }),
   S('strategy.x-data-sources.save', 'strategy', 'Set the X data sources', 'Chooses mac (free) or x-api (paid) for Strategy accounts and/or Quote targets. Spends nothing by itself; the auto-daily switch is owner-only (Refresh panel).', 'x-data-sources-save',
     obj({ strategyAccounts: str('mac | x-api.', { enum: ['mac', 'x-api'] }), quoteTargets: str('mac | x-api.', { enum: ['mac', 'x-api'] }) }, []),
     { tier: 1, snapshot: [{ path: 'client_configs/{clientId}', field: 'marketingBriefConfig.xGrowth.dataSources' }] }),

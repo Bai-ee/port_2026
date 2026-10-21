@@ -8,15 +8,15 @@
 //  - One open request per client: a second Refresh while one is queued/running returns that one (no duplicate scans).
 //  - Claim = transaction queued -> running {leaseId, startedAt}; a 'running' older than 30 min is reclaimable.
 //  - finish() only writes when the lease still matches.
-//  - A request carries a `mode` ('quote' | 'hot' | 'bookmarks'); only an open request of the SAME mode is reused.
+//  - A request carries a `mode` ('quote' | 'hot' | 'bookmarks' | 'recent-posts'); only an open request of the SAME mode is reused.
 // Single-field equality queries only (no composite index).
 
 import { randomUUID } from 'node:crypto';
 
 export const QUOTE_SCAN_COLLECTION = 'x_quote_scan_requests';
 export const SCAN_STATUS = Object.freeze({ QUEUED: 'queued', RUNNING: 'running', DONE: 'done', FAILED: 'failed', RATE_LIMITED: 'rate-limited' });
-/** 'quote' = the legacy watchlist scan; 'hot' = the hot quote scan (design + music breakouts, judged); 'bookmarks' = the owner's X bookmarks, judged. Docs without a mode are 'quote'. */
-export const SCAN_MODES = Object.freeze({ QUOTE: 'quote', HOT: 'hot', BOOKMARKS: 'bookmarks' });
+/** 'quote' = the legacy watchlist scan; 'hot' = the hot quote scan (design + music breakouts, judged); 'bookmarks' = the owner's X bookmarks, judged; 'recent-posts' = the owner's own last-48h posts with views (free bird pull, no judge). Docs without a mode are 'quote'. */
+export const SCAN_MODES = Object.freeze({ QUOTE: 'quote', HOT: 'hot', BOOKMARKS: 'bookmarks', RECENT_POSTS: 'recent-posts' });
 export const SCAN_STALE_RUNNING_MS = 30 * 60 * 1000;
 export const SCAN_TERMINAL = Object.freeze([SCAN_STATUS.DONE, SCAN_STATUS.FAILED, SCAN_STATUS.RATE_LIMITED]);
 

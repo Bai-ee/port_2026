@@ -2,7 +2,7 @@
 // No I/O: every read goes through injected `toolDeps`. Safe to import anywhere.
 // Propose tools never write; they validate a payload and hand back a proposal for the owner to confirm.
 
-import { PROPOSAL_KINDS, PLAN_LIMITS, KNOWN_SLOT_TYPES, BULK_LIMITS, DAILY_FILL_INCLUDES, QUEUE_BULK_ACTIONS, BUCKET_EDIT_OPS, REFRESH_GROUP_IDS, CALENDAR_DECISIONS, CALENDAR_ITEM_KINDS } from '../contracts.js';
+import { PROPOSAL_KINDS, PLAN_LIMITS, KNOWN_SLOT_TYPES, BULK_LIMITS, DAILY_FILL_INCLUDES, QUEUE_BULK_ACTIONS, BUCKET_EDIT_OPS, REFRESH_GROUP_IDS, AGENT_REFRESH_GROUP_IDS, CALENDAR_DECISIONS, CALENDAR_ITEM_KINDS } from '../contracts.js';
 import { estimateFor, REFRESH_GROUPS } from '../../../components/dashboard/marketing/refresh-groups.js';
 import { SOURCE_KINDS } from '../../x-content-inventory/buckets.js';
 import { validateProposal } from './proposals.js';
@@ -349,8 +349,25 @@ export const READ_TOOLS = Object.freeze([
   },
   {
     name: 'get_freshness',
-    description: 'Per brief/market/strategy part: asOf, age in hours, stale or not, and the Refresh group that updates it (null = no Refresh path), plus the staleGroups to refresh. Call before giving action items.',
+    description: 'Per brief/market/strategy part: asOf, age in hours, stale or not, the Refresh group that updates it (null = no Refresh path) and agentCanRun for that group (true = refresh_data runs it now, needs-confirm = paid and not allowed right now, no-path = the owner runs it), plus the staleGroups to refresh. Call before answering anything about performance, the calendar, hot picks, bookmarks, market signals or the brief.',
     input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'refresh_data',
+    description: `Refresh data yourself. groups = Refresh group ids from get_freshness (${AGENT_REFRESH_GROUP_IDS.join(', ')}). Server groups (market-signals, analysis, renders, x-monitor, today-queue) finish inside this call: then re-read the tool you need. Mac groups (recent-posts about 1 min, bookmarks about 2, strategy-accounts about 3, quote-targets about 4, hot-quotes about 8) come back queued with a requestId: answer now with what you have and call refresh_status next turn. Free groups always run. Paid groups (x-monitor, market-signals, analysis, renders) run only when the owner turned on "Let the agent refresh paid sources" and today's cap allows; otherwise status needs-confirm with the cost: offer propose_refresh. Never posts or publishes.`,
+    input_schema: {
+      type: 'object',
+      properties: {
+        groups: { type: 'array', minItems: 1, maxItems: AGENT_REFRESH_GROUP_IDS.length, items: { type: 'string', enum: [...AGENT_REFRESH_GROUP_IDS] }, description: 'Refresh group ids to refresh' },
+        reason: str('Why, in a few words (the owner\'s question)', { maxLength: 200 }),
+      },
+      required: ['groups'],
+    },
+  },
+  {
+    name: 'refresh_status',
+    description: 'Status of Mac refreshes queued by refresh_data (queued, running, done, failed, rate-limited) with their result. Call it first on the next turn after a Mac group was queued, then re-read the data if done. Free.',
+    input_schema: { type: 'object', properties: { requestIds: { type: 'array', minItems: 1, maxItems: 12, items: str('requestId from refresh_data'), description: 'Request ids' } }, required: ['requestIds'] },
   },
   {
     name: 'get_unmet_requests',
@@ -939,7 +956,28 @@ export async function runReadTool(name, input, toolDeps) {
     }
     case 'get_freshness': {
       if (typeof deps.readBriefBundle !== 'function') return NA();
-      return freshnessOf(await deps.readBriefBundle({}));
+      const fresh = freshnessOf(await deps.readBriefBundle({}));
+      if (typeof deps.agentRefreshAvailability !== 'function') return fresh;
+      // Tell the model, per part, whether refresh_data may run its group right now.
+      try {
+        const groups = [...new Set(Object.values(fresh.parts).map((p) => p.refreshGroup).filter(Boolean))];
+        const info = await deps.agentRefreshAvailability(groups);
+        const parts = {};
+        for (const [k, p] of Object.entries(fresh.parts)) parts[k] = p.refreshGroup ? { ...p, agentCanRun: info.availability?.[p.refreshGroup] ?? 'no-path' } : p;
+        return { ...fresh, parts, agentRefresh: { trustedRefresh: info.trustedRefresh === true, dailyCapUsd: info.dailyCapUsd ?? null, spentTodayUsd: info.spentTodayUsd ?? 0 } };
+      } catch { return fresh; }
+    }
+    case 'refresh_data': {
+      if (typeof deps.refreshData !== 'function') return NA();
+      const groups = Array.isArray(input?.groups) ? [...new Set(input.groups.filter((g) => typeof g === 'string'))] : [];
+      const bad = groups.filter((g) => !AGENT_REFRESH_GROUP_IDS.includes(g));
+      if (!groups.length) return { error: 'groups is required', valid: AGENT_REFRESH_GROUP_IDS };
+      if (bad.length) return { error: `unknown group(s): ${bad.map((g) => g.slice(0, 30)).join(', ')}`, valid: AGENT_REFRESH_GROUP_IDS };
+      return deps.refreshData({ groups, reason: typeof input?.reason === 'string' ? input.reason.slice(0, 200) : '' });
+    }
+    case 'refresh_status': {
+      if (typeof deps.refreshStatus !== 'function') return NA();
+      return deps.refreshStatus({ requestIds: Array.isArray(input?.requestIds) ? input.requestIds : [] });
     }
     case 'get_unmet_requests':
       if (typeof deps.listUnmetRequests !== 'function') return NA();

@@ -5,6 +5,7 @@ import {
   validateActionArgs, runActionTool, ACTION_TOOL_NAMES,
 } from '../agent/action-runtime.js';
 import { createMemoryActionStores } from '../agent/action-stores.js';
+import { createMemoryRefreshSpendStore } from '../agent/refresh-spend.js';
 import { validateProposal, decideProposal, buildExecutors } from '../agent/proposals.js';
 import { createAgentLoop } from '../agent/loop.js';
 import { createStrategyHandlers } from '../route-handlers.js';
@@ -62,7 +63,7 @@ test('gates: tier resolution, X floor can never drop below typed', () => {
   assert.equal(resolveGate(e('m.sync'), {}), 'confirm');
   assert.equal(resolveGate(e('m.sync'), { tier3: 'typed' }), 'typed');
   assert.equal(resolveGate(e('q.schedule'), { tier3: 'confirm' }), 'typed');
-  assert.deepEqual(normalizeAutonomy({ tier1: 'x', tier2: 'auto', tier3: 'auto' }), { tier1: 'auto', tier2: 'confirm', tier3: 'confirm' , trustedSchedule: { enabled: false, minLeadMinutes: 10, dailyCap: 3 } });
+  assert.deepEqual(normalizeAutonomy({ tier1: 'x', tier2: 'auto', tier3: 'auto' }), { tier1: 'auto', tier2: 'confirm', tier3: 'confirm' , trustedSchedule: { enabled: false, minLeadMinutes: 10, dailyCap: 3 }, trustedRefresh: { enabled: false, dailyCapUsd: 1 } });
 });
 
 test('trusted scheduling: the only X exception, off by default, needs the explicit marker and stays within the daily cap', () => {
@@ -226,7 +227,7 @@ test('autonomy tier3=typed makes non-X spend typed; X stays typed with tier3=con
   const loose = setup({ autonomy: { tier3: 'confirm' } });
   assert.equal((await loose.rt.run(CTX, { actionId: 'q.schedule', args: { postId: 'p' } })).proposal.payload.typed, true);
   const saved = await loose.rt.saveAutonomy(CLIENT, { tier1: 'confirm', tier3: 'bogus' });
-  assert.deepEqual(saved, { tier1: 'confirm', tier2: 'confirm', tier3: 'confirm' , trustedSchedule: { enabled: false, minLeadMinutes: 10, dailyCap: 3 } });
+  assert.deepEqual(saved, { tier1: 'confirm', tier2: 'confirm', tier3: 'confirm' , trustedSchedule: { enabled: false, minLeadMinutes: 10, dailyCap: 3 }, trustedRefresh: { enabled: false, dailyCapUsd: 1 } });
 });
 
 test('bulk: items => one card with count; >50 refused; tier-1 batch runs as ONE audit row with one undo', async () => {
@@ -492,9 +493,9 @@ function handlers(extra = {}) {
 
 test('route: autonomy get/save (X floor stays), log, undo, 503 without a runtime', async () => {
   const s = handlers();
-  assert.deepEqual((await s.call('strategy-autonomy-get', {})).autonomy, { tier1: 'auto', tier2: 'confirm', tier3: 'confirm' , trustedSchedule: { enabled: false, minLeadMinutes: 10, dailyCap: 3 } });
+  assert.deepEqual((await s.call('strategy-autonomy-get', {})).autonomy, { tier1: 'auto', tier2: 'confirm', tier3: 'confirm' , trustedSchedule: { enabled: false, minLeadMinutes: 10, dailyCap: 3 }, trustedRefresh: { enabled: false, dailyCapUsd: 1 } });
   const saved = await s.call('strategy-autonomy-save', { autonomy: { tier1: 'confirm', tier2: 'auto', tier3: 'typed' } });
-  assert.deepEqual(saved.autonomy, { tier1: 'confirm', tier2: 'confirm', tier3: 'typed' , trustedSchedule: { enabled: false, minLeadMinutes: 10, dailyCap: 3 } });
+  assert.deepEqual(saved.autonomy, { tier1: 'confirm', tier2: 'confirm', tier3: 'typed' , trustedSchedule: { enabled: false, minLeadMinutes: 10, dailyCap: 3 }, trustedRefresh: { enabled: false, dailyCapUsd: 1 } });
   assert.equal((await s.call('strategy-autonomy-save', { tier3: 'auto' })).status, 400);
   await s.stores.audit.append(CLIENT, 'u1', { at: '2026-10-11T00:00:00Z', by: 'o', actionId: 'q.update', tier: 1, status: 'ok', undoable: false, items: [{}] });
   const log = await s.call('strategy-action-log', {});
@@ -549,4 +550,88 @@ test('ui-model: actionCardModel tones/typed gate and undoChipModel', async () =>
   assert.deepEqual(undoChipModel({ undoId: 'u1' }).undoId, 'u1');
   assert.equal(undoChipModel({ ok: true }), null);
   assert.equal(proposalStatusText({ kind: 'action', status: 'confirmed', result: { message: 'Edit: done.' } }).detail, 'Edit: done.');
+});
+
+// ---- agent self-refresh: route actions, autonomy.trustedRefresh, toolDeps ----
+function refreshHandlers() {
+  const stores = createMemoryActionStores();
+  const actionRuntime = createActionRuntime({ ...stores, registry, invoke: async () => ({ ok: true, status: 200, json: { ok: true } }) });
+  const corpusStore = createMemoryCorpusStore({ loadCommitted: () => null });
+  const planStore = createMemoryPlanStore();
+  const refreshService = createRefreshService({ store: corpusStore, queueStore: createMemoryRefreshQueue(), now: () => NOW, enabled: false, detectBird: async () => ({ available: false }), idGen: () => 'rs-1', ingest: async () => ({ rows: [], pull: {} }), runBirdFor: () => () => '' });
+  const scans = new Map();
+  const quoteScanQueue = {
+    request: async ({ clientId, mode }) => { const id = `scan-${mode}`; scans.set(id, { id, clientId, mode, status: 'queued' }); return { requestId: id, status: 'queued' }; },
+    get: async (id) => scans.get(id) ?? null,
+  };
+  const digestCalls = [];
+  const spend = createMemoryRefreshSpendStore();
+  const h = createStrategyHandlers({
+    corpusStore, planStore, refreshService, clock: () => NOW, readXGrowthConfig: async () => ({ ownHandle: 'me', benchmarkHandles: [] }),
+    actionRuntime, quoteScanQueue, refreshSpendStore: spend,
+    runDigestRefresh: async (clientId, o) => { digestCalls.push([clientId, o.phase, [...o.groups]]); return { ok: true }; },
+    runDailyAction: async () => ({ ok: true, run: { suggestions: [{}] } }),
+  });
+  const AUTH = { decoded: { email: 'owner@x.com', uid: 'u1' } };
+  const call = (a, b) => h.handle(a, { clientId: CLIENT, ...b }, { clientId: CLIENT }, AUTH);
+  return { h, call, scans, digestCalls, spend };
+}
+
+test('route: autonomy-save accepts trustedRefresh, validates it, and leaves tier/trustedSchedule alone', async () => {
+  const s = refreshHandlers();
+  assert.deepEqual((await s.call('strategy-autonomy-get', {})).autonomy.trustedRefresh, { enabled: false, dailyCapUsd: 1 });
+  const ok = await s.call('strategy-autonomy-save', { autonomy: { trustedRefresh: { enabled: true, dailyCapUsd: 2.5 } } });
+  assert.deepEqual(ok.autonomy.trustedRefresh, { enabled: true, dailyCapUsd: 2.5 });
+  assert.equal(ok.autonomy.tier1, 'auto');
+  assert.deepEqual(ok.autonomy.trustedSchedule, { enabled: false, minLeadMinutes: 10, dailyCap: 3 });
+  assert.equal((await s.call('strategy-autonomy-save', { autonomy: { trustedRefresh: { enabled: true, dailyCapUsd: 50 } } })).status, 400);
+  assert.equal((await s.call('strategy-autonomy-save', { autonomy: { trustedRefresh: { enabled: true, dailyCapUsd: 0.01 } } })).status, 400);
+  assert.equal((await s.call('strategy-autonomy-save', { autonomy: { trustedRefresh: { enabled: 'yes' } } })).status, 400);
+  assert.equal((await s.call('strategy-autonomy-save', { autonomy: { trustedRefresh: 5 } })).status, 400);
+  assert.deepEqual((await s.call('strategy-autonomy-get', {})).autonomy.trustedRefresh, { enabled: true, dailyCapUsd: 2.5 }); // refused saves changed nothing
+  assert.equal((await s.call('strategy-autonomy-save', { tier1: 'confirm' })).autonomy.trustedRefresh.enabled, true); // other saves keep it
+});
+
+test('route: agent-refresh runs free groups, gates paid ones on the owner setting, and records spend', async () => {
+  const s = refreshHandlers();
+  const free = await s.call('agent-refresh', { groups: ['today-queue', 'recent-posts', 'hot-quotes', 'analysis'] });
+  assert.equal(free.ok, true);
+  assert.deepEqual(free.results.map((r) => [r.group, r.status]), [['today-queue', 'done'], ['recent-posts', 'queued'], ['hot-quotes', 'queued'], ['analysis', 'needs-confirm']]);
+  assert.deepEqual(free.pendingRequestIds, ['scan-recent-posts', 'scan-hot']);
+  assert.equal(s.digestCalls.length, 0); // policy is off: nothing paid ran
+
+  await s.call('strategy-autonomy-save', { autonomy: { trustedRefresh: { enabled: true, dailyCapUsd: 0.3 } } });
+  const paid = await s.call('agent-refresh', { groups: ['market-signals', 'analysis'] });
+  assert.deepEqual(paid.results.map((r) => [r.group, r.status]), [['market-signals', 'done'], ['analysis', 'needs-confirm']]); // 0.10 fits, +0.25 passes 0.30
+  assert.deepEqual(s.digestCalls, [[CLIENT, 'signals', ['market-signals']]]);
+  assert.equal(paid.spentUsd, 0.1);
+  assert.equal((await s.spend.get(CLIENT, '2026-10-11')).usd, 0.1);
+
+  assert.equal((await s.call('agent-refresh', { groups: [] })).status, 400);
+  assert.equal((await s.call('agent-refresh', { groups: ['x-search'] })).status, 400); // never offered to the agent
+  assert.equal((await s.call('agent-refresh', { groups: ['nope'] })).status, 400);
+});
+
+test('route: agent-refresh-status maps queued Mac requests and hides other clients\' ids', async () => {
+  const s = refreshHandlers();
+  await s.call('agent-refresh', { groups: ['bookmarks'] });
+  s.scans.get('scan-bookmarks').status = 'done';
+  s.scans.get('scan-bookmarks').result = { picks: 3 };
+  s.scans.set('scan-other', { id: 'scan-other', clientId: 'other', status: 'done' });
+  const r = await s.call('agent-refresh-status', { requestIds: ['scan-bookmarks', 'scan-other'] });
+  assert.deepEqual(r.requests.map((x) => [x.requestId, x.status]), [['scan-bookmarks', 'done'], ['scan-other', 'unknown']]);
+  assert.deepEqual(r.requests[0].result, { picks: 3 });
+  assert.equal((await s.call('agent-refresh-status', { requestIds: [] })).status, 400);
+});
+
+test('toolDeps: refreshData / refreshStatus / agentRefreshAvailability are closed over the client and feed get_freshness', async () => {
+  const s = refreshHandlers();
+  const deps = s.h.toolDepsFor(CLIENT, { clientId: CLIENT }, { decoded: { email: 'owner@x.com' } });
+  const out = await deps.refreshData({ groups: ['recent-posts', 'renders'], reason: 'since this morning' });
+  assert.deepEqual(out.results.map((r) => [r.group, r.status]), [['recent-posts', 'queued'], ['renders', 'needs-confirm']]);
+  const st = await deps.refreshStatus({ requestIds: out.pendingRequestIds });
+  assert.equal(st.requests[0].status, 'queued');
+  const a = await deps.agentRefreshAvailability(['recent-posts', 'analysis', 'x-search']);
+  assert.deepEqual(a.availability, { 'recent-posts': true, analysis: 'needs-confirm', 'x-search': 'no-path' });
+  assert.equal(a.trustedRefresh, false);
 });
