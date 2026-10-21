@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { estimateFor, paidGroupsFor } from '../refresh-groups.js';
+import { estimateFor, paidGroupsFor, skippedGroupsFor } from '../refresh-groups.js';
 
 test('empty ctx falls back to the static cost string with no dollars', () => {
   const e = estimateFor('market-signals', {});
@@ -53,4 +53,19 @@ test('groupFreshness: local memory, server asOf (newer wins), stale, none', asyn
   const old = groupFreshness('analysis', { now, serverAsOf: { analysis: '2026-10-15T12:00:00Z' } });
   assert.equal(old.stale, true);
   assert.equal(groupFreshness('analysis', { now, serverAsOf: { analysis: '2026-10-16T12:00:00Z' }, staleAfterHours: 48 }).stale, false);
+});
+
+test('skippedGroupsFor lists unselected groups in catalog order with a reason', () => {
+  const out = skippedGroupsFor(['today-queue', 'market-signals']);
+  assert.equal(out.length, 7);
+  assert.deepEqual(out.map((g) => g.id), ['x-search', 'analysis', 'strategy-accounts', 'x-monitor', 'renders', 'quote-targets', 'hot-quotes']);
+  assert.equal(out.find((g) => g.id === 'x-monitor').reason, 'paid groups start off; tick it in Refresh settings');
+  assert.equal(out.find((g) => g.id === 'x-monitor').label, 'X Monitor');
+  assert.equal(out.find((g) => g.id === 'strategy-accounts').reason, 'not selected');
+});
+
+test('skippedGroupsFor treats x-api source groups as paid; bad input skips everything', () => {
+  const out = skippedGroupsFor([], { dataSources: { quoteTargets: 'x-api' } });
+  assert.match(out.find((g) => g.id === 'quote-targets').reason, /paid groups/);
+  assert.equal(skippedGroupsFor(undefined).length, 9);
 });

@@ -43,6 +43,9 @@ function relativeTime(iso) {
 
 const ordered = (ids) => REFRESH_GROUPS.map((g) => g.id).filter((id) => ids.includes(id));
 
+// Paid X groups with their own single-call runner: one-click "sync just this" pills in the header modal.
+const QUICK_SYNC_GROUPS = [{ id: 'x-monitor', buttonId: 'marketing-refresh-quick-x-monitor', label: 'Sync X Monitor' }];
+
 const CONFIG_LINK_IDS = ['market-signals', 'x-monitor', 'today-queue'];
 
 // Sum of the known dollar figures + calls over the paid rows; `unknownUsd` flags rows with no dollar figure.
@@ -96,6 +99,7 @@ export default function MarketingRefreshControl({ variant = 'popover', running =
   const [selection, setSelection] = useState({ ids: [], todayWithModel: false });
   const [last, setLast] = useState({});
   const [pending, setPending] = useState(null); // selection awaiting confirm
+  const [cancelledNotice, setCancelledNotice] = useState(false); // a paid confirm was dismissed: nothing ran
   // X data sources (Mac bird vs X API) per group, loaded with the panel; a failed read leaves everything on the free Mac path.
   const [sources, setSources] = useState(() => normalizeDataSources(null));
   const [sourceNote, setSourceNote] = useState('');
@@ -126,7 +130,7 @@ export default function MarketingRefreshControl({ variant = 'popover', running =
   useEffect(() => { setSelection(readSelection()); }, []);
   useEffect(() => { if (open) setLast(readLastRefreshed()); }, [open, running]);
 
-  const update = useCallback((next) => { setSelection(next); writeSelection(next); setPending(null); }, []);
+  const update = useCallback((next) => { setSelection(next); writeSelection(next); setPending(null); setCancelledNotice(false); }, []);
 
   const toggle = (id) => {
     const ids = selection.ids.includes(id) ? selection.ids.filter((x) => x !== id) : [...selection.ids, id];
@@ -140,6 +144,7 @@ export default function MarketingRefreshControl({ variant = 'popover', running =
   };
 
   const attempt = (sel) => {
+    setCancelledNotice(false);
     const full = { ids: ordered(sel.ids), todayWithModel: !!sel.todayWithModel && sel.ids.includes('today-queue') };
     if (!full.ids.length || running) return 'none';
     if (paidGroupsFor(full).length || xApiPaidRows(full, sources).length) { setPending(full); return 'confirm'; }
@@ -154,14 +159,20 @@ export default function MarketingRefreshControl({ variant = 'popover', running =
     if (attempt(selection) !== 'ran') setOpen(true);
   };
 
+  // Closing the modal with a paid confirm still pending means nothing ran: drop it and say so on next open.
+  const closeModal = useCallback(() => {
+    setOpen(false);
+    if (pending) { setPending(null); setCancelledNotice(true); }
+  }, [pending]);
+
   useEffect(() => {
     if (!isHeader || !open) return undefined;
-    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    const onKey = (e) => { if (e.key === 'Escape') closeModal(); };
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     window.addEventListener('keydown', onKey);
     return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = prevOverflow; };
-  }, [isHeader, open]);
+  }, [isHeader, open, closeModal]);
 
   // Cancel also unticks the paid groups so a stale paid selection never survives into the next Run.
   const cancel = () => {
@@ -169,11 +180,13 @@ export default function MarketingRefreshControl({ variant = 'popover', running =
     const ids = selection.ids.filter((id) => !paidIds.has(id));
     const todayWithModel = paidIds.has('today-queue') ? false : selection.todayWithModel;
     update({ ...selection, ids, todayWithModel });
+    setCancelledNotice(true);
   };
 
   const confirm = () => {
     const sel = pending;
     setPending(null);
+    setCancelledNotice(false);
     // xApiConfirmed is set ONLY here, and only when this confirm row listed an X API group with its estimate.
     if (sel) fire(selectionUsesXApi(sel, sources) ? { ...sel, xApiConfirmed: true } : sel);
   };
@@ -215,6 +228,15 @@ export default function MarketingRefreshControl({ variant = 'popover', running =
               <XSpendLine getIdToken={getIdToken} active={open} />
             </div>
           </div>
+
+          {isHeader ? (
+            <div id="marketing-refresh-quick-sync-row" role="group" aria-label="Quick sync">
+              <span className="mr-caps">QUICK SYNC · PAID, ASKS FIRST</span>
+              {QUICK_SYNC_GROUPS.map((q) => (
+                <button key={q.id} type="button" id={q.buttonId} className="mr-ghost-btn" disabled={running} onClick={() => attempt({ ids: [q.id], todayWithModel: false })}>{q.label}</button>
+              ))}
+            </div>
+          ) : null}
 
           <div id="marketing-refresh-group-list" role="list">
             {REFRESH_GROUPS.map((g) => {
@@ -303,6 +325,8 @@ export default function MarketingRefreshControl({ variant = 'popover', running =
             })}
           </div>
 
+          {cancelledNotice && !pending ? <div id="marketing-refresh-cancelled-notice" role="status">Cancelled — no paid call was made.</div> : null}
+
           {sourceNote ? <div id="marketing-refresh-source-note" role="alert">[ERROR: {sourceNote}]</div> : null}
 
           {pending && paid.length ? (
@@ -344,6 +368,7 @@ export default function MarketingRefreshControl({ variant = 'popover', running =
   );
 
   const selectedCount = selection.ids.length;
+  const selectedLabels = REFRESH_GROUPS.filter((g) => selection.ids.includes(g.id)).map((g) => g.label).join(', ');
 
   return (
     <div id={isHeader ? 'header-refresh-group' : 'marketing-refresh-shell'}>
@@ -368,9 +393,9 @@ export default function MarketingRefreshControl({ variant = 'popover', running =
             disabled={running}
             aria-label={running ? 'Refreshing' : 'Refresh'}
             onClick={runFromHeader}
-            title={selectedCount ? `Refresh ${selectedCount} selected` : 'Choose what to refresh'}
+            title={selectedCount ? `Refresh ${selectedCount} selected: ${selectedLabels}` : 'Nothing selected. Paid groups start off each session; open Refresh settings to choose.'}
           >
-            <span id="header-refresh-run-label">{running ? 'Refreshing…' : 'Refresh'}</span>
+            <span id="header-refresh-run-label">{running ? 'Refreshing…' : 'Refresh'}{running ? null : <span id="marketing-refresh-button-count">{selectedCount ? ` · ${selectedCount}` : ' · set up'}</span>}</span>
             <RefreshCw id="header-refresh-run-icon" size={15} strokeWidth={2} aria-hidden="true" />          </button>
           {open && typeof document !== 'undefined' ? createPortal(
             <div
@@ -378,12 +403,12 @@ export default function MarketingRefreshControl({ variant = 'popover', running =
               role="dialog"
               aria-modal="true"
               aria-label="Refresh settings"
-              onClick={() => setOpen(false)}
+              onClick={closeModal}
             >
               <div id="refresh-settings-modal-card" data-tooltip-disabled="true" onClick={(e) => e.stopPropagation()}>
                 <div id="refresh-settings-modal-header" className="tile-detail-bento-cell" style={marqueeCardEdgeStyle}>
                   <h2 id="refresh-settings-modal-title">Refresh</h2>
-                  <button id="refresh-settings-modal-close" type="button" onClick={() => setOpen(false)} aria-label="Close">[ ✕ ]</button>
+                  <button id="refresh-settings-modal-close" type="button" onClick={closeModal} aria-label="Close">[ ✕ ]</button>
                 </div>
                 <div id="refresh-settings-modal-body" className="tile-detail-bento-cell" style={marqueeCardEdgeStyle}>
                   <div id="refresh-settings-modal-content" className="tile-detail-tab-content">
@@ -439,6 +464,8 @@ export default function MarketingRefreshControl({ variant = 'popover', running =
         #marketing-refresh-x-rate-actions { display: flex; align-items: center; gap: 8px; }
         #marketing-refresh-x-rate-save { min-height: 36px; padding: 0 14px; border: 1px solid var(--t-control-border-strong); border-radius: 999px; background: transparent; color: var(--t-text); font: inherit; cursor: pointer; }
 
+        #marketing-refresh-quick-sync-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 0; border-bottom: 1px solid var(--t-border-faint); }
+        #marketing-refresh-cancelled-notice { margin-top: 10px; font-family: var(--mr-mono); font-size: 11px; letter-spacing: 0.08em; color: var(--t-text-secondary); }
         #marketing-refresh-group-list { display: flex; flex-direction: column; }
         #marketing-refresh-panel .mr-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 7px 0; border-bottom: 1px solid var(--t-border-faint); }
         #marketing-refresh-panel .mr-row-main { display: flex; flex: 1 1 240px; align-items: center; gap: 12px; min-width: 0; min-height: 40px; cursor: pointer; }

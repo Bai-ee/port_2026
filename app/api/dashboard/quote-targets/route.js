@@ -20,7 +20,8 @@ import { quotedUrlOf } from '../../../../features/x-strategy/post-query.js';
 import { parseStatusUrl, findQuotedCandidate, buildQuotedPreview } from '../../../../features/x-quote-targets/quoted-preview.js';
 import { buildPostResults } from '../../../../features/x-content-inventory/results.js';
 import { recentPostsFromQueue } from '../../../../features/x-content-inventory/allocate-slot.js';
-import { readUnifiedCalendar, readCalendarQuoteTargets as readCalendarQuoteTargetsShared } from '../../../../features/x-content-inventory/calendar-reader.js';
+import { readUnifiedCalendar, readQuoteState as readCalendarQuoteState, readCalendarQuoteTargets as readCalendarQuoteTargetsShared } from '../../../../features/x-content-inventory/calendar-reader.js';
+import { projectNow } from '../../../../features/x-content-inventory/now-projection.js';
 import { ctDate, toRow as calendarPostRow } from '../../../../features/x-content-inventory/month-calendar.js';
 import { hotOpportunities, hotPicksToTargets, windowHoursOf } from '../../../../features/x-quote-targets/hot-calendar.js';
 import { decideCalendarItem } from '../../../../features/x-content-inventory/calendar-decide.js';
@@ -322,6 +323,7 @@ const SUPPORTED_ACTIONS = [
   'inventory-save',
   'inventory-delete',
   'month-calendar',
+  'now',
   'calendar-approve',
   'calendar-unapprove',
   'calendar-suggestion-approve',
@@ -442,6 +444,25 @@ async function handleMonthCalendar(context, body) {
   await withRowThumbs(calendar, pkgs, context.clientId);
   // Daily baseline slots (confirmed strategy doc) ride on the calendar so the Day view can mark them (display only).
   return { ok: true, calendar: { ...calendar, baselineSlots, quoteBudget } };
+}
+
+/** "Right now" strip: today's baseline slots (current/next, filled?, next action) + data freshness. Read-only, no X/model calls. */
+async function handleNow(context) {
+  const now = Date.now();
+  const { days, baselineSlots } = await readUnifiedCalendar(fb.adminDb, context.clientId, { from: ctDate(now), to: ctDate(now), now });
+  const day = days.find((d) => d.date === ctDate(now)) || days[0] || null;
+  const { rawQuoteTargets, hotQuotes } = await readCalendarQuoteState(fb.adminDb, context.clientId).catch(() => ({}));
+  let postsAt = null;
+  try {
+    const xSync = await import('../../../../features/x-monitor/sync.js');
+    const { accountId } = await xSync.resolveAccountId(context.clientId);
+    if (accountId) postsAt = (await (await import('../../../../features/x-monitor/store.js')).readAccount(accountId))?.sync?.postsAt ?? null;
+  } catch { postsAt = null; }
+  const projection = projectNow({
+    day, baselineSlots, hotQuotes, now,
+    freshness: { postsAt, hotPicksAt: hotQuotes?.scannedAt ?? null, quoteTargetsAt: rawQuoteTargets?.generatedAt ?? null },
+  });
+  return { ok: true, now: projection };
 }
 
 /**
@@ -1272,6 +1293,7 @@ export async function POST(request) {
     if (action === 'post-status') return json(await handlePostStatus(context, body));
     if (action === 'quoted-post-preview') return json(await handleQuotedPostPreview(context, body));
     if (action === 'post-results') return json(await handlePostResults(context));
+    if (action === 'now') return json(await handleNow(context));
     if (action === 'month-calendar') {
       return json(await handleMonthCalendar(context, body));
     }

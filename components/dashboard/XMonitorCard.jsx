@@ -10,6 +10,7 @@ import {
   snapshotDeltas,
   snapshotSeries,
 } from '../../features/x-monitor/audience-diff.js';
+import { relativeTime, windowTotals, withinRange } from '../../features/x-monitor/post-window.js';
 
 // X Monitor — read-only performance dashboard for the active client's connected X account
 // (optional `clientId` prop → `?as=<clientId>`; omitted = the caller's own workspace).
@@ -34,6 +35,7 @@ import {
 const POLL_INTERVAL_MS = 4000;
 const POLL_MAX_TRIES = 30;
 const RANGES = [
+  { key: 1.5, label: '36H' },
   { key: 7, label: '7D' },
   { key: 30, label: '30D' },
   { key: 90, label: '90D' },
@@ -70,13 +72,6 @@ function fmtDay(value) {
   const d = new Date(typeof value === 'number' ? value : Date.parse(value));
   if (Number.isNaN(d.getTime())) return '—';
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
-}
-
-function withinRange(value, days) {
-  if (!days) return true;
-  const ms = typeof value === 'number' ? value : Date.parse(value || '');
-  if (!Number.isFinite(ms)) return false;
-  return ms >= Date.now() - days * 86_400_000;
 }
 
 // ── Charts (hand-rolled SVG — no chart library in this repo's deps) ──────────
@@ -255,19 +250,23 @@ export default function XMonitorCard({ getIdToken, hideRefresh = false, clientId
   const posts = data?.posts || [];
   const estimate = data?.estimate || null;
 
+  // Range in days (1.5 = 36H); post-window.js also accepts { sinceMs } for callers that need it.
+  const rangeSpec = range;
+
   const series = useMemo(() => {
     const all = snapshotSeries(snapshots);
-    if (!range) return all;
-    return all.filter((p) => withinRange(`${p.date}T00:00:00Z`, range));
-  }, [snapshots, range]);
+    if (!rangeSpec) return all;
+    return all.filter((p) => withinRange(`${p.date}T00:00:00Z`, rangeSpec));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapshots, range, sync?.postsAt]);
 
   const deltas = useMemo(() => snapshotDeltas(snapshots), [snapshots]);
-  const gained = useMemo(() => events.filter((e) => e.type === 'gained' && withinRange(e.detectedAt, range)), [events, range]);
-  const lost = useMemo(() => events.filter((e) => e.type === 'lost' && withinRange(e.detectedAt, range)), [events, range]);
+  const gained = useMemo(() => events.filter((e) => e.type === 'gained' && withinRange(e.detectedAt, rangeSpec)), [events, range, sync?.postsAt]); // eslint-disable-line react-hooks/exhaustive-deps
+  const lost = useMemo(() => events.filter((e) => e.type === 'lost' && withinRange(e.detectedAt, rangeSpec)), [events, range, sync?.postsAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const sortedPosts = useMemo(() => {
     const rows = posts
-      .filter((p) => withinRange(p.createdAt, range))
+      .filter((p) => withinRange(p.createdAt, rangeSpec))
       .map((p) => ({ ...p, er: engagementRate(p.metrics || {}) }));
     const { key, dir } = postSort;
     const pick = (row) => (key === 'createdAt' ? Date.parse(row.createdAt || 0) || 0
@@ -275,7 +274,11 @@ export default function XMonitorCard({ getIdToken, hideRefresh = false, clientId
       : Number(row.metrics?.[key] ?? -1));
     rows.sort((a, b) => (dir === 'asc' ? pick(a) - pick(b) : pick(b) - pick(a)));
     return rows;
-  }, [posts, postSort, range]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [posts, postSort, range, sync?.postsAt]);
+
+  const totals = useMemo(() => windowTotals(posts, range, sync), [posts, range, sync]);
+  const postsAsOf = relativeTime(sync?.postsAt);
 
   const impressionsMissing = posts.length > 0 && posts.every((p) => p.metrics?.impressions == null);
   const audienceCalls = estimate?.pages || 1;
@@ -506,6 +509,16 @@ export default function XMonitorCard({ getIdToken, hideRefresh = false, clientId
               <span className="xm-kicker"><BarChart3 size={13} /> Post performance</span>
               <small>{posts.length ? `${sortedPosts.length} OF ${posts.length} POSTS` : 'NOT SYNCED'}</small>
             </div>
+            <p id="x-monitor-posts-asof-line" className="xm-muted">
+              {sync?.postsAt
+                ? `Posts synced ${postsAsOf} (${fmtWhen(sync.postsAt)}) · metrics are X's private 30-day impressions`
+                : 'Never synced — click Posts only'}
+            </p>
+            {sortedPosts.length ? (
+              <div id="x-monitor-window-totals-row" className="xm-muted">
+                {fmtInt(totals.posts)} posts · {fmtInt(totals.impressions)} impressions · {fmtInt(totals.likes)} likes · {fmtInt(totals.replies)} replies · {fmtPct(totals.er)} eng. rate
+              </div>
+            ) : null}
             {impressionsMissing ? (
               <p className="xm-error">
                 Impressions came back empty — your X access tier did not serve owner-only metrics, so these rows are public
