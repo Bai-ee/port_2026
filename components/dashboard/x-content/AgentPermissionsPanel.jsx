@@ -29,6 +29,7 @@ export default function AgentPermissionsPanel({ clientId, call }) {
   const [tier3, setTier3] = useState('confirm');
   const [xLocked, setXLocked] = useState(true);
   const [trusted, setTrusted] = useState({ enabled: false, minLeadMinutes: 10, dailyCap: 3 });
+  const [refreshTrust, setRefreshTrust] = useState({ enabled: false, dailyCapUsd: 1 });
   const [log, setLog] = useState([]);
   const [msg, setMsg] = useState({ kind: '', text: '' });
   const [busy, setBusy] = useState(false);
@@ -44,6 +45,7 @@ export default function AgentPermissionsPanel({ clientId, call }) {
       if (au.tier1 === 'auto' || au.tier1 === 'confirm') setTier1(au.tier1);
       if (au.tier3 === 'confirm' || au.tier3 === 'typed') setTier3(au.tier3);
       if (au.trustedSchedule && typeof au.trustedSchedule === 'object') setTrusted({ enabled: au.trustedSchedule.enabled === true, minLeadMinutes: au.trustedSchedule.minLeadMinutes ?? 10, dailyCap: au.trustedSchedule.dailyCap ?? 3 });
+      if (au.trustedRefresh && typeof au.trustedRefresh === 'object') setRefreshTrust({ enabled: au.trustedRefresh.enabled === true, dailyCapUsd: Number(au.trustedRefresh.dailyCapUsd) > 0 ? Number(au.trustedRefresh.dailyCapUsd) : 1 });
       setLog(Array.isArray(l?.log) ? l.log : Array.isArray(l?.entries) ? l.entries : []);
     } catch (e) {
       if (mounted.current) setMsg({ kind: 'err', text: e?.data?.error || e?.message || 'Could not load permissions.' });
@@ -54,7 +56,7 @@ export default function AgentPermissionsPanel({ clientId, call }) {
   const save = async (next) => {
     setBusy(true); setMsg({ kind: '', text: '' });
     try {
-      await call('strategy-autonomy-save', { clientId, autonomy: { tier1: next.tier1, tier2: 'confirm', tier3: next.tier3, ...(next.trustedSchedule ? { trustedSchedule: next.trustedSchedule } : {}) } });
+      await call('strategy-autonomy-save', { clientId, autonomy: { tier1: next.tier1, tier2: 'confirm', tier3: next.tier3, ...(next.trustedSchedule ? { trustedSchedule: next.trustedSchedule } : {}), trustedRefresh: next.trustedRefresh || refreshTrust } });
       if (mounted.current) setMsg({ kind: 'ok', text: 'Saved.' });
     } catch (e) {
       if (mounted.current) { setMsg({ kind: 'err', text: e?.data?.error || e?.message || 'Could not save.' }); load(); }
@@ -108,6 +110,22 @@ export default function AgentPermissionsPanel({ clientId, call }) {
             </label>
           </div>
         ) : null}
+      </div>
+      <div id="agent-permissions-trusted-refresh-field" style={S.field}>
+        <label htmlFor="agent-permissions-trusted-refresh-toggle" style={{ fontSize: 13, fontWeight: 600, display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input id="agent-permissions-trusted-refresh-toggle" type="checkbox" checked={refreshTrust.enabled} disabled={busy}
+            onChange={(e) => { const r = { ...refreshTrust, enabled: e.target.checked }; setRefreshTrust(r); save({ tier1, tier3, ...(trusted.enabled ? { trustedSchedule: trusted } : {}), trustedRefresh: r }); }} />
+          Let the agent refresh paid sources itself (X Monitor, Market signals, Analysis, Renders)
+        </label>
+        {refreshTrust.enabled ? (
+          <label htmlFor="agent-permissions-trusted-refresh-cap" style={{ ...S.field, fontSize: 12.5 }}>
+            Daily cap $
+            <input id="agent-permissions-trusted-refresh-cap" type="number" min={0.1} max={20} step={0.1} style={S.select} value={refreshTrust.dailyCapUsd} disabled={busy}
+              onChange={(e) => { const v = Math.min(20, Math.max(0.1, Number(e.target.value) || 1)); setRefreshTrust({ ...refreshTrust, dailyCapUsd: v }); }}
+              onBlur={() => save({ tier1, tier3, ...(trusted.enabled ? { trustedSchedule: trusted } : {}), trustedRefresh: refreshTrust })} />
+          </label>
+        ) : null}
+        <p id="agent-permissions-trusted-refresh-note" style={S.help}>Free sources (recent posts, hot quotes, bookmarks, quote targets, strategy accounts) always refresh on request. X posting stays typed-confirm.</p>
       </div>
       {msg.text ? <p id="x-strategy-agent-permissions-message" role={msg.kind === 'err' ? 'alert' : 'status'} style={msg.kind === 'err' ? S.err : S.ok}>{msg.text}</p> : null}
       <div id="x-strategy-agent-recent-actions" data-section="agent-recent-actions">

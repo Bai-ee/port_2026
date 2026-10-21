@@ -21,7 +21,7 @@
 //       Strategy chat. Executes nothing; the owner still confirms in the UI. Needs a chatStore (else {ok:false,status:503}).
 
 import { createRequire } from 'node:module';
-import { DEFAULT_PLAN, EVALUATION_THRESHOLDS, MAX_BULK_PROPOSALS_PER_TURN, BULK_PROPOSAL_KINDS } from './contracts.js';
+import { DEFAULT_PLAN, EVALUATION_THRESHOLDS, MAX_BULK_PROPOSALS_PER_TURN, BULK_PROPOSAL_KINDS, AGENT_REFRESH_GROUP_IDS } from './contracts.js';
 import { evaluate as defaultEvaluate } from './evaluate.js';
 import { StrategyPlanError, createFirestorePlanStore } from './plan-store.js';
 import { createFirestoreCorpusStore, normalizeHandle, CorpusStoreError } from './corpus-store.js';
@@ -51,7 +51,9 @@ import {
 } from './agent/proposals.js';
 import { normalizeSelected, describeSelected } from './agent/prompt.js';
 import { shapeMarketSignals } from './agent/tools.js';
-import { createActionRuntime } from './agent/action-runtime.js';
+import { createActionRuntime, TRUSTED_REFRESH_CAP_RANGE } from './agent/action-runtime.js';
+import { runAgentRefresh, agentRefreshStatus, agentRefreshAvailability, X_READ_USD_PER_CALL } from './agent/refresh-engine.js';
+import { createFirestoreRefreshSpendStore, utcDayKey } from './agent/refresh-spend.js';
 import { createFirestoreActionStores } from './agent/action-stores.js';
 import { randomUUID } from 'node:crypto';
 import { StrategyDocError, createFirestoreStrategyDocStore } from './strategy-doc-store.js';
@@ -74,6 +76,8 @@ export const STRATEGY_ROUTE_ACTIONS = Object.freeze([
   'strategy-get',
   'strategy-refresh',
   'strategy-refresh-status',
+  'agent-refresh',
+  'agent-refresh-status',
   'strategy-evaluate-handle',
   'strategy-plan-apply',
   'strategy-plan-revert',
@@ -233,6 +237,9 @@ export function createStrategyHandlers({
   readBriefRaw = null, // (clientId, {readPlanDoc, readStrategyDoc, readCorpora, readXMonitor, readTodayRun}) -> raw brief inputs (brief-bundle.js readBriefRaw); absent => get_brief / get_freshness say not available
   editPost = null, // ({clientId, postId, content?, scheduledAt?}) -> saved post; the existing updateSocialPost path
   runPaidSync = null, // ({clientId, kind, params, by, auth, context}) -> result; the `paid-sync` proposal executor (features/mcp/paid-syncs.js). Absent => confirming one fails with a clear message
+  runDigestRefresh = null, // (clientId, {phase:'signals'|'analysis'|'modules', groups:Set, actorUid}) -> pre-digest-refresh refreshDigestClient result; the agent's server-side refresh (never the worker route over HTTP). Absent => those groups say not available
+  describePaidSync = null, // ({clientId, kind, params, auth}) -> {estimate} (features/mcp/paid-syncs.js describePaidSync); prices x_monitor_sync for the agent's refresh cap. Absent => placeholder estimate
+  refreshSpendStore = null, // agent/refresh-spend.js store; absent => the agent's paid refresh groups always answer needs-confirm
   readAudience = null, // (clientId) -> {account, snapshots, events, posts} from THIS client's stored X Monitor account ({account:null} when none); null => tool says unavailable
   readRecentPosts = null, // ({clientId, handle, hours}) -> get_recent_posts result (recent-posts.js createRecentPostsReader); null => tool says unavailable
   readBuckets = null, // (clientId) -> Content Center buckets (listBuckets rows); absent => tracks are not synced to buckets
@@ -476,6 +483,14 @@ export function createStrategyHandlers({
       readStrategyDoc: (id) => (docStore ? readDoc(id) : null),
       readTodayRun: readTodayRun ? (id) => readTodayRun(id) : null,
       readXMonitor: readAudience ? async (id) => (await readAudience(id))?.account ?? null : null,
+      // As-of of the own-timeline snapshot (the Mac pull). Reads the stored snapshot; never spends.
+      readRecentPosts: readRecentPosts ? async () => {
+        const profile = preloaded.profile ?? (preloaded.profile = await loadProfile(clientId));
+        const own = safeHandle(profile.ownHandle);
+        if (!own) return null;
+        const r = await readRecentPosts({ clientId, handle: own, hours: 1 });
+        return r?.asOf ? { asOf: r.asOf, source: r.source ?? null } : null;
+      } : null,
       readCorpora: async () => {
         const profile = preloaded.profile ?? (preloaded.profile = await loadProfile(clientId));
         const handles = [profile.ownHandle, ...(profile.benchmarkHandles || [])].map((h) => safeHandle(h)).filter(Boolean);
@@ -733,6 +748,78 @@ export function createStrategyHandlers({
     return { ok: true, request, ...health };
   }
 
+  // ---- agent self-refresh (refresh_data / refresh_status tools and the agent-refresh route actions) ----------------
+
+  /** The owner's trustedRefresh setting + today's agent spend + the client's data sources. Free reads. */
+  async function agentRefreshState(clientId) {
+    const policy = actionRuntime ? (await actionRuntime.getAutonomy(clientId)).trustedRefresh : { enabled: false, dailyCapUsd: 1 };
+    const spentTodayUsd = refreshSpendStore ? (await refreshSpendStore.get(clientId, utcDayKey(clock())).catch(() => null))?.usd ?? 0 : 0;
+    return { policy: refreshSpendStore ? policy : { ...policy, enabled: false }, spentTodayUsd, sources: await sourcesOf(clientId) };
+  }
+
+  function agentRefreshDeps(clientId, context, auth) {
+    const who = auth?.decoded?.email || auth?.decoded?.uid || null;
+    const unavailable = (what) => { throw new Error(`${what} is not available on this deployment.`); };
+    return {
+      getSources: () => sourcesOf(clientId),
+      spend: refreshSpendStore,
+      estimatePaid: async (group) => {
+        if (group === 'strategy-accounts') {
+          const p = await loadProfile(clientId);
+          const e = estimateCorporaPull({ handles: [p.ownHandle, ...p.benchmarkHandles].filter(Boolean), maxPerHandle: DEFAULT_MAX_PER_HANDLE });
+          return { usd: Math.round(e.calls * X_READ_USD_PER_CALL * 100) / 100, text: `Paid X API: ${e.calls} calls, up to ${e.maxPosts} posts (placeholder $${X_READ_USD_PER_CALL}/call).` };
+        }
+        if (group === 'x-monitor' && typeof describePaidSync === 'function') {
+          const d = await describePaidSync({ clientId, kind: 'x_monitor_sync', params: { include: ['profile', 'posts'] }, auth });
+          const calls = Number(/(\d+)\s+metered/.exec(d?.estimate || '')?.[1]);
+          return Number.isFinite(calls) ? { usd: Math.round(calls * X_READ_USD_PER_CALL * 100) / 100, text: String(d.estimate) } : null;
+        }
+        return null;
+      },
+      digestPhase: ({ phase, group }) => (typeof runDigestRefresh === 'function' ? runDigestRefresh(clientId, { phase, groups: new Set([group]), actorUid: auth?.decoded?.uid ?? null }) : unavailable('Server-side refresh')),
+      paidSync: ({ kind, params }) => (typeof runPaidSync === 'function' ? runPaidSync({ clientId, kind, params, auth, context }) : unavailable('The X Monitor sync')),
+      queueScan: async ({ mode }) => {
+        if (!quoteScanQueue) return { error: 'Mac scan requests are not available on this deployment.' };
+        const q = await quoteScanQueue.request({ clientId, requestedBy: who, mode });
+        return { ...q, workerHealth: (await workerHealthFor(clientId)).workerHealth };
+      },
+      requestStrategyRefresh: async () => {
+        const r = await strategyRefresh({ clientId }, context, auth);
+        return r.ok === false ? { error: r.error } : { ...r, workerHealth: (await workerHealthFor(clientId)).workerHealth };
+      },
+      pullStrategyAccounts: () => strategyRefresh({ clientId, confirmPaid: true }, context, auth), // paid X API; only reached under the owner's trustedRefresh cap
+      generateToday: () => (typeof runDailyAction === 'function' ? runDailyAction(context, 'daily-run-generate', { force: false, draftWithModel: false }) : unavailable("Today's queue")),
+      requestStatus: async (id) => {
+        const q = quoteScanQueue ? await quoteScanQueue.get(id).catch(() => null) : null;
+        if (q) return q.clientId === clientId ? { status: q.status, result: q.result ?? null, error: q.error ?? null } : null;
+        const r = await refreshService.getRequestStatus(id).catch(() => null);
+        if (!r || (r.clientId && r.clientId !== clientId)) return null;
+        return { status: r.status, result: r.results ?? r.result ?? null, error: r.error ?? null };
+      },
+    };
+  }
+
+  const cleanGroups = (v) => (Array.isArray(v) ? [...new Set(v.map((g) => (typeof g === 'string' ? g.trim() : '')).filter(Boolean))] : null);
+
+  async function agentRefresh(body, context, auth) {
+    const c = requireClient(body, context);
+    if (c.error) return c.error;
+    const groups = cleanGroups(body?.groups);
+    if (!groups?.length || groups.length > AGENT_REFRESH_GROUP_IDS.length) return fail(400, 'groups must be a non-empty array of refresh group ids.');
+    const bad = groups.find((g) => !AGENT_REFRESH_GROUP_IDS.includes(g));
+    if (bad) return fail(400, `unknown refresh group "${bad.slice(0, 40)}". Valid: ${AGENT_REFRESH_GROUP_IDS.join(', ')}.`);
+    const st = await agentRefreshState(c.clientId);
+    const out = await runAgentRefresh({ clientId: c.clientId, groups, reason: typeof body?.reason === 'string' ? body.reason : '', deps: agentRefreshDeps(c.clientId, context, auth), policy: st.policy, now: clock() });
+    return { ...out, ok: true, allGroupsOk: out.ok }; // per-group failures are in results; the HTTP call itself succeeded
+  }
+
+  async function agentRefreshStatusAction(body, context, auth) {
+    const c = requireClient(body, context);
+    if (c.error) return c.error;
+    if (!Array.isArray(body?.requestIds) || !body.requestIds.length) return fail(400, 'requestIds must be a non-empty array.');
+    return agentRefreshStatus({ requestIds: body.requestIds, deps: agentRefreshDeps(c.clientId, context, auth) });
+  }
+
   async function strategyEvaluateHandle(body, context) {
     const c = requireClient(body, context);
     if (c.error) return c.error;
@@ -856,6 +943,18 @@ export function createStrategyHandlers({
       ...(readCalendar ? { readCalendar: (opts) => readCalendar(clientId, opts) } : {}),
       ...(readResults ? { readResults: () => readResults(clientId) } : {}),
       ...(readMarketSignals ? { readMarketSignals: () => readMarketSignals(clientId) } : {}),
+      // The agent refreshes data itself (refresh_data / refresh_status): same engine as the agent-refresh route action. Closed over THIS client.
+      refreshData: async ({ groups, reason }) => {
+        const gs = cleanGroups(groups) ?? [];
+        const st = await agentRefreshState(clientId);
+        return runAgentRefresh({ clientId, groups: gs, reason, deps: agentRefreshDeps(clientId, context, auth), policy: st.policy, now: clock() });
+      },
+      refreshStatus: ({ requestIds }) => agentRefreshStatus({ requestIds, deps: agentRefreshDeps(clientId, context, auth) }),
+      // get_freshness annotation: may the agent run this group right now (true | 'needs-confirm' | 'no-path').
+      agentRefreshAvailability: async (groups) => {
+        const st = await agentRefreshState(clientId);
+        return { availability: agentRefreshAvailability({ groups, ...st }), trustedRefresh: st.policy.enabled === true, dailyCapUsd: st.policy.dailyCapUsd, spentTodayUsd: st.spentTodayUsd };
+      },
       // Every brief/market/strategy part with its age + the Refresh group that updates it. Read-only; never refreshes.
       ...(readBriefRaw ? { readBriefBundle: async ({ part } = {}) => buildBriefBundle(await readBriefRaw(clientId, briefReaders(clientId, preloaded)), { now: Date.now(), part }) } : {}),
       // Requests the agent could not do, for the owner to review (needs code / needs you).
@@ -1427,9 +1526,16 @@ export function createStrategyHandlers({
       tier1: given?.tier1 === undefined ? current.tier1 : given.tier1,
       tier3: given?.tier3 === undefined ? current.tier3 : given.tier3,
       trustedSchedule: given?.trustedSchedule === undefined ? current.trustedSchedule : given.trustedSchedule,
+      trustedRefresh: given?.trustedRefresh === undefined ? current.trustedRefresh : given.trustedRefresh,
     };
     if (!['auto', 'confirm'].includes(next.tier1)) return fail(400, "tier1 must be 'auto' or 'confirm'.");
     if (!['confirm', 'typed'].includes(next.tier3)) return fail(400, "tier3 must be 'confirm' or 'typed'. X publishing is always typed.");
+    if (given?.trustedRefresh !== undefined) {
+      const tr = given.trustedRefresh;
+      const cap = Number(tr?.dailyCapUsd);
+      if (!tr || typeof tr !== 'object' || Array.isArray(tr) || typeof tr.enabled !== 'boolean') return fail(400, 'trustedRefresh must be {enabled: boolean, dailyCapUsd: number}.');
+      if (tr.dailyCapUsd !== undefined && (!Number.isFinite(cap) || cap < TRUSTED_REFRESH_CAP_RANGE.min || cap > TRUSTED_REFRESH_CAP_RANGE.max)) return fail(400, `trustedRefresh.dailyCapUsd must be between ${TRUSTED_REFRESH_CAP_RANGE.min} and ${TRUSTED_REFRESH_CAP_RANGE.max}.`);
+    }
     return { ok: true, autonomy: await actionRuntime.saveAutonomy(c.clientId, next), xFloor: 'typed' };
   }
 
@@ -1477,6 +1583,8 @@ export function createStrategyHandlers({
     'strategy-get': strategyGet,
     'strategy-refresh': strategyRefresh,
     'strategy-refresh-status': strategyRefreshStatus,
+    'agent-refresh': agentRefresh,
+    'agent-refresh-status': agentRefreshStatusAction,
     'strategy-evaluate-handle': strategyEvaluateHandle,
     'strategy-plan-apply': strategyPlanApply,
     'strategy-plan-revert': strategyPlanRevert,
@@ -1751,6 +1859,7 @@ export function createStrategyHandlersFromDb(db, {
     readStageStates: (ids) => readStageStatesFromDb(db, ids), readNasStatus: () => handleNasAction({ db, now: () => Date.now() }, 'nas-status', {}),
     readDataSources, saveDataSources, pullCorpora, scanQuotes, responseStyleStore, unmetStore,
     quoteScanQueue: createFirestoreQuoteScanQueue(db),
+    refreshSpendStore: createFirestoreRefreshSpendStore(db),
     readWorkerHealth: (clientId) => readWorkerHealthFromDb(db, { now: Date.now(), clientId }),
     docStore, onBrainOwnedSaved, readBrainTrackTargets, chatStore, agentLoopFactory, callModel, logUsage, runDailyAction, runUpdateItemFacets, readTodayRun, readContentContext, saveXGrowthProfile, env,
     readQueueSummary, readPostsForQuery, readPost, readOpportunities, readResults, readCalendar, readMarketSignals, editPost, runPaidSync, actionRuntime,

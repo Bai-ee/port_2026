@@ -114,6 +114,11 @@ export const BUCKET_EDIT_OPS = Object.freeze(['upsert', 'delete']);
 /** Mirror of components/dashboard/marketing/refresh-groups.js REFRESH_GROUPS ids (a test asserts equality). */
 export const REFRESH_GROUP_IDS = Object.freeze(['market-signals', 'x-search', 'analysis', 'strategy-accounts', 'today-queue', 'x-monitor', 'renders', 'quote-targets', 'hot-quotes', 'bookmarks']);
 
+/** Groups only the agent's own refresh engine knows (no Refresh-panel card/runner, so NOT in REFRESH_GROUP_IDS, which mirrors refresh-groups.js). */
+export const AGENT_ONLY_REFRESH_GROUP_IDS = Object.freeze(['recent-posts']);
+/** What refresh_data accepts: every panel group except the paid X search (never offered to the agent) plus the agent-only groups. */
+export const AGENT_REFRESH_GROUP_IDS = Object.freeze([...REFRESH_GROUP_IDS.filter((id) => id !== 'x-search'), ...AGENT_ONLY_REFRESH_GROUP_IDS]);
+
 /** Kinds only server code may create (the MCP server's request_sync). The in-app agent has no propose tool for them. */
 export const SERVER_ONLY_PROPOSAL_KINDS = Object.freeze(['paid-sync']);
 

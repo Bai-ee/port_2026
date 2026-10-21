@@ -46,7 +46,7 @@ import { createStrategyHandlersFromDb, STRATEGY_ROUTE_ACTIONS } from '../../../.
 import { actionNeedsPilot } from '../../../../features/x-strategy/pilot-policy.js';
 import { createFirestoreQuoteScanQueue, SCAN_MODES } from '../../../../features/x-quote-targets/scan-queue.js';
 import * as bookmarkStore from '../../../../features/x-bookmarks/store.js';
-import { executePaidSync, loadXMonitorService } from '../../../../features/mcp/paid-syncs.js';
+import { executePaidSync, describePaidSync, loadXMonitorService } from '../../../../features/mcp/paid-syncs.js';
 import { createFirestoreCounters } from '../../../../features/mcp/limits.js';
 import { createContentPlanHandlers } from '../../../../features/x-strategy/content-plan.js';
 import { createFirestoreCorpusStore } from '../../../../features/x-strategy/corpus-store.js';
@@ -1287,6 +1287,17 @@ function getStrategyHandlers() {
       editPost: editQueuedPost,
       // A confirmed `paid-sync` card (created by the MCP server's request_sync) runs here, and only here: the owner's
       // Confirm click reaches this through strategy-proposal-decide. The daily cap is enforced inside executePaidSync.
+      // The agent's own refresh (refresh_data): the pre-digest-refresh phases run in-process, never by calling the worker route.
+      // Lazy import: the route module pulls in the whole digest pipeline. ONLY the interactive phases (never the cron path).
+      runDigestRefresh: async (clientId, { phase, groups, actorUid }) => {
+        const { refreshDigestClient } = await import('../../worker/pre-digest-refresh/route.js');
+        const cfg = await require('../../../../features/intelligence/_digest-config.js').getDigestConfig(clientId).catch(() => null);
+        return refreshDigestClient(clientId, {
+          freshnessToken: `agent-refresh-${Date.now().toString(36)}`, source: 'agent-refresh', actorUid, phase, groups,
+          include: cfg?.include || {}, briefLinkMode: cfg?.briefLinkMode || 'fresh',
+        });
+      },
+      describePaidSync: ({ clientId, kind, params }) => describePaidSync(kind, params, { clientId, services: { xMonitor: loadXMonitorService } }),
       runPaidSync: ({ clientId, kind, params, auth }) => executePaidSync({
         kind, params,
         ctx: {

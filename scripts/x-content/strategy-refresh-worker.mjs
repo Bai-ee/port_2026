@@ -66,13 +66,39 @@ function runLaneGraphRefresh(clientId) {
   });
 }
 
+// Refresh "Recent posts" (Mac source): one free bird read of the owner's own timeline -> x_recent_posts snapshot.
+const RECENT_POSTS_TIMEOUT_MS = 3 * 60 * 1000;
+function runRecentPosts(clientId, handle) {
+  return new Promise((resolve) => {
+    execFile(process.execPath, [path.join(REPO, 'scripts/x-content/pull-recent-posts.mjs'), '--handle', handle, '--client', clientId, '--write', '--hours', '48'],
+      { cwd: REPO, timeout: RECENT_POSTS_TIMEOUT_MS, maxBuffer: 8 * 1024 * 1024 },
+      (err, stdout, stderr) => resolve({ ok: !err, code: err?.code ?? 0, stdout: stdout || '', output: `${stdout || ''}\n${stderr || ''}` }));
+  });
+}
+
 /** Claim + run queued quote scans (one per pass is plenty: each takes a few minutes and X rate-limits bursts). */
 async function drainQuoteScans(db) {
   const queue = createFirestoreQuoteScanQueue(db);
   const job = await queue.claimNext();
   if (!job) return null;
-  const mode = job.mode === SCAN_MODES.HOT ? SCAN_MODES.HOT : job.mode === SCAN_MODES.BOOKMARKS ? SCAN_MODES.BOOKMARKS : SCAN_MODES.QUOTE;
+  const mode = job.mode === SCAN_MODES.HOT ? SCAN_MODES.HOT : job.mode === SCAN_MODES.BOOKMARKS ? SCAN_MODES.BOOKMARKS : job.mode === SCAN_MODES.RECENT_POSTS ? SCAN_MODES.RECENT_POSTS : SCAN_MODES.QUOTE;
   log(`[${new Date().toISOString()}] ${mode} scan ${job.id} for ${job.clientId}`);
+  if (mode === SCAN_MODES.RECENT_POSTS) {
+    const cfg = await db.collection('client_configs').doc(job.clientId).get().catch(() => null);
+    const handle = String(cfg?.exists ? cfg.data()?.marketingBriefConfig?.xGrowth?.ownHandle || '' : '').replace(/^@+/, '');
+    if (!handle) {
+      await queue.finish(job.id, job.leaseId, { status: SCAN_STATUS.FAILED, result: { mode, handle: null, posts: 0, asOf: null }, error: 'No own X handle set (marketingBriefConfig.xGrowth.ownHandle) for this client.' });
+      log(`[${new Date().toISOString()}] ${mode} scan ${job.id} -> failed (no ownHandle)`);
+      return { id: job.id, status: SCAN_STATUS.FAILED };
+    }
+    const r = await runRecentPosts(job.clientId, handle);
+    let posts = 0;
+    try { const parsed = JSON.parse(r.stdout); posts = Array.isArray(parsed?.posts) ? parsed.posts.length : 0; } catch { /* stdout not JSON: treat as 0 posts */ }
+    const st = r.ok ? SCAN_STATUS.DONE : (/\b429\b|rate.?limit/i.test(r.output) ? SCAN_STATUS.RATE_LIMITED : SCAN_STATUS.FAILED);
+    await queue.finish(job.id, job.leaseId, { status: st, result: { mode, handle, posts, asOf: new Date().toISOString() }, ...(r.ok ? {} : { error: r.output.trim().split('\n').slice(-3).join(' ').slice(0, 300) }) });
+    log(`[${new Date().toISOString()}] ${mode} scan ${job.id} -> ${st} (${posts} posts)`);
+    return { id: job.id, status: st };
+  }
   const startedAt = Date.now();
   const run = await runQuoteScan(job.clientId, mode);
   const snap = await db.collection('dashboard_state').doc(job.clientId).get().catch(() => null);

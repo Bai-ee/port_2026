@@ -16,6 +16,15 @@ import ActionProposalCard from './ActionProposalCard.jsx';
 import UndoChip from './UndoChip.jsx';
 import AgentPermissionsPanel from './AgentPermissionsPanel.jsx';
 import { messageUndoChips } from '../../../features/x-strategy/action-ui-model.js';
+
+// "Refreshing on your Mac: hot quotes (~8 min), recent posts (~1 min) — ask again when done." from a refresh_data tool result.
+const REFRESH_GROUP_LABELS = { 'recent-posts': 'recent posts', 'hot-quotes': 'hot quotes', bookmarks: 'bookmarks', 'quote-targets': 'quote targets', 'strategy-accounts': 'strategy accounts' };
+function refreshPendingLine(m) {
+  const queued = (Array.isArray(m?.toolResults) ? m.toolResults : []).filter((t) => t?.tool === 'refresh_data').flatMap((t) => (Array.isArray(t.queued) ? t.queued : []));
+  if (!queued.length) return '';
+  const parts = queued.map((q) => `${REFRESH_GROUP_LABELS[q.group] || q.group} (~${q.etaMin} min)`);
+  return `Refreshing on your Mac: ${parts.join(', ')} — ask again when done.`;
+}
 import MemorySuggestRows from './MemorySuggestRows.jsx';
 
 // StrategyChat - the agent chat in the Strategy panel's Chat tab (full width, one centred reading column).
@@ -623,6 +632,9 @@ export default function StrategyChat({
                 ? <div id={`x-strategy-chat-message-text-${n}`} style={S.userBubble}>{plainChatText(m.text)}</div>
                 : <ChatText id={`x-strategy-chat-message-text-${n}`} text={m.text} />}
               {clock ? <div id={`x-strategy-chat-message-time-${n}`} style={{ ...S.time, justifySelf: m.role === 'user' ? 'end' : 'start' }}>{clock}</div> : null}
+              {m.role === 'assistant' && refreshPendingLine(m) ? (
+                <div id={`strategy-chat-refresh-pending-line-${n}`} style={{ ...S.time, justifySelf: 'start', opacity: 0.75 }}>{refreshPendingLine(m)}</div>
+              ) : null}
               {m.role === 'assistant' && messageUndoChips(m).length ? (
                 <div id={`x-strategy-chat-message-undo-${n}`}>
                   {messageUndoChips(m).map((c) => <UndoChip key={c.undoId} undoId={c.undoId} label={c.label} call={call} clientId={clientId} />)}

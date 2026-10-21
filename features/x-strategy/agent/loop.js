@@ -249,7 +249,14 @@ export function createAgentLoop({
       if (!parsed.ok) return reply('Tool input must be a JSON object. Retry with valid input.', true);
       if (READ_TOOL_NAMES.includes(tu.name)) {
         try {
-          return reply(serializeResult(await runReadTool(tu.name, parsed.value, toolDeps)));
+          const out = await runReadTool(tu.name, parsed.value, toolDeps);
+          // The chat shows what is still refreshing on the Mac under the reply (queued groups + ETA).
+          if (tu.name === 'refresh_data' && Array.isArray(out?.results)) {
+            const queued = out.results.filter((r) => r && (r.status === 'queued' || r.status === 'running') && r.mode !== 'server')
+              .map((r) => ({ group: r.group, etaMin: Math.max(1, Math.round((Number(r.etaSeconds) || 60) / 60)) }));
+            if (queued.length) toolResults.push({ tool: 'refresh_data', queued });
+          }
+          return reply(serializeResult(out));
         } catch (err) {
           return reply(`Tool failed: ${String(err?.message ?? err).slice(0, 200)}`, true);
         }

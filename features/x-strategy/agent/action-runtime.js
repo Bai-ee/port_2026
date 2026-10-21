@@ -72,6 +72,21 @@ export function normalizeTrustedSchedule(raw) {
   };
 }
 
+// Trusted refresh (owner opt-in, default off): the agent's own refresh_data may run PAID refresh groups (X Monitor, Market
+// signals, Analysis, Renders, X-API strategy accounts) without a card, while today's agent-refresh spend plus the
+// estimate stays within dailyCapUsd. Free groups never need it. X publishing is unaffected.
+export const TRUSTED_REFRESH_DEFAULTS = Object.freeze({ enabled: false, dailyCapUsd: 1 });
+export const TRUSTED_REFRESH_CAP_RANGE = Object.freeze({ min: 0.1, max: 20 });
+export function normalizeTrustedRefresh(raw) {
+  const r = isPlain(raw) ? raw : {};
+  const cap = Number(r.dailyCapUsd);
+  const { min, max } = TRUSTED_REFRESH_CAP_RANGE;
+  return {
+    enabled: r.enabled === true,
+    dailyCapUsd: Number.isFinite(cap) ? Math.round(Math.min(max, Math.max(min, cap)) * 100) / 100 : TRUSTED_REFRESH_DEFAULTS.dailyCapUsd,
+  };
+}
+
 export function normalizeAutonomy(raw) {
   const r = isPlain(raw) ? raw : {};
   return {
@@ -79,6 +94,7 @@ export function normalizeAutonomy(raw) {
     tier2: 'confirm',
     tier3: r.tier3 === 'typed' ? 'typed' : 'confirm',
     trustedSchedule: normalizeTrustedSchedule(r.trustedSchedule),
+    trustedRefresh: normalizeTrustedRefresh(r.trustedRefresh),
   };
 }
 
