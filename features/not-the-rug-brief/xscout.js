@@ -210,7 +210,7 @@ function collectRedditSignalsFromSearchResults(searchResults = [], compactContex
   return uniqueSignals;
 }
 
-const { validatePostUrl } = require('./post-url-validator.cjs');
+const { validatePostUrl, filterActionableOpportunities } = require('./post-url-validator.cjs');
 
 // Walk an agentData payload and strip any item.url that isn't a real post
 // permalink. Keeps the item itself (the finding may still be useful) — only
@@ -233,6 +233,13 @@ function stripUngroundedUrls(agentData) {
       return next;
     });
   };
+  // Reply opportunities with no openable http(s) link are dropped (the finding
+  // is "go reply in this thread"; without the thread it is not actionable).
+  const dropUnopenable = (list) => {
+    const { kept, droppedNoUrl } = filterActionableOpportunities(list);
+    if (droppedNoUrl) console.log(`[${new Date().toISOString()}] XSCOUT: dropped ${droppedNoUrl} opportunity(ies) with no usable url`);
+    return kept;
+  };
   const out = { ...agentData };
   for (const key of [
     'brandMentions', 'competitorIntel', 'categoryTrends', 'pressCoverage',
@@ -250,13 +257,13 @@ function stripUngroundedUrls(agentData) {
   if (out.viralOpportunities && Array.isArray(out.viralOpportunities.opportunities)) {
     out.viralOpportunities = {
       ...out.viralOpportunities,
-      opportunities: stripList(out.viralOpportunities.opportunities),
+      opportunities: dropUnopenable(stripList(out.viralOpportunities.opportunities)),
     };
   }
   if (out.contentOpportunities && Array.isArray(out.contentOpportunities.opportunities)) {
     out.contentOpportunities = {
       ...out.contentOpportunities,
-      opportunities: stripList(out.contentOpportunities.opportunities),
+      opportunities: dropUnopenable(stripList(out.contentOpportunities.opportunities)),
     };
   }
   return out;

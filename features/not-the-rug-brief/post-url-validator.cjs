@@ -47,4 +47,50 @@ function validatePostUrl(rawUrl) {
   return rawUrl;
 }
 
-module.exports = { validatePostUrl };
+// ── Reply-opportunity gate ───────────────────────────────────────────────────
+// A reply/engagement opportunity points at a specific external thread or post.
+// If nobody can open it, it is not actionable and must never be presented as
+// one. Generic content ideas (e.g. signup `opportunityMap` items: topic/whyNow/
+// priority/format only) are NOT thread-based and are left alone.
+
+function hasHttpUrl(value) {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  try {
+    const { protocol } = new URL(value.trim());
+    return protocol === 'http:' || protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+// Thread-based = carries any scout reply-opportunity marker, or has a `url`
+// field at all (even null/''): the field exists because a link was expected.
+function isThreadOpportunity(item) {
+  if (!item || typeof item !== 'object') return false;
+  return Object.prototype.hasOwnProperty.call(item, 'url')
+    || item.conversation != null
+    || item.injectionAngle != null
+    || item.suggestedReply != null
+    || item.windowHours != null
+    || item.raw != null;
+}
+
+function isActionableOpportunity(item) {
+  if (!item || typeof item !== 'object') return false;
+  return !isThreadOpportunity(item) || hasHttpUrl(item.url);
+}
+
+// Returns { kept, droppedNoUrl }. Non-arrays pass through as an empty list.
+function filterActionableOpportunities(list) {
+  const items = Array.isArray(list) ? list : [];
+  const kept = items.filter(isActionableOpportunity);
+  return { kept, droppedNoUrl: items.length - kept.length };
+}
+
+module.exports = {
+  validatePostUrl,
+  hasHttpUrl,
+  isThreadOpportunity,
+  isActionableOpportunity,
+  filterActionableOpportunities,
+};

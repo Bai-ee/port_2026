@@ -26,6 +26,7 @@ const MAX_DELTA_CHARS = 2500; // day-over-day "what changed" fed to the exec bri
 
 const { callAnthropic, extractAnthropicUsage } = require('./_anthropic-client');
 const { logAnthropicCall } = require('../../api/_lib/usage-logger.cjs');
+const { filterActionableOpportunities } = require('../not-the-rug-brief/post-url-validator.cjs');
 const { getComposition, resolveBriefType } = require('./brief-sections.cjs');
 // Phase 3 (docs/plans/BRIEF-RENDERED-SCRAPE-SONNET-HANDOFF.md §3): same pure
 // dual-view/coverage row derivation the rendered brief uses
@@ -308,7 +309,7 @@ const SECTION_EVIDENCE = {
     const opportunities = arr(agentData.viralOpportunities?.opportunities).length
       ? arr(agentData.viralOpportunities?.opportunities)
       : arr(data.marketingBrief?.contentOpportunities);
-    return opportunities.slice(0, 4)
+    return filterActionableOpportunities(opportunities).kept.slice(0, 4)
       .map((o) => line(o.conversation || o.topic || o.title || 'Opportunity', o.injectionAngle || o.whyNow || o.summary))
       .filter(Boolean);
   },
