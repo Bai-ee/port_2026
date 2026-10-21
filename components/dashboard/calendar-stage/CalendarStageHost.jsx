@@ -12,6 +12,7 @@ import CalendarStage from './CalendarStage';
 import ContentUiStyles from '../content-ui/ContentUiStyles';
 import { useMarketingContentCall, makeNavigate } from '../marketing/useMarketingContentCall';
 import StageTodayExtras from './StageTodayExtras';
+import { readImpersonateClientId, withImpersonation } from '../../../lib/dashboard/bootstrap-session.js';
 
 const MonthCalendarPanel = dynamic(() => import('../x-content/MonthCalendarPanel'), { ssr: false });
 
@@ -38,7 +39,7 @@ export default function CalendarStageHost({
     const load = async () => {
       try {
         const token = await getIdToken();
-        const res = await fetch('/api/social-posting/x-oauth', {
+        const res = await fetch(withImpersonation('/api/social-posting/x-oauth', readImpersonateClientId()), {
           method: 'POST',
           headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
           body: JSON.stringify({ action: 'accounts-list', clientId }),

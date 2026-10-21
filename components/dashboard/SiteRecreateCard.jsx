@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { Globe, ShieldCheck, ExternalLink, Download, CalendarClock } from 'lucide-react';
+import { readImpersonateClientId, withImpersonation } from '../../lib/dashboard/bootstrap-session.js';
 
 // Site Recreate — submit a live site URL, get back an exact static
 // recreation (live preview + downloadable zip) plus a human-handoff upsell
@@ -16,7 +17,7 @@ const CONTACT_HREF = 'https://calendly.com/bballi/30min';
 
 async function authFetch(user, path, options = {}) {
   const token = await user.getIdToken();
-  const res = await fetch(path, {
+  const res = await fetch(withImpersonation(path, readImpersonateClientId()), {
     ...options,
     headers: {
       'Content-Type': 'application/json',

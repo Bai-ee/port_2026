@@ -54,6 +54,11 @@ function getSiteSourceSteps() {
   return require('../../../../features/scout-intake/site-source-steps');
 }
 
+// Per-client signup step toggles (client_configs.onboardingSteps)
+function getOnboardingSteps() {
+  return require('../../../../features/scout-intake/onboarding-steps');
+}
+
 function getMerger() {
   return require('../../../../features/scout-intake/brand-overview-merger');
 }
@@ -225,6 +230,13 @@ async function handleRunBrief(request, { parseBody = true, source = 'worker' } =
     return json({ error: 'Failed to load client config.', runId }, 500);
   }
 
+  // An admin-created client may switch individual signup steps off
+  // (client_configs.onboardingSteps). Any other trigger, or a signup with no
+  // stored choice, runs every step.
+  const { isOnboardingStepEnabled, signupModuleIds } = getOnboardingSteps();
+  const signupStepOn = (key) =>
+    claimedRun.trigger !== 'signup' || isOnboardingStepEnabled(clientConfig?.onboardingSteps, key);
+
   // Step 6 — Execute pipeline (route by pipelineType)
   const pipelineType = claimedRun.pipelineType || 'scout-brief';
   console.log(`[${new Date().toISOString()}] WORKER: pipelineType=${pipelineType} for ${clientId}`);
@@ -280,7 +292,9 @@ async function handleRunBrief(request, { parseBody = true, source = 'worker' } =
         // heavier audit modules and the Daily Brief defer to a later run), but
         // unlike creative-brief it also runs the brand/scout source steps below
         // and ends with a Client Brain draft.
-        moduleIdsToRun = ['multi-device-view', 'social-preview'];
+        moduleIdsToRun = claimedRun.trigger === 'signup'
+          ? signupModuleIds(clientConfig?.onboardingSteps)
+          : ['multi-device-view', 'social-preview'];
       } else if (claimedRun.trigger === 'brief-refresh') {
         let storedModules = {};
         try {
@@ -360,7 +374,7 @@ async function handleRunBrief(request, { parseBody = true, source = 'worker' } =
       // sources, with the brand overview kept DETERMINISTIC (no model call):
       // signup's Anthropic budget is ≤2 calls (scout-config + onboarding
       // summary). No market signals / X / ScrapeCreators here.
-      if (ownSiteUrl && claimedRun.trigger !== 'creative-brief') {
+      if (ownSiteUrl && claimedRun.trigger !== 'creative-brief' && signupStepOn('siteSources')) {
         const { runSiteSourceSteps } = getSiteSourceSteps();
         const sourceSteps = await runSiteSourceSteps({
           clientId,
@@ -386,7 +400,9 @@ async function handleRunBrief(request, { parseBody = true, source = 'worker' } =
       // re-enters here with a real renderSiteUrl and queues the video then.
       const renderSiteUrl = ownSiteUrl
         || (claimedRun.sourceUrl && claimedRun.sourceUrl !== FALLBACK_BRIEF_SITE ? claimedRun.sourceUrl : null);
-      if (renderSiteUrl && (claimedRun.trigger === 'signup' || claimedRun.trigger === 'reseed' || claimedRun.trigger === 'creative-brief')) {
+      if (!signupStepOn('motionVideo')) {
+        console.log(`[WORKER] studio video skipped for ${clientId} — turned off for this client's onboarding`);
+      } else if (renderSiteUrl && (claimedRun.trigger === 'signup' || claimedRun.trigger === 'reseed' || claimedRun.trigger === 'creative-brief')) {
         try {
           const renderJobs = require('../../../../api/_lib/studio-render-jobs.cjs');
           const { getSignupVideoRecipe } = require('../../../../api/_lib/signup-video-recipe.cjs');
@@ -497,7 +513,7 @@ async function handleRunBrief(request, { parseBody = true, source = 'worker' } =
   // never approved by code; never fails the signup run. Called on the failed
   // path below too, so a signup whose modules failed still gets its draft.
   const ensureSignupDraft = async () => {
-    if (claimedRun.trigger !== 'signup') return;
+    if (claimedRun.trigger !== 'signup' || !signupStepOn('brainDraft')) return;
     const { ensureSignupBrainDraft } = getSiteSourceSteps();
     const draft = await ensureSignupBrainDraft(clientId);
     console.log(`[WORKER] signup Brain draft for ${clientId}: ${draft.created ? `created (${draft.status})` : (draft.skipped || `failed: ${draft.error}`)}`);
@@ -623,7 +639,7 @@ async function handleRunBrief(request, { parseBody = true, source = 'worker' } =
   // source steps above; a creative-brief run reads whatever brand overview an
   // earlier run left. Signup runs this inline (1 Anthropic call) now that it no
   // longer chains the scout-brief (whose deferred pass previously generated it).
-  if (claimedRun.trigger === 'creative-brief' || claimedRun.trigger === 'signup') {
+  if ((claimedRun.trigger === 'creative-brief' || claimedRun.trigger === 'signup') && signupStepOn('briefSummary')) {
     try {
       const { generateBriefSummaries } = await import('../../../../features/scout-intake/brief-summary-runner.mjs');
       await generateBriefSummaries({ clientId, runId, briefTypes: ['onboarding'] });
