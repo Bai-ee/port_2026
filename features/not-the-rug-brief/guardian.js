@@ -18,6 +18,7 @@ const { MODELS, logCostEstimate } = require('./optimizer');
 const { getDefaultClientConfig, requireClientConfig } = require('./clients');
 const { getContentSchema } = require('./content-schema');
 const { resolveVoiceProfile } = require('./voice-resolver');
+const { checkCopyAgainstBrain } = require('./brain-facts');
 
 function getAnthropicClient() {
   return getProvider();
@@ -286,9 +287,10 @@ If no flags for a category, return empty array. Score 90+ if clean.`;
  *
  * @param {object} contentOutput - Full Scribe output object (has .content, .guardianFlags, etc.)
  * @param {string} clientId      - e.g. 'critters-quest'
+ * @param {object} [opts]        - readBrain: injectable Client Brain reader (tests)
  * @returns {object} Verdict object — replaces GUARDIAN_PLACEHOLDER on contentOutput
  */
-async function runGuardian(contentOutput, clientId) {
+async function runGuardian(contentOutput, clientId, { readBrain } = {}) {
   const guardianStart = Date.now();
   console.log(`[${new Date().toISOString()}] GUARDIAN: starting QA checks for ${clientId}...`);
 
@@ -333,13 +335,31 @@ async function runGuardian(contentOutput, clientId) {
       );
     }
 
+    // --- Check 2b: Brain hard facts (pure JS) — corrects/drops copy that contradicts
+    // the approved Client Brain's numbers (caps, founding year, prices, durations).
+    // Runs before Haiku so QA judges the corrected copy. Never throws the pipeline.
+    let factCheck = { checked: false, contradictions: [] };
+    try {
+      const reader = readBrain || ((id) => require('../client-brain/store.cjs').readClientBrainDoc(id));
+      factCheck = checkCopyAgainstBrain(content, await reader(clientId));
+    } catch (err) {
+      console.warn(`[GUARDIAN] Brain fact check skipped: ${err.message}`);
+    }
+    const factFlags = factCheck.contradictions.map((c) => ({
+      field: c.field,
+      type: 'brain_fact',
+      severity: c.action === 'dropped' ? 'major' : 'minor',
+      issue: `"${c.excerpt}" contradicts approved Brain (${c.kind}: ${c.expected.join('/')}) — ${c.action}`,
+    }));
+    factFlags.forEach((f) => console.warn(`[GUARDIAN] [BRAIN FACT] ${f.field}: ${f.issue}`));
+
     // --- Check 3+4: Factual + voice (single Haiku call) ---
     // Run even on hardBlock so we have the full picture; just don't let it publish
     const { factualScore, voiceScore, flags: haikusFlags, usage } = await checkFactualAndVoice(
       content, glossary, brandVoice, gameKnowledge, config
     );
     // Merge competitor flags with Haiku flags
-    const flags = [...competitorFlags, ...haikusFlags];
+    const flags = [...competitorFlags, ...factFlags, ...haikusFlags];
 
     logCostEstimate(
       'Guardian (QA check)',
@@ -368,6 +388,7 @@ async function runGuardian(contentOutput, clientId) {
       hardBlock,
       concerns,
       flags,
+      factCheck,
       reviewRequired,
       note: `Guardian v1 — ${MODELS.guardianCheck}`,
       guardianUsage: {
