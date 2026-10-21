@@ -71,8 +71,8 @@ function fakeServices({ fetchImpl } = {}) {
   };
 }
 
-const clientToken = ({ hcid = A, gid = grantIdOf(SECRET_A), aud = clientResourceBase(ORIGIN), scope = CLIENT_SCOPE } = {}) =>
-  signAccessToken({ secret: SECRET, email: `client-grant:${gid.slice(0, 12)}`, aud, scope, hcid, gid, now: NOW });
+const clientToken = ({ hcid = A, gid = grantIdOf(SECRET_A), aud = clientResourceBase(ORIGIN), scope = CLIENT_SCOPE, now = NOW } = {}) =>
+  signAccessToken({ secret: SECRET, email: `client-grant:${gid.slice(0, 12)}`, aud, scope, hcid, gid, now });
 const ownerToken = () => signAccessToken({ secret: SECRET, email: 'bryanballi@gmail.com', aud: resourceUrl(ORIGIN), now: NOW });
 
 function makeDeps(opts) {
@@ -328,9 +328,12 @@ test('initialize: named after the client, site analytics first, marketing second
 // ---- daily update ------------------------------------------------------------------------------------------
 
 const NTR_STATS = {
-  site: 'nottherug.com', range: 'today', degraded: [],
-  analytics: { sessions: 84, pageviews: 210, bookedLeads: 3, inquiries: 2, range: { timezone: 'America/New_York' } },
-  leads: { timezone: 'America/New_York', today: 4 },
+  site: 'nottherug.com', range: '7d', degraded: [],
+  analytics: {
+    sessions: 400, pageviews: 900, bookedLeads: 3, inquiries: 2, appointmentsScheduled: 1, range: { timezone: 'America/New_York' },
+    dailyTrend: [{ date: '2026-10-19', pageviews: 150, sessions: 61 }, { date: '2026-10-20', pageviews: 210, sessions: 84 }],
+  },
+  leads: { timezone: 'America/New_York', today: 4, yesterday: 5 },
   applicants: { total: 40, last7Days: 5, last30Days: 12, onHold: 1 },
 };
 const statsFetch = (body) => async () => ({ ok: true, status: 200, json: async () => body });
@@ -342,8 +345,8 @@ test('get_daily_update: today\'s site numbers, marketing status, scheduled posts
   const out = JSON.parse(textOf(await rpc({ body: call('get_daily_update'), deps })));
   assert.equal(out.date, 'Tue, Oct 20');
   assert.deepEqual(
-    { visits: out.site.visits, leadsBooked: out.site.leadsBooked, leadsToday: out.site.leadsToday, applicants7d: out.site.applicants.last7Days },
-    { visits: 84, leadsBooked: 3, leadsToday: 4, applicants7d: 5 },
+    { today: [out.site.today.visits, out.site.today.leads], yesterday: [out.site.yesterday.visits, out.site.yesterday.leads, out.site.yesterday.date], d7: out.site.last7Days, applicants7d: out.site.applicants.last7Days, lead: out.site.leadWithYesterday },
+    { today: [84, 4], yesterday: [61, 5, '2026-10-19'], d7: { leadsBooked: 3, inquiries: 2, appointmentsScheduled: 1, newApplicants: 5 }, applicants7d: 5, lead: false },
   );
   assert.equal(out.marketing.briefAgeDays, 0);
   assert.equal(out.marketing.briefStale, false);
@@ -353,7 +356,8 @@ test('get_daily_update: today\'s site numbers, marketing status, scheduled posts
   assert.equal(out.scheduled.undatedDrafts, 1);
   assert.deepEqual(out.scheduled.todaysPlan, [{ label: 'Tips', targetPerDay: 1, scheduledToday: 0 }]);
   assert.deepEqual(out.brief, { generatedAt: '2026-10-20T10:00:00.000Z', headline: 'Local search up', summary: 'Dog walking demand rose this week.' });
-  assert.match(out.replyFormat, /Visits <visits> · Leads booked <leadsBooked>/);
+  assert.match(out.replyFormat, /Yesterday \(<site.yesterday.label>\)\*\*: Visits/);
+  assert.match(out.replyFormat, /Last 7 days/);
 });
 
 test('get_daily_update: a broken source leaves the rest; unknown site shape gives nulls, never zeros', async () => {
@@ -367,9 +371,36 @@ test('get_daily_update: a broken source leaves the rest; unknown site shape give
 
   const other = makeDeps({ fetchImpl: statsFetch({ something: 'else' }) });
   const o2 = JSON.parse(textOf(await rpc({ body: call('get_daily_update'), deps: other.deps })));
-  assert.equal(o2.site.visits, null);
-  assert.equal(o2.site.leadsBooked, null);
+  assert.deepEqual([o2.site.today.visits, o2.site.today.leads, o2.site.yesterday.visits, o2.site.yesterday.leads], [null, null, null, null]);
+  assert.equal(o2.site.last7Days.leadsBooked, null);
   assert.equal(o2.site.applicants, null);
+  assert.equal(o2.site.leadWithYesterday, false);
+});
+
+test('get_daily_update: one 7d fetch; just after local midnight it leads with yesterday', async () => {
+  const { deps, calls } = makeDeps({});
+  deps.services.fetch = async (url) => { calls.fetch.push(url); return { ok: true, status: 200, json: async () => NTR_STATS_MIDNIGHT }; };
+  const NTR_STATS_MIDNIGHT = {
+    ...NTR_STATS,
+    analytics: { ...NTR_STATS.analytics, dailyTrend: [{ date: '2026-10-20', pageviews: 130, sessions: 55 }, { date: '2026-10-21', pageviews: 0, sessions: 0 }] },
+    leads: { timezone: 'America/New_York', today: 0, yesterday: 5 },
+  };
+  const at = Date.parse('2026-10-21T04:30:00Z'); // 00:30 America/New_York
+  const out = JSON.parse(textOf(await handleClientMcp({ authorization: `Bearer ${clientToken({ now: at })}`, body: call('get_daily_update'), env, now: () => at, origin: ORIGIN, grantSecret: SECRET_A, deps })));
+  assert.equal(calls.fetch.length, 1);
+  assert.match(String(calls.fetch[0]), /range=7d/);
+  assert.equal(out.site.leadWithYesterday, true);
+  assert.deepEqual([out.site.yesterday.date, out.site.yesterday.label, out.site.yesterday.visits, out.site.yesterday.leads], ['2026-10-20', 'Tue, Oct 20', 55, 5]);
+  assert.deepEqual([out.site.today.date, out.site.today.visits, out.site.today.leads], ['2026-10-21', 0, 0]);
+});
+
+test('get_daily_update: midday with real traffic leads with today; midday with nothing yet leads with yesterday', async () => {
+  const { deps } = makeDeps({ fetchImpl: statsFetch(NTR_STATS) });
+  const mid = Date.parse('2026-10-20T16:00:00Z'); // 12:00 America/New_York
+  const run = async (d) => JSON.parse(textOf(await handleClientMcp({ authorization: `Bearer ${clientToken({ now: mid })}`, body: call('get_daily_update'), env, now: () => mid, origin: ORIGIN, grantSecret: SECRET_A, deps: d })));
+  assert.equal((await run(deps)).site.leadWithYesterday, false);
+  const quiet = makeDeps({ fetchImpl: statsFetch({ ...NTR_STATS, leads: { timezone: 'America/New_York', today: 0, yesterday: 5 }, analytics: { ...NTR_STATS.analytics, dailyTrend: [{ date: '2026-10-19', sessions: 61 }, { date: '2026-10-20', sessions: 0 }] } }) });
+  assert.equal((await run(quiet.deps)).site.leadWithYesterday, true);
 });
 
 test('get_daily_update: an old brief is flagged stale', async () => {
