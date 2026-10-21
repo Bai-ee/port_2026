@@ -1,6 +1,7 @@
 // Content / buckets / media-items / calendar / NAS / Discogs / timeline groups: app/api/dashboard/quote-targets/route.js
 // (route key 'quote-targets'). Auth: Firebase bearer + isAdminEmail + getEffectiveClientContext(request) (admin `?as=<clientId>`
-// impersonation works) + requirePilotOwner (allowlisted owner uid AND client; fails closed with 503 when PILOT_* unset).
+// impersonation works) + requirePilotOwner PER ACTION (allowlisted owner uid AND client; fails closed with 503 when PILOT_* unset).
+// Which actions are gate-free (reads, strategy, drafts) is features/x-strategy/pilot-policy.js; the default is the gate.
 // POST body.action selects the handler; the client is always the server-resolved one (body.clientId is only checked by the
 // strategy-* handlers, which require it to equal the resolved client).
 import { str, int, num, bool, arr, obj, open, day } from './_schema.js';

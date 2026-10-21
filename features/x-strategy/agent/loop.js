@@ -181,7 +181,9 @@ export function createAgentLoop({
     try { today = await toolDeps?.getToday?.(); } catch { today = null; }
     let responseStyle;
     try { responseStyle = effectiveResponseStyle(await toolDeps?.getResponseStyle?.()); } catch { responseStyle = effectiveResponseStyle(null); }
-    const system = buildSystemPrompt({ planSummary: planSummary ?? null, strategyDocText, selectedContext: typeof selectedContext === 'string' ? selectedContext : '', responseStyle, today });
+    let brainState = null;
+    try { brainState = await toolDeps?.getBrainState?.(); } catch { brainState = null; }
+    const system = buildSystemPrompt({ planSummary: planSummary ?? null, brainState, strategyDocText, selectedContext: typeof selectedContext === 'string' ? selectedContext : '', responseStyle, today });
 
     const account = async (resp, ok) => {
       const u = resp?.usage || {};

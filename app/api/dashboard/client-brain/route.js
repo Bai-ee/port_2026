@@ -6,6 +6,7 @@ const { resolveDashboardClientContext } = require('./_context.cjs');
 const { compileAndSaveClientBrainMarkdown, getClientBrain, saveClientBrain, listBrainVersions, readBrainVersion } = require('../../../../features/client-brain/store.cjs');
 const { createClientBrainMarkdownTemplate } = require('../../../../features/client-brain/markdown.cjs');
 const { onBrainStatusChanged } = require('../../../../features/client-brain/brain-sync.cjs');
+const { previewBaseline, adoptBaseline } = require('../../../../features/client-brain/baseline-adopt.cjs');
 
 function json(body, status = 200) {
   return NextResponse.json(body, { status, headers: { 'cache-control': 'no-store' } });
@@ -29,6 +30,16 @@ export async function GET(request) {
       return json({ ok: true, version });
     } catch (err) {
       return json({ error: err.message || 'Could not load Client Brain versions.' }, err.status || 500);
+    }
+  }
+
+  if (action === 'baseline-strategy') {
+    try {
+      let tracks = null;
+      try { tracks = JSON.parse(url.searchParams.get('tracks') || 'null'); } catch { tracks = null; }
+      return json(await previewBaseline(context.clientId, { tracks }));
+    } catch (err) {
+      return json({ error: err.message || 'Could not read the baseline strategy.' }, err.status || 500);
     }
   }
 
@@ -58,6 +69,14 @@ export async function POST(request) {
     body = await request.json();
   } catch {
     return json({ error: 'Invalid JSON body.' }, 400);
+  }
+
+  if (body?.action === 'adopt-baseline') {
+    try {
+      return json(await adoptBaseline(context.clientId, { byUid: decoded?.uid || null, tracks: Array.isArray(body.tracks) ? body.tracks : null }));
+    } catch (err) {
+      return json({ error: err.message || 'Could not adopt the baseline strategy.' }, err.status || 500);
+    }
   }
 
   try {

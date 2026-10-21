@@ -13,3 +13,10 @@ test('agent knows today: the prompt carries TODAY and get_calendar returns today
   assert.equal(out.today, '2026-10-17');
   assert.equal(out.timezone, 'America/Chicago');
 });
+
+test('system prompt carries a BRAIN line only when brainState is given, and offers the baseline when available', async () => {
+  const { buildSystemPrompt } = await import('../agent/prompt.js');
+  assert.doesNotMatch(buildSystemPrompt({ planSummary: 'x' }), /\nBRAIN:/);
+  assert.match(buildSystemPrompt({ planSummary: 'x', brainState: { brainStatus: 'approved', baselineAvailable: false } }), /\nBRAIN: approved\.$/m);
+  assert.match(buildSystemPrompt({ planSummary: 'x', brainState: { brainStatus: 'approved', baselineAvailable: true } }), /BRAIN: approved\. A baseline strategy.*brain\.strategy\.adopt-baseline/);
+});

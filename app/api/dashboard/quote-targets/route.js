@@ -42,6 +42,7 @@ import {
   createFirestoreRunStore, loadDailyLoopInputs, saveSuggestionDraft, editSuggestion, dismissSuggestion, overlayStagedMedia, createModelDrafter,
 } from '../../../../features/x-content-inventory/daily-run-store.js';
 import { createStrategyHandlersFromDb, STRATEGY_ROUTE_ACTIONS } from '../../../../features/x-strategy/route-handlers.js';
+import { actionNeedsPilot } from '../../../../features/x-strategy/pilot-policy.js';
 import { executePaidSync, loadXMonitorService } from '../../../../features/mcp/paid-syncs.js';
 import { createFirestoreCounters } from '../../../../features/mcp/limits.js';
 import { createContentPlanHandlers } from '../../../../features/x-strategy/content-plan.js';
@@ -120,9 +121,8 @@ async function requireAdminContext(request) {
     err.status = 404;
     throw err;
   }
-  // Owner pilot boundary: the whole route is Content Management (global package store, NAS, strategy chat,
-  // calendar). Allowlisted uid + client only; the client id is the server-resolved one (never body/model).
-  requirePilotOwner(context, decoded);
+  // The owner-pilot gate is applied per action in POST (features/x-strategy/pilot-policy.js): approve / schedule /
+  // package store / NAS / spend stay allowlisted-uid + client; strategy, reads and drafts need only admin + client.
   return { decoded, context };
 }
 
@@ -1236,6 +1236,8 @@ export async function POST(request) {
 
   const action = body?.action || new URL(request.url).searchParams.get('action') || '';
   try {
+    // Unlisted actions default to the gate. The client id is the server-resolved one (never body/model).
+    if (actionNeedsPilot(action, body)) requirePilotOwner(context, decoded);
     if (action === 'draft-quote') {
       const result = await handleDraftQuote(context, body);
       return json(result);

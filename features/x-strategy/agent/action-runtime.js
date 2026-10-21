@@ -194,6 +194,7 @@ export function warningLinesFor(entry, count) {
   } else {
     lines.push(`This changes ${n}: ${entry.title}.`);
   }
+  if (entry.confirmNote) lines.push(entry.confirmNote);
   if (entry.irreversible) lines.push("This can't be undone.");
   else if (entry.snapshot?.length || entry.undo) lines.push('You can undo it afterwards from the action log.');
   else lines.push('There is no automatic undo for this.');

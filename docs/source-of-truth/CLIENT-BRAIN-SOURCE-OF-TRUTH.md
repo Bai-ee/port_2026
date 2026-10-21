@@ -171,3 +171,15 @@ A full-page form that edits a client's Brain field by field. It edits the same M
 - **Route:** `GET/POST /api/dashboard/client-brain/form` (`route.js` does auth with the same `resolveDashboardClientContext` as the sibling route, so admin `?as=` works and non-admins only reach their own client; logic is in `_handlers.cjs`). GET returns `{ ok, clientId, status, updatedAt, version, fields, filled, markdownSource }`; no Brain gives empty fields, `status: null`, `markdownSource: ''`. POST `{ fields }` (partial allowed; omitted keys are untouched) saves through `compileAndSaveClientBrainMarkdown(..., { reason: 'form' })` (so a version is recorded) and returns the GET shape. Invalid keys, shapes, row keys, formatting-rule keys, over-long changed values, or a line starting with `## `/`### ` return 400 `{ error, details[] }`.
 - **Status rule:** the form never approves and never un-approves. The stored status is written into the frontmatter before compiling (the compiler derives status from it) and re-checked after; a first save with no Brain creates a `draft`. A form save does not run `onBrainStatusChanged`, so card settings pick up edits of an approved Brain on the next approve/inject/sync, not at save time.
 - **Tests:** `features/client-brain/__tests__/form-markdown.test.js`, `app/api/dashboard/client-brain/form/__tests__/route.test.js`.
+
+## 18. Baseline strategy adoption (2026-10-20)
+
+A client can have a full Marketing Brief baseline (`dashboard_state.strategy30`, `strategyBuilder.lastPlan`, `marketingBrief.content`) while its Brain's Strategy Document / Content Tracks / Track Targets are empty. The chat agent can turn that baseline into Brain content:
+
+- Pure mapper `features/client-brain/baseline-strategy.cjs` (no LLM); I/O in `baseline-adopt.cjs`; route `client-brain` GET `?action=baseline-strategy` (preview) / POST `action:'adopt-baseline'`.
+- Agent actions `brain.strategy.baseline.get` (tier 0) and `brain.strategy.adopt-baseline` (tier 2 = always a confirm card). The chat prompt's `BRAIN:` line tells the model when a baseline is available.
+- **Brain wins:** only empty fields are filled; a new Brain version (reason `baseline`); status kept; then `onBrainStatusChanged` syncs as a Markdown save does.
+- **Thesis** = the Brain's own Strategic One-Liner + Positioning; the brief's daily `content_angle` is only the fallback.
+- **Tracks** = an optional `tracks` list the agent supplies (owner-visible on the card), else 30-day themes that **recur**. One-off daily themes are never drafted as tracks; they come back as `themes` for the agent to group.
+- **Buckets are not created automatically** (a Brain may have parked bucket decisions). Preview/adopt return `bucketsToCreate`; the agent offers `buckets.upsert` for each, whose track sync then reads the approved Brain targets.
+- Confirming the card goes through `strategy-proposal-decide`, which stays pilot-gated (CONTENT-PILOT-OPERATIONS.md §1a).

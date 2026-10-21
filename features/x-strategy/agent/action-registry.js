@@ -115,7 +115,7 @@ export const ROUTE_FILES = Object.freeze({
  *   rateLimit      per-IP+client limiter; an in-process Request has no forwarded IP => shared 'unknown' bucket
  */
 export const ROUTE_AUTH = Object.freeze({
-  'quote-targets': { bearer: true, admin: true, pilotOwner: true, impersonation: true, clientFrom: 'context' },
+  'quote-targets': { bearer: true, admin: true, pilotOwner: 'per-action', impersonation: true, clientFrom: 'context', note: 'Per action (features/x-strategy/pilot-policy.js): reads, strategy/plan/doc edits, Today and DRAFT creation need only admin + client; approve/schedule, buckets, package store, NAS/Discogs/media, paid (confirmPaid, draftWithModel), autonomy, proposal confirm and undo require the pilot owner. Unlisted actions default to the gate.' },
   'social-posting': { bearer: true, admin: false, pilotOwner: 'per-action', impersonation: true, clientFrom: 'context', note: 'approve-draft/approve-and-schedule/reject-draft/reconcile-post and v2 rows require the pilot owner.' },
   'client-brain': { bearer: true, admin: false, pilotOwner: false, impersonation: true, clientFrom: 'context' },
   'client-brain-form': { bearer: true, admin: false, pilotOwner: false, impersonation: true, clientFrom: 'context' },

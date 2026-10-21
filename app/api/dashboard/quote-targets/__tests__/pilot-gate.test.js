@@ -75,14 +75,14 @@ test('unauthenticated => 401, nothing executed', async () => {
 
 test('admin but non-owner uid => 403 pilot-not-owner', async () => {
   who = { uid: 'other-admin' };
-  const r = await post({ action: 'post-status', postIds: [] });
+  const r = await post({ action: 'approve-package', packageId: 'p1' });
   assert.equal(r.status, 403);
   assert.equal(r.body.error, 'Content Management is limited to the pilot owner.');
 });
 
 test('non-admin => 403 before the pilot check', async () => {
   admin = false;
-  const r = await post({ action: 'post-status', postIds: [] });
+  const r = await post({ action: 'post-status', postIds: [] }); // a gate-free action still needs admin
   assert.equal(r.status, 403);
   assert.match(r.body.error, /Admin access required/);
 });
@@ -90,10 +90,20 @@ test('non-admin => 403 before the pilot check', async () => {
 test('owner uid impersonating another client (?as=) => 403, no handler ran', async () => {
   resolvedClient = 'other-client';
   for (const body of [
-    { action: 'post-status', postIds: [] },
-    { action: 'draft-quote', url: 'https://x.com/a/status/1', text: 'hi' },
     { action: 'approve-package', packageId: 'p1' },
+    { action: 'reject-package', packageId: 'p1' },
     { action: 'upsert-bucket', bucket: { id: 'b1' } },
+    { action: 'calendar-approve', postId: 'x' },
+    { action: 'calendar-item-decide', decision: 'approve', item: {} },
+    { action: 'strategy-proposal-decide', clientId: 'other-client', threadId: 't', proposalId: 'p', decision: 'confirm' },
+    { action: 'strategy-autonomy-save', clientId: 'other-client' },
+    { action: 'x-data-sources-save', clientId: 'other-client', strategyAccounts: 'x-api' },
+    { action: 'strategy-action-undo', clientId: 'other-client' },
+    { action: 'strategy-refresh', clientId: 'other-client', confirmPaid: true },
+    { action: 'quote-scan-refresh', clientId: 'other-client', confirmPaid: true },
+    { action: 'daily-run-generate', draftWithModel: true },
+    { action: 'nas-process' },
+    { action: 'not-a-real-action' },
   ]) {
     const r = await post(body);
     assert.equal(r.status, 403, body.action);
@@ -104,15 +114,36 @@ test('owner uid impersonating another client (?as=) => 403, no handler ran', asy
 
 test('body clientId of the owner is ignored when the server resolved another client => 403', async () => {
   resolvedClient = 'other-client';
-  const r = await post({ action: 'post-status', postIds: [], clientId: OWNER_CLIENT, requestedClientId: OWNER_CLIENT });
+  const r = await post({ action: 'approve-package', packageId: 'p1', clientId: OWNER_CLIENT, requestedClientId: OWNER_CLIENT });
   assert.equal(r.status, 403);
   assert.deepEqual(writes(), []);
 });
 
 test('production with no pilot env => 503 fail closed', async () => {
   delete process.env.PILOT_OWNER_UIDS;
-  const r = await post({ action: 'post-status', postIds: [] });
+  const r = await post({ action: 'approve-package', packageId: 'p1' });
   assert.equal(r.status, 503);
+});
+
+test('non-pilot client (admin, other uid, other client): gate-free actions are served, no 403', async () => {
+  who = { uid: 'other-admin' };
+  resolvedClient = 'other-client';
+  const r = await post({ action: 'post-status', postIds: [] });
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body, { ok: true, posts: [] });
+  const list = await post({ action: 'list-buckets' });
+  assert.equal(list.status, 200);
+  const doc = await post({ action: 'strategy-doc-get', clientId: 'other-client' });
+  assert.notEqual(doc.status, 403, 'strategy doc read must not be pilot-gated');
+  const g = await route.GET(new Request('http://localhost/api/dashboard/quote-targets?as=other', { headers: { authorization: 'Bearer t' } }));
+  assert.notEqual(g.status, 403, 'GET reads must not be pilot-gated');
+});
+
+test('production with no pilot env: gate-free actions still serve (not 503)', async () => {
+  delete process.env.PILOT_OWNER_UIDS;
+  delete process.env.PILOT_CLIENT_IDS;
+  const r = await post({ action: 'post-status', postIds: [] });
+  assert.equal(r.status, 200);
 });
 
 test('owner uid + owner client + post-status => 200', async () => {
