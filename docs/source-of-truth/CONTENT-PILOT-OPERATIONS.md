@@ -19,6 +19,29 @@ Status: **in production, multi-client (2026-10-14).** Content system shipped 202
 | GitHub | secrets `HITLOOP_CRON_SECRET`, `HITLOOP_ARCHIVE_WORKER_TOKEN`; repo variable `SOCIAL_PUBLISH_ENABLED` | Only for the fallback sweep (leave unset) |
 | Local Mac worker | a signed-in browser for `bird` cookies, `X_STRATEGY_BIRD_COOKIE_SOURCE` (default `chrome`), Firebase admin credentials | For scan + strategy refresh only |
 
+## 1a. The pilot gate is per action (strategy baseline Phase 3, 2026-10-20)
+`requirePilotOwner` protects the transactional posting machinery, not strategy work. On `quote-targets` the gate is decided per POST action by `features/x-strategy/pilot-policy.js` (`actionNeedsPilot`); **an action not listed there defaults to the gate**, so loosening is an explicit edit + test. Admin auth and the server-resolved client (`?as=`) always still apply. `isPilotClient` (lifecycle v2 stamping, plan enforcement, `x_schedule_ledger` writes) is unchanged: a draft made for a non-pilot client is an ordinary legacy row that the existing ungated `schedule` / `post-now` actions handle; it needs no v2 approval path.
+
+| Route / action | Decision | Reason |
+|---|---|---|
+| `quote-targets` GET | LOOSEN | read only |
+| strategy-get/-refresh-status/-evaluate-handle/-freshness/-action-log/-autonomy-get/-reply-style-get/-unmet-*, x-data-sources-get, quote-scan-status | LOOSEN | reads |
+| strategy-plan-apply/-revert, strategy-doc-save/-revert, strategy-profile-save, strategy-reply-style-save | LOOSEN | plan / strategy doc edits, nothing scheduled or spent |
+| strategy-chat-send/-history, strategy-review | LOOSEN | model chat, cap-limited; proposals only pend |
+| strategy-calendar-batch-*, strategy-daily-fill-*, draft-quote, create-draft-from-item, daily-run-save-draft/-edit/-dismiss/-latest, `dismiss` | LOOSEN | unscheduled drafts / Today queue; no slot, ledger or plan enforcement |
+| strategy-refresh, quote-scan-refresh | LOOSEN unless `confirmPaid:true` | free Mac queue path; the paid X API click stays pilot |
+| daily-run-generate | LOOSEN unless `draftWithModel:true` | model drafting stays pilot |
+| hot-quotes-find | LOOSEN | always the free Mac path |
+| content-context/-plan, inventory-list, post-status, quoted-post-preview, post-results, month-calendar, engine-performance, list-buckets/-folders, timeline-* | LOOSEN | reads |
+| calendar-approve/-unapprove/-suggestion-approve/-item-decide, approve-package, reject-package | KEEP | approve / schedule / global package store |
+| strategy-proposal-decide, strategy-action-undo | KEEP | executes cards (paid-sync, schedule, undo) |
+| strategy-autonomy-save, x-data-sources-save | KEEP | grants the agent trusted scheduling / switches on paid autoDaily |
+| buckets/folders writes, inventory-save/-delete, item facets/move/rights, media-*, hires, NAS_*, Discogs_*, capture-client-story, refresh-analysis, content-task-update | KEEP | package store and media mutation, NAS worker commands |
+| `social-posting` approve-draft/approve-and-schedule/trusted-schedule/reject-draft/reconcile-post, lifecycle v2 rows | KEEP | approve / schedule / ledger (unchanged) |
+| `archive-inbox`, `telegram` (bot binding) | KEEP | global package store; bot binding (unchanged) |
+
+Known limit: a non-pilot admin cannot Confirm a chat proposal card (strategy-proposal-decide stays gated, because the same endpoint executes paid-sync and scheduling cards). Splitting that by proposal kind is a follow-up.
+
 ## 1b. Content-loop readiness gate (multi-client Phase 2, 2026-10-14)
 The owner-only allowlist (`OWNER_CLIENT_IDS` / `assertOwnerClient`) is gone. Every daily-loop entry point — dashboard `quote-targets` `daily-run-*` actions, MCP `regenerate_today_suggestions`, the `/api/worker/daily-loop` cron (still limited to `PILOT_CLIENT_IDS`, still 503 when unset), and `scripts/x-content/daily-run.mjs` — calls `assertClientReady(db, clientId)` (`features/client-readiness/index.js`). A client is ready when it has **all** of: approved Client Brain (`clients/{id}/client_brain/current.status === 'approved'`), a plan doc (`x_strategy_plans/{id}`), a connected X username (`social_accounts/{id}.platforms.x.username`) — **or** the explicit owner override `clients/{id}.contentLoop.enabled === true`. Denied ⇒ 403 with `code` naming the first missing input (`client-brain-not-approved` / `client-plan-missing` / `client-x-not-connected` / `client-not-found`); the cron reports it per client and runs the rest.
 - The loop's own handle is the client's: `social_accounts` username → saved xGrowth `ownHandle` → Brain `identity.xHandle`; none ⇒ self-quote is a named gap (never `@bai_ee`). The digest's X queue uses the same resolver and skips (info step) when the client has none; `DIGEST_X_HANDLE` is retired.

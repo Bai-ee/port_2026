@@ -183,3 +183,19 @@ test('groups: every declared group is used, none is unknown, counts are stable-i
   for (const g of used) assert.ok(GROUPS.includes(g), g);
   for (const g of ['queue', 'calendar', 'content', 'buckets', 'strategy', 'brain', 'signals', 'digest', 'refresh', 'xmonitor', 'media', 'nas', 'other']) assert.ok(used.has(g), `group ${g} empty`);
 });
+
+test('brain baseline actions: read preview is tier 0, adopt is always a card (tier 2) with a note', () => {
+  const get = getAction('brain.strategy.baseline.get');
+  const adopt = getAction('brain.strategy.adopt-baseline');
+  assert.equal(get.tier, 0);
+  assert.equal(get.method, 'GET');
+  assert.deepEqual(get.query, { action: 'baseline-strategy' });
+  assert.equal(adopt.tier, 2);
+  assert.equal(adopt.action, 'adopt-baseline');
+  // The server derives the draft; the model may only supply an optional track grouping (shown on the card).
+  assert.deepEqual(Object.keys(adopt.args.properties), ['tracks']);
+  assert.deepEqual(adopt.args.required || [], []);
+  assert.ok(adopt.confirmNote);
+  assert.deepEqual(validateAction(get), []);
+  assert.deepEqual(validateAction(adopt), []);
+});

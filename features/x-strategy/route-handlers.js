@@ -20,6 +20,7 @@
 //       (default threadId `t_mcp_<yyyymmdd>`, created on first use) so they show up as ordinary pending cards in the
 //       Strategy chat. Executes nothing; the owner still confirms in the UI. Needs a chatStore (else {ok:false,status:503}).
 
+import { createRequire } from 'node:module';
 import { DEFAULT_PLAN, EVALUATION_THRESHOLDS, MAX_BULK_PROPOSALS_PER_TURN, BULK_PROPOSAL_KINDS } from './contracts.js';
 import { evaluate as defaultEvaluate } from './evaluate.js';
 import { StrategyPlanError, createFirestorePlanStore } from './plan-store.js';
@@ -839,6 +840,8 @@ export function createStrategyHandlers({
       getPlan: async () => ((await planStore.get(clientId)) ?? { version: 0, plan: DEFAULT_PLAN, history: [], isDefault: true }),
       // Stored doc or the seeded draft (version 0); absent docStore => null (prompt says none available).
       getStrategyDoc: async () => (docStore ? readDoc(clientId) : null),
+      // Brain status + whether a baseline strategy can be adopted (one prompt line). Best-effort; absent => no line.
+      getBrainState: async () => { try { return await createRequire(import.meta.url)('../client-brain/baseline-adopt.cjs').brainBaselineState(clientId); } catch { return null; } },
       getContext: async () => (readContentContext ? readContentContext(clientId) : { error: 'Content context is not available.' }),
       getTodayRun: async () => summarizeTodayRun(readTodayRun ? await readTodayRun(clientId) : null),
       // Closed over THIS request's clientId; the model never supplies one. Absent reader => key absent => tool says 'not available'.
