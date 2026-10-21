@@ -153,9 +153,11 @@ const newestUnusedFirst = (a, b) => (a.prior ? 1 : 0) - (b.prior ? 1 : 0)
  *   lastUsed                   Map packageId -> 'YYYY-MM-DD' last posted / dated day (the 30-day spread)
  *   quoteTargets               [{id,url,text,author|handle,createdAt,trackId?}] open quote candidates; asOf.quotes
  *   marketSignals              shapeMarketSignals output (topics/opportunities); asOf.signals
- *   trackRules                 { [bucketId]: {perDay, artists?, newestFirst?} } overrides for a bucket's track (daily-mix-rule.js):
+ *   trackRules                 { [bucketId]: {perDay, artists?, newestFirst?, sameDay?} } overrides for a bucket's track (daily-mix-rule.js):
  *                              perDay replaces the engine target; artists limits the pool to non-retired videos by those
- *                              artists; newestFirst ranks never-used items newest render first, then least recently used
+ *                              artists; newestFirst ranks never-used items newest render first, then least recently used;
+ *                              sameDay plans that track for `today` only (never days ahead) and, when a render newer than
+ *                              every draft already holding today has arrived, adds it as today's draft anyway
  *   excludePackageIds          package ids that are never picked (the item the owner just replaced)
  *   replace                    {bucketId} replace-one-item mode: only the track(s) listing that bucket are filled, rejected earlier
  *                              fills no longer hold their slot, and at most ONE row is planned. Normal fills leave this unset.
@@ -195,14 +197,25 @@ export function planDailyFill({
     const buckets = new Set(track.buckets || []);
     const throwback = isThrowbackTrack(track);
     const pkgById = throwback ? new Map((packages || []).filter((p) => p?.id).map((p) => [p.id, p])) : null;
-    for (const date of dates) {
+    // sameDay rule (daily mix): today only, never days ahead, so each morning's render leads that day's draft.
+    const sameDay = !!rule?.sameDay;
+    const renderedOf = (id) => String(pool.find((p) => p.id === id)?.renderedAt || '');
+    for (const date of sameDay ? dates.filter((d) => d === today) : dates) {
       let slots = slotsOn(perDay, date);
       const md = date.slice(5);
       // Re-runs: drafts an earlier fill already put on this day for this track count toward its target. A throwback
       // draft without a dated, media-linked item does not hold the day (it is left alone, never deleted).
-      slots -= fills.filter((f) => !(replace && f.status === 'rejected') && f.reviewOn === date && (f.fillKind === 'baseline' || f.fillKind === 'client-work') && buckets.has(f.bucketId)
-        && (!throwback || throwbackOk(pkgById.get(f.packageId), md))).length;
+      const holding = fills.filter((f) => !(replace && f.status === 'rejected') && f.reviewOn === date && (f.fillKind === 'baseline' || f.fillKind === 'client-work') && buckets.has(f.bucketId)
+        && (!throwback || throwbackOk(pkgById.get(f.packageId), md)));
+      slots -= holding.length;
       if (kind === 'client-work') slots = Math.min(slots, 1 - (clientWorkDay.get(date) || 0));
+      // sameDay: a newer render than every (non-rejected) draft holding today gets its own draft; the older drafts stay
+      // for the owner to pass or delete. A rerun sees the new render already queued and adds nothing.
+      if (sameDay && slots <= 0) {
+        const heldAt = holding.filter((f) => f.status !== 'rejected').map((f) => renderedOf(f.packageId));
+        const newest = pool.filter((p) => !used.has(p.id) && !lastOf(p.id) && !openOf(p.id)).map((p) => String(p.renderedAt || '')).sort().pop() || '';
+        if (newest && heldAt.every((r) => r < newest)) slots = 1;
+      }
       if (slots <= 0) continue;
       const ranked = [];
       for (const p of pool) {

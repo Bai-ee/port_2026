@@ -72,13 +72,16 @@ async function buildReadInputsFor() {
 
 // Daily fill (calendar drafts per bucket track): runs AFTER the suggestions step, non-fatal, drafts only (never publishes).
 // Choice: reuse the Strategy handler factory's `dailyFill` (it already wires ensureDraft/placeDraft/readOpenPackageIds)
-// instead of hand-building runDailyFillForCron deps here. Only readPackages is supplied (the content inventory the
-// suggestions step already reads); handlers without `dailyFill` are reported as failed, never as a healthy skip.
-async function runDailyFillStep({ db, committedCorpusRows, readInputsFor }, clientIds, today) {
+// instead of hand-building runDailyFillForCron deps here. readPackages is the FULL inventory (readInventory, as on the
+// dashboard route), not the suggestions step's slimmed projection: that projection drops clientId (mediaForItem's owner
+// check, so no draft got its media), renderedAt (newest-first ordering) and nas (the throwback media link).
+// Handlers without `dailyFill` are reported as failed, never as a healthy skip.
+async function runDailyFillStep({ db, committedCorpusRows }, clientIds, today) {
   let handlers;
   try {
     const { createStrategyHandlersFromDb } = await import('../../../../features/x-strategy/route-handlers.js');
     const { pickMedia } = await import('../../../../features/x-content-inventory/item-actions.js');
+    const { readInventory } = await import('../../../../features/x-content-inventory/store.js');
     const { tokenUrlFor } = await import('../../../../features/x-content-inventory/thumbs.js');
     const { projectBrief } = require('../../../../features/intelligence/_brief-intel.js');
     const fb = require('../../../../api/_lib/firebase-admin.cjs');
@@ -95,7 +98,7 @@ async function runDailyFillStep({ db, committedCorpusRows, readInputsFor }, clie
     };
     handlers = createStrategyHandlersFromDb(db, {
       loadCommitted: committedCorpusRows,
-      readPackages: async (clientId) => (await readInputsFor(clientId)).packages || [],
+      readPackages: async (clientId) => (await readInventory({ clientId, db })).packages || [],
       // Narratives come from the projected Market Signals brief, as on the dashboard route.
       readMarketSignals: async (clientId) => {
         const snap = await db.collection('dashboard_state').doc(clientId).get();
