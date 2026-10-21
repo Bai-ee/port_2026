@@ -6,7 +6,7 @@
 
 import { ToolError } from '../mcp/jsonrpc.js';
 import { defTool, str } from '../mcp/tools/common.js';
-import { SITE_STATS_RANGES, siteStatsSourceFor, fetchSiteStats } from './sources.js';
+import { SITE_STATS_RANGES, PEOPLE_RANGES, PEOPLE_ID_RE, siteStatsSourceFor, fetchSiteStats, fetchSitePeople } from './sources.js';
 
 export const RANGES = SITE_STATS_RANGES;
 const RANGE_MS = Object.freeze({ today: 86_400_000, '7d': 7 * 86_400_000, '30d': 30 * 86_400_000 });
@@ -29,7 +29,7 @@ const excerptOf = (t, n = 280) => String(t ?? '').replace(/\s+/g, ' ').trim().sl
 const siteStatsTool = defTool({
   name: 'get_site_stats',
   title: 'Website stats',
-  description: 'PRIMARY SOURCE. Live stats from the client\'s own website: visits, traffic sources, top pages, CTA clicks, booking funnel, leads and applicants (counts and trends only). Call this first for any question about how the site or business is doing. range: today | 7d | 30d (default 7d). If stats.degraded lists parts, those parts fell back to zeros.',
+  description: 'PRIMARY SOURCE. Live stats from the client\'s own website: visits, traffic sources, top pages, CTA clicks, booking funnel, leads and applicants (counts and trends only; for names, contact details and answers use get_leads, get_email_captures and get_applicants). Call this first for any question about how the site or business is doing. range: today | 7d | 30d (default 7d). If stats.degraded lists parts, those parts fell back to zeros.',
   inputSchema: { type: 'object', properties: { range: rangeProp('Time range. Default 7d.') } },
   kind: 'external',
   // Site stats are counts keyed by words like "sessions"; key-name redaction would blank them. Values are still scanned.
@@ -41,6 +41,81 @@ const siteStatsTool = defTool({
     fetchImpl: ctx.services.fetch,
     now: ctx.now(),
   }),
+});
+
+// ---- people: leads / email captures / applicants -----------------------------------------------------------
+// Person-level data from the same site (owner-approved 2026-10-21: anyone with the connect link may read it).
+// redactKeys:false so field names like "email"/"phone" are not blanked; secret-looking VALUES are still scrubbed.
+
+const PEOPLE_DEFAULT_LIMIT = 25;
+const PEOPLE_MAX_LIMIT = 50;
+// toolResult caps at RESULT_MAX_CHARS (40000) with a plain slice, which would cut JSON mid-object. Keep the
+// serialized list under this budget by dropping whole items from the end and saying so.
+const PEOPLE_BUDGET_CHARS = 34_000;
+const peopleRange = (args) => (PEOPLE_RANGES.includes(args?.range) ? args.range : '30d');
+const peopleRangeProp = { type: 'string', enum: [...PEOPLE_RANGES], description: 'today | 7d | 30d | all. Default 30d.' };
+const limitProp = { type: 'integer', minimum: 1, maximum: PEOPLE_MAX_LIMIT, description: `How many records, newest first. Default ${PEOPLE_DEFAULT_LIMIT}, max ${PEOPLE_MAX_LIMIT}.` };
+const idProp = { type: 'string', pattern: PEOPLE_ID_RE.source, maxLength: 128, description: 'The record id from the list tool.' };
+
+function peopleRequest(ctx, params) {
+  return fetchSitePeople({
+    source: siteStatsSourceFor(ctx.clientId, ctx.services.sources),
+    env: ctx.services.env, fetchImpl: ctx.services.fetch, now: ctx.now(), ...params,
+  });
+}
+
+function fitItems(res) {
+  if (!Array.isArray(res.items)) return res;
+  const items = [...res.items];
+  const size = () => JSON.stringify({ ...res, items }, null, 1).length;
+  while (items.length > 1 && size() > PEOPLE_BUDGET_CHARS) items.pop();
+  if (items.length === res.items.length) return res;
+  return { ...res, items, count: items.length, note: `Showing the first ${items.length} of ${res.items.length} fetched records (size cap). Ask with a smaller limit, a narrower range, or open one record by id.` };
+}
+
+const peopleListTool = ({ name, title, kind, description, withStage }) => defTool({
+  name, title, description,
+  inputSchema: { type: 'object', properties: { range: peopleRangeProp, ...(withStage ? { stage: str('Only applicants in this pipeline stage (as shown in stageLabel/stage).', { maxLength: 60 }) } : {}), limit: limitProp } },
+  kind: 'external',
+  redactKeys: false,
+  handler: async ({ args, ctx }) => {
+    const n = Number.isInteger(args?.limit) ? Math.min(Math.max(args.limit, 1), PEOPLE_MAX_LIMIT) : PEOPLE_DEFAULT_LIMIT;
+    const stage = withStage && typeof args?.stage === 'string' ? args.stage.trim().slice(0, 60) : undefined;
+    return fitItems(await peopleRequest(ctx, { kind, range: peopleRange(args), stage, limit: n }));
+  },
+});
+
+const peopleOneTool = ({ name, title, kind, description }) => defTool({
+  name, title, description,
+  inputSchema: { type: 'object', properties: { id: idProp }, required: ['id'] },
+  kind: 'external',
+  redactKeys: false,
+  handler: async ({ args, ctx }) => {
+    const id = typeof args?.id === 'string' ? args.id.trim() : '';
+    if (!PEOPLE_ID_RE.test(id)) throw new ToolError('id must be 1-128 letters, digits, _ or -. Take it from the list tool.');
+    return peopleRequest(ctx, { kind, id });
+  },
+});
+
+const leadsTool = peopleListTool({
+  name: 'get_leads', title: 'Leads (Meet & Greet requests)', kind: 'leads',
+  description: 'People who filled in the Meet & Greet form, with full details: owner name, email, phone, neighborhood, dog name, breed/age, service interest, vaccinations, walk frequency, reactivity, allergies, spay/neuter, dog and stranger social, notes, source, and whether they self-reported booking. Use for "who signed up", "who are the new leads", "names", "contact details", "what did X answer". Newest first. range: today | 7d | 30d | all (default 30d). Quote values as recorded.',
+});
+const leadTool = peopleOneTool({
+  name: 'get_lead', title: 'One lead', kind: 'leads',
+  description: 'One Meet & Greet lead with every answer. Needs the id from get_leads.',
+});
+const capturesTool = peopleListTool({
+  name: 'get_email_captures', title: 'Email captures', kind: 'captures',
+  description: 'People who left only their email (started but did not finish the questionnaire): email, source, first and last seen, whether they self-reported booking. Use for "who gave us their email", "unfinished sign-ups". range: today | 7d | 30d | all (default 30d).',
+});
+const applicantsTool = peopleListTool({
+  name: 'get_applicants', title: 'Job applicants', kind: 'applicants', withStage: true,
+  description: 'Job applicants with every answer: name, email, phone, pipeline stage (stage, stageLabel, onHold), source/utm, all application answers, notes and any AI summary. Use for "who applied", "applicant names", "contact details", "what did X answer", "who is on hold". Optional stage filter. range: today | 7d | 30d | all (default 30d). Newest first.',
+});
+const applicantTool = peopleOneTool({
+  name: 'get_applicant', title: 'One applicant', kind: 'applicants',
+  description: 'One applicant with every answer, notes and AI summary. Needs the id from get_applicants.',
 });
 
 // ---- get_client_brain --------------------------------------------------------------------------------------
@@ -309,7 +384,7 @@ const dailyUpdateTool = defTool({
   },
 });
 
-export const clientRegistry = Object.freeze([dailyUpdateTool, siteStatsTool, clientBrainTool, calendarTool, resultsTool, marketingDataTool]);
+export const clientRegistry = Object.freeze([dailyUpdateTool, siteStatsTool, leadsTool, leadTool, capturesTool, applicantsTool, applicantTool, clientBrainTool, calendarTool, resultsTool, marketingDataTool]);
 
 // Sent on initialize: how the assistant should weigh and phrase answers for this one client.
 export function clientInstructions({ label, siteUrl }) {
@@ -321,6 +396,7 @@ export function clientInstructions({ label, siteUrl }) {
     site
       ? `PRIMARY: the website's live analytics. For any question about how the site or business is doing (visits, traffic, sources, pages, bookings, leads, applicants), call get_site_stats first (default 7d; use today or 30d when asked) and lead with those numbers and the trend.`
       : 'No website stats source is connected for this client yet; say so if asked about visits, leads or applicants.',
+    'PEOPLE: you can look up individual leads, email captures and applicants (names, contact details, every answer) with get_leads, get_lead, get_email_captures, get_applicants and get_applicant. When asked about people, use them; quote values exactly as recorded and never invent contact details.',
     'SECONDARY: the marketing work prepared for them: get_marketing_data (Market Signals report, SEO audit, brief outputs), get_content_calendar, get_post_results, get_client_brain (brand, offers, voice). Use these after the site numbers, or when asked directly.',
     'HITLOOP is only the agency service that pipes this data in. Do not describe HITLOOP, its tools, its owner or other clients, and never present HITLOOP\'s own business as the client\'s.',
     'Never estimate or invent a number: if it is not in the data, say it is not available. Always state the range and the date the data is from (fetchedAt, briefGeneratedAt); call out marketing reports older than 30 days as old. If stats.degraded lists parts, say those parts fell back to zeros.',

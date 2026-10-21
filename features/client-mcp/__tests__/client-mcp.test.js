@@ -116,7 +116,7 @@ test('client B token sees B and never A', async () => {
 });
 
 test('no tool takes a clientId argument; all are read-only', () => {
-  assert.deepEqual(clientRegistry.map((t) => t.name), ['get_daily_update', 'get_site_stats', 'get_client_brain', 'get_content_calendar', 'get_post_results', 'get_marketing_data']);
+  assert.deepEqual(clientRegistry.map((t) => t.name), ['get_daily_update', 'get_site_stats', 'get_leads', 'get_lead', 'get_email_captures', 'get_applicants', 'get_applicant', 'get_client_brain', 'get_content_calendar', 'get_post_results', 'get_marketing_data']);
   for (const t of clientRegistry) {
     assert.equal(Object.hasOwn(t.inputSchema.properties || {}, 'clientId'), false, t.name);
     assert.equal(t.annotations.readOnlyHint, true, t.name);
@@ -409,4 +409,87 @@ test('get_daily_update: an old brief is flagged stale', async () => {
   const out = JSON.parse(textOf(await rpc({ body: call('get_daily_update'), deps })));
   assert.equal(out.marketing.briefStale, true);
   assert.ok(out.marketing.briefAgeDays > 30);
+});
+
+// ---- people (leads / captures / applicants) ----------------------------------------------------------------
+
+const jsonRes = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
+const PERSON = { id: 'l_1', ownerName: 'Jane Doe', email: 'jane@example.com', phone: '+1 555 0100', notes: 'Prefers mornings' };
+
+test('people tools hit <stats url>/people with kind/range/limit and the Bearer key; PII passes through', async () => {
+  const seen = [];
+  const { deps } = makeDeps({ fetchImpl: async (url, init) => { seen.push({ url, init }); return jsonRes(200, { site: 'a', kind: 'leads', total: 1, count: 1, items: [PERSON] }); } });
+  const out = await rpc({ body: call('get_leads', { range: '7d', limit: 10 }), deps });
+  const u = new URL(seen[0].url);
+  assert.equal(u.origin + u.pathname, 'https://a.example/api/stats/people');
+  assert.equal(u.searchParams.get('kind'), 'leads');
+  assert.equal(u.searchParams.get('range'), '7d');
+  assert.equal(u.searchParams.get('limit'), '10');
+  assert.equal(seen[0].init.headers.authorization, `Bearer ${SITE_KEY}`);
+  const text = textOf(out);
+  assert.ok(text.includes('jane@example.com') && text.includes('+1 555 0100') && text.includes('Jane Doe'));
+  assert.ok(!text.includes('[redacted]') && !text.includes(SITE_KEY) && !seen[0].url.includes(SITE_KEY));
+  assert.match(text, /fetchedAt/);
+});
+
+test('people tools: defaults, kinds, stage, and single-record lookups', async () => {
+  const seen = [];
+  const { deps } = makeDeps({ fetchImpl: async (url) => { seen.push(new URL(url)); return jsonRes(200, { kind: 'x', item: {} }); } });
+  await rpc({ body: call('get_email_captures'), deps });
+  await rpc({ body: call('get_applicants', { stage: 'interview', range: 'all' }), deps });
+  await rpc({ body: call('get_lead', { id: 'abc_123-X' }), deps });
+  await rpc({ body: call('get_applicant', { id: 'ap1' }), deps });
+  assert.deepEqual([seen[0].searchParams.get('kind'), seen[0].searchParams.get('range'), seen[0].searchParams.get('limit')], ['captures', '30d', '25']);
+  assert.deepEqual([seen[1].searchParams.get('kind'), seen[1].searchParams.get('stage'), seen[1].searchParams.get('range')], ['applicants', 'interview', 'all']);
+  assert.deepEqual([seen[2].searchParams.get('kind'), seen[2].searchParams.get('id'), seen[2].searchParams.get('range')], ['leads', 'abc_123-X', null]);
+  assert.deepEqual([seen[3].searchParams.get('kind'), seen[3].searchParams.get('id')], ['applicants', 'ap1']);
+});
+
+test('people tools: bad ids are rejected without fetching; 404/401/429/400 map to clear errors without the key', async () => {
+  const { deps, calls } = makeDeps();
+  for (const id of ['', 'a/b', '../x', 'a b', 'x'.repeat(129), 'a?kind=leads']) {
+    const out = await rpc({ body: call('get_lead', { id }), deps });
+    assert.equal(out.body.result.isError, true, id);
+  }
+  assert.equal(calls.fetch.length, 0);
+  for (const [status, re] of [[404, /No applicant record with that id/], [401, /rejected/], [429, /rate limiting/], [400, /did not accept/]]) {
+    const d = makeDeps({ fetchImpl: async () => jsonRes(status, {}) }).deps;
+    const out = await rpc({ body: call('get_applicant', { id: 'zz' }), deps: d });
+    assert.equal(out.body.result.isError, true);
+    assert.match(textOf(out), re);
+    assert.ok(!textOf(out).includes(SITE_KEY));
+  }
+  const d = makeDeps({ fetchImpl: async () => { throw new Error(`boom ${SITE_KEY}`); } }).deps;
+  assert.ok(!textOf(await rpc({ body: call('get_leads'), deps: d })).includes(SITE_KEY));
+});
+
+test('people tools: a long list is trimmed by whole items so the JSON stays valid', async () => {
+  const items = Array.from({ length: 50 }, (_, i) => ({ id: `l_${i}`, ownerName: `Person ${i}`, notes: 'n'.repeat(1500) }));
+  const { deps } = makeDeps({ fetchImpl: async () => jsonRes(200, { kind: 'leads', total: 50, count: 50, items }) });
+  const out = await rpc({ body: call('get_leads', { limit: 50 }), deps });
+  const text = textOf(out);
+  assert.ok(!text.includes('[truncated'));
+  const parsed = JSON.parse(text);
+  assert.ok(parsed.items.length < 50 && parsed.items.length >= 1);
+  assert.equal(parsed.count, parsed.items.length);
+  assert.match(parsed.note, /of 50/);
+});
+
+test('people tools: client B cannot reach client A\'s people (registry scoping); no source = clear error', async () => {
+  const seen = [];
+  const { deps } = makeDeps({ fetchImpl: async (url) => { seen.push(url); return jsonRes(200, { items: [] }); } });
+  await rpc({ body: call('get_leads', { clientId: B }), deps });
+  assert.ok(seen.every((u) => u.startsWith('https://a.example/')));
+  const nb = makeDeps({ fetchImpl: async (url) => { seen.push(url); return jsonRes(200, { items: [] }); } });
+  const noKey = await rpc({ token: clientToken({ hcid: B, gid: grantIdOf(SECRET_B) }), secret: SECRET_B, body: call('get_leads'), deps: nb.deps });
+  assert.equal(noKey.body.result.isError, true); // B's key env is unset
+  assert.ok(seen.every((u) => !u.includes('b.example')));
+});
+
+test('people tools: audit rows carry no arguments or results; NTR rows have peopleUrl', async () => {
+  const { deps, audit } = makeDeps({ fetchImpl: async () => jsonRes(200, { items: [PERSON] }) });
+  await rpc({ body: call('get_leads', { range: '7d' }), deps });
+  assert.deepEqual(Object.keys(audit[0]).sort(), ['at', 'clientId', 'grant', 'ms', 'ok', 'tool', 'via']);
+  assert.ok(!JSON.stringify(audit).includes('jane@example.com'));
+  for (const id of ['nottherug-ten-QSMYxuuv', 'not-the-rug-WMmA4G9L']) assert.equal(siteStatsSourceFor(id, DATA_SOURCES).peopleUrl, 'https://nottherug.com/api/stats/people');
 });
