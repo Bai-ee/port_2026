@@ -10,7 +10,9 @@ export { brainDigest } from '../x-quote-targets/hot-judge.js';
 export const RESPONDS = Object.freeze(['quote', 'reply', 'swipe', 'skip']);
 export const LANES = Object.freeze(['design', 'music', 'other']);
 /** Bookmarks are already the owner's own pick, so the fit bar is lower than the hot scan's 0.65. */
-export const BOOKMARK_LIMITS = Object.freeze({ ...JUDGE, threshold: 0.5, maxCandidates: 24 });
+/** Haiku spends most of its output budget thinking (~1k tokens before the JSON), so the judge runs in small batches with a
+ *  per-batch output cap that leaves room for 8 rows of how + why. maxCandidates is the per-run total across batches. */
+export const BOOKMARK_LIMITS = Object.freeze({ ...JUDGE, threshold: 0.5, maxCandidates: 24, batchSize: 8, maxOutputTokens: 6000 });
 export const MAX_HOW = 140;
 export const MAX_WHY = 140;
 const QUOTE_MAX_AGE_HOURS = 36;
@@ -37,7 +39,7 @@ export function bookmarkSystemPrompt(digest) {
     '- lane: "design" | "music" | "other"',
     `- angle (one of ${ANGLES.join(', ')}): "credit" amplify a peer; "craft" a design-craft point; "i-was-there" ONLY for the Chicago/SF house scene, Housepitality or an era/place he was part of; "builder" he shipped something similar; "record" a record-collecting point; "none" when no claim above honestly applies`,
     `- respond: "quote" = a striking object worth a quote-react with a flat 2-8 word caption, ONLY when age_h < ${QUOTE_MAX_AGE_HOURS} or it is still clearly climbing; "reply" = a conversation where he has real standing (age does not matter); "swipe" = a good reference for his OWN future showcase, record or mix post, not for engaging; "skip" = no use`,
-    `- how: ONE plain line (max ${MAX_HOW} chars) saying what he would say or make. Ground it ONLY in the authority claims above. No hype, no hashtags.`,
+    `- how: ONE plain line (max ${MAX_HOW} chars) saying what he would say or make. Ground it ONLY in the authority claims above. A statement from his own work, never a question to the author (he does not ask his audience questions). No hype, no hashtags.`,
     `- why: one plain sentence (max ${MAX_WHY} chars) on why it fits.`,
     'Answer with ONLY a JSON array, one object per post: [{"i":<index>,"fit":<0-1>,"lane":"...","angle":"...","respond":"...","how":"...","why":"...","reject":"<only when rejected>"}]',
   ].join('\n');
@@ -55,15 +57,25 @@ export function bookmarkUserPrompt(candidates, now = Date.now()) {
   return `Bookmarked posts to judge:\n${rows.join('\n')}`;
 }
 
-/** Tolerant parse -> Map(index -> {fit, lane, angle, respond, how, why, reject?}). Bad rows are dropped. */
+/** A cut-off array (max_tokens) still yields its complete rows: every flat {...} object that parses on its own. */
+function salvageRows(text) {
+  const rows = [];
+  for (const m of String(text).matchAll(/\{[^{}]*\}/g)) {
+    try { rows.push(JSON.parse(m[0])); } catch { /* partial row at the cut */ }
+  }
+  return rows;
+}
+
+/** Tolerant parse -> Map(index -> {fit, lane, angle, respond, how, why, reject?}). Bad rows are dropped; a truncated array keeps its complete rows. */
 export function parseBookmarkJudgeOutput(text, count) {
   const raw = String(text || '');
   const start = raw.indexOf('[');
   const end = raw.lastIndexOf(']');
   const out = new Map();
-  if (start === -1 || end <= start) return out;
+  if (start === -1) return out;
   let arr;
-  try { arr = JSON.parse(raw.slice(start, end + 1)); } catch { return out; }
+  if (end <= start) arr = salvageRows(raw.slice(start)); // no closing bracket: the array was cut off
+  else { try { arr = JSON.parse(raw.slice(start, end + 1)); } catch { arr = salvageRows(raw.slice(start)); } }
   for (const r of Array.isArray(arr) ? arr : []) {
     const i = Number(r?.i);
     if (!Number.isInteger(i) || i < 0 || i >= count) continue;
@@ -100,7 +112,7 @@ export function finalizeVerdict(v, item, digest, { now = Date.now(), model = BOO
 }
 
 /**
- * Judge candidates in ONE call.
+ * Judge candidates in batches of limits.batchSize (one model call each; a later batch is skipped once the cost cap is hit).
  * @returns {Promise<{judged:Array<{item:object, judge:object}>, costUsd:number, notes:string[]}>}
  *   judge is null for a row the model dropped, so the next run retries it.
  */
@@ -108,15 +120,27 @@ export async function judgeBookmarks({ candidates, digest, callModel, limits = B
   const notes = [];
   if (!candidates.length) return { judged: [], costUsd: 0, notes };
   if (candidates.length > limits.maxCandidates) throw new Error(`judge cap: ${candidates.length} > ${limits.maxCandidates}`);
-  const res = await callModel({ system: bookmarkSystemPrompt(digest), user: bookmarkUserPrompt(candidates, now), maxTokens: limits.maxOutputTokens });
-  const costUsd = judgeCostUsd(res.usage, limits);
-  if (costUsd > limits.maxCostUsd) notes.push(`judge cost $${costUsd.toFixed(4)} exceeded the $${limits.maxCostUsd} cap`);
-  const verdicts = parseBookmarkJudgeOutput(res.text, candidates.length);
-  if (verdicts.size < candidates.length) notes.push(`judge returned ${verdicts.size}/${candidates.length} verdicts`);
-  const judged = candidates.map((item, i) => {
-    const v = verdicts.get(i);
-    // A missing verdict stays unjudged (null) so the next run retries it.
-    return { item, judge: v ? finalizeVerdict(v, item, digest, { now, model: limits.model, limits }) : null };
-  });
-  return { judged, costUsd, notes };
+  const size = Math.max(1, Number(limits.batchSize) || candidates.length);
+  const system = bookmarkSystemPrompt(digest);
+  const judged = [];
+  let costUsd = 0;
+  for (let at = 0; at < candidates.length; at += size) {
+    const batch = candidates.slice(at, at + size);
+    if (costUsd > limits.maxCostUsd) {
+      notes.push(`judge cost $${costUsd.toFixed(4)} exceeded the $${limits.maxCostUsd} cap; ${candidates.length - at} left unjudged`);
+      judged.push(...batch.map((item) => ({ item, judge: null })));
+      continue;
+    }
+    // eslint-disable-next-line no-await-in-loop
+    const res = await callModel({ system, user: bookmarkUserPrompt(batch, now), maxTokens: limits.maxOutputTokens });
+    costUsd += judgeCostUsd(res.usage, limits);
+    const verdicts = parseBookmarkJudgeOutput(res.text, batch.length);
+    if (verdicts.size < batch.length) notes.push(`judge returned ${verdicts.size}/${batch.length} verdicts (batch ${at / size + 1})`);
+    judged.push(...batch.map((item, i) => {
+      const v = verdicts.get(i);
+      // A missing verdict stays unjudged (null) so the next run retries it.
+      return { item, judge: v ? finalizeVerdict(v, item, digest, { now, model: limits.model, limits }) : null };
+    }));
+  }
+  return { judged, costUsd: Number(costUsd.toFixed(5)), notes };
 }
