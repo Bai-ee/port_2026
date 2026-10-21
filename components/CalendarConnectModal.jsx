@@ -6,10 +6,11 @@
 // dashboard's established modal classes (tile-detail-*, mb-config-*).
 
 import React, { useCallback, useEffect, useState } from 'react';
+import { readImpersonateClientId, withImpersonation } from '../lib/dashboard/bootstrap-session.js';
 
 async function authFetch(user, path, options = {}) {
   const token = await user.getIdToken();
-  const res = await fetch(path, {
+  const res = await fetch(withImpersonation(path, readImpersonateClientId()), {
     ...options,
     headers: {
       'Content-Type': 'application/json',

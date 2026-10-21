@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, BarChart3, CalendarDays, Clock, PenSquare, Quote, RefreshCw, Send, Trash2 } from 'lucide-react';
+import { readImpersonateClientId, withImpersonation } from '../../lib/dashboard/bootstrap-session.js';
 
 // X Calendar — surfaces posts worth quote-reacting to, ranked by a local,
 // zero-cost scan (see scripts/x-content/scan-quote-targets.mjs). The scan runs
@@ -97,7 +98,7 @@ export default function XCalendarCard({ getIdToken, activeClientId, clientName, 
           body: JSON.stringify(body),
         }
       : { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' };
-    const res = await fetch('/api/dashboard/quote-targets', options);
+    const res = await fetch(withImpersonation('/api/dashboard/quote-targets', readImpersonateClientId()), options);
     const data = await res.json().catch(() => ({}));
     return { ok: res.ok, status: res.status, data };
   }, [getIdToken]);

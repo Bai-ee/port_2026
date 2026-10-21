@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { CANONICAL_VERTICALS } from '../../features/strategy-builder/normalize-vertical.js';
+import { readImpersonateClientId, withImpersonation } from '../../lib/dashboard/bootstrap-session.js';
 
 /**
  * Market Category card panel — shows the auto-detected category and lets the
@@ -63,7 +64,7 @@ export default function MarketCategoryPanel({ bootstrap, getIdToken, onSaved }) 
     setNotice(null);
     try {
       const token = await getIdToken();
-      const res = await fetch('/api/dashboard/market-category/analyze', {
+      const res = await fetch(withImpersonation('/api/dashboard/market-category/analyze', readImpersonateClientId()), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({}),
@@ -111,7 +112,7 @@ export default function MarketCategoryPanel({ bootstrap, getIdToken, onSaved }) 
     setNotice(null);
     try {
       const token = await getIdToken();
-      const res = await fetch('/api/dashboard/market-category/config', {
+      const res = await fetch(withImpersonation('/api/dashboard/market-category/config', readImpersonateClientId()), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ value: pendingValue }),

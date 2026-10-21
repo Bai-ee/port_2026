@@ -7,6 +7,7 @@ import {
   UserMinus, UserPlus, UserRound, Users,
 } from 'lucide-react';
 import { SOCIAL_PLATFORMS } from '../../features/social-posting/platforms.js';
+import { readImpersonateClientId, withImpersonation } from '../../lib/dashboard/bootstrap-session.js';
 
 // X Command Center — admin control surface for the live @bai_ee account over
 // OAuth 2.0 user-context (features/social-posting/x-oauth.js). Panels:
@@ -74,7 +75,7 @@ export default function XProfileCard({ getIdToken, activeClientId, clientName })
           body: JSON.stringify(body),
         }
       : { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' };
-    const res = await fetch('/api/social-posting/x-oauth', options);
+    const res = await fetch(withImpersonation('/api/social-posting/x-oauth', readImpersonateClientId()), options);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const err = new Error(data?.error || `HTTP ${res.status}`);

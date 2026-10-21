@@ -92,7 +92,7 @@ const textOf = (out) => out.body.result.content[0].text;
 test('every tool answers for the token\'s client only; a clientId argument for another client is ignored', async () => {
   const { deps, calls } = makeDeps();
   const cases = [
-    ['get_site_stats', {}], ['get_client_brain', {}], ['get_client_brain', { part: 'markdown' }], ['get_content_calendar', { range: '30d' }],
+    ['get_daily_update', {}], ['get_site_stats', {}], ['get_client_brain', {}], ['get_client_brain', { part: 'markdown' }], ['get_content_calendar', { range: '30d' }],
     ['get_post_results', { range: '30d' }], ['get_marketing_data', {}], ['get_marketing_data', { section: 'report' }],
     ['get_marketing_data', { section: 'marketingBrief.reportSnapshot.redditAnalysis' }], ['get_marketing_data', { section: 'seoAudit' }],
   ];
@@ -116,7 +116,7 @@ test('client B token sees B and never A', async () => {
 });
 
 test('no tool takes a clientId argument; all are read-only', () => {
-  assert.deepEqual(clientRegistry.map((t) => t.name), ['get_site_stats', 'get_client_brain', 'get_content_calendar', 'get_post_results', 'get_marketing_data']);
+  assert.deepEqual(clientRegistry.map((t) => t.name), ['get_daily_update', 'get_site_stats', 'get_client_brain', 'get_content_calendar', 'get_post_results', 'get_marketing_data']);
   for (const t of clientRegistry) {
     assert.equal(Object.hasOwn(t.inputSchema.properties || {}, 'clientId'), false, t.name);
     assert.equal(t.annotations.readOnlyHint, true, t.name);
@@ -320,5 +320,62 @@ test('initialize: named after the client, site analytics first, marketing second
   assert.ok(instructions.indexOf('PRIMARY') < instructions.indexOf('SECONDARY'));
   assert.match(instructions, /call get_site_stats first/);
   assert.match(instructions, /Do not describe HITLOOP/);
-  assert.match(clientRegistry[0].description, /^PRIMARY SOURCE/);
+  assert.match(instructions, /OPENING: .*give me an update.*call get_daily_update first/);
+  assert.match(clientRegistry[0].description, /^START HERE/);
+  assert.match(clientRegistry[1].description, /^PRIMARY SOURCE/);
+});
+
+// ---- daily update ------------------------------------------------------------------------------------------
+
+const NTR_STATS = {
+  site: 'nottherug.com', range: 'today', degraded: [],
+  analytics: { sessions: 84, pageviews: 210, bookedLeads: 3, inquiries: 2, range: { timezone: 'America/New_York' } },
+  leads: { timezone: 'America/New_York', today: 4 },
+  applicants: { total: 40, last7Days: 5, last30Days: 12, onHold: 1 },
+};
+const statsFetch = (body) => async () => ({ ok: true, status: 200, json: async () => body });
+
+test('get_daily_update: today\'s site numbers, marketing status, scheduled posts, brief blurb and the reply format', async () => {
+  const { deps } = makeDeps({ fetchImpl: statsFetch(NTR_STATS) });
+  deps.services.projectBrief = () => ({ generatedAt: '2026-10-20T10:00:00Z', headline: 'Local search up', humanBrief: 'Dog walking demand rose this week.', opportunities: [1, 2], competitors: [1] });
+  deps.services.readTodayPlan = async () => ({ tracks: [{ label: 'Tips', targetPerDay: 1, scheduledToday: 0 }] });
+  const out = JSON.parse(textOf(await rpc({ body: call('get_daily_update'), deps })));
+  assert.equal(out.date, 'Tue, Oct 20');
+  assert.deepEqual(
+    { visits: out.site.visits, leadsBooked: out.site.leadsBooked, leadsToday: out.site.leadsToday, applicants7d: out.site.applicants.last7Days },
+    { visits: 84, leadsBooked: 3, leadsToday: 4, applicants7d: 5 },
+  );
+  assert.equal(out.marketing.briefAgeDays, 0);
+  assert.equal(out.marketing.briefStale, false);
+  assert.equal(out.marketing.postedLast7Days, 1);
+  assert.equal(out.scheduled.next7Days, 1);
+  assert.equal(out.scheduled.next[0].text, `${A} planned`);
+  assert.equal(out.scheduled.undatedDrafts, 1);
+  assert.deepEqual(out.scheduled.todaysPlan, [{ label: 'Tips', targetPerDay: 1, scheduledToday: 0 }]);
+  assert.deepEqual(out.brief, { generatedAt: '2026-10-20T10:00:00.000Z', headline: 'Local search up', summary: 'Dog walking demand rose this week.' });
+  assert.match(out.replyFormat, /Visits <visits> · Leads booked <leadsBooked>/);
+});
+
+test('get_daily_update: a broken source leaves the rest; unknown site shape gives nulls, never zeros', async () => {
+  const { deps } = makeDeps({ fetchImpl: async () => ({ ok: false, status: 500 }) });
+  deps.services.readDashboardState = async () => { throw new Error('firestore down'); };
+  const out = JSON.parse(textOf(await rpc({ body: call('get_daily_update'), deps })));
+  assert.match(out.site.error, /HTTP 500/);
+  assert.equal(out.marketing.error, 'not available right now');
+  assert.ok(!JSON.stringify(out).includes('firestore down'));
+  assert.equal(out.scheduled.next7Days, 1);
+
+  const other = makeDeps({ fetchImpl: statsFetch({ something: 'else' }) });
+  const o2 = JSON.parse(textOf(await rpc({ body: call('get_daily_update'), deps: other.deps })));
+  assert.equal(o2.site.visits, null);
+  assert.equal(o2.site.leadsBooked, null);
+  assert.equal(o2.site.applicants, null);
+});
+
+test('get_daily_update: an old brief is flagged stale', async () => {
+  const { deps } = makeDeps({ fetchImpl: statsFetch(NTR_STATS) });
+  deps.services.projectBrief = () => ({ generatedAt: '2026-08-01T00:00:00Z', headline: 'Old' });
+  const out = JSON.parse(textOf(await rpc({ body: call('get_daily_update'), deps })));
+  assert.equal(out.marketing.briefStale, true);
+  assert.ok(out.marketing.briefAgeDays > 30);
 });

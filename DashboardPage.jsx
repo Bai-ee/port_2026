@@ -5384,7 +5384,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	      const url = client?.websiteUrl || client?.website || '';
 	      const industry = dashboardState?.snapshot?.brandOverview?.industry
 	        || dashboardState?.marketCategory?.value || '';
-	      const res = await fetch('/api/social-posting', {
+	      const res = await fetch(apiPath('/api/social-posting'), {
 	        method: 'POST',
 	        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
 	        body: JSON.stringify({ action: 'generate-copy', brand: { name: biz, summary: tag, url, industry } }),
@@ -5395,7 +5395,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	      }
 	    } catch { /* non-fatal — keep the existing/default caption */ }
 	    finally { setPostMeCopyLoading(false); }
-	  }, [user, postMeCopyLoading, client, dashboardState]);
+	  }, [user, postMeCopyLoading, client, dashboardState, apiPath]);
 
 	  // Simplified post path (no API credits needed): open X's web composer with
 	  // the caption prefilled, and copy the image to the clipboard so the user can
@@ -5458,7 +5458,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	        body.mediaType = 'image';
 	        // Let the server detect the real image type from response headers.
 	      }
-	      const res = await fetch('/api/social-posting', {
+	      const res = await fetch(apiPath('/api/social-posting'), {
 	        method: 'POST',
 	        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
 	        body: JSON.stringify(body),
@@ -5489,7 +5489,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    } finally {
 	      setPostMeLoading(false);
 	    }
-	  }, [user, postMeLoading, buildPostMeCaption, dashboardState, latestStudioVideoUrl]);
+	  }, [user, postMeLoading, buildPostMeCaption, dashboardState, latestStudioVideoUrl, apiPath]);
 
   const clientStatus = dashboardState?.status || client?.status || null;
   // Prefer the live run status from brief_runs (polled every 4s) over the cached
@@ -6436,7 +6436,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     setDlAllBusy(true);
     try {
       const token = await user.getIdToken();
-      const res = await fetch('/api/dashboard/deliverables-zip', {
+      const res = await fetch(apiPath('/api/dashboard/deliverables-zip'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ assets, zipName: zipBase }),
@@ -6456,7 +6456,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     } finally {
       setDlAllBusy(false);
     }
-  }, [dlAllBusy, user, client, latestStudioVideoUrl, homepageDeviceMockupUrl, deviceScreenshots, siteMeta]);
+  }, [dlAllBusy, user, client, latestStudioVideoUrl, homepageDeviceMockupUrl, deviceScreenshots, siteMeta, apiPath]);
 
   const handleUpdateClientName = useCallback(async () => {
     if (!user || clientEditLoading) return;
@@ -9501,11 +9501,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       number: 'NC',
       label: 'NEW CLIENT',
       title: 'Create Client',
-      description: 'Creates a new client workspace when there is no website yet, then lets the team add notes and briefs manually.',
+      description: 'Creates a new client workspace. With a website it is onboarded like a signup, running only the onboarding steps you leave on; without one it is an idea-only workspace the team feeds manually.',
       placeholderLabel: 'NEW',
       rows: [
-        { key: 'nc-type', label: 'Type', value: 'Website-less workspace' },
-        { key: 'nc-feed', label: 'Feed', value: 'Brain uploads + brief' },
+        { key: 'nc-type', label: 'Type', value: 'Website or idea-only' },
+        { key: 'nc-feed', label: 'Feed', value: 'Signup onboarding or brain uploads' },
         { key: 'nc-owner', label: 'Owner', value: 'You (admin)' },
         { key: 'nc-access', label: 'Access', value: 'Client dropdown' },
       ],
@@ -16699,6 +16699,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   >
                     <ClientBrainCard
                       getIdToken={brandSystemGetIdToken}
+                      apiPath={apiPath}
                       onSaved={applyClientBrainToBootstrap}
                       onOpenCard={(cardId) => {
                         const targetCard = intakeCapabilityCards.find((c) => c.id === cardId);

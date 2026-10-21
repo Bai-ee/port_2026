@@ -7,10 +7,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { auth } from '../../../firebase';
 import { fallbackDraft, validateDraft } from '../../../features/x-content-inventory/draft.js';
+import { readImpersonateClientId, withImpersonation } from '../../../lib/dashboard/bootstrap-session.js';
 
 export async function standaloneCallSocial(body) {
   const token = auth?.currentUser ? await auth.currentUser.getIdToken() : null;
-  const res = await fetch('/api/social-posting', {
+  const res = await fetch(withImpersonation('/api/social-posting', readImpersonateClientId()), {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify(body),

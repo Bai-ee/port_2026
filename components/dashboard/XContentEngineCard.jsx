@@ -6,6 +6,7 @@ import { FolderTree, History, Library, Users } from 'lucide-react';
 import BottomNav from './content-ui/ui/BottomNav';
 import { Toast } from './content-ui/Feedback';
 import ContentUiStyles from './content-ui/ContentUiStyles';
+import { readImpersonateClientId, withImpersonation } from '../../lib/dashboard/bootstrap-session.js';
 
 // Content Center — the inventory side of the content system: Library (ContentPackage
 // rows), Buckets, Timeline and Clients. Today / Queue & Calendar / Strategy / Results /
@@ -76,7 +77,7 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
 
   const call = useCallback(async (action, body = {}) => {
     const token = getIdToken ? await getIdToken() : null;
-    const res = await fetch(ENDPOINT, {
+    const res = await fetch(withImpersonation(ENDPOINT, readImpersonateClientId()), {
       method: 'POST',
       headers: {
         'content-type': 'application/json',

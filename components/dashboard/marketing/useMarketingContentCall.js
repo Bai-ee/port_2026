@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback } from 'react';
+import { readImpersonateClientId, withImpersonation } from '../../../lib/dashboard/bootstrap-session.js';
 
 const ENDPOINT = '/api/dashboard/quote-targets';
 const SOCIAL_ENDPOINT = '/api/social-posting';
@@ -9,7 +10,7 @@ const SOCIAL_ENDPOINT = '/api/social-posting';
 export function useMarketingContentCall(getIdToken) {
   const call = useCallback(async (action, body = {}) => {
     const token = getIdToken ? await getIdToken() : null;
-    const res = await fetch(ENDPOINT, {
+    const res = await fetch(withImpersonation(ENDPOINT, readImpersonateClientId()), {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -24,7 +25,7 @@ export function useMarketingContentCall(getIdToken) {
 
   const callSocial = useCallback(async (body) => {
     const token = getIdToken ? await getIdToken() : null;
-    const res = await fetch(SOCIAL_ENDPOINT, {
+    const res = await fetch(withImpersonation(SOCIAL_ENDPOINT, readImpersonateClientId()), {
       method: 'POST',
       headers: {
         'content-type': 'application/json',

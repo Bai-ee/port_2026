@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import PacingStrip from './PacingStrip.jsx';
+import { readImpersonateClientId, withImpersonation } from '../../../lib/dashboard/bootstrap-session.js';
 
 const KIND_COLORS = {
   baseline: '#6b7280',
@@ -325,7 +326,7 @@ export default function CalendarPane({ plan, config, getIdToken, onPlanChange, o
     setRegenBusy(itemId);
     try {
       const token = await getIdToken();
-      const res = await fetch('/api/dashboard/strategy-builder/generate', {
+      const res = await fetch(withImpersonation('/api/dashboard/strategy-builder/generate', readImpersonateClientId()), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ config, regenItemId: itemId, currentPlan: plan }),
