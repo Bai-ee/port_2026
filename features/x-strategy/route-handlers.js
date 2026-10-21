@@ -253,6 +253,7 @@ export function createStrategyHandlers({
   pullCorpora = null, // (clientId, {handles}) -> pullCorporaViaXApi result (the PAID X API). Absent => x-api source answers 503
   scanQuotes = null, // (clientId, {}) -> scanQuoteTargetsViaXApi result (the PAID X API). Absent => x-api source answers 503
   readHotQuotes = null, // (clientId) -> raw marketingBrief.hotQuotes | null; the hot-quotes-find result carries the picks
+  readBookmarkPicks = null, // (clientId) -> raw marketingBrief.bookmarkPicks | null; get_bookmark_picks + next_post quote slots. Absent => tool says not available
   quoteScanQueue = null, // features/x-quote-targets/scan-queue.js: Mac-source Refresh queues a scan the Mac worker runs. Absent => instructions only
   signMediaRef = null, readMediaCaptures = null, // ({bucket,path}) -> url|null; (clientId) -> render captures. get_media_link only
   readStageStates = null, readNasStatus = null, // (ids) -> Map id -> {state,commandId} of NAS stage commands; (clientId) -> nas-status. find_hires_media only; absent => no stage progress / worker info
@@ -851,6 +852,7 @@ export function createStrategyHandlers({
       ...(readOpportunities ? { readOpportunities: () => readOpportunities(clientId) } : {}),
       // next_post quote slots: the current unacted hot-scan picks (not passed, window open, not already drafted). Absent reader => no dep.
       ...(readHotQuotes ? { readHotQuotes: async () => unactedHotPicks(await readHotQuotes(clientId), readQueuePosts ? await readQueuePosts(clientId).catch(() => []) : []) } : {}),
+      ...(readBookmarkPicks ? { readBookmarkPicks: () => readBookmarkPicks(clientId) } : {}),
       ...(readCalendar ? { readCalendar: (opts) => readCalendar(clientId, opts) } : {}),
       ...(readResults ? { readResults: () => readResults(clientId) } : {}),
       ...(readMarketSignals ? { readMarketSignals: () => readMarketSignals(clientId) } : {}),

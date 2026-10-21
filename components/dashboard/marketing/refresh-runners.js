@@ -169,6 +169,19 @@ export const GROUP_RUNNERS = {
     throw new Error(`Hot quotes: ${line}${out.request.error ? ` (${out.request.error})` : ''}`);
   },
 
+  // Group 10 — bookmarks: always the Mac (bird). The judged picks land in marketingBrief.bookmarkPicks.
+  bookmarks: async (ctx) => {
+    const res = await quoteCall(ctx, 'bookmarks-find', { clientId: ctx.clientId });
+    if (!res?.requestId) return { detail: [dimLine('[BOOKMARKS]', res?.instructions || 'The bookmarks scan runs on your Mac.')] };
+    const out = await followMacRequest(ctx, { statusAction: 'quote-scan-status', requestId: res.requestId, label: 'Bookmarks', waitMs: HOT_WAIT_MS });
+    if (out.timedOut) return { detail: [dimLine('[BOOKMARKS]', 'Still waiting on your Mac. It stays queued and runs when the Mac checks in.')] };
+    const r = out.request.result || {};
+    const line = `Bookmarks scan ${out.request.status} — ${r.picks ?? r.newThisRun ?? 0} pick(s)`;
+    if (out.request.status === 'done') return { detail: [okLine('[BOOKMARKS]', line)] };
+    if (out.request.status === 'rate-limited') return { detail: [dimLine('[BOOKMARKS]', `${line}. X rate-limited the scan; try again in ~15 min.`)] };
+    throw new Error(`Bookmarks: ${line}${out.request.error ? ` (${out.request.error})` : ''}`);
+  },
+
   // Group 5 — free; draft copy via model only when the option is on. Results are not stored here.
   'today-queue': async (ctx) => {
     const withModel = !!ctx.options?.todayWithModel;

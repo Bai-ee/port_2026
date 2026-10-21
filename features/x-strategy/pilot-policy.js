@@ -18,11 +18,11 @@ export const PILOT_FREE_ACTIONS = Object.freeze(new Set([
   'x-data-sources-get',
   // draft creation only (unscheduled social_posts rows; no slot, no ledger, no plan enforcement)
   'strategy-calendar-batch-preview', 'strategy-calendar-batch-create', 'strategy-daily-fill-preview', 'strategy-daily-fill-create',
-  'draft-quote', 'create-draft-from-item', 'dismiss',
+  'draft-quote', 'create-draft-from-item', 'dismiss', 'bookmark-decide',
   // Today queue
   'daily-run-latest', 'daily-run-generate', 'daily-run-edit', 'daily-run-dismiss', 'daily-run-save-draft',
   // quote targets (free Mac-queue scans and reads)
-  'quote-scan-status', 'hot-quotes-find',
+  'quote-scan-status', 'hot-quotes-find', 'bookmarks-find', 'bookmarks-list',
   // pure reads
   'content-context', 'content-plan', 'inventory-list', 'post-status', 'quoted-post-preview', 'post-results',
   'month-calendar', 'now', 'engine-performance', 'list-buckets', 'list-folders',

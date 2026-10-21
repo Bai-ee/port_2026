@@ -68,6 +68,7 @@ export default function NowStrip({ call, clientId, onNavigate, onOpenCard }) {
 
   const openFreshness = (id) => {
     if (id === 'posts' && typeof onOpenCard === 'function') { onOpenCard('strategy-results'); return; }
+    if (id === 'bookmarks') { try { document.getElementById('strategy-bookmarks-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch { /* no-op */ } return; }
     // Refresh lives in the header panel; bring it into view (never starts a run from here).
     try { document.getElementById('marketing-refresh-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch { /* no-op */ }
   };

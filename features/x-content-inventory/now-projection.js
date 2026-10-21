@@ -8,6 +8,7 @@ const FRESHNESS = [
   { id: 'posts', label: 'Post metrics', staleAfterHours: 24, key: 'postsAt' },
   { id: 'hot-picks', label: 'Hot picks', staleAfterHours: 6, key: 'hotPicksAt' },
   { id: 'quote-targets', label: 'Quote targets', staleAfterHours: 24, key: 'quoteTargetsAt' },
+  { id: 'bookmarks', label: 'Bookmarks', staleAfterHours: 24, key: 'bookmarksAt' },
 ];
 const PRECEDENCE = ['posted', 'scheduled', 'approved', 'draft', 'suggested', 'pick', 'empty'];
 const COVERED = new Set(['posted', 'scheduled', 'approved']);

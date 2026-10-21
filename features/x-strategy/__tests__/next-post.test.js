@@ -171,3 +171,33 @@ test('record drafts in the generated shape (Artist - Title, then Label . Cat . Y
   const r = planNextPost({ now: NOW, slots, rows: [post('today'), post('later', { reviewOn: '2026-10-21', date: '2026-10-21' })], track: 'discogs' });
   assert.deepEqual(r.candidates.map((c) => c.id), ['today']);
 });
+
+test('next_post quote slots: bookmark picks (respond=quote) follow the hot picks, tagged source=bookmark, max 3; reply/swipe ignored', async () => {
+  const base = { now: () => NOW, getStrategyDoc: async () => ({ confirmed: true, sections: { formats: QUOTE_FORMATS } }), getPlan: async () => null, readCalendar: async () => [] };
+  const hot = [{ id: 'h1', text: 'hot one' }, { id: 'h2', text: 'hot two' }];
+  const marks = [{ id: 'b1', author: '@a', url: 'u1', text: 'bm quote', respond: 'quote' }, { id: 'b2', text: 'bm reply', respond: 'reply' }, { id: 'b3', text: 'bm quote 2', respond: 'quote' }];
+  const withBoth = planNextPost({ now: NOW, slots: qSlots, rows: [], hotQuotes: hot, bookmarkPicks: marks });
+  assert.deepEqual(withBoth.hotScan.picks.map((p) => p.id), ['h1', 'h2', 'b1']);
+  assert.equal(withBoth.hotScan.picks[2].source, 'bookmark');
+  assert.equal(withBoth.hotScan.picks[0].source, undefined);
+  const onlyBm = planNextPost({ now: NOW, slots: qSlots, rows: [], hotQuotes: null, bookmarkPicks: marks });
+  assert.equal(onlyBm.hotScan.available, true);
+  assert.deepEqual(onlyBm.hotScan.picks.map((p) => p.id), ['b1', 'b3']);
+  const none = planNextPost({ now: NOW, slots: qSlots, rows: [], bookmarkPicks: [{ id: 'x', respond: 'reply', text: 't' }] });
+  assert.equal(none.hotScan.available, false);
+  const viaTool = await runReadTool('next_post', { track: 'quote' }, { ...base, readBookmarkPicks: async () => ({ picks: marks }) });
+  assert.ok(viaTool.hotScan.picks.some((p) => p.id === 'b1'));
+  const thrown = await runReadTool('next_post', { track: 'quote' }, { ...base, readBookmarkPicks: async () => { throw new Error('boom'); } });
+  assert.equal(thrown.hotScan.available, false);
+});
+
+test('get_bookmark_picks tool: filters open/swipe/all, caps limit, absent dep => not available', async () => {
+  const picks = [{ id: 'a', respond: 'quote' }, { id: 'b', respond: 'reply' }, { id: 'c', respond: 'swipe' }];
+  const dep = { readBookmarkPicks: async () => ({ scannedAt: '2026-10-21T10:00:00Z', picks }) };
+  assert.deepEqual((await runReadTool('get_bookmark_picks', {}, dep)).picks.map((p) => p.id), ['a', 'b']);
+  assert.deepEqual((await runReadTool('get_bookmark_picks', { filter: 'swipe' }, dep)).picks.map((p) => p.id), ['c']);
+  const all = await runReadTool('get_bookmark_picks', { filter: 'all', limit: 2 }, dep);
+  assert.equal(all.picks.length, 2);
+  assert.equal(all.scannedAt, '2026-10-21T10:00:00Z');
+  assert.deepEqual(await runReadTool('get_bookmark_picks', {}, {}), { error: 'not available' });
+});

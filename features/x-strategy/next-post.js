@@ -90,12 +90,20 @@ export function ruleCheckDraft(r, kind) {
 
 
 /** Quote-react slots run on a hot-scan pick: name where it comes from, show the picks if present, never invent a target or caption. */
-function hotScanFor(hotQuotes) {
+function hotScanFor(hotQuotes, bookmarkPicks = null) {
   const base = { source: 'marketingBrief.hotQuotes', rule: 'The target comes from the hot scan. Do not invent a target or write a caption until the owner picks one; then a flat 2-8 word caption.' };
-  if (!Array.isArray(hotQuotes) || !hotQuotes.length) {
+  const hot = Array.isArray(hotQuotes) ? hotQuotes : [];
+  // Owner's bookmarks judged "quote": appended after the hot picks, tagged so the agent can say where a target came from.
+  const marks = (Array.isArray(bookmarkPicks) ? bookmarkPicks : []).filter((b) => b && b.respond === 'quote');
+  if (!hot.length && !marks.length) {
     return { ...base, available: false, note: 'No hot-scan picks are available on this deployment yet. Use get_opportunities for open quote targets; do not make one up.' };
   }
-  return { ...base, available: true, picks: hotQuotes.slice(0, 3).map((q) => ({ id: q.id ?? null, handle: q.handle ?? null, url: q.url ?? null, text: String(q.text ?? '').replace(/\s+/g, ' ').trim().slice(0, 140) })) };
+  const clean = (t) => String(t ?? '').replace(/\s+/g, ' ').trim().slice(0, 140);
+  const picks = [
+    ...hot.map((q) => ({ id: q.id ?? null, handle: q.handle ?? null, url: q.url ?? null, text: clean(q.text) })),
+    ...marks.map((b) => ({ id: b.id ?? null, handle: b.author ?? b.handle ?? null, url: b.url ?? null, text: clean(b.text), source: 'bookmark', ...(b.how ? { how: clean(b.how) } : {}) })),
+  ].slice(0, 3);
+  return { ...base, available: true, picks };
 }
 
 /** Which EXISTING card moves the pick to the slot. Nothing here moves anything; the owner confirms the card. */
@@ -118,9 +126,10 @@ function passCardFor(rest) {
  * @param {Array<{time:string,minutes:number,track:string,trackId:string|null,note:string}>} o.slots baseline slots
  * @param {object[]} o.rows flat calendar rows (kind:'post'), each with `date`
  * @param {string} [o.track] only this track's slot (label, id, or a word like "discogs")
+ * @param {object[]|null} [o.bookmarkPicks] judged bookmark picks (marketingBrief.bookmarkPicks.picks); only respond:'quote' ones join the quote-react picks, after the hot picks (max 3 total)
  * @param {object[]|null} [o.hotQuotes] shaped hot-scan picks (marketingBrief.hotQuotes) when the deployment has them; null/absent degrades cleanly
  */
-export function planNextPost({ now, slots = [], rows = [], track = '', hotQuotes = null } = {}) {
+export function planNextPost({ now, slots = [], rows = [], track = '', hotQuotes = null, bookmarkPicks = null } = {}) {
   const q = norm(track);
   const pool = q ? slots.filter((s) => norm(`${s.track} ${s.trackId ?? ''} ${s.note}`).includes(q)) : slots;
   if (!pool.length) return { available: false, reason: q ? `no baseline slot matches "${String(track).slice(0, 40)}"` : 'no baseline slots (the Strategy document must be confirmed and list a "Daily slot baseline")' };
@@ -177,7 +186,7 @@ export function planNextPost({ now, slots = [], rows = [], track = '', hotQuotes
         : `Next open ${slot.track} slot.`,
     },
     template: TEMPLATES[kind],
-    ...(kind === 'quote-react' ? { hotScan: hotScanFor(hotQuotes) } : {}),
+    ...(kind === 'quote-react' ? { hotScan: hotScanFor(hotQuotes, bookmarkPicks) } : {}),
     pick: pick ? { id: pick.id, why: `Best fit for ${target.date} ${slot.time}: ${pick.failing.length ? `needs ${pick.failing.join(', ')}` : 'passes every check'}.` } : null,
     candidates,
     passSurplus: pass.length ? { ids: pass, why: 'Same track, same stretch: one post per slot. Pass or move these (propose_calendar_decide / propose_post_edit).' } : null,
