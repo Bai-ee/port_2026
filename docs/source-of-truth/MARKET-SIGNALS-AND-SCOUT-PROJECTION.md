@@ -150,6 +150,8 @@ Set both in `.env.local` when the dev server runs under a non-user `HOME` (sympt
 
 ---
 
+**Brain hard-fact check (Guardian, deterministic, zero LLM).** `runGuardian` calls `features/not-the-rug-brief/brain-facts.js` (`checkCopyAgainstBrain`) before its Haiku pass. From an **approved** Client Brain only (identity/positioning/audience/offers/proof — never voice examples) it extracts group-size caps ("max 3 dogs"), founding year ("since 2011"), "from $N" prices and "N minutes" durations, then scans every generated copy string. Contradictions are corrected in place when the Brain has one valid value (cap/price/duration number, wrong "since YYYY", years-in-business off by more than 1 from `now - founded`), otherwise the field is blanked. Result is recorded as `guardianFlags.factCheck` plus `brain_fact` flags (minor = corrected, major = dropped). Unapproved/absent Brain or no extractable facts = no-op; a failure here never breaks the run. Origin: NTR X post said "Max 4 per walk" vs Brain "max 3 dogs".
+
 ## 6b. Control surface — what's a knob vs buried (Scout · Scribe · Guardian)
 
 **Plain-language visual:** [`../dashboard-ui/scout-scribe-guardian-control-surface.html`](../dashboard-ui/scout-scribe-guardian-control-surface.html). This is the steering map for the §7 Tier-1 work — the controls below *are* the dial layer.
