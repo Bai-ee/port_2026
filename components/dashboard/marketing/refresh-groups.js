@@ -39,6 +39,19 @@ export function paidGroupsFor(selection, ctx) {
     }));
 }
 
+// Groups NOT in `ids`, in catalog order, with the honest reason they did not run (printed to the run terminal).
+// A group counts as paid when it is catalog-paid or its X data source is the paid X API (ctx.dataSources).
+export function skippedGroupsFor(ids, ctx) {
+  const ran = Array.isArray(ids) ? ids : [];
+  return REFRESH_GROUPS
+    .filter((g) => !ran.includes(g.id))
+    .map((g) => ({
+      id: g.id,
+      label: g.label,
+      reason: g.paid || isXApiSource(g.id, ctx?.dataSources) ? 'paid groups start off; tick it in Refresh settings' : 'not selected',
+    }));
+}
+
 // ---------------------------------------------------------------------------
 // Live cost estimate per group. Pure; DISPLAY ONLY (never gates or triggers a spend).
 // ctx (every field optional) = { marketingBriefConfig, analysisRecipes, xMonitorState, todayWithModel, todaySlots }.

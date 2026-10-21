@@ -81,7 +81,7 @@ import { ONBOARDING_ENTRY_STEPS, ONBOARDING_CARD_IDS, UI_TEASER_VARIATIONS, NON_
 import LazyVideoThumb from './components/dashboard/LazyVideoThumb';
 import MarketingRefreshControl from './components/dashboard/marketing/MarketingRefreshControl';
 import OnboardingFlowPanel from './components/dashboard/OnboardingFlowPanel';
-import { markGroupRefreshed } from './components/dashboard/marketing/refresh-groups';
+import { markGroupRefreshed, skippedGroupsFor } from './components/dashboard/marketing/refresh-groups';
 import { GROUP_RUNNERS } from './components/dashboard/marketing/refresh-runners';
 import GlassTooltipLayer from './components/dashboard/GlassTooltipLayer';
 import { useResolvedMode, useThemePreference } from './lib/theme-runtime/hooks';
@@ -3823,6 +3823,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           });
         }
       }
+      skippedGroupsFor(list).forEach((g) => appendDim(`[${g.label}] not run — ${g.reason}`));
       termFinish(`done · ${okCount} ok · ${failCount} failed`, failCount === 0);
     } finally {
       marketingRefreshRunningRef.current = false;

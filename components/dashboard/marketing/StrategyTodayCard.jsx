@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import dynamic from 'next/dynamic';
 import SegmentedControl from '../content-ui/ui/SegmentedControl';
 import ContentUiStyles from '../content-ui/ContentUiStyles';
+import NowStrip from './NowStrip';
 import { useMarketingContentCall, makeNavigate } from './useMarketingContentCall';
 
 const PlanPanel = dynamic(() => import('../x-content/PlanPanel'), { ssr: false });
@@ -16,6 +17,7 @@ export default function StrategyTodayCard({ getIdToken, activeClientId, onOpenCa
   const noop = makeNavigate(onOpenCard, 'strategy-today');
   return (
     <div id="strategy-today-root" className="xce-scope">
+      <NowStrip call={call} clientId={activeClientId} onNavigate={noop} onOpenCard={onOpenCard} />
       {typeof onOpenCard === 'function' ? (
         <div id="strategy-today-review-calendar-shell" className="xce-today-review-calendar">
           <button type="button" id="strategy-today-review-calendar-button" className="xce-btn-primary" onClick={() => noop('queue')}>

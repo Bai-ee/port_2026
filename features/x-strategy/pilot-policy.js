@@ -25,7 +25,7 @@ export const PILOT_FREE_ACTIONS = Object.freeze(new Set([
   'quote-scan-status', 'hot-quotes-find',
   // pure reads
   'content-context', 'content-plan', 'inventory-list', 'post-status', 'quoted-post-preview', 'post-results',
-  'month-calendar', 'engine-performance', 'list-buckets', 'list-folders',
+  'month-calendar', 'now', 'engine-performance', 'list-buckets', 'list-folders',
   'timeline-day', 'timeline-days', 'timeline-search', 'timeline-archives',
 ]));
 
