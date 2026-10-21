@@ -80,3 +80,27 @@ test('judgeBookmarks: one call, verdicts mapped by index, missing verdict stays 
   await assert.rejects(() => judgeBookmarks({ candidates: tooMany, digest, callModel }), /judge cap/);
   assert.deepEqual((await judgeBookmarks({ candidates: [], digest, callModel })).judged, []);
 });
+
+test('judgeBookmarks: 20 candidates run in batches of 8 (3 calls), indices are per batch, cost sums', async () => {
+  const candidates = Array.from({ length: 20 }, (_, i) => ({ id: String(i), author: 'a', text: `I built tool ${i}`, createdAt: hoursAgo(1) }));
+  const seen = [];
+  const callModel = async ({ user }) => {
+    const n = (user.match(/"i":\d+/g) || []).length;
+    seen.push(n);
+    return { text: JSON.stringify(Array.from({ length: n }, (_, i) => ({ i, fit: 0.9, lane: 'design', angle: 'builder', respond: 'reply', how: 'h', why: 'w' }))), usage: { input_tokens: 500, output_tokens: 100 } };
+  };
+  const r = await judgeBookmarks({ candidates, digest, callModel, now: NOW });
+  assert.deepEqual(seen, [8, 8, 4]);
+  assert.equal(r.judged.length, 20);
+  assert.ok(r.judged.every((j) => j.judge && j.judge.respond === 'reply'));
+  assert.equal(r.notes.length, 0);
+});
+
+test('parseBookmarkJudgeOutput: a max_tokens cut-off array keeps its complete rows', () => {
+  const cut = '[{"i":0,"fit":0.7,"lane":"design","angle":"craft","respond":"swipe","how":"h","why":"w"},{"i":1,"fit":0.4,"lane":"other","angle":"none","respond":"skip","how":"","why":"w"},{"i":2,"fit":0.8,"lane":"mus';
+  const m = parseBookmarkJudgeOutput(cut, 3);
+  assert.equal(m.size, 2);
+  assert.equal(m.get(0).respond, 'swipe');
+  assert.equal(m.get(1).respond, 'skip');
+  assert.equal(m.get(2), undefined);
+});
