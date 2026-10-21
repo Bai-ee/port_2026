@@ -4,6 +4,7 @@
     "label": "Not The Rug website",
     "kind": "site-stats",
     "url": "https://nottherug.com/api/stats",
+    "peopleUrl": "https://nottherug.com/api/stats/people",
     "keyEnv": "CLIENT_STATS_KEY_NOTTHERUG"
   },
   {
@@ -11,6 +12,7 @@
     "label": "Not The Rug website",
     "kind": "site-stats",
     "url": "https://nottherug.com/api/stats",
+    "peopleUrl": "https://nottherug.com/api/stats/people",
     "keyEnv": "CLIENT_STATS_KEY_NOTTHERUG"
   }
 ]
