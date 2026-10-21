@@ -107,7 +107,7 @@ export const STRATEGY_ROUTE_ACTIONS = Object.freeze([
 
 export const REVIEW_DISPLAY_TEXT = 'Review my strategy against the latest data.';
 const REVIEW_MAX_ROUNDS = 6;
-const REVIEW_MAX_TOKENS = 2500;
+const REVIEW_MAX_TOKENS = 12000; // thinking counts against this on Sonnet 5.5; a Review reads a lot before it writes
 
 /** The model-side brief for a Review. The thread stores REVIEW_DISPLAY_TEXT instead. */
 export function buildReviewBrief(doc) {
