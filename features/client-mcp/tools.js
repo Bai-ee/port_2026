@@ -184,18 +184,53 @@ function localDate(ms, timeZone) {
   catch { return new Date(ms).toISOString().slice(0, 10); }
 }
 
-function siteToday(res) {
+// Site-local calendar date (YYYY-MM-DD) and hour for an instant; dates are shifted by whole days on the string so DST is safe.
+function localParts(ms, timeZone) {
+  try {
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
+    return { date: `${p.year}-${p.month}-${p.day}`, hour: Number(p.hour) };
+  } catch { return { date: new Date(ms).toISOString().slice(0, 10), hour: new Date(ms).getUTCHours() }; }
+}
+const shiftDate = (ymd, days) => new Date(Date.parse(`${ymd}T12:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+const dateLabel = (ymd) => new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric' }).format(new Date(`${ymd}T12:00:00Z`));
+
+// One 7d fetch feeds both days: visits/pageviews from the dailyTrend row for that site-local date, leads from
+// leads.today / leads.yesterday (byDay as fallback). A missing row or field stays null, never 0.
+function siteDay(s, date, leadsDirect) {
+  const row = Array.isArray(s.analytics?.dailyTrend) ? s.analytics.dailyTrend.find((r) => r?.date === date) : null;
+  const byDay = Array.isArray(s.leads?.byDay) ? s.leads.byDay.find((r) => r?.date === date) : null;
+  return {
+    date, label: dateLabel(date),
+    visits: numOrNull(row?.sessions),
+    pageviews: numOrNull(row?.pageviews),
+    leads: numOrNull(leadsDirect) ?? numOrNull(byDay?.count),
+  };
+}
+
+function siteUpdate(res, now) {
   if (res.error) return { error: res.error };
   const s = res.value?.stats || {};
   const a = s.analytics || {};
+  const timeZone = s.leads?.timezone || a.range?.timezone || 'UTC';
+  const { date, hour } = localParts(now, timeZone);
+  const today = siteDay(s, date, s.leads?.today);
+  const yesterday = siteDay(s, shiftDate(date, -1), s.leads?.yesterday);
+  const empty = (d) => !d.visits && !d.leads;
+  // Early in the site's day (or nothing yet) "today" is a misleading empty day: lead with yesterday, today is "so far".
+  const leadWithYesterday = (hour < 6 || empty(today)) && !(yesterday.visits == null && yesterday.leads == null);
   return {
     fetchedAt: res.value.fetchedAt,
-    timeZone: s.leads?.timezone || a.range?.timezone || 'UTC',
-    visits: numOrNull(a.sessions),
-    pageviews: numOrNull(a.pageviews),
-    leadsBooked: numOrNull(a.bookedLeads),
-    inquiries: numOrNull(a.inquiries),
-    leadsToday: numOrNull(s.leads?.today),
+    timeZone,
+    leadWithYesterday,
+    today,
+    yesterday,
+    // bookedLeads / inquiries / appointments only exist as range totals: these are 7-day figures, not daily ones.
+    last7Days: {
+      leadsBooked: numOrNull(a.bookedLeads),
+      inquiries: numOrNull(a.inquiries),
+      appointmentsScheduled: numOrNull(a.appointmentsScheduled),
+      newApplicants: numOrNull(s.applicants?.last7Days),
+    },
     applicants: s.applicants
       ? { last7Days: numOrNull(s.applicants.last7Days), total: numOrNull(s.applicants.total), onHold: numOrNull(s.applicants.onHold), note: 'The site counts applicants by 7 days and in total; there is no per-day count.' }
       : null,
@@ -205,7 +240,10 @@ function siteToday(res) {
 
 export const DAILY_UPDATE_FORMAT = [
   'Reply with exactly this, filled from the data (each line short; "n/a" for a null number, never 0):',
-  '**Today (<date>)**: Visits <visits> · Leads booked <leadsBooked> · New applicants (7 days) <applicants.last7Days>',
+  'If site.leadWithYesterday is true, the first line is Yesterday and Today comes second; otherwise Today first, then Yesterday:',
+  '**Yesterday (<site.yesterday.label>)**: Visits <visits> · Leads <leads>',
+  '**Today so far (<site.today.label>)**: Visits <visits> · Leads <leads>',
+  '**Last 7 days**: Booked <site.last7Days.leadsBooked> · New applicants <site.last7Days.newApplicants>   (7-day totals: never call them daily)',
   '**Marketing**: <one line: latest brief date and age, posts out in the last 7 days, anything stale>',
   '**Scheduled**: <count> posts in the next 7 days, next: <time> "<excerpt>" (or "nothing scheduled")',
   '**Latest brief (<date>)**: <1-2 sentences from brief.headline / brief.summary>',
@@ -216,7 +254,7 @@ export const DAILY_UPDATE_FORMAT = [
 const dailyUpdateTool = defTool({
   name: 'get_daily_update',
   title: 'Daily update (start here)',
-  description: 'START HERE. Call this first, before any other tool, when the user opens a conversation or asks a general question: hi, what do you know, give me an update, what can you tell me, boot up, get started, catch me up, status, how are we doing. One call returns today\'s site numbers (visits, leads booked, applicants), marketing status, scheduled posts and a blurb from the latest brief, plus replyFormat: answer exactly in that format.',
+  description: 'START HERE. Call this first, before any other tool, when the user opens a conversation or asks a general question: hi, what do you know, give me an update, what can you tell me, boot up, get started, catch me up, status, how are we doing. One call returns yesterday\'s and today\'s site numbers (visits, leads), 7-day booked leads and applicants, marketing status, scheduled posts and a blurb from the latest brief, plus replyFormat: answer exactly in that format.',
   inputSchema: { type: 'object', properties: {} },
   kind: 'external',
   // Same reason as get_site_stats: counts keyed by words like "sessions" must not be blanked.
@@ -225,12 +263,12 @@ const dailyUpdateTool = defTool({
     const now = ctx.now();
     const s = ctx.services;
     const [site, posts, today, state] = await Promise.all([
-      settle(() => fetchSiteStats({ source: siteStatsSourceFor(ctx.clientId, s.sources), range: 'today', env: s.env, fetchImpl: s.fetch, now })),
+      settle(() => fetchSiteStats({ source: siteStatsSourceFor(ctx.clientId, s.sources), range: '7d', env: s.env, fetchImpl: s.fetch, now })),
       settle(() => s.readPosts(ctx.clientId)),
       settle(() => s.readTodayPlan(ctx.clientId)),
       settle(() => s.readDashboardState(ctx.clientId)),
     ]);
-    const siteOut = siteToday(site);
+    const siteOut = siteUpdate(site, now);
 
     let scheduled;
     let postedLast7Days = null;
