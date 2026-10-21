@@ -3300,41 +3300,50 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // Persist the last analysis report + live-source results per client so the
   // REPORT tab survives tab/modal close AND reload — kept until the next run
   // replaces it. Keyed by client so switching clients shows the right report.
+  // On a switch the state is reset when the new client has no cache (it used to keep the previous client's
+  // report), and the save effects below fire on state changes only, so a switch never writes one client's
+  // report under another client's key. :v2 drops caches written before that fix.
+  const reportCacheClientRef = useRef(null);
   useEffect(() => {
     const cid = client?.clientId || client?.id;
+    reportCacheClientRef.current = cid || null;
     if (!cid || typeof window === 'undefined') return;
+    let recipe = null; let scout = null; let watch = null;
     try {
-      const rawR = window.localStorage.getItem(`recipeReport:lastRun:${cid}`);
-      if (rawR) { const p = JSON.parse(rawR); if (p && Array.isArray(p.results)) setRecipeRun({ loading: false, results: p.results, error: '' }); }
-      const rawS = window.localStorage.getItem(`scoutTest:lastRun:${cid}`);
-      if (rawS) { const p = JSON.parse(rawS); if (p && typeof p === 'object') setScoutTestState(p); }
-      const rawW = window.localStorage.getItem(`watchlistPull:lastRun:${cid}`);
-      if (rawW) { const p = JSON.parse(rawW); if (p && Array.isArray(p.handles)) setWatchlistPull({ loading: false, handles: p.handles, spotlight: p.spotlight || null, analysis: p.analysis || null, error: '' }); }
+      const rawR = window.localStorage.getItem(`recipeReport:lastRun:v2:${cid}`);
+      if (rawR) { const p = JSON.parse(rawR); if (p && Array.isArray(p.results)) recipe = { loading: false, results: p.results, error: '' }; }
+      const rawS = window.localStorage.getItem(`scoutTest:lastRun:v2:${cid}`);
+      if (rawS) { const p = JSON.parse(rawS); if (p && typeof p === 'object') scout = p; }
+      const rawW = window.localStorage.getItem(`watchlistPull:lastRun:v2:${cid}`);
+      if (rawW) { const p = JSON.parse(rawW); if (p && Array.isArray(p.handles)) watch = { loading: false, handles: p.handles, spotlight: p.spotlight || null, analysis: p.analysis || null, error: '' }; }
     } catch { /* ignore corrupt cache */ }
+    setRecipeRun(recipe || { loading: false, results: [], error: '' });
+    setScoutTestState(scout || {});
+    setWatchlistPull(watch || { loading: false, handles: [], error: '' });
   }, [client?.clientId, client?.id]);
 
   useEffect(() => {
-    const cid = client?.clientId || client?.id;
+    const cid = reportCacheClientRef.current;
     if (!cid || typeof window === 'undefined' || watchlistPull.loading) return;
     try {
       if (watchlistPull.handles && watchlistPull.handles.length) {
-        window.localStorage.setItem(`watchlistPull:lastRun:${cid}`, JSON.stringify({ handles: watchlistPull.handles, spotlight: watchlistPull.spotlight || null, analysis: watchlistPull.analysis || null }));
+        window.localStorage.setItem(`watchlistPull:lastRun:v2:${cid}`, JSON.stringify({ handles: watchlistPull.handles, spotlight: watchlistPull.spotlight || null, analysis: watchlistPull.analysis || null }));
       }
     } catch { /* non-fatal */ }
-  }, [watchlistPull, client?.clientId, client?.id]);
+  }, [watchlistPull]);
 
   useEffect(() => {
-    const cid = client?.clientId || client?.id;
+    const cid = reportCacheClientRef.current;
     if (!cid || typeof window === 'undefined' || recipeRun.loading) return;
     try {
       if (recipeRun.results && recipeRun.results.length) {
-        window.localStorage.setItem(`recipeReport:lastRun:${cid}`, JSON.stringify({ results: recipeRun.results }));
+        window.localStorage.setItem(`recipeReport:lastRun:v2:${cid}`, JSON.stringify({ results: recipeRun.results }));
       }
     } catch { /* quota/serialize — non-fatal */ }
-  }, [recipeRun, client?.clientId, client?.id]);
+  }, [recipeRun]);
 
   useEffect(() => {
-    const cid = client?.clientId || client?.id;
+    const cid = reportCacheClientRef.current;
     if (!cid || typeof window === 'undefined') return;
     const settled = {};
     for (const [k, v] of Object.entries(scoutTestState || {})) {
@@ -3343,9 +3352,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       }
     }
     try {
-      if (Object.keys(settled).length) window.localStorage.setItem(`scoutTest:lastRun:${cid}`, JSON.stringify(settled));
+      if (Object.keys(settled).length) window.localStorage.setItem(`scoutTest:lastRun:v2:${cid}`, JSON.stringify(settled));
     } catch { /* non-fatal */ }
-  }, [scoutTestState, client?.clientId, client?.id]);
+  }, [scoutTestState]);
 
   useEffect(() => {
     if (!user) return undefined;
