@@ -44,6 +44,8 @@ import {
 } from '../../../../features/x-content-inventory/daily-run-store.js';
 import { createStrategyHandlersFromDb, STRATEGY_ROUTE_ACTIONS } from '../../../../features/x-strategy/route-handlers.js';
 import { actionNeedsPilot } from '../../../../features/x-strategy/pilot-policy.js';
+import { createFirestoreQuoteScanQueue, SCAN_MODES } from '../../../../features/x-quote-targets/scan-queue.js';
+import * as bookmarkStore from '../../../../features/x-bookmarks/store.js';
 import { executePaidSync, loadXMonitorService } from '../../../../features/mcp/paid-syncs.js';
 import { createFirestoreCounters } from '../../../../features/mcp/limits.js';
 import { createContentPlanHandlers } from '../../../../features/x-strategy/content-plan.js';
@@ -131,9 +133,9 @@ async function requireAdminContext(request) {
 // Merging happens in memory only; the dismiss POST keeps reading/writing the raw doc.
 async function readQuoteState(clientId) {
   const snap = await fb.adminDb.collection('dashboard_state').doc(clientId).get();
-  if (!snap.exists) return { rawQuoteTargets: null, listSignals: null, hotQuotes: null };
+  if (!snap.exists) return { rawQuoteTargets: null, listSignals: null, hotQuotes: null, bookmarkPicks: null };
   const brief = snap.data()?.marketingBrief;
-  return { rawQuoteTargets: brief?.quoteTargets ?? null, listSignals: brief?.listSignals ?? null, hotQuotes: brief?.hotQuotes ?? null };
+  return { rawQuoteTargets: brief?.quoteTargets ?? null, listSignals: brief?.listSignals ?? null, hotQuotes: brief?.hotQuotes ?? null, bookmarkPicks: brief?.bookmarkPicks ?? null };
 }
 
 /**
@@ -304,6 +306,71 @@ async function handleDismiss(clientId, body) {
   return { ok: true, dismissed };
 }
 
+// ---- Bookmarks (free Mac-sourced signal; docs/source-of-truth/X-GROWTH-SYSTEM.md "Bookmarks") -----------------------
+// The Mac worker reads the owner's X bookmarks with bird, judges them against the Brain and stores picks. These actions
+// only queue that scan, read the stored result and turn a pick into an unscheduled DRAFT. Nothing here posts or calls X.
+const BOOKMARK_ID_RE = /^\d{1,25}$/;
+const BOOKMARK_LIST_MAX = 200;
+const BOOKMARK_FILTERS = ['open', 'all', 'swipe'];
+
+/** Queue a bookmarks scan on the Mac (or return the open one). Poll the returned requestId with `quote-scan-status`. */
+async function handleBookmarksFind(context, decoded) {
+  const q = await createFirestoreQuoteScanQueue(fb.adminDb).request({
+    clientId: context.clientId,
+    requestedBy: decoded?.email || decoded?.uid || null,
+    mode: SCAN_MODES.BOOKMARKS,
+  });
+  return { ok: true, source: 'mac', mode: SCAN_MODES.BOOKMARKS, ...q, note: 'The Mac picks it up within a minute; the scan takes about a minute. Poll quote-scan-status with this requestId, then call bookmarks-list.' };
+}
+
+async function handleBookmarksList(context, body) {
+  const filter = BOOKMARK_FILTERS.includes(body?.filter) ? body.filter : 'open';
+  const limit = Math.max(1, Math.min(Number(body?.limit) || 50, BOOKMARK_LIST_MAX));
+  const now = Date.now();
+  const [picks, all] = await Promise.all([
+    bookmarkStore.readBookmarkPicks(fb.adminDb, context.clientId),
+    bookmarkStore.listBookmarks(fb.adminDb, context.clientId, { limit: 500 }),
+  ]);
+  let items = all;
+  if (filter !== 'all') items = items.filter((x) => !x.decision);
+  if (filter === 'swipe') items = items.filter((x) => x.judge && bookmarkStore.effectiveRespond(x, now) === 'swipe');
+  return { ok: true, filter, picks: picks?.picks ?? [], items: items.slice(0, limit), total: all.length, scannedAt: picks?.scannedAt ?? null };
+}
+
+/** quote -> a quote DRAFT through handleDraftQuote; reply -> a reply DRAFT carrying replyTo; dismiss -> hides it. Never posts. */
+async function handleBookmarkDecide(context, body) {
+  const id = typeof body?.id === 'string' ? body.id.trim() : '';
+  const decision = typeof body?.decision === 'string' ? body.decision : '';
+  if (!BOOKMARK_ID_RE.test(id)) throw badRequest('id must be the bookmark tweet id.');
+  if (!['quote', 'reply', 'dismiss'].includes(decision)) throw badRequest('decision must be quote, reply or dismiss.');
+  const bm = await bookmarkStore.getBookmark(fb.adminDb, context.clientId, id);
+  if (!bm) throw badRequest('Bookmark not found.', 404);
+  if (bm.decision) throw badRequest(`Bookmark already decided (${bm.decision.kind}).`, 409);
+  const text = typeof body?.text === 'string' ? body.text.trim() : '';
+
+  if (decision === 'dismiss') {
+    const saved = await bookmarkStore.setDecision(fb.adminDb, context.clientId, id, { kind: 'dismissed' });
+    return { ok: true, decision: saved };
+  }
+  if (decision === 'reply' && !text) throw badRequest('text is required for reply.');
+
+  if (decision === 'quote') {
+    // No caption yet = the usual quote placeholder; the owner writes the 2-8 word take in the editor (approval removes it).
+    const result = await handleDraftQuote(context, { caption: text || '[add your take]', quotedUrl: bm.url });
+    const saved = await bookmarkStore.setDecision(fb.adminDb, context.clientId, id, { kind: 'quoted', postId: result.post?.id });
+    return { ok: true, decision: saved, post: result.post, verdict: result.verdict, truncated: result.truncated };
+  }
+
+  if (text.length > MAX_POST_LEN) throw badRequest(`text must be ${MAX_POST_LEN} characters or fewer.`);
+  const verdict = guardXPost({ text, type: 'reply', media: 'none' });
+  if (verdict.hardBlock) throw Object.assign(new Error(verdict.note || 'Blocked by content guard.'), { status: 422, verdict });
+  const replyTo = { author: bm.author, url: bm.url, text: bm.text, source: 'bookmark' };
+  const { agents } = runPostingAgents(text, { source: 'bookmarks', replyTo });
+  const post = await createSocialPost(context.clientId, { content: text, source: 'bookmarks', status: 'draft', scheduledAt: null, platform: 'x', replyTo, agents });
+  const saved = await bookmarkStore.setDecision(fb.adminDb, context.clientId, id, { kind: 'replied', postId: post?.id });
+  return { ok: true, decision: saved, post, verdict };
+}
+
 // Daily Content Loop (docs/plans/DAILY-CONTENT-LOOP-MASTER-PLAN.md). Owner
 // account only; reads saved inputs, writes the run store, and — on Save Draft
 // only — one unscheduled social_posts draft. Never schedules or posts.
@@ -317,6 +384,9 @@ const SUPPORTED_ACTIONS = [
   'engine-performance',
   'draft-quote',
   'dismiss',
+  'bookmarks-find',
+  'bookmarks-list',
+  'bookmark-decide',
   'refresh-analysis',
   'content-plan',
   'inventory-list',
@@ -452,6 +522,7 @@ async function handleNow(context) {
   const { days, baselineSlots } = await readUnifiedCalendar(fb.adminDb, context.clientId, { from: ctDate(now), to: ctDate(now), now });
   const day = days.find((d) => d.date === ctDate(now)) || days[0] || null;
   const { rawQuoteTargets, hotQuotes } = await readCalendarQuoteState(fb.adminDb, context.clientId).catch(() => ({}));
+  const bookmarkPicks = await bookmarkStore.readBookmarkPicks(fb.adminDb, context.clientId).catch(() => null);
   let postsAt = null;
   try {
     const xSync = await import('../../../../features/x-monitor/sync.js');
@@ -460,7 +531,7 @@ async function handleNow(context) {
   } catch { postsAt = null; }
   const projection = projectNow({
     day, baselineSlots, hotQuotes, now,
-    freshness: { postsAt, hotPicksAt: hotQuotes?.scannedAt ?? null, quoteTargetsAt: rawQuoteTargets?.generatedAt ?? null },
+    freshness: { postsAt, hotPicksAt: hotQuotes?.scannedAt ?? null, quoteTargetsAt: rawQuoteTargets?.generatedAt ?? null, bookmarksAt: bookmarkPicks?.scannedAt ?? null },
   });
   return { ok: true, now: projection };
 }
@@ -1210,6 +1281,7 @@ function getStrategyHandlers() {
       readOpportunities,
       readQuoteTargets: readQuoteTargetsForFill,
       readHotQuotes: async (clientId) => (await readQuoteState(clientId)).hotQuotes,
+      readBookmarkPicks: async (clientId) => (await readQuoteState(clientId)).bookmarkPicks,
       readResults: readResultsForChat,
       readMarketSignals,
       editPost: editQueuedPost,
@@ -1263,6 +1335,9 @@ export async function POST(request) {
       const result = await handleDraftQuote(context, body);
       return json(result);
     }
+    if (action === 'bookmarks-find') return json(await handleBookmarksFind(context, decoded));
+    if (action === 'bookmarks-list') return json(await handleBookmarksList(context, body));
+    if (action === 'bookmark-decide') return json(await handleBookmarkDecide(context, body));
     if (action === 'refresh-analysis') {
       const result = await handleRefreshAnalysis(context);
       return json(result);

@@ -230,6 +230,17 @@ export const READ_TOOLS = Object.freeze([
     input_schema: { type: 'object', properties: { track: str('Track label, id or word (discogs, design, mix, quote). Omit for the next open slot of any track.') } },
   },
   {
+    name: 'get_bookmark_picks',
+    description: "The owner's X bookmarks, judged against the strategy by the daily Mac scan. Each pick: id, url, author, text, media (video | image | none), likes, ageHours, lane (design | music | other), angle, respond (quote | reply | swipe), how (what to do with it), why, fit. filter: open (quote + reply, default) | swipe (inspiration to keep) | all. Read-only; the owner decides in the Bookmarks panel (Draft quote / Reply / Skip). Nothing posts to X.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        filter: { type: 'string', enum: ['open', 'swipe', 'all'], description: 'open (default) | swipe | all' },
+        limit: int('Max picks', { minimum: 1, maximum: 30 }),
+      },
+    },
+  },
+  {
     name: 'search_inventory',
     description: `Search or list the owner's content inventory. Summary rows (max ${LIMITS.inventoryMax} per page; use offset to page through all): id, title, track, story, hasMedia/mediaKind, and for Discogs records value (USD), have/want, year, artists. Empty query + sort lists everything. For the FULL object of one item use get_item.`,
     input_schema: {
@@ -811,7 +822,18 @@ export async function runReadTool(name, input, toolDeps) {
       // Hot-scan picks (marketingBrief.hotQuotes) for quote-react slots; the dep is optional and may return null.
       let hotQuotes = null;
       if (typeof deps.readHotQuotes === 'function') { try { const hq = await deps.readHotQuotes(); hotQuotes = Array.isArray(hq) ? hq : (Array.isArray(hq?.picks) ? hq.picks : null); } catch { hotQuotes = null; } }
-      return planNextPost({ now: nowMs, slots, rows, track: cleanText(input?.track, 60), hotQuotes });
+      // Judged bookmarks (marketingBrief.bookmarkPicks); optional dep, same degrade-to-null rule.
+      let bookmarkPicks = null;
+      if (typeof deps.readBookmarkPicks === 'function') { try { const bp = await deps.readBookmarkPicks(); bookmarkPicks = Array.isArray(bp) ? bp : (Array.isArray(bp?.picks) ? bp.picks : null); } catch { bookmarkPicks = null; } }
+      return planNextPost({ now: nowMs, slots, rows, track: cleanText(input?.track, 60), hotQuotes, bookmarkPicks });
+    }
+    case 'get_bookmark_picks': {
+      if (typeof deps.readBookmarkPicks !== 'function') return NA();
+      const raw = await deps.readBookmarkPicks();
+      const all = Array.isArray(raw) ? raw : (Array.isArray(raw?.picks) ? raw.picks : []);
+      const filter = ['open', 'swipe', 'all'].includes(input?.filter) ? input.filter : 'open';
+      const picks = all.filter((p) => (filter === 'all' ? true : filter === 'swipe' ? p?.respond === 'swipe' : p?.respond !== 'swipe')).slice(0, clampLimit(input?.limit, 10));
+      return { filter, total: picks.length, scannedAt: raw?.scannedAt ?? null, picks };
     }
     case 'get_x_spend': return need('getXSpend')({ days: Number.isInteger(input?.days) ? Math.min(Math.max(input.days, 1), 90) : 30 });
     case 'get_plan': return { plan: await need('getPlan')() };

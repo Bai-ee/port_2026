@@ -43,12 +43,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // Refresh "Quote targets" (Mac source): run the same free bird scan the 6:30 launchd job runs, for one client.
 const SCAN_TIMEOUT_MS = 10 * 60 * 1000;
 const HOT_SCAN_TIMEOUT_MS = 25 * 60 * 1000; // includes the --if-stale lane-graph refresh the hot scan runs first
+const BOOKMARKS_SCAN_TIMEOUT_MS = 5 * 60 * 1000; // one bird read + one small judge call
 function runQuoteScan(clientId, mode = SCAN_MODES.QUOTE) {
-  // 'hot' = the hot quote scan (judged breakout picks); anything else = the legacy watchlist scan
-  const script = mode === SCAN_MODES.HOT ? 'hot-quote-scan.mjs' : 'scan-quote-targets.mjs';
+  // 'hot' = the hot quote scan (judged breakout picks); 'bookmarks' = the owner's bookmarks (judged); anything else = the legacy watchlist scan
+  const script = mode === SCAN_MODES.HOT ? 'hot-quote-scan.mjs' : mode === SCAN_MODES.BOOKMARKS ? 'bookmarks-scan.mjs' : 'scan-quote-targets.mjs';
+  const timeout = mode === SCAN_MODES.HOT ? HOT_SCAN_TIMEOUT_MS : mode === SCAN_MODES.BOOKMARKS ? BOOKMARKS_SCAN_TIMEOUT_MS : SCAN_TIMEOUT_MS;
   return new Promise((resolve) => {
     execFile(process.execPath, [path.join(REPO, 'scripts/x-content/', script), '--client', clientId, '--write'],
-      { cwd: REPO, timeout: mode === SCAN_MODES.HOT ? HOT_SCAN_TIMEOUT_MS : SCAN_TIMEOUT_MS, maxBuffer: 8 * 1024 * 1024 },
+      { cwd: REPO, timeout, maxBuffer: 8 * 1024 * 1024 },
       (err, stdout, stderr) => resolve({ ok: !err, code: err?.code ?? 0, output: `${stdout || ''}\n${stderr || ''}` }));
   });
 }
@@ -69,7 +71,7 @@ async function drainQuoteScans(db) {
   const queue = createFirestoreQuoteScanQueue(db);
   const job = await queue.claimNext();
   if (!job) return null;
-  const mode = job.mode === SCAN_MODES.HOT ? SCAN_MODES.HOT : SCAN_MODES.QUOTE;
+  const mode = job.mode === SCAN_MODES.HOT ? SCAN_MODES.HOT : job.mode === SCAN_MODES.BOOKMARKS ? SCAN_MODES.BOOKMARKS : SCAN_MODES.QUOTE;
   log(`[${new Date().toISOString()}] ${mode} scan ${job.id} for ${job.clientId}`);
   const startedAt = Date.now();
   const run = await runQuoteScan(job.clientId, mode);
@@ -77,7 +79,14 @@ async function drainQuoteScans(db) {
   const brief = snap?.exists ? snap.data()?.marketingBrief || {} : {};
   let status;
   let result;
-  if (mode === SCAN_MODES.HOT) {
+  if (mode === SCAN_MODES.BOOKMARKS) {
+    const b = brief.bookmarkPicks || {};
+    const fresh = Date.parse(b.scannedAt || '') >= startedAt - 1000;
+    status = run.ok ? SCAN_STATUS.DONE : (/\b429\b|rate.?limit/i.test(run.output) ? SCAN_STATUS.RATE_LIMITED : SCAN_STATUS.FAILED);
+    result = fresh
+      ? { mode, picks: (b.picks || []).length, total: b.total ?? null, newThisRun: b.newThisRun ?? null, costUsd: b.costUsd ?? null, scannedAt: b.scannedAt }
+      : { mode, picks: 0, scannedAt: null };
+  } else if (mode === SCAN_MODES.HOT) {
     const h = brief.hotQuotes || {};
     const fresh = Date.parse(h.scannedAt || '') >= startedAt - 1000;
     const picks = [...(h.picks?.design || []), ...(h.picks?.music || [])];
@@ -96,7 +105,7 @@ async function drainQuoteScans(db) {
     };
   }
   await queue.finish(job.id, job.leaseId, { status, result, ...(run.ok ? {} : { error: run.output.trim().split('\n').slice(-3).join(' ').slice(0, 300) }) });
-  log(`[${new Date().toISOString()}] ${mode} scan ${job.id} -> ${status} (${mode === SCAN_MODES.HOT ? `${result.picks} picks` : `${result.candidates} candidates`})`);
+  log(`[${new Date().toISOString()}] ${mode} scan ${job.id} -> ${status} (${mode === SCAN_MODES.QUOTE ? `${result.candidates} candidates` : `${result.picks} picks`})`);
   // The hot scan refreshes a stale lane graph itself; only the legacy scan needs the worker to do it.
   if (status === SCAN_STATUS.DONE && mode === SCAN_MODES.QUOTE) {
     const graph = await runLaneGraphRefresh(job.clientId);

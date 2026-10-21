@@ -57,8 +57,8 @@ test('groupFreshness: local memory, server asOf (newer wins), stale, none', asyn
 
 test('skippedGroupsFor lists unselected groups in catalog order with a reason', () => {
   const out = skippedGroupsFor(['today-queue', 'market-signals']);
-  assert.equal(out.length, 7);
-  assert.deepEqual(out.map((g) => g.id), ['x-search', 'analysis', 'strategy-accounts', 'x-monitor', 'renders', 'quote-targets', 'hot-quotes']);
+  assert.equal(out.length, 8);
+  assert.deepEqual(out.map((g) => g.id), ['x-search', 'analysis', 'strategy-accounts', 'x-monitor', 'renders', 'quote-targets', 'hot-quotes', 'bookmarks']);
   assert.equal(out.find((g) => g.id === 'x-monitor').reason, 'paid groups start off; tick it in Refresh settings');
   assert.equal(out.find((g) => g.id === 'x-monitor').label, 'X Monitor');
   assert.equal(out.find((g) => g.id === 'strategy-accounts').reason, 'not selected');
@@ -67,5 +67,5 @@ test('skippedGroupsFor lists unselected groups in catalog order with a reason', 
 test('skippedGroupsFor treats x-api source groups as paid; bad input skips everything', () => {
   const out = skippedGroupsFor([], { dataSources: { quoteTargets: 'x-api' } });
   assert.match(out.find((g) => g.id === 'quote-targets').reason, /paid groups/);
-  assert.equal(skippedGroupsFor(undefined).length, 9);
+  assert.equal(skippedGroupsFor(undefined).length, 10);
 });

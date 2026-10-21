@@ -72,4 +72,8 @@ test('stale / missing freshness', () => {
   assert.equal(by['hot-picks'].stale, true);
   assert.equal(by['hot-picks'].asOf, null);
   assert.equal(by['quote-targets'].stale, false);
+  assert.equal(by.bookmarks.stale, true); // no bookmarksAt => stale
+  assert.equal(by.bookmarks.asOf, null);
+  const ok = projectNow({ day, baselineSlots, now: T('12:00'), freshness: { bookmarksAt: '2026-10-21T10:00:00Z' } });
+  assert.equal(ok.freshness.find((f) => f.id === 'bookmarks').stale, false);
 });

@@ -12,6 +12,7 @@ export const REFRESH_GROUPS = [
   { id: 'renders', n: 7, label: 'Renders', updates: 'Creative and video modules', cost: 'Render cost (studio/video)', paid: true, defaultOn: false },
   { id: 'quote-targets', n: 8, label: 'Quote targets', updates: 'Posts worth quote-reacting to, from the watchlist (last 36h)', cost: 'Free — scanned on the Mac (launchd) via bird; paid X API when that source is selected', paid: false, defaultOn: false },
   { id: 'hot-quotes', n: 9, label: 'Hot quotes', updates: 'Four NEW breakout posts to quote-tweet (design + music), judged for fit, with momentum', cost: 'Free bird scan on the Mac; one tiny relevance-judge model call (about $0.002, capped at $0.04)', paid: false, defaultOn: false },
+  { id: 'bookmarks', n: 10, label: 'Bookmarks', updates: 'Your X bookmarks, judged against the strategy (quote / reply / swipe)', cost: 'Free bird pull on the Mac; one tiny judge model call (about $0.002, capped)', paid: false, defaultOn: false },
 ];
 
 // Per-client data source of the two X data groups (client_configs xGrowth.dataSources): 'mac' (free, bird) | 'x-api' (paid).
