@@ -1,5 +1,7 @@
 // intelligence.js — Normalize client-specific Scout agentData into shared shapes
 
+const { filterActionableOpportunities } = require('./post-url-validator.cjs');
+
 function getIntelligenceConfig(config = {}) {
   return config.intelligence || {};
 }
@@ -134,7 +136,8 @@ function normalizeContentOpportunities(agentData = {}, config = {}) {
     ? rawBlock
     : asArray(rawBlock.opportunities);
 
-  return opportunities.map((item) => ({
+  // URL-less reply opportunities never reach Scribe (it would cite unopenable threads).
+  return filterActionableOpportunities(opportunities).kept.map((item) => ({
     title: item.topic || item.conversation || item.trigger || 'Opportunity',
     summary: item.whyNow || item.injectionAngle || item.suggestedAngle || '',
     priority: item.priority || item.authenticity || item.engagementLevel || 'medium',

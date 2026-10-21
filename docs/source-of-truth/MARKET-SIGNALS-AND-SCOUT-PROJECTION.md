@@ -2,6 +2,8 @@
 
 **Status:** active canonical. Read this before touching the Market Signals card, the scout-test sources, the daily-digest email, the executive brief renderer, or the scout search config.
 
+> **Reply opportunities need a link (2026-10-20).** A thread-based opportunity (`viralOpportunities.opportunities`, or `contentOpportunities` items carrying a `url` field / `conversation` / `injectionAngle` / `suggestedReply` / `windowHours` / `raw`) with no http(s) `url` is dropped, never shown as actionable. Generic content ideas (signup `opportunityMap`: topic/whyNow/priority/format only) are exempt. Helper `filterActionableOpportunities` in `features/not-the-rug-brief/post-url-validator.cjs`; applied in `xscout.js` `stripUngroundedUrls` (at write), `intelligence.js` `normalizeContentOpportunities` (Scribe input), `projectBrief` (read; exposes `droppedNoUrl`) and the `viral-windows` brief summary. Already-stored `humanBrief`/`delta` prose is not rewritten; it clears on the next run.
+
 > **The one-button run UX** (Generate Report / Update report only, the single streamed terminal, the Client Brain → search bridge, the REPORT Coverage strip, watchlist mentions routing, skill cap) is documented as-built in [`MARKET-SIGNALS-GENERATE-REPORT-FLOW.md`](./MARKET-SIGNALS-GENERATE-REPORT-FLOW.md). Read it before touching the card's run buttons or the REPORT render.
 
 > **The Run Briefs / Executive Brief card wiring** (Daily Stand Up renamed to Executive Brief, named brief preview cards, card footer run actions, removed duplicate Creative card) is documented in [`EXECUTIVE-BRIEFS-RUN-BRIEFS-WIRING.md`](./EXECUTIVE-BRIEFS-RUN-BRIEFS-WIRING.md). Read it before touching the Run Briefs bucket or `BRIEF_TYPE_BY_CARD`.

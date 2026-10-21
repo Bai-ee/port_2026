@@ -8,6 +8,7 @@
 
 const fb = require('../../api/_lib/firebase-admin.cjs');
 const { getClientWeather } = require('./_weather.js');
+const { filterActionableOpportunities } = require('../not-the-rug-brief/post-url-validator.cjs');
 const { collectRedditSignals, collectInstagramSignals } = require('./_platform-signals.js');
 
 function arr(v) {
@@ -74,13 +75,17 @@ function projectBrief(marketingBrief, state = null) {
   const opportunities = arr(agentData?.viralOpportunities?.opportunities).length
     ? arr(agentData.viralOpportunities.opportunities)
     : arr(marketingBrief?.contentOpportunities);
+  // Reply opportunities with no http(s) url are not actionable: drop on read so
+  // already-stored briefs are cleaned too. See MARKET-SIGNALS-AND-SCOUT-PROJECTION.md.
+  const { kept: actionableOpportunities, droppedNoUrl } = filterActionableOpportunities(opportunities);
 
   return {
+    droppedNoUrl,
     headline: marketingBrief?.headline || state?.headline || '',
     humanBrief: scoutBrief?.humanBrief || '',
     delta: scoutBrief?.delta || '',
     generatedAt: marketingBrief?.generatedAtIso || scoutBrief?.timestamp || null,
-    opportunities: opportunities.map((o) => ({
+    opportunities: actionableOpportunities.map((o) => ({
       topic: o.conversation || o.topic || o.title || 'Opportunity',
       angle: o.injectionAngle || o.whyNow || o.summary || '',
       priority: o.priority || o.authenticity || '',
