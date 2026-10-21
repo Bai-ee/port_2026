@@ -15,9 +15,26 @@ const CAP_RE = new RegExp(
   'gi'
 );
 const PRICE_RE = /\b(from|starting\s+at|starts?\s+at)\s+\$(\d{1,5})\b/gi;
+// Brain side: any "N minutes". Copy side (DURATION_COPY_RES): only when tied to the
+// service itself, so "10 minutes away" / "takes 10 minutes" are left alone.
 const DURATION_RE = /\b(\d{1,3})[- ]?(?:minutes?|mins?)\b/gi;
+const SVC = '(?:walks?|visits?|sessions?|outings?|hikes?)';
+const DURATION_COPY_RES = [
+  new RegExp(`\\b(\\d{1,3})[- ]?(?:minutes?|mins?)[- ]${SVC}\\b`, 'gi'),
+  new RegExp(`\\b(\\d{1,3})[- ]?(?:minutes?|mins?)\\s+per\\s+${SVC}\\b`, 'gi'),
+  new RegExp(`\\b${SVC}\\s+(?:are|is|run|runs|last|lasts)\\s+(?:about\\s+|around\\s+)?(\\d{1,3})[- ]?(?:minutes?|mins?)\\b`, 'gi'),
+];
 const SINCE_RE = /\b(since|founded(?:\s+in)?|established(?:\s+in)?|est\.?)\s+((?:19|20)\d{2})\b/gi;
-const YEARS_RE = /\b(\d{1,2})(\+?)\s+years?\b(?!\s+(?:old|ago|from))/gi;
+// Tenure phrasing only — "2 years of data", "a 3 years plan", "N years ago/old" are left alone.
+const NOT_AGE = '(?!\\s+(?:old|ago|from|of\\s+data))';
+const TENURE_RES = [
+  new RegExp(`\\bfor\\s+(?:over\\s+|nearly\\s+|almost\\s+|more\\s+than\\s+)?(\\d{1,2})\\+?\\s+years?\\b${NOT_AGE}`, 'gid'),
+  new RegExp(`\\b(\\d{1,2})\\+?\\s+years?\\s+in\\s+(?:the\\s+)?business\\b`, 'gid'),
+  new RegExp(`\\b(\\d{1,2})\\+\\s*years?\\b${NOT_AGE}`, 'gid'),
+  new RegExp(`\\b(?:over|nearly|almost|more\\s+than)\\s+(\\d{1,2})\\+?\\s+years?\\b${NOT_AGE}`, 'gid'),
+  new RegExp(`\\b(\\d{1,2})\\+?\\s+years?\\s+of\\s+(?:walking|serving|experience|caring|running|helping|service)\\b`, 'gid'),
+  new RegExp(`\\b(?:we'?ve|we\\s+have|been)\\b[^.!?\\n]{0,40}?\\b(\\d{1,2})\\+?\\s+years?\\b${NOT_AGE}`, 'gid'),
+];
 
 // Dogs / pets / "per walk" all describe the same group-size cap.
 function capClass(unit) {
@@ -73,8 +90,10 @@ function checkString(text, facts, now) {
   for (const m of text.matchAll(PRICE_RE)) {
     test('price', m, m[0].indexOf('$') + 1, m[2].length, Number(m[2]), facts.prices);
   }
-  for (const m of text.matchAll(DURATION_RE)) {
-    test('duration', m, 0, m[1].length, Number(m[1]), facts.durations);
+  for (const re of DURATION_COPY_RES) {
+    for (const m of text.matchAll(re)) {
+      test('duration', m, m[0].indexOf(m[1]), m[1].length, Number(m[1]), facts.durations);
+    }
   }
   if (facts.foundedYear) {
     const expectedYears = now.getUTCFullYear() - facts.foundedYear;
@@ -85,13 +104,17 @@ function checkString(text, facts, now) {
         edits.push({ start: m.index + m[0].length - 4, end: m.index + m[0].length, to: String(facts.foundedYear) });
       }
     }
-    for (const m of text.matchAll(YEARS_RE)) {
-      const before = text.slice(Math.max(0, m.index - 6), m.index).toLowerCase();
-      if (/(last|past|next)\s*$/.test(before)) continue;
-      const got = Number(m[1]);
-      if (Math.abs(got - expectedYears) > 1) {
-        found.push({ kind: 'years', found: got, expected: [expectedYears], fix: expectedYears, excerpt: m[0] });
-        edits.push({ start: m.index, end: m.index + m[1].length, to: String(expectedYears) });
+    const seen = new Set();
+    for (const re of TENURE_RES) {
+      for (const m of text.matchAll(re)) {
+        const [start, end] = m.indices[1];
+        if (seen.has(start)) continue;
+        seen.add(start);
+        const got = Number(m[1]);
+        if (Math.abs(got - expectedYears) > 1) {
+          found.push({ kind: 'years', found: got, expected: [expectedYears], fix: expectedYears, excerpt: m[0] });
+          edits.push({ start, end, to: String(expectedYears) });
+        }
       }
     }
   }

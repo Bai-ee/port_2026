@@ -51,10 +51,24 @@ test('years: tolerance of 1, wrong counts and since-years corrected', () => {
   assert.equal(r.contradictions.length, 2);
 });
 
-test('price and duration are corrected when the Brain has one value', () => {
-  const content = { x_post: 'Walks from $40, 60 minutes.' };
+test('left alone: bare durations and non-tenure "N years"', () => {
+  const src = { x_post: 'The park is 10 minutes away. It takes 10 minutes to book. 2 years of data, a 3 years plan, 5 years ago, a 9 years old pup.' };
+  const content = { ...src };
+  const r = checkCopyAgainstBrain(content, brain(), { now: NOW });
+  assert.deepEqual(content, src);
+  assert.deepEqual(r.contradictions, []);
+});
+
+test('service-tied durations and tenure phrasings are checked', () => {
+  const content = { a: 'A 60-minute walk.', b: 'Walks are 20 minutes.', c: '30 minutes per walk.', d: "We've been at this 9 years.", e: '9 years in business.' };
   checkCopyAgainstBrain(content, brain(), { now: NOW });
-  assert.equal(content.x_post, 'Walks from $33, 45 minutes.');
+  assert.deepEqual(content, { a: 'A 45-minute walk.', b: 'Walks are 45 minutes.', c: '45 minutes per walk.', d: "We've been at this 15 years.", e: '15 years in business.' });
+});
+
+test('price and duration are corrected when the Brain has one value', () => {
+  const content = { x_post: 'Walks from $40, 60-minute walk.' };
+  checkCopyAgainstBrain(content, brain(), { now: NOW });
+  assert.equal(content.x_post, 'Walks from $33, 45-minute walk.');
 });
 
 test('ambiguous Brain values: field is dropped, not guessed; nested/array copy is covered', () => {
