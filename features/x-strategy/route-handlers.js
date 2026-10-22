@@ -36,8 +36,9 @@ import { tracksOf, trackForPackage } from './content-tracks.js';
 import { syncBucketTracks } from './bucket-tracks.js';
 import { normalizeBatchSpec, planCalendarBatch, createCalendarBatch } from '../x-content-inventory/calendar-batch.js';
 import { runDailyFill, isFillPost } from '../x-content-inventory/daily-fill.js';
+import { backfillCalendarMedia, lendSameReleaseMedia } from '../x-content-inventory/calendar-media-backfill.js';
 import { findMediaCandidates, linkMediaPatch, normalizeLinks, mediaOf } from '../x-content-inventory/item-media.js';
-import { findHiresMedia, readStageStatesFromDb } from '../x-content-inventory/hires-media.js';
+import { findHiresMedia, useHiresMedia, readStageStatesFromDb, pendingStageFromDb } from '../x-content-inventory/hires-media.js';
 import { getMediaLinks } from '../x-content-inventory/media-link.js';
 import { handleNasAction } from '../x-content-inventory/nas.js';
 import { planMemorySuggestions, postNeedsMemory, MAX_MEMORY_SUGGESTIONS, MEMORY_LINE_MAX } from '../x-content-inventory/memory-suggest.js';
@@ -251,6 +252,12 @@ export function createStrategyHandlers({
   readQuoteTargets = null, // (clientId) -> {generatedAt, targets:[{id,url,text,handle,createdAt,trackId?}]} open (non-dismissed) quote candidates; daily fill quotes
   ensureDraft = null, // (clientId, payload) -> {post, existing}; twitter-service ensureDraftPost. Absent => batch create answers 503
   mediaForItem = null, // (clientId, pkg) -> {mediaUrl, mediaType, mediaContentType, mediaStoragePath} | null; calendar-batch drafts carry the item's media
+  // Calendar media backfill (x-content-inventory/calendar-media-backfill.js), run after every executed daily fill so no
+  // dated draft with an item stays bare. All optional; absent => the fill reports mediaBackfill: null.
+  readCalendarDrafts = null, // (clientId) -> [{id,status,reviewOn,scheduledAt,packageId,mediaUrl,nasSha}] this client's open social_posts
+  applyPostMedia = null, // (clientId, postId, patch) -> bool; draft-only media / nasSha write (twitter-service swapPostMedia)
+  upsertPackage = null, // (clientId, pkg) -> void; persists a same-release media link onto an item
+  stageNasForPost = null, // (clientId, {postId, packageId}) -> useHiresMedia result; queues the NAS copy + auto-attach for a draft
   upsertBucket = null, deleteBucket = null, // (clientId, bucket) / (clientId, bucketId, {reassignTo}) -> the Content Center bucket-store writers (bucket-edit proposals). Absent => bucket-edit confirm fails clearly
   actionRuntime = null, // agent/action-runtime.js createActionRuntime(...): run_action / undo / audit log / autonomy. Absent => the action tools answer "not available" and the action-* routes 503
   rejectPost = null, // (clientId, postId, {reviewedBy, expectedRevision}) -> rejectDraft; queue-bulk delete-draft. Absent => lazy import of twitter-service
@@ -366,7 +373,7 @@ export function createStrategyHandlers({
     if (!execute) return { ok: true, spec: norm.spec, ...plan };
     if (typeof ensureDraft !== 'function') return { ok: false, status: 503, error: 'Creating drafts is not available on this deployment.' };
     const byId = new Map((packages || []).map((p) => [p.id, p]));
-    const mediaFor = typeof mediaForItem === 'function' ? (id) => mediaForItem(clientId, byId.get(id)) : null;
+    const mediaFor = typeof mediaForItem === 'function' ? (id) => mediaWithLending(clientId, byId.get(id), packages) : null;
     const written = await createCalendarBatch(clientId, plan, {
       ensureDraft, mediaFor, batchId,
       ...(typeof placeDraft === 'function' ? { placeDraft: (postId, patch) => placeDraft(clientId, postId, patch) } : {}),
@@ -415,13 +422,42 @@ export function createStrategyHandlers({
     placeDraft: (clientId, postId, patch) => (typeof placeDraft === 'function' ? placeDraft(clientId, postId, patch) : Promise.resolve(false)),
     mediaFor: async (clientId, packageId) => {
       if (typeof mediaForItem !== 'function') return null;
-      const pkg = ((await readPackages(clientId)) || []).find((p) => p.id === packageId);
-      return pkg ? mediaForItem(clientId, pkg) : null;
+      const packages = (await readPackages(clientId)) || [];
+      const pkg = packages.find((p) => p.id === packageId);
+      return pkg ? mediaWithLending(clientId, pkg, packages) : null;
     },
   };
+  // The item's own staged media, else a same-Discogs-release item's (linked onto it so later posts reuse it): a birthday
+  // item built from a release takes that release's rendered video instead of landing on the calendar bare.
+  async function mediaWithLending(clientId, pkg, packages) {
+    if (!pkg || typeof mediaForItem !== 'function') return null;
+    const own = await mediaForItem(clientId, pkg);
+    if (own) return own;
+    const lent = lendSameReleaseMedia(pkg, packages);
+    if (!lent) return null;
+    const media = await mediaForItem(clientId, lent);
+    if (media && typeof upsertPackage === 'function') await Promise.resolve(upsertPackage(clientId, lent)).catch(() => {});
+    return media;
+  }
+  const backfillDeps = {
+    readDrafts: (clientId) => readCalendarDrafts(clientId),
+    readPackages: async (clientId) => (await readPackages(clientId)) || [],
+    pickMedia: (clientId, pkg) => (typeof mediaForItem === 'function' ? mediaForItem(clientId, pkg) : null),
+    applyPostMedia: (clientId, postId, patch) => applyPostMedia(clientId, postId, patch),
+    ...(typeof upsertPackage === 'function' ? { upsertPackage } : {}),
+    ...(typeof stageNasForPost === 'function' ? { stageNas: stageNasForPost } : {}),
+  };
+  const backfillAvailable = typeof readCalendarDrafts === 'function' && typeof applyPostMedia === 'function' && typeof mediaForItem === 'function';
   async function dailyFill(clientId, spec, { execute = false, batchId = null } = {}) {
     if (execute && typeof ensureDraft !== 'function') return { ok: false, status: 503, error: 'Creating drafts is not available on this deployment.' };
-    return runDailyFill(clientId, { from: spec?.from, days: spec?.days, include: spec?.include, excludePackageIds: spec?.excludePackageIds, replace: spec?.replace, execute, batchId, deps: dailyFillDeps });
+    const r = await runDailyFill(clientId, { from: spec?.from, days: spec?.days, include: spec?.include, excludePackageIds: spec?.excludePackageIds, replace: spec?.replace, execute, batchId, deps: dailyFillDeps });
+    if (!execute || !r?.ok) return r;
+    // Media backfill after the write: a failure here never fails the fill (the drafts exist; the owner sees bare rows).
+    let mediaBackfill = null;
+    if (backfillAvailable) {
+      try { mediaBackfill = await backfillCalendarMedia(backfillDeps, { clientId, from: r.spec.from, days: r.spec.days }); } catch (err) { mediaBackfill = { ok: false, error: String(err?.message || err).slice(0, 160) }; }
+    }
+    return { ...r, mediaBackfill };
   }
   // Preview rows: text shortened (the agent's context is small); counts and skip examples are unchanged.
   const stripFillRows = (r) => (r.ok ? { ...r, rows: r.rows.map(({ text, ...row }) => ({ ...row, text: text.slice(0, 140) })) } : r);
@@ -1838,6 +1874,34 @@ export function createStrategyHandlersFromDb(db, {
     return { generatedAt: qt?.generatedAt || null, targets };
   };
   const ensureDraft = async (clientId, payload) => (await import('../social-posting/twitter-service.js')).ensureDraftPost(clientId, payload);
+  // Calendar media backfill (after every executed fill). Draft-only writes; the NAS copy is queued for the Mac analyzer
+  // with auto:true (no approval written) and attached by the stage-complete hook (archive/commands/worker).
+  const readCalendarDrafts = async (clientId) => {
+    const snap = await db.collection('social_posts').where('clientId', '==', clientId)
+      .select('status', 'reviewOn', 'scheduledAt', 'packageId', 'mediaUrl', 'nasSha').get();
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  };
+  const applyPostMedia = async (clientId, postId, patch) => (await import('../social-posting/twitter-service.js')).swapPostMedia(clientId, postId, patch, { statuses: ['draft'] });
+  const packageStore = async () => import('../x-content-inventory/store.js');
+  const getPackageFor = (clientId) => async (id) => { const p = await (await packageStore()).getPackage(id, { db }); return p && (!p.clientId || p.clientId === clientId) ? p : null; };
+  const upsertPackage = async (clientId, pkg) => (await packageStore()).upsertPackage({ ...pkg, clientId }, { db, returnPackages: false, clientId });
+  const stageNasForPost = async (clientId, { postId, packageId }) => {
+    const fieldValue = db.FieldValue || createRequire(import.meta.url)('../../api/_lib/firebase-admin.cjs').FieldValue;
+    const nasDeps = { db, fieldValue, getPackage: getPackageFor(clientId), upsertPackage: (pkg) => upsertPackage(clientId, pkg), now: () => Date.now(), sleep: (ms) => new Promise((r) => setTimeout(r, ms)), randomId: () => randomUUID() };
+    const { getSocialPost } = await import('../social-posting/twitter-service.js');
+    return useHiresMedia({
+      getPost: (id) => getSocialPost(clientId, id),
+      getPackage: getPackageFor(clientId),
+      readPackages: async () => (await readPackages(clientId)) || [],
+      pendingStage: (id) => pendingStageFromDb(db, id),
+      nasStage: (id) => handleNasAction(nasDeps, 'nas-stage', { id, auto: true }, { email: 'daily-fill' }),
+      nasStatus: () => handleNasAction(nasDeps, 'nas-status', {}),
+      pickMedia: (pkg) => (typeof passThrough.mediaForItem === 'function' ? passThrough.mediaForItem(clientId, pkg) : null),
+      applyPostMedia: (id, media) => applyPostMedia(clientId, id, media),
+      upsertPackage: (pkg) => upsertPackage(clientId, pkg),
+      now: () => Date.now(),
+    }, { clientId, postId, candidateId: packageId, packageId });
+  };
   // X API data sources (client_configs xGrowth.dataSources). The pullers are lazy: nothing here touches X until a confirmed run.
   const readDataSources = async (clientId) => (await import('./data-sources.js')).readDataSources(db, clientId);
   const saveDataSources = async (clientId, patch) => (await import('./data-sources.js')).saveDataSources(db, clientId, patch);
@@ -1856,6 +1920,7 @@ export function createStrategyHandlersFromDb(db, {
   return createStrategyHandlers({
     readDiscogsRelease: async (releaseId) => { const s = await db.collection('discogs_releases').doc(String(releaseId)).get(); return s.exists ? s.data() : null; },
     corpusStore, planStore, refreshService, readPackages, readAudience, readRecentPosts, readBuckets, readBucketEngine, readOpenPackageIds, readFillContext, readTrackRules: dailyMixRulesFor, readQuoteTargets, ensureDraft, placeDraft, listMediaTaskIds, createMediaTasks,
+    readCalendarDrafts, applyPostMedia, upsertPackage, stageNasForPost,
     readStageStates: (ids) => readStageStatesFromDb(db, ids), readNasStatus: () => handleNasAction({ db, now: () => Date.now() }, 'nas-status', {}),
     readDataSources, saveDataSources, pullCorpora, scanQuotes, responseStyleStore, unmetStore,
     quoteScanQueue: createFirestoreQuoteScanQueue(db),

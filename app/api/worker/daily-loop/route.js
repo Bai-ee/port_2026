@@ -72,16 +72,17 @@ async function buildReadInputsFor() {
 
 // Daily fill (calendar drafts per bucket track): runs AFTER the suggestions step, non-fatal, drafts only (never publishes).
 // Choice: reuse the Strategy handler factory's `dailyFill` (it already wires ensureDraft/placeDraft/readOpenPackageIds)
-// instead of hand-building runDailyFillForCron deps here. readPackages is the FULL inventory (readInventory, as on the
-// dashboard route), not the suggestions step's slimmed projection: that projection drops clientId (mediaForItem's owner
-// check, so no draft got its media), renderedAt (newest-first ordering) and nas (the throwback media link).
+// instead of hand-building runDailyFillForCron deps here. readPackages is the FULL inventory (readAllPackages, every
+// page, as on the dashboard route), not the suggestions step's slimmed projection: that projection drops clientId
+// (mediaForItem's owner check, so no draft got its media), renderedAt (newest-first ordering) and nas (the throwback
+// media link).
 // Handlers without `dailyFill` are reported as failed, never as a healthy skip.
 async function runDailyFillStep({ db, committedCorpusRows }, clientIds, today) {
   let handlers;
   try {
     const { createStrategyHandlersFromDb } = await import('../../../../features/x-strategy/route-handlers.js');
     const { pickMedia } = await import('../../../../features/x-content-inventory/item-actions.js');
-    const { readInventory } = await import('../../../../features/x-content-inventory/store.js');
+    const { readAllPackages } = await import('../../../../features/x-content-inventory/store.js');
     const { tokenUrlFor } = await import('../../../../features/x-content-inventory/thumbs.js');
     const { projectBrief } = require('../../../../features/intelligence/_brief-intel.js');
     const fb = require('../../../../api/_lib/firebase-admin.cjs');
@@ -98,7 +99,8 @@ async function runDailyFillStep({ db, committedCorpusRows }, clientIds, today) {
     };
     handlers = createStrategyHandlersFromDb(db, {
       loadCommitted: committedCorpusRows,
-      readPackages: async (clientId) => (await readInventory({ clientId, db })).packages || [],
+      // Every page: the un-paged read drops NAS rows past the 2,000th id (throwback items went "not found").
+      readPackages: (clientId) => readAllPackages({ clientId, db }),
       // Narratives come from the projected Market Signals brief, as on the dashboard route.
       readMarketSignals: async (clientId) => {
         const snap = await db.collection('dashboard_state').doc(clientId).get();
@@ -122,9 +124,12 @@ async function runDailyFillStep({ db, committedCorpusRows }, clientIds, today) {
       // runDailyFill returns ok:true with per-draft write failures in failed[]: any failed write fails this client.
       const failedRows = Array.isArray(r?.failed) ? r.failed : [];
       const failed = failedRows.length || (Number.isFinite(r?.failed) ? r.failed : 0);
+      const mb = r?.mediaBackfill;
       out.push({
         clientId, ok: failed === 0, created: r?.created?.length ?? r?.created ?? 0, existing: r?.existing?.length ?? r?.existing ?? 0, placed: r?.placed?.length ?? r?.placed ?? 0, failed,
         ...(failed ? { error: `${failed} draft write(s) failed${failedRows[0]?.error ? `: ${String(failedRows[0].error).slice(0, 160)}` : ''}` } : {}),
+        // Calendar media backfill (calendar-media-backfill.js): media attached / NAS copies queued / drafts still bare.
+        ...(mb ? { mediaBackfill: mb.ok ? { attached: mb.attached.length, staging: mb.staging.length, lent: mb.lent.length, bare: mb.bare.length, failed: mb.failed.length } : { error: mb.error } } : {}),
       });
     } catch (err) {
       out.push({ clientId, ok: false, error: String(err?.message || err).slice(0, 200) });

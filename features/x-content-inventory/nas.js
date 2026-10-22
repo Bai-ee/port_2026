@@ -409,11 +409,17 @@ async function stage(deps, body, decoded) {
   if (pkg.rights === 'client-approval-needed' || (needsApproval(pkg) && pkg.approval?.state === 'rejected')) {
     throw bad('Package needs approval/rights clearance before staging.', 403);
   }
+  // auto: the calendar backfill copies the file so the draft has its image; it is not a sign-off, so it never writes
+  // approval and never stages an item that still needs one.
+  const auto = body?.auto === true;
+  if (auto && needsApproval(pkg)) throw bad('Package needs approval before it can be staged automatically.', 403);
   const a = await requireAnalyzer(deps, { online: false });
-  await deps.upsertPackage({
-    ...pkg,
-    approval: { state: 'approved', by: decoded?.email || 'owner', at: new Date(deps.now()).toISOString() },
-  });
+  if (!auto) {
+    await deps.upsertPackage({
+      ...pkg,
+      approval: { state: 'approved', by: decoded?.email || 'owner', at: new Date(deps.now()).toISOString() },
+    });
+  }
   const commandId = await queueCommand(deps, {
     type: 'STAGE_FOR_PUBLISH', workerId: a.id, sourceId: nas.sourceId,
     packageId: id, sha256: nas.sha256, relativePath: nas.relativePath,

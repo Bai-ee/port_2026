@@ -90,6 +90,19 @@ One BAI-EE mix video draft a day on the calendar, from the daily email render.
 - ⚠️ **Cron media/ordering fix (2026-10-20):** the cron's fill now reads the FULL inventory (`readInventory`, as the dashboard route does). It used to get the suggestions step's `.select(PACKAGE_FIELDS)` projection, which drops `clientId` (so `mediaForItem` returned null — **no cron draft had media**), `renderedAt` (picks went by id, not newest) and `nas` (no throwback media link). If a cron-made draft lacks media again, check that projection first.
 - Code-owned on purpose: tracks round-trip through the Client Brain, which would drop a track-level field. Insights still shows the `ue` engine target from the plan; set it to 1/day in Strategy to match.
 
+## Calendar media backfill (2026-10-22)
+
+Owner rule: **nothing on the calendar sits without an image or thumbnail when its item has one or can have one.** The fill wrote media only when a draft was created, so every draft made before its item was staged, or before the fill carried media / `nasSha` at all, stayed bare for good (home 2026-10-22: every throwback and most record/mix drafts for the week).
+
+- `features/x-content-inventory/calendar-media-backfill.js` `backfillCalendarMedia` runs **after every executed daily fill** (`dailyFill` in `route-handlers.js`: cron, dashboard and chat fills alike; result field `mediaBackfill`, the daily-loop report carries the counts). Draft-only, dated rows in the fill window, with an item and no `mediaUrl`:
+  - item has staged media → attached (`swapPostMedia`, statuses `['draft']`), plus the `nasSha` link when the item is a NAS file;
+  - no media but an **exact same-Discogs-release** item has some (`findMediaCandidates` score `SAME_RELEASE_SCORE`) → that media is linked onto the item (`linkMediaPatch`, persisted) and attached; word-overlap matches are never auto-linked (they stay the owner's `propose_item_media` call). The same lending runs when a fill or calendar batch creates a draft (`mediaWithLending`).
+  - NAS item not staged → `nasSha` written, then `useHiresMedia` with the item as its own candidate: queues `nas-stage` with **`auto: true`** (no `approval` written, refused when the item still needs one) and records `hiresPending`, so the stage-complete hook (`archive/commands/worker` → `attachStagedHires`) puts the file on the draft. At most `BACKFILL_MAX_STAGES` (10) copies per run; the rest wait for the next fill.
+  - anything else is reported `bare` with a reason (never-public, item has no media, item not found).
+- Approved/scheduled rows are never touched: attaching media to a v2 approved row voids its approval (`isMaterialEdit`).
+- ⚠️ **The Mac analyzer must be running or every stage sits QUEUED** (it was off 2026-10-18 → 10-22; nothing told anyone). It is now a keep-alive launchd job: `scripts/nas/install-analyzer-schedule.sh install|status|restart|uninstall` (label `com.hitloop.archive-analyzer`, wrapper `scripts/nas/run-analyzer.sh` guest-mounts the NAS shares `bryan` and `Public` first; logs `~/Library/Logs/hitloop/archive-analyzer.{log,err}`). A stage FAILS with `File not found on source` when the item's share (`archive_workers/<worker>/sources` root, e.g. `/Volumes/Public/Bryan`) is not mounted.
+- Previews: a staged NAS still resolves through `thumbs.js` from its `publish-staging/nas/...` image ref, so the month row thumb no longer depends on the Mac being online. A staged NAS *video* still has no poster (no `thumbRef`); the row shows no thumb until one is captured.
+
 ## One calendar (2026-10-17, PRs #25–#27)
 
 The month calendar is the single review surface for every possible post.
