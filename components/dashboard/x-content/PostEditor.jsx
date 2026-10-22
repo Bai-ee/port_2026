@@ -285,15 +285,16 @@ export default function PostEditor({
     if (!st.canSave) return;
     run(buildSaveRequest({ row, content, iso: st.iso, scheduledTimeChanged: scheduled && dirty.timeDirty }), { successText: 'Saved.' });
   };
-  const doApprove = () => {
-    if (!st.canApprove) return;
-    if (suggestion) { run(buildSuggestionApproveRequest({ row, content }), { successText: 'Approved. Nothing is scheduled or posted.' }); return; }
-    run(buildApproveRequest({ row, content }), { successText: 'Approved. Nothing is scheduled or posted.' });
-  };
   const planOverride = override && overrideReason.trim() ? { confirm: true, reason: overrideReason.trim() } : null;
-  const doApproveSchedule = () => {
-    if (!st.canApproveSchedule || (override && !overrideReason.trim())) return;
-    run(buildApproveScheduleRequest({ row, content, iso: st.iso, planOverride }), { successText: 'Approved and scheduled.' });
+  // Approve = schedule at the shown time when the post has one (it is on the calendar). No time -> approve only.
+  const doApprove = () => {
+    if (!st.canApprove || (override && !overrideReason.trim())) return;
+    if (suggestion) { run(buildSuggestionApproveRequest({ row, content }), { successText: 'Approved. Nothing is scheduled or posted.' }); return; }
+    if (st.approveMode === 'schedule') {
+      run(buildApproveScheduleRequest({ row, content, iso: st.iso, planOverride }), { successText: `Approved and scheduled for ${when.date} ${when.time}.` });
+      return;
+    }
+    run(buildApproveRequest({ row, content }), { successText: 'Approved. No publish time yet, so nothing is scheduled.' });
   };
 
   // Post = publish now through the normal lifecycle, never a separate row: after an inline confirm it approves and
@@ -342,7 +343,7 @@ export default function PostEditor({
   };
   const secondsLeft = posting ? Math.max(0, Math.ceil((postStep.at - nowMs) / 1000)) : 0;
 
-  // Save lives in More (the row is Approve · Schedule · Post · More).
+  // Save lives in More (the row is Approve · Post · More).
   const items = row ? [
     ...(!suggestion ? [{ id: 'save', label: 'Save changes', enabled: st.canSave }] : []),
     ...moreItems(row, { busy, hasCall: true }),
@@ -460,14 +461,9 @@ export default function PostEditor({
         {row.needsStory ? <p id="post-editor-needs-story" className="pe-muted pe-card-note">This draft still has a story placeholder. Approving removes that line; add your own first if you want one.</p> : null}
         <footer id="post-editor-footer" className="pe-footer">
           <div id="post-editor-footer-actions" className="pe-btn-row">
-            <button type="button" id="post-editor-approve" className="pe-btn pe-btn-primary cta-pill-btn" disabled={!st.canApprove || !!postStep} onClick={doApprove} title={st.canApprove ? 'Approve without scheduling' : st.approveBlockedReason}>
+            <button type="button" id="post-editor-approve" className="pe-btn pe-btn-primary cta-pill-btn" disabled={!st.canApprove || (override && !overrideReason.trim()) || !!postStep} onClick={doApprove} title={!st.canApprove ? st.approveBlockedReason : (st.approveMode === 'schedule' ? 'Approve and schedule at the time above' : 'Approve (no publish time set)')}>
               {busy ? 'Working…' : 'Approve'}
             </button>
-            {!suggestion ? (
-              <button type="button" id="post-editor-approve-schedule" className="pe-btn pe-btn-ghost" disabled={!st.canApproveSchedule || (override && !overrideReason.trim()) || !!postStep} onClick={doApproveSchedule} title={st.scheduleBlockedReason || 'Approve and schedule at the time above'}>
-                Schedule
-              </button>
-            ) : null}
             {!suggestion ? (
               <button type="button" id="post-editor-post-now" className="pe-btn pe-btn-primary" disabled={!canPost || busy || !!postStep} onClick={() => setPostStep('confirm')} title={canPost ? `Post to ${handle || 'X'} now` : st.approveBlockedReason}>
                 Post
@@ -637,7 +633,7 @@ function PostEditorStyles() {
       #post-editor-root .pe-check { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 6px 0; }
       /* Actions sit inside the card, under the text; each button shares the card width equally. */
       #post-editor-root .pe-footer { display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding-top: 10px; border-top: 1px solid var(--t-border-faint); text-align: center; }
-      /* Approve = gradient fill + the homepage comet border (.cta-pill-btn); Save/Schedule = static gradient border;
+      /* Approve = gradient fill + the homepage comet border (.cta-pill-btn); Post = static gradient border;
          More = plain and compact, pinned right. */
       #post-editor-root #post-editor-footer-actions { flex-wrap: nowrap; width: 100%; }
       #post-editor-root #post-editor-footer-actions > .pe-btn { flex: 1 1 0; min-width: 0; }

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 import { randomUUID } from 'crypto';
-import { createSocialPost, readSocialQueue, getSocialPost, createDraftPostOnce, ensureDraftPost, findOpenPostForPackage, updateSocialPost, runPostingAgents, approveDraft, unapproveDraft, rejectDraft, swapPostMedia } from '../../../../features/social-posting/twitter-service.js';
+import { createSocialPost, readSocialQueue, getSocialPost, createDraftPostOnce, ensureDraftPost, findOpenPostForPackage, updateSocialPost, runPostingAgents, approveDraft, unapproveDraft, approveAndSchedule, rejectDraft, swapPostMedia } from '../../../../features/social-posting/twitter-service.js';
 import { buildDayPlan, mergeListCandidates } from '../../../../features/x-quote-targets/day-plan.js';
 // Static import so Next bundles the calendar — docs/audits/ is NOT in
 // .vercelignore, but a runtime fs read of a repo path is fragile on serverless.
@@ -1063,16 +1063,34 @@ async function approveCalendarPost(context, decoded, postId, expectedRevision, c
   return { post, row: calendarRowOf(post), stripped: before.status === 'draft' && before.content !== post.content };
 }
 
+// Calendar Approve. With `scheduledAt` (the row's slot) it approves AND schedules in one transition — the owner's
+// click is the schedule confirm; without it (no slot) it only approves.
 async function handleCalendarApprove(context, decoded, body) {
   const postId = String(body?.postId || '').trim();
   if (!postId) throw Object.assign(new Error('postId is required.'), { status: 400 });
+  if (body?.scheduledAt) {
+    const post = await approveAndSchedule(context.clientId, postId, {
+      scheduledAt: body.scheduledAt,
+      content: typeof body.content === 'string' ? body.content : undefined,
+      reviewedBy: decoded?.email || decoded?.uid || null,
+      expectedRevision: body.expectedRevision,
+    });
+    return { ok: true, post, row: calendarRowOf(post) };
+  }
   return { ok: true, ...(await approveCalendarPost(context, decoded, postId, body?.expectedRevision, body?.content)) };
 }
 
+// Calendar Unapprove: approved -> draft; a scheduled/queued row is unscheduled first (same update PostSheet's Unschedule uses).
 async function handleCalendarUnapprove(context, body) {
   const postId = String(body?.postId || '').trim();
   if (!postId) throw Object.assign(new Error('postId is required.'), { status: 400 });
-  const post = await unapproveDraft(context.clientId, postId, { expectedRevision: body?.expectedRevision });
+  const current = await getSocialPost(context.clientId, postId);
+  if (!current) throw Object.assign(new Error('Post not found.'), { status: 404 });
+  let post = current;
+  if (['scheduled', 'queued'].includes(current.status)) {
+    post = await updateSocialPost(context.clientId, postId, { content: current.content, scheduledAt: '' }, { expectedRevision: body?.expectedRevision });
+  }
+  if (post.status !== 'draft') post = await unapproveDraft(context.clientId, postId, { expectedRevision: post === current ? body?.expectedRevision : post.revision });
   return { ok: true, post, row: calendarRowOf(post) };
 }
 

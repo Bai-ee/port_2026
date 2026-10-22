@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Check, Clock, Quote, Sparkles, X } from 'lucide-react';
-import { FILTERS, APPROVAL_LABEL, rowMark, canApproveRow, canUnapproveRow, isRowWindowClosed, windowLeftLabel } from './calendar-row-model.js';
+import { FILTERS, APPROVAL_LABEL, rowMark, canApproveRow, canUnapproveRow, isRowWindowClosed, windowLeftLabel, rowScheduleAt, isSuggestionRow } from './calendar-row-model.js';
 
 // One-calendar approval marks, filter chips and the suggestion / requote row.
 // Presentation only: handlers come from MonthCalendarPanel. Tokens only (no colour literals).
@@ -53,13 +53,15 @@ export function FilterChips({ value, onChange, counts }) {
   );
 }
 
-/** Inline Approve / Unapprove for a saved post row (approving never schedules). */
+/** Inline Approve / Unapprove for a saved post row. Approve schedules at the row's slot; Unapprove unschedules and returns it to draft. */
 export function InlineApprovalButtons({ row, busy, onApprove, onUnapprove }) {
   if (canUnapproveRow(row) && onUnapprove) {
-    return <button type="button" id={`x-content-month-row-unapprove-${row.id}`} className="xce-mc-text-btn xce-ap-btn" disabled={busy} onClick={() => onUnapprove(row)}>Unapprove</button>;
+    return <button type="button" id={`x-content-month-row-unapprove-${row.id}`} className="xce-mc-text-btn xce-ap-btn" disabled={busy} title="Back to draft (unschedules it)" onClick={() => onUnapprove(row)}>Unapprove</button>;
   }
   if (canApproveRow(row) && onApprove) {
-    return <button type="button" id={`x-content-month-row-approve-only-${row.id}`} className="xce-mc-text-btn xce-ap-btn" disabled={busy} title="Approve without scheduling" onClick={() => onApprove(row)}>Approve</button>;
+    const slot = rowScheduleAt(row);
+    const title = isSuggestionRow(row) ? 'Save as a draft and approve' : (slot ? `Approve and schedule for ${row.time || 'its slot'}` : 'Approve (no upcoming slot, so not scheduled)');
+    return <button type="button" id={`x-content-month-row-approve-only-${row.id}`} className="xce-mc-text-btn xce-ap-btn" disabled={busy} title={title} onClick={() => onApprove(row)}>Approve</button>;
   }
   return null;
 }
