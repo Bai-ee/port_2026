@@ -410,7 +410,7 @@ function MonthCalendarPanelView({
     return { all: all.length, unapproved: n('unapproved'), approved: n('approved'), suggestions: n('suggestions') };
   }, [days, overrides]);
 
-  // Inline Approve / Unapprove (never schedules). Optimistic; reverts with a note on failure, reloads on success.
+  // Inline Approve (schedules at the row's slot) / Unapprove (unschedules). Optimistic; reverts with a note on failure, reloads on success.
   const inlineDecide = async (row, req, next) => {
     if (typeof call !== 'function') return;
     setInlineNote('');
@@ -426,7 +426,7 @@ function MonthCalendarPanelView({
       setInlineBusyId(null);
     }
   };
-  const onApproveOnly = (row) => inlineDecide(row, approveRequest(row), 'approved');
+  const onApproveOnly = (row) => { const req = approveRequest(row); inlineDecide(row, req, req.body.scheduledAt ? 'scheduled' : 'approved'); };
   const onUnapprove = (row) => inlineDecide(row, unapproveRequest(row), 'unapproved');
   const rowBusy = (id) => busyId === id || inlineBusyId === id;
   // Quick Pass (Day level only): calendar-item-decide with 'pass', no confirm, then reload the month.
