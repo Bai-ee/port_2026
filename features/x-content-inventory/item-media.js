@@ -15,6 +15,8 @@ const STOP = new Set(['the', 'and', 'for', 'with', 'from', 'this', 'that', 'you'
 const TITLE_HIT = 15;
 const STORY_HIT = 5;
 const MIN_SCORE = 15; // one title word, or three story words
+/** Score of an exact same-Discogs-release match: the only candidate the calendar backfill links without the owner. */
+export const SAME_RELEASE_SCORE = 100;
 
 const usable = (ref) => pickMediaRef({ assetRefs: [ref] }) !== null;
 
@@ -47,7 +49,7 @@ export function findMediaCandidates(target, packages, { limit = 5 } = {}) {
     if (!m.kind) continue;
     let score = 0;
     let why = '';
-    if (release && discogsId(p) === release) { score = 100; why = `same Discogs release ${release}`; } else {
+    if (release && discogsId(p) === release) { score = SAME_RELEASE_SCORE; why = `same Discogs release ${release}`; } else {
       const theirs = [...new Set(words(p.title))];
       const tHit = theirs.filter((w) => titleWords.has(w));
       const sHit = theirs.filter((w) => storyWords.has(w));

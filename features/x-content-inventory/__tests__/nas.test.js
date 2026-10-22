@@ -287,6 +287,22 @@ test('card: nas-stage approves then queues; refuses never-public / client-approv
   await assert.rejects(() => handleNasAction(deps, 'nas-stage', { id: 'missing' }, {}), { status: 404 });
 });
 
+test('card: nas-stage auto (calendar backfill) queues without writing approval; refuses an item that still needs one', async () => {
+  const { db, deps } = setup();
+  await seedWorkers(db);
+  await ingestNasResults(deps, { sourceId: 'nas1', items: [item()] });
+  const id = nasPackageId(SHA);
+  const r = await handleNasAction(deps, 'nas-stage', { id, auto: true }, { email: 'daily-fill' });
+  assert.equal(r.ok, true);
+  assert.equal(db.cols.get('archive_commands').get(r.commandId).type, 'STAGE_FOR_PUBLISH');
+  assert.equal(pkgs(db).get(id).approval?.state, undefined);
+  pkgs(db).set(id, { ...pkgs(db).get(id), approval: { state: 'needed' } });
+  await assert.rejects(() => handleNasAction(deps, 'nas-stage', { id, auto: true }, {}), { status: 403 });
+  // The owner's own click still approves and queues.
+  const owner = await handleNasAction(deps, 'nas-stage', { id }, { email: 'me@x.com' });
+  assert.equal(pkgs(db).get(id).approval.state, 'approved'); assert.ok(owner.commandId);
+});
+
 test('PATCH hook: STAGE COMPLETE writes assetRefs + staged; other types and bad paths are no-ops', async () => {
   const { db, deps } = setup();
   await ingestNasResults(deps, { sourceId: 'nas1', items: [item()] });

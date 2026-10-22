@@ -1251,7 +1251,9 @@ function getStrategyHandlers() {
       onBrainOwnedSaved: (clientId, target, prior, next) => require('../../../../features/client-brain/brain-sync.cjs').recordCardEdits(clientId, target, prior, next),
       readBrainTrackTargets: (clientId) => require('../../../../features/client-brain/brain-sync.cjs').readApprovedTrackTargets(clientId),
       loadCommitted: committedCorpusRows,
-      readPackages: async (clientId) => (await readInventory({ clientId })).packages,
+      // Every page (memoized 60s): the un-paged readInventory drops NAS rows past the 2,000th id, so fills and the
+      // calendar media backfill could not see the throwback items they were handed.
+      readPackages: (clientId) => readAllPackagesFor(clientId),
       linkItemMedia: (clientId, links) => linkItemMediaFor(clientId, links),
       upsertBucket: (clientId, bucket) => bucketStore.upsertBucket(clientId, bucket),
       deleteBucket: (clientId, bucketId, opts) => bucketStore.deleteBucket(clientId, bucketId, opts),

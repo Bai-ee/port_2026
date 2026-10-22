@@ -195,6 +195,23 @@ export async function readInventory(opts = {}) {
   return result;
 }
 
+/**
+ * EVERY package of a client, paged under the hood (READ_LIMIT bounds one page, not the result). The un-paged
+ * readInventory drops NAS rows past the 2,000th id, which is how the fill and the media backfill "could not find"
+ * a throwback item they had themselves drafted (home: 5,434 NAS rows). Fills and backfills read with this.
+ */
+export async function readAllPackages({ clientId, db, pageSize = 1000, maxPages = 20 } = {}) {
+  const all = [];
+  let cursor = null;
+  for (let page = 0; page < maxPages; page += 1) {
+    const r = await readInventory({ clientId, db, pageSize, ...(cursor ? { startAfter: cursor } : {}) });
+    all.push(...r.packages);
+    cursor = r.nextCursor;
+    if (!cursor) break;
+  }
+  return all;
+}
+
 /** One package by id, or null. One read — use this instead of scanning
  * `readInventory().packages` for a single row. Seed-only rows (never
  * materialized) are returned from the seed. */
