@@ -119,7 +119,7 @@ test('enhancePost strips code fences, trims quotes, clamps to 280 chars, falls b
 test('enhancePost falls back to the normalized original for BOTH options when there is no API key', async () => {
   delete process.env.ANTHROPIC_API_KEY;
   const out = await svc.enhancePost('  Keep   me.  \n\n\n\nOk ');
-  assert.deepEqual(out, { voice: 'Keep   me.\nOk', algo: 'Keep   me.\nOk' });
+  assert.deepEqual(out, { voice: 'Keep   me.\n\nOk', algo: 'Keep   me.\n\nOk' }); // 3+ newlines cap at one blank line; the paragraph break stays
   assert.equal(fetchCalls.length, 0);
 });
 
