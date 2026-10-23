@@ -29,8 +29,10 @@ test('referrer hosts fold link shims; devices reduce to three buckets; origins l
   assert.equal(referrerHost('not a url'), null);
   assert.equal(deviceOf(IPHONE), 'mobile');
   assert.equal(deviceOf(MAC), 'desktop');
-  for (const o of [null, 'https://undergroundexistence.info', `https://evwd.arweave.net`, 'https://ue.ar.io']) assert.equal(isAllowedOrigin(o), true, o);
-  for (const o of ['https://evil.example', 'https://arweave.net.evil.example']) assert.equal(isAllowedOrigin(o), false, o);
+  for (const o of [null, 'https://undergroundexistence.info', `https://evwd.arweave.net`, 'https://ue.ar.io']) assert.equal(isAllowedOrigin(o, 'ue'), true, o);
+  for (const o of ['https://evil.example', 'https://arweave.net.evil.example', 'https://hitloop.agency']) assert.equal(isAllowedOrigin(o, 'ue'), false, o);
+  for (const o of ['https://hitloop.agency', 'https://www.hitloop.agency', 'http://localhost:3000']) assert.equal(isAllowedOrigin(o, 'hitloop'), true, o);
+  for (const o of ['https://undergroundexistence.info', 'https://evwd.arweave.net', 'https://hitloop.agency.evil.example']) assert.equal(isAllowedOrigin(o, 'hitloop'), false, o);
 });
 
 test('pageview: geo from Vercel headers, external referrer kept without query, no IP or UA stored', () => {
@@ -169,4 +171,15 @@ test('owner get_site_sessions + custom dates on get_site_analytics; a bad window
   const bad = await callTool('get_site_analytics', { from: '2026-10-22', to: '2026-10-30' });
   assert.equal(bad.isError, true);
   assert.match(bad.content[0].text, /future/);
+});
+
+test('hitloop site: own-domain referrers are internal, external ones are sources; report uses its own hostname', () => {
+  const h = headers({ origin: 'https://hitloop.agency' });
+  const hb = { site: 'hitloop', vid: 'h1abcdefgh', sid: 'h1sessionx' };
+  assert.equal(parseBeacon({ ...hb, type: 'pageview', path: '/work', ref: 'https://hitloop.agency/' }, h, NOW).row.refHost, undefined);
+  const ext = parseBeacon({ ...hb, type: 'pageview', path: '/work', ref: 'https://www.linkedin.com/feed/' }, h, NOW).row;
+  assert.deepEqual([ext.site, ext.path, ext.refHost], ['hitloop', '/work', 'linkedin.com']);
+  assert.equal(parseBeacon({ ...hb, type: 'pageview', path: '/' }, headers({ origin: 'https://undergroundexistence.info' }), NOW).reason, 'origin');
+  const r = buildReport([{ ...ext, ts: NOW - 1000 }], { site: 'hitloop', range: 'today', now: NOW, firstTs: 1 });
+  assert.deepEqual([r.site, r.analytics.sources[0].source, r.analytics.pages[0].route], ['hitloop.agency', 'referral:linkedin.com', '/work']);
 });

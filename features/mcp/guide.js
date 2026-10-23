@@ -31,7 +31,7 @@ WHICH TOOL FOR WHAT
 - "Clean up the calendar" (pass on / delete / replace items): strategy_propose_calendar_decide, ONE card for up to 20 items with item refs from strategy_get_calendar. pass = off the calendar now, delete = never suggest it again, replace = next-best same-track item same day. No X call.
 - "How is the account doing / what should I post / why": strategy_* read tools (evaluation, algorithm, score_posts, rule check, audience, tracks, queue, results).
 - "Continue / see the dashboard Strategy chat": chat_threads, chat_thread, chat_send (same threads, same agent, same daily cap; cards are confirmed in Marketing Director > Strategy (chat) in the dashboard). find_actions / get_action_log for the action registry and its log.
-- "Show me the data": get_client_overview -> get_document / query_collection; search_timeline for the archive; get_operating_costs; get_x_monitor; get_site_analytics (Underground Existence visitors, sources, clicks, mix plays) and get_site_sessions (individual visits).
+- "Show me the data": get_client_overview -> get_document / query_collection; search_timeline for the archive; get_operating_costs; get_x_monitor; get_site_analytics (visitors, sources, clicks, mix plays for site "ue" = Underground Existence or "hitloop" = hitloop.agency) and get_site_sessions (individual visits).
 - "How does X work in the code": get_hitloop_guide -> list_repo_path / search_repo / read_repo_file / recent_commits.
 `;
 
