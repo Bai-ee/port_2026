@@ -154,16 +154,18 @@ function NetworkTargets({ row, handle, callSocial, onRowPatch, disabled }) {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const published = row.status === 'posted' || row.status === 'posting';
+  // The server is the source of truth: calendar row projections don't carry `targets`, and the host refreshes the row
+  // after any write. Re-read on every revision; keep showing the last answer while re-reading (no flicker).
   useEffect(() => {
     let live = true;
-    setOpts(null); setErr('');
+    setErr('');
     callSocial({ action: 'post-targets', postId: row.id })
       .then((r) => { if (live) setOpts(r); })
       .catch((e) => { if (live) setErr(e?.message || 'Could not load the networks for this post.'); });
     return () => { live = false; };
-  }, [row.id, row.mediaUrl, callSocial]);
+  }, [row.id, row.revision, row.mediaUrl, callSocial]);
 
-  const targets = row.targets ? { x: row.targets.x !== false, instagram: row.targets.instagram === true } : (opts?.targets || { x: true, instagram: false });
+  const targets = opts?.targets || (row.targets ? { x: row.targets.x !== false, instagram: row.targets.instagram === true } : { x: true, instagram: false });
   const ig = opts?.instagram || null;
   const delivery = row.instagramDelivery || opts?.instagramDelivery || null;
 
@@ -173,7 +175,9 @@ function NetworkTargets({ row, handle, callSocial, onRowPatch, disabled }) {
     setSaving(true); setErr('');
     try {
       const res = await callSocial({ action: 'set-targets', postId: row.id, targets: next, expectedRevision: row.revision ?? null });
-      onRowPatch({ targets: res?.post?.targets || next, revision: res?.post?.revision ?? row.revision });
+      const saved = res?.post?.targets || next;
+      setOpts((o) => ({ ...(o || {}), targets: { x: saved.x !== false, instagram: saved.instagram === true } }));
+      onRowPatch({ targets: saved, revision: res?.post?.revision ?? row.revision });
     } catch (e) {
       setErr(e?.message || 'Could not change the networks.');
     } finally { setSaving(false); }
@@ -191,7 +195,6 @@ function NetworkTargets({ row, handle, callSocial, onRowPatch, disabled }) {
         <input type="checkbox" checked={targets.instagram} disabled={lock || (!targets.instagram && !ig?.available)} onChange={() => toggle('instagram')} />
         <span>Instagram{ig?.username ? ` @${ig.username}` : ''}</span>
       </label>
-      {saving ? <span className="pe-muted">Saving…</span> : null}
       {ig && !ig.available && !targets.instagram && !published ? <p id="post-editor-target-instagram-reason" className="pe-muted pe-targets-note">{ig.reason}</p> : null}
       {delivery?.status ? (
         <p id="post-editor-instagram-delivery" className={`pe-targets-note ${delivery.status === 'posted' ? 'pe-muted' : 'pe-note pe-note-warn'}`}>
