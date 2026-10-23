@@ -17,7 +17,7 @@ import {
 } from '../../../../features/social-posting/x-oauth.js';
 import { createSocialPost } from '../../../../features/social-posting/twitter-service.js';
 import { listSocialAccounts, saveSocialAccount, disconnectSocialAccount, toPublicAccount } from '../../../../features/social-posting/social-accounts.js';
-import { LIVE_PLATFORM_KEYS } from '../../../../features/social-posting/platforms.js';
+import { LIVE_PLATFORM_KEYS, CONNECTABLE_PLATFORM_KEYS } from '../../../../features/social-posting/platforms.js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -128,7 +128,7 @@ export async function POST(request) {
       const clientId = String(body.clientId || '');
       const platform = String(body.platform || '');
       if (!clientId) return json({ error: 'clientId is required.' }, 400);
-      if (!LIVE_PLATFORM_KEYS.includes(platform)) return json({ error: `Platform "${platform}" is not live yet.` }, 400);
+      if (!CONNECTABLE_PLATFORM_KEYS.includes(platform)) return json({ error: `Platform "${platform}" cannot be connected yet.` }, 400);
       await disconnectSocialAccount(clientId, platform);
       return json({ ok: true });
     }

@@ -36,6 +36,9 @@ export function toPublicAccount(platformDoc) {
     profileImageUrl: platformDoc.profileImageUrl || null,
     userId: platformDoc.userId || null,
     scope: Array.isArray(platformDoc.scope) ? platformDoc.scope : [],
+    // Instagram long-lived tokens expire (~60d) and are renewed by a cron; the card shows both.
+    expiresAt: platformDoc.expiresAt || null,
+    refreshError: platformDoc.refreshError || null,
     updatedAt: platformDoc.updatedAt || null,
     connectedBy: platformDoc.connectedBy || null,
   };
