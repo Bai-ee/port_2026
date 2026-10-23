@@ -7,6 +7,7 @@ import '../styles/theme/theme.generated.css';
 import '../styles/theme/bridge.css';
 import { AuthProvider } from '../AuthContext';
 import AnalyticsPageView from '../components/AnalyticsPageView';
+import SiteAnalytics from '../components/SiteAnalytics';
 import SmoothScroll from '../components/SmoothScroll';
 import ThemeRuntime from '../components/theme/ThemeRuntime';
 import ThemeStudioMount from '../components/theme/ThemeStudioMount';
@@ -162,6 +163,7 @@ export default function RootLayout({ children }) {
         <SmoothScroll />
         <AuthProvider>
           <AnalyticsPageView />
+          <SiteAnalytics />
           <ThemeStudioMount />
           {children}
         </AuthProvider>

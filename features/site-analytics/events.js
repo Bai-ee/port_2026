@@ -1,10 +1,19 @@
-// events.js - first-party analytics for static sites HITLOOP does not host (e.g. the Underground Existence Arweave site).
+// events.js - first-party analytics for sites HITLOOP tracks with its own beacon: the Underground Existence Arweave
+// site (website/js/ue-analytics.js in arweave-video-generator) and hitloop.agency itself (components/SiteAnalytics.jsx).
 // The site's beacon posts one small JSON event; parseBeacon validates it and builds the stored row. Pure: no I/O.
 // Stored rows never hold an IP address or the raw user agent: location comes from Vercel's geo headers, device is
 // reduced to mobile/tablet/desktop, and the visitor id is a random string the browser keeps in localStorage.
 
+// hostRe = the site's own hosts: allowed as beacon Origins and treated as internal navigation in referrers.
 export const SITES = Object.freeze({
-  ue: Object.freeze({ label: 'Underground Existence', url: 'https://undergroundexistence.info', timeZone: 'America/Chicago' }),
+  ue: Object.freeze({
+    label: 'Underground Existence', url: 'https://undergroundexistence.info', timeZone: 'America/Chicago',
+    hostRe: /^(www\.)?undergroundexistence\.info$|(^|\.)arweave\.net$|(^|\.)ar\.io$|(^|\.)ar-io\.dev$/,
+  }),
+  hitloop: Object.freeze({
+    label: 'HITLOOP (hitloop.agency)', url: 'https://hitloop.agency', timeZone: 'America/Chicago',
+    hostRe: /^(www\.)?hitloop\.agency$/,
+  }),
 });
 
 export const EVENT_TYPES = Object.freeze(['pageview', 'engagement', 'click', 'play']);
@@ -35,17 +44,17 @@ export function referrerHost(url) {
   } catch { return null; }
 }
 
-/** Pages may only beacon from the site itself or an Arweave gateway; a missing Origin (some beacons) is allowed. */
-export function isAllowedOrigin(origin) {
+/** Pages may only beacon from the site's own hosts (or localhost); a missing Origin (some beacons) is allowed. */
+export function isAllowedOrigin(origin, site) {
   if (!origin) return true;
   try {
     const h = new URL(origin).hostname.toLowerCase();
-    return h === 'undergroundexistence.info' || h === 'www.undergroundexistence.info' || /(^|\.)arweave\.net$|(^|\.)ar\.io$|(^|\.)ar-io\.dev$/.test(h) || h === 'localhost' || h === '127.0.0.1';
+    return Boolean(SITES[site]?.hostRe.test(h)) || h === 'localhost' || h === '127.0.0.1';
   } catch { return false; }
 }
 
-// Same-site referrers (the custom domain or an Arweave gateway hop) are navigation, not a traffic source.
-const isInternalHost = (h) => !h || h === 'undergroundexistence.info' || /(^|\.)arweave\.net$|(^|\.)ar\.io$|(^|\.)ar-io\.dev$/.test(h);
+// Same-site referrers (the site's own domain, or an Arweave gateway hop for UE) are navigation, not a traffic source.
+const isInternalHost = (h, site) => !h || Boolean(SITES[site]?.hostRe.test(h));
 
 /** Strip query + fragment from a referrer so no tokens or personal search terms are stored. */
 function cleanReferrer(url) {
@@ -80,7 +89,7 @@ export function parseBeacon(body, headers, now) {
   if (!ID_RE.test(String(body.vid || '')) || !ID_RE.test(String(body.sid || ''))) return { ok: false, reason: 'id' };
   const ua = String(headers?.get?.('user-agent') || '');
   if (!ua || BOT_RE.test(ua)) return { ok: false, reason: 'bot' };
-  if (!isAllowedOrigin(headers?.get?.('origin'))) return { ok: false, reason: 'origin' };
+  if (!isAllowedOrigin(headers?.get?.('origin'), site)) return { ok: false, reason: 'origin' };
 
   const row = {
     site,
@@ -103,7 +112,7 @@ export function parseBeacon(body, headers, now) {
   if (body.type === 'pageview') {
     row.entry = body.entry === true;
     const host = referrerHost(body.ref);
-    if (host && !isInternalHost(host)) { row.refHost = host; row.ref = cleanReferrer(body.ref); }
+    if (host && !isInternalHost(host, site)) { row.refHost = host; row.ref = cleanReferrer(body.ref); }
     const utm = body.utm && typeof body.utm === 'object' ? body.utm : {};
     row.utmSource = clip(utm.source, 60);
     row.utmMedium = clip(utm.medium, 60);

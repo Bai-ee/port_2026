@@ -64,7 +64,11 @@ the env var in Vercel prod (Not The Rug: `CLIENT_STATS_KEY_NOTTHERUG`). The key 
 (`analytics.meta/range/dailyTrend/sources/pages/live`, `leads`/`applicants` null) plus visitors, clicks, outbound
 links, mix plays, countries/cities, devices. Such a site has no people: the people tools say so, the daily update
 drops its lead lines (`leadsTracked:false`) and the instructions omit the PEOPLE tools. Sites are registered in
-`SITES` (`features/site-analytics/events.js`). UE routes to HITLOOP's own client `bryan-balli-WUoltG84`; owner MCP
+`SITES` (`features/site-analytics/events.js`; `hostRe` = allowed Origins + internal referrers). Second site
+`hitloop` = hitloop.agency itself: beacon `components/SiteAnalytics.jsx` (mounted in `app/layout.jsx` next to GA4's
+`AnalyticsPageView`; pageview per App Router pathname change; public pages only — `/dashboard`, `/admin`, `/briefs`,
+`/preview`, `/capture`, `/post-approval`, `/oauth`, `/telegram-upload`, `/sites` excluded; on other hosts only with
+`?site_analytics=1`, test traffic `?site_analytics_test=1`). Read with owner MCP `get_site_analytics` / `get_site_sessions` site `hitloop`. UE routes to HITLOOP's own client `bryan-balli-WUoltG84`; owner MCP
 `get_site_analytics` (report) and `get_site_sessions` (visit paths) read the same data (plus `testMode`, range or from/to). The owner reads UE through the owner MCP (`/api/mcp`); no client grant for `bryan-balli-WUoltG84` is active (8d674dd32e93 was revoked 2026-10-23).
 
 ## Audit + limits
