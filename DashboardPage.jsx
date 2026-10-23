@@ -84,6 +84,7 @@ import OnboardingFlowPanel from './components/dashboard/OnboardingFlowPanel';
 import { markGroupRefreshed, skippedGroupsFor } from './components/dashboard/marketing/refresh-groups';
 import { GROUP_RUNNERS } from './components/dashboard/marketing/refresh-runners';
 import GlassTooltipLayer from './components/dashboard/GlassTooltipLayer';
+import UploadManagerHost from './components/dashboard/UploadManagerHost';
 import { useResolvedMode, useThemePreference } from './lib/theme-runtime/hooks';
 
 const LeadGenDashboard = dynamic(() => import('./components/dashboard/LeadGenDashboard'), {
@@ -11380,6 +11381,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         <span id="run-idle-indicator-dot" aria-hidden="true" />
                       )}
                     </>
+                    <UploadManagerHost user={user} />
                     {isAdmin ? (
                     <span id="header-refresh-shell" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
                       <span className="cap-source-divider" aria-hidden="true" />

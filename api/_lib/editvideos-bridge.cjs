@@ -647,7 +647,7 @@ async function listFolderMedia(folderName, { limit = 60 } = {}) {
   return result;
 }
 
-async function createUploadSession({ folderMode = 'existing', folderName, files = [], orientation = 'auto' } = {}) {
+async function createUploadSession({ folderMode = 'existing', folderName, files = [], orientation = 'auto', resumable = false, origin = '' } = {}) {
   const mode = folderMode === 'new' ? 'new' : 'existing';
   const targetFolder = mode === 'new'
     ? sanitizeNewFolderName(folderName)
@@ -697,6 +697,15 @@ async function createUploadSession({ folderMode = 'existing', folderName, files 
       }
     }
 
+    // Opt-in GCS resumable session (main file only, never the poster). A
+    // failure leaves `resumable` off so the client falls back to the signed PUT.
+    const resumableSession = resumable
+      ? await createResumableSession(storagePath, file.contentType, origin).catch((err) => {
+          console.warn(`[media] resumable session failed for ${storagePath}: ${err?.message}`);
+          return null;
+        })
+      : null;
+
     return {
       id: randomUUID(),
       originalName: file.originalName,
@@ -709,6 +718,7 @@ async function createUploadSession({ folderMode = 'existing', folderName, files 
       method: 'PUT',
       headers: { 'content-type': file.contentType },
       posterUpload,
+      ...(resumableSession ? { resumable: resumableSession } : {}),
     };
   }));
 
@@ -720,6 +730,72 @@ async function createUploadSession({ folderMode = 'existing', folderName, files 
     expiresAt: new Date(Date.now() + SIGNED_UPLOAD_TTL_MS).toISOString(),
     uploads,
   };
+}
+
+// --- GCS resumable uploads (browser resumes a big file after a refresh) ------
+const RESUMABLE_HOSTS = ['storage.googleapis.com', 'www.googleapis.com'];
+
+function resumableOrigin(origin) {
+  const o = String(origin || '').trim().replace(/\/$/, '');
+  if (/^https?:\/\/[^/\s]+$/i.test(o)) return o;
+  return String(process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || '').trim().replace(/\/$/, '') || undefined;
+}
+
+async function createResumableSession(storagePath, contentType, origin) {
+  const [sessionUri] = await bridgeBucket().file(storagePath).createResumableUpload({
+    origin: resumableOrigin(origin),
+    metadata: { contentType },
+  });
+  return { sessionUri };
+}
+
+// SSRF guard: the server PUTs to a client-supplied URL, so only accept a GCS
+// resumable-upload session URI (https, Google host, upload_id present).
+function isValidResumableSessionUri(uri) {
+  let u;
+  try { u = new URL(String(uri || '')); } catch { return false; }
+  if (u.protocol !== 'https:' || u.username || u.password || u.port) return false;
+  const host = u.hostname.toLowerCase();
+  const hostOk = RESUMABLE_HOSTS.includes(host) || host.endsWith('.storage.googleapis.com');
+  return hostOk && !!u.searchParams.get('upload_id');
+}
+
+// Map a GCS status-query response (status + Range header) to the route body.
+function mapResumableStatus(status, rangeHeader, size) {
+  if (status === 308) {
+    const m = /bytes=0-(\d+)/.exec(String(rangeHeader || ''));
+    return { ok: true, offset: m ? Number(m[1]) + 1 : 0, complete: false };
+  }
+  if (status === 200 || status === 201) return { ok: true, offset: size, complete: true };
+  if (status === 404 || status === 410) return { ok: true, expired: true };
+  return null;
+}
+
+async function getResumableStatus({ sessionUri, size } = {}) {
+  const total = Number(size);
+  if (!isValidResumableSessionUri(sessionUri) || !Number.isFinite(total) || total <= 0) {
+    const e = new Error('Invalid upload status request.'); e.status = 400; throw e;
+  }
+  const res = await fetch(sessionUri, {
+    method: 'PUT',
+    headers: { 'Content-Length': '0', 'Content-Range': `bytes */${total}` },
+  });
+  const mapped = mapResumableStatus(res.status, res.headers.get('range'), total);
+  if (!mapped) { const e = new Error(`Upload status check failed (${res.status}).`); e.status = 502; throw e; }
+  return mapped;
+}
+
+async function renewResumableSession({ storagePath, contentType, origin } = {}) {
+  const raw = String(storagePath || '');
+  if (!raw || raw.startsWith('/') || raw.includes('..')) throw new Error('Invalid storagePath.');
+  const parts = raw.split('/');
+  const fileName = parts.pop();
+  const folder = sanitizeExistingFolderPath(parts.join('/'));
+  if (!fileName || sanitizeMediaFileName(fileName) !== fileName || !isMediaFilePath(fileName)) {
+    throw new Error('Invalid storagePath.');
+  }
+  const type = String(contentType || 'application/octet-stream').trim().slice(0, 120);
+  return createResumableSession(`${folder}/${fileName}`, type, origin);
 }
 
 async function getMediaUsage() {
@@ -1416,6 +1492,10 @@ module.exports = {
   listRenderedVideos,
   bridgeBucket,
   createUploadSession,
+  getResumableStatus,
+  renewResumableSession,
+  isValidResumableSessionUri,
+  mapResumableStatus,
   getMediaUsage,
   deleteSourceFiles,
   deleteRenderedRemix,
