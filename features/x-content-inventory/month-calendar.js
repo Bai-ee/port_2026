@@ -212,6 +212,10 @@ export function toRow(p, colors = null) {
     selfReply: isPlainObject(p.selfReply) ? p.selfReply : null,
     mediaVariants: isPlainObject(p.mediaVariants) ? p.mediaVariants : null,
     replyTo: isPlainObject(p.replyTo) ? p.replyTo : null,
+    // Networks (features/social-posting/cross-post.js; absent = X only) and the Instagram leg's outcome. Always present,
+    // so the editor's Post-to checkboxes never fall back to a stale answer after a row refresh.
+    targets: { x: p.targets?.x !== false, instagram: p.targets?.instagram === true },
+    instagramDelivery: isPlainObject(p.instagramDelivery) ? p.instagramDelivery : null,
     bucketId: colors && colors[bucketId] ? bucketId : null,
     bucketColor: colors ? (colors[bucketId] || NEUTRAL_BUCKET_COLOR) : null,
     proposed: false,

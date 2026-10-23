@@ -126,6 +126,33 @@ test('replace: removed package is excluded and the same track/date gets the next
   assert.equal(h.log.some((l) => l[0] === 'reject-package'), false);
 });
 
+test('replace carries the removed post\'s networks (X + Instagram) onto the replacement', async () => {
+  const h = harness({ posts: { p1: draft({ targets: { x: true, instagram: true } }) } });
+  const set = [];
+  h.deps.setTargets = async (_c, id, t) => { set.push([id, t]); };
+  const r = await run(h, 'replace', { kind: 'post', postId: 'p1', date: TODAY });
+  assert.equal(set.length, 1);
+  assert.equal(set[0][0], r.replacement.postId);
+  assert.deepEqual(set[0][1], { x: true, instagram: true });
+  assert.equal(r.targetsNote, undefined);
+});
+
+test('replace: Instagram that cannot carry over leaves the replacement X only, with a note', async () => {
+  const h = harness({ posts: { p1: draft({ targets: { x: false, instagram: true } }) } });
+  h.deps.setTargets = async () => { throw new Error('Instagram needs an image or video. This post is text only.'); };
+  const r = await run(h, 'replace', { kind: 'post', postId: 'p1', date: TODAY });
+  assert.ok(r.replacement);
+  assert.match(r.targetsNote, /not carried over: Instagram needs an image or video.*X only/);
+});
+
+test('replace of an X-only post does not touch the replacement\'s networks', async () => {
+  const h = harness({ posts: { p1: draft() } });
+  let called = false;
+  h.deps.setTargets = async () => { called = true; };
+  await run(h, 'replace', { kind: 'post', postId: 'p1', date: TODAY });
+  assert.equal(called, false);
+});
+
 test('replace with nothing eligible: ok, no replacement, note', async () => {
   const h = harness({ posts: { p1: draft() }, packages: [pkg('rec-a', 'record')] });
   const r = await run(h, 'replace', { kind: 'post', postId: 'p1', date: TODAY });

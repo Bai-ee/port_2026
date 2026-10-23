@@ -16,6 +16,11 @@
 //   openQuoteTargets(clientId)                      -> [{id,createdAt,windowHours?}] open hot-scan picks (a passed pick is dismissed first)
 //   rowOf(clientId, postId)                         -> calendar row | null
 //   now()                                           -> ms
+//   setTargets(clientId, postId, {x, instagram})    -> post   (optional; social-posting setPostTargets)
+//
+// Networks: one row carries X and Instagram (`targets`), so pass / delete take the post off both. replace carries the
+// removed post's networks onto the replacement draft; if the replacement cannot go to Instagram (no media, account
+// gone) it stays X only and `targetsNote` says why.
 
 const DECISIONS = ['pass', 'delete', 'replace'];
 const KINDS = ['post', 'suggestion', 'requote'];
@@ -102,5 +107,19 @@ export async function decideCalendarItem(deps, { clientId, decision, item, by = 
   if (!res?.ok) throw fail(res?.status || 502, 'replace-failed', res?.error || 'The replacement could not be planned.');
   const made = (res.posts || []).find((p) => p.date === date);
   if (!made) return { ok: true, decision, kind, removed, replacement: null, note: 'no-eligible-item' };
-  return { ok: true, decision, kind, removed, replacement: { kind: 'post', postId: made.postId, date, row: (await deps.rowOf(clientId, made.postId)) || null } };
+  let targetsNote = null;
+  const t = post.targets;
+  const custom = t && typeof t === 'object' && (t.instagram === true || t.x === false);
+  if (custom && typeof deps.setTargets === 'function') {
+    try {
+      await deps.setTargets(clientId, made.postId, { x: t.x !== false, instagram: t.instagram === true });
+    } catch (err) {
+      targetsNote = `Instagram was not carried over: ${err?.message || 'not available for the replacement'}. The replacement posts to X only.`;
+    }
+  }
+  return {
+    ok: true, decision, kind, removed,
+    replacement: { kind: 'post', postId: made.postId, date, row: (await deps.rowOf(clientId, made.postId)) || null },
+    ...(targetsNote ? { targetsNote } : {}),
+  };
 }

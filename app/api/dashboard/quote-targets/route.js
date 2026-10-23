@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 import { randomUUID } from 'crypto';
-import { createSocialPost, readSocialQueue, getSocialPost, createDraftPostOnce, ensureDraftPost, findOpenPostForPackage, updateSocialPost, runPostingAgents, approveDraft, unapproveDraft, approveAndSchedule, rejectDraft, swapPostMedia } from '../../../../features/social-posting/twitter-service.js';
+import { createSocialPost, readSocialQueue, getSocialPost, createDraftPostOnce, ensureDraftPost, findOpenPostForPackage, updateSocialPost, runPostingAgents, approveDraft, unapproveDraft, approveAndSchedule, rejectDraft, swapPostMedia, setPostTargets } from '../../../../features/social-posting/twitter-service.js';
 import { buildDayPlan, mergeListCandidates } from '../../../../features/x-quote-targets/day-plan.js';
 // Static import so Next bundles the calendar — docs/audits/ is NOT in
 // .vercelignore, but a runtime fs read of a repo path is fragile on serverless.
@@ -581,6 +581,8 @@ const postStatusRow = (p) => ({
   reviewOn: p.reviewOn || null, bucketId: p.bucketId || null, engine: p.engine || null, fillKind: p.fillKind || null,
   expiresAt: p.expiresAt || null, needsStory: p.needsStory === true, mediaUrl: p.mediaUrl || null, mediaStoragePath: p.mediaStoragePath || null, mediaType: p.mediaType || null, nasSha: p.nasSha || null,
   replyToUrl: p.replyTo && typeof p.replyTo === 'object' ? p.replyTo.url || null : null,
+  targets: { x: p.targets?.x !== false, instagram: p.targets?.instagram === true },
+  instagramDelivery: p.instagramDelivery && typeof p.instagramDelivery === 'object' ? p.instagramDelivery : null,
   provenance: { runId: p.runId || null, suggestionId: p.suggestionId || null, strategyVersion: p.strategyVersion ?? null, sourceRef: p.sourceRef || null },
 });
 
@@ -1159,6 +1161,7 @@ function calendarItemDecideDeps(context, decoded) {
     openQuoteTargets: (cid) => readCalendarQuoteTargets(cid),
     rowOf: async (cid, postId) => { const post = await getSocialPost(cid, postId); return post ? calendarRowOf(post) : null; },
     now: () => Date.now(),
+    setTargets: (cid, postId, targets) => setPostTargets(cid, postId, targets),
   };
 }
 

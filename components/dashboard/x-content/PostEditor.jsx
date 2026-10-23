@@ -144,64 +144,97 @@ function HiresPanel({ row, call, onUsed }) {
   );
 }
 
-// Where this post goes: X and/or Instagram (features/social-posting/cross-post.js). Saved the moment a box changes
-// (social-posting set-targets), independent of Approve, and kept through approve/schedule. Instagram is only tickable
+// Where this post goes: X and/or Instagram (features/social-posting/cross-post.js). Saved the moment a tile changes
+// (social-posting set-targets), independent of Approve, and kept through approve/schedule. Instagram is only selectable
 // when it could actually deliver (connected account, media); the server re-checks. Never touches the text being edited.
-const IG_DELIVERY_TEXT = { posted: 'Posted to Instagram', failed: 'Instagram failed', needs_review: 'Instagram outcome unknown', blocked: 'Instagram skipped' };
+const IG_DELIVERY_TAG = { posted: 'POSTED', failed: 'FAILED', needs_review: 'UNKNOWN', blocked: 'SKIPPED' };
 
-function NetworkTargets({ row, handle, callSocial, onRowPatch, disabled }) {
+/** Network state for the whole footer (channel tiles, publish label, post confirm, calendar label). */
+function useNetworkTargets({ row, callSocial, onRowPatch }) {
   const [opts, setOpts] = useState(null);
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState(null); // 'x' | 'instagram' while a toggle saves
   const [err, setErr] = useState('');
-  const published = row.status === 'posted' || row.status === 'posting';
-  // The server is the source of truth: calendar row projections don't carry `targets`, and the host refreshes the row
-  // after any write. Re-read on every revision; keep showing the last answer while re-reading (no flicker).
+  const id = row?.id || null;
+  const enabled = !!id && !isSuggestion(row);
+  // The server is the source of truth (the host refreshes the row after any write). Re-read on every revision and keep
+  // showing the last answer while re-reading, so nothing flickers.
   useEffect(() => {
+    if (!enabled) return undefined;
     let live = true;
-    setErr('');
-    callSocial({ action: 'post-targets', postId: row.id })
-      .then((r) => { if (live) setOpts(r); })
+    callSocial({ action: 'post-targets', postId: id })
+      .then((r) => { if (live) { setOpts(r); setErr(''); } })
       .catch((e) => { if (live) setErr(e?.message || 'Could not load the networks for this post.'); });
     return () => { live = false; };
-  }, [row.id, row.revision, row.mediaUrl, callSocial]);
+  }, [enabled, id, row?.revision, row?.mediaUrl, callSocial]);
 
-  const targets = opts?.targets || (row.targets ? { x: row.targets.x !== false, instagram: row.targets.instagram === true } : { x: true, instagram: false });
-  const ig = opts?.instagram || null;
-  const delivery = row.instagramDelivery || opts?.instagramDelivery || null;
-
+  const rowT = row?.targets;
+  const targets = opts?.targets || (rowT ? { x: rowT.x !== false, instagram: rowT.instagram === true } : { x: true, instagram: false });
   const toggle = async (key) => {
     const next = { ...targets, [key]: !targets[key] };
-    if (!next.x && !next.instagram) { setErr('Keep at least one network ticked.'); return; }
-    setSaving(true); setErr('');
+    if (!next.x && !next.instagram) { setErr('Keep at least one channel on.'); return; }
+    setSaving(key); setErr('');
     try {
-      const res = await callSocial({ action: 'set-targets', postId: row.id, targets: next, expectedRevision: row.revision ?? null });
+      const res = await callSocial({ action: 'set-targets', postId: id, targets: next, expectedRevision: row.revision ?? null });
       const saved = res?.post?.targets || next;
       setOpts((o) => ({ ...(o || {}), targets: { x: saved.x !== false, instagram: saved.instagram === true } }));
       onRowPatch({ targets: saved, revision: res?.post?.revision ?? row.revision });
     } catch (e) {
-      setErr(e?.message || 'Could not change the networks.');
-    } finally { setSaving(false); }
+      setErr(e?.message || 'Could not change the channels.');
+    } finally { setSaving(null); }
   };
+  return {
+    enabled,
+    ready: !!opts,
+    targets,
+    ig: opts?.instagram || null,
+    delivery: row?.instagramDelivery || opts?.instagramDelivery || null,
+    saving,
+    err,
+    toggle,
+  };
+}
 
-  const lock = disabled || saving || published || !opts;
+/** "X + INSTAGRAM" style label of the ticked channels. */
+const channelsLabel = (t) => [t.x ? 'X' : null, t.instagram ? 'INSTAGRAM' : null].filter(Boolean).join(' + ') || 'NO CHANNEL';
+
+/** Human list for sentences: "@bai_ee on X and @bai__ee on Instagram". */
+function channelsSentence(t, xHandle, igHandle) {
+  const parts = [];
+  if (t.x) parts.push(xHandle ? `${xHandle} on X` : 'X');
+  if (t.instagram) parts.push(igHandle ? `@${igHandle} on Instagram` : 'Instagram');
+  return parts.join(' and ') || 'nowhere';
+}
+
+/** One channel as a mechanical toggle tile (role=checkbox). */
+function ChannelTile({ id, name, handle, on, disabled, saving, note, noteTone, onToggle }) {
   return (
-    <div id="post-editor-network-targets-row" className="pe-targets" role="group" aria-label="Post to">
-      <span className="pe-targets-label">Post to</span>
-      <label id="post-editor-target-x" className="pe-target">
-        <input type="checkbox" checked={targets.x} disabled={lock} onChange={() => toggle('x')} />
-        <span>X{handle ? ` ${handle}` : ''}</span>
-      </label>
-      <label id="post-editor-target-instagram" className="pe-target" title={ig && !ig.available && !targets.instagram ? ig.reason : undefined}>
-        <input type="checkbox" checked={targets.instagram} disabled={lock || (!targets.instagram && !ig?.available)} onChange={() => toggle('instagram')} />
-        <span>Instagram{ig?.username ? ` @${ig.username}` : ''}</span>
-      </label>
-      {ig && !ig.available && !targets.instagram && !published ? <p id="post-editor-target-instagram-reason" className="pe-muted pe-targets-note">{ig.reason}</p> : null}
-      {delivery?.status ? (
-        <p id="post-editor-instagram-delivery" className={`pe-targets-note ${delivery.status === 'posted' ? 'pe-muted' : 'pe-note pe-note-warn'}`}>
-          {IG_DELIVERY_TEXT[delivery.status] || delivery.status}{delivery.error ? `: ${delivery.error}` : ''}
-        </p>
-      ) : null}
-      {err ? <p id="post-editor-targets-error" className="pe-note pe-note-bad pe-targets-note" role="alert">{err}</p> : null}
+    <button
+      type="button"
+      id={id}
+      role="checkbox"
+      aria-checked={on}
+      className={`pe-channel${on ? ' is-on' : ''}`}
+      disabled={disabled}
+      onClick={onToggle}
+    >
+      <span className="pe-channel-top">
+        <span className="pe-channel-name">{name}</span>
+        <span className="pe-channel-state" aria-hidden="true">{saving ? '[…]' : on ? '[ON]' : '[OFF]'}</span>
+      </span>
+      <span className="pe-channel-handle">{handle || '—'}</span>
+      {note ? <span className={`pe-channel-note${noteTone ? ` is-${noteTone}` : ''}`}>{note}</span> : null}
+    </button>
+  );
+}
+
+const STATUS_TAG = { ok: 'DONE', info: 'NOTE', bad: 'ERROR', warn: 'CHECK' };
+
+/** Inline status line: [TAG] text. No toasts: status lives in the footer, where the action happened. */
+function StatusLine({ id, tone = 'info', tag, children, role }) {
+  return (
+    <div id={id} className={`pe-status-line is-${tone}`} role={role || (tone === 'bad' ? 'alert' : 'status')}>
+      <span className="pe-status-tag">[{tag || STATUS_TAG[tone] || 'NOTE'}]</span>
+      <span className="pe-status-text">{children}</span>
     </div>
   );
 }
@@ -222,6 +255,7 @@ export default function PostEditor({
   pickerSlot = null,
   onDirtyChange,
   loadRow,
+  notice = null,
   children = null,
 }) {
   const tz = resolveTimeZone(timeZone);
@@ -303,6 +337,10 @@ export default function PostEditor({
 
   const send = useCallback((req) => (req.endpoint === 'social' ? callSocial(req.body) : call(req.action, req.body)), [call, callSocial]);
 
+  // Channels (X / Instagram). Local merge only on save: notifying the host would re-key the editor on the new revision
+  // and drop unsaved text edits.
+  const net = useNetworkTargets({ row, callSocial, onRowPatch: (patch) => setRow((r) => ({ ...r, ...patch })) });
+
   // Run one write. Success -> merge the server's version into the editor; failure -> keep the edit, explain.
   const run = useCallback(async (req, { onOk, successText } = {}) => {
     setBusy(true); setMessage(null); setConflict(false); setPlanBlock(null);
@@ -383,8 +421,10 @@ export default function PostEditor({
         const fresh = row?.id ? await fetchRow(row.id) : null;
         if (fresh) { setRow((r) => ({ ...r, ...fresh })); if (onSaved) onSaved(fresh); }
         const live = fresh && (fresh.status === 'posted' || fresh.state === 'posted');
+        const igd = fresh?.instagramDelivery;
+        const igBad = net.targets.instagram && igd && igd.status !== 'posted';
         setMessage(live
-          ? { tone: 'ok', text: `Posted to ${handle || 'X'}.` }
+          ? { tone: igBad ? 'warn' : 'ok', text: igBad ? `Posted to ${handle || 'X'}. Instagram: ${igd.error || igd.status}.` : `Posted to ${channelsSentence(net.targets, handle, net.ig?.username)}.` }
           : { tone: 'info', text: fresh?.heldReason || fresh?.error || 'Sent to the publisher. It will go out within 15 minutes if it was not sent yet.' });
       } catch (e) {
         setMessage({ tone: 'info', text: `${e?.message || 'Could not reach the publisher.'} It is scheduled and will go out within 15 minutes.` });
@@ -425,8 +465,9 @@ export default function PostEditor({
     setDeleteAsk(false); setDeciding(decision); setBusy(true); setMessage(null); setConflict(false);
     try {
       const result = await send(buildDecideRequest(row, decision));
-      setMessage({ tone: 'ok', text: decideResultText(decision, result) });
-      if (onDecided) onDecided({ decision, result, row });
+      const text = `${decideResultText(decision, result)}${result?.targetsNote ? ` ${result.targetsNote}` : ''}`;
+      setMessage({ tone: result?.targetsNote ? 'warn' : 'ok', text });
+      if (onDecided) onDecided({ decision, result, row, message: text });
       else if (onClose) onClose();
     } catch (e) {
       const c = classifyError(e);
@@ -522,78 +563,145 @@ export default function PostEditor({
         </div>
         {row.needsStory ? <p id="post-editor-needs-story" className="pe-muted pe-card-note">This draft still has a story placeholder. Approving removes that line; add your own first if you want one.</p> : null}
         <footer id="post-editor-footer" className="pe-footer">
-          {!suggestion && row.id ? (
-            <NetworkTargets
-              row={row}
-              handle={handle}
-              callSocial={callSocial}
-              disabled={busy || !!postStep}
-              // Local merge only: notifying the host would re-key the editor on the new revision and drop unsaved text edits.
-              onRowPatch={(patch) => setRow((r) => ({ ...r, ...patch }))}
-            />
-          ) : null}
-          <div id="post-editor-footer-actions" className="pe-btn-row">
-            <button type="button" id="post-editor-approve" className="pe-btn pe-btn-primary cta-pill-btn" disabled={!st.canApprove || (override && !overrideReason.trim()) || !!postStep} onClick={doApprove} title={!st.canApprove ? st.approveBlockedReason : (st.approveMode === 'schedule' ? 'Approve and schedule at the time above' : 'Approve (no publish time set)')}>
-              {busy ? 'Working…' : 'Approve'}
-            </button>
-            {!suggestion ? (
-              <button type="button" id="post-editor-post-now" className="pe-btn pe-btn-primary" disabled={!canPost || busy || !!postStep} onClick={() => setPostStep('confirm')} title={canPost ? `Post to ${handle || 'X'} now` : st.approveBlockedReason}>
-                Post
-              </button>
-            ) : null}
-            {items.length ? (
-              <div id="post-editor-more" className="pe-more" ref={moreRef}>
-                <button type="button" id="post-editor-more-button" className="pe-btn pe-btn-plain" aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((v) => !v)}>
-                  More <ChevronDown size={14} aria-hidden="true" />
-                </button>
-                {moreOpen ? (
-                  <ul id="post-editor-more-menu" className="pe-menu" role="menu">
-                    {items.map((it) => (
-                      <li key={it.id} role="none">
-                        <button type="button" role="menuitem" id={`post-editor-more-${it.id}`} className="pe-menu-item" disabled={!it.enabled} onClick={() => doMore(it.id)}>{it.label}</button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
+          {/* 1 · CHANNELS — where this post goes. Saved on toggle; Instagram only when it could deliver. */}
+          {net.enabled ? (
+            <section id="post-editor-channels-section" className="pe-fsec" aria-label="Channels">
+              <p className="pe-fsec-label">Channels</p>
+              <div id="post-editor-network-targets-row" className="pe-channels" role="group" aria-label="Post to">
+                <ChannelTile
+                  id="post-editor-target-x"
+                  name="X"
+                  handle={handle}
+                  on={net.targets.x}
+                  saving={net.saving === 'x'}
+                  disabled={!net.ready || !!net.saving || busy || !!postStep || locked || row.status === 'posted' || row.status === 'posting'}
+                  note={row.twitterId ? 'POSTED' : null}
+                  onToggle={() => net.toggle('x')}
+                />
+                <ChannelTile
+                  id="post-editor-target-instagram"
+                  name="Instagram"
+                  handle={net.ig?.username ? `@${net.ig.username}` : null}
+                  on={net.targets.instagram}
+                  saving={net.saving === 'instagram'}
+                  disabled={!net.ready || !!net.saving || busy || !!postStep || locked || row.status === 'posted' || row.status === 'posting' || (!net.targets.instagram && !net.ig?.available)}
+                  note={net.delivery?.status
+                    ? `${IG_DELIVERY_TAG[net.delivery.status] || net.delivery.status.toUpperCase()}${net.delivery.status !== 'posted' && net.delivery.error ? ` · ${net.delivery.error}` : ''}`
+                    : (!net.targets.instagram && net.ig && !net.ig.available ? net.ig.reason : null)}
+                  noteTone={net.delivery?.status && net.delivery.status !== 'posted' ? 'bad' : null}
+                  onToggle={() => net.toggle('instagram')}
+                />
               </div>
-            ) : null}
-          </div>
-          {row && (decide.pass || decide.replace || decide.delete || deciding) ? (
-            <div id="post-editor-decide-row" className="pe-decide-row">
-              <button type="button" id="post-editor-pass-btn" className="pe-btn pe-btn-plain pe-btn-small" disabled={!decide.pass} onClick={() => doDecide('pass')} title="Take it off the calendar. It can come back later.">{deciding === 'pass' ? <span className="brief-loader-spinner" aria-hidden="true" /> : null}{DECISION_LABEL.pass}</button>
-              {!suggestion ? (
-                <button type="button" id="post-editor-replace-btn" className="pe-btn pe-btn-plain pe-btn-small" disabled={!decide.replace} onClick={() => doDecide('replace')} title="Take it off and put the next best item for this track on the same day.">{deciding === 'replace' ? <span className="brief-loader-spinner" aria-hidden="true" /> : null}{DECISION_LABEL.replace}</button>
+              {net.err ? <StatusLine id="post-editor-targets-error" tone="bad">{net.err}</StatusLine> : null}
+            </section>
+          ) : null}
+
+          {/* 2 · STATUS — every result and blocker, inline where the action happened (no toasts). */}
+          {(message || notice || conflict || planBlock || row.state === 'held' || row.state === 'failed' || (!st.canApprove && st.approveBlockedReason)) ? (
+            <section id="post-editor-status-section" className="pe-fsec" aria-label="Status" aria-live="polite">
+              <p className="pe-fsec-label">Status</p>
+              {notice && !message ? <StatusLine id="post-editor-carry-notice" tone={notice.tone || 'ok'}>{notice.text}</StatusLine> : null}
+              {message ? <StatusLine id="post-editor-message" tone={message.tone}>{message.text}</StatusLine> : null}
+              {row.state === 'held' ? (
+                <div id="post-editor-held-panel">
+                  <StatusLine tone="warn" tag="HELD">{row.heldReason || 'Held for review.'} {row.heldNext || 'Review it, then reject it or reconcile it from More.'}{row.error ? ` ${row.error}` : ''}</StatusLine>
+                </div>
               ) : null}
-              <button type="button" id="post-editor-delete-btn" className="pe-btn pe-btn-plain pe-btn-small" disabled={!decide.delete || deleteAsk} onClick={() => setDeleteAsk(true)} title="Take it off and never suggest this content again.">{deciding === 'delete' ? <span className="brief-loader-spinner" aria-hidden="true" /> : null}{DECISION_LABEL.delete}</button>
-            </div>
+              {row.state === 'failed' ? <StatusLine id="post-editor-failed-note" tone="bad" tag="FAILED">{row.error || 'Publishing failed.'} Failed posts are not retried automatically.</StatusLine> : null}
+              {conflict ? (
+                <div id="post-editor-conflict" className="pe-status-block">
+                  <StatusLine tone="warn" tag="CHANGED" role="alert">This post changed while you were editing. Your edit is kept.</StatusLine>
+                  <button type="button" id="post-editor-reload" className="pe-tbtn" disabled={busy} onClick={reload}>Reload</button>
+                </div>
+              ) : null}
+              {planBlock ? (
+                <div id="post-editor-plan-override" className="pe-status-block">
+                  <StatusLine tone="warn" tag="PLAN">{planBlock.message || `The plan blocks this post (${planBlock.code}).`}</StatusLine>
+                  <label htmlFor="post-editor-override-check" className="pe-check">
+                    <input id="post-editor-override-check" type="checkbox" checked={override} onChange={(e) => setOverride(e.target.checked)} />
+                    Override plan <span className="pe-muted">Owner override, recorded on the post</span>
+                  </label>
+                  {override ? <input id="post-editor-override-reason" type="text" className="pe-input" value={overrideReason} placeholder="Reason (required)" aria-label="Override reason (required)" onChange={(e) => setOverrideReason(e.target.value)} /> : null}
+                </div>
+              ) : null}
+              {!st.canApprove && st.approveBlockedReason ? <StatusLine id="post-editor-footer-hint" tone="info" tag="BLOCKED">{st.approveBlockedReason}</StatusLine> : null}
+            </section>
           ) : null}
-          {deleteAsk ? (
-            <div id="post-editor-delete-confirm" className="pe-note pe-note-warn" role="alertdialog" aria-label="Delete for good">
-              <p>{DELETE_CONFIRM_TEXT}</p>
-              <div className="pe-btn-row">
-                <button type="button" id="post-editor-delete-confirm-btn" className="pe-btn pe-btn-plain pe-btn-small" disabled={busy} onClick={() => doDecide('delete')}>Confirm</button>
-                <button type="button" id="post-editor-delete-cancel-btn" className="pe-btn pe-btn-plain pe-btn-small" disabled={busy} onClick={() => setDeleteAsk(false)}>Cancel</button>
+
+          {/* 3 · PUBLISH — approve / post now / more, to the ticked channels. */}
+          <section id="post-editor-publish-section" className="pe-fsec" aria-label="Publish">
+            <p className="pe-fsec-label">Publish{!suggestion ? <span className="pe-fsec-meta"> → {channelsLabel(net.targets)}</span> : null}</p>
+            <div id="post-editor-footer-actions" className="pe-publish-row">
+              <button type="button" id="post-editor-approve" className="pe-btn pe-btn-primary cta-pill-btn" disabled={!st.canApprove || (override && !overrideReason.trim()) || !!postStep} onClick={doApprove} title={!st.canApprove ? st.approveBlockedReason : (st.approveMode === 'schedule' ? 'Approve and schedule at the time above' : 'Approve (no publish time set)')}>
+                {busy ? 'Working…' : 'Approve'}
+              </button>
+              {!suggestion ? (
+                <button type="button" id="post-editor-post-now" className="pe-btn pe-btn-outline" disabled={!canPost || busy || !!postStep} onClick={() => setPostStep('confirm')} title={canPost ? `Post to ${channelsSentence(net.targets, handle, net.ig?.username)} now` : st.approveBlockedReason}>
+                  Post now
+                </button>
+              ) : null}
+              {items.length ? (
+                <div id="post-editor-more" className="pe-more" ref={moreRef}>
+                  <button type="button" id="post-editor-more-button" className="pe-tbtn pe-tbtn-more" aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((v) => !v)}>
+                    More <ChevronDown size={14} aria-hidden="true" />
+                  </button>
+                  {moreOpen ? (
+                    <ul id="post-editor-more-menu" className="pe-menu" role="menu">
+                      {items.map((it) => (
+                        <li key={it.id} role="none">
+                          <button type="button" role="menuitem" id={`post-editor-more-${it.id}`} className="pe-menu-item" disabled={!it.enabled} onClick={() => doMore(it.id)}>{it.label}</button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+            {postStep === 'confirm' ? (
+              <div id="post-editor-post-confirm-row" className="pe-confirm" role="alert">
+                <StatusLine tone="warn" tag="CONFIRM" role="alert">
+                  Post to {channelsSentence(net.targets, handle, net.ig?.username)} now?{net.targets.x ? ' One live X API write.' : ''} This can&apos;t be undone.
+                </StatusLine>
+                <div className="pe-confirm-actions">
+                  <button type="button" id="post-editor-post-cancel" className="pe-tbtn" onClick={() => setPostStep(null)}>Cancel</button>
+                  <button type="button" id="post-editor-post-confirm" className="pe-tbtn pe-tbtn-strong" disabled={busy} onClick={doPostConfirmed}>Confirm and post</button>
+                </div>
               </div>
-            </div>
-          ) : null}
-          {postStep === 'confirm' ? (
-            <div id="post-editor-post-confirm-row" className="pe-post-confirm" role="alert">
-              <p className="pe-post-confirm-text">Post to {handle || 'X'} now? This is one live X API write and can&apos;t be undone.</p>
-              <div className="pe-btn-row">
-                <button type="button" id="post-editor-post-cancel" className="pe-btn pe-btn-plain" onClick={() => setPostStep(null)}>Cancel</button>
-                <button type="button" id="post-editor-post-confirm" className="pe-btn pe-btn-primary" disabled={busy} onClick={doPostConfirmed}>Confirm and post</button>
+            ) : null}
+            {posting ? (
+              <div id="post-editor-post-countdown-row" className="pe-confirm" role="status">
+                <StatusLine tone="info" tag={`T-${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`}>
+                  Posting to {channelsSentence(net.targets, handle, net.ig?.username)}. Closing this still posts it.
+                </StatusLine>
+                <div className="pe-confirm-actions">
+                  <button type="button" id="post-editor-post-countdown-cancel" className="pe-tbtn" disabled={busy} onClick={cancelPost}>Cancel</button>
+                </div>
               </div>
-            </div>
-          ) : null}
-          {posting ? (
-            <div id="post-editor-post-countdown-row" className="pe-post-confirm" role="status">
-              <p className="pe-post-confirm-text">Posting to {handle || 'X'} in {Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, '0')}. Closing this still posts it.</p>
-              <div className="pe-btn-row">
-                <button type="button" id="post-editor-post-countdown-cancel" className="pe-btn pe-btn-plain" disabled={busy} onClick={cancelPost}>Cancel</button>
+            ) : null}
+          </section>
+
+          {/* 4 · CALENDAR — take it off this day. One post = both channels, so this removes it from every ticked channel. */}
+          {row && (decide.pass || decide.replace || decide.delete || deciding) ? (
+            <section id="post-editor-calendar-section" className="pe-fsec" aria-label="Calendar">
+              <p className="pe-fsec-label">Calendar<span className="pe-fsec-meta"> · removes from {channelsLabel(net.targets)}</span></p>
+              <div id="post-editor-decide-row" className={`pe-decide-grid${suggestion ? ' is-two' : ''}`}>
+                <button type="button" id="post-editor-pass-btn" className="pe-tbtn" disabled={!decide.pass} onClick={() => doDecide('pass')} title={`Take it off the calendar (${channelsLabel(net.targets)}). It can come back later.`}>{deciding === 'pass' ? <span className="brief-loader-spinner" aria-hidden="true" /> : null}{DECISION_LABEL.pass}</button>
+                {!suggestion ? (
+                  <button type="button" id="post-editor-replace-btn" className="pe-tbtn" disabled={!decide.replace} onClick={() => doDecide('replace')} title={`Take it off and put the next best item for this track on the same day. The replacement keeps ${channelsLabel(net.targets)}.`}>{deciding === 'replace' ? <span className="brief-loader-spinner" aria-hidden="true" /> : null}{DECISION_LABEL.replace}</button>
+                ) : null}
+                <button type="button" id="post-editor-delete-btn" className="pe-tbtn pe-tbtn-danger" disabled={!decide.delete || deleteAsk} onClick={() => setDeleteAsk(true)} title="Take it off and never suggest this content again.">{deciding === 'delete' ? <span className="brief-loader-spinner" aria-hidden="true" /> : null}{DECISION_LABEL.delete}</button>
               </div>
-            </div>
+              {deleteAsk ? (
+                <div id="post-editor-delete-confirm" className="pe-confirm" role="alertdialog" aria-label="Delete for good">
+                  <StatusLine tone="bad" tag="DELETE" role="alert">{DELETE_CONFIRM_TEXT}</StatusLine>
+                  <div className="pe-confirm-actions">
+                    <button type="button" id="post-editor-delete-cancel-btn" className="pe-tbtn" disabled={busy} onClick={() => setDeleteAsk(false)}>Cancel</button>
+                    <button type="button" id="post-editor-delete-confirm-btn" className="pe-tbtn pe-tbtn-danger" disabled={busy} onClick={() => doDecide('delete')}>Confirm</button>
+                  </div>
+                </div>
+              ) : null}
+            </section>
           ) : null}
-          {!st.canApprove && st.approveBlockedReason ? <p id="post-editor-footer-hint" className="pe-muted">{st.approveBlockedReason}</p> : null}
         </footer>
       </article>
 
@@ -601,34 +709,6 @@ export default function PostEditor({
 
       {children}
 
-      {row.state === 'held' ? (
-        <div id="post-editor-held-panel" className="pe-note pe-note-warn">
-          <p>Held for review: {row.heldReason || 'Held for review.'}</p>
-          <p className="pe-muted">{row.heldNext || 'Review it, then reject it or reconcile it from More.'}</p>
-          {row.error ? <p className="pe-muted">{row.error}</p> : null}
-        </div>
-      ) : null}
-      {row.state === 'failed' ? <p id="post-editor-failed-note" className="pe-note pe-note-bad">{row.error || 'Publishing failed.'} Failed posts are not retried automatically.</p> : null}
-
-      {conflict ? (
-        <div id="post-editor-conflict" className="pe-note pe-note-warn" role="alert">
-          <p>This post changed while you were editing. Your edit is kept.</p>
-          <button type="button" id="post-editor-reload" className="pe-btn pe-btn-ghost" disabled={busy} onClick={reload}>Reload</button>
-        </div>
-      ) : null}
-
-      {planBlock ? (
-        <div id="post-editor-plan-override" className="pe-note pe-note-warn">
-          <p>{planBlock.message || `The plan blocks this post (${planBlock.code}).`}</p>
-          <label htmlFor="post-editor-override-check" className="pe-check">
-            <input id="post-editor-override-check" type="checkbox" checked={override} onChange={(e) => setOverride(e.target.checked)} />
-            Override plan <span className="pe-muted">Owner override, recorded on the post</span>
-          </label>
-          {override ? <input id="post-editor-override-reason" type="text" className="pe-input" value={overrideReason} placeholder="Reason (required)" aria-label="Override reason (required)" onChange={(e) => setOverrideReason(e.target.value)} /> : null}
-        </div>
-      ) : null}
-
-      {message ? <p id="post-editor-message" className={`pe-note pe-note-${message.tone}`} role={message.tone === 'bad' ? 'alert' : 'status'}>{message.text}</p> : null}
       {morePanel === 'reconcile' ? (
         <section id="post-editor-reconcile-panel" className="pe-panel" aria-label="Reconcile">
           <label htmlFor="post-editor-platform-id" className="pe-kicker">X post ID (if it is live)</label>
@@ -704,25 +784,54 @@ function PostEditorStyles() {
       #post-editor-root .pe-note-bad { background: var(--t-danger-bg); border-color: var(--t-danger-border); color: var(--t-danger); }
       #post-editor-root .pe-check { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 6px 0; }
       /* Actions sit inside the card, under the text; each button shares the card width equally. */
-      #post-editor-root .pe-footer { display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding-top: 10px; border-top: 1px solid var(--t-border-faint); text-align: center; }
-      /* Approve = gradient fill + the homepage comet border (.cta-pill-btn); Post = static gradient border;
-         More = plain and compact, pinned right. */
-      #post-editor-root #post-editor-footer-actions { flex-wrap: nowrap; width: 100%; }
-      #post-editor-root #post-editor-footer-actions > .pe-btn { flex: 1 1 0; min-width: 0; }
-      #post-editor-root #post-editor-footer-actions > .pe-more { flex: 0 0 auto; }
-      #post-editor-root .pe-post-confirm { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--t-warning-border); border-radius: 12px; background: var(--t-inset); }
-      #post-editor-root .pe-post-confirm-text { margin: 0; font-size: 13px; line-height: 1.4; }
-      #post-editor-root .pe-post-confirm .pe-btn { width: auto; flex: 0 0 auto; }
+      /* ── Footer (Nothing-style): four full-width sections — CHANNELS · STATUS · PUBLISH · CALENDAR. Flat, monochrome,
+         Space Mono labels, hairline section breaks, inline [STATUS] text instead of floating notes. Approve keeps the UI
+         kit's gradient CTA as the one accent; everything else is outline / technical. */
+      #post-editor-root .pe-footer { display: flex; flex-direction: column; align-items: stretch; gap: 0; margin: 4px -14px -14px; border-top: 1px solid var(--t-border-subtle); text-align: left; }
+      #post-editor-root .pe-fsec { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-top: 1px solid var(--t-border-faint); }
+      #post-editor-root .pe-fsec:first-child { border-top: 0; }
+      #post-editor-root .pe-fsec-label { margin: 0; font-family: "Space Mono", ui-monospace, monospace; font-size: 11px; line-height: 1; letter-spacing: 0.08em; text-transform: uppercase; color: var(--t-text-muted); }
+      #post-editor-root .pe-fsec-meta { color: var(--t-text-secondary); }
+      #post-editor-root .pe-channels { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      #post-editor-root .pe-channel { display: flex; flex-direction: column; align-items: stretch; gap: 6px; min-height: 76px; padding: 12px; border: 1px solid var(--t-border-subtle); border-radius: 8px; background: transparent; color: var(--t-text-secondary); font: inherit; text-align: left; cursor: pointer; transition: border-color 120ms ease-out, color 120ms ease-out, background-color 120ms ease-out; }
+      #post-editor-root .pe-channel:hover:not(:disabled) { border-color: var(--t-control-border-strong); }
+      #post-editor-root .pe-channel.is-on { border-color: var(--t-text-strong); color: var(--t-text-strong); background: var(--t-inset); }
+      #post-editor-root .pe-channel:disabled { cursor: not-allowed; opacity: 0.55; }
+      #post-editor-root .pe-channel:focus-visible { outline: 2px solid var(--t-focus); outline-offset: 2px; }
+      #post-editor-root .pe-channel-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+      #post-editor-root .pe-channel-name { font-family: "Space Grotesk", system-ui, sans-serif; font-size: 16px; font-weight: 500; letter-spacing: -0.01em; }
+      #post-editor-root .pe-channel-state, #post-editor-root .pe-channel-handle, #post-editor-root .pe-channel-note { font-family: "Space Mono", ui-monospace, monospace; font-size: 11px; letter-spacing: 0.04em; }
+      #post-editor-root .pe-channel-state { color: var(--t-text-muted); }
+      #post-editor-root .pe-channel.is-on .pe-channel-state { color: var(--t-text-strong); }
+      #post-editor-root .pe-channel-handle { color: var(--t-text-muted); overflow-wrap: anywhere; }
+      #post-editor-root .pe-channel-note { color: var(--t-text-muted); line-height: 1.4; text-transform: none; overflow-wrap: anywhere; }
+      #post-editor-root .pe-channel-note.is-bad { color: var(--t-danger); }
+      #post-editor-root .pe-status-line { display: flex; gap: 8px; align-items: baseline; margin: 0; font-size: 13px; line-height: 1.45; color: var(--t-text); }
+      #post-editor-root .pe-status-tag { flex: 0 0 auto; font-family: "Space Mono", ui-monospace, monospace; font-size: 11px; letter-spacing: 0.06em; color: var(--t-text-muted); }
+      #post-editor-root .pe-status-line.is-ok .pe-status-tag { color: var(--t-success); }
+      #post-editor-root .pe-status-line.is-warn .pe-status-tag { color: var(--t-warning, var(--t-text-strong)); }
+      #post-editor-root .pe-status-line.is-bad .pe-status-tag, #post-editor-root .pe-status-line.is-bad .pe-status-text { color: var(--t-danger); }
+      #post-editor-root .pe-status-text { min-width: 0; overflow-wrap: anywhere; }
+      #post-editor-root .pe-status-block { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+      #post-editor-root .pe-publish-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: stretch; }
+      #post-editor-root .pe-publish-row > .pe-btn { justify-content: center; width: 100%; min-width: 0; white-space: nowrap; }
+      #post-editor-root .pe-btn-outline { background: transparent; color: var(--t-text-strong); border-color: var(--t-control-border-strong); }
+      #post-editor-root .pe-btn-outline:hover:not(:disabled) { background: var(--t-inset); }
+      #post-editor-root .pe-tbtn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 8px 12px; border: 1px solid var(--t-border-subtle); border-radius: 6px; background: transparent; color: var(--t-text-secondary); font-family: "Space Mono", ui-monospace, monospace; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; white-space: nowrap; }
+      #post-editor-root .pe-tbtn:hover:not(:disabled) { color: var(--t-text-strong); border-color: var(--t-control-border-strong); }
+      #post-editor-root .pe-tbtn:disabled { opacity: 0.45; cursor: not-allowed; }
+      #post-editor-root .pe-tbtn:focus-visible { outline: 2px solid var(--t-focus); outline-offset: 2px; }
+      #post-editor-root .pe-tbtn-strong { color: var(--t-text-strong); border-color: var(--t-text-strong); }
+      #post-editor-root .pe-tbtn-danger:hover:not(:disabled), #post-editor-root .pe-confirm .pe-tbtn-danger { color: var(--t-danger); border-color: var(--t-danger-border); }
+      #post-editor-root .pe-tbtn .brief-loader-spinner { width: 12px; height: 12px; }
+      #post-editor-root .pe-tbtn-more { height: 100%; }
+      #post-editor-root .pe-decide-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+      #post-editor-root .pe-decide-grid.is-two { grid-template-columns: repeat(2, 1fr); }
+      #post-editor-root .pe-confirm { display: flex; flex-direction: column; gap: 10px; padding-top: 10px; border-top: 1px dashed var(--t-border-subtle); }
+      #post-editor-root .pe-confirm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
       #post-editor-root .pe-btn-plain { background: transparent; color: var(--t-text-secondary); border-color: var(--t-border-faint); padding: 8px 12px; }
       #post-editor-root .pe-btn-plain:hover:not(:disabled) { color: var(--t-text-strong); border-color: var(--t-control-border-strong); }
-      #post-editor-root #post-editor-footer-actions .pe-btn { justify-content: center; width: 100%; white-space: nowrap; }
       #post-editor-root .pe-btn-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; }
-      #post-editor-root .pe-targets { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; justify-content: center; margin: 0 0 10px; font-size: 13px; }
-      #post-editor-root .pe-targets-label { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--t-text-muted); }
-      #post-editor-root .pe-target { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; color: var(--t-text); }
-      #post-editor-root .pe-target input { margin: 0; width: 16px; height: 16px; accent-color: var(--t-accent, currentColor); }
-      #post-editor-root .pe-target input:disabled + span { color: var(--t-text-muted); }
-      #post-editor-root .pe-targets-note { flex-basis: 100%; text-align: center; }
       #post-editor-root .pe-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 8px 16px; border-radius: 999px; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; border: 1px solid var(--t-control-border); }
       /* Standard gradient buttons (same as the Queue & Calendar card): primary = full gradient fill, secondary = static
          gradient border. The mask only reads alpha, so a token stands in for #fff. */
@@ -732,11 +841,10 @@ function PostEditorStyles() {
       #post-editor-root .pe-btn:disabled::before { display: none; }
       #post-editor-root .pe-btn:disabled { opacity: 0.45; cursor: not-allowed; background: var(--t-disabled-bg); color: var(--t-text-muted); border-color: var(--t-control-border); }
       #post-editor-root .pe-btn:focus-visible, #post-editor-root .pe-menu-item:focus-visible { outline: 2px solid var(--t-focus); outline-offset: 2px; }
-      #post-editor-root .pe-decide-row { display: flex; gap: 8px; justify-content: center; }
       #post-editor-root .pe-btn-small { min-height: 32px; padding: 4px 12px; font-size: 13px; font-weight: 600; }
       #post-editor-root .pe-btn .brief-loader-spinner { width: 14px; height: 14px; }
       #post-editor-root .pe-more { position: relative; }
-      #post-editor-root .pe-menu { position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 5; min-width: 190px; margin: 0; padding: 6px; list-style: none; border: 1px solid var(--t-control-border); border-radius: 12px; background: var(--t-raised); box-shadow: var(--t-shadow-md); }
+      #post-editor-root .pe-menu { position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 5; min-width: 190px; margin: 0; padding: 6px; list-style: none; border: 1px solid var(--t-control-border); border-radius: 12px; background: var(--t-raised); }
       #post-editor-root .pe-menu-item { display: block; width: 100%; text-align: left; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--t-text); font: inherit; font-size: 14px; cursor: pointer; }
       #post-editor-root .pe-menu-item:hover:not(:disabled) { background: var(--t-inset); }
       #post-editor-root .pe-menu-item:disabled { color: var(--t-dash-text-disabled); cursor: not-allowed; }
@@ -749,6 +857,9 @@ function PostEditorStyles() {
         #post-editor-root .pe-bound-label { flex-basis: auto; }
         #post-editor-root .pe-btn-row .pe-btn { flex: 1 1 auto; justify-content: center; }
         #post-editor-root #post-editor-footer-actions .pe-btn { padding: 8px 10px; font-size: 13px; }
+        #post-editor-root .pe-footer { margin: 4px calc(-1 * var(--mobile-gutter, 8px)) -12px; }
+        #post-editor-root .pe-fsec { padding: 12px var(--mobile-gutter, 8px); }
+        #post-editor-root .pe-channel { min-height: 68px; padding: 10px; }
       }
       @media (prefers-reduced-motion: reduce) { #post-editor-root * { transition: none !important; animation: none !important; } }
     `}</style>
