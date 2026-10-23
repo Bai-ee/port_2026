@@ -537,3 +537,74 @@ test('people tools: audit rows carry no arguments or results; NTR rows have peop
   assert.ok(!JSON.stringify(audit).includes('jane@example.com'));
   for (const id of ['nottherug-ten-QSMYxuuv', 'not-the-rug-WMmA4G9L']) assert.equal(siteStatsSourceFor(id, DATA_SOURCES).peopleUrl, 'https://nottherug.com/api/stats/people');
 });
+
+// ---- HITLOOP-tracked static site (provider 'hitloop', e.g. Underground Existence under HITLOOP's own client) --
+
+function hitloopSiteDeps() {
+  const m = makeDeps();
+  const local = [];
+  m.deps.services.sources = [
+    { clientId: A, label: 'Static site', kind: 'site-stats', provider: 'hitloop', site: 'ue', url: 'https://static.example' },
+    { clientId: B, label: 'Client B site', kind: 'site-stats', url: 'https://b.example/api/stats', keyEnv: 'KEY_A' },
+  ];
+  m.deps.services.readSiteReport = async ({ site, range }) => {
+    local.push({ site, range });
+    return { site: 'static.example', range, analytics: { range: { timezone: 'America/Chicago' }, dailyTrend: [{ date: '2026-10-20', sessions: 9, pageviews: 14 }] }, leads: null, applicants: null, degraded: [] };
+  };
+  m.deps.services.readSiteSessions = async (args) => {
+    local.push({ sessions: true, ...args, now: undefined });
+    return { site: 'static.example', totalSessions: 1, returned: 1, sessions: [{ sid: 's1', visitor: 'v1', pageviews: 2 }] };
+  };
+  return { ...m, local };
+}
+
+test('a hitloop-provider source is read from HITLOOP itself: no HTTP, no key, only for its own client', async () => {
+  const { deps, calls, local } = hitloopSiteDeps();
+  const out = JSON.parse(textOf(await rpc({ body: call('get_site_stats', { range: '30d' }), deps })));
+  assert.equal(out.source, 'Static site');
+  assert.equal(out.stats.analytics.dailyTrend[0].sessions, 9);
+  assert.deepEqual(local, [{ site: 'ue', range: '30d' }]);
+  assert.equal(calls.fetch.length, 0);
+
+  // Client B (a key-backed site) never reaches the static site's report, and A never reaches B's site.
+  const b = await rpc({ token: clientToken({ hcid: B, gid: grantIdOf(SECRET_B) }), secret: SECRET_B, body: call('get_site_stats'), deps });
+  assert.ok(!textOf(b).includes('static.example'));
+  assert.equal(local.length, 1);
+  assert.ok(calls.fetch.every((c) => c.url.startsWith('https://b.example/')));
+});
+
+test('a hitloop-provider site has no people: people tools say so, the daily update drops leads, instructions say no forms', async () => {
+  const { deps } = hitloopSiteDeps();
+  const leads = await rpc({ body: call('get_leads'), deps });
+  assert.equal(leads.body.result.isError, true);
+  assert.match(textOf(leads), /no forms/);
+
+  const daily = JSON.parse(textOf(await rpc({ body: call('get_daily_update'), deps })));
+  assert.equal(daily.site.leadsTracked, false);
+  assert.equal(daily.site.timeZone, 'America/Chicago');
+  assert.match(daily.replyFormat, /leadsTracked is false/);
+
+  const init = await rpc({ body: { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } }, deps });
+  assert.match(init.body.result.instructions, /no forms/);
+  assert.doesNotMatch(init.body.result.instructions, /get_leads, get_lead/);
+});
+
+test('production sources: HITLOOP\'s own client reads the UE site from HITLOOP; Not The Rug clients stay on nottherug.com', () => {
+  const home = siteStatsSourceFor('bryan-balli-WUoltG84', DATA_SOURCES);
+  assert.deepEqual({ provider: home.provider, site: home.site, url: home.url, keyEnv: home.keyEnv }, { provider: 'hitloop', site: 'ue', url: 'https://undergroundexistence.info', keyEnv: undefined });
+  for (const id of ['nottherug-ten-QSMYxuuv', 'not-the-rug-WMmA4G9L']) {
+    const s = siteStatsSourceFor(id, DATA_SOURCES);
+    assert.equal(s.provider, undefined);
+    assert.match(s.url, /^https:\/\/nottherug\.com\//);
+  }
+});
+
+test('a hitloop-provider site serves custom dates and visit paths from HITLOOP too', async () => {
+  const { deps, calls, local } = hitloopSiteDeps();
+  const st = JSON.parse(textOf(await rpc({ body: call('get_site_stats', { from: '2026-10-01', to: '2026-10-10' }), deps })));
+  assert.deepEqual([st.range, st.from, st.to], ['custom', '2026-10-01', '2026-10-10']);
+  const se = JSON.parse(textOf(await rpc({ body: call('get_visitor_sessions', { range: '7d', limit: 5 }), deps })));
+  assert.equal(se.sessions[0].visitor, 'v1');
+  assert.deepEqual(local.at(-1), { sessions: true, site: 'ue', range: '7d', limit: 5, now: undefined });
+  assert.equal(calls.fetch.length, 0);
+});

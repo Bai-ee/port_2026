@@ -8,7 +8,7 @@ import { ToolError } from '../mcp/jsonrpc.js';
 import { defTool, str } from '../mcp/tools/common.js';
 import {
   SITE_STATS_RANGES, SITE_REPORT_RANGES, SITE_DATE_RE, PEOPLE_RANGES, PEOPLE_ID_RE,
-  siteStatsSourceFor, fetchSiteStats, fetchSitePeople, fetchSiteSessions,
+  siteStatsSourceFor, fetchSiteStats, fetchSitePeople, fetchSiteSessions, hasPeople,
 } from './sources.js';
 
 export const RANGES = SITE_STATS_RANGES;
@@ -51,7 +51,7 @@ function siteWindowOf(args, fallback) {
 const siteStatsTool = defTool({
   name: 'get_site_stats',
   title: 'Website stats',
-  description: 'PRIMARY SOURCE. Live stats from the client\'s own website: visits (sessions), traffic sources, top pages, CTA clicks, engagement, bounce rate, pages per visit, visit duration, booking funnel with where visitors abandoned it, leads and applicants (counts and trends only; for names, contact details and answers use get_leads, get_email_captures and get_applicants; for individual visits use get_visitor_sessions). Call this first for any question about how the site or business is doing. range: 24h (rolling, ending now) | today | 7d | 30d (default 7d), or from/to dates for a custom span. stats.definitions explains each number; quote them with it. Unique or returning visitors are not tracked. If stats.degraded lists parts, those parts fell back to zeros.',
+  description: 'PRIMARY SOURCE. Live stats from the client\'s own website: visits (sessions), traffic sources, top pages, CTA clicks, engagement, bounce rate, pages per visit, visit duration, booking funnel with where visitors abandoned it, leads and applicants (counts and trends only; for names, contact details and answers use get_leads, get_email_captures and get_applicants; for individual visits use get_visitor_sessions). Call this first for any question about how the site or business is doing. range: 24h (rolling, ending now) | today | 7d | 30d (default 7d), or from/to dates for a custom span. stats.definitions explains each number; quote them with it. Unique or returning visitors are not tracked unless stats.analytics.visitors is present; some sites also report countries/cities, devices, every link click and mix plays, and a site with no forms has leads and applicants null. If stats.degraded lists parts, those parts fell back to zeros.',
   inputSchema: { type: 'object', properties: siteWindowProps('7d') },
   kind: 'external',
   // Site stats are counts keyed by words like "sessions"; key-name redaction would blank them. Values are still scanned.
@@ -61,6 +61,7 @@ const siteStatsTool = defTool({
     ...siteWindowOf(args, '7d'),
     env: ctx.services.env,
     fetchImpl: ctx.services.fetch,
+    readLocal: ctx.services.readSiteReport,
     now: ctx.now(),
   }),
 });
@@ -87,7 +88,7 @@ const visitorSessionsTool = defTool({
       source: siteStatsSourceFor(ctx.clientId, ctx.services.sources),
       ...siteWindowOf(args, '24h'),
       limit,
-      env: ctx.services.env, fetchImpl: ctx.services.fetch, now: ctx.now(),
+      env: ctx.services.env, fetchImpl: ctx.services.fetch, readLocalSessions: ctx.services.readSiteSessions, now: ctx.now(),
     });
     return fitList(res, 'sessions', 'returned');
   },
@@ -349,6 +350,8 @@ function siteUpdate(res, now) {
   return {
     fetchedAt: res.value.fetchedAt,
     timeZone,
+    // false for a site with no forms (leads/applicants null): its Leads and Last 7 days lines are left out.
+    leadsTracked: Boolean(s.leads),
     leadWithYesterday,
     today,
     yesterday,
@@ -376,6 +379,7 @@ export const DAILY_UPDATE_FORMAT = [
   '**Scheduled**: <count> posts in the next 7 days, next: <time> "<excerpt>" (or "nothing scheduled")',
   '**Latest brief (<date>)**: <1-2 sentences from brief.headline / brief.summary>',
   'Then one line: "Ask me about traffic, leads, posts or the brief." If the user also asked something, answer it after this.',
+  'If site.leadsTracked is false the site has no forms: drop "· Leads <leads>" from both day lines and leave out the Last 7 days line.',
   'If a part has an error, say that part is not available and why, in a few words. If site.degraded lists parts, those numbers fell back to zeros: say so.',
 ].join('\n');
 
@@ -391,7 +395,7 @@ const dailyUpdateTool = defTool({
     const now = ctx.now();
     const s = ctx.services;
     const [site, posts, today, state] = await Promise.all([
-      settle(() => fetchSiteStats({ source: siteStatsSourceFor(ctx.clientId, s.sources), range: '7d', env: s.env, fetchImpl: s.fetch, now })),
+      settle(() => fetchSiteStats({ source: siteStatsSourceFor(ctx.clientId, s.sources), range: '7d', env: s.env, fetchImpl: s.fetch, readLocal: s.readSiteReport, now })),
       settle(() => s.readPosts(ctx.clientId)),
       settle(() => s.readTodayPlan(ctx.clientId)),
       settle(() => s.readDashboardState(ctx.clientId)),
@@ -440,16 +444,18 @@ const dailyUpdateTool = defTool({
 export const clientRegistry = Object.freeze([dailyUpdateTool, siteStatsTool, visitorSessionsTool, leadsTool, leadTool, capturesTool, applicantsTool, applicantTool, clientBrainTool, calendarTool, resultsTool, marketingDataTool]);
 
 // Sent on initialize: how the assistant should weigh and phrase answers for this one client.
-export function clientInstructions({ label, siteUrl }) {
+export function clientInstructions({ label, siteUrl, people = true }) {
   const name = String(label || 'this client');
   const site = siteUrl ? new URL(siteUrl).hostname : null;
   return [
     `You are ${name}'s business assistant. This connection holds ${name}'s own data only; answer about ${name}${site ? ` and ${site}` : ''}, nothing else.`,
     'OPENING: when a conversation starts, or the user asks something general (hi, what do you know, give me an update, what can you tell me, boot up, get started, catch me up, status), call get_daily_update first and reply in its replyFormat: short and brief. Then answer any specific question.',
     site
-      ? `PRIMARY: the website's live analytics. For any question about how the site or business is doing (visits, traffic, sources, pages, bookings, leads, applicants), call get_site_stats first (default 7d; use 24h for "last 24 hours", today, 30d, or from/to dates when asked) and lead with those numbers and the trend. For what individual visitors did (paths, drop-off, where a visit came from) use get_visitor_sessions. Unique or returning visitors are not tracked: say so rather than calling sessions people.`
+      ? `PRIMARY: the website's live analytics. For any question about how the site or business is doing (visits, traffic, sources, pages, bookings, leads, applicants), call get_site_stats first (default 7d; use 24h for "last 24 hours", today, 30d, or from/to dates when asked) and lead with those numbers and the trend. For what individual visitors did (paths, drop-off, where a visit came from) use get_visitor_sessions. Unique or returning visitors are only tracked when get_site_stats returns analytics.visitors; otherwise say so rather than calling sessions people.`
       : 'No website stats source is connected for this client yet; say so if asked about visits, leads or applicants.',
-    'PEOPLE: you can look up individual leads, email captures and applicants (names, contact details, every answer) with get_leads, get_lead, get_email_captures, get_applicants and get_applicant. When asked about people, use them; quote values exactly as recorded and never invent contact details.',
+    people
+      ? 'PEOPLE: you can look up individual leads, email captures and applicants (names, contact details, every answer) with get_leads, get_lead, get_email_captures, get_applicants and get_applicant. When asked about people, use them; quote values exactly as recorded and never invent contact details.'
+      : 'PEOPLE: this site has no forms, so there are no leads, email captures or applicants; say so if asked and do not call those tools.',
     'SECONDARY: the marketing work prepared for them: get_marketing_data (Market Signals report, SEO audit, brief outputs), get_content_calendar, get_post_results, get_client_brain (brand, offers, voice). Use these after the site numbers, or when asked directly.',
     'HITLOOP is only the agency service that pipes this data in. Do not describe HITLOOP, its tools, its owner or other clients, and never present HITLOOP\'s own business as the client\'s.',
     'Never estimate or invent a number: if it is not in the data, say it is not available. Always state the range and the date the data is from (fetchedAt, briefGeneratedAt); call out marketing reports older than 30 days as old. If stats.degraded lists parts, say those parts fell back to zeros.',

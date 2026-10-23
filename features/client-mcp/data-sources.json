@@ -14,5 +14,13 @@
     "url": "https://nottherug.com/api/stats",
     "peopleUrl": "https://nottherug.com/api/stats/people",
     "keyEnv": "CLIENT_STATS_KEY_NOTTHERUG"
+  },
+  {
+    "clientId": "bryan-balli-WUoltG84",
+    "label": "Underground Existence website",
+    "kind": "site-stats",
+    "provider": "hitloop",
+    "site": "ue",
+    "url": "https://undergroundexistence.info"
   }
 ]

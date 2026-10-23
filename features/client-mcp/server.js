@@ -8,6 +8,7 @@ import { readTodayPlan } from '../email-digest/today-plan.js';
 import { createFirestoreCounters, createFirestoreAudit } from '../mcp/limits.js';
 import { createFirestoreGrantStore } from './grants.js';
 import { DATA_SOURCES } from './sources.js';
+import { getSiteReport, getSessionPaths } from '../site-analytics/report.js';
 
 const require = createRequire(import.meta.url);
 const fb = require('../../api/_lib/firebase-admin.cjs');
@@ -25,6 +26,8 @@ export function getClientServices() {
       env: process.env,
       fetch: (...a) => fetch(...a),
       sources: DATA_SOURCES,
+      readSiteReport: (args) => getSiteReport({ db, ...args }),
+      readSiteSessions: (args) => getSessionPaths({ db, ...args }),
       readBrainDoc: (clientId) => require('../client-brain/store.cjs').readClientBrainDoc(clientId),
       readStrategyDoc: (clientId) => createFirestoreStrategyDocStore(db).get(clientId),
       readPosts: (clientId) => readSocialQueue(clientId, { limit: 1500 }),

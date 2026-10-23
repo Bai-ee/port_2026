@@ -8,7 +8,7 @@ import { checkRateLimit, rpcCost } from '../mcp/limits.js';
 import { authenticateClientBearer } from './auth.js';
 import { GRANT_SECRET_RE, clientMetadataUrl } from './grants.js';
 import { clientRegistry, clientInstructions } from './tools.js';
-import { siteStatsSourceFor } from './sources.js';
+import { hasPeople, siteStatsSourceFor } from './sources.js';
 
 const rpcError = (code, message) => ({ jsonrpc: '2.0', id: null, error: { code, message } });
 
@@ -44,7 +44,7 @@ export async function handleClientMcp({ authorization, body, bodyError = false, 
   const ctx = { clientId: auth.clientId, now, services: deps.services };
   const site = siteStatsSourceFor(auth.clientId, deps.services.sources);
   return handleRpc(body, {
-    registry: clientRegistry, ctx, instructions: clientInstructions({ label: auth.label, siteUrl: site?.url || null }),
+    registry: clientRegistry, ctx, instructions: clientInstructions({ label: auth.label, siteUrl: site?.url || null, people: !site || hasPeople(site) }),
     serverInfo: { name: 'client-data', title: `${auth.label} data` },
     onCall: ({ tool, ok, ms }) => deps.audit.write(clientAuditEntry({ now: now(), clientId: auth.clientId, grantId: auth.grantId, tool, ok, ms })),
   });
