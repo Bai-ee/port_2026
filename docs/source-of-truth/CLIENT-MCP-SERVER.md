@@ -53,6 +53,20 @@ the env var in Vercel prod (Not The Rug: `CLIENT_STATS_KEY_NOTTHERUG`). The key 
 
 **Not available from the Not The Rug site (not recorded, so no tool can return it):** unique/returning visitors (no persistent visitor id), lead acquisition source (leads are not linked to sessions), scroll depth beyond the one-time 50% engagement signal, and counts of filtered bot traffic (dropped silently at `/api/track`). Each needs new tracking on the site first.
 
+**HITLOOP-tracked static sites** (no server of their own, e.g. the Underground Existence Arweave site): row
+`{clientId, label, kind:'site-stats', provider:'hitloop', site, url}` — no key, no HTTP. The site's beacon
+(`website/js/ue-analytics.js` in `arweave-video-generator`, loaded by `boot.js`) posts to the public collector
+`app/api/public/site-events` → `site_analytics/{site}/events` (no IP/UA stored; geo from Vercel headers; `expireAt` =
+395 days, needs a Firestore TTL policy on that field; `SITE_ANALYTICS_DISABLED=true` = runtime kill switch;
+`?ue_analytics_test=1` on the site = test traffic, excluded from real numbers). `get_site_stats` builds the report
+(range or from/to) and `get_visitor_sessions` (per-visit paths, `/api/stats/sessions` envelope plus a pseudonymous
+`visitor` id) from Firestore via `features/site-analytics/report.js` in the same shape as the client-site `/api/stats`
+(`analytics.meta/range/dailyTrend/sources/pages/live`, `leads`/`applicants` null) plus visitors, clicks, outbound
+links, mix plays, countries/cities, devices. Such a site has no people: the people tools say so, the daily update
+drops its lead lines (`leadsTracked:false`) and the instructions omit the PEOPLE tools. Sites are registered in
+`SITES` (`features/site-analytics/events.js`). UE routes to HITLOOP's own client `bryan-balli-WUoltG84`; owner MCP
+`get_site_analytics` reads the same report (plus `testMode`).
+
 ## Audit + limits
 `mcp_audit` row per call: `{at, via:'client-mcp', clientId, grant (12-char prefix), tool, ok, ms}` — no arguments or
 results. Rate limit 120 calls / 10 min per grant (shared `mcp_rate_limits`).
