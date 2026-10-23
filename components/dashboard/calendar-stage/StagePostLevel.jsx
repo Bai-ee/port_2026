@@ -111,9 +111,13 @@ export default function StagePostLevel({ postId, row, calendarReady, stage, onRe
   // Pass / Replace / Delete finished: reload the month, then move to the replacement (or the next item of the day);
   // an emptied day steps back to the Day level. Unsaved edits on the removed item are moot, so the leave guard is skipped.
   const dayIds = pickDayPostIds(dayGroups, stage.nav?.state?.date || null, realId);
-  const onDecided = async ({ result }) => {
+  // The decide result (incl. "Instagram was not carried over…") is shown on the post the stage moves to, since the
+  // removed one is gone from view.
+  const [decideNotice, setDecideNotice] = useState(null); // { postId, text, tone }
+  const onDecided = async ({ result, message }) => {
     dirtyRef.current = false;
     const target = targetAfterDecide(dayIds, realId, replacementRowId(result));
+    setDecideNotice(target && message ? { postId: target, text: message, tone: result?.targetsNote ? 'warn' : 'ok' } : null);
     try { if (onRefresh) await onRefresh(); } catch { /* the stage still moves on; the Day list has its own retry */ }
     if (target) nav.openPost(target, { replace: true });
     else nav.back();
@@ -169,6 +173,7 @@ export default function StagePostLevel({ postId, row, calendarReady, stage, onRe
         onClose={() => nav.back()}
         onSaved={() => { setVoidedNote(false); if (onRefresh) onRefresh(); }}
         onDecided={onDecided}
+        notice={decideNotice && decideNotice.postId === realId ? decideNotice : null}
         onDirtyChange={onDirtyChange}
         onPickCreative={() => { setAttachError(null); setStageNote(''); setPickerOpen(true); }}
         pickerSlot={pickerSlot}
