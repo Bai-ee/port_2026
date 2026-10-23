@@ -24,7 +24,8 @@ separate and unaffected.
 | Tool | Reads |
 |---|---|
 | `get_daily_update()` | **The opener.** One call: ONE site-stats fetch with range `7d`, split into `site.today` / `site.yesterday` (visits/pageviews = the `analytics.dailyTrend` row for that site-local date, leads = `leads.today`/`leads.yesterday`, `byDay` fallback; a missing row is null, never 0) and `site.last7Days` (`bookedLeads`, `inquiries`, `appointmentsScheduled`, `applicants.last7Days` — range totals, never shown as daily; the site has no per-day applicant count). `site.leadWithYesterday` is true when the site-local time is before 06:00 or today has no visits and no leads yet (and yesterday has data): the reply then leads with the Yesterday line and shows today as "so far", so a 00:03 check never opens on an empty day, marketing status (brief age, stale >30 d, posts out last 7 d), scheduled posts next 7 d + undated drafts + today's plan tracks, a brief blurb (`projectBrief` headline + humanBrief), and `replyFormat` (`DAILY_UPDATE_FORMAT` in `tools.js`). Each part fails soft; an unknown site shape gives nulls |
-| `get_site_stats(range)` | registered site source (`features/client-mcp/data-sources.json`), `range` = today\|7d\|30d passed through; returns the site JSON + `fetchedAt` |
+| `get_site_stats(range \| from,to)` | registered site source (`features/client-mcp/data-sources.json`). `range` = 24h (rolling, ending now)\|today\|7d\|30d, or `from`/`to` (YYYY-MM-DD, site timezone, inclusive; the site enforces ≤90 days, not future, within 13-month retention and 400s otherwise). Returns the site JSON + `fetchedAt` (`range:'custom'` + from/to for a span). Since the 2026-10-22 site update the analytics block also has `bounceRatePct`, `pagesPerSession`, `sessionDuration` (first→last event, a floor) and `funnel.abandonment` (furthest step for sessions that never saved/booked), each defined in `stats.definitions` |
+| `get_visitor_sessions(range \| from,to, limit)` | site `GET <sessionsUrl>` (default `<stats url>/sessions`, or the row's `sessionsUrl`): visits newest first — source (`campaign:`/`referral:`/`direct`, null + `startedBeforeWindow` when the visit began before the window), entry/exit page, ordered trail of pages/CTAs/booking steps with times (≤40 per visit, `trailTruncated`), duration, bounced, outcome. Default 24h / 25, max 100. A session = one browser tab, never a person; real traffic only (test mode excluded). Trimmed by whole sessions with `sizeNote` |
 | `get_leads(range, limit)` | site `GET <peopleUrl>?kind=leads` (default `<stats url>/people`, or the row's `peopleUrl`): Meet & Greet leads with full answers. range today\|7d\|30d\|all (default 30d), limit 1–50 (default 25) |
 | `get_lead(id)` | same endpoint with `id`; one lead |
 | `get_email_captures(range, limit)` | `kind=captures`: email-only signups who did not finish the questionnaire |
@@ -46,9 +47,11 @@ marketing work in HITLOOP (marketing data, calendar, results, brain). Never desc
 clients; never estimate numbers; always state the range/date; flag reports older than 30 days. Tune the wording there.
 
 ## Website sources
-One row per client in `features/client-mcp/data-sources.json`: `{clientId, label, kind:'site-stats', url, peopleUrl?, keyEnv}` +
+One row per client in `features/client-mcp/data-sources.json`: `{clientId, label, kind:'site-stats', url, peopleUrl?, sessionsUrl?, keyEnv}` +
 the env var in Vercel prod (Not The Rug: `CLIENT_STATS_KEY_NOTTHERUG`). The key is only sent as
 `Authorization: Bearer`; it never appears in a result, error or audit row.
+
+**Not available from the Not The Rug site (not recorded, so no tool can return it):** unique/returning visitors (no persistent visitor id), lead acquisition source (leads are not linked to sessions), scroll depth beyond the one-time 50% engagement signal, and counts of filtered bot traffic (dropped silently at `/api/track`). Each needs new tracking on the site first.
 
 ## Audit + limits
 `mcp_audit` row per call: `{at, via:'client-mcp', clientId, grant (12-char prefix), tool, ok, ms}` — no arguments or

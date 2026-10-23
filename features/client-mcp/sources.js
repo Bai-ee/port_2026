@@ -6,6 +6,9 @@
 import rows from './data-sources.json' with { type: 'json' };
 
 export const SITE_STATS_RANGES = Object.freeze(['today', '7d', '30d']);
+// The site's /api/stats also takes a rolling 24h and from/to dates (YYYY-MM-DD, site timezone, inclusive, <= 90 days).
+export const SITE_REPORT_RANGES = Object.freeze(['24h', ...SITE_STATS_RANGES]);
+export const SITE_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 export const FETCH_TIMEOUT_MS = 10_000;
 
 export const DATA_SOURCES = Object.freeze(rows.map((r) => Object.freeze({ ...r })));
@@ -50,11 +53,24 @@ async function getJson({ source, url, params, env, fetchImpl, notFound }) {
   try { return await res.json(); } catch { throw new SourceError(`${source.label} returned something that is not JSON.`); }
 }
 
-/** GET <url>?range=<range> with the client's key. Returns the site's JSON as-is plus fetchedAt. */
-export async function fetchSiteStats({ source, range, env, fetchImpl, now }) {
+/** GET <url>?range=<range> (or ?from=&to=) with the client's key. Returns the site's JSON as-is plus fetchedAt. */
+export async function fetchSiteStats({ source, range, from, to, env, fetchImpl, now }) {
   if (!source) throw new SourceError('No website stats source is set up for this client.');
-  const stats = await getJson({ source, url: new URL(source.url), params: { range }, env, fetchImpl });
-  return { source: source.label, range, fetchedAt: new Date(now).toISOString(), stats };
+  const custom = Boolean(from && to);
+  const params = custom ? { from, to } : { range };
+  const stats = await getJson({ source, url: new URL(source.url), params, env, fetchImpl });
+  return { source: source.label, range: custom ? 'custom' : range, ...(custom ? { from, to } : {}), fetchedAt: new Date(now).toISOString(), stats };
+}
+
+/** sessionsUrl of the row, else <stats url>/sessions. */
+export const sessionsUrlOf = (source) => source.sessionsUrl || `${String(source.url).replace(/\/$/, '')}/sessions`;
+
+/** GET <sessionsUrl>?range=..|from=&to=&limit=..: per-visit paths (source, pages, CTAs, booking steps, outcome). */
+export async function fetchSiteSessions({ source, range, from, to, limit, env, fetchImpl, now }) {
+  if (!source) throw new SourceError('No website source is set up for this client.');
+  const params = from && to ? { from, to, limit } : { range, limit };
+  const data = await getJson({ source, url: new URL(sessionsUrlOf(source)), params, env, fetchImpl });
+  return { source: source.label, fetchedAt: new Date(now).toISOString(), ...data };
 }
 
 /** GET <peopleUrl>?kind=..&range=..[&id|&stage&limit]: person-level leads / email captures / applicants. */
