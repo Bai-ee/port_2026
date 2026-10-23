@@ -52,7 +52,7 @@ test('every action literal exists in its route source (or the route\'s declared 
 
 test('coverage: every action of the two core routes is catalogued or explicitly excluded', () => {
   const EXCLUDED_QT = new Set(['strategy-chat-send', 'strategy-chat-history', 'strategy-proposal-decide', 'strategy-review', 'save-thumb', 'media-url', 'strategy-autonomy-save', 'strategy-action-undo', 'strategy-reply-style-get', 'strategy-reply-style-save', 'strategy-unmet-list', 'strategy-unmet-status']);
-  const EXCLUDED_SP = new Set(['process-due-cron']);
+  const EXCLUDED_SP = new Set(['process-due-cron', 'set-targets']);
   const registered = (route) => new Set(ACTIONS.filter((a) => a.route === route).map((a) => a.action).filter(Boolean));
 
   // quote-targets: SUPPORTED_ACTIONS array in the route (spreads resolved through the imported lists).

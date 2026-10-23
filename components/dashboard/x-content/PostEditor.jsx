@@ -144,6 +144,65 @@ function HiresPanel({ row, call, onUsed }) {
   );
 }
 
+// Where this post goes: X and/or Instagram (features/social-posting/cross-post.js). Saved the moment a box changes
+// (social-posting set-targets), independent of Approve, and kept through approve/schedule. Instagram is only tickable
+// when it could actually deliver (connected account, media); the server re-checks. Never touches the text being edited.
+const IG_DELIVERY_TEXT = { posted: 'Posted to Instagram', failed: 'Instagram failed', needs_review: 'Instagram outcome unknown', blocked: 'Instagram skipped' };
+
+function NetworkTargets({ row, handle, callSocial, onRowPatch, disabled }) {
+  const [opts, setOpts] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const published = row.status === 'posted' || row.status === 'posting';
+  useEffect(() => {
+    let live = true;
+    setOpts(null); setErr('');
+    callSocial({ action: 'post-targets', postId: row.id })
+      .then((r) => { if (live) setOpts(r); })
+      .catch((e) => { if (live) setErr(e?.message || 'Could not load the networks for this post.'); });
+    return () => { live = false; };
+  }, [row.id, row.mediaUrl, callSocial]);
+
+  const targets = row.targets ? { x: row.targets.x !== false, instagram: row.targets.instagram === true } : (opts?.targets || { x: true, instagram: false });
+  const ig = opts?.instagram || null;
+  const delivery = row.instagramDelivery || opts?.instagramDelivery || null;
+
+  const toggle = async (key) => {
+    const next = { ...targets, [key]: !targets[key] };
+    if (!next.x && !next.instagram) { setErr('Keep at least one network ticked.'); return; }
+    setSaving(true); setErr('');
+    try {
+      const res = await callSocial({ action: 'set-targets', postId: row.id, targets: next, expectedRevision: row.revision ?? null });
+      onRowPatch({ targets: res?.post?.targets || next, revision: res?.post?.revision ?? row.revision });
+    } catch (e) {
+      setErr(e?.message || 'Could not change the networks.');
+    } finally { setSaving(false); }
+  };
+
+  const lock = disabled || saving || published || !opts;
+  return (
+    <div id="post-editor-network-targets-row" className="pe-targets" role="group" aria-label="Post to">
+      <span className="pe-targets-label">Post to</span>
+      <label id="post-editor-target-x" className="pe-target">
+        <input type="checkbox" checked={targets.x} disabled={lock} onChange={() => toggle('x')} />
+        <span>X{handle ? ` ${handle}` : ''}</span>
+      </label>
+      <label id="post-editor-target-instagram" className="pe-target" title={ig && !ig.available && !targets.instagram ? ig.reason : undefined}>
+        <input type="checkbox" checked={targets.instagram} disabled={lock || (!targets.instagram && !ig?.available)} onChange={() => toggle('instagram')} />
+        <span>Instagram{ig?.username ? ` @${ig.username}` : ''}</span>
+      </label>
+      {saving ? <span className="pe-muted">Saving…</span> : null}
+      {ig && !ig.available && !targets.instagram && !published ? <p id="post-editor-target-instagram-reason" className="pe-muted pe-targets-note">{ig.reason}</p> : null}
+      {delivery?.status ? (
+        <p id="post-editor-instagram-delivery" className={`pe-targets-note ${delivery.status === 'posted' ? 'pe-muted' : 'pe-note pe-note-warn'}`}>
+          {IG_DELIVERY_TEXT[delivery.status] || delivery.status}{delivery.error ? `: ${delivery.error}` : ''}
+        </p>
+      ) : null}
+      {err ? <p id="post-editor-targets-error" className="pe-note pe-note-bad pe-targets-note" role="alert">{err}</p> : null}
+    </div>
+  );
+}
+
 export default function PostEditor({
   postId = null,
   row: rowProp = null,
@@ -460,6 +519,16 @@ export default function PostEditor({
         </div>
         {row.needsStory ? <p id="post-editor-needs-story" className="pe-muted pe-card-note">This draft still has a story placeholder. Approving removes that line; add your own first if you want one.</p> : null}
         <footer id="post-editor-footer" className="pe-footer">
+          {!suggestion && row.id ? (
+            <NetworkTargets
+              row={row}
+              handle={handle}
+              callSocial={callSocial}
+              disabled={busy || !!postStep}
+              // Local merge only: notifying the host would re-key the editor on the new revision and drop unsaved text edits.
+              onRowPatch={(patch) => setRow((r) => ({ ...r, ...patch }))}
+            />
+          ) : null}
           <div id="post-editor-footer-actions" className="pe-btn-row">
             <button type="button" id="post-editor-approve" className="pe-btn pe-btn-primary cta-pill-btn" disabled={!st.canApprove || (override && !overrideReason.trim()) || !!postStep} onClick={doApprove} title={!st.canApprove ? st.approveBlockedReason : (st.approveMode === 'schedule' ? 'Approve and schedule at the time above' : 'Approve (no publish time set)')}>
               {busy ? 'Working…' : 'Approve'}
@@ -645,6 +714,12 @@ function PostEditorStyles() {
       #post-editor-root .pe-btn-plain:hover:not(:disabled) { color: var(--t-text-strong); border-color: var(--t-control-border-strong); }
       #post-editor-root #post-editor-footer-actions .pe-btn { justify-content: center; width: 100%; white-space: nowrap; }
       #post-editor-root .pe-btn-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; }
+      #post-editor-root .pe-targets { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; justify-content: center; margin: 0 0 10px; font-size: 13px; }
+      #post-editor-root .pe-targets-label { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--t-text-muted); }
+      #post-editor-root .pe-target { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; color: var(--t-text); }
+      #post-editor-root .pe-target input { margin: 0; width: 16px; height: 16px; accent-color: var(--t-accent, currentColor); }
+      #post-editor-root .pe-target input:disabled + span { color: var(--t-text-muted); }
+      #post-editor-root .pe-targets-note { flex-basis: 100%; text-align: center; }
       #post-editor-root .pe-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 8px 16px; border-radius: 999px; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; border: 1px solid var(--t-control-border); }
       /* Standard gradient buttons (same as the Queue & Calendar card): primary = full gradient fill, secondary = static
          gradient border. The mask only reads alpha, so a token stands in for #fff. */

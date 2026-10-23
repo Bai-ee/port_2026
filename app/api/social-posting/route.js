@@ -24,6 +24,8 @@ import {
   runPostingAgents,
   schedulePost,
   updateSocialPost,
+  setPostTargets,
+  getPostTargetOptions,
 } from '../../../features/social-posting/twitter-service.js';
 import { scoreXPost } from '../../../features/x-growth/index.js';
 import {
@@ -307,6 +309,19 @@ export async function POST(request) {
         expectedRevision: body.expectedRevision,
         planOverride: planOverrideFrom(body, decoded),
       });
+      return json({ ok: true, post });
+    }
+
+    // Post networks (X / Instagram checkboxes). Reading is free; setting is owner-only like approve, and is not a
+    // material edit (approval + schedule kept). Instagram is refused unless it could actually deliver.
+    if (action === 'post-targets') {
+      if (!body.postId) return json({ error: 'postId is required.' }, 400);
+      return json({ ok: true, ...(await getPostTargetOptions(context.clientId, body.postId)) });
+    }
+    if (action === 'set-targets') {
+      requirePilotOwner(context, decoded);
+      if (!body.postId) return json({ error: 'postId is required.' }, 400);
+      const post = await setPostTargets(context.clientId, body.postId, body.targets, { expectedRevision: body.expectedRevision });
       return json({ ok: true, post });
     }
 

@@ -36,6 +36,7 @@
 //   not call itself or approve its own proposal cards.   quote-targets save-thumb (binary data URL), media-url (single, superseded
 //   by media-urls), media route upload-session / complete-upload (browser uploads), remix-download.
 //   social-posting GET ?action=process-due (cron-secret only) and planOverride (plan-cap bypass needs a human reason).
+//   social-posting set-targets (ticking X / Instagram decides where a live post goes: the owner's checkbox, not the agent).
 //   worker/* other than pre-digest-refresh, intelligence/*, leadgen/*, site-clone, studio-*, knowledge-base/*, onboarding.
 //   mcp/*  -> the MCP transport is a separate surface.
 

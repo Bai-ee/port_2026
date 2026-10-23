@@ -14,6 +14,7 @@ import { reserveInTx, releaseReservations } from './reservations.js';
 import { toMs, contentHash, LIFECYCLE_VERSION, OPEN_STATUSES, MANUAL_CLAIMABLE_STATUSES, APPROVAL_VOID_STATUSES, isV2, packageClearance, replyBlock, findPackageCollision, isMaterialEdit, deliveryBlock } from './lifecycle.js';
 import { assertNoMemoryPlaceholder, hasMemoryPlaceholder, stripBlockingPlaceholders, sanitizeMediaVariants, sanitizeSelfReply, sanitizeSourceRef } from './self-reply.js';
 import { sanitizeRepostOf, repostLabel } from './repost.js';
+import { postTargets, normalizeTargets, instagramBlockReason, deliverInstagram } from './cross-post.js';
 
 const require = createRequire(import.meta.url);
 const fb = require('../../api/_lib/firebase-admin.cjs');
@@ -1865,21 +1866,37 @@ async function postAndRecord(snapshot) {
   }
   try {
     const now = new Date().toISOString();
-    const result = await publishStoredPost(post, now);
-    const updated = {
-      ...post,
-      status: 'posted',
-      twitterId: result.twitterId,
-      postedAt: post.postedAt || now,
-      updatedAt: now,
-      error: null,
-      retryable: false,
-      errorClass: null,
-      ...selfReplyFields(post, result, now),
-    };
+    const targets = postTargets(post);
+    let updated = { ...post, updatedAt: now };
+    if (targets.x) {
+      const result = await publishStoredPost(post, now);
+      updated = {
+        ...post,
+        status: 'posted',
+        twitterId: result.twitterId,
+        postedAt: post.postedAt || now,
+        updatedAt: now,
+        error: null,
+        retryable: false,
+        errorClass: null,
+        ...selfReplyFields(post, result, now),
+      };
+    }
+    // Instagram leg (./cross-post.js): runs after X, never fails a published X post. When X is not a target it
+    // is the row's only leg, so its outcome becomes the row's outcome.
+    if (targets.instagram) {
+      const delivery = await runInstagramLeg(post);
+      updated.instagramDelivery = delivery;
+      if (!targets.x) {
+        Object.assign(updated, delivery.status === 'posted'
+          ? { status: 'posted', postedAt: post.postedAt || now, error: null, retryable: false, errorClass: null }
+          : { status: delivery.status === 'needs_review' ? 'needs_review' : 'failed', error: delivery.error, retryable: false, errorClass: `instagram-${delivery.status}` });
+      }
+    }
     await settleClaimed(post, updated);
-    await recordPackagePosted(updated, now);
-    return { ok: true, updated };
+    if (updated.status === 'posted') await recordPackagePosted(updated, now);
+    else if (updated.status === 'failed') await releaseHeldSlot(updated);
+    return { ok: updated.status === 'posted', updated };
   } catch (error) {
     const updated = failedRow(post, error);
     await settleClaimed(post, updated);
@@ -1887,6 +1904,58 @@ async function postAndRecord(snapshot) {
     if (updated.status === 'failed' && !isRetryableFailure(updated)) await releaseHeldSlot(updated);
     return { ok: false, updated };
   }
+}
+
+// Instagram leg deps, lazy so X-only paths (and their tests) never load the accounts store. Swappable in tests.
+let instagramLegDeps = null;
+export function __setInstagramLegDepsForTest(deps) { instagramLegDeps = deps; }
+
+async function runInstagramLeg(post) {
+  const deps = instagramLegDeps || {
+    getAccount: async (clientId) => (await import('./social-accounts.js')).getSocialAccount(clientId, 'instagram'),
+    publish: async (payload, opts) => (await import('./adapters/instagram.js')).publish(payload, opts),
+  };
+  return deliverInstagram(post, { ...deps, media: await freshPostMedia(post) });
+}
+
+/**
+ * Which networks a post goes to (`targets: {x, instagram}`), editable until it is published. Not a material edit:
+ * approval, schedule and slot are kept. Instagram is refused unless it could actually deliver (live, account
+ * connected, media present), so a ticked box always means "will post".
+ */
+export async function setPostTargets(clientId, postId, targets, { expectedRevision = null } = {}) {
+  const next = normalizeTargets(targets);
+  const post = await getSocialPost(clientId, postId);
+  if (!post) throw Object.assign(new Error('Post not found.'), { status: 404 });
+  if (expectedRevision != null && (post.revision || 0) !== Number(expectedRevision)) throw conflict();
+  if (post.status === 'posted' || post.status === 'posting') {
+    throw Object.assign(new Error('This post has already been published; its networks can no longer change.'), { status: 409, code: 'already-published' });
+  }
+  if (next.instagram) {
+    const account = instagramLegDeps
+      ? await instagramLegDeps.getAccount(clientId)
+      : await (await import('./social-accounts.js')).getSocialAccount(clientId, 'instagram');
+    const why = instagramBlockReason(post, account);
+    if (why) throw Object.assign(new Error(why), { status: 409, code: 'instagram-blocked' });
+  }
+  const cur = postTargets(post);
+  if (cur.x === next.x && cur.instagram === next.instagram && post.targets) return post;
+  return commitPostTransition(clientId, post, { ...post, targets: next, updatedAt: new Date().toISOString() });
+}
+
+/** What the editor's network checkboxes show for one post: current targets + whether Instagram can be ticked. */
+export async function getPostTargetOptions(clientId, postId) {
+  const post = await getSocialPost(clientId, postId);
+  if (!post) throw Object.assign(new Error('Post not found.'), { status: 404 });
+  const account = instagramLegDeps
+    ? await instagramLegDeps.getAccount(clientId)
+    : await (await import('./social-accounts.js')).getSocialAccount(clientId, 'instagram');
+  const reason = instagramBlockReason(post, account);
+  return {
+    targets: postTargets(post),
+    instagram: { available: !reason, reason: reason || null, username: account?.username || null },
+    instagramDelivery: post.instagramDelivery || null,
+  };
 }
 
 // A failed publish. Lifecycle-v2 rows whose outcome is AMBIGUOUS (timeout/5xx/unknown: X may already have the

@@ -368,7 +368,7 @@ export default function XProfileCard({ getIdToken, activeClientId, clientName })
                         ) : (
                           <span className="xp-chip xp-chip-muted">Not connected</span>
                         )}
-                        {!p.live ? <span className="xp-chip xp-chip-muted">Publishing not live yet</span> : null}
+                        {!p.live ? <span className="xp-chip xp-chip-muted">{p.crossPost ? 'Posts from the calendar (tick Instagram on a post)' : 'Publishing not live yet'}</span> : null}
                       </div>
                       {p.key === 'instagram' && acct.connected && acct.expiresAt ? (
                         <p id="social-account-instagram-token-status" className={acct.refreshError || acct.expiresAt < Date.now() ? 'xp-error' : 'xp-sub'} style={{ margin: '6px 0 0' }}>
