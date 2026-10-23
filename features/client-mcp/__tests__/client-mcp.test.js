@@ -116,7 +116,7 @@ test('client B token sees B and never A', async () => {
 });
 
 test('no tool takes a clientId argument; all are read-only', () => {
-  assert.deepEqual(clientRegistry.map((t) => t.name), ['get_daily_update', 'get_site_stats', 'get_leads', 'get_lead', 'get_email_captures', 'get_applicants', 'get_applicant', 'get_client_brain', 'get_content_calendar', 'get_post_results', 'get_marketing_data']);
+  assert.deepEqual(clientRegistry.map((t) => t.name), ['get_daily_update', 'get_site_stats', 'get_visitor_sessions', 'get_leads', 'get_lead', 'get_email_captures', 'get_applicants', 'get_applicant', 'get_client_brain', 'get_content_calendar', 'get_post_results', 'get_marketing_data']);
   for (const t of clientRegistry) {
     assert.equal(Object.hasOwn(t.inputSchema.properties || {}, 'clientId'), false, t.name);
     assert.equal(t.annotations.readOnlyHint, true, t.name);
@@ -248,6 +248,50 @@ test('get_site_stats errors never leak the key (401, 429, network, unset key)', 
   const noKey = await rpc({ token: clientToken({ hcid: B, gid: grantIdOf(SECRET_B) }), secret: SECRET_B, body: call('get_site_stats'), deps: nb.deps });
   assert.equal(noKey.body.result.isError, true);
   assert.match(textOf(noKey), /not connected yet/);
+});
+
+test('get_site_stats: rolling 24h and from/to dates pass through; half or malformed dates are refused without fetching', async () => {
+  const { deps, calls } = makeDeps();
+  await rpc({ body: call('get_site_stats', { range: '24h' }), deps });
+  assert.equal(new URL(calls.fetch[0].url).searchParams.get('range'), '24h');
+  const out = await rpc({ body: call('get_site_stats', { from: '2026-10-01', to: '2026-10-07', range: '30d' }), deps });
+  const u = new URL(calls.fetch[1].url);
+  assert.deepEqual([u.searchParams.get('from'), u.searchParams.get('to'), u.searchParams.get('range')], ['2026-10-01', '2026-10-07', null]);
+  assert.match(textOf(out), /"range": "custom"/);
+  for (const args of [{ from: '2026-10-01' }, { from: '10/01/2026', to: '2026-10-07' }]) {
+    const bad = await rpc({ body: call('get_site_stats', args), deps });
+    assert.equal(bad.body.result.isError, true, JSON.stringify(args));
+  }
+  assert.equal(calls.fetch.length, 2);
+});
+
+test('get_visitor_sessions hits <stats url>/sessions with range/limit (default 24h, 25), key in the header only', async () => {
+  const seen = [];
+  const body = { range: { key: '24h' }, totalSessions: 1, returned: 1, note: 'A session is one browser tab', sessions: [{ sid: 's1', source: 'referral:google.com', trail: [{ event: 'page_view', route: '/' }] }] };
+  const { deps } = makeDeps({ fetchImpl: async (url, init) => { seen.push({ url: new URL(url), init }); return jsonRes(200, body); } });
+  const out = await rpc({ body: call('get_visitor_sessions'), deps });
+  await rpc({ body: call('get_visitor_sessions', { from: '2026-10-01', to: '2026-10-02', limit: 100 }), deps });
+  assert.equal((await rpc({ body: call('get_visitor_sessions', { limit: 500 }), deps })).body.result.isError, true); // schema max
+  assert.equal(seen.length, 2);
+  assert.equal(seen[0].url.origin + seen[0].url.pathname, 'https://a.example/api/stats/sessions');
+  assert.deepEqual([seen[0].url.searchParams.get('range'), seen[0].url.searchParams.get('limit')], ['24h', '25']);
+  assert.deepEqual([seen[1].url.searchParams.get('from'), seen[1].url.searchParams.get('to'), seen[1].url.searchParams.get('limit')], ['2026-10-01', '2026-10-02', '100']);
+  assert.equal(seen[0].init.headers.authorization, `Bearer ${SITE_KEY}`);
+  const text = textOf(out);
+  assert.ok(!text.includes(SITE_KEY) && !seen[0].url.toString().includes(SITE_KEY));
+  assert.match(text, /referral:google\.com/);
+  assert.match(text, /"sessions": \[/); // key-name redaction off: "sessions" is not blanked
+  assert.match(text, /fetchedAt/);
+});
+
+test('get_visitor_sessions: a long list is trimmed by whole sessions; the site note is kept', async () => {
+  const sessions = Array.from({ length: 100 }, (_, i) => ({ sid: `s${i}`, trail: Array.from({ length: 40 }, () => ({ event: 'page_view', route: '/neighborhoods', at: '2026-10-20T12:00:00.000Z' })) }));
+  const { deps } = makeDeps({ fetchImpl: async () => jsonRes(200, { totalSessions: 100, returned: 100, note: 'site note', sessions }) });
+  const parsed = JSON.parse(textOf(await rpc({ body: call('get_visitor_sessions', { limit: 100 }), deps })));
+  assert.ok(parsed.sessions.length < 100 && parsed.sessions.length >= 1);
+  assert.equal(parsed.returned, parsed.sessions.length);
+  assert.equal(parsed.note, 'site note');
+  assert.match(parsed.sizeNote, /of 100/);
 });
 
 test('Not The Rug is the first registered site source, keyed by env name only', () => {

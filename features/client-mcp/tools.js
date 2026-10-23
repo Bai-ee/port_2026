@@ -6,7 +6,10 @@
 
 import { ToolError } from '../mcp/jsonrpc.js';
 import { defTool, str } from '../mcp/tools/common.js';
-import { SITE_STATS_RANGES, PEOPLE_RANGES, PEOPLE_ID_RE, siteStatsSourceFor, fetchSiteStats, fetchSitePeople } from './sources.js';
+import {
+  SITE_STATS_RANGES, SITE_REPORT_RANGES, SITE_DATE_RE, PEOPLE_RANGES, PEOPLE_ID_RE,
+  siteStatsSourceFor, fetchSiteStats, fetchSitePeople, fetchSiteSessions,
+} from './sources.js';
 
 export const RANGES = SITE_STATS_RANGES;
 const RANGE_MS = Object.freeze({ today: 86_400_000, '7d': 7 * 86_400_000, '30d': 30 * 86_400_000 });
@@ -24,23 +27,70 @@ const msOf = (v) => {
 const isoOf = (v) => { const t = msOf(v); return t == null ? null : new Date(t).toISOString(); };
 const excerptOf = (t, n = 280) => String(t ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 
-// ---- get_site_stats ----------------------------------------------------------------------------------------
+// ---- get_site_stats / get_visitor_sessions -----------------------------------------------------------------
+
+const siteRangeProp = (description) => ({ type: 'string', enum: [...SITE_REPORT_RANGES], description });
+const siteDateProp = (description) => str(description, { pattern: SITE_DATE_RE.source, maxLength: 10 });
+const siteWindowProps = (defaultRange) => ({
+  range: siteRangeProp(`24h (rolling, ending now) | today | 7d | 30d. Default ${defaultRange}. Ignored when from/to are given.`),
+  from: siteDateProp('Custom start date, YYYY-MM-DD in the site timezone. Needs to. At most 90 days, within the last 13 months.'),
+  to: siteDateProp('Custom end date (inclusive), YYYY-MM-DD in the site timezone, not in the future. Needs from.'),
+});
+
+/** {range} or {from, to}. The site does the full date checks (order, future, span); this only checks the shape. */
+function siteWindowOf(args, fallback) {
+  const from = typeof args?.from === 'string' ? args.from.trim() : '';
+  const to = typeof args?.to === 'string' ? args.to.trim() : '';
+  if (from || to) {
+    if (!SITE_DATE_RE.test(from) || !SITE_DATE_RE.test(to)) throw new ToolError('from and to must both be given as YYYY-MM-DD dates.');
+    return { from, to };
+  }
+  return { range: SITE_REPORT_RANGES.includes(args?.range) ? args.range : fallback };
+}
 
 const siteStatsTool = defTool({
   name: 'get_site_stats',
   title: 'Website stats',
-  description: 'PRIMARY SOURCE. Live stats from the client\'s own website: visits, traffic sources, top pages, CTA clicks, booking funnel, leads and applicants (counts and trends only; for names, contact details and answers use get_leads, get_email_captures and get_applicants). Call this first for any question about how the site or business is doing. range: today | 7d | 30d (default 7d). If stats.degraded lists parts, those parts fell back to zeros.',
-  inputSchema: { type: 'object', properties: { range: rangeProp('Time range. Default 7d.') } },
+  description: 'PRIMARY SOURCE. Live stats from the client\'s own website: visits (sessions), traffic sources, top pages, CTA clicks, engagement, bounce rate, pages per visit, visit duration, booking funnel with where visitors abandoned it, leads and applicants (counts and trends only; for names, contact details and answers use get_leads, get_email_captures and get_applicants; for individual visits use get_visitor_sessions). Call this first for any question about how the site or business is doing. range: 24h (rolling, ending now) | today | 7d | 30d (default 7d), or from/to dates for a custom span. stats.definitions explains each number; quote them with it. Unique or returning visitors are not tracked. If stats.degraded lists parts, those parts fell back to zeros.',
+  inputSchema: { type: 'object', properties: siteWindowProps('7d') },
   kind: 'external',
   // Site stats are counts keyed by words like "sessions"; key-name redaction would blank them. Values are still scanned.
   redactKeys: false,
   handler: async ({ args, ctx }) => fetchSiteStats({
     source: siteStatsSourceFor(ctx.clientId, ctx.services.sources),
-    range: rangeOf(args, '7d'),
+    ...siteWindowOf(args, '7d'),
     env: ctx.services.env,
     fetchImpl: ctx.services.fetch,
     now: ctx.now(),
   }),
+});
+
+const SESSIONS_DEFAULT_LIMIT = 25;
+const SESSIONS_MAX_LIMIT = 100;
+
+const visitorSessionsTool = defTool({
+  name: 'get_visitor_sessions',
+  title: 'Visitor sessions (paths)',
+  description: 'Individual website visits, newest first: where each came from (campaign, referring site or direct), entry and exit page, every page, CTA click and booking step in order with times, duration, whether it bounced, and how far it got (booking step reached, lead saved, scheduler opened, appointment booked). Use for "what did visitors do", "show me the last visits", "where do people drop off", "what path do leads take". A session is one browser tab, not a person: visitors cannot be identified or linked to leads. range: 24h | today | 7d | 30d (default 24h), or from/to dates. limit: default 25, max 100.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      ...siteWindowProps('24h'),
+      limit: { type: 'integer', minimum: 1, maximum: SESSIONS_MAX_LIMIT, description: `How many visits, newest first. Default ${SESSIONS_DEFAULT_LIMIT}, max ${SESSIONS_MAX_LIMIT}.` },
+    },
+  },
+  kind: 'external',
+  redactKeys: false,
+  handler: async ({ args, ctx }) => {
+    const limit = Number.isInteger(args?.limit) ? Math.min(Math.max(args.limit, 1), SESSIONS_MAX_LIMIT) : SESSIONS_DEFAULT_LIMIT;
+    const res = await fetchSiteSessions({
+      source: siteStatsSourceFor(ctx.clientId, ctx.services.sources),
+      ...siteWindowOf(args, '24h'),
+      limit,
+      env: ctx.services.env, fetchImpl: ctx.services.fetch, now: ctx.now(),
+    });
+    return fitList(res, 'sessions', 'returned');
+  },
 });
 
 // ---- people: leads / email captures / applicants -----------------------------------------------------------
@@ -64,14 +114,17 @@ function peopleRequest(ctx, params) {
   });
 }
 
-function fitItems(res) {
-  if (!Array.isArray(res.items)) return res;
-  const items = [...res.items];
-  const size = () => JSON.stringify({ ...res, items }, null, 1).length;
-  while (items.length > 1 && size() > PEOPLE_BUDGET_CHARS) items.pop();
-  if (items.length === res.items.length) return res;
-  return { ...res, items, count: items.length, note: `Showing the first ${items.length} of ${res.items.length} fetched records (size cap). Ask with a smaller limit, a narrower range, or open one record by id.` };
+function fitList(res, key, countKey) {
+  if (!Array.isArray(res[key])) return res;
+  const list = [...res[key]];
+  const size = () => JSON.stringify({ ...res, [key]: list }, null, 1).length;
+  while (list.length > 1 && size() > PEOPLE_BUDGET_CHARS) list.pop();
+  if (list.length === res[key].length) return res;
+  // Sessions already carry the site's own `note`, so their cap message goes in sizeNote.
+  const noteKey = key === 'items' ? 'note' : 'sizeNote';
+  return { ...res, [key]: list, [countKey]: list.length, [noteKey]: `Showing the first ${list.length} of ${res[key].length} fetched records (size cap). Ask with a smaller limit or a narrower range${key === 'items' ? ', or open one record by id' : ''}.` };
 }
+const fitItems = (res) => fitList(res, 'items', 'count');
 
 const peopleListTool = ({ name, title, kind, description, withStage }) => defTool({
   name, title, description,
@@ -384,7 +437,7 @@ const dailyUpdateTool = defTool({
   },
 });
 
-export const clientRegistry = Object.freeze([dailyUpdateTool, siteStatsTool, leadsTool, leadTool, capturesTool, applicantsTool, applicantTool, clientBrainTool, calendarTool, resultsTool, marketingDataTool]);
+export const clientRegistry = Object.freeze([dailyUpdateTool, siteStatsTool, visitorSessionsTool, leadsTool, leadTool, capturesTool, applicantsTool, applicantTool, clientBrainTool, calendarTool, resultsTool, marketingDataTool]);
 
 // Sent on initialize: how the assistant should weigh and phrase answers for this one client.
 export function clientInstructions({ label, siteUrl }) {
@@ -394,7 +447,7 @@ export function clientInstructions({ label, siteUrl }) {
     `You are ${name}'s business assistant. This connection holds ${name}'s own data only; answer about ${name}${site ? ` and ${site}` : ''}, nothing else.`,
     'OPENING: when a conversation starts, or the user asks something general (hi, what do you know, give me an update, what can you tell me, boot up, get started, catch me up, status), call get_daily_update first and reply in its replyFormat: short and brief. Then answer any specific question.',
     site
-      ? `PRIMARY: the website's live analytics. For any question about how the site or business is doing (visits, traffic, sources, pages, bookings, leads, applicants), call get_site_stats first (default 7d; use today or 30d when asked) and lead with those numbers and the trend.`
+      ? `PRIMARY: the website's live analytics. For any question about how the site or business is doing (visits, traffic, sources, pages, bookings, leads, applicants), call get_site_stats first (default 7d; use 24h for "last 24 hours", today, 30d, or from/to dates when asked) and lead with those numbers and the trend. For what individual visitors did (paths, drop-off, where a visit came from) use get_visitor_sessions. Unique or returning visitors are not tracked: say so rather than calling sessions people.`
       : 'No website stats source is connected for this client yet; say so if asked about visits, leads or applicants.',
     'PEOPLE: you can look up individual leads, email captures and applicants (names, contact details, every answer) with get_leads, get_lead, get_email_captures, get_applicants and get_applicant. When asked about people, use them; quote values exactly as recorded and never invent contact details.',
     'SECONDARY: the marketing work prepared for them: get_marketing_data (Market Signals report, SEO audit, brief outputs), get_content_calendar, get_post_results, get_client_brain (brand, offers, voice). Use these after the site numbers, or when asked directly.',
