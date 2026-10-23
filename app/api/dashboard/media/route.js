@@ -16,6 +16,8 @@ const {
   listSourceFoldersWithCounts,
   listFolderMedia,
   createUploadSession,
+  getResumableStatus,
+  renewResumableSession,
   invalidateFolderCache,
   listOptions,
   getMediaUsage,
@@ -457,10 +459,27 @@ export async function POST(request) {
     }
 
     try {
-      const session = await createUploadSession(body || {});
+      const session = await createUploadSession({ ...(body || {}), origin: request.headers.get('origin') || '' });
       return json({ ok: true, session });
     } catch (err) {
       return json({ error: err.message || 'Could not create upload session.' }, 400);
+    }
+  }
+
+  // Resumable-upload plumbing (same auth as create-upload-session).
+  if (action === 'upload-status' || action === 'upload-renew') {
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return json({ error: 'Invalid JSON body.' }, 400);
+    }
+    try {
+      if (action === 'upload-status') return json(await getResumableStatus(body || {}));
+      const { sessionUri } = await renewResumableSession({ ...(body || {}), origin: request.headers.get('origin') || '' });
+      return json({ ok: true, sessionUri });
+    } catch (err) {
+      return json({ error: err.message || 'Upload request failed.' }, err.status || 400);
     }
   }
 
