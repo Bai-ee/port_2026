@@ -62,3 +62,11 @@ test('titleFromFilename tidies separators', () => {
   assert.equal(titleFromFilename('Cool_Track.v2.MOV'), 'Cool Track v2');
   assert.equal(titleFromFilename(''), 'Untitled upload');
 });
+
+test('the upload session storage prefix is dropped from titles and ids', () => {
+  assert.equal(titleFromFilename('track-xyz/user_upload_1792791713044_1_xyz-test-clip.mp4'), 'xyz test clip');
+  const first = uploadPackageId(C, 'track-xyz/user_upload_1792791713044_1_clip.mp4', 2048);
+  assert.equal(uploadPackageId(C, 'track-xyz/user_upload_1792799999999_0_clip.mp4', 2048), first);
+  assert.notEqual(uploadPackageId(C, 'track-xyz/user_upload_1792799999999_0_clip.mp4', 4096), first);
+  assert.notEqual(uploadPackageId(C, 'track-abc/user_upload_1792791713044_1_clip.mp4', 2048), first);
+});
