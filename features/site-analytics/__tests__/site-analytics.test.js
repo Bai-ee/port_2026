@@ -157,3 +157,16 @@ test('visit paths: newest first, source/entry/exit, trail, visitor id; test traf
   assert.equal(p.sessions[1].bounced, true);
   assert.equal(buildSessionPaths(EVENTS, { site: 'ue', range: '7d', now: NOW, limit: 1 }).returned, 1);
 });
+
+test('owner get_site_sessions + custom dates on get_site_analytics; a bad window is a tool error with the reason', async () => {
+  const seed = Object.fromEntries(EVENTS.map((e, i) => [`site_analytics/ue/events/e${i}`, e]));
+  const ctx = { db: createFakeDb(seed), email: 'o@x.test', clientId: 'c', now: () => NOW, services: {} };
+  const callTool = (name, args) => handleRpc({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }, { registry, ctx, instructions: '' }).then((r) => r.body.result);
+  const s = JSON.parse((await callTool('get_site_sessions', { range: '7d', limit: 2 })).content[0].text);
+  assert.deepEqual([s.totalSessions, s.returned, s.sessions[0].sid], [3, 2, 'b1']);
+  const c = JSON.parse((await callTool('get_site_analytics', { from: '2026-10-22', to: '2026-10-22' })).content[0].text);
+  assert.deepEqual([c.range, c.analytics.pageviews], ['custom', 2]);
+  const bad = await callTool('get_site_analytics', { from: '2026-10-22', to: '2026-10-30' });
+  assert.equal(bad.isError, true);
+  assert.match(bad.content[0].text, /future/);
+});
