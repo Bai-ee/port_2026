@@ -28,6 +28,7 @@ import { decideCalendarItem } from '../../../../features/x-content-inventory/cal
 import { createContentTaskStore } from '../../../../features/x-content-inventory/content-tasks.js';
 import { joinPerformance, engineStats } from '../../../../features/x-content-inventory/performance.js';
 import * as bucketStore from '../../../../features/x-content-inventory/bucket-store.js';
+import { packageFromUpload, assertUploadPath, MAX_UPLOAD_FILES } from '../../../../features/x-content-inventory/upload-ingest.js';
 import { findMediaCandidates, linkMediaPatch, normalizeLinks } from '../../../../features/x-content-inventory/item-media.js';
 import { normalizeFacets } from '../../../../features/x-content-inventory/facets.js';
 import { resolveMediaUrls } from '../../../../features/rendered-videos/media-url.js';
@@ -408,6 +409,7 @@ const SUPPORTED_ACTIONS = [
   'reject-package',
   'list-buckets',
   'upsert-bucket',
+  'ingest-uploads',
   'delete-bucket',
   'list-folders',
   'upsert-folder',
@@ -1241,10 +1243,46 @@ async function handleBucketAction(context, action, body) {
     return { ok: true, ...out, tracksSynced: !!sync?.changed };
   };
   if (action === 'upsert-bucket') return withTrackSync(await bucketStore.upsertBucket(cid, body?.bucket ?? stripEnvelope(body)));
+  if (action === 'ingest-uploads') return handleIngestUploads(cid, body);
   if (action === 'delete-bucket') return withTrackSync(await bucketStore.deleteBucket(cid, body?.bucketId ?? body?.id, { reassignTo: body?.reassignTo }));
   if (action === 'list-folders') return { ok: true, folders: await bucketStore.listFolders(cid, { bucketId: body?.bucketId || undefined }) };
   if (action === 'upsert-folder') return { ok: true, ...(await bucketStore.upsertFolder(cid, body?.folder ?? stripEnvelope(body))) };
   return { ok: true, ...(await bucketStore.deleteFolder(cid, body?.folderId ?? body?.id)) };
+}
+
+/** Turn files already uploaded to the EditVideos source bucket into library items in one bucket. Idempotent per fullPath; never overwrites an existing row. */
+async function handleIngestUploads(clientId, body) {
+  const bad = (message, status = 400) => Object.assign(new Error(message), { status });
+  const bucketId = String(body?.bucketId ?? '').trim();
+  const folder = String(body?.folder ?? '').trim().replace(/\/+$/, '');
+  const files = Array.isArray(body?.files) ? body.files : [];
+  if (!bucketId) throw bad('bucketId is required.');
+  if (!folder) throw bad('folder is required.');
+  if (!files.length) throw bad('files is required.');
+  if (files.length > MAX_UPLOAD_FILES) throw bad(`At most ${MAX_UPLOAD_FILES} files per call.`);
+  let bucket = (await bucketStore.listBuckets(clientId)).find((b) => b.id === bucketId);
+  if (!bucket) throw bad(`Unknown bucket: ${bucketId}`, 404);
+  const now = Date.now();
+  // Validate every path before any write so a bad entry cannot half-apply the batch.
+  const items = files.map((file) => {
+    assertUploadPath(file?.fullPath, folder);
+    if (file?.posterPath) assertUploadPath(file.posterPath);
+    return packageFromUpload({ clientId, bucket, file, now });
+  });
+  if (!bucket.uploadFolder) {
+    await bucketStore.upsertBucket(clientId, { ...bucket, uploadFolder: folder });
+    bucket = { ...bucket, uploadFolder: folder };
+  }
+  const get = getPackageFor(clientId);
+  const save = upsertFor(clientId);
+  const created = [];
+  const existing = [];
+  for (const pkg of items) {
+    if (await get(pkg.id)) { existing.push(pkg.id); continue; }
+    await save(pkg);
+    created.push(pkg.id);
+  }
+  return { ok: true, created, existing, bucket: { id: bucket.id, uploadFolder: bucket.uploadFolder || folder } };
 }
 
 function nasDeps(clientId) {
@@ -1340,7 +1378,7 @@ function getStrategyHandlers() {
   return strategyHandlers;
 }
 
-const BUCKET_ACTIONS = new Set(['list-buckets', 'upsert-bucket', 'delete-bucket', 'list-folders', 'upsert-folder', 'delete-folder']);
+const BUCKET_ACTIONS = new Set(['list-buckets', 'upsert-bucket', 'ingest-uploads', 'delete-bucket', 'list-folders', 'upsert-folder', 'delete-folder']);
 
 export async function POST(request) {
   let context;

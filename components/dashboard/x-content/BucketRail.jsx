@@ -117,6 +117,7 @@ export default function BucketRail({ buckets, counts, selectedId, onSelect, onUp
                   {(close) => (
                     <div className="xce-pop-list">
                       <p className="xce-pop-label">{b.active === false ? 'Inactive · ' : ''}{shareSummary(b.share)}</p>
+                      {b.uploadFolder ? <p className="xce-pop-label" id={`x-content-bucket-upload-folder-${b.id}`}>Folder: {b.uploadFolder}</p> : null}
                       <button type="button" className="xce-pop-item" disabled={busy} onClick={() => { setRenamingId(b.id); setRenameValue(b.name); close(); }}><Pencil size={13} /> Rename</button>
                       <button type="button" className="xce-pop-item" disabled={busy || idx === 0} onClick={() => { move(idx, -1); close(); }}><ArrowUp size={13} /> Move up</button>
                       <button type="button" className="xce-pop-item" disabled={busy || idx === buckets.length - 1} onClick={() => { move(idx, 1); close(); }}><ArrowDown size={13} /> Move down</button>

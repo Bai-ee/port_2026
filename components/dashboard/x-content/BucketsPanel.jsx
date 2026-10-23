@@ -14,6 +14,7 @@ import BucketToolbar from './BucketToolbar.jsx';
 import ItemGrid, { isAutoDaily } from './ItemGrid.jsx';
 import { effectiveFacets } from '../../../features/x-content-inventory/facets.js';
 import ItemDrawer from './ItemDrawer.jsx';
+import BucketUpload from './BucketUpload.jsx';
 import SourcePanel from './SourcePanel.jsx';
 import { syncChangedRows } from '../../../features/rendered-videos/sync-view.js';
 import { NasContext } from './nas-context.js';
@@ -62,7 +63,7 @@ function sourceKindOf(list, id) {
   return list.find((b) => b.id === id)?.sourceKind;
 }
 
-export default function BucketsPanel({ call, packages, loading, error, onReload }) {
+export default function BucketsPanel({ call, mediaCall, packages, loading, error, onReload }) {
   const [buckets, setBuckets] = useState(() => mergeBuckets([]));
   const [folders, setFolders] = useState([]);
   const [metaLoading, setMetaLoading] = useState(true);
@@ -274,6 +275,10 @@ export default function BucketsPanel({ call, packages, loading, error, onReload 
         <div id="x-content-buckets-layout" className="xce-bk-layout">
           <BucketRail buckets={buckets} counts={bucketCounts} selectedId={bucketId} onSelect={selectBucket} onUpsert={upsertBuckets} busy={busy} />
           <div id="x-content-buckets-main" className="xce-bk-main">
+            {bucketId !== 'all' && bucketById[bucketId] && mediaCall ? (
+              <BucketUpload key={bucketId} bucket={bucketById[bucketId]} call={call} mediaCall={mediaCall} disabled={busy}
+                onDone={async () => { await loadMeta(); await onReload(); }} />
+            ) : null}
             <BucketToolbar
               views={views} viewId={searching ? 'all' : viewId} onView={setViewId}
               folders={bucketFolders} selectedFolder={selectedFolder} suggestions={folderSuggestions}
