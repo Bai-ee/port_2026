@@ -65,7 +65,7 @@ the env var in Vercel prod (Not The Rug: `CLIENT_STATS_KEY_NOTTHERUG`). The key 
 links, mix plays, countries/cities, devices. Such a site has no people: the people tools say so, the daily update
 drops its lead lines (`leadsTracked:false`) and the instructions omit the PEOPLE tools. Sites are registered in
 `SITES` (`features/site-analytics/events.js`). UE routes to HITLOOP's own client `bryan-balli-WUoltG84`; owner MCP
-`get_site_analytics` reads the same report (plus `testMode`).
+`get_site_analytics` (report) and `get_site_sessions` (visit paths) read the same data (plus `testMode`, range or from/to). The owner reads UE through the owner MCP (`/api/mcp`); no client grant for `bryan-balli-WUoltG84` is active (8d674dd32e93 was revoked 2026-10-23).
 
 ## Audit + limits
 `mcp_audit` row per call: `{at, via:'client-mcp', clientId, grant (12-char prefix), tool, ok, ms}` — no arguments or
