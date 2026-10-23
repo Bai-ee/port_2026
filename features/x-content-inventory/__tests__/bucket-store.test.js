@@ -72,6 +72,15 @@ test('upsertBucket creates with id from name, rejects duplicate names, validates
   await assert.rejects(() => upsertBucket(C, { name: 'Bad', sourceKind: 'nope' }, { db }), { status: 400 });
 });
 
+test('upsertBucket persists uploadFolder and list exposes it; bad paths rejected', async () => {
+  const db = makeDb();
+  const r = await upsertBucket(C, { name: 'Uploads', sourceKind: 'manual', uploadFolder: 'Uploads/mixes' }, { db });
+  assert.equal(r.bucket.uploadFolder, 'Uploads/mixes');
+  assert.equal((await listBuckets(C, { db })).find((b) => b.id === 'uploads').uploadFolder, 'Uploads/mixes');
+  await assert.rejects(() => upsertBucket(C, { id: 'uploads', name: 'Uploads', sourceKind: 'manual', uploadFolder: '../x' }, { db }), { status: 400 });
+  assert.equal((await listBuckets(C, { db: makeDb() })).find((b) => b.id === 'ue').uploadFolder, undefined);
+});
+
 test('upsertBucket rename of an existing id keeps it and checks name clashes', async () => {
   const db = makeDb();
   const r = await upsertBucket(C, { id: 'ue', name: 'Mixes', sourceKind: 'rendered-video' }, { db });

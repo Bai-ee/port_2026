@@ -90,6 +90,19 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
     return data;
   }, [getIdToken]);
 
+  // Media Library endpoint (signed-upload sessions) — same auth + ?as= wrapper as `call`.
+  const callMedia = useCallback(async (action, body = {}) => {
+    const token = getIdToken ? await getIdToken() : null;
+    const res = await fetch(withImpersonation(`/api/dashboard/media?action=${encodeURIComponent(action)}`, readImpersonateClientId()), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw Object.assign(new Error(data?.error || `${action} failed.`), { status: res.status, data });
+    return data;
+  }, [getIdToken]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -196,7 +209,7 @@ export default function XContentEngineCard({ getIdToken, activeClientId, clientN
       {tab === 'timeline' ? (
         <TimelinePanel call={call} />
       ) : tab === 'buckets' ? (
-        <BucketsPanel call={call} packages={packages} loading={loading} error={error} onReload={() => load()} />
+        <BucketsPanel call={call} mediaCall={callMedia} packages={packages} loading={loading} error={error} onReload={() => load()} />
       ) : tab === 'clients' ? (
         <ClientCapturePanel
           packages={packages}

@@ -38,7 +38,7 @@ export const PLATFORMS = ['x', 'instagram', 'youtube', 'site', 'email', 'bandcam
 // --- Additive content-model fields (plan §3a). All OPTIONAL: validated only
 // when present, so every pre-existing row stays valid unchanged. ---
 
-export const SOURCE_KINDS = ['discogs', 'ue', 'manual', 'thread', 'rendered-video', 'nas-archive', 'ideas'];
+export const SOURCE_KINDS = ['discogs', 'ue', 'manual', 'thread', 'rendered-video', 'nas-archive', 'ideas', 'upload'];
 
 /** `pinned` outranks `timely` outranks `evergreen` — lets a client launch beat
  * the archive without hand-editing the calendar. */

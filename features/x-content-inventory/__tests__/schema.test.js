@@ -17,7 +17,7 @@ test('enums are exported', () => {
   assert.deepEqual(PRIORITIES, ['pinned', 'timely', 'evergreen']);
   assert.deepEqual(FORMATS, ['video', 'still', 'text', 'thread', 'carousel']);
   assert.deepEqual(APPROVAL_STATES, ['none', 'needed', 'approved', 'rejected']);
-  assert.deepEqual(SOURCE_KINDS, ['discogs', 'ue', 'manual', 'thread', 'rendered-video', 'nas-archive', 'ideas']);
+  assert.deepEqual(SOURCE_KINDS, ['discogs', 'ue', 'manual', 'thread', 'rendered-video', 'nas-archive', 'ideas', 'upload']);
 });
 
 test('engine', () => {

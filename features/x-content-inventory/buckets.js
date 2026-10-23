@@ -45,6 +45,10 @@ export function validateBucket(b) {
   if (!String(b.name ?? '').trim()) errors.push('name is required');
   if (String(b.name ?? '').length > 60) errors.push('name ≤ 60 chars');
   if (!SOURCE_KINDS.includes(b.sourceKind)) errors.push(`sourceKind must be one of ${SOURCE_KINDS.join(', ')}`);
+  if (b.uploadFolder != null && b.uploadFolder !== '') {
+    const f = b.uploadFolder;
+    if (typeof f !== 'string' || f.length > 300 || f.startsWith('/') || f.split('/').includes('..')) errors.push('uploadFolder must be a relative folder path (no leading / or ..)');
+  }
   if (b.share != null) {
     if (typeof b.share !== 'object') errors.push('share must be an object');
     else for (const [k, v] of Object.entries(b.share)) {
