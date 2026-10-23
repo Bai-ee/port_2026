@@ -1,7 +1,8 @@
 // upload-ingest.js — turns a file uploaded into a bucket's EditVideos folder into a ContentPackage.
 //
-// Pure: no fs, no network, no clock (`now` is injected). The id is derived from clientId + fullPath so
-// re-ingesting the same upload is idempotent; the route reports it under `existing` and never overwrites edits.
+// Pure: no fs, no network, no clock (`now` is injected). The upload session stores each file as
+// `user_upload_<ms>_<n>_<name>`, so the id is derived from clientId + folder + original name + size: uploading
+// the same file again maps to the same item; the route reports it under `existing` and never overwrites edits.
 // Rows mirror rendered-video rows (status 'idea', `ev:` assetRefs, posterRef) so the same publisher/calendar paths apply.
 
 import { createHash } from 'node:crypto';
@@ -24,14 +25,22 @@ export function assertUploadPath(path, folder) {
   return p;
 }
 
-/** Stable id: `upload-` + 16 hex of sha1(clientId + NUL + fullPath). */
-export function uploadPackageId(clientId, fullPath) {
-  return `upload-${createHash('sha1').update(`${clientId}\u0000${fullPath}`).digest('hex').slice(0, 16)}`;
+/** "track-xyz/user_upload_1792791713044_1_clip.mp4" -> "clip.mp4" (the upload session's storage prefix removed). */
+export function originalName(path) {
+  return String(path ?? '').split('/').pop().replace(/^user[_-]upload[_-]\d+[_-]\d+[_-]/i, '');
 }
 
-/** "my_clip-final.v2.mp4" -> "my clip final v2" */
+/** Stable id: `upload-` + 16 hex of sha1(clientId, folder, original name, size). */
+export function uploadPackageId(clientId, fullPath, size) {
+  const p = String(fullPath ?? '');
+  const folder = p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '';
+  const key = [clientId, folder, originalName(p).toLowerCase(), Number(size) || 0].join('\u0000');
+  return `upload-${createHash('sha1').update(key).digest('hex').slice(0, 16)}`;
+}
+
+/** "user_upload_1792791713044_0_my_clip-final.v2.mp4" -> "my clip final v2" */
 export function titleFromFilename(name) {
-  const base = String(name ?? '').split('/').pop().replace(/\.[A-Za-z0-9]{1,5}$/, '');
+  const base = originalName(name).replace(/\.[A-Za-z0-9]{1,5}$/, '');
   const t = base.replace(/[_\-.]+/g, ' ').replace(/\s+/g, ' ').trim();
   return (t || 'Untitled upload').slice(0, 120);
 }
@@ -48,7 +57,7 @@ export function packageFromUpload({ clientId, bucket, file, now = Date.now() }) 
   const iso = new Date(now).toISOString();
   const posterPath = file?.posterPath ? assertUploadPath(file.posterPath) : null;
   return {
-    id: uploadPackageId(clientId, fullPath),
+    id: uploadPackageId(clientId, fullPath, file?.size),
     clientId,
     bucketId: bucket.id,
     ...(ENGINE_IDS.includes(bucket.id) ? { engine: bucket.id } : {}),
