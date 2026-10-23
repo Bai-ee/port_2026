@@ -124,18 +124,34 @@ export default function XProfileCard({ getIdToken, activeClientId, clientName })
     };
   }, [loadAccounts]);
 
-  function beginAccountPolling() {
+  function beginAccountPolling(platform) {
     if (acctPollRef.current) clearInterval(acctPollRef.current);
     let tries = 0;
     acctPollRef.current = setInterval(async () => {
       tries += 1;
       const accts = await loadAccounts({ silent: true });
-      if (accts?.x?.connected || tries >= POLL_MAX_TRIES) {
+      const acct = accts?.[platform];
+      if (acct?.connected || tries >= POLL_MAX_TRIES) {
         clearInterval(acctPollRef.current);
         acctPollRef.current = null;
-        if (accts?.x?.connected) setAcctNotice({ kind: 'ok', text: `Connected as @${accts.x.username}.` });
+        if (acct?.connected) setAcctNotice({ kind: 'ok', text: `Connected as @${acct.username}.` });
       }
     }, POLL_INTERVAL_MS);
+  }
+
+  // Each platform has its own OAuth start route; the account list and
+  // disconnect stay on the shared x-oauth route (generic social_accounts store).
+  async function startConnect(platform) {
+    if (platform !== 'instagram') return apiFetch({ action: 'start', clientId: activeClientId });
+    const token = await getIdToken();
+    const res = await fetch(withImpersonation('/api/social-posting/instagram-oauth', readImpersonateClientId()), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ action: 'start', clientId: activeClientId }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    return data;
   }
 
   async function connectPlatform(platform) {
@@ -143,10 +159,10 @@ export default function XProfileCard({ getIdToken, activeClientId, clientName })
     setAcctBusy(`connect:${platform}`);
     setAcctNotice(null);
     try {
-      const data = await apiFetch({ action: 'start', clientId: activeClientId });
+      const data = await startConnect(platform);
       window.open(data.url, '_blank', 'noopener');
       setAcctNotice({ kind: 'ok', text: 'Authorize in the tab that just opened — this row updates itself when the callback lands.' });
-      beginAccountPolling();
+      beginAccountPolling(platform);
     } catch (err) {
       setAcctNotice({ kind: 'error', text: err.message });
     } finally {
@@ -335,7 +351,7 @@ export default function XProfileCard({ getIdToken, activeClientId, clientName })
                 {SOCIAL_PLATFORMS.map((p) => {
                   const acct = accounts?.[p.key] || { connected: false };
                   const missingMediaWrite = p.key === 'x' && acct.connected && acct.authMode === 'oauth2' && !(acct.scope || []).includes('media.write');
-                  if (!p.live) {
+                  if (!p.connectable) {
                     return (
                       <div id={`social-account-${p.key}-row`} key={p.key} className="xp-social-row xp-social-row-disabled">
                         <span className="xp-social-platform">{p.label}</span>
@@ -352,7 +368,22 @@ export default function XProfileCard({ getIdToken, activeClientId, clientName })
                         ) : (
                           <span className="xp-chip xp-chip-muted">Not connected</span>
                         )}
+                        {!p.live ? <span className="xp-chip xp-chip-muted">Publishing not live yet</span> : null}
                       </div>
+                      {p.key === 'instagram' && acct.connected && acct.expiresAt ? (
+                        <p id="social-account-instagram-token-status" className={acct.refreshError || acct.expiresAt < Date.now() ? 'xp-error' : 'xp-sub'} style={{ margin: '6px 0 0' }}>
+                          {acct.expiresAt < Date.now()
+                            ? 'Token expired — reconnect to resume publishing.'
+                            : acct.refreshError
+                              ? `Token renewal failed (${acct.refreshError}). Expires ${new Date(acct.expiresAt).toLocaleDateString()} — reconnect if this persists.`
+                              : `Token renews automatically · expires ${new Date(acct.expiresAt).toLocaleDateString()}`}
+                        </p>
+                      ) : null}
+                      {p.key === 'instagram' && !acct.connected ? (
+                        <p className="xp-sub" style={{ margin: '6px 0 0' }}>
+                          The account must be an Instagram Business/Creator account and accepted as an Instagram Tester on the HITLOOP Meta app (until the app passes Meta review).
+                        </p>
+                      ) : null}
                       <div className="xp-actions">
                         {acct.connected ? (
                           <button type="button" onClick={() => disconnectPlatform(p.key)} disabled={!!acctBusy}>

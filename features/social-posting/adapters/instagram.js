@@ -18,7 +18,9 @@
 import { getPlatformDef } from '../platforms.js';
 
 export const GRAPH_API_VERSION = 'v21.0';
-export const GRAPH_HOST = 'https://graph.facebook.com';
+// Instagram API with Instagram Login (owner decision 2026-10-23: no Facebook
+// Page needed). Tokens are IG user tokens; permission instagram_business_content_publish.
+export const GRAPH_HOST = 'https://graph.instagram.com';
 export const CAPTION_MAX = 2200;
 export const CAROUSEL_MIN = 2;
 export const CAROUSEL_MAX = 10;
