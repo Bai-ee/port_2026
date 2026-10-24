@@ -120,7 +120,7 @@ used clips fill only leftover slots, and pins the result as an explicit `videoOr
 | `api/_lib/media-assets.cjs` | `media_assets` Firestore index (global, mirrors the bucket). `assetDocId`/`posterPathForSource` (pure), `upsertAssets`, `removeAssets`, `moveAssetDocs`, `ensureFolderDoc`/`removeFolderDoc`, `listIndexFolders`, `listIndexFolderFiles`, `syncIndexFromBucket`. See [§ Media Library workspace](#media-library-workspace-index--posters). |
 | `api/_lib/media-recipe.cjs` | `validateRemixRecipe` + folder allowlist (`sanitizeFolderName`). Output locked 720/30/30. Allows safe two-segment existing EV folders such as `assets/retro_dust`; new upload folders stay flat. |
 | `api/_lib/media-reconcile.cjs` | `reconcileMediaJob(job, clientId)` — EditVideos → Hitloop. |
-| `app/api/dashboard/media/route.js` | Metadata-only route. Actions: `create-video-remix`, `job` (reconciles), `jobs`, `folders`, `folder-files`, `create-upload-session`, `complete-upload`, `options`, `media-index` (GET), `move-media`/`rename-folder`/`delete-folder`/`create-folder` (admin-gated POST). |
+| `app/api/dashboard/media/route.js` | Metadata-only route. Actions: `create-video-remix`, `job` (reconciles), `jobs`, `folders`, `folder-files`, `create-upload-session`, `complete-upload`, `upload-status`, `upload-renew`, `options`, `media-index` (GET), `move-media`/`rename-folder`/`delete-folder`/`create-folder` (admin-gated POST). |
 | `app/api/worker/media-reconcile/route.js` | Backstop sweep (worker-secret auth); also pingable by the EV Action. |
 | `DashboardPage.jsx` | `video-remix` card (build UI, unchanged), `dashboard_state` listener (carries `mediaCaptures`/`mediaVideoPending`), `runVideoRemix`, REMIX params tab, SOURCE MEDIA upload tab, shell/modal `<video>` (`latestRemixVideoUrl`); imports `MediaThumb` for source-clip thumbnails. |
 | `components/dashboard/MediaLibraryCard.jsx` | The `media-library` card's workspace UI (mount branch at the old shared `video-remix`/`media-library` guard). Exports `MediaThumb` (poster → video-first-frame → icon-tile fallback), consumed by both this card and `video-remix`. |
@@ -159,7 +159,7 @@ mirrors bucket objects for fast listings/counts:
   `syncIndexFromBucket()` (diffs a fresh `listAllSourceFileRows()` bucket scan against the index).
 
 **Posters.** First-frame JPEGs are captured **client-side** at upload (`captureVideoPoster` in
-`MediaLibraryCard.jsx`: hidden `<video>` → seek ~0.1s → `<canvas>` → JPEG blob, max 480px wide,
+`lib/dashboard/capture-video-poster.js`, used by `MediaLibraryCard.jsx` and content-track uploads: hidden `<video>` → seek ~0.1s → `<canvas>` → JPEG blob, max 480px wide,
 q0.7, 3s timeout) — no server transcode. They live at the deterministic path
 `.posters/<folder>/<fileName>.jpg` (`posterPathForSource`, appending `.jpg` to the full original
 name, never swapping the extension). `.posters` is in `EXCLUDED_FOLDERS` and — like every
@@ -172,11 +172,13 @@ none yet). `MediaThumb` (exported from `MediaLibraryCard.jsx`, imported by both 
 **never a black square**. Backfilling posters for existing `.mov`/HEVC files is deferred to a
 server-side (FFmpeg, cross-repo) job — see `docs/plans/VIDEO-REMIX-MEDIA-PERF-PLAN.md`.
 
+**Resumable uploads (2026-10-23, PR #83).** `create-upload-session` accepts `resumable:true`; the route passes the request `Origin`, and `createUploadSession` opens a GCS resumable session (`createResumableUpload({origin})`) for each main file (never the poster) and returns it as `files[].resumable`. If opening it fails the field is omitted and the client falls back to the single signed PUT. The browser sends 8 MiB chunks (`CHUNK_SIZE`, a 256 KiB multiple) with `Content-Range`; 308 = continue. After a refresh `upload-status {sessionUri, size}` asks GCS for the committed offset (`getResumableStatus` → `mapResumableStatus`: 308 → `{offset, complete:false}`, 200/201 → `{complete:true}`, 404/410 → `{expired:true}`, anything else 502), and `upload-renew {storagePath, contentType}` opens a fresh session when the old one expired (upload restarts at 0). Both actions only accept a session URI that passes `isValidResumableSessionUri` (https, Google storage host, `upload_id`). The only caller today is the dashboard upload manager (`lib/dashboard/upload-manager.js`, used by content-track uploads — see [`CONTENT-TRACKS.md`](CONTENT-TRACKS.md) § Upload into a track); Media Library and Video Remix still use the plain signed PUT. Tests: `api/_lib/__tests__/resumable-upload.test.js`, `lib/dashboard/__tests__/upload-manager.test.js`.
+
 **Admin gating.** `move-media`/`rename-folder`/`delete-folder`/`create-folder` are admin-gated at
 the route (`ADMIN_MEDIA_MUTATIONS`, same pattern as `delete-source-media`). `media-index` (GET) is
 open to any authenticated user — a non-admin sees a read-only workspace (browse + preview only; the
 UI hides upload/move/rename/delete controls via the `isAdmin` prop, it isn't only a backend gate).
-Upload (`create-upload-session`/`complete-upload`) intentionally stays open to any client, same as
+Upload (`create-upload-session`/`complete-upload`/`upload-status`/`upload-renew`) intentionally stays open to any client, same as
 today's `video-remix` upload flow, which shares those two actions — gating them would have broken
 `video-remix` uploads for non-admins.
 

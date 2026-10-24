@@ -60,3 +60,6 @@ Read tools: `get_evaluation, get_plan, get_context, get_today_run, search_invent
 
 ## Content tracks + promotion loop (2026-10-11)
 UE-hosted mixes are `cleared` by owner policy (D1); suggestions carry track/promotion/media; NAS items need explicit staging. See [`CONTENT-TRACKS.md`](CONTENT-TRACKS.md).
+
+## Track uploads (2026-10-23)
+Files can be uploaded straight into a bucket/track (Buckets → Upload); they become `source.kind:'upload'` library items and upload in the background. See [`CONTENT-TRACKS.md`](CONTENT-TRACKS.md) § Upload into a track.
