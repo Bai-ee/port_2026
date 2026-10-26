@@ -140,7 +140,7 @@ async function runDailyFillStep({ db, committedCorpusRows }, clientIds, today) {
 
 // Rendered videos -> content library (Dj Mix Videos bucket): the 06:00 daily email render is done by ~06:03, so syncing
 // here (before suggestions and the fill) puts it in the bucket the same day without anyone opening the Content Engine.
-// Only the media owner client (NAS_INVENTORY_CLIENT_ID) has the feed; everyone else is a no-op. Non-fatal; reported as
+// Only the rendered-video owner (RENDERED_VIDEOS_CLIENT_ID, else NAS_INVENTORY_CLIENT_ID) has the feed; everyone else is a no-op. Non-fatal; reported as
 // `renderedVideos`. force: the cron runs once a day, so the dashboard's 10-minute throttle must not skip it.
 async function runRenderedVideoSyncStep(db, clientIds) {
   try {

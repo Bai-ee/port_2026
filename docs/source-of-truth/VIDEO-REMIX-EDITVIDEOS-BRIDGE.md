@@ -205,6 +205,8 @@ Options for the params tab come from `listOptions()`: **14 filters** (9 original
 `system/artists`), logos (live from EV bucket `logos/`). See [§ Render behavior](#render-behavior--filters-logos-audio-layout-editvideos-worker)
 for the filter looks + how to add one.
 
+The shared rendered-video feed (Dj Mix Videos sync into `x_content_packages`) is owned by the client in env `RENDERED_VIDEOS_CLIENT_ID`, falling back to `NAS_INVENTORY_CLIENT_ID` when unset; any other client's sync is skipped `not-owner`.
+
 ## Render behavior — filters, logos, audio, layout (EditVideos worker)
 
 ⚠️ **How a video *looks* is decided in the EditVideos repo (`Bai-ee/arweave-video-generator`),

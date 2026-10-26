@@ -2,14 +2,15 @@
 // `sync-rendered-videos` action (app/api/dashboard/quote-targets/route.js) and the daily-loop cron, so a finished
 // render (the 06:00 daily email video included) lands in the Dj Mix Videos bucket without anyone opening the dashboard.
 //
-// Rendered videos come from ONE shared EditVideos feed, owned by the NAS/archive client (NAS_INVENTORY_CLIENT_ID).
+// Rendered videos come from ONE shared EditVideos feed, owned by RENDERED_VIDEOS_CLIENT_ID when set, else the NAS/archive
+// client (NAS_INVENTORY_CLIENT_ID).
 // Any other client's sync is a no-op (it would otherwise create home's renders under that client).
 
 import { syncRenderedVideos } from './sync.js';
 
 const PKG_COLLECTION = 'x_content_packages';
 
-export const mediaOwnerClientId = () => process.env.NAS_INVENTORY_CLIENT_ID || null;
+export const mediaOwnerClientId = () => process.env.RENDERED_VIDEOS_CLIENT_ID || process.env.NAS_INVENTORY_CLIENT_ID || null;
 
 /**
  * @param {{ db, bridge, upsert: (pkg) => Promise<unknown>, clientId: string, force?: boolean }} opts
