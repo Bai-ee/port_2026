@@ -15,6 +15,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { syncRenderedVideos } from '../../features/rendered-videos/sync.js';
 import { upsertPackage } from '../../features/x-content-inventory/store.js';
+import { mediaOwnerClientId } from '../../features/rendered-videos/firestore-sync.js';
 import { requireClientArg } from './_client-arg.mjs';
 
 const require = createRequire(import.meta.url);
@@ -32,8 +33,9 @@ const bridge = require(path.join(REPO, 'api/_lib/editvideos-bridge.cjs'));
 const clientId = requireClientArg();
 // The EditVideos feed is one shared feed owned by the NAS/archive client; syncing it under anyone else would create
 // that client's copies of the owner's renders (or 409 on the owner's rows).
-if (clientId !== process.env.NAS_INVENTORY_CLIENT_ID) {
-  console.error(`Refusing: rendered videos belong to NAS_INVENTORY_CLIENT_ID (${process.env.NAS_INVENTORY_CLIENT_ID || 'unset'}), not ${clientId}.`);
+const feedOwner = mediaOwnerClientId();
+if (clientId !== feedOwner) {
+  console.error(`Refusing: rendered videos belong to RENDERED_VIDEOS_CLIENT_ID / NAS_INVENTORY_CLIENT_ID (${feedOwner || 'unset'}), not ${clientId}.`);
   process.exit(1);
 }
 const artistsPath = arg('--artists', path.join(REPO, '../EditVideos/arweave-video-generator/website/artists.json'));

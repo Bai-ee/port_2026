@@ -10,9 +10,11 @@
 // Lives here, not on the track: content tracks round-trip through the Client Brain (Brain wins), which would drop a
 // track-level field. Same idea as the code-owned daily email video recipe (app/api/worker/pre-digest-video).
 
+import { mediaOwnerClientId } from '../rendered-videos/firestore-sync.js';
+
 export const DAILY_MIX_RULE = Object.freeze({ perDay: 1, artists: Object.freeze(['BAI-EE']), newestFirst: true, sameDay: true });
 
-/** `{ [bucketId]: rule }` for planDailyFill's `trackRules`; empty for every client but the media owner. */
-export function dailyMixRulesFor(clientId, { ownerClientId = process.env.NAS_INVENTORY_CLIENT_ID || null } = {}) {
+/** `{ [bucketId]: rule }` for planDailyFill's `trackRules`; empty for every client but the rendered-video owner (RENDERED_VIDEOS_CLIENT_ID, else NAS_INVENTORY_CLIENT_ID). */
+export function dailyMixRulesFor(clientId, { ownerClientId = mediaOwnerClientId() } = {}) {
   return clientId && ownerClientId && clientId === ownerClientId ? { ue: DAILY_MIX_RULE } : {};
 }

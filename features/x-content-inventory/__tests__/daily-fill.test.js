@@ -215,6 +215,18 @@ test('trackRules (daily mix): one BAI-EE video a day from the Dj Mix Videos buck
   assert.deepEqual(dailyMixRulesFor('home', { ownerClientId: 'home' }), { ue: DAILY_MIX_RULE });
   assert.deepEqual(dailyMixRulesFor('other', { ownerClientId: 'home' }), {});
   assert.deepEqual(dailyMixRulesFor('home', { ownerClientId: null }), {});
+  // default owner = the rendered-video owner (RENDERED_VIDEOS_CLIENT_ID, else NAS_INVENTORY_CLIENT_ID)
+  const saved = { r: process.env.RENDERED_VIDEOS_CLIENT_ID, n: process.env.NAS_INVENTORY_CLIENT_ID };
+  try {
+    process.env.NAS_INVENTORY_CLIENT_ID = 'home';
+    delete process.env.RENDERED_VIDEOS_CLIENT_ID;
+    assert.deepEqual(dailyMixRulesFor('home'), { ue: DAILY_MIX_RULE });
+    process.env.RENDERED_VIDEOS_CLIENT_ID = 'ue-client';
+    assert.deepEqual(dailyMixRulesFor('ue-client'), { ue: DAILY_MIX_RULE });
+    assert.deepEqual(dailyMixRulesFor('home'), {});
+  } finally {
+    for (const [k, v] of [['RENDERED_VIDEOS_CLIENT_ID', saved.r], ['NAS_INVENTORY_CLIENT_ID', saved.n]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  }
 });
 
 test('trackRules: two renders of the same mix never fill two days of one window', async () => {
