@@ -53,7 +53,7 @@ Rule: nothing publishes without a written story (caption builder refuses placeho
 - Go/no-go, and which account is first (personal brand vs a HITLOOP account; plan defers HITLOOP account until audience data justifies it).
 - Hashtag policy: default is 3-5 relevant tags from the package (none invented; fewer if the package has fewer). Alternatives: zero tags, or a fixed per-engine set.
 - Auto vs approval mode (recommend approval for the first month).
-- Login type: Instagram Login vs Facebook Login (changes host/permissions; adapter uses `graph.facebook.com` via one constant).
+- Login type: **DECIDED 2026-10-23 — Instagram Login** (no Facebook Page). Adapter host is `graph.instagram.com`; permission `instagram_business_content_publish`. Meta app "HITLOOP" (id 1626060622319695), Instagram app "HITLOOP-IG"; @bai__ee (IG user id 17841402101650073, BUSINESS) is an Instagram Tester; token in env `INSTAGRAM_ACCESS_TOKEN` / `INSTAGRAM_USER_ID`.
 - First-comment strategy and whether to cross-link X handle in bio.
 - Whether client work may appear on a personal Instagram at all (rights).
 

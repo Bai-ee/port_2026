@@ -74,11 +74,27 @@ X Strategy → Plan tab → "Content tracks" (`#x-strategy-content-tracks-panel`
 - **narrative**: up to one a day (today, tomorrow) from the Market Signals topics/opportunities, text = `topic: detail` + `Where it shows up in my work: [add your take]`.
 - **client-work**: the baseline slots of client-work tracks (engine `client`, or a label like Video Editing / Graphic Design), kind `client-work`, max 1 a day, never added on top of the baseline count.
 
-Gate: `[add your take]` joins `[add your memory]` in `features/social-posting/self-reply.js` (`BLOCKING_PLACEHOLDERS`): approve, schedule, post-now and the due sweep all refuse text that still has either, and `needsStory` follows the text for `daily-fill` drafts like `calendar-batch` ones.
+Gate: `[add your take]` joins `[add your memory]` in `features/social-posting/self-reply.js` (`BLOCKING_PLACEHOLDERS`). **Since 2026-10-17 (PR #25) approval never blocks on them:** every approve path goes through `approveInMemory` (`twitter-service.js`), which strips the placeholder lines (`stripBlockingPlaceholders`, content + self-reply) and clears `needsStory`. Schedule, post-now and the due sweep still refuse text that has either placeholder.
 
 Idempotent: key `daily-fill:<date>:<kind>:<packageId|targetId>` through `ensureDraftPost`; earlier fill drafts on a day/bucket count toward that track's target and a quote/narrative already filled is skipped, so a re-run adds nothing. Rows carry `reason` + `source {type,id,asOf}`.
 
 Wiring: `createStrategyHandlers` deps `readFillContext`, `readQuoteTargets` (plus the existing `readOpenPackageIds`, `readMarketSignals`, `ensureDraft`, `placeDraft`, `mediaForItem`); route actions `strategy-daily-fill-preview` / `strategy-daily-fill-create` (body `{clientId, spec:{from?, days?(1-31, default 7), include?}}`); agent deps `previewDailyFill(spec)` / executor `runDailyFill({clientId, spec, proposalId})`. The cron entry is `runDailyFillForCron(clientId, {today, deps})` (today + 6 days, every kind), with `deps = handlers.dailyFillDeps`.
+
+## Daily mix video (2026-10-19)
+
+One BAI-EE mix video draft a day on the calendar, from the daily email render.
+- **Render:** `app/api/worker/pre-digest-video` (06:00 UTC) renders a random BAI-EE mix (`randomAudio.artists`); the EditVideos worker plays Arweave and Firebase-hosted mixes (`worker/lib/mix-audio.js` in arweave-video-generator) and cuts a random 30 s clip.
+- **Into the bucket:** the 11:30 daily-loop runs the rendered-video sync first (`features/rendered-videos/firestore-sync.js`, also the Content Engine's `sync-rendered-videos`), so that render is an `rv-` item in Dj Mix Videos (`ue`) the same day.
+- **Onto the calendar:** `features/x-content-inventory/daily-mix-rule.js` hands the daily fill a `trackRules` override for `ue`, media owner client only (`NAS_INVENTORY_CLIENT_ID`): 1 a day (replaces the engine target), BAI-EE only, not retired, video only; never-used first, newest render first, then least recently used; one mix title per fill window. Drafts only, for owner approval.
+- Code-owned on purpose: tracks round-trip through the Client Brain, which would drop a track-level field. Insights still shows the `ue` engine target from the plan; set it to 1/day in Strategy to match.
+
+## One calendar (2026-10-17, PRs #25–#27)
+
+The month calendar is the single review surface for every possible post.
+- **Reader:** `features/x-content-inventory/calendar-reader.js` `readUnifiedCalendar` (dashboard handler `handleMonthCalendar` = reader + `withRowThumbs`; a parity test pins them deep-equal). Per day it returns: saved `social_posts` of every status, today's daily-run suggestions, and open quote targets on every day their 36h window covers (rows already saved as posts are de-duplicated). Rows carry `kind`, `approval`, links, window time left and `hasPlaceholder`; totals include suggested + requote counts. Pure row shaping in `month-calendar.js` and `components/dashboard/x-content/calendar-row-model.js`.
+- **Approve routes (quote-targets, catalogued tier 1):** `calendar-approve` (post, optional edited content, revision-checked), `calendar-unapprove` (approved + unscheduled → draft), `calendar-suggestion-approve` (suggestion via `saveSuggestionDraft`, or quote via `ensureDraftPost` with the daily-fill key, then approve). Approving never schedules.
+- **UI:** `MonthCalendarPanel.jsx` + `CalendarApprovalBits.jsx`: approval marks per row, filter chips All / Unapproved / Approved / Suggestions, inline Approve / Unapprove on rows and in `PostSheet`; quote rows show handle, link, time left. Today card: "Review everything on the calendar".
+- **Agent / MCP:** read tool `get_calendar` (from/to/filter; omit both = today + 6 days; result carries `today` + `timezone`); MCP `strategy_get_calendar`. `get_post` / `find_posts` rows carry `approveNote` when text has a placeholder. The prompt gets a `TODAY: <date> (<tz>)` line every turn (`toolDeps.getToday()`, client profile timezone) — the model has no clock and must never guess dates.
 
 ## Limits
 - Insights → "By content track" renders `evaluation.byTrack` (per-track benchmarks, gaps vs the track lead, "no benchmark yet"); the overall pace section stays labelled separately. Own posts are not tagged by track, so each track's own side is all of your posts (stated in the UI).
@@ -89,3 +105,15 @@ Wiring: `createStrategyHandlers` deps `readFillContext`, `readQuoteTargets` (plu
 - Telegram video by URL caps at 20MB (else poster + link). Staging completion is not pushed — reopen Today's posts.
 - Strategy-chat edits of `contentTracks` are supported by the proposal schema; no dedicated chat UI.
 - Local `npm run build` with the symlinked `node_modules` needs `--webpack` (Turbopack rejects the symlink); Vercel builds normally.
+
+## Pass / Delete / Replace (2026-10-19)
+
+Every calendar row (saved post, daily suggestion, open requote) can be passed, deleted or replaced. Logic: `features/x-content-inventory/calendar-decide.js` (`decideCalendarItem`, pure, deps injected); route wiring: `calendarItemDecideDeps` in `app/api/dashboard/quote-targets/route.js`. No X call is ever made.
+
+- **pass** removes the row; the library item stays eligible for later days. **delete** also rejects the library package (`reject-package`), so no fill offers it again. **replace** = pass + one new review draft for the same day and track.
+- **post**: refused 409 `not-removable` when posted/posting/queued/manual. A scheduled post is unscheduled first (no X call), then rejected (`rejectDraft`; the doc is kept as `rejected`, which the calendar hides). If the post came from a quote target (`sourceRef.kind` or `fillSource.type` = `quote-target`) that target is dismissed too, so the requote does not reappear.
+- **suggestion**: pass/delete dismiss it; replace is 400 `replace-unsupported`.
+- **requote** (unsaved candidate): pass/delete dismiss the target; replace dismisses it and returns the next open candidate id (no draft is created; that candidate is already a requote row).
+- **replace (post)** runs `dailyFill` for that one date with `excludePackageIds: [removed package]` and `replace: {bucketId}`: only that bucket's track is filled, rejected earlier fills no longer hold the day's slot (normal fills still count them), and at most one row is planned. No eligible item gives `replacement: null, note: 'no-eligible-item'`. Quote drafts can only be replaced on today (quotes plan today only).
+
+Action: `POST /api/dashboard/quote-targets` with `{ action: 'calendar-item-decide', decision: 'pass'|'delete'|'replace', item }` (owner-gated like every action on the route). `item` per kind: `post` `{ postId, expectedRevision?, date? }`; `suggestion` `{ suggestionId, runId? }`; `requote` `{ targetId, date? }`. Result `{ ok, decision, kind, removed: { postId?, packageId?, targetId?, suggestionId?, packageRejected? }, replacement: null | { kind: 'post', postId, date, row } | { kind: 'requote', targetId, date }, note? }`. Errors carry `code`: `bad-decision`, `bad-kind`, `bad-item`, `not-found`, `not-removable`, `replace-unsupported`, `replace-failed`.

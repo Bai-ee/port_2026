@@ -4,6 +4,8 @@ PR: `release/content-system` -> `main` (squash). Date: 2026-10-11. Release plan:
 
 > **Multi-client (2026-10-14, shipped after this release — historical text below is the 2026-10-11 release as reviewed):** the owner-only gates are gone (`OWNER_CLIENT_IDS`/`assertOwnerClient` → `assertClientReady`), `x_content_packages` is client-scoped (`clientId` required; NAS/archive legacy owner = `NAS_INVENTORY_CLIENT_ID`; per-client NAS via the worker's `clients.map.json`), X identity/X Monitor/watchlist/benchmarks are per client, and signup seeds a Brain draft. Start with [`source-of-truth/CONTENT-PILOT-OPERATIONS.md`](source-of-truth/CONTENT-PILOT-OPERATIONS.md) §1b–1f. `PILOT_CLIENT_IDS` prod = home, UE, NTR.
 
+> **Current status (2026-10-18):** for what shipped after this release (bucket tracks, full-control agent, daily fill, one calendar, high-res/media tools — PRs #16–#31) and what is still unverified, start at [`plans/CONTENT-SYSTEM-STATUS-2026-10-18.md`](plans/CONTENT-SYSTEM-STATUS-2026-10-18.md).
+
 **TL;DR for the reviewer**
 - One workspace, the **Content Engine** card (Social Media Manager bucket, admin), takes X content from find -> draft -> review -> approve -> schedule -> track.
 - Almost everything is **additive**. Legacy `social_posts` rows, Copywriter, Schedule Posts, digest and quote drafts keep their old behavior. New strictness is opt-in per row (`lifecycleVersion: 2`) and per client (pilot allowlist).
