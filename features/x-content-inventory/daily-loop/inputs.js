@@ -9,6 +9,7 @@ import { resolvePlanInputs } from '../../x-strategy/plan-inputs.js';
 import { tracksOf } from '../../x-strategy/content-tracks.js';
 import { promotionsOf } from '../../x-strategy/promotions.js';
 import { mergeListCandidates } from '../../x-quote-targets/day-plan.js';
+import { readContentSources, mergeSourceRows } from '../content-sources.js';
 
 // --- inputs ----------------------------------------------------------------
 
@@ -39,13 +40,22 @@ export async function loadDailyLoopInputs(deps, { clientId, packageIds = null, c
   const state = stateSnap.exists ? stateSnap.data() : {};
 
   let packages;
-  // Only this client's packages (multi-client Phase 3a): an id list drops another client's rows.
+  // This client's packages plus its content sources' (content-sources.js, viewed for this client); an id list drops
+  // any other client's rows.
+  const sources = await readContentSources(clientId, { db });
   if (packageIds?.length) {
     const snaps = await db.getAll(...packageIds.map((id) => db.collection('x_content_packages').doc(id)));
-    packages = snaps.filter((s) => s.exists && s.data()?.clientId === clientId).map((s) => ({ id: s.id, ...s.data() }));
+    const rows = snaps.filter((s) => s.exists).map((s) => ({ id: s.id, ...s.data() }));
+    packages = mergeSourceRows(
+      rows.filter((r) => r.clientId === clientId),
+      sources.map((entry) => ({ entry, rows: rows.filter((r) => r.clientId === entry.clientId) })),
+      clientId,
+    );
   } else {
-    const snap = await db.collection('x_content_packages').where('clientId', '==', clientId).select(...PACKAGE_FIELDS).get();
-    packages = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const readRows = async (id) => (await db.collection('x_content_packages').where('clientId', '==', id).select(...PACKAGE_FIELDS).get())
+      .docs.map((d) => ({ id: d.id, ...d.data() }));
+    const [own, ...shared] = await Promise.all([readRows(clientId), ...sources.map((e) => readRows(e.clientId))]);
+    packages = mergeSourceRows(own, sources.map((entry, i) => ({ entry, rows: shared[i] })), clientId);
   }
 
   // Brain: only an APPROVED Brain is used. Anything else is reported with why.

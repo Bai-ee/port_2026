@@ -24,7 +24,7 @@ import {
 import { buildMonthCalendar } from '../x-content-inventory/month-calendar.js';
 import { resolveCalendarEngineConfig } from '../content-context/load-content-context.js';
 import { createFirestorePlanStore } from '../x-strategy/plan-store.js';
-import { upsertPackage, packageGetterFor, readInventory } from '../x-content-inventory/store.js';
+import { upsertPackage, packageGetterFor, readSharedInventory } from '../x-content-inventory/store.js';
 import { createFirestoreRunStore } from '../x-content-inventory/daily-loop/run-store.js';
 import { saveSuggestionDraft, dismissSuggestion as dismissDailySuggestion, overlayStagedMedia } from '../x-content-inventory/daily-loop/review.js';
 import { handleNasAction } from '../x-content-inventory/nas.js';
@@ -112,17 +112,7 @@ export function createTelegramRuntime({ env = process.env, db = fb.adminDb, tran
   });
 
   // "Copy + high-res": same readers/writers as the dashboard's find-hires-media / hires-media-use route actions.
-  const readAllPackages = async (clientId) => {
-    const all = [];
-    let cursor = null;
-    for (let page = 0; page < 20; page += 1) {
-      const r = await readInventory({ clientId, pageSize: 1000, ...(cursor ? { startAfter: cursor } : {}) });
-      all.push(...r.packages);
-      cursor = r.nextCursor;
-      if (!cursor) break;
-    }
-    return all;
-  };
+  const readAllPackages = async (clientId) => (await readSharedInventory({ clientId, all: true })).packages;
   // A sendable URL (+ byte size when the bucket knows it) for a storage ref ("ev:<path>" or "publish-staging/...").
   async function mediaFromRef(ref, fallbackUrl, type) {
     const r = String(ref || '');

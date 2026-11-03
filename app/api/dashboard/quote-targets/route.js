@@ -14,7 +14,7 @@ import { readCorpus, readCorpora, saveGapReport } from '../../../../features/x-b
 // a day of authored posts out of the content inventory.
 import { buildDayPlan as buildContentDayPlan } from '../../../../features/x-content-inventory/plan-day.js';
 import { validateInventory } from '../../../../features/x-content-inventory/schema.js';
-import { readInventory, readSharedInventory, upsertPackage, deletePackage, packageGetterFor } from '../../../../features/x-content-inventory/store.js';
+import { readSharedInventory, upsertPackage, deletePackage, packageGetterFor } from '../../../../features/x-content-inventory/store.js';
 import { buildClientPackage, applyApproval } from '../../../../features/x-content-inventory/client-capture.js';
 import { quotedUrlOf } from '../../../../features/x-strategy/post-query.js';
 import { parseStatusUrl, findQuotedCandidate, buildQuotedPreview } from '../../../../features/x-quote-targets/quoted-preview.js';
@@ -377,7 +377,8 @@ function getContentPlanHandlers() {
       corpusStore: getCorpusStore(),
       planStore: createFirestorePlanStore(fb.adminDb),
       readXGrowthConfig: readXGrowthConfigFor,
-      readInventory,
+      // Own rows + content-source rows (content-sources.js): the day plan sees what the client may post.
+      readInventory: readSharedInventory,
       readCorpus,
       readCorpora,
       legacyRows: { own: ownCorpusRows, benchmark: benchmarkCorpusRows },
@@ -398,7 +399,7 @@ const getPackageFor = (clientId) => packageGetterFor(clientId);
 async function handleInventoryList(context) {
   // Own rows plus read-only rows of this client's content sources (content-sources.js); the audit covers own rows only.
   const { packages, updatedAt, seeded, sources } = await readSharedInventory({ clientId: context.clientId });
-  const own = packages.filter((p) => !p.readOnly);
+  const own = packages.filter((p) => !p.sharedFrom);
   return { ok: true, packages, updatedAt, seeded, sources, audit: validateInventory(own) };
 }
 
@@ -488,7 +489,7 @@ const postStatusRow = (p) => ({
 
 /** Post-level results for THIS client: posted / waiting / needs attention, joined to package, run and plan version. Read-only. */
 async function handlePostResults(context) {
-  const [posts, inventory] = await Promise.all([readSocialQueue(context.clientId), readInventory({ clientId: context.clientId }).catch(() => ({ packages: [] }))]);
+  const [posts, inventory] = await Promise.all([readSocialQueue(context.clientId), readSharedInventory({ clientId: context.clientId }).catch(() => ({ packages: [] }))]);
   return { ok: true, results: buildPostResults({ posts, packages: inventory?.packages || [], now: Date.now() }) };
 }
 
@@ -808,27 +809,17 @@ async function handleSaveThumb(context, body) {
 async function handleFindItemMedia(context, body) {
   const id = String(body?.id || '').trim();
   if (!id) throw badRequest('id is required.');
-  const { packages } = await readInventory({ clientId: context.clientId });
+  const { packages } = await readSharedInventory({ clientId: context.clientId });
   const target = packages.find((p) => p.id === id);
   if (!target) throw badRequest(`Unknown item: ${id}`, 404);
   return { ok: true, id, candidates: findMediaCandidates(target, packages, { limit: body?.limit }) };
 }
 
 /**
- * Every package of a client, paged past readInventory's un-paged bound (READ_LIMIT NAS rows) so the high-res finder sees
+ * Every package of a client (own + content sources), paged past readInventory's un-paged bound (READ_LIMIT NAS rows) so the high-res finder sees
  * the whole drive (~6k rows ~8s). Memoized per client for 60s: a find and the following use share one read.
  */
-const readAllPackagesFor = memoByClient(60_000, async (clientId) => {
-  const all = [];
-  let cursor = null;
-  for (let page = 0; page < 20; page += 1) {
-    const r = await readInventory({ clientId, pageSize: 1000, ...(cursor ? { startAfter: cursor } : {}) });
-    all.push(...r.packages);
-    cursor = r.nextCursor;
-    if (!cursor) break;
-  }
-  return all;
-});
+const readAllPackagesFor = memoByClient(60_000, async (clientId) => (await readSharedInventory({ clientId, all: true })).packages);
 
 /** Bigger copies of a post's (or item's) picture on the NAS, ranked, with staged/worker state (hires-media.js). Read-only. */
 async function handleFindHiresMedia(context, body) {
@@ -1200,7 +1191,8 @@ function getStrategyHandlers() {
       onBrainOwnedSaved: (clientId, target, prior, next) => require('../../../../features/client-brain/brain-sync.cjs').recordCardEdits(clientId, target, prior, next),
       readBrainTrackTargets: (clientId) => require('../../../../features/client-brain/brain-sync.cjs').readApprovedTrackTargets(clientId),
       loadCommitted: committedCorpusRows,
-      readPackages: async (clientId) => (await readInventory({ clientId })).packages,
+      // Own + content-source rows (content-sources.js), fresh on every call.
+      readPackages: async (clientId) => (await readSharedInventory({ clientId })).packages,
       linkItemMedia: (clientId, links) => linkItemMediaFor(clientId, links),
       upsertBucket: (clientId, bucket) => bucketStore.upsertBucket(clientId, bucket),
       deleteBucket: (clientId, bucketId, opts) => bucketStore.deleteBucket(clientId, bucketId, opts),

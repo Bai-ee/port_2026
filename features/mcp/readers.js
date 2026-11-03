@@ -11,7 +11,7 @@ import { mergeListCandidates } from '../x-quote-targets/day-plan.js';
 import { ageHoursOf, DEFAULT_WINDOW_HOURS } from '../x-quote-targets/rank.js';
 import { joinPerformance, engineStats } from '../x-content-inventory/performance.js';
 import { buildDayPlan as buildContentDayPlan } from '../x-content-inventory/plan-day.js';
-import { readInventory } from '../x-content-inventory/store.js';
+import { readSharedInventory } from '../x-content-inventory/store.js';
 import { recentPostsFromQueue } from '../x-content-inventory/allocate-slot.js';
 import { createFirestoreRunStore } from '../x-content-inventory/daily-run-store.js';
 import { runDailyLoop, localDateOf, LOOP_VERSION } from '../x-content-inventory/daily-loop.js';
@@ -179,7 +179,7 @@ export function createReaders(db) {
       onBrainOwnedSaved: (clientId, target, prior, next) => require('../client-brain/brain-sync.cjs').recordCardEdits(clientId, target, prior, next),
       readBrainTrackTargets: (clientId) => require('../client-brain/brain-sync.cjs').readApprovedTrackTargets(clientId),
       loadCommitted: committedCorpusRows,
-      readPackages: async (clientId) => (await readInventory({ clientId })).packages,
+      readPackages: async (clientId) => (await readSharedInventory({ clientId })).packages,
       readTodayRun: (clientId) => latestDailyRun(createFirestoreRunStore(db), clientId),
       readContentContext: async (clientId) => summarizeContentContext(await readContentContext(clientId)),
       readQueueSummary, readPostsForQuery, readPost, readOpportunities, readResults, readMarketSignals,

@@ -303,7 +303,7 @@ test('packageGetterFor: a client sees only its own rows by id; unstamped and for
   assert.equal(await packageGetterFor(null)('mine', { db }), null);
 });
 
-test('readSharedInventory: own rows plus source rows marked read-only; writes to a source row stay refused', async () => {
+test('readSharedInventory (legacy string grant = read): source rows marked read-only; writes to them stay refused', async () => {
   const db = makeDb();
   const UE = 'fixture-client-ue';
   const OTHER = 'fixture-client-other';
@@ -313,7 +313,7 @@ test('readSharedInventory: own rows plus source rows marked read-only; writes to
   await db.collection('client_configs').doc(C).set({ contentSources: [UE, C, 'bad/id'] });
 
   const r = await readSharedInventory({ clientId: C, db });
-  assert.deepEqual(r.sources, [UE]);
+  assert.deepEqual(r.sources, [{ clientId: UE, bucketId: null, access: 'read' }]); // legacy string entry => read-only
   const byId = Object.fromEntries(r.packages.map((p) => [p.id, p]));
   assert.equal(byId.mine.readOnly, undefined);
   assert.equal(byId['ue-1'].readOnly, true);
@@ -327,4 +327,38 @@ test('readSharedInventory: own rows plus source rows marked read-only; writes to
   assert.deepEqual((await readSharedInventory({ clientId: UE, db })).packages.map((p) => p.id), ['ue-1']);
   const ownOnly = (await readSharedInventory({ clientId: C, sources: [], db })).packages;
   assert.ok(ownOnly.some((p) => p.id === 'mine') && ownOnly.every((p) => p.clientId === C && !p.readOnly));
+});
+
+test('full content-source grant: viewer edits a source row (owner kept, view undone); delete still refused; getter sees it', async () => {
+  const db = makeDb();
+  const UE = 'fixture-client-ue';
+  const DISC = 'fixture-client-disc';
+  await upsertPackage(row({ id: 'mine' }), { clientId: C, db, returnPackages: false });
+  await upsertPackage(row({ id: 'rv-1', bucketId: 'ue' }), { clientId: UE, db, returnPackages: false });
+  await upsertPackage(row({ id: 'disc-1' }), { clientId: DISC, db, returnPackages: false });
+  await db.collection('client_configs').doc(C).set({ contentSources: [
+    { clientId: UE, bucketId: 'mixes', access: 'full' }, { clientId: DISC, bucketId: 'record', access: 'full' },
+  ] });
+
+  const all = await readSharedInventory({ clientId: C, db, all: true });
+  const byId = Object.fromEntries(all.packages.map((p) => [p.id, p]));
+  assert.deepEqual([byId['rv-1'].bucketId, byId['rv-1'].sharedWith, byId['rv-1'].readOnly], ['mixes', C, undefined]);
+  assert.equal(byId['disc-1'].bucketId, 'record');
+
+  // Edit through the viewer's view: the row keeps its owner and its own bucket; nothing view-only is stored.
+  const r = await upsertPackage({ ...byId['rv-1'], title: 'BAI-EE Mix' }, { clientId: C, db, returnPackages: false });
+  const saved = stored(db).get('rv-1');
+  assert.deepEqual([saved.clientId, saved.bucketId, saved.title, 'sharedWith' in saved, 'ownerBucketId' in saved], [UE, 'ue', 'BAI-EE Mix', false, false]);
+  assert.deepEqual([r.pkg.bucketId, r.pkg.sharedWith], ['mixes', C]);
+  const discSaved = await upsertPackage({ ...byId['disc-1'], title: 'x' }, { clientId: C, db, returnPackages: false });
+  assert.equal('bucketId' in stored(db).get('disc-1'), false);
+  assert.equal(discSaved.pkg.bucketId, 'record');
+
+  await assert.rejects(() => deletePackage('rv-1', { clientId: C, db, returnPackages: false }), { status: 409, code: 'package-client-mismatch' });
+  // The source owner cannot write the viewer's rows (grants are one-way).
+  await assert.rejects(() => upsertPackage(row({ id: 'mine', title: 'y' }), { clientId: UE, db, returnPackages: false }), { status: 409 });
+
+  const get = packageGetterFor(C);
+  assert.equal((await get('rv-1', { db })).bucketId, 'mixes');
+  assert.equal(await packageGetterFor('fixture-client-zzz')('rv-1', { db }), null);
 });

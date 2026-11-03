@@ -39,7 +39,9 @@ import { validatePackage, sanitizePostFields } from './schema.js';
 import { mergeInventory } from './archive-ingest.js';
 import { resolveEngine, isEngine } from './engines.js';
 import { buildSearchTokens, FACET_VERSION } from './facets.js';
-import { readContentSources, normalizeContentSources, mergeSourceRows } from './content-sources.js';
+import {
+  readContentSources, normalizeContentSources, mergeSourceRows, canWriteFor, viewSourceRow, stripViewFields,
+} from './content-sources.js';
 // Static import so Next bundles the seed rows — same reason as the route's
 // bundledCalendar: a runtime fs read of a repo path is fragile on serverless.
 import seedRows from './content-packages.json' with { type: 'json' };
@@ -196,26 +198,38 @@ export async function readInventory(opts = {}) {
   return result;
 }
 
+/** Every stored row of one client, paged past READ_LIMIT (MAX_ALL_PAGES × 1000 rows at most). */
+const MAX_ALL_PAGES = 20;
+async function readAllRows(clientId, db) {
+  const all = [];
+  let cursor = null;
+  for (let page = 0; page < MAX_ALL_PAGES; page += 1) {
+    const r = await readInventory({ clientId, db, pageSize: 1000, ...(cursor ? { startAfter: cursor } : {}) });
+    all.push(...r.packages);
+    cursor = r.nextCursor;
+    if (!cursor) return { packages: all, updatedAt: r.updatedAt, seeded: r.seeded };
+  }
+  return { packages: all, updatedAt: null, seeded: false };
+}
+
 /**
- * The viewer's inventory plus the rows of its content-source clients (content-sources.js), read-only.
- * `sources` omitted => read from client_configs/{clientId}.contentSources. A source that has no stored rows adds
- * nothing (never the repo seed). Un-paginated only; writes stay per client (upsertPackage / deletePackage refuse a
- * source row with package-client-mismatch).
+ * The viewer's inventory plus the rows of its content-source clients (content-sources.js), each source row viewed
+ * for the viewer (its bucket, `sharedFrom`, `sharedWith`). `sources` omitted => client_configs/{clientId}.contentSources.
+ * A source with no stored rows adds nothing (never the repo seed). `all: true` pages every client past READ_LIMIT;
+ * otherwise each client is one un-paginated read (readInventory's bound).
  *
- * @param {{ clientId: string, sources?: string[], db?: object }} opts  clientId REQUIRED
- * @returns {Promise<{ packages: object[], updatedAt: number|null, seeded: boolean, sources: string[] }>}
+ * @param {{ clientId: string, sources?: object[], all?: boolean, db?: object }} opts  clientId REQUIRED
+ * @returns {Promise<{ packages: object[], updatedAt: number|null, seeded: boolean, sources: object[] }>}
  */
 export async function readSharedInventory(opts = {}) {
   const clientId = requireClientId(opts.clientId, 'readSharedInventory');
   const sources = opts.sources === undefined
     ? await readContentSources(clientId, { db: opts.db })
     : normalizeContentSources(opts.sources, clientId);
-  const [own, ...fromSources] = await Promise.all([
-    readInventory({ clientId, db: opts.db }),
-    ...sources.map((s) => readInventory({ clientId: s, db: opts.db })),
-  ]);
-  const sourceRows = fromSources.flatMap((r) => (r.seeded ? [] : r.packages));
-  return { ...own, packages: mergeSourceRows(own.packages, sourceRows), sources };
+  const read = (id) => (opts.all ? readAllRows(id, opts.db) : readInventory({ clientId: id, db: opts.db }));
+  const [own, ...fromSources] = await Promise.all([read(clientId), ...sources.map((s) => read(s.clientId))]);
+  const groups = fromSources.map((r, i) => ({ entry: sources[i], rows: r.seeded ? [] : r.packages }));
+  return { ...own, packages: mergeSourceRows(own.packages, groups, clientId), sources };
 }
 
 /** One package by id, or null. One read — use this instead of scanning
@@ -234,12 +248,19 @@ export async function getPackage(id, opts = {}) {
   return null;
 }
 
-/** getPackage bound to one client: another client's row (or an unstamped one) reads as null, so a caller acting for
+/** getPackage bound to one client: its own rows, and rows of its content sources (viewed for it, see
+ * content-sources.js). Any other client's row (or an unstamped one) reads as null, so a caller acting for
  * `clientId` can never see or act on a foreign package by guessing its id. */
 export function packageGetterFor(clientId) {
+  let sources = null;
   return async (id, opts = {}) => {
     const pkg = await getPackage(id, opts);
-    return pkg && clientId && pkg.clientId === clientId ? pkg : null;
+    if (!pkg || !clientId) return null;
+    if (pkg.clientId === clientId) return pkg;
+    if (!pkg.clientId) return null;
+    sources ??= await readContentSources(clientId, { db: opts.db });
+    const entry = sources.find((e) => e.clientId === pkg.clientId);
+    return entry ? viewSourceRow(pkg, entry, clientId) : null;
   };
 }
 
@@ -413,13 +434,16 @@ export async function upsertPackage(pkg, opts = {}) {
 
   const requested = cleanClientId(opts.clientId) || cleanClientId(pkg.clientId);
   const owner = cleanClientId(existing?.clientId);
-  if (owner && requested && owner !== requested) {
+  // Another client's row: refused unless the requester holds a 'full' content-source grant on its owner
+  // (content-sources.js). Either way the row keeps its owner.
+  const viewer = owner && requested && owner !== requested ? requested : null;
+  if (viewer && !(await canWriteFor(viewer, owner, { db }))) {
     throw Object.assign(new Error(`Package ${id} belongs to another client.`), { status: 409, code: 'package-client-mismatch' });
   }
   const clientId = owner || requested;
   if (!clientId) throw Object.assign(new Error(`clientId is required to save package ${id}.`), { status: 400, code: 'package-client-required' });
 
-  const base = sanitizePostFields(stripUndefined({ ...pkg, id, clientId, updatedAt: Date.now() }));
+  const base = sanitizePostFields(stripUndefined({ ...stripViewFields(pkg, existing), id, clientId, updatedAt: Date.now() }));
   const verdict = validatePackage(base);
   if (!verdict.ok) {
     throw Object.assign(new Error(verdict.errors.join('; ')), { status: 400, errors: verdict.errors });
@@ -451,8 +475,10 @@ export async function upsertPackage(pkg, opts = {}) {
   const updatedAt = queueMetaTouch(db, batch, newDocs);
   await batch.commit();
 
-  const result = { pkg: candidate, warnings: verdict.warnings, created, updatedAt };
-  if (returnPackages) result.packages = (await readInventory({ db, clientId })).packages;
+  // A grant write answers in the requester's view (its bucket, sharedWith) and with the requester's inventory.
+  const entry = viewer ? (await readContentSources(viewer, { db })).find((e) => e.clientId === owner) : null;
+  const result = { pkg: entry ? viewSourceRow(candidate, entry, viewer) : candidate, warnings: verdict.warnings, created, updatedAt };
+  if (returnPackages) result.packages = (await readSharedInventory({ db, clientId: viewer || clientId })).packages;
   return result;
 }
 
