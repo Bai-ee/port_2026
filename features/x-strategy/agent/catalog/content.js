@@ -74,6 +74,8 @@ export const CONTENT_ACTIONS = [
     obj({ postId: str('social_posts id.'), expectedRevision: int('Post revision you read.') }, ['postId']), { tier: 1, snapshot: [{ collection: 'social_posts', idArg: 'postId' }] }),
   Q('calendar.suggestion.approve', 'calendar', 'Approve a calendar suggestion', 'Saves a daily-run suggestion (kind suggestion) or an open quote target (kind requote) as a draft through the existing save path, then approves it. Never schedules or publishes.', 'calendar-suggestion-approve',
     obj({ kind: str('suggestion or requote.'), id: str('Suggestion id (from the calendar row suggestionId) or quote target id (row quoteTargetId).'), date: day('Calendar day the row was shown on.') }, ['kind', 'id']), { tier: 1 }),
+  Q('calendar.item.decide', 'calendar', 'Pass, delete or replace a calendar item', 'pass = off the calendar now; delete = pass + never suggest it again (library item rejected); replace = pass + next-best same-track item that day. No X call.', 'calendar-item-decide',
+    obj({ decision: str('pass | delete | replace (replace not for suggestions).', { enum: ['pass', 'delete', 'replace'] }), item: open('post {kind:"post",postId,expectedRevision?} | suggestion {kind:"suggestion",suggestionId,runId?,date} | requote {kind:"requote",targetId,url?,date}.') }, ['decision', 'item']), { tier: 2 }),
   Q('content.quote-target.dismiss', 'content', 'Dismiss a quote target', 'Hides a quote-target candidate from the calendar (kept in a bounded dismissed list).', 'dismiss',
     obj({ candidateId: str('Candidate id.') }, ['candidateId']),
     { tier: 1, snapshot: [{ path: 'dashboard_state/{clientId}', field: 'marketingBrief.quoteTargets.dismissed' }] }),

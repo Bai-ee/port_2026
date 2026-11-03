@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, FolderPlus, Pencil, RotateCw, Trash2, Upload, X } from 'lucide-react';
 import { uploadFileToSignedUrl } from '../../lib/dashboard/upload-signed-url';
+import { readImpersonateClientId, withImpersonation } from '../../lib/dashboard/bootstrap-session.js';
 
 // Media Library — a management-only workspace over the shared EditVideos
 // source bucket: folder rail + file grid, drag-and-drop move, multi-select,
@@ -233,7 +234,7 @@ export default function MediaLibraryCard({ getIdToken, isAdmin }) {
   const apiFetch = useCallback(async (action, { method = 'GET', body, query = {} } = {}) => {
     const token = await getIdToken();
     const qs = new URLSearchParams({ action, ...query }).toString();
-    const res = await fetch(`/api/dashboard/media?${qs}`, {
+    const res = await fetch(withImpersonation(`/api/dashboard/media?${qs}`, readImpersonateClientId()), {
       method,
       headers: {
         Authorization: `Bearer ${token}`,

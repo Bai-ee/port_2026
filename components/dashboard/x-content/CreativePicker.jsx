@@ -5,6 +5,7 @@ import { Search, X } from 'lucide-react';
 import LoadingRing from '../content-ui/ui/LoadingRing';
 import MiniThumb from './MiniThumb.jsx';
 import { PICKER_FILTERS, pickerTiles } from './creative-picker-model.js';
+import { readImpersonateClientId, withImpersonation } from '../../../lib/dashboard/bootstrap-session.js';
 
 // CreativePicker — inline panel inside the post editor: choose a Content Center item whose media becomes the post's
 // creative. Presentational about the pick: it only emits onPick(packageId); the parent calls the
@@ -24,7 +25,7 @@ export default function CreativePicker({ clientId, getIdToken, onPick, onCancel,
 
   const call = useCallback(async (action, body = {}) => {
     const token = getIdToken ? await getIdToken() : null;
-    const res = await fetch(ENDPOINT, {
+    const res = await fetch(withImpersonation(ENDPOINT, clientId || readImpersonateClientId()), {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
       body: JSON.stringify({ action, ...body }),
@@ -32,7 +33,7 @@ export default function CreativePicker({ clientId, getIdToken, onPick, onCancel,
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw Object.assign(new Error(data?.error || `${action} failed.`), { status: res.status });
     return data;
-  }, [getIdToken]);
+  }, [getIdToken, clientId]);
 
   useEffect(() => {
     let live = true;

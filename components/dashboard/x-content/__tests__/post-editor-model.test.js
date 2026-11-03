@@ -4,6 +4,7 @@ import {
   MAX_CHARS, charCount, isOverLimit, formatInZone, zonedWallToMs, whenToIso, initialWhen, isFutureEnough, resolveTimeZone,
   statusPill, boundFields, boundFieldsGate, dirtyState, actionState, buildApproveRequest, buildApproveScheduleRequest,
   buildSaveRequest, buildSuggestionApproveRequest, classifyError, approvalVoided, mergeServerPost, moreItems, OWNER_ONLY_MESSAGE,
+  decideItems, buildDecideRequest, decideResultText, replacementRowId,
 } from '../post-editor-model.js';
 
 const FULL = { selfReply: null, mediaVariants: null, replyTo: null };
@@ -48,21 +49,31 @@ test('future check needs a one minute lead', () => {
   assert.equal(isFutureEnough(null, NOW), false);
 });
 
-test('approve needs no time; approve & schedule needs a future time', () => {
+test('approve with no time only approves; with a time it schedules, so that time must be ahead', () => {
   const row = draft();
   const noTime = actionState({ row, content: 'hello', when: { date: '', time: '' }, tz: TZ, now: NOW });
   assert.equal(noTime.canApprove, true);
-  assert.equal(noTime.canApproveSchedule, false);
-  assert.match(noTime.scheduleBlockedReason, /date and time/);
+  assert.equal(noTime.approveMode, 'approve');
 
   const past = actionState({ row, content: 'hello', when: { date: '2026-10-18', time: '09:00' }, tz: TZ, now: NOW });
-  assert.equal(past.canApprove, true);
-  assert.equal(past.canApproveSchedule, false);
-  assert.match(past.scheduleBlockedReason, /a minute/);
+  assert.equal(past.approveMode, 'schedule');
+  assert.equal(past.canApprove, false);
+  assert.match(past.approveBlockedReason, /a minute/);
+
+  const half = actionState({ row, content: 'hello', when: { date: '2026-10-19', time: '' }, tz: TZ, now: NOW });
+  assert.equal(half.canApprove, false);
+  assert.match(half.approveBlockedReason, /date and time/);
 
   const future = actionState({ row, content: 'hello', when: { date: '2026-10-19', time: '09:00' }, tz: TZ, now: NOW });
-  assert.equal(future.canApproveSchedule, true);
+  assert.equal(future.approveMode, 'schedule');
+  assert.equal(future.canApprove, true);
   assert.equal(future.iso, '2026-10-19T14:00:00.000Z');
+
+  // already scheduled at that time, nothing changed: Approve has nothing to do
+  const sched = draft({ status: 'scheduled', scheduledAt: '2026-10-19T14:00:00.000Z' });
+  const same = actionState({ row: sched, content: 'hello', when: { date: '2026-10-19', time: '09:00' }, tz: TZ, now: NOW });
+  assert.equal(same.canApprove, false);
+  assert.match(same.approveBlockedReason, /Already scheduled/);
 });
 
 test('over limit, empty and busy disable approve and save', () => {
@@ -70,7 +81,6 @@ test('over limit, empty and busy disable approve and save', () => {
   for (const content of ['x'.repeat(281), '   ']) {
     const s = actionState({ row: draft(), content, when, tz: TZ, now: NOW });
     assert.equal(s.canApprove, false);
-    assert.equal(s.canApproveSchedule, false);
     assert.equal(s.canSave, false);
   }
   const busy = actionState({ row: draft(), content: 'hello there', when, tz: TZ, now: NOW, busy: true });
@@ -78,11 +88,15 @@ test('over limit, empty and busy disable approve and save', () => {
   assert.equal(busy.canSave, false);
 });
 
-test('approved row: approve disabled until the copy changes; locked rows never approve', () => {
+test('approved row: with no time, approve waits for a copy change; with a time, Approve schedules it; locked rows never approve', () => {
   const when = { date: '2026-10-19', time: '09:00' };
   const approved = draft({ status: 'approved', state: 'approved' });
-  assert.equal(actionState({ row: approved, content: 'hello', when, tz: TZ, now: NOW }).canApprove, false);
-  assert.equal(actionState({ row: approved, content: 'hello edited', when, tz: TZ, now: NOW }).canApprove, true);
+  const noTime = { date: '', time: '' };
+  assert.equal(actionState({ row: approved, content: 'hello', when: noTime, tz: TZ, now: NOW }).canApprove, false);
+  assert.equal(actionState({ row: approved, content: 'hello edited', when: noTime, tz: TZ, now: NOW }).canApprove, true);
+  const withTime = actionState({ row: approved, content: 'hello', when, tz: TZ, now: NOW });
+  assert.equal(withTime.canApprove, true);
+  assert.equal(withTime.approveMode, 'schedule');
   for (const status of ['posted', 'failed', 'needs_review']) {
     const s = actionState({ row: draft({ status }), content: 'hello', when, tz: TZ, now: NOW });
     assert.equal(s.canApprove, false, status);
@@ -117,7 +131,6 @@ test('bound-field gate: unknown fields hide, so approve stays disabled', () => {
   const when = { date: '2026-10-19', time: '09:00' };
   const s = actionState({ row: calendarRow, content: 'hello', when, tz: TZ, now: NOW });
   assert.equal(s.canApprove, false);
-  assert.equal(s.canApproveSchedule, false);
   assert.match(s.approveBlockedReason, /Reload the full post/);
   assert.equal(boundFieldsGate(draft()).ok, true);
 });
@@ -141,7 +154,7 @@ test('suggestions: approve via calendar-suggestion-approve with text, never sche
   const sug = { id: 'suggestion:abc', kind: 'suggestion', state: 'suggested', suggestionId: 'abc', text: 'idea', date: '2026-10-19' };
   const s = actionState({ row: sug, content: 'idea', when: { date: '2026-10-20', time: '09:00' }, tz: TZ, now: NOW });
   assert.equal(s.canApprove, true);
-  assert.equal(s.canApproveSchedule, false);
+  assert.equal(s.approveMode, 'approve');
   assert.equal(s.canSave, false);
   assert.deepEqual(buildSuggestionApproveRequest({ row: sug, content: 'edited idea' }), {
     endpoint: 'content', action: 'calendar-suggestion-approve', body: { kind: 'suggestion', id: 'abc', date: '2026-10-19', text: 'edited idea' },
@@ -200,4 +213,31 @@ test('status pill and More items', () => {
   assert.equal(items(draft({ status: 'needs_review', state: 'held' })).reconcile, true);
   assert.equal(items(draft({ packageId: 'nas-1' })).hires, true);
   assert.deepEqual(moreItems({ kind: 'suggestion' }), []);
+});
+
+test('decideItems: per kind and status', () => {
+  assert.deepEqual(decideItems(draft()), { pass: true, replace: true, delete: true });
+  assert.deepEqual(decideItems(draft({ status: 'posted', state: 'posted' })), { pass: false, replace: false, delete: false });
+  assert.deepEqual(decideItems(draft({ status: 'posting' })), { pass: false, replace: false, delete: false });
+  assert.deepEqual(decideItems({ id: 'suggestion:s1', kind: 'suggestion' }), { pass: true, replace: false, delete: true });
+  assert.deepEqual(decideItems({ id: 'requote:t1', kind: 'requote' }), { pass: true, replace: false, delete: true });
+  assert.deepEqual(decideItems(draft(), { busy: true }), { pass: false, replace: false, delete: false });
+  assert.deepEqual(decideItems(null), { pass: false, replace: false, delete: false });
+});
+
+test('buildDecideRequest: item fields per kind', () => {
+  assert.deepEqual(buildDecideRequest(draft(), 'pass'), { endpoint: 'content', action: 'calendar-item-decide', body: { decision: 'pass', item: { kind: 'post', postId: 'p1', expectedRevision: 3 } } });
+  assert.deepEqual(buildDecideRequest({ id: 'suggestion:s1', kind: 'suggestion', date: '2026-10-20', runId: 'r1' }, 'delete').body, { decision: 'delete', item: { kind: 'suggestion', suggestionId: 's1', runId: 'r1', date: '2026-10-20' } });
+  assert.deepEqual(buildDecideRequest({ id: 'requote:t9', kind: 'requote', quotedUrl: 'https://x.com/a/status/1', date: '2026-10-20' }, 'pass').body.item, { kind: 'requote', targetId: 't9', url: 'https://x.com/a/status/1', date: '2026-10-20' });
+  assert.equal(buildDecideRequest(draft({ revision: undefined }), 'replace').body.item.expectedRevision, null);
+});
+
+test('decideResultText and replacementRowId', () => {
+  assert.equal(decideResultText('pass', {}), 'Passed.');
+  assert.equal(decideResultText('delete', {}), 'Deleted.');
+  assert.equal(decideResultText('replace', { replacement: null, note: 'no-eligible-item' }), 'Passed. Nothing else fits this day.');
+  assert.match(decideResultText('replace', { replacement: { kind: 'post', postId: 'p2', row: { title: 'Next one' } } }), /Replaced with Next one/);
+  assert.equal(replacementRowId({ replacement: { kind: 'post', postId: 'p2' } }), 'p2');
+  assert.equal(replacementRowId({ replacement: { kind: 'requote', targetId: 't3' } }), 'requote:t3');
+  assert.equal(replacementRowId({ replacement: null }), null);
 });

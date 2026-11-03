@@ -227,13 +227,18 @@ test('Brain draft failure never throws (signup run continues)', async () => {
 
 test('route wiring: signup runs the source steps with a deterministic brand overview and drafts the Brain', () => {
   const src = fs.readFileSync(path.join(ROOT, 'app/api/worker/run-brief/route.js'), 'utf8');
-  assert.match(src, /if \(ownSiteUrl && claimedRun\.trigger !== 'creative-brief'\)/);
+  assert.match(src, /if \(ownSiteUrl && claimedRun\.trigger !== 'creative-brief' && signupStepOn\('siteSources'\)\)/);
   assert.match(src, /brandOverviewUseModel: claimedRun\.trigger !== 'signup'/);
-  assert.match(src, /if \(claimedRun\.trigger !== 'signup'\) return;\s*const \{ ensureSignupBrainDraft \}/);
+  assert.match(src, /if \(claimedRun\.trigger !== 'signup' \|\| !signupStepOn\('brainDraft'\)\) return;\s*const \{ ensureSignupBrainDraft \}/);
   // The draft runs on BOTH paths: before the failed-return and after the onboarding summary on success.
   assert.match(src, /if \(pipelineResult\.status === 'failed'\) \{\s*await ensureSignupDraft\(\);/);
   assert.ok(src.indexOf('await ensureSignupDraft();\n\n  await completeRun(') > -1, 'success-path draft precedes completeRun');
-  assert.match(src, /moduleIdsToRun = \['multi-device-view', 'social-preview'\]/);
+  // Signup modules follow client_configs.onboardingSteps (absent = both modules).
+  assert.match(src, /\? signupModuleIds\(clientConfig\?\.onboardingSteps\)\s*: \['multi-device-view', 'social-preview'\]/);
+  // Admin-chosen onboarding steps gate only the signup trigger.
+  assert.match(src, /claimedRun\.trigger !== 'signup' \|\| isOnboardingStepEnabled\(clientConfig\?\.onboardingSteps, key\)/);
+  assert.match(src, /if \(!signupStepOn\('motionVideo'\)\)/);
+  assert.match(src, /claimedRun\.trigger === 'signup'\) && signupStepOn\('briefSummary'\)\)/);
   // Signup never chains the scout-brief (market signals) run.
   assert.match(src, /claimedRun\.trigger === 'brief-refresh' \|\| claimedRun\.trigger === 'reseed'\)\) \{\s*const chainSourceUrl/);
 });

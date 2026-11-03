@@ -199,7 +199,9 @@ function BrainSyncResult({ brainSync }) {
   );
 }
 
-export default function ClientBrainCard({ getIdToken, onSaved, onOpenCard }) {
+export default function ClientBrainCard({ getIdToken, apiPath, onSaved, onOpenCard }) {
+  // apiPath appends ?as=<clientId> during admin impersonation so the card reads and writes the switched client.
+  const toApiPath = typeof apiPath === 'function' ? apiPath : (path) => path;
   const [tab, setTab] = useState('source');
   const [brain, setBrain] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -220,14 +222,14 @@ export default function ClientBrainCard({ getIdToken, onSaved, onOpenCard }) {
   const loadVersions = useCallback(async () => {
     try {
       const token = await getIdToken();
-      const res = await fetch('/api/dashboard/client-brain?action=versions', {
+      const res = await fetch(toApiPath('/api/dashboard/client-brain?action=versions'), {
         headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) setVersions(Array.isArray(data.versions) ? data.versions : []);
     } catch { /* version list is best-effort */ }
-  }, [getIdToken]);
+  }, [getIdToken, apiPath]);
 
   useEffect(() => { loadVersions(); }, [loadVersions]);
 
@@ -236,7 +238,7 @@ export default function ClientBrainCard({ getIdToken, onSaved, onOpenCard }) {
     setError('');
     try {
       const token = await getIdToken();
-      const res = await fetch(`/api/dashboard/client-brain?action=version&ts=${encodeURIComponent(id)}`, {
+      const res = await fetch(toApiPath(`/api/dashboard/client-brain?action=version&ts=${encodeURIComponent(id)}`), {
         headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
       });
@@ -258,7 +260,7 @@ export default function ClientBrainCard({ getIdToken, onSaved, onOpenCard }) {
     setError('');
     try {
       const token = await getIdToken();
-      const res = await fetch('/api/dashboard/client-brain', {
+      const res = await fetch(toApiPath('/api/dashboard/client-brain'), {
         headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
       });
@@ -275,7 +277,7 @@ export default function ClientBrainCard({ getIdToken, onSaved, onOpenCard }) {
     } finally {
       setLoading(false);
     }
-  }, [getIdToken]);
+  }, [getIdToken, apiPath]);
 
   useEffect(() => {
     loadBrain();
@@ -339,7 +341,7 @@ export default function ClientBrainCard({ getIdToken, onSaved, onOpenCard }) {
     setError('');
     try {
       const token = await getIdToken();
-      const res = await fetch('/api/dashboard/client-brain/sources', {
+      const res = await fetch(toApiPath('/api/dashboard/client-brain/sources'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ sourceRefs }),
@@ -360,7 +362,7 @@ export default function ClientBrainCard({ getIdToken, onSaved, onOpenCard }) {
     setError('');
     try {
       const token = await getIdToken();
-      const res = await fetch(`/api/dashboard/client-brain/${action}`, {
+      const res = await fetch(toApiPath(`/api/dashboard/client-brain/${action}`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(body),
@@ -416,7 +418,7 @@ export default function ClientBrainCard({ getIdToken, onSaved, onOpenCard }) {
     setError('');
     try {
       const token = await getIdToken();
-      const res = await fetch('/api/dashboard/client-brain', {
+      const res = await fetch(toApiPath('/api/dashboard/client-brain'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ markdownSource: source }),
@@ -464,7 +466,7 @@ export default function ClientBrainCard({ getIdToken, onSaved, onOpenCard }) {
         scribeInstructions: voiceDraft.scribeInstructions.trim(),
         avoidPatterns: voiceDraft.avoidText.split('\n').map((s) => s.trim()).filter(Boolean),
       };
-      const res = await fetch('/api/dashboard/client-brain', {
+      const res = await fetch(toApiPath('/api/dashboard/client-brain'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ brain: { voice: nextVoice } }),
@@ -507,8 +509,7 @@ export default function ClientBrainCard({ getIdToken, onSaved, onOpenCard }) {
           onClick={(e) => {
             // Preserve admin ?as=<clientId> when present.
             e.preventDefault();
-            const as = new URLSearchParams(window.location.search).get('as');
-            window.location.assign(as ? `/dashboard/brain?as=${encodeURIComponent(as)}` : '/dashboard/brain');
+            window.location.assign(toApiPath('/dashboard/brain'));
           }}
         >
           Open Brain Builder ↗

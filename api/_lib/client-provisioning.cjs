@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const { getMaster, listSources }        = require('../../features/intelligence/_store');
 const { buildIntelligencePayload }      = require('./intelligence-bootstrap-utils.cjs');
 const { getDefaultModuleConfig, getDefaultModuleState } = require('../../features/scout-intake/module-registry');
+const { ONBOARDING_STEPS, normalizeOnboardingSteps } = require('../../features/scout-intake/onboarding-steps');
 const { logWarn } = require('./observability.cjs');
 
 function normalizeOptionalUrl(input) {
@@ -633,20 +634,46 @@ async function provisionClientForUser({ uid, email, displayName, companyName, we
   };
 }
 
+// Dashboard module state for an admin-created client: a module whose
+// onboarding step is off stays idle instead of reading as queued.
+function adminClientModuleState(steps) {
+  const state = getDefaultModuleState(Boolean(steps));
+  if (!steps) return state;
+  for (const step of ONBOARDING_STEPS) {
+    if (step.moduleId && steps[step.key] === false && state[step.moduleId]) {
+      state[step.moduleId] = { ...state[step.moduleId], status: 'idle' };
+    }
+  }
+  return state;
+}
+
 /**
- * Admin-created, website-less client. Unlike provisionClientForUser this does
- * NOT link the admin's own user record (so the admin can own many separate
- * workspaces), is always website-less (idea-only), and never queues a brief.
+ * Admin-created client. Unlike provisionClientForUser this does NOT link the
+ * admin's own user record (so the admin can own many separate workspaces).
  * The new client is registered in the admin's adminDashboards roster so it is
  * reachable from the dashboard client switcher (impersonation).
  *
- * @param {{ adminUid: string, adminEmail: string, companyName: string, ideaDescription?: string }} input
- * @returns {Promise<{ clientId: string, client: object }>}
+ * Without a website it is an idea-only workspace and never queues a brief.
+ * With a website it is provisioned like a signup — own-site config, queued
+ * 'signup' brief run — limited to the onboarding steps the admin left on
+ * (client_configs.onboardingSteps, see features/scout-intake/onboarding-steps.js).
+ * The caller triggers the worker when initialRunCreated is true.
+ *
+ * @param {{ adminUid: string, adminEmail: string, companyName: string, ideaDescription?: string, websiteUrl?: string, onboardingSteps?: object }} input
+ * @returns {Promise<{ clientId: string, client: object, initialRun: object|null, initialRunCreated: boolean }>}
  */
-async function createWebsitelessClient({ adminUid, adminEmail, companyName, ideaDescription }) {
+async function createAdminClient({ adminUid, adminEmail, companyName, ideaDescription, websiteUrl, onboardingSteps }) {
+  let normalized = null;
+  try {
+    normalized = normalizeOptionalUrl(websiteUrl);
+  } catch {
+    const err = new Error('Enter a valid website URL.');
+    err.status = 400;
+    throw err;
+  }
   const resolvedCompanyName = deriveCompanyName({
     companyName,
-    hostname: '',
+    hostname: normalized?.hostname || '',
     displayName: '',
     email: adminEmail,
   });
@@ -656,6 +683,7 @@ async function createWebsitelessClient({ adminUid, adminEmail, companyName, idea
     err.status = 400;
     throw err;
   }
+  const steps = normalized ? normalizeOnboardingSteps(onboardingSteps) : null;
 
   const clientKey = slugify(resolvedCompanyName || 'client');
   const autoId = fb.adminDb.collection('clients').doc().id;
@@ -674,12 +702,15 @@ async function createWebsitelessClient({ adminUid, adminEmail, companyName, idea
     ownerDisplayName: '',
     companyName: resolvedCompanyName,
     dashboardTitle: buildDashboardTitle(resolvedCompanyName),
-    dashboardDescription: 'Website-less workspace. Feed it via uploads (brain) and a brief run.',
-    websiteUrl: '',
-    normalizedOrigin: '',
-    normalizedHost: '',
-    status: 'active',
-    onboardingStatus: 'intake_received',
+    dashboardDescription: normalized
+      ? `Initial discovery and dashboard setup for ${normalized.hostname} is in progress.`
+      : 'Website-less workspace. Feed it via uploads (brain) and a brief run.',
+    websiteUrl: normalized?.websiteUrl || '',
+    normalizedOrigin: normalized?.origin || '',
+    normalizedHost: normalized?.hostname || '',
+    status: normalized ? 'provisioning' : 'active',
+    onboardingStatus: normalized ? 'brief_queued' : 'intake_received',
+    ...(normalized ? { entryMode: 'website' } : {}),
     pipelineType: 'free-tier-intake',
     activeModules: [],
     activeAddOns: [],
@@ -705,16 +736,17 @@ async function createWebsitelessClient({ adminUid, adminEmail, companyName, idea
       updatedAt: now,
     }),
     onboardingRef.set({
-      state: 'intake_received',
-      sourceUrl: '',
+      state: normalized ? 'brief_queued' : 'intake_received',
+      sourceUrl: normalized?.websiteUrl || '',
       ideaDescription: trimmedIdeaDescription,
-      queuedAt: null,
+      queuedAt: normalized ? now : null,
       updatedAt: now,
     }),
     clientConfigRef.set({
       clientId,
+      ...(normalized ? { entryMode: 'website' } : {}),
       sourceInputs: {
-        websiteUrl: '',
+        websiteUrl: normalized?.websiteUrl || '',
         ideaDescription: trimmedIdeaDescription,
         uploadedImageRefs: [],
       },
@@ -725,22 +757,25 @@ async function createWebsitelessClient({ adminUid, adminEmail, companyName, idea
       providerConfig: { defaultProvider: 'anthropic' },
       moduleFlags: {},
       moduleConfig: getDefaultModuleConfig(),
+      ...(steps ? { onboardingSteps: steps } : {}),
       createdAt: now,
       updatedAt: now,
     }),
     dashboardStateRef.set({
       clientId,
-      status: 'active',
+      status: normalized ? 'provisioning' : 'active',
       headline: null,
       summaryCards: [],
       latestInsights: [],
       latestRunId: null,
       latestRunStatus: null,
-      modules: getDefaultModuleState(false),
+      modules: adminClientModuleState(steps),
       updatedAt: now,
       provisioningState: {
         startedAt: now,
-        message: 'Website-less workspace ready. Upload to the brain and run a brief.',
+        message: normalized
+          ? 'Initial brief run is queued and will be processed shortly.'
+          : 'Website-less workspace ready. Upload to the brain and run a brief.',
       },
       errorState: null,
     }),
@@ -759,10 +794,25 @@ async function createWebsitelessClient({ adminUid, adminEmail, companyName, idea
       );
     }
   } catch (adminWriteErr) {
-    console.warn('[createWebsitelessClient] non-fatal: failed to update adminDashboards', adminWriteErr?.message);
+    console.warn('[createAdminClient] non-fatal: failed to update adminDashboards', adminWriteErr?.message);
   }
 
-  return { clientId, client: clientPayload };
+  if (!normalized) {
+    return { clientId, client: clientPayload, initialRun: null, initialRunCreated: false };
+  }
+
+  const run = await queueInitialBriefRun({ clientId, uid: adminUid, websiteUrl: normalized.websiteUrl });
+  await Promise.all([
+    clientRef.set({ latestRunId: run.runId, latestRunStatus: run.status, updatedAt: now }, { merge: true }),
+    dashboardStateRef.set({ latestRunId: run.runId, latestRunStatus: run.status, updatedAt: now }, { merge: true }),
+  ]);
+
+  return {
+    clientId,
+    client: { ...clientPayload, latestRunId: run.runId, latestRunStatus: run.status },
+    initialRun: run,
+    initialRunCreated: run.created !== false,
+  };
 }
 
 function inferModuleStateFromDashboard(dashboardState) {
@@ -1261,7 +1311,7 @@ module.exports = {
   getDashboardBootstrap,
   provisionClientFromProspect,
   provisionClientForUser,
-  createWebsitelessClient,
+  createAdminClient,
   reseedIntakeForClient,
   loadAdminAccess,
   buildCreationFailureProjection,

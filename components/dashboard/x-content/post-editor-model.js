@@ -173,13 +173,14 @@ export function dirtyState({ row, content, when, tz }) {
 // ---- action enablement ----
 
 /**
- * What each footer button may do right now.
- * Approve            : calendar-approve (content + expectedRevision). No time needed.
- * Approve & schedule : approve-and-schedule. Needs a time >= 1 min ahead.
- * Save               : update (content, + scheduledAt for an already-scheduled post whose time moved).
+ * What the footer may do right now. One Approve button:
+ *   approveMode 'schedule' : the post has a publish time -> approve-and-schedule at it (needs >= 1 min ahead).
+ *   approveMode 'approve'  : no time set (unplaced) -> calendar-approve only.
+ *   suggestions            : calendar-suggestion-approve (saves a draft, approves; no time yet).
+ * Save: update (content, + scheduledAt for an already-scheduled post whose time moved).
  */
 export function actionState({ row, content, when, tz, now = Date.now(), busy = false, dirty = null } = {}) {
-  const none = { canSave: false, canApprove: false, canApproveSchedule: false, scheduleBlockedReason: '', approveBlockedReason: '', iso: null, isFuture: false };
+  const none = { canSave: false, canApprove: false, approveMode: 'approve', approveBlockedReason: '', iso: null, isFuture: false };
   if (!row) return none;
   const suggestion = isSuggestion(row);
   const locked = isLockedRow(row);
@@ -191,6 +192,8 @@ export function actionState({ row, content, when, tz, now = Date.now(), busy = f
   const d = dirty || dirtyState({ row, content, when, tz });
   const approved = isApprovedStatus(row);
   const scheduled = isScheduledStatus(row);
+  const hasTime = !suggestion && !!(when?.date || when?.time);
+  const approveMode = hasTime ? 'schedule' : 'approve';
 
   let approveBlockedReason = '';
   if (busy) approveBlockedReason = 'Working…';
@@ -200,21 +203,15 @@ export function actionState({ row, content, when, tz, now = Date.now(), busy = f
   else if (!gate.ok) approveBlockedReason = boundFieldsNotice(gate);
   else if (suggestion && row.windowOpen === false) approveBlockedReason = 'The window for this one has closed.';
   else if (!suggestion && row.status === 'needs_review') approveBlockedReason = 'Needs review before it can be approved.';
-  else if (!suggestion && (approved || scheduled) && !d.contentDirty) approveBlockedReason = approved ? 'Already approved.' : 'Already scheduled.';
+  else if (approveMode === 'schedule') {
+    if (!iso) approveBlockedReason = 'Set a publish date and time.';
+    else if (!isFuture) approveBlockedReason = 'Pick a time at least a minute from now.';
+    else if (scheduled && !d.contentDirty && !d.timeDirty) approveBlockedReason = 'Already scheduled at that time.';
+  } else if (!suggestion && approved && !d.contentDirty) approveBlockedReason = 'Already approved.';
   const canApprove = !approveBlockedReason;
 
-  let scheduleBlockedReason = approveBlockedReason;
-  if (canApprove) {
-    if (suggestion) scheduleBlockedReason = 'Approve first; scheduling needs a saved post.';
-    else if (!iso) scheduleBlockedReason = 'Set a publish date and time.';
-    else if (!isFuture) scheduleBlockedReason = 'Pick a time at least a minute from now.';
-    else if (scheduled && !d.contentDirty && !d.timeDirty) scheduleBlockedReason = 'Already scheduled at that time.';
-    else scheduleBlockedReason = '';
-  }
-  const canApproveSchedule = !scheduleBlockedReason && canApprove;
-
   const canSave = !busy && !suggestion && !locked && !empty && !over && d.dirty && !(scheduled && d.timeDirty && !isFuture);
-  return { canSave, canApprove, canApproveSchedule, approveBlockedReason, scheduleBlockedReason, iso, isFuture };
+  return { canSave, canApprove, approveMode, approveBlockedReason, iso, isFuture };
 }
 
 // ---- request builders (action + body for the existing routes; nothing new server-side) ----
@@ -226,12 +223,12 @@ export function buildSaveRequest({ row, content, iso, scheduledTimeChanged }) {
   return { endpoint: 'social', body };
 }
 
-/** `calendar-approve` on /api/dashboard/quote-targets: saves edited copy at the checked revision, then approves. */
+/** `calendar-approve` on /api/dashboard/quote-targets: saves edited copy at the checked revision, then approves (no time). */
 export function buildApproveRequest({ row, content }) {
   return { endpoint: 'content', action: 'calendar-approve', body: { postId: row.id, content, expectedRevision: row.revision ?? null } };
 }
 
-/** `approve-and-schedule` on /api/social-posting. */
+/** `approve-and-schedule` on /api/social-posting: what Approve does for a post with a publish time. */
 export function buildApproveScheduleRequest({ row, content, iso, planOverride = null }) {
   const body = { action: 'approve-and-schedule', postId: row.id, content, scheduledAt: iso, expectedRevision: row.revision ?? null };
   if (planOverride) body.planOverride = planOverride;
@@ -250,6 +247,54 @@ export const buildRejectRequest = (row) => ({ endpoint: 'social', body: { action
 /** Unschedule = update with an empty scheduledAt (what PostSheet does). */
 export const buildUnscheduleRequest = (row) => ({ endpoint: 'social', body: { action: 'update', postId: row.id, content: row.content, scheduledAt: '', expectedRevision: row.revision ?? null } });
 export const buildReconcileRequest = ({ row, outcome, platformId }) => ({ endpoint: 'social', body: { action: 'reconcile-post', postId: row.id, outcome, platformId: outcome === 'posted' ? (String(platformId || '').trim() || null) : null } });
+
+// ---- Pass / Replace / Delete (one calendar-item-decide call for posts, suggestions and requotes) ----
+
+const NOT_REMOVABLE_STATUSES = new Set(['posted', 'posting']);
+export const DECISION_LABEL = { pass: 'Pass', replace: 'Replace', delete: 'Delete' };
+export const DELETE_CONFIRM_TEXT = "Delete for good? This content won't be suggested again.";
+
+/** Which decisions are enabled for this row. Posted / posting -> none; suggestions and requotes cannot be replaced. */
+export function decideItems(row, { busy = false } = {}) {
+  const off = { pass: false, replace: false, delete: false };
+  if (!row) return off;
+  const gone = NOT_REMOVABLE_STATUSES.has(row.status) || row.state === 'posted' || row.approval === 'posted';
+  if (busy || gone) return off;
+  const suggestion = isSuggestion(row);
+  return { pass: true, replace: !suggestion, delete: true };
+}
+
+/** `calendar-item-decide` on /api/dashboard/quote-targets. Same id derivation as buildSuggestionApproveRequest. */
+export function buildDecideRequest(row, decision) {
+  let item;
+  if (row?.kind === 'requote') {
+    const targetId = row.quoteTargetId ?? String(row.id || '').replace(/^requote:/, '');
+    item = { kind: 'requote', targetId, url: row.quotedUrl || row.url || null, date: row.date || null };
+  } else if (isSuggestion(row)) {
+    const suggestionId = row.suggestionId ?? String(row.id || '').replace(/^suggestion:/, '');
+    item = { kind: 'suggestion', suggestionId, runId: row.runId ?? row.provenance?.runId ?? null, date: row.date || null };
+  } else {
+    item = { kind: 'post', postId: row?.id, expectedRevision: row?.revision ?? null };
+  }
+  return { endpoint: 'content', action: 'calendar-item-decide', body: { decision, item } };
+}
+
+/** Operator-facing line for a decide response. */
+export function decideResultText(decision, result) {
+  if (decision === 'pass') return 'Passed.';
+  if (decision === 'delete') return 'Deleted.';
+  const r = result?.replacement;
+  if (!r || result?.note === 'no-eligible-item') return 'Passed. Nothing else fits this day.';
+  const label = r.row?.title || r.row?.text || r.row?.content;
+  return label ? `Replaced with ${String(label).slice(0, 60)}.` : 'Replaced.';
+}
+
+/** Id of the replacement row to focus on the calendar, or null. */
+export const replacementRowId = (result) => {
+  const r = result?.replacement;
+  if (!r) return null;
+  return r.postId || r.row?.id || (r.targetId ? `requote:${r.targetId}` : null);
+};
 
 // ---- More menu ----
 

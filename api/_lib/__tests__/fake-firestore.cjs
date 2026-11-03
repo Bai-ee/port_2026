@@ -192,7 +192,11 @@ class Query {
 }
 
 class Collection extends Query {
-  doc(id) { return new DocRef(this._store, this._collection, id); }
+  doc(id) {
+    // No id = Firestore auto-id, like the real SDK.
+    if (id === undefined) { _autoId += 1; id = `auto${String(_autoId).padStart(8, '0')}`; }
+    return new DocRef(this._store, this._collection, id);
+  }
   async add(data) {
     _autoId += 1;
     const ref = this.doc(`auto-${_autoId}`);

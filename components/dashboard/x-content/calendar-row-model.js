@@ -66,8 +66,8 @@ export function canApproveRow(row, nowMs = Date.now()) {
   return false;
 }
 
-/** Unapprove = approved -> draft, only when not scheduled. */
-export const canUnapproveRow = (row) => rowApproval(row) === 'approved';
+/** Unapprove = approved or scheduled -> draft (approving schedules, so unapproving unschedules). */
+export const canUnapproveRow = (row) => ['approved', 'scheduled'].includes(rowApproval(row)) && row?.state !== 'manual';
 
 export function isRowWindowClosed(row, nowMs = Date.now()) {
   if (row?.windowOpen === false) return true;
@@ -100,24 +100,35 @@ export function dayRows(day) {
   return out;
 }
 
-/** Apply optimistic overrides ({ [id]: 'approved'|'unapproved' }) to a row. */
+/** Apply optimistic overrides ({ [id]: 'approved'|'scheduled'|'unapproved' }) to a row. */
 export function withOverride(row, overrides) {
   const o = overrides?.[row?.id];
   if (!o) return row;
+  if (o === 'scheduled') return { ...row, approval: 'scheduled', state: 'scheduled' };
   if (o === 'approved') return { ...row, approval: 'approved', state: isSuggestionRow(row) ? 'approved' : (row.state === 'pending' || row.state === 'awaiting' ? 'approved' : row.state), kind: undefined };
   if (o === 'unapproved') return { ...row, approval: 'unapproved', state: 'pending' };
   return row;
 }
 
-/** Route action + body for approving a row inline. */
-export function approveRequest(row) {
+const MIN_LEAD_MS = 60_000;
+
+/** The calendar slot a saved row would be scheduled at by Approve: its scheduled or proposed time, if still ahead. */
+export function rowScheduleAt(row, nowMs = Date.now()) {
+  const at = row?.scheduledAt || row?.proposedAt || null;
+  const ms = at ? Date.parse(at) : NaN;
+  return Number.isFinite(ms) && ms >= nowMs + MIN_LEAD_MS ? new Date(ms).toISOString() : null;
+}
+
+/** Route action + body for approving a row inline. A saved row on the calendar is approved AND scheduled at its slot. */
+export function approveRequest(row, nowMs = Date.now()) {
   if (isSuggestionRow(row)) {
     const requote = row.kind === 'requote';
     // The server wants the raw suggestion / quote-target id; row.id is prefixed ('suggestion:<id>' / 'requote:<id>') to stay unique.
     const raw = (requote ? row.quoteTargetId : row.suggestionId) ?? String(row.id || '').replace(/^(suggestion|requote):/, '');
     return { action: 'calendar-suggestion-approve', body: { kind: requote ? 'requote' : 'suggestion', id: raw, date: row.date || null } };
   }
-  return { action: 'calendar-approve', body: { postId: row.id } };
+  const scheduledAt = rowScheduleAt(row, nowMs);
+  return { action: 'calendar-approve', body: scheduledAt ? { postId: row.id, scheduledAt } : { postId: row.id } };
 }
 
 export const unapproveRequest = (row) => ({ action: 'calendar-unapprove', body: { postId: row.id } });

@@ -5,6 +5,7 @@ import InputsPane from './strategy-builder/InputsPane.jsx';
 import CalendarPane from './strategy-builder/CalendarPane.jsx';
 import PushPane from './strategy-builder/PushPane.jsx';
 import { normalizeVertical } from '../../features/strategy-builder/normalize-vertical.js';
+import { readImpersonateClientId, withImpersonation } from '../../lib/dashboard/bootstrap-session.js';
 
 const TABS = [
   { id: 'inputs', label: 'INPUTS' },
@@ -70,7 +71,7 @@ export default function StrategyBuilderCard({ bootstrap, getIdToken, onOpenCard,
     configSaveTimer.current = setTimeout(async () => {
       try {
         const token = await getIdToken();
-        await fetch('/api/dashboard/strategy-builder/config', {
+        await fetch(withImpersonation('/api/dashboard/strategy-builder/config', readImpersonateClientId()), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({ config }),
@@ -87,7 +88,7 @@ export default function StrategyBuilderCard({ bootstrap, getIdToken, onOpenCard,
     if (!plan || !items?.length) return { scheduled: 0, failed: [], flagged: [] };
     try {
       const token = await getIdToken();
-      const res = await fetch('/api/dashboard/strategy-builder/push', {
+      const res = await fetch(withImpersonation('/api/dashboard/strategy-builder/push', readImpersonateClientId()), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ plan: { ...plan, items } }),
@@ -105,7 +106,7 @@ export default function StrategyBuilderCard({ bootstrap, getIdToken, onOpenCard,
     setBusy(true);
     try {
       const token = await getIdToken();
-      const res = await fetch('/api/dashboard/strategy-builder/generate', {
+      const res = await fetch(withImpersonation('/api/dashboard/strategy-builder/generate', readImpersonateClientId()), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ config }),

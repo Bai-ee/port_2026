@@ -65,6 +65,7 @@ import { normalizeDataSources } from './data-sources.js';
 import { estimateCorporaPull, estimateQuoteScan, DEFAULT_MAX_PER_HANDLE, DEFAULT_MAX_ACCOUNTS, DEFAULT_PER_HANDLE } from './x-api-estimate.js';
 import { normalizeWatchlist } from '../x-quote-targets/client-watchlist.js';
 import { guardXPost } from '../x-content-guard/index.js';
+import { dailyMixRulesFor } from '../x-content-inventory/daily-mix-rule.js';
 
 export const STRATEGY_ROUTE_ACTIONS = Object.freeze([
   'strategy-get',
@@ -214,6 +215,7 @@ export function describeRows(handle, read, nowMs) {
 export function createStrategyHandlers({
   corpusStore, planStore: basePlanStore, refreshService, readXGrowthConfig,
   readPackages = async () => [], readWorkerHealth = null, evaluate = defaultEvaluate, clock = Date.now,
+  readDiscogsRelease = null, // (releaseId) -> discogs_releases/{id} (full Discogs bundle) | null; get_item links it to a record item
   resolveProfile = resolveXGrowthProfile, buildPreviewPlan = buildContentDayPlan,
   docStore: baseDocStore = null, onBrainOwnedSaved = null, // strategy-doc-store.js; absent => the strategy-doc-* actions answer 503
   readBrainTrackTargets = null, // clientId -> approved Brain Track Targets rows (per-type shares); absent => postsPerDay only
@@ -233,6 +235,7 @@ export function createStrategyHandlers({
   readOpenPackageIds = null, // (clientId) -> Map packageId -> {postId, status, scheduledAt, reviewOn} of open posts (or a Set); batch skips or places them
   placeDraft = null, // (clientId, postId, {reviewOn, bucketId, media}) -> bool; sets an unscheduled draft's review day + missing media
   readFillContext = null, // (clientId) -> {fillPosts:[{postId,status,reviewOn,fillKind,bucketId,idempotencyKey}], lastUsed: Map packageId -> 'YYYY-MM-DD'}; daily fill re-run accounting + 30-day spread
+  readTrackRules = null, // (clientId) -> {[bucketId]: rule}; daily-fill trackRules (features/x-content-inventory/daily-mix-rule.js)
   readQuoteTargets = null, // (clientId) -> {generatedAt, targets:[{id,url,text,handle,createdAt,trackId?}]} open (non-dismissed) quote candidates; daily fill quotes
   ensureDraft = null, // (clientId, payload) -> {post, existing}; twitter-service ensureDraftPost. Absent => batch create answers 503
   mediaForItem = null, // (clientId, pkg) -> {mediaUrl, mediaType, mediaContentType, mediaStoragePath} | null; calendar-batch drafts carry the item's media
@@ -248,6 +251,7 @@ export function createStrategyHandlers({
   signMediaRef = null, readMediaCaptures = null, // ({bucket,path}) -> url|null; (clientId) -> render captures. get_media_link only
   readStageStates = null, readNasStatus = null, // (ids) -> Map id -> {state,commandId} of NAS stage commands; (clientId) -> nas-status. find_hires_media only; absent => no stage progress / worker info
   linkItemMedia = null, // (clientId, links) -> {linked, failed, results}; the quote-targets link-item-media writer. Absent => item-media confirm fails clearly
+  decideCalendarItems = null, // ({clientId, items:[{decision,item}], proposalId}) -> {ok, results:[...]}; injected by the integration step (x-content-inventory/calendar-decide.js). Absent => propose_calendar_decide / its confirm say not available
   env = {}, // explicit on purpose: only createStrategyHandlersFromDb passes process.env, so a bare handler can never reach a real model
 } = {}) {
   if (!corpusStore || !basePlanStore || !refreshService || typeof readXGrowthConfig !== 'function') {
@@ -390,6 +394,7 @@ export function createStrategyHandlers({
         quoteTargets: quotes?.targets ?? [], marketSignals: signals ? shapeMarketSignals(signals) : null,
         asOf: { quotes: quotes?.generatedAt ?? null, signals: signals?.generatedAt ?? null },
         today: localDate(nowMs, profile.timezone), nowMs,
+        trackRules: typeof readTrackRules === 'function' ? readTrackRules(clientId) : {},
       };
     },
     ensureDraft: (clientId, payload) => (typeof ensureDraft === 'function' ? ensureDraft(clientId, payload) : Promise.reject(new Error('Creating drafts is not available on this deployment.'))),
@@ -402,7 +407,7 @@ export function createStrategyHandlers({
   };
   async function dailyFill(clientId, spec, { execute = false, batchId = null } = {}) {
     if (execute && typeof ensureDraft !== 'function') return { ok: false, status: 503, error: 'Creating drafts is not available on this deployment.' };
-    return runDailyFill(clientId, { from: spec?.from, days: spec?.days, include: spec?.include, execute, batchId, deps: dailyFillDeps });
+    return runDailyFill(clientId, { from: spec?.from, days: spec?.days, include: spec?.include, excludePackageIds: spec?.excludePackageIds, replace: spec?.replace, execute, batchId, deps: dailyFillDeps });
   }
   // Preview rows: text shortened (the agent's context is small); counts and skip examples are unchanged.
   const stripFillRows = (r) => (r.ok ? { ...r, rows: r.rows.map(({ text, ...row }) => ({ ...row, text: text.slice(0, 140) })) } : r);
@@ -790,7 +795,18 @@ export function createStrategyHandlers({
         const planDoc = await planStore.get(clientId);
         const profile = preloaded.profile ?? (preloaded.profile = await loadProfile(clientId));
         const tracks = tracksOf(planDoc);
-        return { tracks, library: summarizeTrackLibrary(tracks, await readPackages(clientId)), profiles: await safeTrackProfiles(planDoc, profile) };
+        // Code-owned fill overrides (daily-mix-rule.js): they replace the plan target for that track, so say so.
+        const rules = typeof readTrackRules === 'function' ? readTrackRules(clientId) : {};
+        const dailyRules = Object.entries(rules || {}).map(([bucket, r]) => ({
+          bucket, track: tracks.find((t) => (t.buckets || []).includes(bucket))?.label ?? bucket, perDay: r.perDay,
+          artists: r.artists ?? [], replacesPlanTarget: true,
+          order: 'never-used first, newest render first; then least recently used; one mix title per fill window; drafts only',
+          source: 'the 06:00 UTC daily email video (a random BAI-EE mix), synced into the bucket by the 11:30 daily-loop',
+        }));
+        return {
+          tracks, library: summarizeTrackLibrary(tracks, await readPackages(clientId)), profiles: await safeTrackProfiles(planDoc, profile),
+          ...(dailyRules.length ? { dailyRules } : {}),
+        };
       },
       getPlan: async () => ((await planStore.get(clientId)) ?? { version: 0, plan: DEFAULT_PLAN, history: [], isDefault: true }),
       // Stored doc or the seeded draft (version 0); absent docStore => null (prompt says none available).
@@ -829,7 +845,7 @@ export function createStrategyHandlers({
           return next;
         },
       } : {}),
-      searchInventory: async ({ query, limit, track } = {}) => {
+      searchInventory: async ({ query, limit, track, offset = 0, sort = 'relevance', media } = {}) => {
         const max = Math.min(Math.max(1, Number(limit) || 10), 20);
         const tokens = String(query ?? '').toLowerCase().split(/\s+/).filter(Boolean).slice(0, 8);
         const tracks = tracksOf(await planStore.get(clientId));
@@ -844,11 +860,46 @@ export function createStrategyHandlers({
           const score = tokens.length ? tokens.filter((t) => hay.includes(t)).length : 0;
           if (!tokens.length || score) scored.push({ score, p });
         }
-        scored.sort((a, b) => b.score - a.score);
-        return scored.slice(0, max).map(({ p }) => ({
-          id: p.id, title: p.title ?? null, story: String(p.story ?? '').slice(0, 160), bucketId: p.bucketId ?? null, track: trackForPackage(tracks, p)?.id ?? null,
-          hasStory: !!String(p.story ?? '').trim() && !hasPlaceholderStory(p), facets: p.humanEdits || p.facets || {},
-        }));
+        const kindOf = (p) => mediaOf(p).kind || null;
+        const filtered = media && media !== 'any' ? scored.filter(({ p }) => (media === 'none' ? !kindOf(p) : kindOf(p) === media)) : scored;
+        const ds = (p) => p.discogsSummary || null;
+        const num = (v) => (Number.isFinite(Number(v)) && v !== null ? Number(v) : null);
+        const cmpNull = (a, b, dir) => (a == null && b == null ? 0 : a == null ? 1 : b == null ? -1 : dir * (a - b)); // no value sorts last
+        const sorters = {
+          relevance: (a, b) => b.score - a.score,
+          'value-desc': (a, b) => cmpNull(num(ds(a.p)?.valueUsd), num(ds(b.p)?.valueUsd), -1),
+          'value-asc': (a, b) => cmpNull(num(ds(a.p)?.valueUsd), num(ds(b.p)?.valueUsd), 1),
+          'want-desc': (a, b) => cmpNull(num(ds(a.p)?.want), num(ds(b.p)?.want), -1),
+          'year-asc': (a, b) => cmpNull(num(ds(a.p)?.year ?? a.p.eraYear), num(ds(b.p)?.year ?? b.p.eraYear), 1),
+          'year-desc': (a, b) => cmpNull(num(ds(a.p)?.year ?? a.p.eraYear), num(ds(b.p)?.year ?? b.p.eraYear), -1),
+          title: (a, b) => String(a.p.title ?? '').localeCompare(String(b.p.title ?? '')),
+        };
+        filtered.sort((a, b) => (sorters[sort] || sorters.relevance)(a, b) || String(a.p.id).localeCompare(String(b.p.id)));
+        const start = Math.max(0, Number(offset) || 0);
+        const rows = filtered.slice(start, start + max).map(({ p }) => {
+          const d = ds(p);
+          return {
+            id: p.id, title: p.title ?? null, story: String(p.story ?? '').slice(0, 160), bucketId: p.bucketId ?? null, track: trackForPackage(tracks, p)?.id ?? null,
+            hasStory: !!String(p.story ?? '').trim() && !hasPlaceholderStory(p), hasMedia: !!kindOf(p), mediaKind: kindOf(p),
+            ...(d ? { discogs: { valueUsd: d.valueUsd, valueBasis: d.valueBasis, have: d.have, want: d.want, year: d.year, artists: d.artists, labels: d.labels, forSale: d.forSale } } : {}),
+            facets: p.humanEdits || p.facets || {},
+          };
+        });
+        return { total: filtered.length, offset: start, rows };
+      },
+      // get_item: the FULL stored object of one of THIS client's items + what is linked to it (Discogs bundle). Read-only.
+      readItemFull: async (id) => {
+        const pkgs = await readPackages(clientId);
+        const item = (pkgs || []).find((p) => p.id === id);
+        if (!item) return null;
+        const { searchTokens, ...visible } = item; // derived search index only; every real field stays
+        const releaseId = /^discogs-(\d+)$/.exec(String(item.id))?.[1] || (item.source?.kind === 'discogs' ? String(item.source.externalId || '') : '');
+        let discogs = null;
+        if (releaseId && typeof readDiscogsRelease === 'function') {
+          const d = await readDiscogsRelease(releaseId).catch(() => null);
+          if (d && (!d.clientId || d.clientId === clientId)) discogs = d;
+        }
+        return { item: visible, ...(discogs ? { discogs } : releaseId ? { discogs: null, discogsNote: 'No Discogs data stored yet: scripts/discogs/refresh-releases.mjs fetches it.' } : {}) };
       },
       // Item media (item-media.js): who could lend media to an item, and a dry run of a set of links (no writes).
       findItemMedia: async ({ id, limit } = {}) => {
@@ -911,6 +962,7 @@ export function createStrategyHandlers({
       previewCalendarBatch: async (spec) => stripRows(await calendarBatch(clientId, spec)),
       // Dry run only (no writes): what a daily fill would create. The proposal re-plans at confirm time.
       previewDailyFill: async (spec) => stripFillRows(await dailyFill(clientId, spec)),
+      ...(decideCalendarItems ? { decideCalendarItems: true } : {}), // capability flag; the proposal executor runs the real dep
       getAlgorithm: async () => summarizeAlgorithm(getAlgorithmProfile()),
       scorePosts: async ({ handle, days, limit } = {}) => {
         const profile = preloaded.profile ?? (preloaded.profile = await loadProfile(clientId));
@@ -1159,6 +1211,7 @@ export function createStrategyHandlers({
     runItemMedia: linkItemMedia ? ({ clientId, links }) => linkItemMedia(clientId, links) : null,
     runCalendarBatch: async ({ clientId, spec, proposalId }) => calendarBatch(clientId, spec, { execute: true, batchId: proposalId ? `calendar-batch-${proposalId}` : null }),
     runDailyFill: async ({ clientId, spec, proposalId }) => dailyFill(clientId, spec, { execute: true, batchId: proposalId ? `daily-fill-${proposalId}` : null }),
+    decideCalendarItems: decideCalendarItems ? (a) => decideCalendarItems(a) : null,
     refreshHandles: async ({ clientId, handles, context, auth }) => strategyRefresh({ clientId, handles }, context, auth),
     placeDraft, upsertBucket, deleteBucket, syncTracks, ...(rejectPost ? { rejectPost } : {}),
     runAction: actionRuntime ? ({ clientId, payload, by: who, auth, context, proposalId }) => actionRuntime.executeApproved({ ...actionCtx(clientId, context, auth), by: who }, payload, { proposalId }) : null,
@@ -1614,7 +1667,8 @@ export function createStrategyHandlersFromDb(db, {
   const listMediaTaskIds = (clientId) => taskStore.ids(clientId);
   const createMediaTasks = ({ clientId, rows, by, proposalId }) => taskStore.create(clientId, rows, { by, proposalId });
   return createStrategyHandlers({
-    corpusStore, planStore, refreshService, readPackages, readAudience, readBuckets, readBucketEngine, readOpenPackageIds, readFillContext, readQuoteTargets, ensureDraft, placeDraft, listMediaTaskIds, createMediaTasks,
+    readDiscogsRelease: async (releaseId) => { const s = await db.collection('discogs_releases').doc(String(releaseId)).get(); return s.exists ? s.data() : null; },
+    corpusStore, planStore, refreshService, readPackages, readAudience, readBuckets, readBucketEngine, readOpenPackageIds, readFillContext, readTrackRules: dailyMixRulesFor, readQuoteTargets, ensureDraft, placeDraft, listMediaTaskIds, createMediaTasks,
     readStageStates: (ids) => readStageStatesFromDb(db, ids), readNasStatus: () => handleNasAction({ db, now: () => Date.now() }, 'nas-status', {}),
     readDataSources, saveDataSources, pullCorpora, scanQuotes, responseStyleStore, unmetStore,
     quoteScanQueue: createFirestoreQuoteScanQueue(db),

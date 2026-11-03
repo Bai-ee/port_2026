@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarClock, RefreshCw, Send, Sparkles, Wand2 } from 'lucide-react';
+import { readImpersonateClientId, withImpersonation } from '../../lib/dashboard/bootstrap-session.js';
 
 function toDatetimeLocal(date) {
   const d = date ? new Date(date) : new Date(Date.now() + 30 * 60 * 1000);
@@ -80,7 +81,7 @@ export default function SocialPostingPanel({ getIdToken, sourceDraft, sourceLabe
           body: JSON.stringify(body),
         }
       : { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' };
-    const res = await fetch('/api/social-posting', options);
+    const res = await fetch(withImpersonation('/api/social-posting', readImpersonateClientId()), options);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data?.hint || data?.error || `HTTP ${res.status}`);
     return data;

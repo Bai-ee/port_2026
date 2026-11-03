@@ -39,12 +39,13 @@ const STEPS = [
     title: 'Today’s Agenda',
     Icon: CalendarDays,
     lede: 'Everything on the calendar today, by category. Review the drafts, then schedule them.',
-    // Opens Queue & Calendar with today's day view on top (closing it shows the month).
-    primary: { cardId: 'strategy-queue-calendar', label: 'Open Today', openToday: true },
+    // `stage` buttons open the Calendar Stage instead of a card: nextPost = the next unposted post's editor,
+    // queue = the month view (where Back from Today lands), today = today's Day view.
+    primary: { cardId: 'strategy-queue-calendar', label: 'Open Next Post', stage: 'nextPost' },
     related: [
-      { cardId: 'strategy-queue-calendar', label: 'Queue & Calendar' },
+      { cardId: 'strategy-queue-calendar', label: 'Open Queue', stage: 'queue', key: 'queue' },
+      { cardId: 'strategy-queue-calendar', label: 'Open Today', stage: 'today', key: 'today' },
       { cardId: 'copywriter', label: 'Copywriter' },
-      { cardId: 'strategy-publishing-settings', label: 'Publishing settings' },
     ],
   },
 ];
@@ -118,6 +119,26 @@ function todaysAgenda(calendar) {
   return { date: day.date, rows, openTasks, total: sum('total'), drafts: sum('drafts'), scheduled: sum('scheduled'), posted: sum('posted'), requotes };
 }
 
+// The next post still to go out: the earliest unposted, non-suggestion row from now on (this month's calendar only;
+// date/time are the calendar's own client-zone values). Rows without a time sort last on their day.
+function nextPostOf(calendar) {
+  const now = new Date();
+  const today = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+  const nowHm = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+  let best = null;
+  for (const day of (calendar?.weeks || []).flat()) {
+    if (!day?.date || day.date < today) continue;
+    for (const r of day.posts || []) {
+      if (!r?.id || r.kind === 'suggestion' || r.state === 'posted') continue;
+      const hm = r.time || '99:99';
+      if (day.date === today && r.time && hm < nowHm) continue;
+      const key = `${day.date} ${hm}`;
+      if (!best || key < best.key) best = { key, date: day.date, postId: String(r.id) };
+    }
+  }
+  return best;
+}
+
 function readDone() {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(DONE_KEY) || '{}');
@@ -125,7 +146,7 @@ function readDone() {
   } catch { return []; }
 }
 
-export default function OnboardingFlowPanel({ onOpenCard, onOpenTodayDay, availableCardIds, marketingBrief, getIdToken, clientId }) {
+export default function OnboardingFlowPanel({ onOpenCard, onOpenTodayDay, onOpenQueue, onOpenPost, availableCardIds, marketingBrief, getIdToken, clientId }) {
   const [done, setDone] = useState([]);
   const [serverFreshness, setServerFreshness] = useState(null);
   const [calendar, setCalendar] = useState(null);
@@ -158,6 +179,13 @@ export default function OnboardingFlowPanel({ onOpenCard, onOpenTodayDay, availa
   const briefAt = marketingBrief?.scoutBrief?.timestamp || marketingBrief?.generatedAtIso || null;
   const insight = marketLine(marketingBrief);
   const agenda = useMemo(() => todaysAgenda(calendar), [calendar]);
+  const nextPost = useMemo(() => nextPostOf(calendar), [calendar]);
+  // Stage buttons: the handler for each, and why it can't run yet (null = ready).
+  const stageAction = {
+    nextPost: { run: () => onOpenPost?.(nextPost.date, nextPost.postId), blocked: !onOpenPost ? 'Unavailable' : !calendar ? (calendarFailed ? 'Calendar unavailable' : 'Loading the calendar') : !nextPost ? 'No upcoming post this month' : null },
+    queue: { run: () => onOpenQueue?.(), blocked: onOpenQueue ? null : 'Unavailable' },
+    today: { run: () => onOpenTodayDay?.(), blocked: onOpenTodayDay ? null : 'Unavailable' },
+  };
   const num = (n) => (typeof n === 'number' && Number.isFinite(n) ? pad2(n) : '—');
 
   // Per-step status block (stats + optional quote line), from the saved brief/refresh only.
@@ -264,14 +292,31 @@ export default function OnboardingFlowPanel({ onOpenCard, onOpenTodayDay, availa
                   );
                 })()}
                 <div className="of-step-actions">
-                  {has(s.primary.cardId) ? (
-                    <button type="button" id={`onboarding-flow-primary-btn-${s.id}`} className="of-primary-btn" onClick={() => (s.primary.openToday && onOpenTodayDay ? onOpenTodayDay() : onOpenCard?.(s.primary.cardId))}>
-                      {s.primary.label}
-                      <ArrowUpRight size={15} strokeWidth={2} aria-hidden="true" />
-                    </button>
-                  ) : null}
+                  {has(s.primary.cardId) ? (() => {
+                    const act = s.primary.stage ? stageAction[s.primary.stage] : null;
+                    return (
+                      <button
+                        type="button"
+                        id={`onboarding-flow-primary-btn-${s.id}`}
+                        className="of-primary-btn"
+                        disabled={!!act?.blocked}
+                        title={act?.blocked || undefined}
+                        onClick={() => (act ? act.run() : onOpenCard?.(s.primary.cardId))}
+                      >
+                        {s.primary.label}
+                        <ArrowUpRight size={15} strokeWidth={2} aria-hidden="true" />
+                      </button>
+                    );
+                  })() : null}
                   {s.related.filter((r) => has(r.cardId)).map((r) => (
-                    <button key={r.cardId} type="button" id={`onboarding-flow-related-${r.cardId}`} className="of-related-btn" onClick={() => onOpenCard?.(r.cardId)}>
+                    <button
+                      key={r.key || r.cardId}
+                      type="button"
+                      id={`onboarding-flow-related-${r.key || r.cardId}`}
+                      className="of-related-btn"
+                      disabled={!!(r.stage && stageAction[r.stage].blocked)}
+                      onClick={() => (r.stage ? stageAction[r.stage].run() : onOpenCard?.(r.cardId))}
+                    >
                       {r.label}
                       <ArrowUpRight size={13} strokeWidth={2} aria-hidden="true" />
                     </button>
@@ -301,7 +346,8 @@ export default function OnboardingFlowPanel({ onOpenCard, onOpenTodayDay, availa
            The mask only reads alpha, so a token stands in for the usual #fff. */
         #onboarding-flow-shell .of-primary-btn { position: relative; isolation: isolate; display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 18px; border: none; border-radius: 999px; background: var(--t-surface); color: var(--t-text-strong); font-family: var(--of-ui); font-size: 14px; font-weight: 700; cursor: pointer; transition: transform 150ms ease-out; }
         #onboarding-flow-shell .of-primary-btn::before { content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; padding: 1px; background: linear-gradient(180deg, var(--t-accent-bright) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%); -webkit-mask: linear-gradient(var(--t-text) 0 0) content-box, linear-gradient(var(--t-text) 0 0); -webkit-mask-composite: xor; mask: linear-gradient(var(--t-text) 0 0) content-box, linear-gradient(var(--t-text) 0 0); mask-composite: exclude; pointer-events: none; }
-        #onboarding-flow-shell .of-primary-btn:hover { transform: translateY(-1px); }
+        #onboarding-flow-shell .of-primary-btn:hover:not(:disabled) { transform: translateY(-1px); }
+        #onboarding-flow-shell .of-primary-btn:disabled, #onboarding-flow-shell .of-related-btn:disabled { opacity: 0.45; cursor: not-allowed; }
         #onboarding-flow-shell .of-related-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 14px; border: 1px solid var(--t-border-faint); border-radius: 999px; background: transparent; color: var(--t-text-secondary); font-family: var(--of-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; transition: color 150ms ease-out, border-color 150ms ease-out; }
         #onboarding-flow-shell .of-related-btn:hover { color: var(--t-text-strong); border-color: var(--t-control-border-strong); }
         #onboarding-flow-shell .of-done-btn { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; min-height: 32px; padding: 0 12px; border: 1px solid var(--t-border-faint); border-radius: 999px; background: transparent; color: var(--t-text-secondary); font-family: var(--of-mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; }

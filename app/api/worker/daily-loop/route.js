@@ -130,6 +130,27 @@ async function runDailyFillStep({ db, committedCorpusRows, readInputsFor }, clie
   return out;
 }
 
+// Rendered videos -> content library (Dj Mix Videos bucket): the 06:00 daily email render is done by ~06:03, so syncing
+// here (before suggestions and the fill) puts it in the bucket the same day without anyone opening the Content Engine.
+// Only the media owner client (NAS_INVENTORY_CLIENT_ID) has the feed; everyone else is a no-op. Non-fatal; reported as
+// `renderedVideos`. force: the cron runs once a day, so the dashboard's 10-minute throttle must not skip it.
+async function runRenderedVideoSyncStep(db, clientIds) {
+  try {
+    const { syncRenderedVideosForClient, mediaOwnerClientId } = await import('../../../../features/rendered-videos/firestore-sync.js');
+    const owner = mediaOwnerClientId();
+    if (!owner || !clientIds.includes(owner)) return { ok: true, skipped: 'media-owner-not-in-run' };
+    const { upsertPackage } = await import('../../../../features/x-content-inventory/store.js');
+    const bridge = require('../../../../api/_lib/editvideos-bridge.cjs');
+    const r = await syncRenderedVideosForClient({
+      db, bridge, clientId: owner, force: true,
+      upsert: (pkg) => upsertPackage(pkg, { returnPackages: false, clientId: owner }),
+    });
+    return { clientId: owner, ok: r?.ok !== false, created: r?.created ?? 0, updated: r?.updated ?? 0, total: r?.total ?? 0 };
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err).slice(0, 200) };
+  }
+}
+
 // Auto-daily X API refresh (strategy accounts + quote targets): ONLY for clients whose dataSources are 'x-api' with
 // autoDaily on; a default client (all 'mac') is skipped without a read of X. Runs before the fill so the fill sees the
 // fresh scan. Non-fatal and budget-capped (the pullers call assertXBudget); summarized in the response as `xApiAuto`.
@@ -180,6 +201,7 @@ async function run(request) {
     const groups = refreshDaily.cronGroupsFor(await refreshDaily.readRefreshDaily(clientId).catch(() => refreshDaily.resolveRefreshDaily({})));
     (groups.has('today-queue') ? todayIds : dailyOff).push(clientId);
   }
+  const renderedVideos = await runRenderedVideoSyncStep(db, todayIds);
   const ran = todayIds.length ? await runScheduledDailyLoop({ store: createFirestoreRunStore(db), assertReady, readInputsFor }, { clientIds: todayIds }) : [];
   const results = [...ran, ...dailyOff.map((clientId) => ({ clientId, ok: true, skipped: 'not-in-daily-profile' }))];
   // The X API auto-daily step has its own per-client switch (X source autoDaily), independent of "Today and queue".
@@ -193,7 +215,7 @@ async function run(request) {
     dailyFill = [{ ok: false, error: String(err?.message || err).slice(0, 200) }];
   }
   const suggestionsOk = results.every((r) => r.ok);
-  return NextResponse.json({ ok: suggestionsOk && dailyFill.every((r) => r.ok), suggestionsOk, results, xApiAuto, dailyFill });
+  return NextResponse.json({ ok: suggestionsOk && dailyFill.every((r) => r.ok), suggestionsOk, results, xApiAuto, renderedVideos, dailyFill });
 }
 
 export const GET = run;

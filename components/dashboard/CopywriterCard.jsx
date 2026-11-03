@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarClock, Check, Copy, FilePlus2, Save, Send, Sparkles, Wand2 } from 'lucide-react';
+import { readImpersonateClientId, withImpersonation } from '../../lib/dashboard/bootstrap-session.js';
 
 // Copywriter — a quick X/Twitter notepad. Draft, save, evaluate (live X-algo
 // score, deterministic + free), update in place, and schedule/publish on the fly.
@@ -56,7 +57,7 @@ export default function CopywriterCard({ getIdToken }) {
           body: JSON.stringify(body),
         }
       : { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' };
-    const res = await fetch('/api/social-posting', options);
+    const res = await fetch(withImpersonation('/api/social-posting', readImpersonateClientId()), options);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data?.hint || data?.error || `HTTP ${res.status}`);
     return data;

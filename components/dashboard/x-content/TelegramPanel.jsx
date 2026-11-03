@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { auth } from '../../../firebase';
+import { readImpersonateClientId, withImpersonation } from '../../../lib/dashboard/bootstrap-session.js';
 import Card from '../content-ui/ui/Card.jsx';
 import { XCE_COLORS, XCE_RADII, XCE_TYPE } from '../content-ui/xce-tokens';
 
@@ -95,7 +96,7 @@ export default function TelegramPanel({ getIdToken: getIdTokenProp, activeClient
   const request = useCallback(async (method, body) => {
     const token = getIdToken ? await getIdToken() : null;
     const qs = method === 'GET' && activeClientId ? `?clientId=${encodeURIComponent(activeClientId)}` : '';
-    const res = await fetch(`${ENDPOINT}${qs}`, {
+    const res = await fetch(withImpersonation(`${ENDPOINT}${qs}`, activeClientId || readImpersonateClientId()), {
       method,
       cache: 'no-store',
       headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },

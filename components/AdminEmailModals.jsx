@@ -5,7 +5,7 @@
 // Market Signals card pattern: a SETTINGS tab that sets the params, then a
 // PREVIEW tab that renders + sends the resulting email.
 //   • AdminEmailDigestView — SETTINGS (config) + PREVIEW (email + send)
-//   • AdminCreateClientView — website-less client workspace
+//   • AdminCreateClientView — new client, with a website (signup-style onboarding) or without
 // The SETTINGS tab is styled with the dashboard-modal style guide primitives
 // (scoped under `.vrk-scope`: .section / .toggle-grid / .segmented / .field-grid),
 // the same kit the Video Remix modal uses. See
@@ -1177,30 +1177,54 @@ export function AdminEmailDigestView({ user, onOpenCard, runWithTerminal, active
   );
 }
 
-// ── Create Client: website-less workspace (template for from-scratch signups) ──
+// ── Create Client: with a website (signup-style onboarding) or without ──
+// Mirrors ONBOARDING_STEPS in features/scout-intake/onboarding-steps.js (the
+// client cannot import that CJS dir); a test keeps keys + labels in sync.
+export const CREATE_CLIENT_ONBOARDING_STEPS = [
+  { key: 'deviceMockups', label: 'Device mockups', desc: 'Site screenshots in desktop, tablet and phone frames.' },
+  { key: 'socialPreview', label: 'Social preview check', desc: 'How shared links to the site look on social.' },
+  { key: 'siteSources', label: 'Brand & site sources', desc: 'Reads the site to seed the brand overview and search config (1 AI call).' },
+  { key: 'motionVideo', label: 'Motion mockup video', desc: 'One GPU-rendered scroll video of the site.' },
+  { key: 'briefSummary', label: 'Creative Brief summary', desc: 'The Creative Brief cover paragraph (1 AI call).' },
+  { key: 'brainDraft', label: 'Client Brain draft', desc: 'A draft Client Brain from what onboarding gathered.' },
+];
+
+const allStepsOn = () => Object.fromEntries(CREATE_CLIENT_ONBOARDING_STEPS.map((s) => [s.key, true]));
+
 export function AdminCreateClientView({ user }) {
+  const [mode, setMode] = useState('none'); // 'none' | 'website'
   const [companyName, setCompanyName] = useState('');
+  const [websiteUrl, setWebsiteUrl] = useState('');
   const [ideaDescription, setIdeaDescription] = useState('');
-  const [status, setStatus] = useState(null); // { kind, msg, clientId }
+  const [steps, setSteps] = useState(allStepsOn);
+  const [status, setStatus] = useState(null); // { kind, msg, clientId, runQueued }
   const [runStatus, setRunStatus] = useState(null); // { kind, msg }
+  const withWebsite = mode === 'website';
 
   const create = useCallback(async () => {
     if (!user) return;
     if (!companyName.trim()) { setStatus({ kind: 'error', msg: 'Enter a client name.' }); return; }
+    if (withWebsite && !websiteUrl.trim()) { setStatus({ kind: 'error', msg: 'Enter the website URL.' }); return; }
     setStatus({ kind: 'pending', msg: 'Creating…' });
     setRunStatus(null);
     try {
       const data = await authFetch(user, '/api/admin/create-client', {
         method: 'POST',
-        body: JSON.stringify({ companyName, ideaDescription }),
+        body: JSON.stringify(withWebsite
+          ? { companyName, ideaDescription, websiteUrl, onboardingSteps: steps }
+          : { companyName, ideaDescription }),
       });
-      setStatus({ kind: 'ok', msg: `Created ${data.clientId}. Run its first brief below, then set it as Home in the Email Digest settings.`, clientId: data.clientId });
+      setStatus(data.runId
+        ? { kind: 'ok', msg: `Created ${data.clientId}. Onboarding is running — switch to it in the client dropdown to watch progress.`, clientId: data.clientId, runQueued: true }
+        : { kind: 'ok', msg: `Created ${data.clientId}. Run its first brief below, then set it as Home in the Email Digest settings.`, clientId: data.clientId });
       setCompanyName('');
+      setWebsiteUrl('');
       setIdeaDescription('');
+      setSteps(allStepsOn());
     } catch (e) {
       setStatus({ kind: 'error', msg: e.message });
     }
-  }, [user, companyName, ideaDescription]);
+  }, [user, companyName, ideaDescription, websiteUrl, steps, withWebsite]);
 
   const runBrief = useCallback(async () => {
     const cid = status?.clientId;
@@ -1214,6 +1238,27 @@ export function AdminCreateClientView({ user }) {
     }
   }, [user, status]);
 
+  const modeOption = (value, label, desc) => {
+    const on = mode === value;
+    return (
+      <button
+        key={value}
+        type="button"
+        className={`mb-config-platform-toggle${on ? ' is-on' : ''}`}
+        aria-pressed={on}
+        onClick={() => setMode(value)}
+      >
+        <span className="mb-config-platform-check">{on ? '✓' : ''}</span>
+        <span className="mb-config-platform-body">
+          <span className="mb-config-platform-title">{label}</span>
+          <span className="mb-config-platform-desc">{desc}</span>
+        </span>
+      </button>
+    );
+  };
+
+  const enabledCount = CREATE_CLIENT_ONBOARDING_STEPS.filter((s) => steps[s.key]).length;
+
   return (
     <div className="tile-detail-bento-cell tile-detail-tabbed-container">
       <div className="tile-detail-tab-content">
@@ -1222,19 +1267,63 @@ export function AdminCreateClientView({ user }) {
             <div className="mb-config-section-head">
               <span className="mb-config-section-index">01</span>
               <div>
-                <h4>New website-less client</h4>
-                <p>Creates a workspace with no site attached — the template for survey-only / email-only / from-scratch signups. Feed it via uploads and a brief run after switching to it in the client dropdown.</p>
+                <h4>New client</h4>
+                <p>With a website, the client is onboarded exactly like a signup — the first brief run starts on create, limited to the steps you leave on. Without one, it is an idea-only workspace you feed via uploads and a brief run.</p>
               </div>
+            </div>
+            <div id="create-client-website-mode-row" className="mb-config-platform-grid">
+              {modeOption('none', 'No website', 'Idea-only workspace. No brief run until you start one.')}
+              {modeOption('website', 'With website', 'Signup-style onboarding from the client’s site.')}
             </div>
             <label className="mb-config-field">
               <span className="mb-config-label">Client name</span>
               <input className="mb-config-input" value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="e.g. Bryan Balli" />
             </label>
+            {withWebsite ? (
+              <label id="create-client-website-url-field" className="mb-config-field">
+                <span className="mb-config-label">Website URL</span>
+                <input className="mb-config-input" type="url" inputMode="url" value={websiteUrl} onChange={(e) => setWebsiteUrl(e.target.value)} placeholder="e.g. acme.com" />
+              </label>
+            ) : null}
             <label className="mb-config-field">
-              <span className="mb-config-label">Idea / positioning (no website)</span>
-              <textarea className="mb-config-textarea" rows={4} value={ideaDescription} onChange={(e) => setIdeaDescription(e.target.value)} placeholder="What this brand/person is about — seeds the brief's search plan in place of a website." />
+              <span className="mb-config-label">{withWebsite ? 'Idea / positioning (optional)' : 'Idea / positioning (no website)'}</span>
+              <textarea className="mb-config-textarea" rows={4} value={ideaDescription} onChange={(e) => setIdeaDescription(e.target.value)} placeholder={withWebsite ? 'Extra context about the brand, kept with the client’s sources.' : 'What this brand/person is about — seeds the brief’s search plan in place of a website.'} />
             </label>
           </section>
+          {withWebsite ? (
+            <section id="create-client-onboarding-steps-panel" className="mb-config-section">
+              <div className="mb-config-section-head">
+                <span className="mb-config-section-index">02</span>
+                <div>
+                  <h4>Onboarding steps</h4>
+                  <p>{enabledCount} of {CREATE_CLIENT_ONBOARDING_STEPS.length} on. Steps you turn off are skipped in this client’s first brief run only; later runs are unaffected.</p>
+                </div>
+              </div>
+              <div id="create-client-onboarding-steps-grid" className="mb-config-platform-grid">
+                {CREATE_CLIENT_ONBOARDING_STEPS.map((step) => {
+                  const on = steps[step.key];
+                  return (
+                    <button
+                      key={step.key}
+                      type="button"
+                      className={`mb-config-platform-toggle${on ? ' is-on' : ''}`}
+                      aria-pressed={on}
+                      onClick={() => setSteps((prev) => ({ ...prev, [step.key]: !prev[step.key] }))}
+                    >
+                      <span className="mb-config-platform-check">{on ? '✓' : ''}</span>
+                      <span className="mb-config-platform-body">
+                        <span className="mb-config-platform-title">
+                          {step.label}
+                          <span className={`mb-config-platform-status mb-config-platform-status--${on ? 'ready' : 'available'}`}>{on ? 'on' : 'off'}</span>
+                        </span>
+                        <span className="mb-config-platform-desc">{step.desc}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
           {status?.kind === 'error' && <p className="mb-config-error">{status.msg}</p>}
           {runStatus?.kind === 'error' && <p className="mb-config-error">{runStatus.msg}</p>}
           <div className="mb-config-actionbar">
@@ -1245,7 +1334,7 @@ export function AdminCreateClientView({ user }) {
             </span>
             <div className="mb-config-actionbar-buttons">
               <button type="button" className="tile-foot-rerun-btn" onClick={create} disabled={status?.kind === 'pending'}>{status?.kind === 'pending' ? 'Creating…' : 'Create Client'}</button>
-              {status?.clientId ? (
+              {status?.clientId && !status.runQueued ? (
                 <button type="button" className="mb-config-mini-btn" onClick={runBrief} disabled={runStatus?.kind === 'pending'}>{runStatus?.kind === 'pending' ? 'Running…' : 'Run brief'}</button>
               ) : null}
             </div>

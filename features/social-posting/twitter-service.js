@@ -456,8 +456,10 @@ function extractMedia(payload = {}) {
   };
 }
 
+// What the operator typed is what posts: line breaks (incl. one blank line between paragraphs), emoji and @handles
+// all pass through. Only trailing spaces/tabs on a line are dropped and runs of 3+ newlines are capped at a blank line.
 export function normalizePostText(content) {
-  return String(content || '').replace(/\s+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  return String(content || '').replace(/\r\n?/g, '\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 // Strategist-written single promo post via Claude — the same model the Strategy

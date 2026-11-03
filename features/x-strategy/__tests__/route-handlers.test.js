@@ -409,8 +409,8 @@ test('toolDeps: getPlan/getTodayRun/searchInventory/topPosts/getEvaluation use t
   await s.call('strategy-plan-apply', { changes: { authoredPerDay: 6 }, expectedVersion: 0 });
   assert.equal((await deps.getPlan()).version, 1);
   assert.equal((await deps.getTodayRun()).suggestions[0].id, 's1');
-  assert.deepEqual((await deps.searchInventory({ query: 'dawn pier', limit: 5 })).map((p) => p.id), ['p1']);
-  assert.equal((await deps.searchInventory({ query: '', limit: 999 })).length, 2);
+  assert.deepEqual((await deps.searchInventory({ query: 'dawn pier', limit: 5 })).rows.map((p) => p.id), ['p1']);
+  assert.equal((await deps.searchInventory({ query: '', limit: 999 })).rows.length, 2);
   const top = await deps.topPosts({ handle: 'me_acct', limit: 2 });
   assert.deepEqual(top.rows.map((r) => r.id), ['2', '1']);
   assert.deepEqual((await deps.topPosts({ handle: 'me_acct', type: 'original', topic: 'brand' })).rows.map((r) => r.id), ['1']);
@@ -635,7 +635,7 @@ test('searchInventory: hasStory is false for placeholder stories, finds a mix by
   const s = chatSetup({ packages: pkgs, loopResult: (a, d) => { deps = d; return { text: 'ok', proposals: [] }; } });
   await s.call('strategy-chat-send', { text: 'q' });
   const hits = await deps.searchInventory({ query: 'acidman', limit: 5 });
-  assert.deepEqual(hits.map((p) => [p.id, p.hasStory]).sort(), [['p2', true], ['p3', false], ['rv-1', false]]);
+  assert.deepEqual(hits.rows.map((p) => [p.id, p.hasStory]).sort(), [['p2', true], ['p3', false], ['rv-1', false]]);
 });
 
 // ---- tracks are the source of truth for xGrowth.benchmarkHandles ----

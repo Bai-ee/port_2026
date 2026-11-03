@@ -2,7 +2,7 @@
 // No I/O: every read goes through injected `toolDeps`. Safe to import anywhere.
 // Propose tools never write; they validate a payload and hand back a proposal for the owner to confirm.
 
-import { PROPOSAL_KINDS, PLAN_LIMITS, KNOWN_SLOT_TYPES, BULK_LIMITS, DAILY_FILL_INCLUDES, QUEUE_BULK_ACTIONS, BUCKET_EDIT_OPS, REFRESH_GROUP_IDS } from '../contracts.js';
+import { PROPOSAL_KINDS, PLAN_LIMITS, KNOWN_SLOT_TYPES, BULK_LIMITS, DAILY_FILL_INCLUDES, QUEUE_BULK_ACTIONS, BUCKET_EDIT_OPS, REFRESH_GROUP_IDS, CALENDAR_DECISIONS, CALENDAR_ITEM_KINDS } from '../contracts.js';
 import { estimateFor, REFRESH_GROUPS } from '../../../components/dashboard/marketing/refresh-groups.js';
 import { SOURCE_KINDS } from '../../x-content-inventory/buckets.js';
 import { validateProposal } from './proposals.js';
@@ -83,6 +83,7 @@ export const PROPOSE_TOOL_BY_KIND = Object.freeze({
   'bucket-edit': 'propose_bucket_edit',
   'memory-suggest': 'propose_memory_suggestions',
   'media-tasks': 'propose_media_tasks',
+  'calendar-decide': 'propose_calendar_decide',
 });
 export const KIND_BY_PROPOSE_TOOL = Object.freeze(
   Object.fromEntries(Object.entries(PROPOSE_TOOL_BY_KIND).map(([k, v]) => [v, k])),
@@ -183,7 +184,7 @@ export const READ_TOOLS = Object.freeze([
   },
   {
     name: 'get_tracks',
-    description: 'The content tracks in effect (one per Content Center bucket, named after it): per track its engines, buckets, share, benchmarks, promotions, what its library holds (library: item count, top tags, sample titles; use search_inventory with track to see items), and its own benchmark profile (format mix, median length, link-in-reply rate, best hours, post-type mix, example ids, per-handle breakdown). A track with no benchmark reports status no-benchmark with your own history as the fallback. Never averaged across tracks.',
+    description: 'The content tracks in effect (one per Content Center bucket, named after it): per track its engines, buckets, share, benchmarks, promotions, what its library holds (library: item count, top tags, sample titles; use search_inventory with track to see items), and its own benchmark profile (format mix, median length, link-in-reply rate, best hours, post-type mix, example ids, per-handle breakdown). A track with no benchmark reports status no-benchmark with your own history as the fallback. Never averaged across tracks. dailyRules: fill overrides that replace a track target (e.g. one BAI-EE mix video draft a day in Dj Mix Videos).',
     input_schema: { type: 'object', properties: {} },
   },
   {
@@ -210,15 +211,31 @@ export const READ_TOOLS = Object.freeze([
   },
   {
     name: 'search_inventory',
-    description: `Search the owner's content inventory. Returns summary rows with each item's track (max ${LIMITS.inventoryMax}). Pass track to search one track only.`,
+    description: `Search or list the owner's content inventory. Summary rows (max ${LIMITS.inventoryMax} per page; use offset to page through all): id, title, track, story, hasMedia/mediaKind, and for Discogs records value (USD), have/want, year, artists. Empty query + sort lists everything. For the FULL object of one item use get_item.`,
     input_schema: {
       type: 'object',
       properties: {
-        query: str('Search text'),
+        query: str('Search text (optional; empty = every item, ordered by sort)'),
         limit: int('Max rows', { minimum: 1, maximum: LIMITS.inventoryMax }),
+        offset: int('Skip this many rows (paging)', { minimum: 0, maximum: 5000 }),
         track: str('Optional track id or name (from get_tracks); only items in that track'),
+        media: { type: 'string', enum: ['any', 'video', 'image', 'none'], description: 'Only items with this media (video = has a video it can post)' },
+        sort: { type: 'string', enum: ['relevance', 'value-desc', 'value-asc', 'want-desc', 'year-asc', 'year-desc', 'title'], description: 'Order (default relevance; value = Discogs market value)' },
       },
-      required: ['query'],
+    },
+  },
+  {
+    name: 'get_item',
+    description: 'The FULL stored object of one content item: every field of its library row plus everything linked to it (Discogs records: the full Discogs release, marketplace stats, price suggestions and collection entry). Without path: the whole object if it fits, else its parts with sizes. Pass path to read one part. Read-only.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        itemId: str('Item id (from search_inventory / get_calendar)'),
+        path: str('Optional dot path into the object, e.g. "discogs.release.tracklist" or "item.facets"'),
+        offset: int('For an array at path: first element', { minimum: 0, maximum: 5000 }),
+        limit: int('For an array at path: how many elements', { minimum: 1, maximum: 200 }),
+      },
+      required: ['itemId'],
     },
   },
   {
@@ -398,7 +415,7 @@ export const PROPOSE_TOOLS = Object.freeze([
     postId: str('Post id from get_queue / get_post'),
     expectedUpdatedAt: str('The post updatedAt from get_post'),
   }, ['postId', 'expectedUpdatedAt']),
-  propose('calendar-batch', `Propose putting a SET of library items on the calendar as review drafts (up to ${MAX_BATCH} at once). Pick the items with select (a track id or name from get_tracks, a bucketId, a search query and/or item ids; combined with AND) and date them with dateRule: anniversary = the next time each item's event date comes round, at most perDay per date (default 1; items with no event date are skipped), or spread = perDay items a day from startDate. Each item becomes ONE draft dated for review: the flyer facts plus the owner's story, or "${MEMORY_PLACEHOLDER}" when there is none. Drafts are never approved, scheduled or published by this; items already on the queue are skipped. The tool result shows how many drafts it would create; report that to the owner.`, {
+  propose('calendar-batch', `Propose putting a SET of library items on the calendar as review drafts (up to ${MAX_BATCH} at once). Pick the items with select (a track id or name from get_tracks, a bucketId, a search query and/or item ids; combined with AND) and date them with dateRule: anniversary = the next time each item's event date comes round, at most perDay per date (default 1; items with no event date are skipped), or spread = perDay items a day from startDate (in title order, or your own order with order:'ids'). Each item becomes ONE draft dated for review: the flyer facts plus the owner's story, or "${MEMORY_PLACEHOLDER}" when there is none. Drafts are never approved, scheduled or published by this; items already on the queue are skipped. The tool result shows how many drafts it would create; report that to the owner.`, {
     select: {
       type: 'object',
       description: 'Which items. At least one field; all given fields must match.',
@@ -407,8 +424,10 @@ export const PROPOSE_TOOLS = Object.freeze([
         bucketId: str('Content Center bucket id'),
         query: str('Search words; every word must match'),
         ids: { type: 'array', maxItems: MAX_BATCH, items: str('Inventory item id') },
+        media: { type: 'string', enum: ['any', 'video', 'image', 'some'], description: 'Only items with this media (video = has a video it can post; some = any media)' },
       },
     },
+    order: { type: 'string', enum: ['title', 'ids'], description: "spread only: 'ids' keeps exactly the order of select.ids (e.g. after you sorted them by value with search_inventory/get_item); default title" },
     dateRule: {
       type: 'object',
       description: 'How each draft is dated.',
@@ -441,6 +460,30 @@ export const PROPOSE_TOOLS = Object.freeze([
     postIds: { type: 'array', minItems: 1, maxItems: BULK_LIMITS.queueBulkMax, items: str('Post id from get_queue') },
     date: str('set-review-date only: YYYY-MM-DD'),
   }, ['action', 'postIds']),
+  propose('calendar-decide', `Propose cleaning up the calendar: ONE card for up to ${BULK_LIMITS.calendarDecideMax} items, one decision each. pass = off the calendar now (the content can come back later). delete = pass AND never suggest this content again. replace = pass and the next-best item for the same track lands the same day (posts/requotes only; a suggestion cannot be replaced). Build each item from a get_calendar row: post {kind:'post', postId=id, expectedRevision=revision}; suggestion {kind:'suggestion', suggestionId=id, runId, date=the day}; requote {kind:'requote', targetId=id, url=quotedUrl, date=the day}. Never touches X; nothing is posted or spent.`, {
+    items: {
+      type: 'array', minItems: 1, maxItems: BULK_LIMITS.calendarDecideMax,
+      items: {
+        type: 'object',
+        properties: {
+          decision: { type: 'string', enum: [...CALENDAR_DECISIONS] },
+          item: {
+            type: 'object',
+            properties: {
+              kind: { type: 'string', enum: [...CALENDAR_ITEM_KINDS] },
+              postId: str('post: the row id'), expectedRevision: int('post: the row revision', { minimum: 0 }),
+              suggestionId: str('suggestion: the row id'), runId: str('suggestion: the row runId'),
+              targetId: str('requote: the row id'), url: str('requote: the row quotedUrl'),
+              date: str('suggestion/requote: the calendar day, YYYY-MM-DD'),
+            },
+            required: ['kind'],
+          },
+          title: str('Short label shown on the card (the row text, clipped)', { maxLength: 100 }),
+        },
+        required: ['decision', 'item'],
+      },
+    },
+  }, ['items']),
   propose('bucket-edit', `Propose adding, changing or deleting ONE Content Center bucket (a content source and its content track). upsert: send bucket {name, sourceKind, optional id/color/active/order/share}; omit id to create, send the existing id to change. delete: send bucket {id}; items still in it block the delete unless reassignTo names another bucket. Tracks re-sync after the change. Only the bucket changes; no post is touched.`, {
     op: { type: 'string', enum: [...BUCKET_EDIT_OPS] },
     bucket: {
@@ -487,6 +530,33 @@ export function serializeResult(value, max = LIMITS.resultMaxChars) {
   let s;
   try { s = JSON.stringify(value === undefined ? null : value); } catch { s = JSON.stringify({ error: 'unserializable result' }); }
   return s.length > max ? `${s.slice(0, max)}... [truncated ${s.length - max} chars]` : s;
+}
+
+/**
+ * Whole-object access within the tool result budget: the value at `path` (dot path, numeric parts index arrays) if it
+ * fits; an array is sliced by offset/limit; anything still too big comes back as a map of its parts and their sizes so
+ * the caller can ask for each part. Never silently truncates a value.
+ */
+export function pageObject(root, { path = '', offset = 0, limit = 0, budget = 11000 } = {}) {
+  const parts = String(path || '').split('.').map((x) => x.trim()).filter(Boolean);
+  let v = root;
+  for (const k of parts) {
+    if (v == null || typeof v !== 'object' || !(k in v)) return { error: `no "${parts.join('.')}" in this item`, parts: v && typeof v === 'object' ? Object.keys(v) : [] };
+    v = v[k];
+  }
+  const at = parts.join('.') || '(root)';
+  if (Array.isArray(v) && (offset || limit)) {
+    const start = Math.max(0, Number(offset) || 0);
+    const n = Math.max(1, Math.min(200, Number(limit) || 20));
+    v = { path: at, total: v.length, offset: start, items: v.slice(start, start + n) };
+    return JSON.stringify(v).length <= budget ? v : { path: at, total: v.total, error: 'these elements are too big together; ask for fewer (smaller limit)' };
+  }
+  if (JSON.stringify(v ?? null).length <= budget) return parts.length ? { path: at, value: v } : v;
+  const size = (x) => JSON.stringify(x ?? null).length;
+  const map = Array.isArray(v)
+    ? { kind: 'array', total: v.length, firstElementChars: v.length ? size(v[0]) : 0 }
+    : { kind: 'object', parts: Object.fromEntries(Object.entries(v).map(([k, x]) => [k, Array.isArray(x) ? `array(${x.length}) ${size(x)} chars` : `${typeof x} ${size(x)} chars`])) };
+  return { path: at, tooBigForOneRead: true, ...map, howToRead: Array.isArray(v) ? `pass path "${parts.join('.')}" with offset/limit` : `pass path "${parts.length ? `${parts.join('.')}.` : ''}<part>" for each part` };
 }
 
 function capRows(res, max) {
@@ -589,6 +659,7 @@ function shapeCalendarItem(r) {
   };
   if (kind === 'post') {
     out.status = strOrNull(r.status);
+    if (Number.isInteger(r.revision)) out.revision = r.revision; // expectedRevision for propose_calendar_decide
     if (r.proposed === true) out.proposed = true;
     const q = quotedUrlOf({ content: text, status: r.status });
     if (q) out.quotedUrl = q;
@@ -600,6 +671,7 @@ function shapeCalendarItem(r) {
     out.windowOpen = r.windowOpen === true;
     if (strOrNull(r.expiresAt)) out.expiresAt = r.expiresAt;
     if (kind === 'suggestion' && strOrNull(r.suggestionType)) out.type = r.suggestionType;
+    if (kind === 'suggestion' && strOrNull(r.runId)) out.runId = r.runId; // item ref for propose_calendar_decide (id = suggestionId; requote id = targetId, quotedUrl = url)
   }
   if (placeholder && kind === 'post' && r.approval !== 'posted') out.approveNote = PLACEHOLDER_NOTE;
   return out;
@@ -710,9 +782,19 @@ export async function runReadTool(name, input, toolDeps) {
     }
     case 'search_inventory': {
       const query = String(input?.query ?? '').trim();
-      if (!query) throw new Error('query is required');
+      const sort = typeof input?.sort === 'string' ? input.sort : 'relevance';
+      if (!query && sort === 'relevance' && !input?.media && !input?.track) throw new Error('give a query, or a sort / media / track to list items');
       const track = String(input?.track ?? '').trim().slice(0, 60) || undefined;
-      return capRows(await need('searchInventory')({ query, limit: clampLimit(input?.limit, LIMITS.inventoryMax), track }), LIMITS.inventoryMax);
+      const offset = Number.isInteger(input?.offset) && input.offset > 0 ? input.offset : 0;
+      return capRows(await need('searchInventory')({ query, limit: clampLimit(input?.limit, LIMITS.inventoryMax), track, offset, sort, media: input?.media || undefined }), LIMITS.inventoryMax);
+    }
+    case 'get_item': {
+      if (typeof deps.readItemFull !== 'function') return NA();
+      const id = typeof input?.itemId === 'string' ? input.itemId.trim().slice(0, 160) : '';
+      if (!id) return { error: 'itemId is required' };
+      const full = await deps.readItemFull(id);
+      if (!full) return { error: `unknown item ${id}` };
+      return pageObject(full, { path: input?.path, offset: input?.offset, limit: input?.limit, budget: LIMITS.resultMaxChars - 800 });
     }
     case 'top_posts': {
       const args = {
@@ -1000,7 +1082,7 @@ export async function prepareProposal(toolName, input, { toolDeps, userMessages 
         break;
       }
       case 'calendar-batch': {
-        const spec = normalizeBatchSpec({ select: input.select, dateRule: input.dateRule, ...(input.limit !== undefined ? { limit: input.limit } : {}) });
+        const spec = normalizeBatchSpec({ select: input.select, dateRule: input.dateRule, ...(input.limit !== undefined ? { limit: input.limit } : {}), ...(input.order !== undefined ? { order: input.order } : {}) });
         if (!spec.ok) return fail(spec.errors.join('; '));
         if (typeof toolDeps?.previewCalendarBatch !== 'function') return fail('calendar batch is not available');
         const pre = await toolDeps.previewCalendarBatch(spec.spec);
@@ -1099,6 +1181,28 @@ export async function prepareProposal(toolName, input, { toolDeps, userMessages 
         }
         if (problems.length) return fail(`cannot ${action} these posts: ${problems.join('; ').slice(0, 600)}`);
         payload = { ...v.proposal.payload, rows };
+        break;
+      }
+      case 'calendar-decide': {
+        const v = validateProposal({ kind, payload: { items: input.items } });
+        if (!v.ok) return fail(v.errors.join('; '));
+        if (!toolDeps?.decideCalendarItems) return fail('calendar cleanup is not available');
+        // Posts are checked against the stored row (exists, still on the calendar); suggestions/requotes carry the model's label.
+        const items = [];
+        const problems = [];
+        for (const row of v.proposal.payload.items) {
+          let { title, date } = row;
+          if (row.item.kind === 'post' && typeof toolDeps?.readPost === 'function') {
+            const post = await toolDeps.readPost(row.item.postId);
+            if (!isPlain(post)) { problems.push(`${row.item.postId}: unknown post id`); continue; }
+            if (['posted', 'rejected'].includes(post.status)) { problems.push(`${row.item.postId}: is ${post.status}, nothing to clean up`); continue; }
+            title = String(post.content ?? post.text ?? '').slice(0, 100) || title;
+            date = strOrNull(post.reviewOn) || (post.scheduledAt ? String(post.scheduledAt).slice(0, 10) : date);
+          }
+          items.push({ ...row, ...(title ? { title } : {}), ...(date || row.item.date ? { date: date || row.item.date } : {}) });
+        }
+        if (problems.length) return fail(`cannot clean up these items: ${problems.join('; ').slice(0, 600)}`);
+        payload = { items };
         break;
       }
       case 'bucket-edit': {

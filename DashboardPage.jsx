@@ -41,6 +41,7 @@ import {
 } from 'lucide-react';
 import { BrainIcon } from './components/ui/brain';
 import UpRightArrow from './components/UpRightArrow';
+import ScrambleCta from './components/home/ScrambleCta';
 import { useAuth } from './AuthContext';
 import { collection, doc, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { db } from './firebase';
@@ -68,7 +69,7 @@ import ScoutTestMetaRow from './components/dashboard/ScoutTestMetaRow';
 import MarketSignalsTermControl from './components/dashboard/MarketSignalsTermControl';
 import { ReplyTargetsBlock, RedditAnalysisBlock, InstagramAnalysisBlock, OpportunitySignalsBlock, RecipeBriefBlock, WatchlistAnalysisBlock } from './components/dashboard/MarketSignalsReportBlocks';
 
-import { VIDEO_REMIX_FOLDER_FILE_CACHE_TTL_MS, VIDEO_REMIX_FOLDER_PAGE_SIZE, VIDEO_REMIX_FOLDER_PAGE_STEP, VIDEO_REMIX_FOLDER_PAGE_MAX, SAVED_REMIX_PAGE_SIZE, VIDEO_REMIX_MAX_COUNT, STANDARD_REMIX_DEFAULTS, buildRemixRecipe, sanitizeVideoRemixFolderPreview, formatVideoRemixBytes, readVideoRemixPendingJob, writeVideoRemixPendingJob, normalizeVideoRemixFolderDetails, uploadVideoRemixFileToSignedUrl } from './lib/dashboard/video-remix';
+import { VIDEO_REMIX_FOLDER_FILE_CACHE_TTL_MS, VIDEO_REMIX_FOLDER_PAGE_SIZE, VIDEO_REMIX_FOLDER_PAGE_STEP, VIDEO_REMIX_FOLDER_PAGE_MAX, SAVED_REMIX_PAGE_SIZE, VIDEO_REMIX_MAX_COUNT, STANDARD_REMIX_DEFAULTS, buildRemixRecipe, sanitizeVideoRemixFolderPreview, formatVideoRemixBytes, readVideoRemixPendingJob, writeVideoRemixPendingJob, readVideoRemixLastUploadFolder, writeVideoRemixLastUploadFolder, normalizeVideoRemixFolderDetails, uploadVideoRemixFileToSignedUrl } from './lib/dashboard/video-remix';
 import { parseBriefSuggestedPost, sanitizeBriefHtmlForStandalone, parseEstimateLineItems, buildDefaultEstimateBriefDraft, hydrateEstimateBriefDraft, buildEstimateBriefConfigPayload, briefSlugify, titlePdfFileName, withDownloadParam, buildCustomBriefStarterHtml } from './lib/dashboard/brief-drafts';
 import { safeDownloadName, downloadBrowserAsset, termArrCount, termItemLines, cloneJson, appendCacheBust, fsTimestampToDate } from './lib/dashboard/format-utils';
 import { MARKETING_BRIEF_SOURCE_PLATFORMS, UNLOCKED_SOURCE_PLATFORMS, DEFAULT_MARKETING_BRIEF_SOURCE_PLATFORMS, WATCHLIST_RECIPE_IDS, SEARCH_PLAN_CUSTOM_MAX, BRAND_KEYWORD_RECOMMENDED_MAX, CATEGORY_TERM_RECOMMENDED_MAX, WEB_SEARCH_SOURCES, SOCIAL_SIGNAL_SOURCES, deriveMarketingBriefPerPlatformResults, splitMarketingBriefTerms, getClientHostname, buildRecommendedCustomSearchRows, getMarketingBriefSearchStats, buildDefaultMarketingBriefConfig, joinConfigList } from './lib/dashboard/marketing-brief-config';
@@ -1325,7 +1326,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    setVideoRemixFolders(details.map((item) => item.name));
 	    setVideoRemixUploadDraft((prev) => {
 	      if (prev.existingFolder && details.some((item) => item.name === prev.existingFolder)) return prev;
-	      return { ...prev, existingFolder: details[0]?.name || '' };
+	      // Never default to the first folder (uploads once landed in "72326" by accident): last upload folder or none.
+	      const last = readVideoRemixLastUploadFolder();
+	      return { ...prev, existingFolder: last && details.some((item) => item.name === last) ? last : '' };
 	    });
 	    return details;
 	  }, [user, apiPath]);
@@ -1467,7 +1470,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    const folderMode = videoRemixUploadDraft.folderMode === 'new' ? 'new' : 'existing';
 	    const targetFolder = folderMode === 'new'
 	      ? sanitizeVideoRemixFolderPreview(videoRemixUploadDraft.newFolderName)
-	      : (videoRemixUploadDraft.existingFolder || videoRemixFolders[0] || '');
+	      : (videoRemixUploadDraft.existingFolder || '');
 	    if (!targetFolder) {
 	      setVideoRemixUploadError(folderMode === 'new' ? 'Name the new folder first.' : 'Choose a folder first.');
 	      return;
@@ -1525,6 +1528,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	          : [...prev.selectedFolders, folderName],
 	      }));
 	      setVideoRemixUploadDraft((prev) => ({ ...prev, existingFolder: folderName, folderMode: 'existing' }));
+	      writeVideoRemixLastUploadFolder(folderName);
 	      setVideoRemixFolderFiles({ folder: folderName, files: [] });
 	      if (refreshed.some((item) => item.name === folderName)) {
 	        loadVideoRemixFolderFiles(folderName);
@@ -1735,6 +1739,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   });
   const capabilityGridRef = useRef(null);
   const dashboardVisibleRef = useRef(false);
+  // performance.now() when the page-load intro timeline starts; the Stand Up panel reveal times itself against it.
+  const introStartAtRef = useRef(0);
   // First bootstrap resolved — the card stagger waits for it so cards animate
   // against real data. Stays true through later refetches (admin client
   // switch, reseed) so the reveal never replays.
@@ -2041,6 +2047,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   // Stand Up > Open Today: the stage at the Day level, today in the client's time zone (no client zone is loaded in this page yet,
   // so the stage falls back to America/Chicago). The Stand Up panel receives this as its `onOpenTodayDay` prop.
   const openCalendarStageToday = useCallback(() => openCalendarStage({ level: 'day', date: todayInZone(undefined) }), [openCalendarStage]);
+  // Stand Up > Open Queue: the month view as Back from Today shows it (focused on today). Open Next Post: that post's editor.
+  const openCalendarStageQueue = useCallback(() => openCalendarStage({ level: 'month', date: todayInZone(undefined) }), [openCalendarStage]);
+  const openCalendarStagePost = useCallback((date, postId) => openCalendarStage({ level: 'post', date, postId }), [openCalendarStage]);
   useDashboardFade(dashboardUiRootRef, !!calendarStage);
   // Reload / browser-forward onto a ?cal= URL reopens the stage at that level.
   useEffect(() => {
@@ -2937,7 +2946,9 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           setVideoRemixFolders(details.map((item) => item.name));
           setVideoRemixUploadDraft((prev) => {
             if (prev.existingFolder && details.some((item) => item.name === prev.existingFolder)) return prev;
-            return { ...prev, existingFolder: details[0]?.name || '' };
+            // Never default to the first folder (uploads once landed in "72326" by accident): last upload folder or none.
+            const last = readVideoRemixLastUploadFolder();
+            return { ...prev, existingFolder: last && details.some((item) => item.name === last) ? last : '' };
           });
         }
       } catch {
@@ -5373,7 +5384,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	      const url = client?.websiteUrl || client?.website || '';
 	      const industry = dashboardState?.snapshot?.brandOverview?.industry
 	        || dashboardState?.marketCategory?.value || '';
-	      const res = await fetch('/api/social-posting', {
+	      const res = await fetch(apiPath('/api/social-posting'), {
 	        method: 'POST',
 	        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
 	        body: JSON.stringify({ action: 'generate-copy', brand: { name: biz, summary: tag, url, industry } }),
@@ -5384,7 +5395,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	      }
 	    } catch { /* non-fatal — keep the existing/default caption */ }
 	    finally { setPostMeCopyLoading(false); }
-	  }, [user, postMeCopyLoading, client, dashboardState]);
+	  }, [user, postMeCopyLoading, client, dashboardState, apiPath]);
 
 	  // Simplified post path (no API credits needed): open X's web composer with
 	  // the caption prefilled, and copy the image to the clipboard so the user can
@@ -5447,7 +5458,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	        body.mediaType = 'image';
 	        // Let the server detect the real image type from response headers.
 	      }
-	      const res = await fetch('/api/social-posting', {
+	      const res = await fetch(apiPath('/api/social-posting'), {
 	        method: 'POST',
 	        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
 	        body: JSON.stringify(body),
@@ -5478,7 +5489,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    } finally {
 	      setPostMeLoading(false);
 	    }
-	  }, [user, postMeLoading, buildPostMeCaption, dashboardState, latestStudioVideoUrl]);
+	  }, [user, postMeLoading, buildPostMeCaption, dashboardState, latestStudioVideoUrl, apiPath]);
 
   const clientStatus = dashboardState?.status || client?.status || null;
   // Prefer the live run status from brief_runs (polled every 4s) over the cached
@@ -5950,6 +5961,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 
     // Ready — animate dashboard in (initial load OR after processing)
     dashboardVisibleRef.current = true;
+    introStartAtRef.current = performance.now();
     gsap.set(sections, { autoAlpha: 0 });
     if (cards.length) gsap.set(cards, { autoAlpha: 0 });
 
@@ -5969,6 +5981,30 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 
     return () => tl.kill();
   }, [showIntakeModal, entranceReady, creationFailureOpen]);
+
+  // Stand Up panel reveal. The panel replaces the card grid (which the intro fades as #capability-grid), and it
+  // can mount before or after the intro starts, so it runs its own short timeline: the panel shell fades in while
+  // the capability menu lands, then the 3 · 2 · 1 steps stagger in last. Opening the bucket later (intro long
+  // done) plays the same reveal with no lead-in.
+  const FLOW_INTRO_SHELL_AT_S = 0.85; // page-intro time: during the menu fade (0.55 + 0.5)
+  useLayoutEffect(() => {
+    if (activeCapabilityFilter !== 'flow') return undefined;
+    const shell = document.querySelector('#onboarding-flow-shell');
+    if (!shell) return undefined;
+    const steps = gsap.utils.toArray('#onboarding-flow-step-list > li', shell);
+    const targets = [shell, ...steps];
+    if (showIntakeModal || creationFailureOpen || !entranceReady || !introStartAtRef.current) {
+      gsap.set(targets, { autoAlpha: 0 });
+      return undefined;
+    }
+    gsap.set(targets, { autoAlpha: 0 });
+    const elapsedS = (performance.now() - introStartAtRef.current) / 1000;
+    const leadIn = Math.max(0, FLOW_INTRO_SHELL_AT_S - elapsedS);
+    const tl = gsap.timeline({ delay: leadIn });
+    tl.to(shell, { autoAlpha: 1, duration: 0.45, ease: 'power2.out' }, 0)
+      .to(steps, { autoAlpha: 1, duration: 0.45, ease: 'power2.out', stagger: 0.12 }, 0.3);
+    return () => { tl.kill(); gsap.set(targets, { autoAlpha: 1 }); };
+  }, [activeCapabilityFilter, entranceReady, showIntakeModal, creationFailureOpen]);
 
   // Card reveal — runs once the grid shell is on screen AND the first
   // bootstrap has resolved. No stagger: all cards display at once when ready.
@@ -6400,7 +6436,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     setDlAllBusy(true);
     try {
       const token = await user.getIdToken();
-      const res = await fetch('/api/dashboard/deliverables-zip', {
+      const res = await fetch(apiPath('/api/dashboard/deliverables-zip'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ assets, zipName: zipBase }),
@@ -6420,7 +6456,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     } finally {
       setDlAllBusy(false);
     }
-  }, [dlAllBusy, user, client, latestStudioVideoUrl, homepageDeviceMockupUrl, deviceScreenshots, siteMeta]);
+  }, [dlAllBusy, user, client, latestStudioVideoUrl, homepageDeviceMockupUrl, deviceScreenshots, siteMeta, apiPath]);
 
   const handleUpdateClientName = useCallback(async () => {
     if (!user || clientEditLoading) return;
@@ -9465,11 +9501,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       number: 'NC',
       label: 'NEW CLIENT',
       title: 'Create Client',
-      description: 'Creates a new client workspace when there is no website yet, then lets the team add notes and briefs manually.',
+      description: 'Creates a new client workspace. With a website it is onboarded like a signup, running only the onboarding steps you leave on; without one it is an idea-only workspace the team feeds manually.',
       placeholderLabel: 'NEW',
       rows: [
-        { key: 'nc-type', label: 'Type', value: 'Website-less workspace' },
-        { key: 'nc-feed', label: 'Feed', value: 'Brain uploads + brief' },
+        { key: 'nc-type', label: 'Type', value: 'Website or idea-only' },
+        { key: 'nc-feed', label: 'Feed', value: 'Signup onboarding or brain uploads' },
         { key: 'nc-owner', label: 'Owner', value: 'You (admin)' },
         { key: 'nc-access', label: 'Access', value: 'Client dropdown' },
       ],
@@ -9538,6 +9574,41 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       ],
       footerLeft: 'Studio',
       footerRight: 'ADMIN',
+      readinessBadge: { tone: 'ok', label: 'Live' },
+    }, {
+      // Hero 3D scene tuner — opens the homepage with ?scene=1 (the on-page launcher row was removed).
+      id: 'hero-scene-editor',
+      category: 'admin',
+      number: '3D',
+      label: '3D SCENE',
+      title: '3D Scene',
+      description: 'Tune the homepage hero scene live on the homepage. Templates are saved in this browser.',
+      placeholderLabel: '3D\nSCENE',
+      rows: [
+        { key: 'hs-what', label: 'Edits', value: 'Hero loop scene' },
+        { key: 'hs-where', label: 'Opens', value: 'Homepage · new tab' },
+        { key: 'hs-access', label: 'Access', value: 'Admin only' },
+      ],
+      footerLeft: 'Editor',
+      footerRight: 'ADMIN',
+      readinessBadge: { tone: 'ok', label: 'Live' },
+    }, {
+      // Hero type tuner — opens the homepage with ?type=1. Drafts are read in local dev only (lib/hero-type/store.js).
+      id: 'hero-type-editor',
+      category: 'admin',
+      number: 'TY',
+      label: 'HERO TYPE',
+      title: 'Hero Type',
+      description: 'Tune the homepage hero text live on the homepage. Drafts apply on localhost only.',
+      placeholderLabel: 'HERO\nTYPE',
+      rows: [
+        { key: 'ht-what', label: 'Edits', value: 'Hero headline + small line' },
+        { key: 'ht-where', label: 'Opens', value: 'Homepage · new tab' },
+        { key: 'ht-access', label: 'Access', value: 'Admin only' },
+      ],
+      footerLeft: 'Editor',
+      footerRight: 'ADMIN',
+      readinessBadge: { tone: 'ok', label: 'Live' },
     }] : []),
 
     {
@@ -10824,22 +10895,13 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       <header id="founders-top-strip" data-tooltip-disabled="true">
         <div id="founders-top-strip-inner">
           <Link href="/" id="founders-brand" aria-label="Back to homepage">
-            <img src="/img/circle_logo.png" alt="" aria-hidden="true" />
+            {/* Same id as the homepage logo, so the shared blend rule in colors.css applies (color-dodge in dark). */}
+            <img id="founders-brand-logo-image" src="/img/circle_logo.png" alt="" aria-hidden="true" />
           </Link>
           <div id="founders-top-actions">
-            <button type="button" id="founders-login-link" onClick={handleSignOut}>
-              Logout
-            </button>
-            <a
-              id="founders-chat-cta"
-              href="https://calendly.com/bballi/30min"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <span className="founders-chat-label-full">Contact</span>
-              <span className="founders-chat-label-short">Contact</span>
-              <UpRightArrow id="founders-chat-cta-icon" />
-            </a>
+            {/* Same CTA as the homepage (components/home/ScrambleCta.jsx): CLIENTS at rest, scrambles to LOGOUT on
+                desktop hover; touch screens just show LOGOUT. */}
+            <ScrambleCta restLabel="CLIENTS" revealLabel="LOGOUT" touchLabel="LOGOUT" ariaLabel="Log out" onClick={handleSignOut} />
           </div>
           {/* Visually-hidden power-user controls (theme preference + sign out). `inert` (not aria-hidden) keeps the focusable buttons out of the tab order and the accessibility tree; the Studio preview switch is the supported setter. */}
           <div id="founders-hidden-controls" inert>
@@ -11180,10 +11242,11 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                       if (!hasDeliverableAssets) return null;
                       return (
                         <>
-                          <span className="cap-source-divider" aria-hidden="true" />
+                          <span className="cap-source-divider dash-source-desktop-only" aria-hidden="true" />
                           <button
                             type="button"
                             id="dashboard-dl-all-chip"
+                            className="dash-source-desktop-only"
                             title="Download all deliverable assets as a zip"
                             aria-label="Download all deliverable assets as a zip"
                             onClick={handleDownloadAllDeliverables}
@@ -11216,6 +11279,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         <button
                           type="button"
                           id="dashboard-coverage-chip"
+                          className="dash-source-desktop-only"
                           title="Open Data Quality"
                           aria-label="Open Data Quality"
                           onClick={() => {
@@ -11259,10 +11323,10 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                         </button>
                       );
                     })()}
-                    <span className="cap-source-divider" aria-hidden="true" />
+                    <span className="cap-source-divider dash-source-desktop-only" aria-hidden="true" />
                     {/* Two affordances share the chip: the icon opens the latest
                         brief; the countdown time opens the cooldown / payment modal. */}
-                    <span id="brief-cooldown-chip" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0 2px', flexShrink: 0 }}>
+                    <span id="brief-cooldown-chip" className="dash-source-desktop-only" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '0 2px', flexShrink: 0 }}>
                       <button
                         type="button"
                         id="brief-cooldown-icon-btn"
@@ -11340,7 +11404,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           {/* STAND UP bucket (admin): Content → Strategy → Calendar steps in place of the card grid. */}
           {isAdmin && activeCapabilityFilter === 'flow' ? (
             <div id="onboarding-flow-grid-col-shell">
-              <OnboardingFlowPanel onOpenCard={openCapabilityCardById} availableCardIds={new Set(intakeCapabilityCards.map((c) => c.id))} marketingBrief={marketingBrief} getIdToken={brandSystemGetIdToken} clientId={client?.clientId || client?.id || bootstrap?.effectiveClientId} onOpenTodayDay={openCalendarStageToday} />
+              <OnboardingFlowPanel onOpenCard={openCapabilityCardById} availableCardIds={new Set(intakeCapabilityCards.map((c) => c.id))} marketingBrief={marketingBrief} getIdToken={brandSystemGetIdToken} clientId={client?.clientId || client?.id || bootstrap?.effectiveClientId} onOpenTodayDay={openCalendarStageToday} onOpenQueue={openCalendarStageQueue} onOpenPost={openCalendarStagePost} />
             </div>
           ) : null}
           <div id="capability-grid" ref={capabilityGridRef} style={activeCapabilityFilter === 'leadgen' || activeCapabilityFilter === 'flow' ? { display: 'none' } : undefined}>
@@ -14224,6 +14288,51 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   </div>
                 )}
 
+                {/* Admin · homepage hero editors (replace the homepage's bottom launcher row) */}
+                {activeTileModal.cardId === 'hero-scene-editor' && (
+                  <div id="hero-scene-editor-card-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
+                    <div className="tile-detail-tab-content">
+                      <div id="hero-scene-editor-card-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 14 }}>
+                        <p id="hero-scene-editor-card-lede" style={{ margin: 0, maxWidth: '52ch', fontSize: 15, lineHeight: 1.45, color: 'var(--t-text-secondary)' }}>
+                          Opens the homepage in a new tab with the 3D Scene panel open.
+                        </p>
+                        <a
+                          id="hero-scene-editor-launcher"
+                          className="cta-pill-btn"
+                          href="/?scene=1"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ display: 'inline-flex', alignItems: 'center', minHeight: 44, padding: '0 22px', border: '1px solid var(--t-border-faint)', borderRadius: 999, background: 'var(--t-surface)', color: 'var(--t-text-strong)', fontFamily: 'var(--font-ui)', fontSize: 15, fontWeight: 700, textDecoration: 'none' }}
+                        >
+                          Open 3D Scene editor
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeTileModal.cardId === 'hero-type-editor' && (
+                  <div id="hero-type-editor-card-panel" className="tile-detail-bento-cell tile-detail-tabbed-container">
+                    <div className="tile-detail-tab-content">
+                      <div id="hero-type-editor-card-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 14 }}>
+                        <p id="hero-type-editor-card-lede" style={{ margin: 0, maxWidth: '52ch', fontSize: 15, lineHeight: 1.45, color: 'var(--t-text-secondary)' }}>
+                          Opens the homepage in a new tab with the Hero Type panel open. Drafts apply on localhost only.
+                        </p>
+                        <a
+                          id="hero-type-editor-launcher"
+                          className="cta-pill-btn"
+                          href="/?type=1"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ display: 'inline-flex', alignItems: 'center', minHeight: 44, padding: '0 22px', border: '1px solid var(--t-border-faint)', borderRadius: 999, background: 'var(--t-surface)', color: 'var(--t-text-strong)', fontFamily: 'var(--font-ui)', fontSize: 15, fontWeight: 700, textDecoration: 'none' }}
+                        >
+                          Open Hero Type editor
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Knowledge Officer · Google Calendar — per-client OAuth connection */}
                 {activeTileModal.cardId === 'calendar-connect' && (
                   <CalendarConnectView user={user} />
@@ -16590,6 +16699,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   >
                     <ClientBrainCard
                       getIdToken={brandSystemGetIdToken}
+                      apiPath={apiPath}
                       onSaved={applyClientBrainToBootstrap}
                       onOpenCard={(cardId) => {
                         const targetCard = intakeCapabilityCards.find((c) => c.id === cardId);
@@ -16904,7 +17014,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                  const folderFilesLimit = videoRemixFolderFiles.limit || VIDEO_REMIX_FOLDER_PAGE_SIZE;
 	                  const folderFilesMaybeMore = videoRemixFolderFiles.files.length >= folderFilesLimit && folderFilesLimit < VIDEO_REMIX_FOLDER_PAGE_MAX;
 	                  const loadMoreFolderFiles = () => loadVideoRemixFolderFiles(videoRemixFolderFiles.folder, folderFilesLimit + VIDEO_REMIX_FOLDER_PAGE_STEP).catch(() => {});
-	                  const effectiveExistingFolder = videoRemixUploadDraft.existingFolder || folderDetailList[0]?.name || '';
+	                  const effectiveExistingFolder = videoRemixUploadDraft.existingFolder || '';
 	                  const uploadTargetFolder = videoRemixUploadDraft.folderMode === 'new'
 	                    ? sanitizeVideoRemixFolderPreview(videoRemixUploadDraft.newFolderName)
 	                    : effectiveExistingFolder;
@@ -17267,10 +17377,12 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                  <label className="field">
 	                                    <span className="label">Existing folder</span>
 	                                    <select
+	                                      id="video-remix-upload-folder-select"
 	                                      value={effectiveExistingFolder}
 	                                      onChange={(e) => setVideoRemixUploadDraft((prev) => ({ ...prev, existingFolder: e.target.value }))}
 	                                      disabled={!folderDetailList.length}
 	                                    >
+	                                      {folderDetailList.length ? <option value="">Choose a folder…</option> : null}
 	                                      {folderDetailList.length ? folderDetailList.map((folder) => (
 	                                        <option key={folder.name} value={folder.name}>
 	                                          {folder.name}{folder.count != null ? ` (${folder.count})` : ''}
@@ -17335,7 +17447,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                                disabled={videoRemixUploadLoading || !uploadQueuedCount || !uploadTargetFolder}
 	                                onClick={runVideoRemixUpload}
 	                              >
-	                                <span className="cta-text">{videoRemixUploadLoading ? 'Uploading…' : 'Upload to Source Folder'}</span>
+	                                <span className="cta-text">{videoRemixUploadLoading ? `Uploading to ${uploadTargetFolder}…` : uploadTargetFolder ? `Upload ${uploadQueuedCount ? `${uploadQueuedCount} ` : ''}to ${uploadTargetFolder}` : 'Choose a folder to upload'}</span>
 	                                <span className="cta-icon">↗</span>
 	                              </button>
 	                            </section>

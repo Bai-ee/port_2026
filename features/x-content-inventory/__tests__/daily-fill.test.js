@@ -187,3 +187,59 @@ test('baseline: junk auto-caption titles are never picked', () => {
   const p = planDailyFill({ tracks, packages: [junk, ...PACKAGES], from: TODAY, days: 3, today: TODAY, include: ['baseline'] });
   assert.ok(!p.rows.some((r) => r.packageId === 'nas-junk'));
 });
+
+test('trackRules (daily mix): one BAI-EE video a day from the Dj Mix Videos bucket, newest unused first, then least recently used', async () => {
+  const { dailyMixRulesFor, DAILY_MIX_RULE } = await import('../daily-mix-rule.js');
+  const rv = (id, artist, renderedAt, extra = {}) => pkg(id, 'ue', { ...ready, entities: [artist], renderedAt, ...extra });
+  const packages = [
+    rv('rv-old', 'BAI-EE', '2026-09-01T06:03:00Z'),
+    rv('rv-new', 'BAI-EE', '2026-10-17T06:03:00Z'),
+    rv('rv-mid', 'bai-ee', '2026-10-10T06:03:00Z'),
+    rv('rv-other', 'CESAR RAMIREZ', '2026-10-18T06:03:00Z'),
+    rv('rv-gone', 'BAI-EE', '2026-10-16T06:03:00Z', { status: 'retired' }),
+    rv('rv-still', 'BAI-EE', '2026-10-15T06:03:00Z', { mediaState: 'still' }),
+    rv('rv-used', 'BAI-EE', '2026-10-14T06:03:00Z'),
+  ];
+  const lastUsed = new Map([['rv-used', '2026-08-01']]);
+  const p = planDailyFill({ tracks, packages, lastUsed, from: TODAY, days: 4, today: TODAY, include: ['baseline'], trackRules: { ue: DAILY_MIX_RULE } });
+  const ue = p.rows.filter((r) => r.trackId === 'ue');
+  // Exactly one a day (the rule replaces the engine target), BAI-EE only, never retired or a still.
+  assert.deepEqual(ue.map((r) => r.date), ['2026-10-17', '2026-10-18', '2026-10-19', '2026-10-20']);
+  // Newest never-used first, then the rest by render date, then the least recently used.
+  assert.deepEqual(ue.map((r) => r.packageId), ['rv-new', 'rv-mid', 'rv-old', 'rv-used']);
+  // Without the rule the same pool keeps the engine target and any artist.
+  const plain = planDailyFill({ tracks, packages, from: TODAY, days: 4, today: TODAY, include: ['baseline'] });
+  assert.ok(plain.rows.filter((r) => r.trackId === 'ue').length < 4);
+  // Only the media owner client gets the rule.
+  assert.deepEqual(dailyMixRulesFor('home', { ownerClientId: 'home' }), { ue: DAILY_MIX_RULE });
+  assert.deepEqual(dailyMixRulesFor('other', { ownerClientId: 'home' }), {});
+  assert.deepEqual(dailyMixRulesFor('home', { ownerClientId: null }), {});
+});
+
+test('trackRules: two renders of the same mix never fill two days of one window', async () => {
+  const { DAILY_MIX_RULE } = await import('../daily-mix-rule.js');
+  const rv = (id, title, renderedAt) => pkg(id, 'ue', { ...ready, entities: ['BAI-EE'], title, renderedAt });
+  const packages = [rv('rv-1', "BAI-EE – Live @ Viva Acid '24", '2026-10-03'), rv('rv-2', "BAI-EE – Live @ Viva Acid '24", '2026-10-02'), rv('rv-3', 'BAI-EE – Music Mix', '2026-10-01')];
+  const p = planDailyFill({ tracks, packages, from: TODAY, days: 3, today: TODAY, include: ['baseline'], trackRules: { ue: DAILY_MIX_RULE } });
+  assert.deepEqual(p.rows.filter((r) => r.trackId === 'ue').map((r) => r.packageId), ['rv-1', 'rv-3']);
+});
+
+test('excludePackageIds: an excluded package is never picked; spec carries it only when given', () => {
+  const base = plan({ days: 1, include: ['baseline'] });
+  const first = where(base, 'baseline').find((r) => r.trackId === 'record');
+  const p = plan({ days: 1, include: ['baseline'], excludePackageIds: [first.packageId] });
+  assert.ok(!p.rows.some((r) => r.packageId === first.packageId));
+  assert.equal('excludePackageIds' in normalizeFillSpec({}, { today: TODAY }).spec, false);
+  assert.deepEqual(normalizeFillSpec({ excludePackageIds: ['a', 'a', 'b'] }, { today: TODAY }).spec.excludePackageIds, ['a', 'b']);
+  assert.equal(normalizeFillSpec({ excludePackageIds: [1] }, { today: TODAY }).ok, false);
+  assert.equal(normalizeFillSpec({ excludePackageIds: Array.from({ length: 201 }, (_, i) => `p${i}`) }, { today: TODAY }).ok, false);
+});
+
+test('replace mode: a rejected fill no longer holds its slot, only that bucket is filled, one row max', () => {
+  const rejected = [{ postId: 'x', status: 'rejected', reviewOn: TODAY, fillKind: 'baseline', bucketId: 'record', idempotencyKey: 'k' }];
+  // Normal re-run: the rejected draft still counts, so the record track gets nothing today.
+  assert.equal(where(plan({ days: 1, include: ['baseline'], fillPosts: rejected }), 'baseline').filter((r) => r.trackId === 'record').length, 0);
+  const p = plan({ days: 1, include: ['baseline'], fillPosts: rejected, replace: { bucketId: 'record' } });
+  assert.deepEqual(p.rows.map((r) => r.trackId), ['record']);
+  assert.equal(normalizeFillSpec({ replace: { bucketId: 5 } }, { today: TODAY }).ok, false);
+});

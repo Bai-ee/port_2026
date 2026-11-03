@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 import { randomUUID } from 'crypto';
-import { createSocialPost, readSocialQueue, getSocialPost, createDraftPostOnce, ensureDraftPost, findOpenPostForPackage, updateSocialPost, runPostingAgents, approveDraft, unapproveDraft, swapPostMedia } from '../../../../features/social-posting/twitter-service.js';
+import { createSocialPost, readSocialQueue, getSocialPost, createDraftPostOnce, ensureDraftPost, findOpenPostForPackage, updateSocialPost, runPostingAgents, approveDraft, unapproveDraft, approveAndSchedule, rejectDraft, swapPostMedia } from '../../../../features/social-posting/twitter-service.js';
 import { buildDayPlan, mergeListCandidates } from '../../../../features/x-quote-targets/day-plan.js';
 // Static import so Next bundles the calendar — docs/audits/ is NOT in
 // .vercelignore, but a runtime fs read of a repo path is fragile on serverless.
@@ -23,13 +23,14 @@ import { buildPostResults } from '../../../../features/x-content-inventory/resul
 import { recentPostsFromQueue } from '../../../../features/x-content-inventory/allocate-slot.js';
 import { readUnifiedCalendar, readCalendarQuoteTargets as readCalendarQuoteTargetsShared } from '../../../../features/x-content-inventory/calendar-reader.js';
 import { ctDate, toRow as calendarPostRow } from '../../../../features/x-content-inventory/month-calendar.js';
+import { decideCalendarItem } from '../../../../features/x-content-inventory/calendar-decide.js';
 import { createContentTaskStore } from '../../../../features/x-content-inventory/content-tasks.js';
 import { joinPerformance, engineStats } from '../../../../features/x-content-inventory/performance.js';
 import * as bucketStore from '../../../../features/x-content-inventory/bucket-store.js';
 import { findMediaCandidates, linkMediaPatch, normalizeLinks } from '../../../../features/x-content-inventory/item-media.js';
 import { normalizeFacets } from '../../../../features/x-content-inventory/facets.js';
 import { resolveMediaUrls } from '../../../../features/rendered-videos/media-url.js';
-import { syncRenderedVideos } from '../../../../features/rendered-videos/sync.js';
+import { syncRenderedVideosForClient } from '../../../../features/rendered-videos/firestore-sync.js';
 import { resolveMediaUrlsBatch, MEDIA_URLS_MAX_IDS, MEDIA_KINDS, tokenUrlFor } from '../../../../features/x-content-inventory/thumbs.js';
 import { setRights, saveThumb, createDraftFromItem, pickMedia } from '../../../../features/x-content-inventory/item-actions.js';
 import { NAS_ACTIONS, handleNasAction } from '../../../../features/x-content-inventory/nas.js';
@@ -319,6 +320,7 @@ const SUPPORTED_ACTIONS = [
   'calendar-approve',
   'calendar-unapprove',
   'calendar-suggestion-approve',
+  'calendar-item-decide',
   'content-task-update',
   'content-context',
   'post-status',
@@ -392,9 +394,6 @@ const handleContentPlan = (context, body) => getContentPlanHandlers().contentPla
 // client is refused (409). Item actions resolve by id through getPackageFor, which hides a foreign row (404).
 const upsertFor = (clientId) => (pkg) => upsertPackage(pkg, { returnPackages: false, clientId });
 const getPackageFor = (clientId) => packageGetterFor(clientId);
-// Rendered videos come from ONE shared EditVideos feed, owned by the NAS/archive client. Any other client's sync is a
-// no-op (it would otherwise create home's renders under that client, or 409 on home's rows).
-const mediaOwnerClientId = () => process.env.NAS_INVENTORY_CLIENT_ID || null;
 
 async function handleInventoryList(context) {
   const { packages, updatedAt, seeded } = await readInventory({ clientId: context.clientId });
@@ -768,46 +767,15 @@ async function readStoredPackages(ids) {
   return out;
 }
 
-const rvMetaRef = (clientId) => fb.adminDb.collection('content_buckets').doc(clientId).collection('meta').doc('rendered-videos');
-
+// Same wiring as the daily-loop cron (features/rendered-videos/firestore-sync.js).
 async function handleSyncRenderedVideos(context, body) {
-  const clientId = context.clientId;
-  if (clientId !== mediaOwnerClientId()) {
-    return { ok: true, skipped: 'not-owner', created: 0, updated: 0, unchanged: 0, total: 0, lastSyncAt: null };
-  }
-  const bridge = loadBridge();
-  return syncRenderedVideos({
-    async listVideos() {
-      const videos = [];
-      let cursor = null;
-      let complete = false;
-      for (let i = 0; i < 50; i += 1) {
-        const page = await bridge.listRenderedVideos({ limit: 200, startAfter: cursor });
-        videos.push(...page.videos);
-        cursor = page.nextCursor;
-        if (!cursor) { complete = true; break; }
-      }
-      return { videos, complete }; // complete only when the cursor ran out (enables retire-on-missing)
-    },
-    async listStored() {
-      const snap = await fb.adminDb.collection('x_content_packages').where('clientId', '==', clientId).where('source.kind', '==', 'rendered-video').get();
-      return snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
-    },
-    async listMediaJobs(jobIds) {
-      const map = new Map();
-      for (let i = 0; i < jobIds.length; i += 30) {
-        const snap = await fb.adminDb.collection('media_jobs').where('editJobId', 'in', jobIds.slice(i, i + 30)).get();
-        for (const d of snap.docs) { const j = d.data(); if (j.editJobId) map.set(String(j.editJobId), j); }
-      }
-      return map;
-    },
-    readExisting: readStoredPackages,
-    upsert: upsertFor(clientId),
-    async readMeta() { const s = await rvMetaRef(clientId).get(); return s.exists ? s.data() : null; },
-    async writeMeta(m) { await rvMetaRef(clientId).set(m, { merge: true }); },
-    now: () => Date.now(),
-    ueArtists: [], // artists.json is a local file; sync keeps stored genres/era (see sync.js)
-  }, { force: body?.force === true });
+  return syncRenderedVideosForClient({
+    db: fb.adminDb,
+    bridge: loadBridge(),
+    upsert: upsertFor(context.clientId),
+    clientId: context.clientId,
+    force: body?.force === true,
+  });
 }
 
 async function handleMediaUrls(context, body) {
@@ -1024,16 +992,34 @@ async function approveCalendarPost(context, decoded, postId, expectedRevision, c
   return { post, row: calendarRowOf(post), stripped: before.status === 'draft' && before.content !== post.content };
 }
 
+// Calendar Approve. With `scheduledAt` (the row's slot) it approves AND schedules in one transition — the owner's
+// click is the schedule confirm; without it (no slot) it only approves.
 async function handleCalendarApprove(context, decoded, body) {
   const postId = String(body?.postId || '').trim();
   if (!postId) throw Object.assign(new Error('postId is required.'), { status: 400 });
+  if (body?.scheduledAt) {
+    const post = await approveAndSchedule(context.clientId, postId, {
+      scheduledAt: body.scheduledAt,
+      content: typeof body.content === 'string' ? body.content : undefined,
+      reviewedBy: decoded?.email || decoded?.uid || null,
+      expectedRevision: body.expectedRevision,
+    });
+    return { ok: true, post, row: calendarRowOf(post) };
+  }
   return { ok: true, ...(await approveCalendarPost(context, decoded, postId, body?.expectedRevision, body?.content)) };
 }
 
+// Calendar Unapprove: approved -> draft; a scheduled/queued row is unscheduled first (same update PostSheet's Unschedule uses).
 async function handleCalendarUnapprove(context, body) {
   const postId = String(body?.postId || '').trim();
   if (!postId) throw Object.assign(new Error('postId is required.'), { status: 400 });
-  const post = await unapproveDraft(context.clientId, postId, { expectedRevision: body?.expectedRevision });
+  const current = await getSocialPost(context.clientId, postId);
+  if (!current) throw Object.assign(new Error('Post not found.'), { status: 404 });
+  let post = current;
+  if (['scheduled', 'queued'].includes(current.status)) {
+    post = await updateSocialPost(context.clientId, postId, { content: current.content, scheduledAt: '' }, { expectedRevision: body?.expectedRevision });
+  }
+  if (post.status !== 'draft') post = await unapproveDraft(context.clientId, postId, { expectedRevision: post === current ? body?.expectedRevision : post.revision });
   return { ok: true, post, row: calendarRowOf(post) };
 }
 
@@ -1078,6 +1064,35 @@ async function handleCalendarSuggestionApprove(context, decoded, body) {
   }
   const out = await approveCalendarPost(context, decoded, postId, undefined);
   return { ok: true, kind, created: true, ...out };
+}
+
+/** Real I/O for decideCalendarItem (calendar-decide.js). Nothing here calls X; a replacement fill writes review drafts only. */
+function calendarItemDecideDeps(context, decoded) {
+  const clientId = context.clientId;
+  return {
+    getPost: (cid, postId) => getSocialPost(cid, postId),
+    rejectPost: (cid, postId, opts) => rejectDraft(cid, postId, { reviewedBy: opts?.by, expectedRevision: opts?.expectedRevision }),
+    unschedulePost: (cid, postId, opts) => updateSocialPost(cid, postId, { scheduledAt: null }, { expectedRevision: opts?.expectedRevision }),
+    dismissQuoteTarget: (cid, targetId) => handleDismiss(cid, { candidateId: targetId }),
+    dismissSuggestion: async (cid, suggestionId) => {
+      const store = createFirestoreRunStore(fb.adminDb);
+      const run = await latestDailyRun(store, cid);
+      if (!run) throw Object.assign(new Error('No daily run found.'), { status: 404 });
+      await dismissSuggestion({ store }, { key: { clientId: run.clientId, localDate: run.localDate, channel: run.channel, version: run.version }, suggestionId });
+    },
+    rejectPackage: (cid, packageId) => handleDecidePackage({ clientId: cid }, decoded, { id: packageId }, 'rejected'),
+    getPackage: (cid, packageId) => getPackageFor(cid)(packageId),
+    fill: (cid, spec, opts) => getStrategyHandlers().dailyFill(cid, spec, opts),
+    openQuoteTargets: (cid) => readCalendarQuoteTargets(cid),
+    rowOf: async (cid, postId) => { const post = await getSocialPost(cid, postId); return post ? calendarRowOf(post) : null; },
+    now: () => Date.now(),
+  };
+}
+
+async function handleCalendarItemDecide(context, decoded, body) {
+  return decideCalendarItem(calendarItemDecideDeps(context, decoded), {
+    clientId: context.clientId, decision: body?.decision, item: body?.item, by: decoded?.email || decoded?.uid || null,
+  });
 }
 
 async function handleDailyRun(context, action, body) {
@@ -1189,6 +1204,20 @@ function getStrategyHandlers() {
       deleteBucket: (clientId, bucketId, opts) => bucketStore.deleteBucket(clientId, bucketId, opts),
       mediaForItem: (clientId, pkg) => (pkg && pkg.clientId === clientId ? pickMedia(pkg, mediaSigners()) : null),
       runDailyAction: (context, action, body) => handleDailyRun(context, action, body),
+      // Agent / MCP calendar cleanup card (propose_calendar_decide), run on the owner's Confirm: one item at a time,
+      // a failed item is reported in its row and never stops the rest.
+      decideCalendarItems: async ({ clientId, items }) => {
+        const results = [];
+        for (const { decision, item } of Array.isArray(items) ? items : []) {
+          try {
+            // eslint-disable-next-line no-await-in-loop
+            results.push(await decideCalendarItem(calendarItemDecideDeps({ clientId }, null), { clientId, decision, item, by: 'agent-card' }));
+          } catch (err) {
+            results.push({ ok: false, decision, kind: item?.kind ?? null, error: String(err?.message || err).slice(0, 200), reason: err?.code ?? null });
+          }
+        }
+        return { ok: results.some((r) => r.ok), results };
+      },
       runUpdateItemFacets: (context, body) => handleUpdateItemFacets(context, body),
       readTodayRun: (clientId) => latestDailyRun(createFirestoreRunStore(fb.adminDb), clientId),
       readContentContext: async (clientId) => summarizeContentContext(await readContentContext(clientId)),
@@ -1243,7 +1272,7 @@ export async function POST(request) {
     return json({ error: 'Invalid JSON body.' }, 400);
   }
 
-  const action = body?.action || '';
+  const action = body?.action || new URL(request.url).searchParams.get('action') || '';
   try {
     if (action === 'draft-quote') {
       const result = await handleDraftQuote(context, body);
@@ -1288,6 +1317,7 @@ export async function POST(request) {
       const result = await handleCalendarSuggestionApprove(context, decoded, body);
       return json(result, result.ok === false ? (result.status || 422) : 200);
     }
+    if (action === 'calendar-item-decide') return json(await handleCalendarItemDecide(context, decoded, body));
     if (action === 'content-task-update') return json(await handleContentTaskUpdate(context, body));
     if (action === 'engine-performance') {
       return json(await handleEnginePerformance(context, body));

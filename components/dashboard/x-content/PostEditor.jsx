@@ -10,7 +10,8 @@ import {
   MAX_CHARS, MEDIA_CHANGED_MESSAGE, charCount, isOverLimit, initialWhen, zoneLabel, resolveTimeZone,
   isSuggestion, isLockedRow, boundFields, boundFieldsGate, boundFieldsNotice, dirtyState, actionState, isScheduledStatus,
   buildSaveRequest, buildApproveRequest, buildApproveScheduleRequest, buildSuggestionApproveRequest, buildUnapproveRequest,
-  buildRejectRequest, buildUnscheduleRequest, buildReconcileRequest, moreItems, classifyError, approvalVoided, mediaChanged, mergeServerPost,
+  buildRejectRequest, buildUnscheduleRequest, buildReconcileRequest, moreItems,
+  decideItems, buildDecideRequest, decideResultText, DECISION_LABEL, DELETE_CONFIRM_TEXT, classifyError, approvalVoided, mediaChanged, mergeServerPost,
 } from './post-editor-model.js';
 
 // PostEditor — the single View & Edit Post surface. An X-style card that IS the editor: copy, creative, time, and
@@ -154,6 +155,7 @@ export default function PostEditor({
   timeZone,
   onClose,
   onSaved,
+  onDecided,
   onPickCreative,
   pickerSlot = null,
   onDirtyChange,
@@ -174,6 +176,8 @@ export default function PostEditor({
   const [override, setOverride] = useState(false);
   const [overrideReason, setOverrideReason] = useState('');
   const [moreOpen, setMoreOpen] = useState(false);
+  const [deleteAsk, setDeleteAsk] = useState(false);
+  const [deciding, setDeciding] = useState(null); // 'pass' | 'replace' | 'delete' while a decide call runs
   const [morePanel, setMorePanel] = useState(null); // 'reconcile' | 'hires' | null
   const [platformId, setPlatformId] = useState('');
   const textRef = useRef(null);
@@ -281,15 +285,16 @@ export default function PostEditor({
     if (!st.canSave) return;
     run(buildSaveRequest({ row, content, iso: st.iso, scheduledTimeChanged: scheduled && dirty.timeDirty }), { successText: 'Saved.' });
   };
-  const doApprove = () => {
-    if (!st.canApprove) return;
-    if (suggestion) { run(buildSuggestionApproveRequest({ row, content }), { successText: 'Approved. Nothing is scheduled or posted.' }); return; }
-    run(buildApproveRequest({ row, content }), { successText: 'Approved. Nothing is scheduled or posted.' });
-  };
   const planOverride = override && overrideReason.trim() ? { confirm: true, reason: overrideReason.trim() } : null;
-  const doApproveSchedule = () => {
-    if (!st.canApproveSchedule || (override && !overrideReason.trim())) return;
-    run(buildApproveScheduleRequest({ row, content, iso: st.iso, planOverride }), { successText: 'Approved and scheduled.' });
+  // Approve = schedule at the shown time when the post has one (it is on the calendar). No time -> approve only.
+  const doApprove = () => {
+    if (!st.canApprove || (override && !overrideReason.trim())) return;
+    if (suggestion) { run(buildSuggestionApproveRequest({ row, content }), { successText: 'Approved. Nothing is scheduled or posted.' }); return; }
+    if (st.approveMode === 'schedule') {
+      run(buildApproveScheduleRequest({ row, content, iso: st.iso, planOverride }), { successText: `Approved and scheduled for ${when.date} ${when.time}.` });
+      return;
+    }
+    run(buildApproveRequest({ row, content }), { successText: 'Approved. No publish time yet, so nothing is scheduled.' });
   };
 
   // Post = publish now through the normal lifecycle, never a separate row: after an inline confirm it approves and
@@ -338,7 +343,7 @@ export default function PostEditor({
   };
   const secondsLeft = posting ? Math.max(0, Math.ceil((postStep.at - nowMs) / 1000)) : 0;
 
-  // Save lives in More (the row is Approve · Schedule · Post · More).
+  // Save lives in More (the row is Approve · Post · More).
   const items = row ? [
     ...(!suggestion ? [{ id: 'save', label: 'Save changes', enabled: st.canSave }] : []),
     ...moreItems(row, { busy, hasCall: true }),
@@ -352,6 +357,25 @@ export default function PostEditor({
     else if (id === 'reconcile') setMorePanel((p) => (p === 'reconcile' ? null : 'reconcile'));
     else if (id === 'hires') setMorePanel((p) => (p === 'hires' ? null : 'hires'));
   };
+  // Pass / Replace / Delete: one call, the item leaves this day. The host moves on via onDecided (else onClose).
+  const doDecide = async (decision) => {
+    if (!row) return;
+    setDeleteAsk(false); setDeciding(decision); setBusy(true); setMessage(null); setConflict(false);
+    try {
+      const result = await send(buildDecideRequest(row, decision));
+      setMessage({ tone: 'ok', text: decideResultText(decision, result) });
+      if (onDecided) onDecided({ decision, result, row });
+      else if (onClose) onClose();
+    } catch (e) {
+      const c = classifyError(e);
+      if (c.kind === 'conflict') setConflict(true);
+      else setMessage({ tone: 'bad', text: e?.code === 'not-removable' || e?.data?.code === 'not-removable' ? 'This one already went out, so it cannot be removed.' : c.message });
+    } finally {
+      setBusy(false); setDeciding(null);
+    }
+  };
+  const decide = row ? decideItems(row, { busy: busy || !!postStep }) : { pass: false, replace: false, delete: false };
+
   const doReconcile = (outcome) => run(buildReconcileRequest({ row, outcome, platformId }), { successText: outcome === 'posted' ? 'Marked posted.' : 'Marked not posted.', onOk: () => setMorePanel(null) });
 
   const afterHires = async () => {
@@ -437,14 +461,9 @@ export default function PostEditor({
         {row.needsStory ? <p id="post-editor-needs-story" className="pe-muted pe-card-note">This draft still has a story placeholder. Approving removes that line; add your own first if you want one.</p> : null}
         <footer id="post-editor-footer" className="pe-footer">
           <div id="post-editor-footer-actions" className="pe-btn-row">
-            <button type="button" id="post-editor-approve" className="pe-btn pe-btn-primary cta-pill-btn" disabled={!st.canApprove || !!postStep} onClick={doApprove} title={st.canApprove ? 'Approve without scheduling' : st.approveBlockedReason}>
+            <button type="button" id="post-editor-approve" className="pe-btn pe-btn-primary cta-pill-btn" disabled={!st.canApprove || (override && !overrideReason.trim()) || !!postStep} onClick={doApprove} title={!st.canApprove ? st.approveBlockedReason : (st.approveMode === 'schedule' ? 'Approve and schedule at the time above' : 'Approve (no publish time set)')}>
               {busy ? 'Working…' : 'Approve'}
             </button>
-            {!suggestion ? (
-              <button type="button" id="post-editor-approve-schedule" className="pe-btn pe-btn-ghost" disabled={!st.canApproveSchedule || (override && !overrideReason.trim()) || !!postStep} onClick={doApproveSchedule} title={st.scheduleBlockedReason || 'Approve and schedule at the time above'}>
-                Schedule
-              </button>
-            ) : null}
             {!suggestion ? (
               <button type="button" id="post-editor-post-now" className="pe-btn pe-btn-primary" disabled={!canPost || busy || !!postStep} onClick={() => setPostStep('confirm')} title={canPost ? `Post to ${handle || 'X'} now` : st.approveBlockedReason}>
                 Post
@@ -467,6 +486,24 @@ export default function PostEditor({
               </div>
             ) : null}
           </div>
+          {row && (decide.pass || decide.replace || decide.delete || deciding) ? (
+            <div id="post-editor-decide-row" className="pe-decide-row">
+              <button type="button" id="post-editor-pass-btn" className="pe-btn pe-btn-plain pe-btn-small" disabled={!decide.pass} onClick={() => doDecide('pass')} title="Take it off the calendar. It can come back later.">{deciding === 'pass' ? <span className="brief-loader-spinner" aria-hidden="true" /> : null}{DECISION_LABEL.pass}</button>
+              {!suggestion ? (
+                <button type="button" id="post-editor-replace-btn" className="pe-btn pe-btn-plain pe-btn-small" disabled={!decide.replace} onClick={() => doDecide('replace')} title="Take it off and put the next best item for this track on the same day.">{deciding === 'replace' ? <span className="brief-loader-spinner" aria-hidden="true" /> : null}{DECISION_LABEL.replace}</button>
+              ) : null}
+              <button type="button" id="post-editor-delete-btn" className="pe-btn pe-btn-plain pe-btn-small" disabled={!decide.delete || deleteAsk} onClick={() => setDeleteAsk(true)} title="Take it off and never suggest this content again.">{deciding === 'delete' ? <span className="brief-loader-spinner" aria-hidden="true" /> : null}{DECISION_LABEL.delete}</button>
+            </div>
+          ) : null}
+          {deleteAsk ? (
+            <div id="post-editor-delete-confirm" className="pe-note pe-note-warn" role="alertdialog" aria-label="Delete for good">
+              <p>{DELETE_CONFIRM_TEXT}</p>
+              <div className="pe-btn-row">
+                <button type="button" id="post-editor-delete-confirm-btn" className="pe-btn pe-btn-plain pe-btn-small" disabled={busy} onClick={() => doDecide('delete')}>Confirm</button>
+                <button type="button" id="post-editor-delete-cancel-btn" className="pe-btn pe-btn-plain pe-btn-small" disabled={busy} onClick={() => setDeleteAsk(false)}>Cancel</button>
+              </div>
+            </div>
+          ) : null}
           {postStep === 'confirm' ? (
             <div id="post-editor-post-confirm-row" className="pe-post-confirm" role="alert">
               <p className="pe-post-confirm-text">Post to {handle || 'X'} now? This is one live X API write and can&apos;t be undone.</p>
@@ -596,7 +633,7 @@ function PostEditorStyles() {
       #post-editor-root .pe-check { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 6px 0; }
       /* Actions sit inside the card, under the text; each button shares the card width equally. */
       #post-editor-root .pe-footer { display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding-top: 10px; border-top: 1px solid var(--t-border-faint); text-align: center; }
-      /* Approve = gradient fill + the homepage comet border (.cta-pill-btn); Save/Schedule = static gradient border;
+      /* Approve = gradient fill + the homepage comet border (.cta-pill-btn); Post = static gradient border;
          More = plain and compact, pinned right. */
       #post-editor-root #post-editor-footer-actions { flex-wrap: nowrap; width: 100%; }
       #post-editor-root #post-editor-footer-actions > .pe-btn { flex: 1 1 0; min-width: 0; }
@@ -617,6 +654,9 @@ function PostEditorStyles() {
       #post-editor-root .pe-btn:disabled::before { display: none; }
       #post-editor-root .pe-btn:disabled { opacity: 0.45; cursor: not-allowed; background: var(--t-disabled-bg); color: var(--t-text-muted); border-color: var(--t-control-border); }
       #post-editor-root .pe-btn:focus-visible, #post-editor-root .pe-menu-item:focus-visible { outline: 2px solid var(--t-focus); outline-offset: 2px; }
+      #post-editor-root .pe-decide-row { display: flex; gap: 8px; justify-content: center; }
+      #post-editor-root .pe-btn-small { min-height: 32px; padding: 4px 12px; font-size: 13px; font-weight: 600; }
+      #post-editor-root .pe-btn .brief-loader-spinner { width: 14px; height: 14px; }
       #post-editor-root .pe-more { position: relative; }
       #post-editor-root .pe-menu { position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 5; min-width: 190px; margin: 0; padding: 6px; list-style: none; border: 1px solid var(--t-control-border); border-radius: 12px; background: var(--t-raised); box-shadow: var(--t-shadow-md); }
       #post-editor-root .pe-menu-item { display: block; width: 100%; text-align: left; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--t-text); font: inherit; font-size: 14px; cursor: pointer; }
