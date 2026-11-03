@@ -39,6 +39,7 @@ import { validatePackage, sanitizePostFields } from './schema.js';
 import { mergeInventory } from './archive-ingest.js';
 import { resolveEngine, isEngine } from './engines.js';
 import { buildSearchTokens, FACET_VERSION } from './facets.js';
+import { readContentSources, normalizeContentSources, mergeSourceRows } from './content-sources.js';
 // Static import so Next bundles the seed rows — same reason as the route's
 // bundledCalendar: a runtime fs read of a repo path is fragile on serverless.
 import seedRows from './content-packages.json' with { type: 'json' };
@@ -193,6 +194,28 @@ export async function readInventory(opts = {}) {
   const result = { packages: mergeInventory(seed, stored), updatedAt, seeded: false };
   if (paged) result.nextCursor = stored.length === limit ? stored[stored.length - 1].id : null;
   return result;
+}
+
+/**
+ * The viewer's inventory plus the rows of its content-source clients (content-sources.js), read-only.
+ * `sources` omitted => read from client_configs/{clientId}.contentSources. A source that has no stored rows adds
+ * nothing (never the repo seed). Un-paginated only; writes stay per client (upsertPackage / deletePackage refuse a
+ * source row with package-client-mismatch).
+ *
+ * @param {{ clientId: string, sources?: string[], db?: object }} opts  clientId REQUIRED
+ * @returns {Promise<{ packages: object[], updatedAt: number|null, seeded: boolean, sources: string[] }>}
+ */
+export async function readSharedInventory(opts = {}) {
+  const clientId = requireClientId(opts.clientId, 'readSharedInventory');
+  const sources = opts.sources === undefined
+    ? await readContentSources(clientId, { db: opts.db })
+    : normalizeContentSources(opts.sources, clientId);
+  const [own, ...fromSources] = await Promise.all([
+    readInventory({ clientId, db: opts.db }),
+    ...sources.map((s) => readInventory({ clientId: s, db: opts.db })),
+  ]);
+  const sourceRows = fromSources.flatMap((r) => (r.seeded ? [] : r.packages));
+  return { ...own, packages: mergeSourceRows(own.packages, sourceRows), sources };
 }
 
 /** One package by id, or null. One read — use this instead of scanning

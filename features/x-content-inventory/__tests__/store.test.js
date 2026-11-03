@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  upsertPackage, deletePackage, readInventory, readCandidates, getPackage, packageGetterFor,
+  upsertPackage, deletePackage, readInventory, readSharedInventory, readCandidates, getPackage, packageGetterFor,
   backfillIndexFields, PACKAGE_CAP, READ_LIMIT, NAS_ID_END,
 } from '../store.js';
 import { nasPackageId } from '../nas.js';
@@ -301,4 +301,30 @@ test('packageGetterFor: a client sees only its own rows by id; unstamped and for
   assert.equal(await get('theirs', { db }), null);
   assert.equal(await get('legacy-unstamped', { db }), null);
   assert.equal(await packageGetterFor(null)('mine', { db }), null);
+});
+
+test('readSharedInventory: own rows plus source rows marked read-only; writes to a source row stay refused', async () => {
+  const db = makeDb();
+  const UE = 'fixture-client-ue';
+  const OTHER = 'fixture-client-other';
+  await upsertPackage(row({ id: 'mine' }), { clientId: C, db, returnPackages: false });
+  await upsertPackage(row({ id: 'ue-1' }), { clientId: UE, db, returnPackages: false });
+  await upsertPackage(row({ id: 'not-granted' }), { clientId: OTHER, db, returnPackages: false });
+  await db.collection('client_configs').doc(C).set({ contentSources: [UE, C, 'bad/id'] });
+
+  const r = await readSharedInventory({ clientId: C, db });
+  assert.deepEqual(r.sources, [UE]);
+  const byId = Object.fromEntries(r.packages.map((p) => [p.id, p]));
+  assert.equal(byId.mine.readOnly, undefined);
+  assert.equal(byId['ue-1'].readOnly, true);
+  assert.equal(byId['ue-1'].sharedFrom, UE);
+  assert.equal(byId['not-granted'], undefined);
+
+  await assert.rejects(() => upsertPackage(row({ id: 'ue-1', title: 'x' }), { clientId: C, db, returnPackages: false }), { status: 409, code: 'package-client-mismatch' });
+  await assert.rejects(() => deletePackage('ue-1', { clientId: C, db, returnPackages: false }), { status: 409, code: 'package-client-mismatch' });
+
+  // No grant => exactly the client's own inventory; explicit sources override the config.
+  assert.deepEqual((await readSharedInventory({ clientId: UE, db })).packages.map((p) => p.id), ['ue-1']);
+  const ownOnly = (await readSharedInventory({ clientId: C, sources: [], db })).packages;
+  assert.ok(ownOnly.some((p) => p.id === 'mine') && ownOnly.every((p) => p.clientId === C && !p.readOnly));
 });

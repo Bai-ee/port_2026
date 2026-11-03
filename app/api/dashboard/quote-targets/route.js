@@ -14,7 +14,7 @@ import { readCorpus, readCorpora, saveGapReport } from '../../../../features/x-b
 // a day of authored posts out of the content inventory.
 import { buildDayPlan as buildContentDayPlan } from '../../../../features/x-content-inventory/plan-day.js';
 import { validateInventory } from '../../../../features/x-content-inventory/schema.js';
-import { readInventory, upsertPackage, deletePackage, packageGetterFor } from '../../../../features/x-content-inventory/store.js';
+import { readInventory, readSharedInventory, upsertPackage, deletePackage, packageGetterFor } from '../../../../features/x-content-inventory/store.js';
 import { buildClientPackage, applyApproval } from '../../../../features/x-content-inventory/client-capture.js';
 import { quotedUrlOf } from '../../../../features/x-strategy/post-query.js';
 import { parseStatusUrl, findQuotedCandidate, buildQuotedPreview } from '../../../../features/x-quote-targets/quoted-preview.js';
@@ -396,8 +396,10 @@ const upsertFor = (clientId) => (pkg) => upsertPackage(pkg, { returnPackages: fa
 const getPackageFor = (clientId) => packageGetterFor(clientId);
 
 async function handleInventoryList(context) {
-  const { packages, updatedAt, seeded } = await readInventory({ clientId: context.clientId });
-  return { ok: true, packages, updatedAt, seeded, audit: validateInventory(packages) };
+  // Own rows plus read-only rows of this client's content sources (content-sources.js); the audit covers own rows only.
+  const { packages, updatedAt, seeded, sources } = await readSharedInventory({ clientId: context.clientId });
+  const own = packages.filter((p) => !p.readOnly);
+  return { ok: true, packages, updatedAt, seeded, sources, audit: validateInventory(own) };
 }
 
 async function handleInventorySave(context, body) {
