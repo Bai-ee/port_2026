@@ -196,7 +196,18 @@
 }
 
 /* ── Shared top-nav (normalized across homepage + dashboard) ───────────────── */
-body.cmo-modal-open #founders-top-strip { display: none; }
+/* Top-left logo blend: the --t-logo-blend token (light), color-dodge in dark. Homepage (Header.jsx) and dashboard
+   (DashboardPage.jsx) both tag their logo #founders-brand-logo-image. */
+#founders-brand-logo-image { mix-blend-mode: var(--t-logo-blend); }
+/* Hero headline ink (lib/hero-type DEFAULT headlineInk): soft near-black (the text token, not pure black) in light;
+   in dark the logo's own tinted near-white, sampled from /img/circle_logo.png, instead of pure white. */
+:root { --hero-headline-ink: var(--t-text); }
+:root[data-theme="dark"] { --hero-headline-ink: #dbdae3; }
+:root[data-theme="dark"] #founders-brand-logo-image { mix-blend-mode: color-dodge !important; }
+/* Hidden behind the Let's Connect modal without leaving layout: display:none zeroed the nav's height, and the
+   hero headline (which centres itself under the nav) jumped. Fades with the modal backdrop. !important beats
+   the intro timeline's inline opacity/visibility. */
+body.cmo-modal-open #founders-top-strip { opacity: 0 !important; visibility: hidden !important; pointer-events: none; transition: opacity 320ms ease-out, visibility 0s linear 320ms; }
 #founders-top-strip {
   position: fixed;
   top: 0;
@@ -317,10 +328,6 @@ body.cmo-modal-open #founders-top-strip { display: none; }
 }
 .founders-chat-label-short { display: none; }
 .founders-chat-label-full  { display: inline; }
-#founders-chat-cta-icon {
-  font-size: 0.95rem;
-  opacity: 0.9;
-}
 /* Site-header variant: plain text link, no pill */
 .founders-chat-cta--light {
   background: none !important;
@@ -346,6 +353,28 @@ body.cmo-modal-open #founders-top-strip { display: none; }
   #founders-chat-cta { padding: 0.5rem 0.75rem; font-size: 0.78rem; gap: 0.22rem; }
   .founders-chat-label-full  { display: none; }
   .founders-chat-label-short { display: inline; }
+  /* Homepage on phones: no glass bar, and the logo blends into the hero scene. The fixed, z-indexed strip is its
+     own stacking context, so a blend on the logo only ever saw the bar's fill; the blend moves to the strip itself
+     (the CLIENTS label stays white in dark / dark in light under these modes). !important beats Header.jsx's
+     inline glass styles and the dark-mode logo rule above. */
+  #founders-top-strip[data-nav-variant="home"] {
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    box-shadow: none !important;
+    mix-blend-mode: var(--t-logo-blend);
+  }
+  :root[data-theme="dark"] #founders-top-strip[data-nav-variant="home"] { mix-blend-mode: color-dodge; }
+  #founders-top-strip[data-nav-variant="home"] #founders-brand-logo-image { mix-blend-mode: normal !important; transition: filter 600ms ease-in-out; }
+  /* Light: the pastel torus all but vanished on the light scene, so it inks dark instead (white glow in dark,
+     dark ink in light, eased with the logo-click theme fade). */
+  :root[data-theme="light"] #founders-top-strip[data-nav-variant="home"] { mix-blend-mode: multiply; }
+  :root[data-theme="light"] #founders-top-strip[data-nav-variant="home"] #founders-brand-logo-image { filter: invert(1) contrast(1.4); }
+  /* Every other header (dashboard, inner pages) keeps its glass bar, so the scene blend can't reach it; filters match
+     the homepage look instead: dark ink in light, white in dark. */
+  #founders-top-strip:not([data-nav-variant="home"]) #founders-brand-logo-image { mix-blend-mode: normal !important; transition: filter 600ms ease-in-out; }
+  :root[data-theme="light"] #founders-top-strip:not([data-nav-variant="home"]) #founders-brand-logo-image { filter: invert(1) contrast(1.4); }
+  :root[data-theme="dark"] #founders-top-strip:not([data-nav-variant="home"]) #founders-brand-logo-image { filter: grayscale(1) brightness(1.35) contrast(1.1); }
 }
 
 @supports (color: color(display-p3 1 1 1)) {

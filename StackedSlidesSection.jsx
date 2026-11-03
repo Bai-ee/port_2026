@@ -751,6 +751,11 @@ function isValidHomepageUrl(raw) {
 // Classify the hero input: a website URL/domain, an email address, or a free-text
 // brand name / idea. Lets a user without a website spin up a dashboard from an
 // email or a name/idea instead.
+// Onboarding (Let's Chat) modal fade-out length, and where the modal runs without animation (see the
+// #cmo-modal-overlay media rule), so closing there is immediate.
+const CMO_FADE_OUT_MS = 220;
+const CMO_NO_MOTION_QUERY = '(max-width: 767px), (prefers-reduced-motion: reduce)';
+
 function classifyHomepageInput(raw) {
   const trimmed = String(raw || '').trim();
   if (!trimmed) return { kind: 'empty', value: '' };
@@ -884,7 +889,10 @@ function useConstantSpeedMarquees() {
   }, []);
 }
 
-const StackedSlidesSection = () => {
+// `aboveFoldOnly` (homepage, 2026-10-18): render only the email/booking row of the first panel. Everything below
+// the fold (HELLO marquee, onboarding table, testimonials, reel, capabilities + footer) is parked, not deleted —
+// see docs/plans/HOMEPAGE-BELOW-FOLD-PARKED.md to bring it back.
+const StackedSlidesSection = ({ aboveFoldOnly = false }) => {
   useConstantSpeedMarquees();
   const wrapperRef = useRef(null);
   const servicesViewportRef = useRef(null);
@@ -1258,6 +1266,18 @@ const StackedSlidesSection = () => {
   //   cardTimer.current = setTimeout(() => { setHoverCards((prev) => prev.filter((c) => c.key === key)); cardTimer.current = null; }, 760);
   // };
   const [showCmoModal, setShowCmoModal] = useState(false);
+  // Closing plays a short fade-out before unmounting (skipped where the modal has no animation).
+  const [cmoClosing, setCmoClosing] = useState(false);
+  const closeCmoModal = () => {
+    const noMotion = typeof window !== 'undefined' && window.matchMedia?.(CMO_NO_MOTION_QUERY).matches;
+    if (noMotion) { setShowCmoModal(false); return; }
+    setCmoClosing(true);
+  };
+  useEffect(() => {
+    if (!cmoClosing) return undefined;
+    const t = setTimeout(() => { setShowCmoModal(false); setCmoClosing(false); }, CMO_FADE_OUT_MS);
+    return () => clearTimeout(t);
+  }, [cmoClosing]);
   const router = useRouter();
 
   useEffect(() => {
@@ -1268,7 +1288,7 @@ const StackedSlidesSection = () => {
 
   useEffect(() => {
     if (!showCmoModal) return;
-    const onKey = (e) => { if (e.key === 'Escape') setShowCmoModal(false); };
+    const onKey = (e) => { if (e.key === 'Escape') closeCmoModal(); };
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     document.body.classList.add('cmo-modal-open');
@@ -1306,6 +1326,16 @@ const StackedSlidesSection = () => {
   const handleHeroBookCall = () => {
     const input = classifyHomepageInput(homepageUrl);
     openCalendlyBooking(input.kind === 'email' ? input.value : '');
+  };
+
+  // Onboarding modal (LET'S CHAT): for now connecting = booking a Calendly call, so it takes an email only.
+  // Website onboarding comes back in a later phase (handleCreateDashboard still backs the other inputs).
+  const cmoEmailValid = classifyHomepageInput(homepageUrl).kind === 'email';
+  const handleCmoBookCall = () => {
+    const input = classifyHomepageInput(homepageUrl);
+    if (input.kind !== 'email') return;
+    closeCmoModal();
+    openCalendlyBooking(input.value);
   };
 
   const handleCreateDashboard = () => {
@@ -2839,14 +2869,15 @@ const StackedSlidesSection = () => {
         @keyframes cmoMarqueeScroll { from { transform: translate3d(0,0,0); } to { transform: translate3d(-50%,0,0); } }
         @keyframes agentMarquee { from { transform: translate3d(0,0,0); } to { transform: translate3d(-50%,0,0); } }
         @keyframes cmoModalFadeIn { from { opacity:0; } to { opacity:1; } }
-        @keyframes cmoModalPopIn { from { opacity:0; transform: scale(0.96) translateY(8px); } to { opacity:1; transform: scale(1) translateY(0); } }
+        @keyframes cmoModalFadeOut { from { opacity:1; } to { opacity:0; } }
         #cmo-modal-overlay {
           position: fixed; inset: 0; z-index: 100000;
           background: color-mix(in srgb, var(--t-surface) 60%, transparent);
           backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
           display: flex; align-items: center; justify-content: center;
           padding: 20px; box-sizing: border-box;
-          animation: cmoModalFadeIn 180ms ease-out;
+          /* Open: the page fades back behind the blur first, then the card fades in. Close: both fade out. */
+          animation: cmoModalFadeIn 320ms ease-out both;
           overflow-y: auto;
         }
         @media (max-width: 600px) {
@@ -2857,15 +2888,19 @@ const StackedSlidesSection = () => {
              override here, or the container stops matching its image. */
           .dash-peek-card { width: calc(100% / 3) !important; }
         }
+        #cmo-modal-overlay[data-closing="true"] { animation: cmoModalFadeOut 220ms ease-in both; pointer-events: none; }
         #cmo-auth-card {
           position: relative; width: 100%; max-width: 44rem;
           padding: clamp(1.25rem,5vw,2rem); border-radius: 1.1rem; box-sizing: border-box;
-          background: var(--t-surface); border: 1px solid var(--t-glass-border);
+          background: var(--t-surface); border: 1px solid var(--t-border-subtle);
           backdrop-filter: blur(28px); -webkit-backdrop-filter: blur(28px);
-          box-shadow: 0 1px 0 color-mix(in srgb, var(--t-surface) 65%, transparent), inset 0 1px 0 color-mix(in srgb, var(--t-glass-highlight) 88.89%, transparent),
+          /* Same edge as the loading/marquee modals (marqueeCardEdgeStyle in pageSurfaceSystem.js). */
+          box-shadow: 0 1px 0 var(--t-border-subtle), inset 0 1px 0 var(--t-glass-highlight),
             0px 5px 10px rgba(0,0,0,0.1), 0px 15px 30px rgba(0,0,0,0.1), 0px 20px 40px rgba(0,0,0,0.15);
-          display: flex; flex-direction: column;
-          animation: cmoModalPopIn 220ms cubic-bezier(0.2,0.8,0.2,1);
+          /* Header + footer rows are hidden; keep the original card height and centre what is left. */
+          display: flex; flex-direction: column; justify-content: center; min-height: 21rem;
+          /* Fade only (no scale / up-down movement), a beat after the backdrop. */
+          animation: cmoModalFadeIn 280ms ease-out 90ms both;
           font-family: 'Space Grotesk', system-ui, sans-serif;
         }
         #cmo-auth-brand-row {
@@ -2899,9 +2934,9 @@ const StackedSlidesSection = () => {
         }
         #cmo-modal-marquee {
           position: relative; width: 100%; flex-shrink: 0; overflow: hidden;
-          pointer-events: none; margin: 25px 0;
-          mask-image: linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%);
-          -webkit-mask-image: linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%);
+          pointer-events: none; margin: 0 0 25px;
+          mask-image: linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%);
+          -webkit-mask-image: linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%);
         }
         #cmo-modal-marquee .cmo-marquee-track {
           display: flex; align-items: center; width: max-content;
@@ -2912,7 +2947,7 @@ const StackedSlidesSection = () => {
           font-weight: 700; letter-spacing: -0.02em; line-height: 1.05;
           color: color-mix(in srgb, var(--t-text) 82%, transparent); white-space: nowrap;
         }
-        #cmo-modal-marquee .cmo-marquee-dot { font-family: 'Doto', monospace; color: color-mix(in srgb, var(--t-text) 35%, transparent); padding: 0 0.3rem; }
+        #cmo-modal-marquee .cmo-marquee-dot { font-family: 'Doto', monospace; color: color-mix(in srgb, var(--t-text) 35%, transparent); padding: 0 0.45em; }
         @media (prefers-reduced-motion: reduce) { #cmo-modal-marquee .cmo-marquee-track { animation: none; } }
         @media (max-width: 640px) {
           #cmo-modal-marquee { margin: 0; padding: 0; }
@@ -2951,6 +2986,11 @@ const StackedSlidesSection = () => {
           font-size: clamp(0.85rem,1.1vw,0.95rem); color: var(--t-text); line-height: 1.2;
         }
         #cmo-modal-url-input::placeholder { color: color-mix(in srgb, var(--t-text) 45%, transparent); }
+        /* iOS zooms the whole page into any field under 16px on focus (and leaves it shifted); touch screens get 16px. */
+        @media (pointer: coarse) {
+          #cmo-modal-url-input,
+          #hero-url-input { font-size: 16px !important; }
+        }
         #cmo-url-pill-submit {
           display: inline-flex; align-items: center; gap: 0.25rem; flex-shrink: 0;
           border-radius: 999px; padding: 0.5rem 0.75rem; line-height: 1;
@@ -2998,9 +3038,15 @@ const StackedSlidesSection = () => {
         #cmo-url-input-row .cta-pill-btn::before,
         #footer-url-input-row .cta-pill-btn::before,
         .cmo-url-input-mobile .cta-pill-btn::before { display: none; }
-        /* Exception: the hero pill is the page's primary on-load CTA, so it keeps
-           the comet border until a valid site/email flips it to the ready state. */
-        #hero-url-input-row .cta-pill-btn[data-cta-state="idle"]::before { display: block; }
+        /* Exception: the hero pill gets the comet border once the input has a value (ready state). */
+        #hero-url-input-row .cta-pill-btn[data-cta-state="ready"]::before { display: block; }
+        /* The arrow only appears once the button is clickable. Below these widths both buttons collapse to an
+           arrow-only circle, so the arrow stays there. */
+        /* !important: UpRightArrow sets display inline. */
+        @media (min-width: 768px) { #hero-onboard-cta[data-cta-state="idle"] .hero-onboard-arrow { display: none !important; } }
+        @media (min-width: 601px) { #cmo-url-pill-submit:disabled .cmo-submit-arrow { display: none !important; } }
+        /* Comet border only in the ready state, as on the hero button. */
+        #cmo-url-pill-submit[data-cta-state="idle"]::before { display: none; }
         /* Footer nav links inactive until their pages ship — LinkedIn/X stay live (matches main) */
         #inline-footer-seo-nav a,
         #inline-footer-bottom a {
@@ -3096,10 +3142,10 @@ const StackedSlidesSection = () => {
                       <div id="panel-hero-text-row" style={{ ...textRowStyle, display: 'flex', alignItems: 'center', gap: 'clamp(0.5rem, 1.5vw, 1rem)', width: '100%' }}>
                         <div id="hero-url-input-row" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flex: 1, minWidth: 0, height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'color-mix(in srgb, var(--t-surface) 45%, transparent)', border: '1px solid var(--t-border-subtle)', borderRadius: '999px', boxShadow: '0 1px 4px color-mix(in srgb, var(--t-text) 7%, transparent)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                           <CalendlyIcon id="hero-url-input-calendly-icon" size={21} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'color-mix(in srgb, var(--t-text) 60%, transparent)' : 'color-mix(in srgb, var(--t-text) 40%, transparent)' }} />
-                          <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter email to set up time" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'color-mix(in srgb, var(--t-text) 75%, transparent)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
-                          {/* Primary on-load CTA: loud gradient + comet border while empty,
-                              calm white "ready" state once a valid site/email is entered. */}
-                          <button id="hero-onboard-cta" className="cta-pill-btn" data-cta-state={urlIsValid ? 'ready' : 'idle'} onClick={handleHeroBookCall} disabled={!urlIsValid} style={urlIsValid ? { ...ctaSecondaryStyle, flexShrink: 0, opacity: 1, padding: '0.75rem 0.75rem' } : { ...ctaStyle, flexShrink: 0, opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="hero-onboard-label">Let's Connect</span><UpRightArrow style={ctaIconStyle} /></button>
+                          <input id="hero-url-input" value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter email to set up time" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'color-mix(in srgb, var(--t-text) 75%, transparent)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
+                          {/* Hero CTA: calm static gradient border while the input is empty, then the full
+                              gradient + comet border once something is entered (same as the Onboarding modal). */}
+                          <button id="hero-onboard-cta" className="cta-pill-btn" data-cta-state={urlIsValid ? 'ready' : 'idle'} onClick={handleHeroBookCall} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, opacity: 1, padding: '0.75rem 0.75rem' } : { ...ctaSecondaryStyle, flexShrink: 0, opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="hero-onboard-label">Let's Chat</span><UpRightArrow className="hero-onboard-arrow" style={ctaIconStyle} /></button>
                         </div>
                         <a
                           id="panel-hero-cta"
@@ -3117,6 +3163,7 @@ const StackedSlidesSection = () => {
                         </a>
                       </div>
                     </div>
+                    {!aboveFoldOnly && (<>
                     <div data-capability-header style={{ ...capabilitySectionHeaderStyle, maxWidth: 'none', marginBottom: 0 }}>
                       <div id="testimonials-marquee-shell" style={{ width: '100%', overflow: 'hidden',
                         /* Equal gap above and below the HELLO glyphs — measured to the
@@ -3259,7 +3306,7 @@ const StackedSlidesSection = () => {
                                     <div id="cmo-url-input-row" className="cmo-url-input-desktop" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.85rem', height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'color-mix(in srgb, var(--t-surface) 45%, transparent)', border: '1px solid var(--t-border-subtle)', borderRadius: '999px', boxShadow: '0 1px 4px color-mix(in srgb, var(--t-text) 7%, transparent)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                                       <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'color-mix(in srgb, var(--t-text) 60%, transparent)' : 'color-mix(in srgb, var(--t-text) 40%, transparent)' }} />
                                       <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'color-mix(in srgb, var(--t-text) 75%, transparent)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
-                                      <span id="cmo-dashboard-cta-hover-shell" style={{ display: 'inline-flex', flexShrink: 0, cursor: 'pointer' }}><button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(var(--t-surface), var(--t-surface)) padding-box, linear-gradient(90deg, color-mix(in srgb, var(--t-accent-bright) 0%, transparent) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%) border-box', color: 'var(--t-text)', boxShadow: 'none', opacity: 1, cursor: 'pointer', padding: '0.75rem 0.75rem' }}>Connect<UpRightArrow style={ctaIconStyle} /></button></span>
+                                      <span id="cmo-dashboard-cta-hover-shell" style={{ display: 'inline-flex', flexShrink: 0, cursor: 'pointer' }}><button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(var(--t-surface), var(--t-surface)) padding-box, linear-gradient(90deg, color-mix(in srgb, var(--t-accent-bright) 0%, transparent) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%) border-box', color: 'var(--t-text)', boxShadow: 'none', opacity: 1, cursor: 'pointer', padding: '0.75rem 0.75rem' }}>Chat<UpRightArrow style={ctaIconStyle} /></button></span>
                                     </div>
                                     <div className="cmo-table-inner" style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '0px solid color-mix(in srgb, var(--t-text) 10%, transparent)' }}>
                                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
@@ -3273,7 +3320,7 @@ const StackedSlidesSection = () => {
                                     <div className="cmo-url-input-mobile" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'color-mix(in srgb, var(--t-surface) 45%, transparent)', border: '1px solid var(--t-border-subtle)', borderRadius: '999px', boxShadow: '0 1px 4px color-mix(in srgb, var(--t-text) 7%, transparent)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                                       <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'color-mix(in srgb, var(--t-text) 60%, transparent)' : 'color-mix(in srgb, var(--t-text) 40%, transparent)' }} />
                                       <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'color-mix(in srgb, var(--t-text) 75%, transparent)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
-                                      <button aria-label="Connect" className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(var(--t-surface), var(--t-surface)) padding-box, linear-gradient(90deg, color-mix(in srgb, var(--t-accent-bright) 0%, transparent) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%) border-box', color: 'var(--t-text)', boxShadow: 'none', opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="cmo-table-submit-label">Connect</span><UpRightArrow className="cmo-table-submit-arrow" style={ctaIconStyle} /></button>
+                                      <button aria-label="Chat" className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(var(--t-surface), var(--t-surface)) padding-box, linear-gradient(90deg, color-mix(in srgb, var(--t-accent-bright) 0%, transparent) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%) border-box', color: 'var(--t-text)', boxShadow: 'none', opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="cmo-table-submit-label">Chat</span><UpRightArrow className="cmo-table-submit-arrow" style={ctaIconStyle} /></button>
                                     </div>
                                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'clamp(0.82rem, 1.1vw, 0.95rem)', fontFamily: "'Space Grotesk', system-ui, sans-serif" }}>
                                     <colgroup><col style={{ width: '2rem' }} /><col style={{ width: '26%' }} /><col /></colgroup>
@@ -3381,6 +3428,7 @@ const StackedSlidesSection = () => {
                         </div>
                       </div>
                     </section>
+                    </>)}
                   </div>
                 ) : null}
               </div>
@@ -3389,6 +3437,7 @@ const StackedSlidesSection = () => {
         ))}
       </div>
 
+      {!aboveFoldOnly && (<>
       {/* reel video section */}
       <div id="section-break-spacer" style={{ width: '100%', boxSizing: 'border-box', padding: 'clamp(3rem, 6vw, 5rem) clamp(1rem, 4vw, 3rem)' }}>
         <ReelPlayer />
@@ -3438,7 +3487,7 @@ const StackedSlidesSection = () => {
                         <div id="footer-url-input-row" onMouseEnter={(e) => e.stopPropagation()} onMouseLeave={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flex: 1, minWidth: 'min(100%, 18rem)', height: '3.25rem', boxSizing: 'border-box', padding: '0.35rem 0.35rem 0.35rem 0.75rem', background: 'color-mix(in srgb, var(--t-surface) 45%, transparent)', border: '1px solid var(--t-border-subtle)', borderRadius: '999px', boxShadow: '0 1px 4px color-mix(in srgb, var(--t-text) 7%, transparent)', gap: '0.5rem', position: 'relative', zIndex: 10, lineHeight: 1 }}>
                           <Globe size={15} strokeWidth={1.5} style={{ flexShrink: 0, alignSelf: 'center', color: urlIsValid ? 'color-mix(in srgb, var(--t-text) 60%, transparent)' : 'color-mix(in srgb, var(--t-text) 40%, transparent)' }} />
                           <input value={homepageUrl} onChange={handleHomepageUrlChange} placeholder="Enter website or email" style={{ flex: 1, alignSelf: 'center', border: 'none', outline: 'none', background: 'transparent', padding: 0, margin: 0, lineHeight: 1.2, fontSize: 'clamp(0.75rem, 1.1vw, 0.88rem)', color: 'color-mix(in srgb, var(--t-text) 75%, transparent)', fontFamily: "'Space Grotesk', system-ui, sans-serif", minWidth: 0 }} />
-                          <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(var(--t-surface), var(--t-surface)) padding-box, linear-gradient(90deg, color-mix(in srgb, var(--t-accent-bright) 0%, transparent) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%) border-box', color: 'var(--t-text)', boxShadow: 'none', opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="footer-submit-label">Connect</span><UpRightArrow style={ctaIconStyle} /></button>
+                          <button className="cta-pill-btn" onClick={handleCreateDashboard} disabled={!urlIsValid} style={urlIsValid ? { ...ctaStyle, flexShrink: 0, boxShadow: 'none', padding: '0.75rem 0.75rem' } : { ...ctaStyle, border: '1px solid transparent', flexShrink: 0, background: 'linear-gradient(var(--t-surface), var(--t-surface)) padding-box, linear-gradient(90deg, color-mix(in srgb, var(--t-accent-bright) 0%, transparent) 0%, var(--t-support-1) 52%, var(--t-support-2) 100%) border-box', color: 'var(--t-text)', boxShadow: 'none', opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}><span className="footer-submit-label">Chat</span><UpRightArrow style={ctaIconStyle} /></button>
                         </div>
                         <a
                           id="footer-contact-cta"
@@ -3517,6 +3566,7 @@ const StackedSlidesSection = () => {
           </div>
         </div>
       </section>
+      </>)}
 
       {/* Particle debug panel */}
       {settingsOpen && (
@@ -3585,24 +3635,28 @@ const StackedSlidesSection = () => {
       {showCmoModal && (
         <div
           id="cmo-modal-overlay"
-          onClick={() => setShowCmoModal(false)}
+          data-closing={cmoClosing ? 'true' : undefined}
+          onClick={closeCmoModal}
           role="dialog"
           aria-modal="true"
-          aria-label="Connect"
+          aria-label="Let's chat"
         >
           <div id="cmo-auth-card" onClick={(e) => e.stopPropagation()}>
+            {/* Header row hidden, same as the loading modals (avatar, ONBOARDING eyebrow, close). The modal
+                still closes on Escape or a backdrop click.
             <div id="cmo-auth-brand-row">
               <Image id="cmo-auth-sig" src="/img/profile2_400x400.png" width={44} height={44} alt="" aria-hidden="true" />
               <span id="cmo-auth-eyebrow">ONBOARDING</span>
               <button type="button" id="cmo-auth-back-btn" onClick={() => setShowCmoModal(false)} aria-label="Close">✕</button>
             </div>
+            */}
 
-            <div id="cmo-modal-marquee" aria-label="CREATE DASHBOARD">
+            <div id="cmo-modal-marquee" aria-label="Set up a call">
               <div className="cmo-marquee-track" data-marquee-track>
                 {Array.from({ length: 8 }).map((_, i) => (
                   <span key={i} className="cmo-marquee-item" aria-hidden={i > 0 ? 'true' : undefined}>
-                    CREATE DASHBOARD
-                    <span className="cmo-marquee-dot">·</span>
+                    {/* No whitespace around the dot: its symmetric padding is the only gap on each side. */}
+                    {'SET UP A CALL'}<span className="cmo-marquee-dot">•</span>
                   </span>
                 ))}
               </div>
@@ -3612,37 +3666,49 @@ const StackedSlidesSection = () => {
             <div id="cmo-url-row">
               <form
                 id="cmo-url-pill"
-                onSubmit={(e) => { e.preventDefault(); handleCreateDashboard(); }}
+                onSubmit={(e) => { e.preventDefault(); handleCmoBookCall(); }}
                 onMouseEnter={(e) => e.stopPropagation()}
                 onMouseLeave={(e) => e.stopPropagation()}
               >
-                <Globe size={16} strokeWidth={1.6} style={{ flexShrink: 0, color: urlIsValid ? 'color-mix(in srgb, var(--t-text) 60%, transparent)' : 'color-mix(in srgb, var(--t-text) 40%, transparent)' }} />
+                <CalendlyIcon id="cmo-modal-calendly-icon" size={18} style={{ flexShrink: 0, color: cmoEmailValid ? 'color-mix(in srgb, var(--t-text) 60%, transparent)' : 'color-mix(in srgb, var(--t-text) 40%, transparent)' }} />
                 <input
                   id="cmo-modal-url-input"
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  aria-label="Email to book a call"
                   value={homepageUrl}
                   onChange={handleHomepageUrlChange}
-                  placeholder="Enter website or email"
+                  placeholder="Enter email to set up time"
                 />
+                {/* Same button as the homepage hero (#hero-onboard-cta): static gradient border while empty,
+                    full gradient + comet border once a valid email is in. */}
                 <button
                   type="submit"
                   id="cmo-url-pill-submit"
-                  disabled={!urlIsValid}
-                  className={urlIsValid ? 'cta-pill-btn cmo-url-pill-submit-active' : 'cta-pill-btn cmo-url-pill-submit-idle'}
+                  className="cta-pill-btn"
+                  data-cta-state={cmoEmailValid ? 'ready' : 'idle'}
+                  disabled={!cmoEmailValid}
+                  style={cmoEmailValid ? { ...ctaStyle, flexShrink: 0, opacity: 1, padding: '0.75rem 0.75rem' } : { ...ctaSecondaryStyle, flexShrink: 0, opacity: 1, cursor: 'default', padding: '0.75rem 0.75rem' }}
                 >
-                  <span className="cmo-submit-label">Connect</span>
-                  <UpRightArrow className="cmo-submit-arrow" />
+                  <span className="cmo-submit-label">Let&apos;s Chat</span>
+                  <UpRightArrow className="cmo-submit-arrow" style={ctaIconStyle} />
                 </button>
               </form>
+              {/* SIGN IN removed: this modal only books Calendly calls for now (the header CLIENTS button signs in).
               <a
                 id="cmo-signin-link"
                 href="/login"
-                className={urlIsValid ? 'cta-pill-btn cmo-url-pill-submit-idle' : 'cta-pill-btn cmo-url-pill-submit-active'}
+                className={cmoEmailValid ? 'cta-pill-btn cmo-url-pill-submit-idle' : 'cta-pill-btn cmo-url-pill-submit-active'}
               >SIGN IN</a>
+              */}
             </div>
 
+            {/* Website warning hidden: this modal takes emails only for now.
             <div id="cmo-modal-footer-row">
               <span id="cmo-url-warning">* You must be a client to change website later.</span>
             </div>
+            */}
           </div>
         </div>
       )}

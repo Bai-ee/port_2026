@@ -9,6 +9,21 @@
    Scoped families (--bb-*, --vrk-*, --sg-*, --pilot-*) and the dashboard shell
    ([data-dashboard-theme]) are re-pointed in their own stylesheets, where they are declared. */
 
+/* Scramble glyph ink for the header CTA (components/home/ScrambleCta.jsx): a gradient across the cells from -a to
+   -b. Dark = the hero scene's blue -> green; light = magenta -> olive-gold (the particle field through the pink
+   wash). Hand-set, not generated. */
+:root,
+:root[data-theme="dark"],
+[data-theme-scope="dark"] {
+  --t-scramble-ink-a: #6d8bff;
+  --t-scramble-ink-b: var(--t-scene-secondary);
+}
+:root[data-theme="light"],
+[data-theme-scope="light"] {
+  --t-scramble-ink-a: #b3308f;
+  --t-scramble-ink-b: #9a8c2e;
+}
+
 :root,
 [data-theme-scope] {
   /* Dashboard brand highlight (open question 5, resolved: NOT a status colour). */

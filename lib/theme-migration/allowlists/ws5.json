@@ -22,6 +22,13 @@
     },
     {
       "file": "colors.css",
+      "literal": "#dbdae3",
+      "count": 1,
+      "reason": "hero headline ink in dark mode: the logo's tinted near-white, sampled from the brand mark",
+      "exceptionId": "X5"
+    },
+    {
+      "file": "colors.css",
       "literal": "#292109",
       "count": 2,
       "reason": "Radix yellow scale: no consumers",
