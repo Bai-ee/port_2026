@@ -105,6 +105,8 @@ Added for the **Social Auto-Publish** feature (daily video → each client's own
 | `v1.uploadMedia` / `v2.uploadMedia` | media upload, split by which auth mode resolved |
 | `v2.tweet(payload)` | post |
 
+**Synced calendars (2026-11-04)** write through this same surface: with `client_configs/{viewer}.calendarSyncs` set (Social Accounts card › Synced calendars, or `scripts/x-content/calendar-syncs.mjs`), every scheduled post of a *source* client becomes a mirror post on the *viewer's* calendar and publishes on the viewer's connected X (copy = own tweet, repost = `v2.retweet`) and Instagram via the normal `process-due` sweep. The toggle is the owner's standing spend consent for those writes; no per-post confirm. Rules + reconcile in `SOCIAL-AUTO-PUBLISH.md` § Synced calendars; module `features/social-posting/calendar-sync.js`.
+
 OAuth 2.0 refresh tokens rotate. When the same immutable X `userId` is assigned
 to more than one Hitloop client, `getXOAuth2Client(clientId)` resolves all of
 those exact-account aliases to the newest stored authorization and writes each

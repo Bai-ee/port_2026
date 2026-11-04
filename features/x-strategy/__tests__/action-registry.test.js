@@ -54,7 +54,9 @@ test('coverage: every action of the two core routes is catalogued or explicitly 
   const EXCLUDED_QT = new Set(['strategy-chat-send', 'strategy-chat-history', 'strategy-proposal-decide', 'strategy-review', 'save-thumb', 'media-url', 'strategy-autonomy-save', 'strategy-action-undo', 'strategy-reply-style-get', 'strategy-reply-style-save', 'strategy-unmet-list', 'strategy-unmet-status',
     // UI-only: follows a browser upload to signed URLs; the agent has no files to hand it.
     'ingest-uploads']);
-  const EXCLUDED_SP = new Set(['process-due-cron', 'set-targets']);
+  // calendar-syncs / set-calendar-syncs / run-calendar-sync: the Synced-calendars toggle is the owner's standing spend
+  // consent on this client's accounts (SOCIAL-AUTO-PUBLISH.md § Synced calendars); the agent never reads or flips it.
+  const EXCLUDED_SP = new Set(['process-due-cron', 'set-targets', 'calendar-syncs', 'set-calendar-syncs', 'run-calendar-sync']);
   const registered = (route) => new Set(ACTIONS.filter((a) => a.route === route).map((a) => a.action).filter(Boolean));
 
   // quote-targets: SUPPORTED_ACTIONS array in the route (spreads resolved through the imported lists).
