@@ -58,7 +58,8 @@ test('baseline: the track target a day; media-ready first; an anniversary item o
   for (const r of p.rows) {
     assert.ok(r.reason && r.source.type === 'library-item' && r.source.id === r.packageId && r.source.asOf === TODAY);
     assert.ok(r.text.length <= 280);
-    assert.equal(r.needsStory, true);
+    assert.equal(r.needsStory, false);
+    assert.doesNotMatch(r.text, /\[add your/);
   }
 });
 

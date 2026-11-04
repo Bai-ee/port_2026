@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 import ownCorpusRows from '../../../../docs/audits/bai-ee-x-corpus.json' with { type: 'json' };
 import benchmarkCorpusRows from '../../../../docs/audits/seb-design-x-corpus.json' with { type: 'json' };
+import { usableBy } from '../../../../features/x-content-inventory/content-sources.js';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -101,7 +102,7 @@ async function runDailyFillStep({ db, committedCorpusRows, readInputsFor }, clie
         const snap = await db.collection('dashboard_state').doc(clientId).get();
         return snap.exists ? projectBrief(snap.data()?.marketingBrief, snap.data()) : null;
       },
-      mediaForItem: (clientId, pkg) => (pkg && pkg.clientId === clientId ? pickMedia(pkg, signers) : null),
+      mediaForItem: (clientId, pkg) => (usableBy(pkg, clientId) ? pickMedia(pkg, signers) : null),
     });
   } catch (err) {
     return clientIds.map((clientId) => ({ clientId, ok: false, error: String(err?.message || err).slice(0, 200) }));

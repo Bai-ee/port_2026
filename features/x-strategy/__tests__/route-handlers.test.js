@@ -598,8 +598,8 @@ test('createStrategyHandlersFromDb forwards route deps: a calendar batch drafts 
   assert.equal(r.ok, true, r.error);
   assert.equal(r.created, 1);
   assert.equal(drafts[0].mediaUrl, 'https://m/c1/birthday-x.mp4');
-  assert.match(drafts[0].content, /\[add your memory\]$/);
-  assert.equal(drafts[0].needsStory, true);
+  assert.doesNotMatch(drafts[0].content, /\[add your/);
+  assert.equal(drafts[0].needsStory, false);
   assert.match(drafts[0].reviewOn, /-12-31$/);
 });
 

@@ -443,7 +443,7 @@ export async function upsertPackage(pkg, opts = {}) {
   const clientId = owner || requested;
   if (!clientId) throw Object.assign(new Error(`clientId is required to save package ${id}.`), { status: 400, code: 'package-client-required' });
 
-  const base = sanitizePostFields(stripUndefined({ ...stripViewFields(pkg, existing), id, clientId, updatedAt: Date.now() }));
+  const base = sanitizePostFields(stripUndefined({ ...stripViewFields(pkg, existing, viewer), id, clientId, updatedAt: Date.now() }));
   const verdict = validatePackage(base);
   if (!verdict.ok) {
     throw Object.assign(new Error(verdict.errors.join('; ')), { status: 400, errors: verdict.errors });

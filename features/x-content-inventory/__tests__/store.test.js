@@ -362,3 +362,20 @@ test('full content-source grant: viewer edits a source row (owner kept, view und
   assert.equal((await get('rv-1', { db })).bucketId, 'mixes');
   assert.equal(await packageGetterFor('fixture-client-zzz')('rv-1', { db }), null);
 });
+
+test('per-client usage: the viewer posting a source row does not change the owner status or rotation', async () => {
+  const db = makeDb();
+  const UE = 'fixture-client-ue';
+  await upsertPackage(row({ id: 'rv-9', status: 'idea' }), { clientId: UE, db, returnPackages: false });
+  await db.collection('client_configs').doc(C).set({ contentSources: [{ clientId: UE, bucketId: 'mixes', access: 'full' }] });
+  const view = await packageGetterFor(C)('rv-9', { db });
+  await upsertPackage({ ...view, status: 'posted', lastPostedAt: 1234, postCount: 1, lastTwitterId: 'tw-1' }, { clientId: C, db, returnPackages: false });
+  const saved = stored(db).get('rv-9');
+  assert.deepEqual([saved.clientId, saved.status, saved.lastPostedAt, saved.lastTwitterId], [UE, 'idea', null, undefined]);
+  assert.deepEqual(saved.usage[C], { status: 'posted', lastPostedAt: 1234, postCount: 1, lastTwitterId: 'tw-1' });
+  const again = await packageGetterFor(C)('rv-9', { db });
+  assert.deepEqual([again.status, again.lastPostedAt, again.lastTwitterId], ['posted', 1234, 'tw-1']);
+  // The owner still sees its own untouched lifecycle and no usage replay on its next save.
+  const own = await packageGetterFor(UE)('rv-9', { db });
+  assert.deepEqual([own.status, own.lastPostedAt], ['idea', null]);
+});

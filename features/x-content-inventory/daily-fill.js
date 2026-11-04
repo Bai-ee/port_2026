@@ -6,7 +6,7 @@
 //   narrative   up to one a day (today, tomorrow) from the Market Signals topics
 //   client-work the client-work tracks' baseline slots (kind 'client-work'; never added on top of the baseline count)
 // Quote and narrative drafts carry the "[add your take]" placeholder and needsStory, so they cannot be approved unfilled.
-// Library drafts follow calendar-batch.js (facts + "[add your memory]" unless the owner already wrote a story).
+// Library drafts follow calendar-batch.js: the item's facts in the fixed copy shape (copy-format.js), no placeholder.
 //
 // planDailyFill is pure (no I/O, no clock); runDailyFill takes its readers and the draft writer as dependencies.
 
@@ -41,7 +41,6 @@ const isPlain = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const clip = (v, max) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 const dayNumber = (d) => Math.floor(Date.parse(`${d}T00:00:00Z`) / DAY_MS);
 const slug = (v) => clip(v, 80).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
-const ownerStory = (pkg) => String(pkg?.humanEdits?.story ?? '').trim();
 
 /** Validate a fill spec from the owner, the agent or a route body. Never throws. */
 export function normalizeFillSpec(raw, { today } = {}) {
@@ -206,7 +205,7 @@ export function planDailyFill({
         if (kind === 'client-work') clientWorkDay.set(date, (clientWorkDay.get(date) || 0) + 1);
         rows.push({
           date, kind, trackId: track.id, bucketId: bucketOfPackage(c.p), packageId: c.p.id, title: c.p.title ?? null,
-          text: draftTextFor(c.p), needsStory: !ownerStory(c.p), engine: resolveEngine(c.p),
+          text: draftTextFor(c.p), needsStory: false, engine: resolveEngine(c.p), // fixed copy shape (copy-format.js)
           nasSha: typeof c.p.nas?.sha256 === 'string' ? c.p.nas.sha256 : null,
           reason: c.dated ? `event date ${md} falls on this day`
             : `${c.tier === 1 ? 'media ready' : 'library item'}; ${c.prior ? `last used ${c.prior}` : 'not used before'}`,

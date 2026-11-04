@@ -45,17 +45,18 @@ test('dates: month-day from facets, next anniversary on or after today, Feb 29 i
   assert.equal(nextAnniversary('04-31', TODAY), null);
 });
 
-test('draftTextFor: facts + placeholder when no story, the owner story otherwise, never over 280', () => {
-  const t = draftTextFor(PACKAGES[0]);
-  assert.match(t, /^Dec 17, 2014 · An Evening of Deep Rhythms\n1195 w folsom st \| sf\n\n\[add your memory\]$/);
-  assert.match(draftTextFor(PACKAGES[2]), /I played the closing set/);
+test('draftTextFor: the fixed copy shape (facts one per line), never a placeholder or story, never over 280', () => {
+  assert.equal(draftTextFor(PACKAGES[0]), 'An Evening of Deep Rhythms\n1195 w folsom st | sf\nDecember 17, 2014');
+  assert.doesNotMatch(draftTextFor(PACKAGES[2]), /I played the closing set|\[add your/);
   assert.ok(draftTextFor({ ...PACKAGES[0], title: 'x'.repeat(400) }).length <= 280);
-  // A generated facts story (birthday) keeps its facts minus the source link, and still waits for the owner's line.
+  // A Discogs birthday item without stamped release data: its title stands in, the year from eraYear, the hashtag.
   const bday = { id: 'birthday-dj-sneak', title: 'DJ Sneak birthday (11-05)', eventDate: '1969-11-05', engine: 'record', source: { kind: 'discogs', externalId: '15399' },
     story: 'DJ Sneak was born 1969-11-05. On my shelf: Recycled Loops (1995), AV8 Records AV09. Source: https://en.wikipedia.org/wiki/DJ_Sneak' };
-  assert.equal(draftTextFor(bday), 'Nov 5, 1969 · DJ Sneak birthday (11-05)\nDJ Sneak was born 1969-11-05. On my shelf: Recycled Loops (1995), AV8 Records AV09.\n\n[add your memory]');
+  assert.equal(draftTextFor(bday), 'DJ Sneak birthday (11-05)\n#baieesdiscogs');
+  assert.equal(draftTextFor({ ...bday, release: { artists: ['DJ Sneak'], title: 'Recycled Loops', year: 1995, catno: 'AV09' } }),
+    'DJ Sneak\nRecycled Loops\n1995 - AV09\n#baieesdiscogs');
   assert.equal(eventMonthDay(bday), '11-05');
-  assert.ok(draftTextFor({ ...PACKAGES[0], title: 'x'.repeat(400) }).endsWith(MEMORY_PLACEHOLDER));
+  assert.ok(!draftTextFor({ ...PACKAGES[0], title: 'x'.repeat(400) }).includes(MEMORY_PLACEHOLDER));
 });
 
 test('planCalendarBatch anniversary: dated by event, sorted, undated and queued items skipped', () => {
@@ -63,9 +64,9 @@ test('planCalendarBatch anniversary: dated by event, sorted, undated and queued 
   const plan = planCalendarBatch({ packages: PACKAGES, tracks, spec, today: TODAY, openPackageIds: new Set(['nas-b']) });
   assert.equal(plan.ok, true);
   assert.deepEqual(plan.rows.map((r) => [r.packageId, r.reviewOn, r.needsStory, r.track]), [
-    ['nas-c', '2026-10-16', false, 'nas'], ['nas-a', '2026-12-17', true, 'nas'],
+    ['nas-c', '2026-10-16', false, 'nas'], ['nas-a', '2026-12-17', false, 'nas'],
   ]);
-  assert.deepEqual(plan.counts, { matched: 4, drafts: 2, placesExisting: 0, needsMemory: 1, skipped: { 'already-queued': 1, 'no-date': 1 } });
+  assert.deepEqual(plan.counts, { matched: 4, drafts: 2, placesExisting: 0, needsMemory: 0, skipped: { 'already-queued': 1, 'no-date': 1 } });
   assert.equal(plan.firstDate, '2026-10-16');
   assert.equal(plan.lastDate, '2026-12-17');
 });
@@ -132,7 +133,7 @@ test('createCalendarBatch: one draft per item via the create-once writer; a re-r
     assert.equal(post.source, 'calendar-batch');
     assert.match(post.reviewOn, /^\d{4}-\d{2}-\d{2}$/);
   }
-  assert.equal(store.get('calendar-batch:nas-a').needsStory, true);
+  assert.equal(store.get('calendar-batch:nas-a').needsStory, false);
   // mediaFor: the item's media rides on the draft; a media failure still creates the draft.
   const withMedia = new Map();
   const ensure2 = async (c, p) => { withMedia.set(p.packageId, p); return { post: p, existing: false }; };

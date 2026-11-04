@@ -61,22 +61,51 @@ export async function canWriteFor(viewer, owner, { db } = {}) {
   return (await readContentSources(viewer, { db })).some((e) => e.clientId === owner && e.access === 'full');
 }
 
-/** Pure. One source row as `viewer` sees it (see header). */
+/**
+ * Posting lifecycle fields are PER CLIENT on a shared row: each client schedules and posts on its own calendar and X
+ * account, so one client's use must not recycle, retire or re-rank the row for another. The owner keeps them at the
+ * top level; every other client keeps its own copy in `usage.{clientId}`.
+ */
+export const USAGE_FIELDS = ['status', 'lastPostedAt', 'postCount', 'lastTwitterId', 'lastManualPostId', 'lastPostedSelfReported'];
+
+/** Pure. One source row as `viewer` sees it (see header): its bucket, and its own usage in place of the owner's. */
 export function viewSourceRow(row, entry, viewer) {
+  const mine = (row.usage && typeof row.usage === 'object' && row.usage[viewer]) || {};
   const out = { ...row, sharedFrom: row.clientId || entry.clientId, sharedWith: viewer, ownerBucketId: row.bucketId ?? null };
+  delete out.usage; // other clients' usage is not this viewer's business
+  for (const f of USAGE_FIELDS) delete out[f];
+  // The owner retiring a row removes it for everyone; otherwise an unused row is a fresh idea for the viewer.
+  out.status = row.status === 'retired' ? 'retired' : (mine.status || 'idea');
+  out.lastPostedAt = mine.lastPostedAt ?? null;
+  out.postCount = Number(mine.postCount) || 0;
+  for (const f of ['lastTwitterId', 'lastManualPostId', 'lastPostedSelfReported']) if (mine[f] !== undefined) out[f] = mine[f];
   if (entry.bucketId) out.bucketId = entry.bucketId;
   if (entry.access !== 'full') out.readOnly = true;
   return out;
 }
 
-/** Pure. A package about to be written for its owner: view fields dropped, the owner's bucketId restored. */
-export function stripViewFields(pkg, existing) {
+/**
+ * Pure. A package about to be written. For its owner (`viewer` null) only stray view fields and `usage` are dropped. For a viewer
+ * writing through a grant: view fields dropped, the owner's bucketId and lifecycle fields kept as stored, and the
+ * viewer's lifecycle fields moved to `usage.{viewer}` (a merge write leaves other clients' usage alone).
+ */
+export function stripViewFields(pkg, existing, viewer = null) {
   const out = { ...pkg };
   for (const k of VIEW_FIELDS) delete out[k];
-  if (pkg && 'ownerBucketId' in pkg) {
-    const own = existing?.bucketId ?? pkg.ownerBucketId ?? null;
-    if (own == null) delete out.bucketId; else out.bucketId = own;
+  // `usage` is only ever written below, for the writing viewer: a row read and saved back (by its owner or anyone)
+  // must never replay another client's usage over newer values.
+  delete out.usage;
+  if (!viewer) return out;
+  if (existing?.bucketId == null) delete out.bucketId; else out.bucketId = existing.bucketId;
+  // Only the viewer's own VIEW carries its usage; a raw owner row passed through (e.g. a media-link patch) carries
+  // the owner's lifecycle, which must not be copied into the viewer's usage.
+  const isView = pkg.sharedWith === viewer;
+  const use = {};
+  for (const f of USAGE_FIELDS) {
+    if (isView && pkg[f] !== undefined) use[f] = pkg[f];
+    if (existing?.[f] === undefined) delete out[f]; else out[f] = existing[f];
   }
+  if (Object.keys(use).length) out.usage = { [viewer]: use };
   return out;
 }
 

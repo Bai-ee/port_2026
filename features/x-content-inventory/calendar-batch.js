@@ -3,14 +3,14 @@
 // (`anniversary` = the next time the item's event date comes round, at most `perDay` per date; `spread` = `perDay` a
 // day from a start date).
 // Each item becomes one `social_posts` draft (status 'draft', scheduledAt null, `reviewOn` = its date) through the
-// existing create-once path, so nothing here can approve, schedule or publish. A draft with no owner memory keeps the
-// "[add your memory]" placeholder and needsStory, which the approval gate and the publish sweep both refuse.
+// existing create-once path, so nothing here can approve, schedule or publish. The draft copy is the item's facts in
+// the fixed shape (copy-format.js): no placeholder, no story, so nothing waits for an owner line.
 //
 // planCalendarBatch is pure (no I/O, no clock); createCalendarBatch takes the draft writer as a dependency.
 
 import { trackForPackage, bucketOfPackage, isBucketId } from '../x-strategy/content-tracks.js';
 import { resolveEngine } from './engines.js';
-import { hasPlaceholderStory } from './match.js';
+import { formatPostCopy } from './copy-format.js';
 import { mediaOf } from './item-media.js';
 
 export const MAX_BATCH = 366; // one a day for a year
@@ -18,11 +18,9 @@ const WRITE_CONCURRENCY = 10;
 export const MAX_PER_DAY = 6;
 export const MEMORY_PLACEHOLDER = '[add your memory]';
 const DATE_RULES = ['anniversary', 'spread'];
-const POST_MAX = 280;
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MONTH_DAY_RE = /^(\d{2})-(\d{2})$/;
 const SKIP_EXAMPLES = 20;
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const isPlain = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const text = (v, max) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
@@ -112,39 +110,11 @@ export function nextAnniversary(md, today) {
   return null;
 }
 
-/** "Dec 17, 2014" / "Dec 17" for the draft's first line, or ''. */
-function dateLabel(pkg) {
-  const full = String(pkg?.humanEdits?.eventDate ?? pkg?.facets?.eventDate ?? pkg?.eventDate ?? '').trim();
-  const md = eventMonthDay(pkg);
-  if (!md) return '';
-  const [mm, dd] = md.split('-').map(Number);
-  const year = DAY_RE.test(full) ? full.slice(0, 4) : '';
-  return `${MONTHS[mm - 1]} ${dd}${year ? `, ${year}` : ''}`;
-}
-
-// The owner's own words: an owner-edited story. A generated story ("X was born …. Source: <url>") is facts, not memory.
+// The owner's own words (kept only to rank anniversary candidates; copy never includes a story).
 const ownerStory = (pkg) => String(pkg?.humanEdits?.story ?? '').trim();
-// Facts from a generated story, without the source line or links (links belong in the self-reply, not the post).
-const storyFacts = (pkg) => (hasPlaceholderStory(pkg) ? '' : String(pkg?.story ?? '')
-  .replace(/\s*source:.*$/is, '').replace(/https?:\/\/\S+/g, '').replace(/\s+/g, ' ').trim());
 
-/**
- * Draft text: date · title, where, the item's facts, then the owner's story or the memory placeholder (a batch draft
- * always waits for the owner's own line unless they already wrote one). Always <= 280 chars.
- */
-export function draftTextFor(pkg) {
-  const facets = pkg?.facets || {};
-  const title = text(pkg?.title || (Array.isArray(facets.partyNames) ? facets.partyNames[0] : '') || pkg?.id, 120);
-  const where = [Array.isArray(facets.venues) ? facets.venues[0] : '', Array.isArray(facets.cities) && !facets.venues?.length ? facets.cities[0] : '']
-    .map((x) => text(x, 60)).filter((x) => x && !title.toLowerCase().includes(x.toLowerCase())).join(', ');
-  const own = ownerStory(pkg);
-  const head = [[dateLabel(pkg), title].filter(Boolean).join(' · '), where, own ? '' : storyFacts(pkg)].filter(Boolean).join('\n');
-  const tail = own || MEMORY_PLACEHOLDER;
-  const room = POST_MAX - tail.length - 2;
-  if (room < 20) return tail.slice(0, POST_MAX);
-  const h = head.length > room ? `${head.slice(0, room - 1).trimEnd()}…` : head;
-  return h ? `${h}\n\n${tail}` : tail;
-}
+/** Draft text = the item's facts in the fixed copy shape (copy-format.js). Always <= 280 chars. */
+export const draftTextFor = (pkg) => formatPostCopy(pkg);
 
 function selector(spec, tracks) {
   const { track, bucketId, query, ids } = spec.select;
@@ -233,7 +203,7 @@ export function planCalendarBatch({ packages = [], tracks = [], spec, today, ope
     title: p.title ?? null,
     reviewOn,
     content: draftTextFor(p),
-    needsStory: !ownerStory(p),
+    needsStory: false, // the copy is complete facts; nothing waits for an owner line
     engine: resolveEngine(p),
     bucketId: bucketOfPackage(p),
     nasSha: typeof p.nas?.sha256 === 'string' ? p.nas.sha256 : null,

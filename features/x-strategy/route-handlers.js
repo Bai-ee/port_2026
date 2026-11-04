@@ -897,7 +897,8 @@ export function createStrategyHandlers({
         let discogs = null;
         if (releaseId && typeof readDiscogsRelease === 'function') {
           const d = await readDiscogsRelease(releaseId).catch(() => null);
-          if (d && (!d.clientId || d.clientId === clientId)) discogs = d;
+          // The release data belongs to the item's owner: this client, or the content source it was shared from.
+          if (d && (!d.clientId || d.clientId === clientId || d.clientId === item.sharedFrom)) discogs = d;
         }
         return { item: visible, ...(discogs ? { discogs } : releaseId ? { discogs: null, discogsNote: 'No Discogs data stored yet: scripts/discogs/refresh-releases.mjs fetches it.' } : {}) };
       },

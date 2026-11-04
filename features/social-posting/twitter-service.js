@@ -2077,14 +2077,23 @@ export async function approveAndPostNow(clientId, postId, { reviewedBy = null, e
 // Write a published post back onto its content package (post.packageId join):
 // lastPostedAt, postCount+1, lastTwitterId, status 'posted'. Best-effort — a
 // package failure must never turn a live tweet into a failed post. Idempotent per
-// tweet (skips when the package already carries this twitterId).
+// tweet (skips when the package already carries this twitterId). Read and written
+// as the POSTING client: on a content-source row (content-sources.js) these land in
+// that client's own usage, never the owner's fields.
 async function recordPackagePosted(post, now) {
   if (!post?.packageId) return;
   const manual = post.deliveryMode === 'manual' && !post.twitterId;
   if (!post.twitterId && !manual) return;
   try {
     const store = await import('../x-content-inventory/store.js');
-    const pkg = await store.getPackage(post.packageId);
+    let pkg = await store.getPackage(post.packageId);
+    let writeOpts = { returnPackages: false };
+    // A content-source row (another client's row shared with the poster): read and write it as the poster, so the
+    // use lands in the poster's own usage. Any other row is stamped as before.
+    if (pkg?.clientId && post.clientId && pkg.clientId !== post.clientId) {
+      const view = await store.packageGetterFor(post.clientId)(post.packageId);
+      if (view?.sharedWith === post.clientId) { pkg = view; writeOpts = { returnPackages: false, clientId: post.clientId }; }
+    }
     if (manual) {
       // Self-reported: count the use so the package isn't recycled, but never write it as a verified tweet id.
       if (!pkg || pkg.lastManualPostId === post.id) return;
@@ -2095,7 +2104,7 @@ async function recordPackagePosted(post, now) {
         postCount: (Number(pkg.postCount) || 0) + 1,
         lastManualPostId: post.id,
         lastPostedSelfReported: true,
-      }, { returnPackages: false });
+      }, writeOpts);
       return;
     }
     if (!pkg || pkg.lastTwitterId === post.twitterId) return;
@@ -2105,7 +2114,7 @@ async function recordPackagePosted(post, now) {
       lastPostedAt: now,
       postCount: (Number(pkg.postCount) || 0) + 1,
       lastTwitterId: post.twitterId,
-    }, { returnPackages: false });
+    }, writeOpts);
   } catch (error) {
     console.warn('[package-writeback] package update failed:', error.message);
   }

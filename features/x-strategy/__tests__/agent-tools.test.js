@@ -21,9 +21,9 @@ test('prompt carries the likes-only rule and the no-invention rule', () => {
 
 test('prompt stays compact and embeds only a capped plan summary, not the evaluation', () => {
   const p = buildSystemPrompt({ planSummary: 'x'.repeat(10000), evaluationSummary: 'y'.repeat(5000) });
-  assert.ok(p.length < 10500);
+  assert.ok(p.length < 10800); // +300 for the owner's POST COPY rule (2026-11-03)
   const withDoc = buildSystemPrompt({ planSummary: 'x', strategyDocText: 'z'.repeat(20000) });
-  assert.ok(withDoc.length < 10500 + 7000, 'the strategy document is capped');
+  assert.ok(withDoc.length < 10800 + 7000, 'the strategy document is capped');
   assert.ok(!/"byType"|"gaps"/.test(p));
   const s = summarizePlan({ version: 2, plan: { authoredPerDay: 4, tier: 1, typeFloors: { 'quote-react': 1 }, typeCaps: {}, benchmarkPrimary: 'seb__design', notes: '' } });
   assert.match(s, /version 2/);

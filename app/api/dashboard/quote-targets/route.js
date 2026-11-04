@@ -15,6 +15,7 @@ import { readCorpus, readCorpora, saveGapReport } from '../../../../features/x-b
 import { buildDayPlan as buildContentDayPlan } from '../../../../features/x-content-inventory/plan-day.js';
 import { validateInventory } from '../../../../features/x-content-inventory/schema.js';
 import { readSharedInventory, upsertPackage, deletePackage, packageGetterFor } from '../../../../features/x-content-inventory/store.js';
+import { readContentSources, usableBy } from '../../../../features/x-content-inventory/content-sources.js';
 import { buildClientPackage, applyApproval } from '../../../../features/x-content-inventory/client-capture.js';
 import { quotedUrlOf } from '../../../../features/x-strategy/post-query.js';
 import { parseStatusUrl, findQuotedCandidate, buildQuotedPreview } from '../../../../features/x-quote-targets/quoted-preview.js';
@@ -395,6 +396,11 @@ const handleContentPlan = (context, body) => getContentPlanHandlers().contentPla
 // client is refused (409). Item actions resolve by id through getPackageFor, which hides a foreign row (404).
 const upsertFor = (clientId) => (pkg) => upsertPackage(pkg, { returnPackages: false, clientId });
 const getPackageFor = (clientId) => packageGetterFor(clientId);
+/** Owners whose raw stored rows `clientId` may use: itself + its content sources (`fullOnly`: sources it may edit). */
+async function usableOwners(clientId, { fullOnly = false } = {}) {
+  const sources = await readContentSources(clientId).catch(() => []);
+  return new Set([clientId, ...sources.filter((e) => !fullOnly || e.access === 'full').map((e) => e.clientId)]);
+}
 
 async function handleInventoryList(context) {
   // Own rows plus read-only rows of this client's content sources (content-sources.js); the audit covers own rows only.
@@ -454,7 +460,8 @@ async function withRowThumbs(calendar, pkgs, clientId) {
       nasBase = st?.online && st.localThumbBase ? st.localThumbBase : null;
     } catch { nasBase = null; }
   }
-  const ids = [...new Set(rows.map((r) => r.packageId).filter((id) => pkgs.get(id)?.clientId === clientId))];
+  const owners = await usableOwners(clientId);
+  const ids = [...new Set(rows.map((r) => r.packageId).filter((id) => owners.has(pkgs.get(id)?.clientId)))];
   let urls = {};
   try {
     if (ids.length) {
@@ -789,8 +796,9 @@ async function handleMediaUrls(context, body) {
   if (!kinds.every((k) => MEDIA_KINDS.includes(k))) throw badRequest(`kinds must be among ${MEDIA_KINDS.join(', ')}.`);
   const stored = await readStoredPackages(ids);
   const bridge = loadBridge();
-  // Another client's id is simply absent (no URL minted for it).
-  const urls = await resolveMediaUrlsBatch([...stored.values()].filter((p) => p.clientId === context.clientId), kinds, {
+  // Another client's id is simply absent (no URL minted for it), unless it is one of this client's content sources.
+  const owners = await usableOwners(context.clientId);
+  const urls = await resolveMediaUrlsBatch([...stored.values()].filter((p) => owners.has(p.clientId)), kinds, {
     hitloopBucket: fb.adminStorage.bucket(),
     signEv: (p) => bridge.signReadUrl(p),
   });
@@ -880,7 +888,8 @@ async function linkItemMediaFor(clientId, rawLinks) {
   const norm = normalizeLinks(rawLinks);
   if (!norm.ok) throw badRequest(norm.errors.join('; '));
   const pkgs = await readStoredPackages([...new Set(norm.links.flatMap((l) => [l.targetId, l.sourceId]))]);
-  const mine = (id) => { const p = pkgs.get(id); return p && p.clientId === clientId ? p : null; };
+  const owners = await usableOwners(clientId, { fullOnly: true });
+  const mine = (id) => { const p = pkgs.get(id); return p && owners.has(p.clientId) ? p : null; };
   const results = [];
   for (const l of norm.links) {
     const target = mine(l.targetId);
@@ -1196,7 +1205,7 @@ function getStrategyHandlers() {
       linkItemMedia: (clientId, links) => linkItemMediaFor(clientId, links),
       upsertBucket: (clientId, bucket) => bucketStore.upsertBucket(clientId, bucket),
       deleteBucket: (clientId, bucketId, opts) => bucketStore.deleteBucket(clientId, bucketId, opts),
-      mediaForItem: (clientId, pkg) => (pkg && pkg.clientId === clientId ? pickMedia(pkg, mediaSigners()) : null),
+      mediaForItem: (clientId, pkg) => (usableBy(pkg, clientId) ? pickMedia(pkg, mediaSigners()) : null),
       runDailyAction: (context, action, body) => handleDailyRun(context, action, body),
       // Agent / MCP calendar cleanup card (propose_calendar_decide), run on the owner's Confirm: one item at a time,
       // a failed item is reported in its row and never stops the rest.
