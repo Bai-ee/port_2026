@@ -11,7 +11,7 @@
 // or any .cjs here — any of those break `next dev` the moment this file is
 // pulled into a client bundle (see model.js's own header comment).
 
-import { formatMoney } from '../../../../features/invoices/model.js';
+import { formatMoney, computeTotals } from '../../../../features/invoices/model.js';
 
 // ── Path grammar ────────────────────────────────────────────────────────
 // A path is dot-separated segments; a segment may carry one bracket suffix
@@ -213,6 +213,9 @@ const FIELD_PATHS = [
   // "Quote", ...). Lives under the cover section id since it's rendered in
   // hero(), the cover block.
   { path: 'labels.title', type: 'text', label: 'Document title', section: 'cover', editable: true },
+  { path: 'labels.recommendationLabel', type: 'text', label: 'Recommendation heading', section: 'recommendation', editable: true },
+  { path: 'labels.totalsLabel', type: 'text', label: 'Totals heading', section: 'totals', editable: true },
+  { path: 'labels.totalLabel', type: 'text', label: 'Total row label', section: 'totals', editable: true },
   { path: 'invoiceNumber', type: 'text', label: 'Invoice #', section: 'invoiceMeta', editable: true },
   { path: 'currency', type: 'text', label: 'Currency', section: 'invoiceMeta', editable: true },
   { path: 'status', type: 'enum', label: 'Status', section: 'invoiceMeta', editable: true },
@@ -268,6 +271,8 @@ const FIELD_PATHS = [
   { path: 'totals.amountPaid', type: 'money', label: 'Amount already paid', section: 'totals', editable: true },
   { path: 'totals.deposit', type: 'money', label: 'Amount due now', section: 'deposit', editable: true },
   { path: 'totals.depositLabel', type: 'text', label: 'Amount-due heading', section: 'deposit', editable: true },
+  { path: 'totals.totalDue', type: 'money', label: 'Total due amount', section: 'totalDue', editable: true },
+  { path: 'totals.totalDueLabel', type: 'text', label: 'Total-due heading', section: 'totalDue', editable: true },
   // model.js's computeTotals passes these through cleanString (free text),
   // never through formatMoney — matching that contract (not the card's own
   // <input type="number"> control, which is stricter than the shared model
@@ -337,6 +342,16 @@ export { FIELD_PATHS };
 // the only theme fields that change DOM shape (the `data-invoice-theme`
 // marker + @page geometry) — a color-only preset swap is a value patch, not
 // a structural one, same reasoning as every other field below.
+// Bit-string of which Totals-area figures are non-zero — the same gates
+// render.js's buildTotals()/buildDeposit()/buildTotalDue() print on. Uses
+// computeTotals() so subtotal/total reflect the live item sum (or the
+// typed subtotal when no item is priced), exactly as the renderer sees them.
+function totalsPresence(inv) {
+  const t = computeTotals(inv);
+  return [t.subtotal, t.total, t.discount, t.tax, t.amountPaid, t.deposit, t.totalDue]
+    .map((v) => (Number(v) > 0 ? 1 : 0)).join('');
+}
+
 export function structureKey(draft, sections, theme = null) {
   const inv = draft && typeof draft === 'object' ? draft : {};
   const sec = sections && typeof sections === 'object' ? sections : { include: {}, order: [] };
@@ -374,6 +389,14 @@ export function structureKey(draft, sections, theme = null) {
     // Bank-transfer rows are each rendered only when set (render.js
     // buildPayment), so which ones are non-empty is structural.
     `bank=${['bankName', 'accountNumber', 'routingAch', 'routingWire'].map((k) => (inv.payment?.bank?.[k] ? 1 : 0)).join('')}`,
+    // Totals/Deposit/Total-due presence. render.js prints the Totals panel
+    // only when subtotal/total/amountPaid is non-zero, its discount / tax /
+    // amount-paid rows only when set, and the Deposit / Total due blocks
+    // only when their amount is > 0 — so a figure crossing 0 ↔ non-zero is
+    // structural (a row/block appears or disappears), not a value patch.
+    // Without this, typing a first discount or a total-due amount patched
+    // nothing until some unrelated structural edit forced a re-render.
+    `totals=${totalsPresence(inv)}`,
   ];
   return parts.join('#');
 }

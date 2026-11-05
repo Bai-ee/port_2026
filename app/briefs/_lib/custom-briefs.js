@@ -1,4 +1,5 @@
 import { createRequire } from 'module';
+import { formatMoney, resolveInvoiceLabels } from '../../../features/invoices/model.js';
 
 const require = createRequire(import.meta.url);
 export const fb = require('../../../api/_lib/firebase-admin.cjs');
@@ -203,11 +204,48 @@ export function briefDateLabel(brief) {
   return `${OG_MONTHS[date.getUTCMonth()]} ${date.getUTCDate()} ${date.getUTCFullYear()}`;
 }
 
+// Invoice-kind briefs (Invoice Studio publish — `brief.kind === 'invoice'`,
+// `brief.invoice` = the stored normalized model) share with the reader what
+// the document actually is: the subhead names who it is for and the OG
+// tiles carry BILL TO · TOTAL · DUE instead of the generic client/website/
+// date band, which on an invoice read as the owner's own inputs. Returns
+// null for anything that is not an invoice so the brief path is untouched.
+function invoiceOgFacts(brief) {
+  if (brief?.kind !== 'invoice' || !brief.invoice || typeof brief.invoice !== 'object') return null;
+  const inv = brief.invoice;
+  const billTo = String(inv.billTo?.name || '').trim();
+  const labels = resolveInvoiceLabels(inv);
+  const docKind = String(labels.title || 'Invoice').trim();
+  const number = String(inv.invoiceNumber || '').trim();
+  const total = Number(inv.totals?.total) || 0;
+  const totalLabel = total > 0 ? formatMoney(total, inv.currency || 'USD', inv.locale || 'en-US') : '';
+  const due = toDateSafe(inv.dueDate);
+  const dueLabel = due ? `${OG_MONTHS[due.getUTCMonth()]} ${due.getUTCDate()} ${due.getUTCFullYear()}` : '';
+  const description = [
+    billTo ? `${docKind} for ${billTo}` : docKind,
+    number ? `#${number}` : '',
+    totalLabel ? `· ${totalLabel}` : '',
+  ].filter(Boolean).join(' ');
+  return {
+    description: description.slice(0, 240),
+    subhead: billTo ? `Prepared for ${billTo}` : '',
+    // Uploaded per-invoice logo (Cover card) wins over the HITLOOP mark in
+    // the OG image's oversized corner logo; null = renderer's brand asset.
+    logo: typeof inv.logoDataUrl === 'string' && /^data:image\//.test(inv.logoDataUrl) ? inv.logoDataUrl : null,
+    tiles: [
+      { k: 'BILL TO', v: billTo || '—' },
+      { k: 'TOTAL', v: totalLabel || '—' },
+      { k: 'DUE', v: dueLabel || '—' },
+    ],
+  };
+}
+
 export function buildBriefOpenGraphMeta({ origin, clientId, client, brief, snapshotId }) {
   const clientName = clientDisplayName(client, clientId);
   const publicPath = publicBriefPath({ clientId, client, brief, snapshotId });
   const title = String(brief.title || brief.briefSlug || snapshotId || 'Custom Brief').trim();
-  const description = briefDescription(brief, clientName);
+  const invoiceFacts = invoiceOgFacts(brief);
+  const description = invoiceFacts ? invoiceFacts.description : briefDescription(brief, clientName);
   const publicUrl = `${origin}${publicPath}`;
   const imageUrl = `${publicUrl}/og-image`;
   return {
@@ -222,5 +260,50 @@ export function buildBriefOpenGraphMeta({ origin, clientId, client, brief, snaps
     imageAlt: `${title} preview image`,
     hideOgSubhead: brief.hideOgSubhead === true,
     ogLabel: briefOgLabel(brief),
+    // Invoice-only overrides for the OG image (see invoiceOgFacts). Absent
+    // on briefs, where og-image/route.js keeps its own defaults.
+    ...(invoiceFacts ? { ogVariant: 'invoice', ogLogo: invoiceFacts.logo, ogLines: ogLinesOf(brief), ogTitleLines: ogTitleLinesOf(brief), ogSubhead: ogSubheadOverride(brief) ?? invoiceFacts.subhead, ogTiles: invoiceFacts.tiles } : {}),
+    ...(!invoiceFacts && ogSubheadOverride(brief) !== null ? { ogSubhead: ogSubheadOverride(brief) } : {}),
+  };
+}
+
+// Operator-typed OG subhead (Invoice Studio's Publish card). Stored as
+// `brief.ogSubhead`; blank/absent = null = "use the computed default".
+// Up to two optional extra lines under the subhead (Invoice Studio's
+// Publish card); blank entries are dropped, so "off" = empty.
+function ogLinesOf(brief) {
+  const raw = Array.isArray(brief?.ogLines) ? brief.ogLines : [];
+  return raw.map((line) => String(line || '').replace(/\s+/g, ' ').trim().slice(0, 120)).filter(Boolean).slice(0, 2);
+}
+
+// Operator-managed headline lines for the invoice OG image (Publish card);
+// empty = auto-wrap the title.
+function ogTitleLinesOf(brief) {
+  const raw = Array.isArray(brief?.ogTitleLines) ? brief.ogTitleLines : [];
+  return raw.map((line) => String(line || '').replace(/\s+/g, ' ').trim().slice(0, 40)).filter(Boolean).slice(0, 3);
+}
+
+function ogSubheadOverride(brief) {
+  const text = String(brief?.ogSubhead || '').replace(/\s+/g, ' ').trim();
+  return text ? text.slice(0, 160) : null;
+}
+
+// Meta for the Studio's live OG preview (app/api/dashboard/custom-briefs/
+// og-preview): the same shape buildBriefOpenGraphMeta() produces, built
+// from an UNSAVED draft instead of a stored brief, so the preview is the
+// real renderer over the real inputs — never a client-side approximation.
+export function buildInvoiceOgPreviewMeta({ title, invoice, ogLabel, ogSubhead, hideOgSubhead, ogLines, ogTitleLines, clientName }) {
+  const brief = { kind: 'invoice', invoice, title, ogLabel, ogSubhead, ogLines, ogTitleLines, hideOgSubhead: hideOgSubhead === true };
+  const invoiceFacts = invoiceOgFacts(brief);
+  const cleanTitle = String(title || '').trim() || String(invoice?.invoiceNumber || '').trim() || 'Invoice';
+  return {
+    title: cleanTitle,
+    description: invoiceFacts ? invoiceFacts.description : briefDescription(brief, clientName),
+    clientName: clientName || '',
+    website: '',
+    dateLabel: '',
+    hideOgSubhead: hideOgSubhead === true,
+    ogLabel: briefOgLabel(brief),
+    ...(invoiceFacts ? { ogVariant: 'invoice', ogLogo: invoiceFacts.logo, ogLines: ogLinesOf(brief), ogTitleLines: ogTitleLinesOf(brief), ogSubhead: ogSubheadOverride(brief) ?? invoiceFacts.subhead, ogTiles: invoiceFacts.tiles } : {}),
   };
 }

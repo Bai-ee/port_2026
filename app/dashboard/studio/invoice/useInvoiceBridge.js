@@ -283,6 +283,21 @@ export function computeDerivedPatches(invoice) {
   return patches;
 }
 
+/** Write every computeDerivedPatches() display into the matching
+ * [data-inv-derived] node of `doc`. Shared by the per-change effect and by
+ * attach(), which must re-sync a freshly loaded document whose srcDoc may
+ * predate the latest draft. */
+function applyDerivedPatches(doc, invoice) {
+  if (!doc) return;
+  const patches = computeDerivedPatches(invoice);
+  if (!patches.length) return;
+  const byPath = new Map(patches.map((p) => [p.path, p.display]));
+  doc.querySelectorAll('[data-inv-derived]').forEach((node) => {
+    const display = byPath.get(node.dataset.invDerived);
+    if (display !== undefined) node.textContent = display;
+  });
+}
+
 function placeCaretAtEnd(el) {
   const doc = el && el.ownerDocument;
   const win = doc && doc.defaultView;
@@ -462,14 +477,28 @@ export function useInvoiceBridge(iframeRef, draft, railRef) {
     ensureHighlightStyle(doc);
 
     const seedInvoice = draftRef.current?.invoice;
+    // The srcDoc this document came from was rendered at the moment the
+    // structureKey changed; any keystrokes that landed while the iframe was
+    // reloading (e.g. typing "5600" where the 0 → 5 step was structural)
+    // patched the DYING document and are not in this one. Re-sync every
+    // editable field and every derived figure from the live draft first.
+    applyDerivedPatches(doc, seedInvoice);
+    const seedCurrency = seedInvoice?.currency;
+    const seedLocale = seedInvoice?.locale;
     const nodes = doc.querySelectorAll('[data-inv-field]');
     nodes.forEach((node) => {
       node.setAttribute('contenteditable', 'plaintext-only');
       const seedPath = resolveCanvasEditPath(seedInvoice, node.dataset.invField);
+      const seedValue = seedPath != null ? getAtPath(seedInvoice, seedPath) : undefined;
+      if (seedPath != null && seedValue !== undefined && seedValue !== null && seedValue !== '') {
+        const type = node.dataset.invType;
+        node.textContent = formatValue(type, seedValue, seedCurrency, seedLocale);
+        if (RAW_TYPES.has(type)) node.dataset.invRaw = rawTextForType(type, seedValue);
+      }
       committedRef.current.set(node, {
         display: node.textContent,
         raw: node.dataset.invRaw ?? null,
-        value: seedPath != null ? getAtPath(seedInvoice, seedPath) : undefined,
+        value: seedValue,
       });
 
       const onFocus = () => {
@@ -576,13 +605,7 @@ export function useInvoiceBridge(iframeRef, draft, railRef) {
     let doc = null;
     try { doc = frame?.contentDocument; } catch { doc = null; }
     if (!doc) return;
-    const patches = computeDerivedPatches(draft.invoice);
-    if (!patches.length) return;
-    const byPath = new Map(patches.map((p) => [p.path, p.display]));
-    doc.querySelectorAll('[data-inv-derived]').forEach((node) => {
-      const display = byPath.get(node.dataset.invDerived);
-      if (display !== undefined) node.textContent = display;
-    });
+    applyDerivedPatches(doc, draft.invoice);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft.invoice]);
 
