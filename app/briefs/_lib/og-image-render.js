@@ -152,6 +152,39 @@ async function dotoFont() {
   return dotoFontPromise;
 }
 
+// Any local font as glyph OUTLINES. The embedded @font-face route works on a
+// dev Mac but Vercel's librsvg ignores it — the OG subhead shipped as tofu
+// boxes in production — while the Doto headline, drawn as paths via fontkit,
+// rendered fine. So every operator-facing text line goes through this.
+const fontPromises = new Map();
+function fontAt(filePath) {
+  if (!fontPromises.has(filePath)) {
+    fontPromises.set(filePath, readFile(filePath).then((buf) => fontkit.create(buf)).catch(() => null));
+  }
+  return fontPromises.get(filePath);
+}
+
+async function pathText(lines, { fontPath, x, y, size, fill = '#1a1a1a', lineHeight = 1.5, fallback }) {
+  const font = await fontAt(fontPath);
+  if (!font) return fallback ? fallback() : '';
+  const scale = size / font.unitsPerEm;
+  return lines.map((line, lineIndex) => {
+    const run = font.layout(String(line || ''));
+    let cursor = 0;
+    const paths = run.glyphs.map((glyph, glyphIndex) => {
+      const position = run.positions[glyphIndex];
+      const pathData = glyph.path?.toSVG?.() || '';
+      const glyphX = cursor + (position?.xOffset || 0);
+      const glyphY = position?.yOffset || 0;
+      cursor += position?.xAdvance || glyph.advanceWidth || 0;
+      if (!pathData) return '';
+      return `<path d="${pathData}" transform="translate(${glyphX} ${glyphY})" fill="${fill}"/>`;
+    }).filter(Boolean).join('\n');
+    const baseline = y + lineIndex * size * lineHeight;
+    return `<g transform="translate(${x} ${baseline}) scale(${scale} -${scale})">${paths}</g>`;
+  }).join('\n');
+}
+
 async function dotoHeadline(lines, {
   x,
   y,
@@ -290,8 +323,8 @@ async function makeSvg(meta) {
   ${invoiceVariant ? '' : `<circle cx="${contentLeft + 6}" cy="108" r="6" fill="#0a0a0a"/>`}
   ${invoiceVariant ? '' : textLines([ogLabel], { x: contentLeft + 34, y: 116, size: 24, weight: 700, fill: '#5a5346', family: 'SpaceMonoLocal, monospace', className: 'og-label' })}
   ${await dotoHeadline(titleLines, { x: contentLeft, y: titleY, size: titleSize, fill: '#0a0a0a', lineHeight: titleLineHeight })}
-  ${subhead?.text ? textLines([subhead.text], { x: contentLeft, y: subhead.y, size: subhead.size, weight: 400, fill: '#1a1a1a', lineHeight: 1, family: 'SpaceGroteskLocal, system-ui, sans-serif', className: 'og-body' }) : ''}
-  ${extraLines.length ? textLines(extraLines, { x: contentLeft, y: extraLinesY, size: 22, weight: 400, fill: '#5a5346', lineHeight: 1.5, family: 'SpaceGroteskLocal, system-ui, sans-serif', className: 'og-body' }) : ''}
+  ${subhead?.text ? await pathText([subhead.text], { fontPath: SPACE_GROTESK_400_PATH, x: contentLeft, y: subhead.y, size: subhead.size, fill: '#1a1a1a', lineHeight: 1, fallback: () => textLines([subhead.text], { x: contentLeft, y: subhead.y, size: subhead.size, weight: 400, fill: '#1a1a1a', lineHeight: 1, family: 'SpaceGroteskLocal, system-ui, sans-serif', className: 'og-body' }) }) : ''}
+  ${extraLines.length ? await pathText(extraLines, { fontPath: SPACE_GROTESK_400_PATH, x: contentLeft, y: extraLinesY, size: 22, fill: '#5a5346', lineHeight: 1.5, fallback: () => textLines(extraLines, { x: contentLeft, y: extraLinesY, size: 22, weight: 400, fill: '#5a5346', lineHeight: 1.5, family: 'SpaceGroteskLocal, system-ui, sans-serif', className: 'og-body' }) }) : ''}
   ${tilesSvg}
 </svg>`;
 }
