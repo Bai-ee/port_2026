@@ -276,7 +276,7 @@ test('FIELD_PATHS covers every path family named in the §4.1 grammar', () => {
   ]) {
     assert.ok(paths.includes(expected), `FIELD_PATHS missing "${expected}"`);
   }
-  assert.equal(paths.length, 67);
+  assert.equal(paths.length, 72);
   assert.ok(FIELD_PATHS.every((e) => e.editable === true));
 });
 
@@ -304,6 +304,19 @@ test('structureKey is stable for the same structure and changes only on structur
   // A term COUNT change (add/remove) changes the key even though terms have no ids.
   const withExtraTerm = { ...draft, terms: [...draft.terms, 'New term'] };
   assert.notEqual(structureKey(withExtraTerm, sections), keyA);
+});
+
+test('structureKey changes when a totals-area figure crosses zero (row/block appears)', () => {
+  const draft = sampleDraft();
+  const sections = { include: { totals: true, totalDue: true }, order: ['totals', 'totalDue'] };
+  const keyA = structureKey(draft, sections);
+  const withDiscount = { ...draft, totals: { ...draft.totals, discount: 50 } };
+  assert.notEqual(structureKey(withDiscount, sections), keyA);
+  const withTotalDue = { ...draft, totals: { ...draft.totals, totalDue: 500 } };
+  assert.notEqual(structureKey(withTotalDue, sections), keyA);
+  // A non-zero → different non-zero value is a value patch, not structural.
+  const bumped = { ...withDiscount, totals: { ...withDiscount.totals, discount: 75 } };
+  assert.equal(structureKey(bumped, sections), structureKey(withDiscount, sections));
 });
 
 // Design-layer plan L7 — theme is an optional 3rd argument, and structureKey

@@ -655,6 +655,33 @@ const InvoiceCanvas = forwardRef(function InvoiceCanvas(
     } catch {
       // A rejected fonts.ready (rare) must never block printing.
     }
+    // One tall page sized to the document (matches the published PDF's
+    // single-page behaviour) instead of Letter pagination: inject an @page
+    // size = sheet width × full document height for the duration of the
+    // print, then remove it. Chrome caps a page side at 200in (19200px).
+    let printStyle = null;
+    if (doc) {
+      try {
+        const sheet = doc.querySelector('.invoice-sheet') || doc.body;
+        // Same sheet margins as the hosted PDF (api/_lib/browserless.cjs
+        // invoice mode: 56px top/bottom, 64px sides); the page box grows by
+        // the padding delta so nothing is pushed onto a second page.
+        const PAD_Y = 56;
+        const PAD_X = 64;
+        const screenPadY = ['paddingTop', 'paddingBottom'].reduce((sum, k) => sum + (parseFloat(doc.defaultView.getComputedStyle(sheet)[k]) || 0), 0);
+        const width = Math.ceil(sheet.getBoundingClientRect().width || doc.documentElement.clientWidth || 1200);
+        const height = Math.min(19200, Math.ceil(doc.documentElement.scrollHeight || doc.body.scrollHeight || 0) + Math.max(0, PAD_Y * 2 - screenPadY) + 8);
+        if (width > 0 && height > 0) {
+          printStyle = doc.createElement('style');
+          printStyle.id = 'invoice-print-single-page';
+          printStyle.textContent = `@page { size: ${width}px ${height}px; margin: 0; } @media print { html, body { width: ${width}px; margin: 0; } .invoice-sheet { max-width: none; margin: 0; padding: ${PAD_Y}px ${PAD_X}px; box-sizing: border-box; } }`;
+          doc.head.appendChild(printStyle);
+          const cleanup = () => { try { printStyle?.remove(); } catch { /* detached */ } };
+          frame.contentWindow.addEventListener('afterprint', cleanup, { once: true });
+          setTimeout(cleanup, 60000);
+        }
+      } catch { printStyle = null; }
+    }
     frame.contentWindow.focus();
     frame.contentWindow.print();
   }, []);

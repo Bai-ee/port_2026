@@ -86,8 +86,25 @@ function normalizeSectionsShape(raw) {
       if (SECTION_IDS.includes(id)) include[id] = raw.include[id] !== false;
     });
   }
-  const rawOrder = Array.isArray(raw?.order) ? raw.order.filter((id) => SECTION_IDS.includes(id)) : [];
-  const order = [...rawOrder, ...SECTION_IDS.filter((id) => !rawOrder.includes(id))];
+  // Accept the flat editor shape AND registry.js's nested wire shape — a
+  // saved invoice comes back from the publish route with the nested one,
+  // and reading only the flat array reset the order to registry default.
+  const rawOrderList = Array.isArray(raw?.order) ? raw.order : (Array.isArray(raw?.order?.sections) ? raw.order.sections : []);
+  const rawOrder = rawOrderList.filter((id) => SECTION_IDS.includes(id));
+  // A section the stored order never mentions (added to registry.js after
+  // the draft was saved) slots in right after its nearest registry
+  // predecessor that IS present, not at the tail — so e.g. `totalDue`
+  // lands beside Deposit on an old draft instead of after Contact footer.
+  const order = [...rawOrder];
+  SECTION_IDS.forEach((id, registryIndex) => {
+    if (order.includes(id)) return;
+    let insertAt = order.length;
+    for (let i = registryIndex - 1; i >= 0; i -= 1) {
+      const at = order.indexOf(SECTION_IDS[i]);
+      if (at !== -1) { insertAt = at + 1; break; }
+    }
+    order.splice(insertAt, 0, id);
+  });
   return { include, order };
 }
 

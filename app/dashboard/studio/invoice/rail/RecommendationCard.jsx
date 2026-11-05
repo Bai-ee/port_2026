@@ -17,6 +17,7 @@ import SectionCard from './SectionCard';
 import { ui } from '../../components/rail-ui';
 import { RailTextInput, RailTextArea, RailIconButton, RailAddButton } from './rail-field-controls';
 import { parseValue } from '../invoice-fields';
+import { resolveInvoiceLabels } from '../../../../../features/invoices/model.js';
 
 export default function RecommendationCard({ draft, open, onToggle }) {
   const { invoice } = draft;
@@ -28,7 +29,13 @@ export default function RecommendationCard({ draft, open, onToggle }) {
       sectionId="recommendation" id="invoice-rail-recommendation-card" icon={<Sparkles size={18} strokeWidth={2} />} title="Recommendation"
       subtitle={rec.name} color="#f97316" open={open} onToggle={onToggle} draft={draft}
     >
-      <RailTextInput path="recommendation.name" label="Package name" value={rec.name} onChange={(v) => edit('recommendation.name', 'text', v)} />
+      <RailTextInput
+        path="labels.recommendationLabel" label="Section heading"
+        value={invoice.labels?.recommendationLabel || ''}
+        placeholder={`Using the default: ${resolveInvoiceLabels(invoice).recommendationLabel}`}
+        onChange={(v) => draft.applyFieldEdit('labels.recommendationLabel', v, 'rail')}
+      />
+      <RailTextInput path="recommendation.name" label="Title line (optional — blank prints nothing)" value={rec.name} onChange={(v) => edit('recommendation.name', 'text', v)} />
       <RailTextArea path="recommendation.body" label="Body" rows={3} value={rec.body} onChange={(v) => edit('recommendation.body', 'multiline', v)} />
       <div style={{ display: 'grid', gap: 6 }}>
         <span style={ui.label}>Highlight chips</span>

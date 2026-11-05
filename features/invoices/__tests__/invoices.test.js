@@ -83,6 +83,59 @@ test('computeTotals passes deposit through unchanged and is pure (no mutation)',
   assert.equal(JSON.stringify(invoice), before);
 });
 
+test('computeTotals honours a typed subtotal only when no item is numerically priced', () => {
+  const textOnly = normalizeInvoice({
+    standaloneItems: [{ name: 'Site', costLabel: '4,350' }, { name: 'Merch', costLabel: '500' }],
+    totals: { subtotal: 4850, discount: 100, tax: 50, amountPaid: 2000 },
+  });
+  assert.equal(textOnly.totals.subtotal, 4850);
+  assert.equal(textOnly.totals.total, 4800);
+  assert.equal(textOnly.totals.balanceDue, 2800);
+  // One priced item → the typed figure is ignored and the items win again.
+  const priced = normalizeInvoice({
+    standaloneItems: [{ name: 'Site', costLabel: '4,350' }, { name: 'Build', qty: 1, unitPrice: 500 }],
+    totals: { subtotal: 4850 },
+  });
+  assert.equal(priced.totals.subtotal, 500);
+});
+
+test('totalDue passes through computeTotals and renders as its own block only when on and > 0', () => {
+  const invoice = normalizeInvoice({
+    standaloneItems: [{ name: 'Build', qty: 1, unitPrice: 500 }],
+    totals: { deposit: 250, totalDue: 500, totalDueLabel: 'Final payment' },
+  });
+  assert.equal(invoice.totals.totalDue, 500);
+  assert.equal(invoice.totals.totalDueLabel, 'Final payment');
+  assert.equal(normalizeInvoice({}).totals.totalDueLabel, 'Total due');
+  // Default section config leaves totalDue OFF.
+  assert.equal(defaultInvoiceSectionConfig().include.totalDue, false);
+  const off = renderInvoiceHtml(invoice);
+  assert.ok(!off.includes('invoice-total-due-section'));
+  const on = renderInvoiceHtml(invoice, { sections: { include: { totalDue: true } } });
+  assert.ok(on.includes('id="invoice-total-due-section"'));
+  assert.ok(on.includes('Final payment'));
+  assert.ok(on.includes('$500.00'));
+  const zero = renderInvoiceHtml(normalizeInvoice({ ...invoice, totals: { ...invoice.totals, totalDue: 0 } }), { sections: { include: { totalDue: true } } });
+  assert.ok(!zero.includes('invoice-total-due-section'));
+});
+
+test('recommendation prints no title line when name is blank and its heading is an editable label override', () => {
+  const invoice = normalizeInvoice({ recommendation: { name: '', body: 'Just a note.' }, labels: { recommendationLabel: 'Notes from Bryan' } });
+  const html = renderInvoiceHtml(invoice, { sections: { include: { recommendation: true } }, editable: true });
+  assert.ok(!html.includes('<p class="invoice-recommendation-name">'));
+  assert.ok(html.includes('data-inv-field="labels.recommendationLabel"'));
+  assert.ok(html.includes('Notes from Bryan'));
+  assert.ok(html.includes('Just a note.'));
+});
+
+test('normalizeInvoiceSectionConfig honours a flat editor-shape order array (what Studio/legacy card POST)', () => {
+  const flat = normalizeInvoiceSectionConfig({ include: { cover: true }, order: ['totals', 'cover', 'lineItems'] });
+  assert.deepEqual(flat.order.sections.slice(0, 3), ['totals', 'cover', 'lineItems']);
+  const nested = normalizeInvoiceSectionConfig({ order: { sections: ['totals', 'cover', 'lineItems'] } });
+  assert.deepEqual(nested.order.sections, flat.order.sections);
+  assert.deepEqual(resolveInvoiceSections({ include: { totals: true, cover: true }, order: ['totals', 'cover'] }).slice(0, 2), ['totals', 'cover']);
+});
+
 test('formatMoney formats USD currency', () => {
   assert.equal(formatMoney(1234.5), '$1,234.50');
   assert.equal(formatMoney('not-a-number'), '$0.00');
