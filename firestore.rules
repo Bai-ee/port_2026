@@ -102,5 +102,17 @@ service cloud.firestore {
       allow read:  if false;
       allow write: if false;
     }
+
+    // server-only (Admin SDK); personal scope — see features/life-timeline/CONTRACT.md
+    match /life_media/{id} { allow read, write: if false; }
+
+    // server-only (Admin SDK); personal scope — see features/life-timeline/CONTRACT.md
+    match /life_months/{id} { allow read, write: if false; }
+
+    // server-only (Admin SDK); personal scope — see features/life-timeline/CONTRACT.md
+    match /life_month_parts/{id} { allow read, write: if false; }
+
+    // server-only (Admin SDK); personal scope — see features/life-timeline/CONTRACT.md
+    match /life_sources/{id} { allow read, write: if false; }
   }
 }
