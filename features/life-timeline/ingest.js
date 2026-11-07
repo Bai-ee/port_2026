@@ -5,7 +5,7 @@ export const MAX_ITEMS = 100;
 export const MAX_UPLOAD_ITEMS = 200;
 export const MAX_THUMB_BYTES = 10 * 1024 * 1024;
 const SRC_ID_RE = /^[a-z0-9-]{1,80}$/;
-const SRC_KINDS = ['photos', 'iphoto'];
+const SRC_KINDS = ['photos', 'iphoto', 'folder'];
 const SHA_RE = /^[0-9a-f]{64}$/;
 
 const bad = (message) => Object.assign(new Error(message), { status: 400 });

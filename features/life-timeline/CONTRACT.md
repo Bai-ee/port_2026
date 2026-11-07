@@ -36,7 +36,7 @@ Items sorted by `t` asc then `id`. More than 1,500 items → `partCount>1`, part
 `ym:'unknown'` holds undated items (`t:null`). Month packs are rebuilt from `life_media where ym == X` after each ingest (idempotent).
 
 ### `life_sources/{sourceId}`
-`{ id, kind:'photos'|'iphoto', label, libraryPath /*share-relative*/, itemCount, lastPushAt }` (itemCount recomputed on push = count of life_media with sourceIds array-contains id).
+`{ id, kind:'photos'|'iphoto'|'folder', label, libraryPath /*share-relative*/, itemCount, lastPushAt }` (itemCount recomputed on push = count of life_media with sourceIds array-contains id).
 
 ## LifeItem (push item; validated by `schema.js sanitizeLifeItem`)
 Fields = `life_media` minus `{schema, ym, day, sourceIds, createdAt, updatedAt}`. Validation: `sha256` 64 lowercase hex; `id === sha256.slice(0,16)`; kind in enum; strings trimmed + capped (title 300, description 2000, album/keyword 200 each, ≤100 albums, ≤200 keywords, ≤50 locations); `takenLocal` matches `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$` or null; `tz` `^[+-]\d{2}:\d{2}$` or null; gps in range; `thumbs` paths must equal `life-thumbs/<id>_s.jpg` / `_m.jpg`; `canonicalPath` must start `HITLOOP-ARCHIVE/timeline/` and contain no `..`; `relativePath`s no leading `/`, no `..`, no `/Volumes`. Invalid item → skipped with reason, others proceed.

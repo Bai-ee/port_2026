@@ -57,6 +57,14 @@ test('rejects >100 items, empty, bad source', async () => {
   }
 });
 
+test('accepts a folder source (plain directory, share-relative path)', async () => {
+  const d = makeDeps();
+  const folder = { id: 'folder-dec10th-mac-backup', kind: 'folder', label: 'Dec10th MAc Backup', libraryPath: 'Dec10th MAc Backup' };
+  const r = await ingestLifeResults(d, { source: folder, items: [rawItem(1)] });
+  assert.ok(r);
+  assert.ok(d.sources.has('folder-dec10th-mac-backup'));
+});
+
 test('upload urls', async () => {
   const signUpload = async ({ storagePath, contentType }) => `https://u/${storagePath}?ct=${contentType}`;
   const s = sha('a');
