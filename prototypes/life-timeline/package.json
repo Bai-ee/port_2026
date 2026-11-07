@@ -1,0 +1,15 @@
+{
+  "name": "hitloop-life-timeline-prototype",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --webpack --hostname 127.0.0.1 --port 3077",
+    "build": "next build --webpack"
+  },
+  "dependencies": {
+    "next": "16.2.9",
+    "react": "19.2.5",
+    "react-dom": "19.2.5"
+  },
+  "type": "module"
+}
