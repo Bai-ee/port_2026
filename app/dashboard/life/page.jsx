@@ -1,11 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useAuth } from '../../../AuthContext';
+import StatusBand from './StatusBand';
 
-// Life Timeline P4: bare owner-only validation view (test harness, not the final UI).
-// Data: /api/life/{months,month,item}, gated server-side by LIFE_OWNER_UIDS.
+// Life Timeline: public ingest status band (StatusBand, /api/life/status, no sign-in) above the
+// owner-only validation view. Timeline data: /api/life/{months,month,item}, gated by LIFE_OWNER_UIDS.
 
 const C = {
   page: 'var(--t-dash-page)',
@@ -43,7 +43,6 @@ const fmtDur = (s) => {
 
 export default function LifeTimelinePage() {
   const { user, loading } = useAuth();
-  const router = useRouter();
   const [index, setIndex] = useState(null);
   const [fatal, setFatal] = useState('');
   const [ym, setYm] = useState(null);
@@ -53,13 +52,6 @@ export default function LifeTimelinePage() {
   const [detail, setDetail] = useState(null);
   const monthRetried = useRef(false);
   const detailRetried = useRef(false);
-
-  useEffect(() => {
-    if (!loading && !user) {
-      const here = `${window.location.pathname}${window.location.search || ''}`;
-      router.replace(`/login?redirect=${encodeURIComponent(here)}&next=${encodeURIComponent(here)}`);
-    }
-  }, [user, loading, router]);
 
   const api = useCallback(async (path) => {
     const token = await user.getIdToken();
@@ -123,7 +115,8 @@ export default function LifeTimelinePage() {
 
   const shell = { minHeight: '100vh', background: C.page, color: C.text, padding: '16px 8px', fontFamily: 'system-ui, sans-serif', boxSizing: 'border-box' };
 
-  if (loading || !user) return <div id="life-timeline-page-shell" style={shell}>Loading…</div>;
+  const here = typeof window === 'undefined' ? '/dashboard/life' : `${window.location.pathname}${window.location.search || ''}`;
+  const signInHref = `/login?redirect=${encodeURIComponent(here)}&next=${encodeURIComponent(here)}`;
 
   const item = detail?.item;
 
@@ -131,6 +124,20 @@ export default function LifeTimelinePage() {
     <div id="life-timeline-page-shell" style={shell}>
       <div id="life-timeline-header" style={{ maxWidth: 1200, margin: '0 auto 12px' }}>
         <h1 style={{ fontSize: 20, margin: 0 }}>Life Timeline</h1>
+      </div>
+
+      <StatusBand />
+
+      {loading && <div id="life-timeline-loading" style={{ maxWidth: 1200, margin: '0 auto', color: C.muted, fontSize: 13 }}>Loading…</div>}
+      {!loading && !user && (
+        <div id="life-timeline-signin-prompt" style={{ maxWidth: 1200, margin: '0 auto', color: C.muted, fontSize: 13 }}>
+          The photo timeline is private. <a href={signInHref} style={{ color: C.accent }}>Sign in</a> as the owner to view it.
+        </div>
+      )}
+
+      {user && (
+      <div id="life-timeline-body">
+      <div id="life-timeline-intro" style={{ maxWidth: 1200, margin: '0 auto 12px' }}>
         <p id="life-timeline-harness-note" style={{ margin: '4px 0 0', color: C.muted, fontSize: 13 }}>
           Test harness: bare validation view of the private photo index (thumbnails and 1600px previews only).
           {index ? ` ${index.total} items.` : ''}
@@ -225,6 +232,8 @@ export default function LifeTimelinePage() {
             )}
           </div>
         </div>
+      )}
+      </div>
       )}
     </div>
   );
