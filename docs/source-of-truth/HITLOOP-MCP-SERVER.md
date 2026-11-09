@@ -122,3 +122,7 @@ Three new generated tools: `strategy_propose_post_approve`, `strategy_propose_po
 ## Daily brief `todayPlan` (2026-10-13)
 
 `get_daily_brief` now includes a `todayPlan` block, built by the same `readTodayPlan` as the daily email's `todayPlan` section (tracks with per-day targets, next <=5 scheduled posts, pending proposals; see EMAIL-DIGEST-CARD.md). Read-only; never throws.
+
+## Website analytics (2026-10-23)
+
+`get_site_analytics` and `get_site_sessions` (`features/mcp/tools/site-analytics.js`, read-only, Firestore only) read HITLOOP's own first-party beacon data for sites `"ue"` (Underground Existence Arweave site, default) and `"hitloop"` (hitloop.agency). Args: `site`, `range` (today | 24h | 7d | 30d), or `from`/`to` (YYYY-MM-DD, at most 90 days, not in the future), `testMode` (only test traffic), and `limit` for sessions (default 25, max 100). `get_site_analytics` returns the report (pageviews, sessions, visitors, sources, pages, clicks, outbound links, mix plays, countries, cities, devices, live); `get_site_sessions` returns individual visits with their ordered page/click/play trail. Both use `redactKeys:false` (count keys such as "sessions" would otherwise be blanked). Collector, storage, beacons and the report shape: [CLIENT-MCP-SERVER.md § Website sources](CLIENT-MCP-SERVER.md#website-sources). Registry count is 87 (pinned in `features/mcp/__tests__/tools.test.js`). Re-add the connector in ChatGPT/Claude to pick up new tools.

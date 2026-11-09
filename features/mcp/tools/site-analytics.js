@@ -1,5 +1,5 @@
-// site-analytics.js - owner view of sites HITLOOP tracks with its own beacon (/api/public/site-events; today the
-// Underground Existence Arweave site). Same report + visit paths the client MCP serves for a hitloop-provider
+// site-analytics.js - owner view of sites HITLOOP tracks with its own beacon (/api/public/site-events; the
+// Underground Existence Arweave site and hitloop.agency). Same report + visit paths the client MCP serves for a hitloop-provider
 // source (features/site-analytics/report.js), plus a test-mode switch for checking the beacon after a deploy.
 // Firestore only.
 
@@ -16,7 +16,7 @@ const windowProps = (defaultRange) => ({
   range: { type: 'string', enum: [...REPORT_RANGES], description: `today | 24h (rolling) | 7d | 30d. Default ${defaultRange}. Ignored when from/to are given.` },
   from: str('Custom start date, YYYY-MM-DD in the site timezone. Needs to. At most 90 days.', DATE),
   to: str('Custom end date (inclusive), YYYY-MM-DD in the site timezone, not in the future. Needs from.', DATE),
-  testMode: { type: 'boolean', description: 'Only test traffic (?ue_analytics_test=1). Default false.' },
+  testMode: { type: 'boolean', description: 'Only test traffic (?ue_analytics_test=1 on UE, ?site_analytics_test=1 on hitloop.agency). Default false.' },
 });
 
 function windowOf(args, defaultRange) {
