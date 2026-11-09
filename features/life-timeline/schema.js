@@ -167,3 +167,74 @@ export function buildMonthPacks(ym, mediaDocs, nowIso = new Date().toISOString()
   const partDocs = chunks.slice(1).map((items, i) => ({ ym, part: i + 1, items }));
   return { monthDoc, partDocs };
 }
+
+// ---- life.status/1 (heartbeat doc `life_status/current`; PUBLIC read, so numbers/labels only) ----
+export const STATUS_SCHEMA = 'life.status/1';
+export const STATUS_STR_MAX = 200;
+export const STATUS_RECENT_MAX = 20;
+export const STATUS_REMAINING_MAX = 60;
+
+const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})?$/;
+// Strings are trimmed, capped, and DROPPED (null) if they contain '/' or '\' (no paths, ever).
+const sstr = (v) => {
+  if (typeof v !== 'string') return null;
+  const s = v.trim().slice(0, STATUS_STR_MAX);
+  return s && !/[/\\]/.test(s) ? s : null;
+};
+const sIso = (v) => { const s = sstr(v); return s && ISO_RE.test(s) && !Number.isNaN(Date.parse(s)) ? s : null; };
+const sEnum = (v, list) => (list.includes(v) ? v : null);
+const sNum = (v) => num(v);
+const sInt = (v) => { const n = num(v); return n == null ? null : Math.max(0, Math.round(n)); };
+
+export function sanitizeLifeStatus(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return fail('not-an-object');
+  if (raw.schema !== STATUS_SCHEMA) return fail('bad-schema');
+  const updatedAt = sIso(raw.updatedAt);
+  if (!updatedAt) return fail('bad-updatedAt');
+  const r = raw.run && typeof raw.run === 'object' ? raw.run : {};
+  const p = raw.progress && typeof raw.progress === 'object' ? raw.progress : {};
+  const m = raw.machine && typeof raw.machine === 'object' ? raw.machine : {};
+  const status = {
+    schema: STATUS_SCHEMA,
+    updatedAt,
+    run: {
+      enabled: sEnum(r.enabled, ['on', 'dry', 'off']),
+      state: sEnum(r.state, ['running', 'stopped', 'done', 'idle']),
+      startedAt: sIso(r.startedAt),
+      batch: sstr(r.batch),
+      step: sEnum(r.step, ['download', 'plan', 'apply', 'thumbs', 'push', 'verify']),
+      stepStartedAt: sIso(r.stepStartedAt),
+      stoppedAt: sstr(r.stoppedAt),
+      error: sstr(r.error),
+    },
+    progress: {
+      batchesDone: sInt(p.batchesDone),
+      batchesTotal: sInt(p.batchesTotal),
+      batchesRemaining: (Array.isArray(p.batchesRemaining) ? p.batchesRemaining : []).map(sstr).filter(Boolean).slice(0, STATUS_REMAINING_MAX),
+      itemsDownloadedThisBatch: sInt(p.itemsDownloadedThisBatch),
+      itemsThisBatchTotal: sInt(p.itemsThisBatchTotal),
+      assets: sInt(p.assets),
+      pushed: sInt(p.pushed),
+      unpushed: sInt(p.unpushed),
+      noThumb: sInt(p.noThumb),
+      lastPushAt: sIso(p.lastPushAt),
+      pushedLast24h: sInt(p.pushedLast24h),
+      itemsPerMin: sNum(p.itemsPerMin),
+      etaFinishAt: sIso(p.etaFinishAt),
+    },
+    machine: {
+      power: sEnum(m.power, ['AC', 'Battery']),
+      batteryPct: sNum(m.batteryPct),
+      chargerWatts: sNum(m.chargerWatts),
+      diskFreeGb: sNum(m.diskFreeGb),
+      memFreePct: sNum(m.memFreePct),
+      nasMounted: typeof m.nasMounted === 'boolean' ? m.nasMounted : null,
+      controlServerUp: typeof m.controlServerUp === 'boolean' ? m.controlServerUp : null,
+    },
+    recent: (Array.isArray(raw.recent) ? raw.recent : [])
+      .map((e) => (e && typeof e === 'object' ? { at: sIso(e.at), msg: sstr(e.msg) } : null))
+      .filter((e) => e && e.msg)
+      .slice(0, STATUS_RECENT_MAX),
+  };
+  return { ok: true, status };
+}

@@ -2,6 +2,7 @@
 // Real dependencies load lazily (firebase-admin) so tests injecting fakes never touch it.
 import { lifeUploadUrls, ingestLifeResults } from './ingest.js';
 import { requireLifeOwner } from './owner-auth.js';
+import { sanitizeLifeStatus } from './schema.js';
 
 const HEADERS = { 'cache-control': 'no-store' };
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$|^unknown$/;
@@ -102,4 +103,24 @@ export async function handleItem(request, deps) {
       : [null, null];
     return res({ item, previewUrl, thumbUrl, expiresAt: new Date((d.now ? d.now() : Date.now()) + 3600000).toISOString() });
   } catch (e) { return errRes(e); }
+}
+
+export async function handleStatusWrite(request, deps) {
+  const d = deps || await realDeps();
+  const denied = workerGate(request, d);
+  if (denied) return denied;
+  const body = await request.json().catch(() => null);
+  const out = sanitizeLifeStatus(body);
+  if (!out.ok) return res({ error: `Invalid status: ${out.reason}` }, 400);
+  try {
+    const receivedAt = new Date(d.now ? d.now() : Date.now()).toISOString();
+    await d.writeStatus(out.status, undefined, receivedAt);
+    return res({ ok: true, receivedAt });
+  } catch (e) { return errRes(e); }
+}
+
+// PUBLIC (no auth): numbers/labels only, no paths or names. The one exception to owner-only reads.
+export async function handleStatusRead(request, deps) {
+  const d = deps || await realDeps();
+  try { return res({ status: (await d.readStatus()) || null }); } catch (e) { return errRes(e); }
 }

@@ -86,3 +86,13 @@ export async function upsertSource(src, itemCount, db, nowIso = new Date().toISO
     id: src.id, kind: src.kind, label: src.label, libraryPath: src.libraryPath, itemCount, lastPushAt: nowIso,
   }, { merge: true });
 }
+
+// Heartbeat status doc (public read; see CONTRACT.md "Status").
+export async function writeStatus(status, db, receivedAt = new Date().toISOString()) {
+  await getDb(db).collection('life_status').doc('current').set({ ...status, receivedAt });
+}
+
+export async function readStatus(db) {
+  const s = await getDb(db).collection('life_status').doc('current').get();
+  return s.exists ? s.data() : null;
+}
