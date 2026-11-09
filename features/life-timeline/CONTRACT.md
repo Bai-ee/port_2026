@@ -45,7 +45,22 @@ Fields = `life_media` minus `{schema, ym, day, sourceIds, createdAt, updatedAt}`
 - `POST /api/archive/worker/life/upload-urls` body `{ items:[{ sha256, variant:'s'|'m', contentType:'image/jpeg', sizeBytes }] }` (1..200, size 1..10 MB) → `{ urls:[{ sha256, variant, storagePath, uploadUrl, headers:{'content-type':'image/jpeg'} }] }` (V4 write, 15 min; lowercase header key — see nas.js comment).
 - `POST /api/archive/worker/life/results` body `{ source:{id,kind,label,libraryPath}, items:LifeItem[1..100] }` → `{ ok:true, upserted, skipped:[{id,reason}], months:[ym…] }`. Upserts `life_media`, rebuilds touched `life_months`, upserts `life_sources`.
 
-## Owner routes (`app/api/life/*`, `no-store`)
+## Status (ingest heartbeat) — `life_status/current`, schema `life.status/1`
+Written every ~5 min by the Mac heartbeat; read by the public status band on `/dashboard/life`.
+```
+{ schema:'life.status/1', updatedAt:ISO, receivedAt:ISO /*server, added on write*/,
+  run:{ enabled:'on'|'dry'|'off', state:'running'|'stopped'|'done'|'idle', startedAt, batch /*'2020'|'2021-03'*/,
+        step:'download'|'plan'|'apply'|'thumbs'|'push'|'verify'|null, stepStartedAt, stoppedAt:string|null, error:string|null },
+  progress:{ batchesDone, batchesTotal, batchesRemaining:[label], itemsDownloadedThisBatch, itemsThisBatchTotal,
+             assets, pushed, unpushed, noThumb, lastPushAt, pushedLast24h, itemsPerMin, etaFinishAt },
+  machine:{ power:'AC'|'Battery', batteryPct, chargerWatts, diskFreeGb, memFreePct, nasMounted:boolean, controlServerUp:boolean },
+  recent:[{ at:ISO, msg }] }
+```
+`sanitizeLifeStatus` (schema.js): requires `schema === 'life.status/1'` and a valid ISO `updatedAt` (else 400); unknown fields dropped; strings trimmed, capped at 200, and **dropped (null) if they contain `/` or `\`** (no paths); enums coerced to null when invalid; numbers finite else null (counts rounded, >= 0); `batchesRemaining` <= 60, `recent` <= 20 (entries without a usable `msg` removed). Missing values are `null`. Stored with `store.writeStatus` (whole-doc overwrite) / `store.readStatus`.
+- `POST /api/archive/worker/life/status` (worker token, same gate as above; 503/401/400) body = `life.status/1` → `{ ok:true, receivedAt }`.
+- `GET /api/life/status` — **PUBLIC, no auth, `Cache-Control: no-store`** → `{ status: <doc> | null }`. The one exception to owner-only reads: the doc holds only counts, batch labels (`2020`, `2021-03`), power/disk numbers and short path-free messages; no file paths, file names, account names or item ids, enforced by the sanitizer above.
+
+## Owner routes (`app/api/life/*`, `no-store`; all except `status`)
 Gate: `verifyRequestUser` (Firebase ID token) AND `decoded.uid` in env `LIFE_OWNER_UIDS` (comma list). Env unset → 503 `{error:'Life timeline not configured'}`; not owner → 403. Never falls back to admins.
 - `GET /api/life/months` → `{ months:[{ym,count}] (asc, excludes 'unknown'), unknownCount, total }`.
 - `GET /api/life/month?ym=YYYY-MM|unknown` → `{ ym, items:[{ id, t, k, w, h, m, d, thumbUrl }], expiresAt }` (thumbUrl = signed `_s`; items without thumbs get `thumbUrl:null`).
@@ -53,4 +68,4 @@ Gate: `verifyRequestUser` (Firebase ID token) AND `decoded.uid` in env `LIFE_OWN
 
 ## Code layout
 `features/life-timeline/{schema.js (pure: sanitizeLifeItem, monthKey, buildMonthPacks, MONTH_PART_MAX=1500), store.js (Firestore via api/_lib firebase-admin; deps injectable), ingest.js (ingestLifeResults(deps, body)), signed.js (signReadUrl/signUploadUrl, injectable), owner-auth.js (requireLifeOwner), __tests__/*.test.js}` — ESM `.js` like `features/social-archive`. Tests use fakes only (no Firebase).
-P4 page: `app/dashboard/life/page.jsx` (owner-only bare validation view; ids kebab-case; theme tokens only).
+P4 page: `app/dashboard/life/page.jsx` (public `StatusBand.jsx` on top, owner-only bare validation view below; ids kebab-case; theme tokens only).

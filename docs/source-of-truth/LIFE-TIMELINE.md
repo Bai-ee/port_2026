@@ -14,12 +14,15 @@ Private, **owner-only** timeline of every photo/video by capture date. v1 = Appl
 4. Owner opens `/dashboard/life` → `GET /api/life/months|month|item`.
 
 ## Routes
-- Worker (bearer `HITLOOP_ARCHIVE_WORKER_TOKEN`): `app/api/archive/worker/life/{upload-urls,results}`.
+- Worker (bearer `HITLOOP_ARCHIVE_WORKER_TOKEN`): `app/api/archive/worker/life/{upload-urls,results,status}` (`status` = heartbeat write, `life_status/current`).
 - Owner: `app/api/life/{months,month,item}` — Firebase ID token AND uid in env **`LIFE_OWNER_UIDS`** (503 when unset — fail closed, no admin fallback).
+- **Public exception:** `GET /api/life/status` needs no sign-in (`no-store`). It returns the ingest heartbeat (`life.status/1`): counts, batch labels, power/disk numbers and short messages only. The sanitizer drops any string containing `/` or `\` and unknown fields, so no paths, file names or account names can reach it. `/dashboard/life` renders it as a status band (bento boxes, 60 s refresh, alert when heartbeat > 15 min old, run stopped or error) above the owner-gated timeline. Schema: CONTRACT.md "Status".
 - Handlers: `features/life-timeline/http.js`; pure logic `schema.js`; Firestore `store.js`; signing `signed.js`; gate `owner-auth.js`.
 
 ## Env (not yet set in Vercel — no deploy in v1)
 `LIFE_OWNER_UIDS` (owner uid), plus the existing `HITLOOP_ARCHIVE_WORKER_TOKEN` and Firebase admin vars.
+
+Runtime env for the status routes: `HITLOOP_ARCHIVE_WORKER_TOKEN` (write) and the Firebase admin vars (both); the public read needs no extra env.
 
 ## Dates
 Bucketed by **local capture time** (`takenLocal`), never UTC or file mtime. Library `imageDate` is a UTC instant; local = + `imageTimeZoneOffsetSeconds`; LMT-style offsets (e.g. -05:59) are rounded to 15 min for `tz`/`tsUtc` while keeping the wall clock.
