@@ -1,6 +1,6 @@
 # Instagram Channel Strategy (Active Content System, Phase 5)
 
-Status: adapter built behind the flag; Instagram stays NOT LIVE (`platforms.js` `live:false`). Going live is an owner decision. Parent plan: `ACTIVE-CONTENT-SYSTEM-PLAN.md` §3g.
+Status (2026-10-23): Instagram Login app set up; first supervised post done; per-client Connect + daily token refresh SHIPPED (PR #77); calendar X/IG per-post targets + Instagram publish leg SHIPPED (PR #79, fixes #80, footer #84). `platforms.js` instagram stays `live:false` (generic auto-publish paths do not call it) with `crossPost:true` (calendar leg only). As-built contract: `docs/source-of-truth/SOCIAL-AUTO-PUBLISH.md` (Instagram connect + Calendar cross-post). Owner's first live X+IG calendar post is still pending. Parent plan: `ACTIVE-CONTENT-SYSTEM-PLAN.md` §3g.
 
 Code: `features/social-posting/adapters/instagram.js` (Graph API container flow), `features/social-posting/instagram-caption.js` (pure caption builder). Tests in `features/social-posting/__tests__/instagram-adapter.test.js`.
 
@@ -35,25 +35,25 @@ Rule: nothing publishes without a written story (caption builder refuses placeho
 - No Instagram account data: follower count, existing audience, past performance are all unknown.
 - No insights path built: reach, plays, saves, shares, profile visits are not read anywhere.
 - No verified link between records / UE / client audiences and Instagram interests.
-- No stored token or account: nothing is connected.
+- Accounts connect per client in Social Accounts (`social_accounts/{clientId}.platforms.instagram`); @bai__ee is connected for HITLOOP.
 
 ## 5. Prerequisites to go live (owner / ops)
 
 1. Instagram Business or Creator account (not personal).
 2. Meta developer app; if using Facebook Login, the account linked to a Facebook Page.
 3. Permissions: `instagram_business_content_publish` (Instagram Login) or `instagram_content_publish` plus `pages_show_list` / `pages_read_engagement` (Facebook Login). App Review / Business verification may be required for use beyond app-role testers: status UNKNOWN.
-4. Long-lived token (about 60 days) with a refresh job and expiry alert; stored through the existing `social-accounts` store (platform-generic), never in the repo or logs.
+4. DONE: long-lived token (about 60 days), daily refresh cron `/api/worker/instagram-token-refresh`, expiry/error shown on the Social Accounts row; stored through the existing `social-accounts` store (platform-generic), never in the repo or logs.
 5. Media must be a PUBLIC https URL that Instagram's servers can fetch (it pulls the file itself). Use public or long-lived signed Firebase Storage URLs; the signed URL must outlive the poll window. Local NAS paths cannot be used.
 6. Media constraints to verify against current Meta docs before go-live: reel length/size/codec, aspect ratio, image JPEG only, carousel item rules.
-7. OAuth connect flow (new route + UI row; the Social Accounts card already has a generic row). Not built.
-8. Flip `platforms.js` instagram `live:true` only after a supervised test post on a throwaway account.
+7. DONE: OAuth connect flow (`app/api/social-posting/instagram-oauth{,/callback}`, Social Accounts Instagram row).
+8. Supervised test post done 2026-10-23. `live:true` stays off: the calendar uses `crossPost` instead; flipping `live` needs the generic paths to pass the Instagram adapter's own signature first. Remaining: Meta App Review / Business verification so client accounts need not be testers.
 
 ## 6. Owner decisions
 
 - Go/no-go, and which account is first (personal brand vs a HITLOOP account; plan defers HITLOOP account until audience data justifies it).
 - Hashtag policy: default is 3-5 relevant tags from the package (none invented; fewer if the package has fewer). Alternatives: zero tags, or a fixed per-engine set.
 - Auto vs approval mode (recommend approval for the first month).
-- Login type: **DECIDED 2026-10-23 — Instagram Login** (no Facebook Page). Adapter host is `graph.instagram.com`; permission `instagram_business_content_publish`. Meta app "HITLOOP" (id 1626060622319695), Instagram app "HITLOOP-IG"; @bai__ee (IG user id 17841402101650073, BUSINESS) is an Instagram Tester; token in env `INSTAGRAM_ACCESS_TOKEN` / `INSTAGRAM_USER_ID`.
+- Login type: **DECIDED 2026-10-23 — Instagram Login** (no Facebook Page). Adapter host is `graph.instagram.com`; permission `instagram_business_content_publish`. Meta app "HITLOOP" (id 1626060622319695), Instagram app "HITLOOP-IG"; @bai__ee (IG user id 17841402101650073, BUSINESS) is an Instagram Tester; tokens now stored per client by Connect; env `INSTAGRAM_ACCESS_TOKEN` / `INSTAGRAM_USER_ID` are redundant (remove after owner OK).
 - First-comment strategy and whether to cross-link X handle in bio.
 - Whether client work may appear on a personal Instagram at all (rights).
 
@@ -64,6 +64,8 @@ Rule: nothing publishes without a written story (caption builder refuses placeho
 - Until then the strategy above is a hypothesis, not a measured plan.
 
 ## 8. Wiring still needed (later phase, other agents' files)
+
+Partly done 2026-10-23 by `features/social-posting/cross-post.js` (calendar leg): token from `social-accounts`, `instagramDelivery.mediaId` stored, `ambiguous` → `needs_review` (never auto-retried). Still open: caption = raw post text (`buildInstagramCaption` / `variants.instagram` not used), no carousel, no sweep retry classes, no insights.
 
 - `twitter-service.js` / `app/api/social-posting/route.js`: route by `post.platform` through `getAdapter`, carry `variants.instagram` and 9:16 asset URLs, call `buildInstagramCaption`, resolve `accessToken`/`igUserId` from `social-accounts`, and persist the error flags (`retryable`, `ambiguous`, `stage`). `ambiguous:true` must park the post as `needs_review`, never auto-retry (same as the X stale-claim rule).
 - The sweep must treat `ig-poll-timeout` / `ig-transient` as retryable with the existing 3-attempt cap, and `ig-publish-ambiguous` as never.
