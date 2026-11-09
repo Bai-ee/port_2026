@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 const require=createRequire(import.meta.url);
-const {buildAuthRequestShim,verifyAdminRequest}=require('../../../../../api/_lib/auth.cjs');
-const fb=require('../../../../../api/_lib/firebase-admin.cjs');
+const {buildAuthRequestShim,verifyAdminRequest}=require('../../../../api/_lib/auth.cjs');
+const fb=require('../../../../api/_lib/firebase-admin.cjs');
 
 async function auth(r){try{await verifyAdminRequest(buildAuthRequestShim(r));return null}catch{return NextResponse.json({error:'Forbidden.'},{status:403})}}
 

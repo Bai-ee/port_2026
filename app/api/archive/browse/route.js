@@ -3,8 +3,8 @@ import { createRequire } from 'module';
 import { randomUUID } from 'crypto';
 
 const require = createRequire(import.meta.url);
-const { buildAuthRequestShim, verifyAdminRequest } = require('../../../../../api/_lib/auth.cjs');
-const fb = require('../../../../../api/_lib/firebase-admin.cjs');
+const { buildAuthRequestShim, verifyAdminRequest } = require('../../../../api/_lib/auth.cjs');
+const fb = require('../../../../api/_lib/firebase-admin.cjs');
 
 export async function POST(request) {
   try { await verifyAdminRequest(buildAuthRequestShim(request)); }
