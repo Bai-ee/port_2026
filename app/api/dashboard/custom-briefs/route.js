@@ -361,6 +361,9 @@ function serializeBriefDoc({ doc, data, clientId, client, origin }) {
     description: data.description || '',
     ogLabel: data.ogLabel || 'BRYAN BALLI',
     hideOgSubhead: data.hideOgSubhead === true,
+    ogSubhead: data.ogSubhead || '',
+    ogLines: Array.isArray(data.ogLines) ? data.ogLines : [],
+    ogTitleLines: Array.isArray(data.ogTitleLines) ? data.ogTitleLines : [],
     sourcePath: data.sourcePath || '',
     sourceHash: data.sourceHash || '',
     public: data.public === true,
@@ -524,6 +527,9 @@ export async function POST(request) {
     const description = String(body.description || '').trim().slice(0, 500);
     const ogLabel = String(body.ogLabel || 'BRYAN BALLI').trim().slice(0, 80) || 'BRYAN BALLI';
     const hideOgSubhead = body.hideOgSubhead === true;
+    const ogSubhead = String(body.ogSubhead || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+    const ogLines = (Array.isArray(body.ogLines) ? body.ogLines : []).map((line) => String(line || '').replace(/\s+/g, ' ').trim().slice(0, 120)).filter(Boolean).slice(0, 2);
+    const ogTitleLines = (Array.isArray(body.ogTitleLines) ? body.ogTitleLines : []).map((line) => String(line || '').replace(/\s+/g, ' ').trim().slice(0, 40)).filter(Boolean).slice(0, 3);
     const pdfFileName = titlePdfFileName(title);
     const isPublic = body.public === true;
     const publicClientSlug = publicClientSlugFor(bootstrap?.client || null, clientId, body.publicClientSlug);
@@ -647,6 +653,9 @@ export async function POST(request) {
       description,
       ogLabel,
       hideOgSubhead,
+      ogSubhead,
+      ogLines,
+      ogTitleLines,
       html,
       kind,
       ...(kind === 'invoice' ? { invoice: invoiceModel, sections: invoiceSections } : {}),

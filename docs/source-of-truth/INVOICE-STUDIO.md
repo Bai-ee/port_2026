@@ -222,7 +222,7 @@ byte-identical decoded content.
 
 ## 9. Rail structure
 
-Exactly 14 section `RailCard`s, one per `features/invoices/registry.js` id, rendered in
+Exactly 15 section `RailCard`s (14 + `totalDue`, §15), one per `features/invoices/registry.js` id, rendered in
 `draft.sections.order` (not a hardcoded list — the rail re-orders itself live), plus 2 admin-only
 cards (`PublishCard`, `SavedInvoicesCard`) below a visual divider. `SectionCard.jsx` owns the eye
 toggle, ↑/↓ reorder, the "off" dim, touch-target sizing, and default-title resolution
@@ -375,3 +375,10 @@ pre-Studio HTML bytes.
 - **Bank transfer** (§2 shape gains `payment.bank = { bankName, accountNumber, routingAch, routingWire }`, free text so leading zeros survive): rendered as `#invoice-payment-bank` above the method/QR rows, omitted when all four are empty (byte-identical for existing invoices). Four `payment.bank.*` editable canvas fields (catalog 63 → 67); `structureKey()` carries a `bank=` presence bitmask. Rail: "Add bank transfer" / "Remove bank transfer". Legacy `InvoiceBuilderCard` has the same inputs (`#invoice-builder-bank-panel`). No on/off toggle (owner decision pending). The owner's real bank details are never in source.
 - **Launchers:** `invoice-builder` card `footerAction` OPEN STUDIO + `#invoice-builder-open-studio-link` in the legacy toolbar. Legacy card and Studio keep separate drafts; they converge only through publish → Saved invoices.
 - Open owner decisions unchanged: bank toggle, legacy card retirement.
+
+## 15. 2026-11-05 session — Totals fix + Total due section
+
+- **Totals honoured when nothing is priced** (`model.js` `computeTotals`): subtotal still sums priced items, but when every item is a text `costLabel` the typed `totals.subtotal` is used instead of printing $0.00 and overwriting rail edits. `total` stays `subtotal − discount + tax`. New export `allPricedItemCount()`. `rail/TotalsCard.jsx` now shows which mode is active, makes Subtotal editable only when no item is priced, and renders Total as a read-only computed figure (it was a decoy input), computed live via `computeTotals` so it matches the canvas.
+- **Totals-area presence is structural** (`invoice-fields.js` `structureKey` gains `totals=` bitmask): discount/tax/amount-paid rows and the Deposit / Total due blocks print only when non-zero, so a figure crossing 0 now forces a structural re-render — previously a first discount or deposit never appeared until an unrelated structural edit.
+- **`totalDue` section** (registry id, default OFF, 15th section): a second stand-alone amount box in the Deposit shape so deposit and full total can be stated separately — `render.js` `buildTotalDue()` → `#invoice-total-due-section`, fields `totals.totalDue` (money, hand-set, NOT derived) + `totals.totalDueLabel` (editable heading, default "Total due"), rail `TotalDueCard.jsx` (`#invoice-rail-total-due-card`, presets Total due / Balance due / Final payment). Prints only when amount > 0. Field catalog 67 → 69. Golden fixture unchanged (section off by default).
+- **Old drafts**: `useInvoiceDraft.js` `normalizeSectionsShape` now slots a registry id missing from a stored order after its nearest present predecessor (Total due lands after Deposit), not at the tail. A draft autosaved before this change may already hold it at the tail — drag it up once.

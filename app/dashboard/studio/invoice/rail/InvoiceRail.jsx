@@ -104,6 +104,7 @@ import LineItemsCard from './LineItemsCard';
 import StandaloneItemsCard from './StandaloneItemsCard';
 import TotalsCard from './TotalsCard';
 import DepositCard from './DepositCard';
+import TotalDueCard from './TotalDueCard';
 import RecommendationCard from './RecommendationCard';
 import FlowCard from './FlowCard';
 import TermsCard from './TermsCard';
@@ -126,6 +127,7 @@ const SECTION_CARD_COMPONENTS = {
   standaloneItems: StandaloneItemsCard,
   totals: TotalsCard,
   deposit: DepositCard,
+  totalDue: TotalDueCard,
   recommendation: RecommendationCard,
   flow: FlowCard,
   terms: TermsCard,
@@ -149,6 +151,7 @@ const CARD_DOM_ID_TO_KEY = {
   'invoice-rail-standalone-items-card': 'standaloneItems',
   'invoice-rail-totals-card': 'totals',
   'invoice-rail-deposit-card': 'deposit',
+  'invoice-rail-total-due-card': 'totalDue',
   'invoice-rail-recommendation-card': 'recommendation',
   'invoice-rail-flow-card': 'flow',
   'invoice-rail-terms-card': 'terms',
@@ -229,6 +232,13 @@ const InvoiceRail = forwardRef(function InvoiceRail({
   const [publishError, setPublishError] = useState('');
   const [publishedAt, setPublishedAt] = useState('');
   const [copiedLink, setCopiedLink] = useState(false);
+  // OG share-image controls (Publish card's live preview). Sent with the
+  // publish body; restored from the saved brief on "Open in editor".
+  const [ogLabel, setOgLabel] = useState('');
+  const [ogSubhead, setOgSubhead] = useState('');
+  const [hideOgSubhead, setHideOgSubhead] = useState(false);
+  const [ogLines, setOgLines] = useState(['', '']);
+  const [ogTitleLines, setOgTitleLines] = useState(['', '']);
 
   // ── Signed-in: saved invoices list ──────────────────────────────────────
   const [savedInvoices, setSavedInvoices] = useState([]);
@@ -279,6 +289,7 @@ const InvoiceRail = forwardRef(function InvoiceRail({
         method: 'POST',
         body: JSON.stringify({
           kind: 'invoice', invoice: draft.invoice, sections: draft.sections, title, briefSlug, public: publicToggle,
+          ogLabel: ogLabel || undefined, ogSubhead, hideOgSubhead, ogLines, ogTitleLines,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -299,7 +310,7 @@ const InvoiceRail = forwardRef(function InvoiceRail({
       if (!cancelledRef.current) setPublishing(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authedFetch, publishing, publishTitle, publishSlugInput, savedSlug, publicToggle, draft.invoice, draft.sections, loadSavedInvoices]);
+  }, [authedFetch, publishing, publishTitle, publishSlugInput, savedSlug, publicToggle, ogLabel, ogSubhead, hideOgSubhead, ogLines, ogTitleLines, draft.invoice, draft.sections, loadSavedInvoices]);
 
   const copyPublicLink = useCallback(async (url) => {
     if (!url) return;
@@ -323,6 +334,11 @@ const InvoiceRail = forwardRef(function InvoiceRail({
     setPublishTitle(brief.title || '');
     setPublishSlugInput('');
     setPublicToggle(brief.public !== false);
+    setOgLabel(brief.ogLabel && brief.ogLabel !== 'BRYAN BALLI' ? brief.ogLabel : '');
+    setOgSubhead(brief.ogSubhead || '');
+    setHideOgSubhead(brief.hideOgSubhead === true);
+    setOgLines([brief.ogLines?.[0] || '', brief.ogLines?.[1] || '']);
+    setOgTitleLines([brief.ogTitleLines?.[0] || '', brief.ogTitleLines?.[1] || '']);
     setPublishedBrief(brief);
     setPublishError('');
     setPublishedAt('');
@@ -358,6 +374,11 @@ const InvoiceRail = forwardRef(function InvoiceRail({
     setPublishTitle('');
     setPublishSlugInput('');
     setPublicToggle(true);
+    setOgLabel('');
+    setOgSubhead('');
+    setHideOgSubhead(false);
+    setOgLines(['', '']);
+    setOgTitleLines(['', '']);
     setPublishedBrief(null);
     setPublishError('');
     setPublishedAt('');
@@ -392,6 +413,9 @@ const InvoiceRail = forwardRef(function InvoiceRail({
     title: publishTitle, slugInput: publishSlugInput, publicToggle, savedSlug,
     publishedBrief, publishing, error: publishError, publishedAt, copiedLink,
     setTitle: setPublishTitle, setSlugInput: setPublishSlugInput, setPublicToggle,
+    ogLabel, ogSubhead, hideOgSubhead, setOgLabel, setOgSubhead, setHideOgSubhead,
+    ogLines, setOgLines, ogTitleLines, setOgTitleLines,
+    authedFetch,
     submit: publishInvoice, copyLink: copyPublicLink,
   };
   const savedList = {

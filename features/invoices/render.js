@@ -211,19 +211,36 @@ function resolvePdfHref(options) {
 function hero(id, sub, body, brand, sectionId, editable, draftLogoDataUrl, headlineText) {
   const mark = brand?.logo
     ? `<img id="invoice-brand-logo" src="${brand.logo.dataUri}" alt="${esc(brand.wordmark || '')}" width="${brand.logo.width}" height="${brand.logo.height}" />`
-    : (draftLogoDataUrl ? `<img id="invoice-draft-logo" src="${esc(draftLogoDataUrl)}" alt="" style="display:block;width:56px;height:auto;margin:0;flex:0 0 auto;" />` : '');
+    : (draftLogoDataUrl ? `<img id="invoice-draft-logo" src="${esc(draftLogoDataUrl)}" alt="" style="display:block;height:auto;width:auto;margin:0;flex:0 0 auto;" />` : '');
   const headline = headlineText
     ? `<h1 class="invoice-hero-title">${editableField('labels.title', 'text', null, esc(headlineText), editable)}</h1>`
     : '';
+  // Headline + number stack on the left, logo on the right, in ONE flex row:
+  // the logo stretches to the text block's height (CSS align-self:stretch
+  // + auto width keeps its aspect), so it is exactly as tall as the two
+  // lines at every sheet width — canvas, published page and PDF alike — and
+  // can never hang into the meta rule below.
   return `
   <header id="${esc(id)}" class="invoice-hero"${sectionAttr(sectionId, editable)}>
     <div class="invoice-hero-mark">
+      <div class="invoice-hero-text">
+        ${headline}
+        ${sub ? `<p class="invoice-hero-sub">${sub}</p>` : ''}
+      </div>
       ${mark}
-      ${headline}
     </div>
-    ${sub ? `<p class="invoice-hero-sub">${sub}</p>` : ''}
     ${body}
   </header>`;
+}
+
+// Rough printed line count for a free-text block at the PDF sheet width
+// (~95 chars per line of 18px Space Grotesk across a 1200px sheet) — feeds
+// the single-page PDF height estimate, which must err long, never short: an
+// undershoot splits the invoice onto a second page.
+function textLinesEstimate(text) {
+  const value = String(text || '');
+  if (!value.trim()) return 0;
+  return value.split(/\n/).reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / 95)), 0);
 }
 
 function block(id, label, body, sectionId, editable, labelField) {
@@ -296,15 +313,22 @@ function buildCover(invoice, options) {
   // mark/name is the logo image beside it (or nothing, on a public render);
   // the project this document covers is the Project summary section's job,
   // and the amount belongs with the money blocks below, not the masthead.
-  // "Bill To"/"Issue Date"/"Due Date" below are this strip's own fixed
-  // captions, not a resolveInvoiceLabels() key — no docKind/labels entry
-  // exists for them (only billToLabel/issueLabel/dueLabel, used by Invoice
-  // details' differently-worded facts), so they stay hardcoded on purpose.
+  // "Bill To"/"Issue Date"/"Due Date" are this strip's own default
+  // captions (not the doc-kind defaults, which word Invoice details' facts
+  // differently), but an EXPLICIT per-invoice labels.{billToLabel,
+  // issueLabel,dueLabel} override — the same fields Invoice details'
+  // label overrides edit — replaces them, so renaming "Due Date" to
+  // e.g. "Target launch" changes the cover too.
+  const overrides = invoice.labels && typeof invoice.labels === 'object' ? invoice.labels : {};
+  const caption = (key, fallback) => {
+    const value = String(overrides[key] || '').trim();
+    return esc(value || fallback);
+  };
   const body = `
     <div class="meta">
-      <div><div class="k">Bill To</div><div class="v">${editableField('billTo.name', 'text', null, esc(billTo.name || '—'), editable)}</div></div>
-      <div><div class="k">Issue Date</div><div class="v">${editableField('issueDate', 'date', issueDate, esc(issueDate), editable)}</div></div>
-      <div><div class="k">Due Date</div><div class="v">${editableField('dueDate', 'date', dueDate, esc(dueDate || '—'), editable)}</div></div>
+      <div><div class="k">${caption('billToLabel', 'Bill To')}</div><div class="v">${editableField('billTo.name', 'text', null, esc(billTo.name || '—'), editable)}</div></div>
+      <div><div class="k">${caption('issueLabel', 'Issue Date')}</div><div class="v">${editableField('issueDate', 'date', issueDate, esc(issueDate), editable)}</div></div>
+      <div><div class="k">${caption('dueLabel', 'Due Date')}</div><div class="v">${editableField('dueDate', 'date', dueDate, esc(dueDate || '—'), editable)}</div></div>
     </div>`;
   // Just the number — the doc-kind word is already the big headline above,
   // so repeating "Invoice"/"Quote" here would be pure repetition.
@@ -400,8 +424,11 @@ function buildLineItems(invoice, options) {
       <div class="invoice-item-rate">${esc(labels.rateLabel || 'Rate')}</div>
       <div class="invoice-item-amount">${esc(labels.amountLabel || 'Amount')}</div>
     </div>`;
+  // A group whose every amount is hand-written text (costLabel) has nothing
+  // to put under Hours / Rate — drop those two columns for that group so the
+  // table reads Task · Amount instead of two empty columns.
   const body = categories.map((cat) => `
-    <div class="invoice-item-group"${rowAttr('category', cat.id, editable)}>
+    <div class="invoice-item-group${cat.items.every((item) => item.costLabel) ? ' invoice-item-group--text-cost' : ''}"${rowAttr('category', cat.id, editable)}>
       ${cat.name ? `<div class="invoice-category-label">${editableField(`categories[${cat.id}].name`, 'text', null, esc(cat.name), editable)}</div>` : ''}
       ${head}
       ${cat.items.map((item) => renderItemRow(item, invoice.currency, {
@@ -450,22 +477,33 @@ function buildTotals(invoice, options) {
     hasAdjustments ? fact(labels.subtotalLabel || 'Subtotal', derivedField('totals.subtotal', money(totals.subtotal), editable)) : '',
     totals.discount ? fact(totals.discountLabel || labels.discountLabel || 'Discount', `−${editableField('totals.discount', 'money', totals.discount, money(totals.discount), editable)}`, discountLabelField) : '',
     totals.tax ? fact(totals.taxLabel || labels.taxLabel || 'Tax', editableField('totals.tax', 'money', totals.tax, money(totals.tax), editable), taxLabelField) : '',
-    hasAdjustments || totals.amountPaid ? fact(labels.totalLabel || 'Total', `${derivedField('totals.total', money(totals.total), editable)} ${esc(currency)}`) : '',
-    totals.amountPaid ? fact(labels.amountPaidLabel || 'Amount paid', `−${editableField('totals.amountPaid', 'money', totals.amountPaid, money(totals.amountPaid), editable)}`) : '',
   ]);
-  const balancePath = totals.amountPaid ? 'totals.balanceDue' : 'totals.total';
-  // 'Total due' (the no-amountPaid branch) has no resolveInvoiceLabels() key
-  // — only the amountPaid branch ('Balance due') matches labels.balanceLabel
-  // — so only that branch swaps.
-  const balance = `
-    <div class="invoice-balance">
-      <span class="invoice-balance-label">${esc(totals.amountPaid ? (labels.balanceLabel || 'Balance due') : 'Total due')}</span>
-      <span class="invoice-balance-value">${derivedField(balancePath, money(totals.amountPaid ? totals.balanceDue : totals.total), editable)} <span class="invoice-balance-currency">${esc(currency)}</span></span>
+  // One centered hero figure — the Total — with its label on the left and
+  // the currency code on the far right (3-column grid, see
+  // .invoice-total-hero). Everything the reader may want to reconcile
+  // against it (amount paid, balance due) cascades underneath as small
+  // secondary rows, so the sheet ends on one number at one weight.
+  const totalHero = `
+    <div class="invoice-balance invoice-total-hero">
+      <span class="invoice-balance-label">${editableField('labels.totalLabel', 'text', null, esc(labels.totalLabel || 'Total'), editable)}</span>
+      <span class="invoice-balance-value">${derivedField('totals.total', money(totals.total), editable)}</span>
+      <span class="invoice-balance-currency">${esc(currency)}</span>
     </div>`;
+  const secondary = totals.amountPaid
+    ? `<div class="invoice-totals-secondary">${facts([
+      fact(labels.amountPaidLabel || 'Amount paid', `−${editableField('totals.amountPaid', 'money', totals.amountPaid, money(totals.amountPaid), editable)}`),
+      fact(labels.balanceLabel || 'Balance due', `<strong>${derivedField('totals.balanceDue', money(totals.balanceDue), editable)} ${esc(currency)}</strong>`),
+    ])}</div>`
+    : '';
   const paidMark = invoice.status === 'paid' && totals.balanceDue <= 0
     ? '<div class="invoice-paid-mark">Paid in full</div>'
     : '';
-  return block('invoice-totals-panel', labels.totalsLabel || 'Totals', `${rows}${balance}${paidMark}`, 'totals', editable);
+  // Heading + hero label are per-invoice label overrides (invoice.labels),
+  // editable on the canvas and in the rail's Totals card — same pattern as
+  // Recommendation's heading.
+  const totalsHeading = labels.totalsLabel || 'Totals';
+  const totalsHeadingField = editableField('labels.totalsLabel', 'text', null, esc(totalsHeading), editable);
+  return block('invoice-totals-panel', totalsHeading, `${rows}${totalHero}${secondary}${paidMark}`, 'totals', editable, totalsHeadingField);
 }
 
 
@@ -484,16 +522,30 @@ function buildDeposit(invoice, options) {
   // override mechanism is untouched. It used to be repeated as a caption
   // inside the container above the amount; the container now holds the
   // figure and nothing else.
-  const partial = totals.total > 0 && totals.deposit < totals.total
-    ? `<div class="invoice-due-of">of ${derivedField('totals.total', esc(formatMoney(totals.total, currency, locale)), editable)} total</div>`
-    : '';
   const body = `
     <div class="card" style="text-align:center">
       <div class="invoice-total-value" style="margin:4px 0">${editableField('totals.deposit', 'money', totals.deposit, esc(formatMoney(totals.deposit, currency, locale)), editable)}</div>
-      ${partial}
     </div>`;
   const depositLabelField = editableField('totals.depositLabel', 'text', null, esc(depositHeading), editable);
   return block('invoice-deposit-section', depositHeading, body, 'deposit', editable, depositLabelField);
+}
+
+// Second stand-alone amount box, same shape as Deposit, so a deposit and
+// the full total can each be stated in their own box. The heading is the
+// block's own editable label (totals.totalDueLabel, default 'Total due');
+// the figure is a hand-set money field (totals.totalDue), deliberately NOT
+// derived from totals.total so it stays independently editable.
+function buildTotalDue(invoice, options) {
+  const { totals, currency, locale } = invoice;
+  const editable = options.editable;
+  if (!(totals.totalDue > 0)) return '';
+  const heading = totals.totalDueLabel || 'Total due';
+  const body = `
+    <div class="card" style="text-align:center">
+      <div class="invoice-total-value" style="margin:4px 0">${editableField('totals.totalDue', 'money', totals.totalDue, esc(formatMoney(totals.totalDue, currency, locale)), editable)}</div>
+    </div>`;
+  const labelField = editableField('totals.totalDueLabel', 'text', null, esc(heading), editable);
+  return block('invoice-total-due-section', heading, body, 'totalDue', editable, labelField);
 }
 
 function buildRecommendation(invoice, options) {
@@ -506,7 +558,17 @@ function buildRecommendation(invoice, options) {
       ${recommendation.body ? `<p class="sub" style="font-size:18px;margin-bottom:20px">${editableField('recommendation.body', 'multiline', recommendation.body, esc(recommendation.body), editable)}</p>` : ''}
       ${recommendation.chips.length ? `<div class="invoice-chip-row">${recommendation.chips.map((c, i) => `<span class="invoice-chip"${rowAttr('chips', i, editable)}>${editableField(`recommendation.chips[${i}]`, 'text', null, esc(c), editable)}</span>`).join('')}</div>` : ''}
     </div>`;
-  return block('invoice-recommendation-section', labels.recommendationLabel || 'Recommendation', `<p class="invoice-recommendation-name">${editableField('recommendation.name', 'text', null, esc(recommendation.name || labels.recommendationLabel || 'Recommendation'), editable)}</p>${body}`, 'recommendation', editable);
+  // Every line here is the operator's to change or drop: the section
+  // heading is the per-invoice labels.recommendationLabel override (blank =
+  // doc-kind default), the title line prints only when recommendation.name
+  // is set (it used to fall back to repeating the heading), and body/chips
+  // print only when present — so this can be a plain labeled text field.
+  const heading = labels.recommendationLabel || 'Recommendation';
+  const headingField = editableField('labels.recommendationLabel', 'text', null, esc(heading), editable);
+  const nameLine = recommendation.name
+    ? `<p class="invoice-recommendation-name">${editableField('recommendation.name', 'text', null, esc(recommendation.name), editable)}</p>`
+    : '';
+  return block('invoice-recommendation-section', heading, `${nameLine}${body}`, 'recommendation', editable, headingField);
 }
 
 function buildFlow(invoice, options) {
@@ -644,6 +706,7 @@ const SECTION_BUILDERS = {
   standaloneItems: buildStandaloneItems,
   totals: buildTotals,
   deposit: buildDeposit,
+  totalDue: buildTotalDue,
   recommendation: buildRecommendation,
   flow: buildFlow,
   terms: buildTerms,
@@ -669,8 +732,13 @@ const INVOICE_CSS = `
   .invoice-hero-sub, .invoice-block-label, .stat-row .k, #invoice-contact-footer-section,
   .invoice-list, .invoice-category-label, .invoice-subitem-list li, .invoice-chip { color:#000000; }
   /* Mark and wordmark read as one lockup on a single baseline. */
-  .invoice-hero-mark { display:flex; align-items:center; gap:14px; margin:0 0 10px; }
-  #invoice-brand-logo { display:block; width:56px; height:auto; margin:0; flex:0 0 auto; }
+  /* Headline + number on the left, logo on the right, logo as tall as the
+     text block (align-self:stretch; width follows the aspect ratio) and
+     capped so a tall logo never dominates. See hero(). */
+  .invoice-hero-mark { display:flex; align-items:stretch; justify-content:space-between; gap:24px; margin:0 0 10px; }
+  .invoice-hero-text { min-width:0; }
+  .invoice-hero-mark > img { display:block; align-self:stretch; height:auto; width:auto; max-height:112px; max-width:200px; object-fit:contain; object-position:right top; margin:0; flex:0 0 auto; }
+  #invoice-brand-logo { display:block; width:auto; height:auto; margin:0; flex:0 0 auto; }
   .invoice-signer { display:flex; flex-direction:column; gap:2px; text-align:left; text-transform:none; letter-spacing:.04em; line-height:1.5; }
   .invoice-signer .invoice-link { text-decoration:none; }
   .invoice-signer-name { font-weight:700; letter-spacing:.1em; text-transform:uppercase; }
@@ -682,7 +750,7 @@ const INVOICE_CSS = `
   .invoice-sheet { max-width:min(1180px, 94vw); margin:0 auto; padding:clamp(22px,4vw,44px) var(--gutter) clamp(28px,5vw,52px); }
   .invoice-hero { padding-bottom:20px; margin-bottom:22px; border-bottom:1px solid var(--line); }
   .invoice-hero-title { font-family:'Doto',monospace; font-weight:900; font-size:clamp(30px,6vw,60px); line-height:.94; letter-spacing:0; margin:0; color:var(--ink); }
-  .invoice-hero-sub { font-family:'Space Mono',monospace; font-size:13px; letter-spacing:.18em; text-transform:uppercase; line-height:1.4; color:var(--ink-soft); margin:0 0 18px; display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; }
+  .invoice-hero-sub { font-family:'Space Mono',monospace; font-size:13px; letter-spacing:.18em; text-transform:uppercase; line-height:1.4; color:var(--ink-soft); margin:6px 0 0; display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; }
   .invoice-hero-number { font-weight:700; letter-spacing:.12em; }
   /* BRIEF_CSS scopes the cover meta grid and marquee scale to \`.cover\` (a
      slide class this layout no longer emits), so the sheet restates them at
@@ -699,6 +767,9 @@ const INVOICE_CSS = `
   .invoice-block { margin:0 0 20px; break-inside:avoid; page-break-inside:avoid; }
   .invoice-block-label { font-family:'Space Mono',monospace; font-size:11px; font-weight:700; letter-spacing:.22em; text-transform:uppercase; color:var(--ink-soft); margin:0 0 10px; }
   .invoice-block .card { padding:clamp(14px,2.4vw,22px); }
+  /* The Recommendation body borrows the brief's .sub class, whose 58ch
+     max-width left ~30% of the card empty on a full-width invoice sheet. */
+  #invoice-recommendation-section .card .sub { max-width:none; white-space:pre-line; }
   .invoice-block .stat-row { padding:12px 0; }
   #invoice-contact-footer-section { width:100%; padding:16px 0 0; margin-top:4px; border-top:1px solid var(--line); justify-content:space-between; align-items:center; gap:16px; }
   /* Grid, not flex-wrap: the code stays beside the details at every width.
@@ -727,22 +798,29 @@ const INVOICE_CSS = `
   .invoice-status { font-family:'Space Mono',monospace; font-size:10px; letter-spacing:.16em; text-transform:uppercase; border:1px solid var(--ink); padding:2px 8px; border-radius:999px; }
   .invoice-status.is-paid { background:var(--ink); color:#fff; }
   /* The one number the reader has to act on gets the weight. */
-  .invoice-balance { display:flex; justify-content:space-between; align-items:baseline; gap:16px; flex-wrap:wrap; margin-top:14px; padding-top:14px; border-top:2px solid var(--ink); }
+  .invoice-balance { display:flex; justify-content:space-between; align-items:baseline; gap:16px; flex-wrap:wrap; margin-top:14px; padding-top:14px; border-top:1px solid var(--line); }
+  .invoice-balance.invoice-total-hero { display:grid; grid-template-columns:1fr auto 1fr; align-items:baseline; }
+  .invoice-balance.invoice-total-hero .invoice-balance-value { text-align:center; }
+  .invoice-balance.invoice-total-hero .invoice-balance-currency { text-align:right; }
+  .invoice-totals-secondary { margin-top:12px; padding-top:4px; border-top:1px solid var(--line); }
+  .invoice-totals-secondary .invoice-fact dd { text-align:right; }
+  .invoice-totals-secondary .invoice-fact dd strong { font-weight:700; }
   .invoice-balance-label { font-family:'Space Mono',monospace; font-size:11px; letter-spacing:.18em; text-transform:uppercase; }
   .invoice-balance-value { font-family:'Doto',monospace; font-weight:900; font-size:clamp(26px,4.4vw,44px); line-height:1; }
   .invoice-balance-currency { font-family:'Space Mono',monospace; font-weight:400; font-size:12px; letter-spacing:.14em; }
-  .invoice-due-of { font-family:'Space Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; opacity:.72; }
   .invoice-paid-mark { margin-top:10px; font-family:'Space Mono',monospace; font-size:11px; letter-spacing:.2em; text-transform:uppercase; }
   .invoice-item-group { margin:0 0 18px; }
   .invoice-item-row { display:grid; grid-template-columns:minmax(0,1fr) 82px 104px 116px; gap:14px; align-items:baseline; width:100%; padding:11px 0; border-bottom:1px solid var(--line); }
   .invoice-item-row:last-child { border-bottom:none; }
-  .invoice-item-head { padding:6px 0; border-bottom:1px solid var(--ink); font-family:'Space Mono',monospace; font-size:10px; letter-spacing:.18em; text-transform:uppercase; }
+  .invoice-item-head { padding:6px 0; border-bottom:1px solid var(--line); font-family:'Space Mono',monospace; font-size:10px; letter-spacing:.18em; text-transform:uppercase; }
   .invoice-item-head > div { font-family:'Space Mono',monospace; font-size:10px; font-weight:400; letter-spacing:.18em; text-transform:uppercase; }
   .invoice-item-task { min-width:0; display:flex; flex-direction:column; gap:3px; }
   .invoice-item-name { font-family:'Space Grotesk',sans-serif; font-size:13px; line-height:1.4; }
   .invoice-item-detail { font-family:'Space Grotesk',sans-serif; font-size:12px; line-height:1.4; opacity:.72; }
   .invoice-item-hours, .invoice-item-rate, .invoice-item-amount { font-family:'Space Mono',monospace; font-size:13px; text-align:right; white-space:nowrap; }
   .invoice-item-amount { font-weight:700; }
+  .invoice-item-group--text-cost .invoice-item-row { grid-template-columns:minmax(0,1fr) 140px; }
+  .invoice-item-group--text-cost .invoice-item-hours, .invoice-item-group--text-cost .invoice-item-rate { display:none; }
   @media (max-width:560px) {
     .invoice-item-row { grid-template-columns:minmax(0,1fr) auto; row-gap:4px; }
     .invoice-item-task { grid-column:1 / -1; }
@@ -939,11 +1017,12 @@ export function renderInvoiceDocument(invoice, options = {}) {
     + (rendered.includes('standaloneItems') ? 120 : 0)
     + (rendered.includes('totals') ? 230 : 0)
     + (rendered.includes('deposit') ? 200 : 0)
-    + (rendered.includes('recommendation') ? 220 : 0)
+    + (rendered.includes('totalDue') ? 200 : 0)
+    + (rendered.includes('recommendation') ? 120 + textLinesEstimate(inv.recommendation?.body) * 27 + (inv.recommendation?.chips?.length ? 50 : 0) : 0)
     + (rendered.includes('flow') ? 260 : 0)
     + (rendered.includes('terms') ? 60 + inv.terms.length * 34 : 0)
-    + (rendered.includes('payment') ? 250 : 0)
-    + (rendered.includes('notes') ? 120 : 0)
+    + (rendered.includes('payment') ? 250 + (inv.payment?.bank && Object.values(inv.payment.bank).some(Boolean) ? 220 : 0) : 0)
+    + (rendered.includes('notes') ? 60 + textLinesEstimate(inv.notes) * 26 : 0)
     + (rendered.includes('contactFooter') ? 90 : 0);
 
   return { html, renderedSections: rendered, skippedSections: skipped, estimatedHeightPx };

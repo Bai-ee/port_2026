@@ -68,6 +68,7 @@ function blankTotals(overrides = {}) {
   return {
     subtotal: 0, discount: 0, discountLabel: '', tax: 0, taxLabel: '',
     total: 0, amountPaid: 0, deposit: 0, depositLabel: 'Payment due',
+    totalDue: 0, totalDueLabel: 'Total due',
     monthlyLabel: 'Monthly Recurring', monthlyValue: '',
     oneTimeLabel: '1-Time Setup', oneTimeValue: '',
     ...overrides,

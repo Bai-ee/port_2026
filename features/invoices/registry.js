@@ -22,6 +22,7 @@ export const INVOICE_SECTIONS = [
   { id: 'standaloneItems', label: 'Additional items', hint: 'Items that do not belong to a category.', defaultOn: false },
   { id: 'totals', label: 'Totals', hint: 'Subtotal, discount, tax, total, and amount paid.', defaultOn: true },
   { id: 'deposit', label: 'Deposit', hint: 'Amount due now — heading defaults to "Payment due" (or "Deposit due").', defaultOn: true },
+  { id: 'totalDue', label: 'Total due', hint: 'Second stand-alone amount box (e.g. the full total) with its own heading, separate from Deposit.', defaultOn: false },
   { id: 'recommendation', label: 'Recommendation', hint: 'Recommended package with chips.', defaultOn: false },
   { id: 'flow', label: 'How it works', hint: 'Horizontal step-by-step flow cards.', defaultOn: false },
   { id: 'terms', label: 'Terms', hint: 'Terms and conditions list.', defaultOn: false },
@@ -47,7 +48,13 @@ export function normalizeInvoiceSectionConfig(raw) {
   for (const id of SECTION_IDS) {
     if (typeof rawInclude[id] === 'boolean') include[id] = rawInclude[id];
   }
-  const rawOrder = Array.isArray(raw?.order?.sections) ? raw.order.sections.filter((id) => SECTION_IDS.includes(id)) : [];
+  // Accept both order shapes: this file's wire shape `{ order: { sections:
+  // [...] } }` AND the editors' flat `{ order: [...] }` (Invoice Studio's
+  // useInvoiceDraft.js and the legacy InvoiceBuilderCard both POST the flat
+  // one). Reading only the nested shape silently dropped every operator
+  // reorder on publish — the published page/PDF fell back to registry order.
+  const rawOrderList = Array.isArray(raw?.order) ? raw.order : (Array.isArray(raw?.order?.sections) ? raw.order.sections : []);
+  const rawOrder = rawOrderList.filter((id) => SECTION_IDS.includes(id));
   const order = { sections: [...rawOrder, ...SECTION_IDS.filter((id) => !rawOrder.includes(id))] };
   return { include, order };
 }

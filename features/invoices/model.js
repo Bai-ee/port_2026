@@ -380,14 +380,27 @@ function allNumericItems(invoice) {
   ];
 }
 
+// How many items carry a numeric price (no costLabel) — the count that
+// decides whether computeTotals() sums the subtotal or honours a typed one.
+// Exported for the rail's TotalsCard so it can say which mode is active.
+export function allPricedItemCount(invoice) {
+  return allNumericItems(invoice).filter((item) => item && !item.costLabel).length;
+}
+
 // subtotal = sum of numerically-priced items only (text-cost items opt out
-// of the math by design). total = subtotal - discount + tax. deposit and
-// the free-text monthly/one-time display values pass through unchanged.
-// Pure: reads invoice, never mutates it.
+// of the math by design). When the invoice has NO priced items at all (every
+// amount is a hand-written costLabel), the operator's own typed
+// totals.subtotal is honoured instead — otherwise the Totals panel printed
+// $0.00 and silently overwrote every rail edit. total = subtotal - discount
+// + tax. deposit, totalDue and the free-text monthly/one-time display
+// values pass through unchanged. Pure: reads invoice, never mutates it.
 export function computeTotals(invoice) {
   const items = allNumericItems(invoice);
-  const subtotal = money(items.reduce((sum, item) => sum + (item?.costLabel ? 0 : money(item?.total ?? 0)), 0));
   const prior = invoice?.totals && typeof invoice.totals === 'object' ? invoice.totals : {};
+  const priced = items.filter((item) => item && !item.costLabel);
+  const subtotal = priced.length
+    ? money(priced.reduce((sum, item) => sum + money(item.total ?? 0), 0))
+    : money(prior.subtotal ?? 0);
   const discount = money(prior.discount ?? 0);
   const tax = money(prior.tax ?? 0);
   const total = money(subtotal - discount + tax);
@@ -407,6 +420,11 @@ export function computeTotals(invoice) {
     balanceDue: money(total - amountPaid),
     deposit: money(prior.deposit ?? 0),
     depositLabel: cleanString(prior.depositLabel, 'Payment due'),
+    // Second stand-alone "due" box (registry section `totalDue`), printed by
+    // render.js's buildTotalDue() beside Deposit so a deposit and the full
+    // total can each be stated in their own box. Pass-through like deposit.
+    totalDue: money(prior.totalDue ?? 0),
+    totalDueLabel: cleanString(prior.totalDueLabel, 'Total due'),
     monthlyLabel: cleanString(prior.monthlyLabel, 'Monthly Recurring'),
     monthlyValue: cleanString(prior.monthlyValue),
     oneTimeLabel: cleanString(prior.oneTimeLabel, '1-Time Setup'),

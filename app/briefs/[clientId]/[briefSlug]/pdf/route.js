@@ -64,6 +64,21 @@ export async function GET(_request, context) {
   if (!buffer?.length && resolved.brief.html) {
     const fileNameForPdf = resolved.brief.pdfFileName ||
       titlePdfFileName(resolved.brief.title || resolved.brief.briefSlug || resolved.snapshot.id);
+    // Invoices print as ONE page sized to the document (same as the publish
+    // route), never the paginated edge-to-edge brief layout. The height
+    // comes from re-running the renderer's own estimate over the stored
+    // model; the stored HTML is still what gets printed.
+    let pdfMode = 'edge-to-edge';
+    let pdfHeightPx = null;
+    if (resolved.brief.kind === 'invoice' && resolved.brief.invoice) {
+      pdfMode = 'invoice';
+      try {
+        const { renderInvoiceDocument } = await import('../../../../../features/invoices/render.js');
+        const { normalizeInvoice } = await import('../../../../../features/invoices/model.js');
+        const estimate = renderInvoiceDocument(normalizeInvoice(resolved.brief.invoice), { sections: resolved.brief.sections || null });
+        pdfHeightPx = Number(estimate?.estimatedHeightPx) || null;
+      } catch { pdfHeightPx = null; }
+    }
     const pdfResult = await persistBriefPdfArtifact({
       clientId: resolved.clientId,
       runId: `public-pdf-${resolved.snapshot.id}-${Date.now()}`,
@@ -71,7 +86,8 @@ export async function GET(_request, context) {
       fileName: fileNameForPdf,
       storageClientKey: resolved.brief.publicClientSlug || resolved.clientId,
       storageBriefKey: resolved.brief.publicBriefSlug || resolved.snapshot.id,
-      pdfMode: 'edge-to-edge',
+      pdfMode,
+      pdfHeightPx,
     }).catch(() => null);
     if (pdfResult?.ok && pdfResult.artifactRef) {
       await resolved.snapshot.ref.set({
