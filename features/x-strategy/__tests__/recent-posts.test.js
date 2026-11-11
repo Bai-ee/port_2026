@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   assertReadOnlyBird, birdArgsFor, buildSnapshot, createMemoryRecentPostsStore, createRecentPostsReader, normalizeRecentPost,
   parseTimeline, shapeRecentPosts, snapshotFromMonitor, RECENT_CACHE_TTL_MS, RATE_LIMIT_COOLDOWN_MS,
+  recentPullDue, SCHEDULED_PULL_MS, REFRESH_REQUEST_COOLDOWN_MS,
 } from '../recent-posts.js';
 import { runReadTool, READ_TOOL_NAMES, READ_TOOLS } from '../agent/tools.js';
 import { createStrategyHandlers } from '../route-handlers.js';
@@ -234,7 +235,7 @@ test('no bird (Vercel): serves the Mac-written snapshot, marked stale with its a
   assert.equal(r.source, 'bird-snapshot');
   assert.equal(r.stale, true);
   assert.equal(r.asOf, new Date(NOW - 6 * H).toISOString());
-  assert.match(r.caveats.join(' '), /pull-recent-posts\.mjs/);
+  assert.match(r.caveats.join(' '), /re-pulls hourly/);
 });
 
 test('no bird and no snapshot: falls back to X Monitor impressions, labelled with their source and sync time', async () => {
@@ -297,4 +298,73 @@ test('handler without a reader says it is not available', async () => {
   const h = await handlers();
   const r = await h.toolDepsFor('c1', { clientId: 'c1' }).getRecentPosts({});
   assert.equal(r.available, false);
+});
+
+// ---- Phase 2: hourly pulls, checkpoints, on-demand refresh -----------------------------------------------------------
+
+test('checkpoints: each mark is frozen at the first pull past it and carried forward; later pulls never overwrite it', () => {
+  const first = buildSnapshot({ raws: parseTimeline(timeline([original('10', 3, 36), original('8', 30, 60)])), handle: 'me_acct', pulledAt: NOW });
+  assert.deepEqual(Object.keys(first.checkpoints['10']).filter((k) => k !== 'utc'), ['h2']); // 3h old: h2 only
+  assert.equal(first.checkpoints['10'].h2.views, 36);
+  assert.equal(first.checkpoints['10'].h2.ageHours, 3); // captured late, and says so
+  assert.deepEqual(Object.keys(first.checkpoints['8']).filter((k) => k !== 'utc').sort(), ['h2', 'h24']);
+  // 22h later the same posts have grown: post 10 crosses 24h, post 8 keeps its earlier h2/h24 and gains nothing new (52h < 72h)
+  const later = NOW + 22 * H;
+  const raws = parseTimeline(timeline([original('10', 3, 400), original('8', 30, 90)])).map((r) => ({ ...r, createdAt: r.createdAt }));
+  const second = buildSnapshot({ raws, handle: 'me_acct', pulledAt: later, prev: first });
+  assert.equal(second.checkpoints['10'].h2.views, 36, 'h2 is not overwritten');
+  assert.equal(second.checkpoints['10'].h24.views, 400);
+  assert.equal(second.checkpoints['8'].h24.views, 60);
+  assert.equal(second.checkpoints['8'].h72, undefined);
+});
+
+test('shape: posts carry their checkpoints; needsMetrics lists posts with no view count (never zero)', () => {
+  const noViews = { ...original('11', 4, 0), _raw: undefined };
+  const snap = buildSnapshot({ raws: parseTimeline(timeline([noViews, original('10', 3, 36)])), handle: 'me_acct', pulledAt: NOW });
+  const r = shapeRecentPosts(snap, { now: NOW, source: 'bird-live' });
+  assert.deepEqual(r.needsMetrics.map((p) => p.id), ['11']);
+  assert.equal(r.posts.find((p) => p.id === '10').checkpoints.h2.views, 36);
+  assert.equal(r.posts.find((p) => p.id === '11').checkpoints, undefined);
+  assert.match(r.checkpointRule, /h2\/h24\/h72/);
+});
+
+test('recentPullDue: hourly, sooner when requested after the last pull, never when fresh', () => {
+  assert.equal(recentPullDue(null, NOW), 'scheduled');
+  assert.equal(recentPullDue({ pulledAt: NOW - 10 * 60_000 }, NOW), false);
+  assert.equal(recentPullDue({ pulledAt: NOW - SCHEDULED_PULL_MS }, NOW), 'scheduled');
+  assert.equal(recentPullDue({ pulledAt: NOW - 10 * 60_000, refreshRequestedAt: NOW - 60_000 }, NOW), 'requested');
+  assert.equal(recentPullDue({ pulledAt: NOW - 60_000, refreshRequestedAt: NOW - 10 * 60_000 }, NOW), false, 'a request older than the pull is served');
+});
+
+test('no bird + stale snapshot: asks the Mac worker for a pull, at most once per cooldown; fresh snapshot asks nothing', async () => {
+  const mem = createMemoryRecentPostsStore();
+  const asked = [];
+  const store = { ...mem, async requestRefresh(key, at) { asked.push([key, at]); const s = await mem.get(key); await mem.put(key, { ...s, refreshRequestedAt: at }); } };
+  await store.put('c1__me_acct', buildSnapshot({ raws: parseTimeline(fixtureTimeline()), handle: 'me_acct', pulledAt: NOW - 2 * H, clientId: 'c1' }));
+  let t = NOW;
+  const reader = () => createRecentPostsReader({ runBird: null, store, now: () => t })({ clientId: 'c1', handle: 'me_acct' });
+  const a = await reader();
+  assert.equal(asked.length, 1);
+  assert.match(a.caveats.join(' '), /Requested a fresh pull/);
+  assert.equal(a.refreshRequestedAt, new Date(NOW).toISOString());
+  t += 60_000;
+  const b = await reader();
+  assert.equal(asked.length, 1, 'cooldown: no second request');
+  assert.match(b.caveats.join(' '), /already requested/);
+  t += REFRESH_REQUEST_COOLDOWN_MS;
+  await reader();
+  assert.equal(asked.length, 2, 'after the cooldown a still-stale snapshot asks again');
+  await store.put('c1__me_acct', buildSnapshot({ raws: parseTimeline(fixtureTimeline()), handle: 'me_acct', pulledAt: t - 60_000, clientId: 'c1' }));
+  await reader();
+  assert.equal(asked.length, 2, 'a fresh snapshot asks nothing');
+});
+
+test('live pull carries checkpoints forward from the stored snapshot', async () => {
+  const store = createMemoryRecentPostsStore();
+  await store.put('c1__me_acct', buildSnapshot({ raws: parseTimeline(timeline([original('8', 30, 60)])), handle: 'me_acct', pulledAt: NOW - 2 * H, clientId: 'c1' }));
+  const reader = createRecentPostsReader({ runBird: async () => timeline([original('8', 30, 75)]), store, now: () => NOW, ttlMs: 0 });
+  const r = await reader({ clientId: 'c1', handle: 'me_acct' });
+  assert.equal(r.source, 'bird-live');
+  assert.equal(r.posts[0].views, 75);
+  assert.equal(r.posts[0].checkpoints.h24.views, 60, 'the earlier h24 capture survives the new pull');
 });
