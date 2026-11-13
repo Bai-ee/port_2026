@@ -7,7 +7,8 @@ import Lenis from 'lenis';
 // Pages outside the marketing site keep native scroll — the dashboard/admin
 // shells have their own nested scrollable modals/panels/terminals that
 // Lenis's global wheel hijack would fight with.
-const EXCLUDED_PREFIXES = ['/dashboard', '/admin', '/login', '/preview', '/capture', '/briefs', '/api'];
+// '/playroom' is a full-screen Pixi game with its own pointer/touch handling.
+const EXCLUDED_PREFIXES = ['/dashboard', '/admin', '/login', '/preview', '/capture', '/briefs', '/api', '/playroom'];
 
 export default function SmoothScroll() {
   const pathname = usePathname();

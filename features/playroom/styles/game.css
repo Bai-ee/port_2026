@@ -1,0 +1,121 @@
+#playroom-root {
+  --bg: #f6e7d8;
+  --ink: #5b4636;
+  --accent: #ff9eb5;
+  --accent-2: #ffd88a;
+  --panel: #fff8f0;
+}
+#playroom-root, #playroom-root * { box-sizing: border-box; }
+html.playroom-active, html.playroom-active body {
+  overflow: hidden;
+  overscroll-behavior: none;
+  height: 100%;
+}
+#playroom-root {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100dvh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: var(--bg);
+  overscroll-behavior: none;
+  font-family: ui-rounded, "SF Pro Rounded", system-ui, -apple-system, sans-serif;
+  color: var(--ink);
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  z-index: 2147483000;
+}
+#playroom-root img { -webkit-user-drag: none; user-drag: none; }
+#playroom-root #playroom-game { position: fixed; inset: 0; width: 100%; height: 100dvh; }
+#playroom-root #playroom-game canvas { display: block; touch-action: none; }
+
+#playroom-root #playroom-hud[hidden],
+#playroom-root #playroom-play-btn[hidden],
+#playroom-root #playroom-loading[hidden],
+#playroom-root #playroom-loading-text[hidden] { display: none; }
+#playroom-root .hud-btn {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 12px);
+  width: 56px;
+  height: 56px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 28px;
+  line-height: 1;
+  box-shadow: 0 3px 0 rgba(91, 70, 54, 0.25);
+  touch-action: manipulation;
+  z-index: 5;
+}
+#playroom-root .hud-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(91, 70, 54, 0.25); }
+#playroom-root #playroom-reset-btn { left: calc(env(safe-area-inset-left) + 12px); }
+#playroom-root #playroom-mute-btn { right: calc(env(safe-area-inset-right) + 12px); }
+
+#playroom-root #playroom-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  background: linear-gradient(#fde9e1, #f6e7d8);
+}
+#playroom-root #playroom-loading[hidden] { display: none; }
+#playroom-root #playroom-loading h1 { margin: 0; font-size: 56px; color: #e97a9a; letter-spacing: 1px; }
+#playroom-root #playroom-progress { width: min(60vw, 360px); height: 18px; border-radius: 9px; background: #fff8f0; overflow: hidden; box-shadow: inset 0 2px 0 rgba(91, 70, 54, 0.15); }
+#playroom-root #playroom-progress-bar { width: 0; height: 100%; border-radius: 9px; background: var(--accent); transition: width 0.15s; }
+#playroom-root #playroom-loading-text { margin: 0; font-size: 18px; max-width: 80vw; text-align: center; }
+#playroom-root #playroom-loading.error #playroom-loading-text { color: #b3261e; }
+#playroom-root #playroom-play-btn {
+  min-width: 200px;
+  min-height: 72px;
+  padding: 0 40px;
+  border: 0;
+  border-radius: 36px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-size: 32px;
+  font-weight: 700;
+  box-shadow: 0 5px 0 #e97a9a;
+  touch-action: manipulation;
+}
+#playroom-root #playroom-play-btn:active { transform: translateY(3px); box-shadow: 0 2px 0 #e97a9a; }
+
+#playroom-root #playroom-rotate {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-2);
+  text-align: center;
+  font-size: 24px;
+}
+#playroom-root .rotate-icon { font-size: 72px; }
+@media (orientation: portrait) {
+  #playroom-root #playroom-rotate { display: flex; }
+}
+
+#playroom-root #fps {
+  position: fixed;
+  left: 4px;
+  bottom: 4px;
+  z-index: 30;
+  font: 12px monospace;
+  color: #000;
+  background: rgba(255, 255, 255, 0.6);
+  padding: 2px 4px;
+  pointer-events: none;
+}
