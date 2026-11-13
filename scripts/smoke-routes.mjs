@@ -26,6 +26,7 @@ const publicRoutes = [
   { path: '/preview/canvas', name: 'preview-canvas', expectText: 'Background' },
   { path: '/preview/intake-modal', name: 'preview-intake-modal', expectText: 'INTAKE' },
   { path: '/preview/mini-brief', name: 'preview-mini-brief', expectText: 'Mini Brief' },
+  { path: '/playroom', name: 'playroom', expectText: 'Playroom' },
   { path: '/api/health', name: 'health', expectText: '"ok":true', minBodyLength: 10, mode: 'fetch' },
 ];
 
