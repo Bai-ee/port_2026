@@ -119,3 +119,8 @@ html.playroom-active, html.playroom-active body {
   padding: 2px 4px;
   pointer-events: none;
 }
+
+#playroom-root .hud-btn { background: transparent; box-shadow: none; padding: 0; }
+#playroom-root .hud-btn img { width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; }
+#playroom-root #playroom-play-btn { display: inline-flex; align-items: center; justify-content: center; gap: 12px; }
+#playroom-root #playroom-play-btn img { width: 44px; height: 38px; object-fit: contain; pointer-events: none; }

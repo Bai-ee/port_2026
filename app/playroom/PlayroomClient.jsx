@@ -31,6 +31,8 @@ export default function PlayroomClient() {
           return;
         }
         gameRef.current = game;
+        // Test hook for the e2e suite (features/playroom/e2e); never exposed in production.
+        if (process.env.NODE_ENV !== 'production') window.__game = game;
         setPct(100);
         setMuted(game.muted);
         setReady(true);
@@ -42,6 +44,7 @@ export default function PlayroomClient() {
     })();
     return () => {
       cancelled = true;
+      if (process.env.NODE_ENV !== 'production' && window.__game === gameRef.current) delete window.__game;
       gameRef.current?.destroy();
       gameRef.current = null;
     };
@@ -56,14 +59,14 @@ export default function PlayroomClient() {
     <div id="playroom-root" style={{ position: 'fixed', inset: 0, zIndex: 2147483000 }}>
       <div id="playroom-game" ref={mountRef} />
       <div id="playroom-hud" hidden={!started}>
-        <button id="playroom-reset-btn" className="hud-btn" type="button" aria-label="Reset room" onClick={() => gameRef.current?.reset()}>↻</button>
-        <button id="playroom-mute-btn" className="hud-btn" type="button" aria-label="Toggle sound" onClick={() => gameRef.current && setMuted(gameRef.current.toggleMute())}>{muted ? '🔇' : '🔊'}</button>
+        <button id="playroom-reset-btn" className="hud-btn" type="button" aria-label="Reset room" onClick={() => gameRef.current?.reset()}><img src="/playroom/assets/sprites/ui_reset.png" alt="" draggable={false} /></button>
+        <button id="playroom-mute-btn" className="hud-btn" type="button" aria-label="Toggle sound" onClick={() => gameRef.current && setMuted(gameRef.current.toggleMute())}><img src={muted ? '/playroom/assets/sprites/ui_mute.png' : '/playroom/assets/sprites/ui_sound.png'} alt="" draggable={false} /></button>
       </div>
       <div id="playroom-loading" hidden={started} className={error ? 'error' : undefined}>
         <h1>Playroom</h1>
         <div id="playroom-progress"><div id="playroom-progress-bar" style={{ width: pct + '%' }} /></div>
         <p id="playroom-loading-text" hidden={ready && !error}>{error ? 'Could not start: ' + error : 'Loading...'}</p>
-        <button id="playroom-play-btn" type="button" hidden={!ready || !!error} onClick={play}>Play</button>
+        <button id="playroom-play-btn" type="button" hidden={!ready || !!error} onClick={play}><img src="/playroom/assets/sprites/ui_play.png" alt="" draggable={false} />Play</button>
       </div>
       <div id="playroom-rotate"><div className="rotate-icon">↻</div><p>Please rotate your device<br />to landscape</p></div>
     </div>

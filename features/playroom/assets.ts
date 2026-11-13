@@ -1,34 +1,25 @@
 import { Assets, type Texture } from 'pixi.js';
 import type { GetTexture } from './types';
 
-const P = '/playroom/assets/placeholder/';
+const P = '/playroom/assets/sprites/';
+
+/** PNG sprites keyed by asset id (id == filename without extension). */
+const PNG_IDS = [
+  'ponytail_stand', 'ponytail_seated', 'cap_stand', 'cap_seated', 'crown_stand', 'crown_seated',
+  'armchair', 'sofa', 'table', 'nightstand', 'lamp_off', 'lamp_on', 'door_closed', 'door_open',
+  'window', 'rug', 'plant', 'frame_heart', 'frame_picture', 'bunting',
+  'teddy', 'duck', 'blocks', 'toy_car', 'storybook', 'apple', 'cookie', 'mug', 'beach_ball', 'guitar', 'cat', 'dog',
+];
 
 /** asset id -> URL. Swap art by editing only this table. */
-const MANIFEST: Record<string, string> = {
-  room_bg: P + 'room_bg.svg',
-  kid_a_stand: P + 'kid_a_stand.svg',
-  kid_a_sit: P + 'kid_a_sit.svg',
-  kid_b_stand: P + 'kid_b_stand.svg',
-  kid_b_sit: P + 'kid_b_sit.svg',
-  chair_back: P + 'chair_back.svg',
-  chair_front: P + 'chair_front.svg',
-  table: P + 'table.svg',
-  lamp_off: P + 'lamp_off.svg',
-  lamp_on: P + 'lamp_on.svg',
-  ball: P + 'ball.svg',
-  teddy: P + 'teddy.svg',
-  book: P + 'book.svg',
-  apple: P + 'apple.svg',
-  cup: P + 'cup.svg',
-  robot: P + 'robot.svg',
-  blocks: P + 'blocks.svg',
-  duck: P + 'duck.svg',
-};
+const MANIFEST: Record<string, string> = { room_bg: P + 'room_bg.svg' };
+for (const id of PNG_IDS) MANIFEST[id] = P + id + '.png';
 
 export async function loadAssets(onProgress?: (p: number) => void): Promise<void> {
   const ids = Object.keys(MANIFEST);
   for (const id of ids) {
-    Assets.add({ alias: id, src: MANIFEST[id], data: { resolution: 2 } });
+    // SVG background is authored at stage size; give it 2x raster resolution. PNGs load at 1x.
+    Assets.add({ alias: id, src: MANIFEST[id], data: id === 'room_bg' ? { resolution: 2 } : {} });
   }
   await Assets.load(ids, onProgress);
 }
