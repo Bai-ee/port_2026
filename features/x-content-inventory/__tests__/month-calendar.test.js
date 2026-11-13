@@ -307,3 +307,21 @@ test('post rows carry selfReply / mediaVariants / replyTo as full objects (null 
   assert.deepEqual(toRow({ id: 'r', status: 'draft', content: 'x', replyTo }).replyTo, replyTo);
   assert.equal(toRow({ id: 'r', status: 'draft', content: 'x', replyTo: 'https://x' }).replyTo, null);
 });
+
+test('a synced-calendar draft (plannedAt) sits at its exact time as a proposal; a past plannedAt falls back to a normal proposal', () => {
+  const cal = buildMonthCalendar({
+    month: '2026-10',
+    now: NOW,
+    posts: [
+      draft('s', { plannedAt: '2026-10-14T23:15:00Z' }), // 18:15 CT on the 14th, off the 30-min proposal grid
+      draft('old', { plannedAt: '2026-10-09T14:00:00Z' }), // already past
+    ],
+  });
+  const s = day(cal, '2026-10-14').posts.find((r) => r.id === 's');
+  assert.ok(s, 'planned draft on its day');
+  assert.equal(s.proposed, true);
+  assert.equal(s.proposedAt, '2026-10-14T23:15:00.000Z');
+  const old = allDays(cal).flatMap((d) => d.posts || []).find((r) => r.id === 'old');
+  assert.ok(old && old.proposed, 'past plannedAt is proposed like any undated draft');
+  assert.notEqual(old.proposedAt, '2026-10-09T14:00:00.000Z');
+});

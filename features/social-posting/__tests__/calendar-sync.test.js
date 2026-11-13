@@ -15,7 +15,7 @@ const svc = await import('../twitter-service.js');
 const NOW = Date.parse('2026-11-04T15:00:00.000Z');
 const IMG = { mediaUrl: 'https://cdn.example/a.jpg', mediaType: 'image', mediaContentType: 'image/jpeg' };
 const IG_ACCOUNT = { accessToken: 't', userId: '1', username: 'hitloop', expiresAt: Date.now() + 86_400_000 };
-const entry = (over = {}) => ({ clientId: 'disc', x: 'copy', instagram: 'off', offsetMinutes: 0, ...over });
+const entry = (over = {}) => ({ clientId: 'disc', x: 'copy', instagram: 'off', offsetMinutes: 0, mode: 'schedule', ...over });
 const srcPost = (over = {}) => ({ id: 'p1', clientId: 'disc', status: 'scheduled', scheduledAt: '2026-11-04T18:00:00.000Z', content: 'Hello', ...over });
 
 // ── config ──────────────────────────────────────────────────────────────────
@@ -25,13 +25,14 @@ test('normalizeCalendarSyncs: defaults, caps, dedupes, drops self and all-off ro
     { clientId: 'disc', x: 'repost' },
     { clientId: 'home' },
     { clientId: 'ugex', x: 'off', instagram: 'off' },
-    { clientId: 'ugex', x: 'repost', instagram: 'copy', offsetMinutes: 99999 },
+    { clientId: 'ugex', x: 'repost', instagram: 'copy', offsetMinutes: 99999, mode: 'schedule' },
     'bad',
   ], 'home');
   assert.deepEqual(out, [
-    { clientId: 'disc', x: 'copy', instagram: 'off', offsetMinutes: 0 },
-    { clientId: 'ugex', x: 'repost', instagram: 'copy', offsetMinutes: 7 * 24 * 60 },
+    { clientId: 'disc', x: 'copy', instagram: 'off', offsetMinutes: 0, mode: 'draft' },
+    { clientId: 'ugex', x: 'repost', instagram: 'copy', offsetMinutes: 7 * 24 * 60, mode: 'schedule' },
   ]);
+  assert.equal(normalizeCalendarSyncs([{ clientId: 'disc', mode: 'bogus' }])[0].mode, 'draft');
   assert.deepEqual(normalizeCalendarSyncs(null), []);
 });
 
@@ -155,7 +156,7 @@ const deps = () => ({ svc, getInstagramAccount: async () => IG_ACCOUNT });
 const homeQueue = async () => (await svc.readSocialQueue('home')).filter(isMirror);
 
 test('end to end: a scheduled source post lands as a scheduled mirror on the viewer; re-runs are idempotent', async () => {
-  await ctx.adminDb.collection('client_configs').doc('home').set({ calendarSyncs: [{ clientId: 'disc', x: 'copy', instagram: 'copy' }] });
+  await ctx.adminDb.collection('client_configs').doc('home').set({ calendarSyncs: [{ clientId: 'disc', x: 'copy', instagram: 'copy', mode: 'schedule' }] });
   const src = await svc.schedulePost('disc', { content: 'Record of the day', scheduledAt: inOneHour(), packageId: 'pkg-1', engine: 'record', ...IMG });
   const run = await runCalendarSync('home', deps());
   assert.deepEqual(run.entries.map((e) => [e.clientId, e.created, e.errors]), [['disc', 1, []]]);
@@ -176,7 +177,7 @@ test('end to end: a scheduled source post lands as a scheduled mirror on the vie
 });
 
 test('end to end: unscheduling the source retires the mirror; rescheduling it brings a fresh one; an owner reject sticks', async () => {
-  await ctx.adminDb.collection('client_configs').doc('home').set({ calendarSyncs: [{ clientId: 'disc', x: 'copy' }] });
+  await ctx.adminDb.collection('client_configs').doc('home').set({ calendarSyncs: [{ clientId: 'disc', x: 'copy', mode: 'schedule' }] });
   const at = inOneHour();
   const src = await svc.schedulePost('disc', { content: 'One', scheduledAt: at });
   await runCalendarSync('home', deps());
@@ -200,7 +201,7 @@ test('end to end: unscheduling the source retires the mirror; rescheduling it br
 });
 
 test('end to end: the viewer\'s own open copy of the package blocks the mirror (reported, not thrown)', async () => {
-  await ctx.adminDb.collection('client_configs').doc('home').set({ calendarSyncs: [{ clientId: 'disc', x: 'copy' }] });
+  await ctx.adminDb.collection('client_configs').doc('home').set({ calendarSyncs: [{ clientId: 'disc', x: 'copy', mode: 'schedule' }] });
   await svc.schedulePost('home', { content: 'My own take', scheduledAt: inOneHour(), packageId: 'pkg-dup' });
   await svc.schedulePost('disc', { content: 'Their take', scheduledAt: new Date(Date.now() + 2 * 3_600_000).toISOString(), packageId: 'pkg-dup' });
   const run = await runCalendarSync('home', deps());
@@ -211,12 +212,97 @@ test('end to end: the viewer\'s own open copy of the package blocks the mirror (
 
 test('end to end: no config means nothing happens; a mirror is never re-mirrored by a third client', async () => {
   assert.deepEqual(await runCalendarSync('home', deps()), { viewer: 'home', entries: [] });
-  await ctx.adminDb.collection('client_configs').doc('home').set({ calendarSyncs: [{ clientId: 'disc', x: 'copy' }] });
-  await ctx.adminDb.collection('client_configs').doc('ugex').set({ calendarSyncs: [{ clientId: 'home', x: 'copy' }] });
+  await ctx.adminDb.collection('client_configs').doc('home').set({ calendarSyncs: [{ clientId: 'disc', x: 'copy', mode: 'schedule' }] });
+  await ctx.adminDb.collection('client_configs').doc('ugex').set({ calendarSyncs: [{ clientId: 'home', x: 'copy', mode: 'schedule' }] });
   await svc.schedulePost('disc', { content: 'Chain?', scheduledAt: inOneHour() });
   await runCalendarSync('home', deps());
   process.env.PILOT_CLIENT_IDS = 'home,disc,ugex';
   const third = await runCalendarSync('ugex', deps());
   assert.equal(third.entries[0].created, 0);
   assert.deepEqual(third.entries[0].skipped, [{ postId: (await homeQueue())[0].id, reason: 'is-a-mirror' }]);
+});
+
+// ── draft mode (the default) ────────────────────────────────────────────────
+test('draft mode: the copy is an unscheduled draft carrying the source time as plannedAt', () => {
+  const [m] = desiredMirrors(srcPost(IMG), entry({ mode: 'draft', instagram: 'copy', offsetMinutes: 30 }), { viewer: 'home', nowMs: NOW, igAllowed: true });
+  assert.equal(m.payload.status, 'draft');
+  assert.equal(m.payload.scheduledAt, null);
+  assert.equal(m.payload.plannedAt, '2026-11-04T18:30:00.000Z');
+  assert.equal(m.payload.mirrorOf.mode, 'draft');
+  assert.deepEqual(m.payload.targets, { x: true, instagram: true });
+  // Switching modes is a different copy (the old one is replaced, not reused).
+  const [s] = desiredMirrors(srcPost(IMG), entry({ instagram: 'copy', offsetMinutes: 30 }), { viewer: 'home', nowMs: NOW, igAllowed: true });
+  assert.notEqual(m.hash, s.hash);
+});
+
+test('draft plan: an untouched draft is replaced/removed; one the owner touched or scheduled is theirs', () => {
+  const e = entry({ mode: 'draft' });
+  const [v1] = desiredMirrors(srcPost({ content: 'v1' }), e, { viewer: 'home', nowMs: NOW });
+  const row = (over) => ({ id: 'm1', clientId: 'home', status: 'draft', mirrorOf: v1.payload.mirrorOf, ...over });
+  const edited = planCalendarSync({ entry: e, viewer: 'home', nowMs: NOW, sourcePosts: [srcPost({ content: 'v2' })], viewerPosts: [row()] });
+  assert.equal(edited.create.length, 1);
+  assert.deepEqual(edited.retire.map((r) => r.id), ['m1']);
+  const gone = planCalendarSync({ entry: e, viewer: 'home', nowMs: NOW, sourcePosts: [], viewerPosts: [row()] });
+  assert.deepEqual(gone.retire.map((r) => r.id), ['m1']);
+  for (const over of [{ revision: 1 }, { status: 'approved', revision: 1 }, { status: 'scheduled', revision: 2, scheduledAt: '2026-11-04T18:00:00.000Z' }]) {
+    const p = planCalendarSync({ entry: e, viewer: 'home', nowMs: NOW, sourcePosts: [srcPost({ content: 'v2' })], viewerPosts: [row(over)] });
+    assert.equal(p.create.length, 0, JSON.stringify(over));
+    assert.equal(p.retire.length, 0, JSON.stringify(over));
+    assert.deepEqual(p.skipped, [{ postId: 'p1', reason: 'owner-took-over' }]);
+    const orphan = planCalendarSync({ entry: e, viewer: 'home', nowMs: NOW, sourcePosts: [], viewerPosts: [row(over)] });
+    assert.equal(orphan.retire.length, 0, JSON.stringify(over));
+  }
+  const rejected = planCalendarSync({ entry: e, viewer: 'home', nowMs: NOW, sourcePosts: [srcPost({ content: 'v1' })], viewerPosts: [row({ status: 'rejected', reviewedBy: 'owner@x' })] });
+  assert.equal(rejected.create.length, 0);
+  assert.deepEqual(rejected.skipped, [{ postId: 'p1', reason: 'declined' }]);
+});
+
+test('end to end (draft): a dated draft lands on the viewer; nothing is scheduled; the owner schedules it; reject sticks', async () => {
+  await ctx.adminDb.collection('client_configs').doc('home').set({ calendarSyncs: [{ clientId: 'disc', x: 'copy', instagram: 'copy' }] });
+  const at = inOneHour();
+  const src = await svc.schedulePost('disc', { content: 'Record of the day', scheduledAt: at, packageId: 'pkg-1', ...IMG });
+  const run = await runCalendarSync('home', deps());
+  assert.deepEqual(run.entries.map((e) => [e.created, e.errors]), [[1, []]]);
+  const [m] = await homeQueue();
+  assert.equal(m.status, 'draft');
+  assert.equal(m.scheduledAt, null);
+  assert.equal(m.plannedAt, new Date(Date.parse(at)).toISOString());
+  assert.equal(m.mirrorOf.mode, 'draft');
+  assert.deepEqual(m.targets, { x: true, instagram: true });
+  assert.equal((await runCalendarSync('home', deps())).entries[0].kept, 1);
+
+  // Source moved to a new time: the untouched draft is replaced at the new time.
+  const later = new Date(Date.parse(at) + 3_600_000).toISOString();
+  const moved = await svc.updateSocialPost('disc', src.id, { scheduledAt: later });
+  assert.equal(moved.status, 'scheduled');
+  const edit = await runCalendarSync('home', deps());
+  assert.deepEqual([edit.entries[0].created, edit.entries[0].retired], [1, 1]);
+  const open = (await homeQueue()).filter((p) => p.status === 'draft');
+  assert.equal(open.length, 1);
+  assert.equal(open[0].plannedAt, later);
+
+  // The owner schedules the copy; a later source change leaves it alone.
+  await svc.approveAndSchedule('home', open[0].id, { scheduledAt: open[0].plannedAt, content: open[0].content });
+  await svc.updateSocialPost('disc', src.id, { scheduledAt: new Date(Date.parse(later) + 3_600_000).toISOString() });
+  const owned = await runCalendarSync('home', deps());
+  assert.deepEqual([owned.entries[0].created, owned.entries[0].retired], [0, 0]);
+  assert.deepEqual(owned.entries[0].skipped, [{ postId: src.id, reason: 'owner-took-over' }]);
+  assert.equal((await homeQueue()).filter((p) => p.status === 'scheduled').length, 1);
+});
+
+test('end to end (draft): owner reject of an untouched draft sticks; source cancel removes an untouched draft', async () => {
+  await ctx.adminDb.collection('client_configs').doc('home').set({ calendarSyncs: [{ clientId: 'disc', x: 'copy' }] });
+  const a = await svc.schedulePost('disc', { content: 'A', scheduledAt: inOneHour() });
+  const b = await svc.schedulePost('disc', { content: 'B', scheduledAt: new Date(Date.now() + 3 * 3_600_000).toISOString() });
+  await runCalendarSync('home', deps());
+  const drafts = await homeQueue();
+  assert.equal(drafts.length, 2);
+  const draftA = drafts.find((p) => p.mirrorOf.postId === a.id);
+  await svc.rejectDraft('home', draftA.id, { reviewedBy: 'owner@x' });
+  await svc.updateSocialPost('disc', b.id, { scheduledAt: null });
+  const run = await runCalendarSync('home', deps());
+  assert.equal(run.entries[0].created, 0);
+  assert.equal(run.entries[0].retired, 1);
+  assert.deepEqual(run.entries[0].skipped, [{ postId: a.id, reason: 'declined' }]);
+  assert.equal((await homeQueue()).filter((p) => p.status === 'draft').length, 0);
 });

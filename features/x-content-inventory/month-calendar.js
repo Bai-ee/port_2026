@@ -260,6 +260,15 @@ export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_EN
       reviewDated.push(row);
       continue;
     }
+    // A synced-calendar draft (features/social-posting/calendar-sync.js) is meant for an exact time: show it there.
+    // A past plannedAt falls through to a normal proposal.
+    const plannedMs = ms == null && REVIEWABLE.has(p.status) ? Date.parse(p.plannedAt || '') : NaN;
+    if (Number.isFinite(plannedMs) && plannedMs >= now + PROPOSAL_WINDOW.leadMin * 60_000) {
+      const date = ctDate(plannedMs);
+      if (!byDate.has(date)) byDate.set(date, []);
+      byDate.get(date).push({ ...row, ms: plannedMs, time: ctTime(plannedMs), proposed: true, proposedAt: new Date(plannedMs).toISOString() });
+      continue;
+    }
     if (ms == null) {
       // A manual takeover with no live slot: the owner is posting it, so it is never re-proposed into a slot.
       if (p.status === 'manual') { manualUndated.push({ ...row, reason: 'manual' }); continue; }

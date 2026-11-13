@@ -1,8 +1,14 @@
 // calendar-sync.js — one client's calendar also posts on another client's accounts.
 //
 //   client_configs/{viewer}.calendarSyncs = [
-//     { clientId: 'bai-ees-discogs-TP37NQG0', x: 'copy', instagram: 'copy', offsetMinutes: 0 },
+//     { clientId: 'bai-ees-discogs-TP37NQG0', x: 'copy', instagram: 'copy', offsetMinutes: 0, mode: 'draft' },
 //   ]
+//
+// mode 'draft' (the default): every mirror lands as an unscheduled DRAFT on the viewer's calendar at the source's
+// time (`plannedAt`, placed by features/x-content-inventory/month-calendar.js). Nothing publishes until the owner
+// schedules it there. An untouched draft follows its source (edited -> replaced, unscheduled/posted/gone ->
+// removed); once the owner edits, approves or schedules it, the row is theirs and the sync never touches it again.
+// mode 'schedule': the rest of this header — mirrors are scheduled and publish on their own.
 //
 // The viewer (e.g. the HITLOOP home client) opts in to a SOURCE client's calendar. Every scheduled source post
 // gets a MIRROR row on the viewer's own calendar: a normal social_posts row owned by the viewer (clientId = viewer)
@@ -24,7 +30,8 @@
 //   - a source edit (text / media / time) retires the open mirror and creates a fresh one; posted mirrors are kept
 //   - a source unscheduled/rejected/removed retires its open mirrors (scheduled/queued only; never a posted row)
 //   - the viewer's own open copy of the same package blocks the mirror (schedulePost's package-collision rule)
-// Spend: the toggle is the owner's standing consent; every mirror is an X write on the viewer's account.
+// Spend (schedule mode): the toggle is the owner's standing consent; every mirror is an X write on the viewer's
+// account. Draft mode spends nothing until the owner schedules a draft.
 
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
@@ -35,6 +42,7 @@ const CLIENT_ID_RE = /^[A-Za-z0-9_-]{3,80}$/;
 export const MAX_CALENDAR_SYNCS = 10;
 export const X_MODES = ['copy', 'repost', 'off'];
 export const INSTAGRAM_MODES = ['copy', 'off'];
+export const SYNC_MODES = ['draft', 'schedule'];
 export const MAX_OFFSET_MINUTES = 7 * 24 * 60;
 export const MIN_LEAD_MS = 2 * 60_000; // a mirror is never scheduled closer than this to "now"
 export const REPOST_WINDOW_MS = 48 * 3_600_000; // repost only a source tweet this fresh
@@ -42,9 +50,17 @@ export const SOURCE = 'calendar-sync';
 
 const OPEN_MIRROR = new Set(['scheduled', 'queued', 'posting', 'posted', 'manual', 'needs_review', 'failed']);
 const RETIRABLE = new Set(['scheduled', 'queued']);
+const retiredBySync = (r) => r.status === 'rejected' && r.reviewedBy === SOURCE;
+const isDraftMirror = (r) => r?.mirrorOf?.mode === 'draft';
+// Draft mirrors: the sync's own untouched draft (no revision since creation) is the only row it may replace/remove.
+const untouchedDraft = (r) => r.status === 'draft' && !(Number(r.revision) > 0);
+// A mirror row that still stands (the sync keeps it or replaces it; it is not a cancellation).
+const isOpen = (r) => (isDraftMirror(r) ? r.status !== 'rejected' && r.status !== 'expired' : OPEN_MIRROR.has(r.status));
+// A row the sync may retire: a scheduled mirror not yet sent, or an untouched draft mirror.
+const isRetirable = (r) => (isDraftMirror(r) ? untouchedDraft(r) : RETIRABLE.has(r.status));
 // A mirror the OWNER took off the calendar (unscheduled to draft/approved, rejected, or left to expire). A row the
 // sync itself retired (rejected with reviewedBy = SOURCE) is not a decision and never blocks a fresh mirror.
-const declinedByOwner = (r) => !OPEN_MIRROR.has(r.status) && !(r.status === 'rejected' && r.reviewedBy === SOURCE);
+const declinedByOwner = (r) => !isOpen(r) && !retiredBySync(r);
 
 const database = (db) => db || require('../../api/_lib/firebase-admin.cjs').adminDb;
 
@@ -57,7 +73,8 @@ function normalizeEntry(v, selfId) {
   const instagram = INSTAGRAM_MODES.includes(v.instagram) ? v.instagram : 'off';
   const n = Number(v.offsetMinutes);
   const offsetMinutes = Number.isFinite(n) ? Math.max(0, Math.min(MAX_OFFSET_MINUTES, Math.round(n))) : 0;
-  return { clientId, x, instagram, offsetMinutes };
+  const mode = SYNC_MODES.includes(v.mode) ? v.mode : 'draft';
+  return { clientId, x, instagram, offsetMinutes, mode };
 }
 
 /** Pure. Clean sync entries: valid, de-duplicated (first wins), never the viewer itself, capped, no all-off rows. */
@@ -122,20 +139,23 @@ export function desiredMirrors(sourcePost, entry, { viewer, nowMs, igAllowed = f
   const wantIg = entry.instagram === 'copy' && igAllowed && Boolean(media) && sourcePost.kind !== 'repost';
   const out = [];
   const scheduled = (sourcePost.status === 'scheduled' || sourcePost.status === 'queued') && Number.isFinite(Date.parse(sourcePost.scheduledAt || ''));
-  const base = (leg, extra, hashParts) => {
+  const draft = entry.mode === 'draft';
+  // Draft mode: same row, but unscheduled with the wanted time kept as plannedAt (the calendar places it there).
+  const base = (leg, { scheduledAt, ...extra }, hashParts) => {
     const key = mirrorKey(src, sourcePost.id, leg);
-    const hash = hashOf(hashParts);
+    const hash = hashOf(draft ? ['draft', ...hashParts] : hashParts);
     return {
       key,
       hash,
       payload: {
         source: SOURCE,
         idempotencyKey: `${key}:${hash}`,
-        mirrorOf: { clientId: src, postId: sourcePost.id, key, hash },
+        mirrorOf: { clientId: src, postId: sourcePost.id, key, hash, ...(draft ? { mode: 'draft' } : {}) },
         ...(sourcePost.packageId ? { packageId: sourcePost.packageId } : {}),
         ...(sourcePost.engine ? { engine: sourcePost.engine } : {}),
         ...(sourcePost.bucketId ? { bucketId: sourcePost.bucketId } : {}),
         ...extra,
+        ...(draft ? { status: 'draft', scheduledAt: null, plannedAt: scheduledAt } : { scheduledAt }),
       },
     };
   };
@@ -205,13 +225,17 @@ export function planCalendarSync({ entry, viewer, sourcePosts, viewerPosts, nowM
     for (const want of desiredMirrors(src, entry, { viewer, nowMs, igAllowed })) {
       wantedKeys.add(want.key);
       const rows = byKey.get(want.key) || [];
-      const open = rows.filter((r) => OPEN_MIRROR.has(r.status));
+      const open = rows.filter(isOpen);
       const same = open.find((r) => r.mirrorOf.hash === want.hash);
       if (same) { keep.push(same); continue; }
       // The owner cancelled this exact mirror (or it missed its window): do not bring it back.
       if (rows.some((r) => r.mirrorOf.hash === want.hash && declinedByOwner(r))) { skipped.push({ postId: src.id, reason: 'declined' }); continue; }
-      const live = open.filter((r) => !RETIRABLE.has(r.status));
-      if (live.length) { keep.push(...live); skipped.push({ postId: src.id, reason: 'already-live' }); continue; }
+      const live = open.filter((r) => !isRetirable(r));
+      if (live.length) {
+        keep.push(...live);
+        skipped.push({ postId: src.id, reason: live.every(isDraftMirror) && !live.some((r) => r.status === 'posted') ? 'owner-took-over' : 'already-live' });
+        continue;
+      }
       retire.push(...open); // stale copy (source edited): replace it
       create.push(want);
     }
@@ -219,7 +243,7 @@ export function planCalendarSync({ entry, viewer, sourcePosts, viewerPosts, nowM
   // Mirrors whose source no longer wants them (unscheduled, rejected, deleted, mode changed).
   for (const [key, rows] of byKey) {
     if (wantedKeys.has(key)) continue;
-    for (const r of rows) if (RETIRABLE.has(r.status)) retire.push(r);
+    for (const r of rows) if (isRetirable(r)) retire.push(r);
   }
   return { create, retire, keep, skipped };
 }
@@ -263,10 +287,15 @@ export async function runCalendarSync(viewer, { svc, getInstagramAccount, db, no
     }
     for (const want of plan.create) {
       try {
-        await service.schedulePost(viewer, { ...want.payload, reviewedAt: new Date(nowMs).toISOString() }, {
-          by: SOURCE,
-          planOverride: { by: SOURCE, reason: `Synced from the ${entry.clientId} calendar` },
-        });
+        if (want.payload.status === 'draft') {
+          // A draft: nothing is reserved or published; the owner schedules it from the calendar.
+          await service.ensureDraftPost(viewer, want.payload);
+        } else {
+          await service.schedulePost(viewer, { ...want.payload, reviewedAt: new Date(nowMs).toISOString() }, {
+            by: SOURCE,
+            planOverride: { by: SOURCE, reason: `Synced from the ${entry.clientId} calendar` },
+          });
+        }
         result.created += 1;
       } catch (err) {
         result.errors.push({ stage: 'create', sourcePostId: want.payload.mirrorOf.postId, code: err.code || null, message: err.message || String(err) });
@@ -277,8 +306,10 @@ export async function runCalendarSync(viewer, { svc, getInstagramAccount, db, no
   return { viewer, entries: out };
 }
 
-// scheduled/queued -> unscheduled -> (unapproved) -> rejected. Only these two statuses ever reach here (RETIRABLE).
+// scheduled/queued -> unscheduled -> (unapproved) -> rejected; an untouched draft mirror is rejected directly.
+// Only rows isRetirable() accepts ever reach here.
 async function retireMirror(service, viewer, mirror) {
+  if (mirror.status === 'draft') return service.rejectDraft(viewer, mirror.id, { reviewedBy: SOURCE });
   const unscheduled = await service.updateSocialPost(viewer, mirror.id, { scheduledAt: null });
   const draft = unscheduled.status === 'approved' ? await service.unapproveDraft(viewer, unscheduled.id) : unscheduled;
   return service.rejectDraft(viewer, draft.id, { reviewedBy: SOURCE });

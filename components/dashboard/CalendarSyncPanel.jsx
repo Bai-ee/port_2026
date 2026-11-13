@@ -6,8 +6,9 @@ import { readImpersonateClientId, withImpersonation } from '../../lib/dashboard/
 
 // Synced calendars — the loaded client also posts what OTHER clients' calendars schedule, on its own connected
 // accounts (features/social-posting/calendar-sync.js). One row per other client: X mode (copy / repost / off),
-// Instagram mode (copy / off), delay. Saving writes client_configs.calendarSyncs and reconciles at once, so the
-// mirrors appear on this client's calendar right away. Mounted inside the Social Accounts card (admin only).
+// Instagram mode (copy / off), delay, and whether copies arrive as drafts (default: nothing posts until scheduled
+// here) or auto-post. Saving writes client_configs.calendarSyncs and reconciles at once, so the copies appear on
+// this client's calendar right away. Mounted inside the Social Accounts card (admin only).
 // Own <style jsx>: the parent's scoped styles do not reach a child component's elements.
 
 const X_MODES = [
@@ -19,6 +20,11 @@ const IG_MODES = [
   { value: 'copy', label: 'Copy' },
   { value: 'off', label: 'Off' },
 ];
+const SYNC_MODES = [
+  { value: 'draft', label: 'Drafts (I schedule)' },
+  { value: 'schedule', label: 'Auto-post' },
+];
+const OFF_ENTRY = (clientId) => ({ clientId, x: 'off', instagram: 'off', offsetMinutes: 0, mode: 'draft' });
 
 const describeRun = (run) => (run || []).map((e) => {
   const bits = [`${e.created} added`, `${e.retired} removed`, `${e.kept} kept`];
@@ -69,10 +75,10 @@ export default function CalendarSyncPanel({ activeClientId, getIdToken }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const entryFor = (clientId) => syncs.find((s) => s.clientId === clientId) || { clientId, x: 'off', instagram: 'off', offsetMinutes: 0 };
+  const entryFor = (clientId) => ({ ...OFF_ENTRY(clientId), ...(syncs.find((s) => s.clientId === clientId) || {}) });
   const setEntry = (clientId, patch) => {
     setSyncs((prev) => {
-      const cur = prev.find((s) => s.clientId === clientId) || { clientId, x: 'off', instagram: 'off', offsetMinutes: 0 };
+      const cur = { ...OFF_ENTRY(clientId), ...(prev.find((s) => s.clientId === clientId) || {}) };
       const next = { ...cur, ...patch };
       const rest = prev.filter((s) => s.clientId !== clientId);
       return next.x === 'off' && next.instagram === 'off' ? rest : [...rest, next];
@@ -116,9 +122,9 @@ export default function CalendarSyncPanel({ activeClientId, getIdToken }) {
         <small>{active ? `${active} SOURCE${active === 1 ? '' : 'S'}` : 'OFF'}</small>
       </div>
       <p className="cs-sub">
-        Also post what another client&apos;s calendar schedules, on <strong>this</strong> client&apos;s connected accounts. Each synced post
-        appears on this calendar as its own row (edit, unschedule or reject it here without touching the source). Turning a source
-        on is standing consent to publish those posts from this client&apos;s X and Instagram.
+        Copy what another client&apos;s calendar schedules onto <strong>this</strong> client&apos;s calendar. Each copy is its own row (edit,
+        schedule or reject it here without touching the source). <strong>Drafts</strong>: copies wait at the source&apos;s time and nothing
+        posts until you schedule one. <strong>Auto-post</strong>: standing consent to publish them from this client&apos;s X and Instagram.
       </p>
       {!activeClientId ? (
         <div className="cs-empty">Load a client first.</div>
@@ -149,6 +155,12 @@ export default function CalendarSyncPanel({ activeClientId, getIdToken }) {
                     {IG_MODES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
                   </select>
                 </label>
+                <label className="cs-field">
+                  <span>Copies</span>
+                  <select id={`calendar-sync-mode-${c.clientId}`} value={e.mode} onChange={(ev) => setEntry(c.clientId, { mode: ev.target.value })} disabled={busy || !on}>
+                    {SYNC_MODES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                  </select>
+                </label>
                 <label className="cs-field cs-field-delay">
                   <span>Delay (min)</span>
                   <input type="number" min={0} max={10080} step={5} value={e.offsetMinutes} disabled={busy || !on}
@@ -177,7 +189,7 @@ export default function CalendarSyncPanel({ activeClientId, getIdToken }) {
         .cs-sub { margin: 0 0 12px; font-size: 13px; line-height: 1.45; opacity: 0.8; }
         .cs-empty { font-size: 13px; opacity: 0.6; padding: 8px 0; }
         .cs-list { display: flex; flex-direction: column; gap: 8px; }
-        .cs-row { display: grid; grid-template-columns: minmax(140px, 1.4fr) 1fr 1fr 110px; gap: 10px; align-items: end; padding: 10px 12px; border: 1px solid var(--t-border-faint); border-radius: 8px; opacity: 0.75; }
+        .cs-row { display: grid; grid-template-columns: minmax(140px, 1.4fr) 1fr 1fr 1fr 110px; gap: 10px; align-items: end; padding: 10px 12px; border: 1px solid var(--t-border-faint); border-radius: 8px; opacity: 0.75; }
         .cs-row-on { opacity: 1; border-color: var(--t-text); }
         .cs-row-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
         .cs-row-name strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

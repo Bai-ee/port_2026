@@ -1,20 +1,21 @@
 #!/usr/bin/env node
 // Show, set or run a client's calendar syncs (client_configs/{clientId}.calendarSyncs, see
 // features/social-posting/calendar-sync.js): the other clients whose scheduled posts this client also publishes on
-// its own accounts, with the X mode (copy | repost | off), Instagram mode (copy | off) and delay in minutes.
+// its own accounts, with the X mode (copy | repost | off), Instagram mode (copy | off), delay in minutes and mode
+// (draft = copies wait unscheduled on the calendar, the default | schedule = copies auto-post).
 //
 // DEFAULT IS A DRY RUN: prints the current list, the proposed list and what a sync would create / retire.
 // Nothing is written and nothing is scheduled.
-// --apply (OWNER ONLY): writes the proposed list, then runs the sync once (schedules mirrors on this client's
-//   calendar; they publish through the normal due sweep on this client's X / Instagram).
+// --apply (OWNER ONLY): writes the proposed list, then runs the sync once (draft mode: unscheduled drafts on this
+//   client's calendar; schedule mode: scheduled mirrors that publish through the normal due sweep).
 // --run (OWNER ONLY): runs the sync once with the saved list (no config change).
 //
 // Usage:
 //   node scripts/x-content/calendar-syncs.mjs --client <id>                                   # show + dry-run plan
-//   node scripts/x-content/calendar-syncs.mjs --client <id> --set <src[:x[:ig[:delay]]],...>   # dry run
+//   node scripts/x-content/calendar-syncs.mjs --client <id> --set <src[:x[:ig[:delay[:mode]]]],...>   # dry run
 //   node scripts/x-content/calendar-syncs.mjs --client <id> --set <...> --apply                # OWNER ONLY
 //   node scripts/x-content/calendar-syncs.mjs --client <id> --run                              # OWNER ONLY
-//   x defaults to copy, ig to off, delay to 0.  --set ""  clears the list.
+//   x defaults to copy, ig to off, delay to 0, mode to draft.  --set ""  clears the list.
 
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -34,7 +35,7 @@ const apply = argv.includes('--apply');
 const runOnly = argv.includes('--run');
 const db = fb.adminDb;
 
-const fmt = (list) => (list.length ? list.map((e) => `${e.clientId} x=${e.x} ig=${e.instagram} delay=${e.offsetMinutes}m`).join(' | ') : '(none)');
+const fmt = (list) => (list.length ? list.map((e) => `${e.clientId} x=${e.x} ig=${e.instagram} delay=${e.offsetMinutes}m mode=${e.mode}`).join(' | ') : '(none)');
 const current = await readCalendarSyncs(clientId, { db });
 console.log(`client   ${clientId}`);
 console.log(`current  ${fmt(current)}`);
@@ -42,8 +43,8 @@ console.log(`current  ${fmt(current)}`);
 let proposed = current;
 if (si > -1) {
   const raw = String(argv[si + 1] ?? '').split(',').map((s) => s.trim()).filter(Boolean).map((s) => {
-    const [id, x, instagram, delay] = s.split(':');
-    return { clientId: id, x: x || 'copy', instagram: instagram || 'off', offsetMinutes: Number(delay) || 0 };
+    const [id, x, instagram, delay, mode] = s.split(':');
+    return { clientId: id, x: x || 'copy', instagram: instagram || 'off', offsetMinutes: Number(delay) || 0, mode: mode || 'draft' };
   });
   proposed = normalizeCalendarSyncs(raw, clientId);
   for (const e of proposed) {
@@ -61,8 +62,8 @@ for (const entry of proposed) {
   const sourcePosts = await svc.readSocialQueue(entry.clientId);
   const plan = planCalendarSync({ entry, viewer: clientId, sourcePosts, viewerPosts, igAllowed });
   console.log(`plan     ${entry.clientId}: create ${plan.create.length}, retire ${plan.retire.length}, keep ${plan.keep.length}, skip ${plan.skipped.length}${entry.instagram === 'copy' && !igAllowed ? ' (Instagram off: no usable account)' : ''}`);
-  for (const c of plan.create) console.log(`  + ${c.payload.scheduledAt}  ${c.payload.kind === 'repost' ? '[repost] ' : ''}${String(c.payload.content).replace(/\s+/g, ' ').slice(0, 70)}  targets=${JSON.stringify(c.payload.targets)}`);
-  for (const r of plan.retire) console.log(`  - ${r.scheduledAt}  ${r.id}  ${String(r.content).replace(/\s+/g, ' ').slice(0, 60)}`);
+  for (const c of plan.create) console.log(`  + ${c.payload.scheduledAt || `draft@${c.payload.plannedAt}`}  ${c.payload.kind === 'repost' ? '[repost] ' : ''}${String(c.payload.content).replace(/\s+/g, ' ').slice(0, 70)}  targets=${JSON.stringify(c.payload.targets)}`);
+  for (const r of plan.retire) console.log(`  - ${r.scheduledAt || `draft@${r.plannedAt}`}  ${r.id}  ${String(r.content).replace(/\s+/g, ' ').slice(0, 60)}`);
   for (const s of plan.skipped) console.log(`  ~ ${s.postId} ${s.reason}`);
 }
 

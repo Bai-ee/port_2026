@@ -1030,8 +1030,13 @@ function buildSocialPostRecord(clientId, payload, id) {
         postId: cleanStr(payload.mirrorOf.postId, 160),
         key: cleanStr(payload.mirrorOf.key, 300),
         hash: cleanStr(payload.mirrorOf.hash, 32),
+        ...(payload.mirrorOf.mode === 'draft' ? { mode: 'draft' } : {}),
       },
     } : {}),
+    // Calendar sync draft mode: the time this unscheduled draft is meant for (the month calendar places it there).
+    // Not a schedule: nothing publishes from it until the owner schedules the row.
+    ...(Number.isFinite(Date.parse(String(payload.plannedAt || ''))) && !payload.scheduledAt
+      ? { plannedAt: new Date(Date.parse(payload.plannedAt)).toISOString() } : {}),
     // Additive provenance (only present when the producer supplies it, so legacy rows keep their exact shape).
     // lifecycleVersion 2 opts the row into the stricter edit/delivery rules in ./lifecycle.js.
     ...(payload.lifecycleVersion === LIFECYCLE_VERSION ? { lifecycleVersion: LIFECYCLE_VERSION } : {}),
