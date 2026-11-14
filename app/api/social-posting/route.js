@@ -27,6 +27,7 @@ import {
   setPostTargets,
   getPostTargetOptions,
 } from '../../../features/social-posting/twitter-service.js';
+import { readCalendarSyncs, writeCalendarSyncs, runCalendarSync, runCalendarSyncForAllClients } from '../../../features/social-posting/calendar-sync.js';
 import { scoreXPost } from '../../../features/x-growth/index.js';
 import {
   getKnowledgeBaseRuntimeContext,
@@ -87,6 +88,22 @@ function json(body, status = 200) {
   return NextResponse.json(body, { status, headers: { 'cache-control': 'no-store' } });
 }
 
+// Cron log line for the calendar-sync pass: counts only, plus any errors so a stuck mirror is visible in the run log.
+function summarizeCalendarSync(sync) {
+  if (!sync?.ok) return { ok: false, error: sync?.error || 'unknown' };
+  const out = { ok: true, viewers: 0, created: 0, retired: 0, errors: [] };
+  for (const v of sync.viewers || []) {
+    out.viewers += 1;
+    if (v.error) out.errors.push({ viewer: v.viewer, message: v.error });
+    for (const e of v.entries || []) {
+      out.created += e.created;
+      out.retired += e.retired;
+      for (const err of e.errors || []) out.errors.push({ viewer: v.viewer, source: e.clientId, ...err });
+    }
+  }
+  return out;
+}
+
 async function resolveContext(request) {
   const decoded = await verifyRequestUser(makeReqShim(request));
   const context = await getEffectiveClientContext({ uid: decoded.uid, email: decoded.email, request });
@@ -105,11 +122,15 @@ export async function GET(request) {
     if (!isCronRequest(request)) return json({ error: 'Unauthorized.' }, 401);
     try {
       const maxParam = Number(new URL(request.url).searchParams.get('max'));
+      // Calendar sync first (./calendar-sync.js): mirrors of other clients' scheduled posts land on the viewer's
+      // calendar before the sweep, so a mirror due in this window publishes in this window. Never throws.
+      const calendarSync = await runCalendarSyncForAllClients();
       const result = await processDuePostsForAllClients(Number.isFinite(maxParam) && maxParam > 0 ? { maxPerRun: Math.min(maxParam, 10) } : {});
       // Owner alert when the run parked or failed anything (off unless PILOT_ALERT_* + RESEND_API_KEY are set).
       const alert = await alertOnHeldPosts(result);
       return json({
         ok: true,
+        calendarSync: summarizeCalendarSync(calendarSync),
         alert: alert.sent ? 'sent' : alert.reason,
         posted: result.posted.length,
         failed: result.failed.length,
@@ -310,6 +331,24 @@ export async function POST(request) {
         planOverride: planOverrideFrom(body, decoded),
       });
       return json({ ok: true, post });
+    }
+
+    // Calendar sync (./calendar-sync.js): this client also posts what other clients' calendars schedule. Reading is
+    // free; saving is owner-only (the toggle is standing spend consent on this client's accounts) and reconciles
+    // at once, so the owner sees the mirrors land. The source list is the request's; the viewer is the resolved client.
+    if (action === 'calendar-syncs') {
+      return json({ ok: true, syncs: await readCalendarSyncs(context.clientId) });
+    }
+    if (action === 'set-calendar-syncs') {
+      requirePilotOwner(context, decoded);
+      const syncs = await writeCalendarSyncs(context.clientId, Array.isArray(body.syncs) ? body.syncs : []);
+      const run = await runCalendarSync(context.clientId, { entries: syncs });
+      return json({ ok: true, syncs, run: run.entries });
+    }
+    if (action === 'run-calendar-sync') {
+      requirePilotOwner(context, decoded);
+      const run = await runCalendarSync(context.clientId);
+      return json({ ok: true, run: run.entries });
     }
 
     // Post networks (X / Instagram checkboxes). Reading is free; setting is owner-only like approve, and is not a
