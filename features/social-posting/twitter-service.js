@@ -1020,6 +1020,23 @@ function buildSocialPostRecord(clientId, payload, id) {
     attempts: 0,
     // Repost rows only (legacy rows keep their exact shape).
     ...(kind ? { kind, repostOf } : {}),
+    // Networks at creation (./cross-post.js). Only producers that know the networks pass it (calendar sync);
+    // the editor's checkboxes still go through setPostTargets, which also verifies the Instagram account.
+    ...(payload.targets && typeof payload.targets === 'object' ? { targets: normalizeTargets(payload.targets) } : {}),
+    // Calendar sync (./calendar-sync.js): this row mirrors another client's post onto this client's accounts.
+    ...(payload.mirrorOf && typeof payload.mirrorOf === 'object' && payload.mirrorOf.postId ? {
+      mirrorOf: {
+        clientId: cleanStr(payload.mirrorOf.clientId, 80),
+        postId: cleanStr(payload.mirrorOf.postId, 160),
+        key: cleanStr(payload.mirrorOf.key, 300),
+        hash: cleanStr(payload.mirrorOf.hash, 32),
+        ...(payload.mirrorOf.mode === 'draft' ? { mode: 'draft' } : {}),
+      },
+    } : {}),
+    // Calendar sync draft mode: the time this unscheduled draft is meant for (the month calendar places it there).
+    // Not a schedule: nothing publishes from it until the owner schedules the row.
+    ...(Number.isFinite(Date.parse(String(payload.plannedAt || ''))) && !payload.scheduledAt
+      ? { plannedAt: new Date(Date.parse(payload.plannedAt)).toISOString() } : {}),
     // Additive provenance (only present when the producer supplies it, so legacy rows keep their exact shape).
     // lifecycleVersion 2 opts the row into the stricter edit/delivery rules in ./lifecycle.js.
     ...(payload.lifecycleVersion === LIFECYCLE_VERSION ? { lifecycleVersion: LIFECYCLE_VERSION } : {}),

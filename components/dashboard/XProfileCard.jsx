@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { SOCIAL_PLATFORMS } from '../../features/social-posting/platforms.js';
 import { readImpersonateClientId, withImpersonation } from '../../lib/dashboard/bootstrap-session.js';
+import CalendarSyncPanel from './CalendarSyncPanel.jsx';
 
 // X Command Center — admin control surface for the live @bai_ee account over
 // OAuth 2.0 user-context (features/social-posting/x-oauth.js). Panels:
@@ -432,6 +433,9 @@ export default function XProfileCard({ getIdToken, activeClientId, clientName })
             )}
             {acctNotice ? <p className={`xp-notice xp-notice-${acctNotice.kind}`}>{acctNotice.text}</p> : null}
           </section>
+
+          {/* ── Synced calendars — this client also posts other clients' scheduled posts ── */}
+          <CalendarSyncPanel activeClientId={activeClientId} getIdToken={getIdToken} />
 
           {/* ── Connection ─────────────────────────────────────────── */}
           <section id="x-profile-connection-panel" className="xp-panel">
