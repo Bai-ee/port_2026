@@ -8,8 +8,9 @@
 //
 // WHERE IT RUNS: bird needs the Mac's Chrome cookies, so it cannot run on Vercel. Same pattern as scan-quote-targets:
 //   - Mac / local dev (X_STRATEGY_LOCAL_INGEST=1 and bird runnable): live pull, cached ~15 min in memory + Firestore.
-//   - Vercel (no bird): serve the last Firestore snapshot the Mac wrote (scripts/x-content/pull-recent-posts.mjs),
-//     flagged stale with its as-of; with no snapshot, fall back to X Monitor's stored impressions (source x-monitor).
+//   - Vercel (no bird): serve the last Firestore snapshot the Mac wrote (the refresh worker re-pulls hourly; a stale read
+//     sets refreshRequestedAt and the worker pulls within ~60s), flagged stale with its as-of; with no snapshot, fall
+//     back to X Monitor's stored impressions (source x-monitor). Each snapshot carries per-post checkpoints (2h/24h/72h).
 // Every figure carries its source and as-of; where bird and X Monitor both have a post the LATER capture wins.
 //
 // Pure except through injected `runBird` / `store`; READ-ONLY bird verbs only (see assertReadOnlyBird).
@@ -27,6 +28,10 @@ export const BASELINE_DAYS = 14; // window of the owner's median
 export const OUTLIER_RATIO = 10; // views / median >= this => outlier
 export const RECENT_COLLECTION = 'x_recent_posts';
 export const RECENT_SNAPSHOT_MAX_ROWS = 150;
+export const SCHEDULED_PULL_MS = 60 * 60 * 1000; // the Mac worker re-pulls each snapshot hourly
+export const REFRESH_REQUEST_COOLDOWN_MS = 5 * 60 * 1000; // a stale read asks the Mac worker at most this often
+export const CHECKPOINT_HOURS = Object.freeze([2, 24, 72]); // per-post metrics frozen at the first pull past each mark
+const CHECKPOINT_KEEP_MS = 8 * 86_400_000;
 const TEXT_MAX = 160;
 const CT = 'America/Chicago';
 const AUTHORED = new Set(['original-showcase', 'original-text', 'quote-react', 'quote-commentary', 'self-quote']);
@@ -124,8 +129,29 @@ export function normalizeRecentPost(raw, { handle } = {}) {
   return row;
 }
 
-/** Timeline -> snapshot rows (newest first, deduped, capped). `pulledAt` is when bird answered. */
-export function buildSnapshot({ raws, handle, pulledAt, clientId = null }) {
+/**
+ * Carry the previous snapshot's checkpoints forward and add any newly due ones: for each mark in CHECKPOINT_HOURS, the
+ * first pull at or past that post age freezes its numbers (with the real age, so a late capture is visible as late).
+ * Posts older than 8 days are dropped.
+ */
+export function updateCheckpoints(prev, rows, pulledAt) {
+  const out = {};
+  for (const [id, cp] of Object.entries(prev || {})) if (cp && pulledAt - Date.parse(cp.utc) < CHECKPOINT_KEEP_MS) out[id] = cp;
+  for (const r of rows) {
+    const ms = Date.parse(r.utc);
+    if (r.views === null || !Number.isFinite(ms) || pulledAt - ms >= CHECKPOINT_KEEP_MS) continue;
+    const ageHours = (pulledAt - ms) / 3_600_000;
+    for (const mark of CHECKPOINT_HOURS) {
+      const k = `h${mark}`;
+      if (ageHours < mark || out[r.id]?.[k]) continue;
+      out[r.id] = { ...(out[r.id] || { utc: r.utc }), [k]: { at: new Date(pulledAt).toISOString(), ageHours: Math.round(ageHours * 10) / 10, views: r.views, likes: r.likes, reposts: r.reposts, replies: r.replies, bookmarks: r.bookmarks } };
+    }
+  }
+  return out;
+}
+
+/** Timeline -> snapshot rows (newest first, deduped, capped). `pulledAt` is when bird answered; `prev` carries checkpoints. */
+export function buildSnapshot({ raws, handle, pulledAt, clientId = null, prev = null }) {
   const seen = new Set();
   const rows = [];
   for (const raw of raws || []) {
@@ -135,7 +161,8 @@ export function buildSnapshot({ raws, handle, pulledAt, clientId = null }) {
     rows.push(row);
   }
   rows.sort((a, b) => (a.utc < b.utc ? 1 : -1));
-  return { clientId, handle: String(handle).replace(/^@+/, ''), pulledAt, rows: rows.slice(0, RECENT_SNAPSHOT_MAX_ROWS) };
+  const kept = rows.slice(0, RECENT_SNAPSHOT_MAX_ROWS);
+  return { clientId, handle: String(handle).replace(/^@+/, ''), pulledAt, rows: kept, checkpoints: updateCheckpoints(prev?.checkpoints, kept, pulledAt) };
 }
 
 const clampHours = (h) => (Number.isInteger(h) ? Math.min(Math.max(h, 1), RECENT_MAX_HOURS) : RECENT_DEFAULT_HOURS);
@@ -166,8 +193,12 @@ export function shapeRecentPosts(snap, { hours, now = Date.now(), source, monito
   const inWindow = rows.filter((r) => Date.parse(r.utc) >= cut);
   const posts = inWindow.slice(0, RECENT_POSTS_MAX).map((r) => {
     const vsMedian = AUTHORED.has(r.type) && r.views !== null && med > 0 ? Math.round((r.views / med) * 10) / 10 : null;
-    return { ...r, atCT: ctStamp(Date.parse(r.utc)), vsMedian, outlier: vsMedian !== null && vsMedian >= OUTLIER_RATIO };
+    const cp = snap.checkpoints?.[r.id];
+    const checkpoints = cp ? Object.fromEntries(CHECKPOINT_HOURS.filter((h) => cp[`h${h}`]).map((h) => [`h${h}`, cp[`h${h}`]])) : null;
+    return { ...r, atCT: ctStamp(Date.parse(r.utc)), vsMedian, outlier: vsMedian !== null && vsMedian >= OUTLIER_RATIO, ...(checkpoints && Object.keys(checkpoints).length ? { checkpoints } : {}) };
   });
+  // Posts the account can still learn from but has no view count for (never guessed, never zero).
+  const needsMetrics = inWindow.filter((r) => r.type !== 'retweet' && r.views === null).map((r) => ({ id: r.id, url: r.url, atCT: ctStamp(Date.parse(r.utc)) }));
   const ageMinutes = Math.max(0, Math.round((now - asOf) / 60_000));
   return {
     available: true,
@@ -181,6 +212,10 @@ export function shapeRecentPosts(snap, { hours, now = Date.now(), source, monito
     outlierRule: `outlier = views / median >= ${OUTLIER_RATIO}`,
     count: inWindow.length,
     ...(inWindow.length > posts.length ? { truncated: true } : {}),
+    checkpointRule: `checkpoints h${CHECKPOINT_HOURS.join('/h')} = numbers frozen at the first pull past that post age (ageHours shows how late)`,
+    needsMetrics,
+    ...(snap.lastError ? { lastPullError: snap.lastError } : {}),
+    ...(snap.refreshRequestedAt ? { refreshRequestedAt: new Date(snap.refreshRequestedAt).toISOString() } : {}),
     posts,
     caveats: [
       'views = X impression count at as-of; it grows after the pull. A post under ~2h old is still moving.',
@@ -212,13 +247,29 @@ export function createMemoryRecentPostsStore() {
   return { async get(key) { return m.get(key) ?? null; }, async put(key, snap) { m.set(key, snap); } };
 }
 
-/** Firestore snapshot cache: x_recent_posts/{clientId}__{handle}. Written only by a live pull (Mac / local). */
+/**
+ * Firestore snapshot cache: x_recent_posts/{clientId}__{handle}. Snapshots are written only by a live pull (Mac / local);
+ * `put` replaces the doc, so a successful pull also clears refreshRequestedAt and lastError.
+ */
 export function createFirestoreRecentPostsStore(db) {
   const ref = (key) => db.collection(RECENT_COLLECTION).doc(String(key).replace(/[^\w.-]+/g, '_'));
   return {
     async get(key) { const s = await ref(key).get(); return s.exists ? s.data() : null; },
     async put(key, snap) { await ref(key).set(snap); },
+    /** Ask the Mac worker for a pull now (it drains every 60s). */
+    async requestRefresh(key, at) { await ref(key).set({ refreshRequestedAt: at }, { merge: true }); },
+    async markFailed(key, error) { await ref(key).set({ lastError: error }, { merge: true }); },
   };
+}
+
+/**
+ * Mac worker: is this snapshot due? Hourly, or sooner when a reader asked (refreshRequestedAt after the last pull).
+ * @returns {false|'scheduled'|'requested'}
+ */
+export function recentPullDue(snap, now = Date.now(), everyMs = SCHEDULED_PULL_MS) {
+  if (!snap || !Number.isFinite(snap.pulledAt)) return 'scheduled';
+  if (Number.isFinite(snap.refreshRequestedAt) && snap.refreshRequestedAt > snap.pulledAt) return 'requested';
+  return now - snap.pulledAt >= everyMs ? 'scheduled' : false;
 }
 
 /**
@@ -233,8 +284,10 @@ export function createRecentPostsReader({ runBird = null, store = createMemoryRe
   const bird = runBird ? readOnlyBird(runBird) : null;
 
   async function livePull(key, clientId, handle) {
+    let prev = mem.get(key) ?? null;
+    if (!prev) { try { prev = await store.get(key); } catch { prev = null; } }
     const stdout = await bird(birdArgsFor(handle));
-    const snap = buildSnapshot({ raws: parseTimeline(stdout), handle, pulledAt: now(), clientId });
+    const snap = buildSnapshot({ raws: parseTimeline(stdout), handle, pulledAt: now(), clientId, prev });
     if (!snap.rows.length) throw Object.assign(new Error('bird returned no posts'), { code: 'NO_POSTS' });
     mem.set(key, snap);
     try { await store.put(key, snap); } catch { /* cache write is best effort */ }
@@ -284,9 +337,24 @@ export function createRecentPostsReader({ runBird = null, store = createMemoryRe
       }
     }
 
+    // No bird here (Vercel): a stale read asks the Mac worker for a pull (it drains every 60s), at most every few minutes.
+    if (!fresh && !bird && typeof store.requestRefresh === 'function') {
+      const asked = Number(snap?.refreshRequestedAt);
+      const pending = Number.isFinite(asked) && asked > (snap?.pulledAt ?? 0);
+      if (pending && t - asked < REFRESH_REQUEST_COOLDOWN_MS) {
+        extra.push('A fresh pull is already requested from the Mac worker; ask again in about a minute.');
+      } else {
+        try {
+          await store.requestRefresh(key, t);
+          if (snap) snap = { ...snap, refreshRequestedAt: t };
+          extra.push('Requested a fresh pull from the Mac worker (it runs every 60s); ask again in about a minute for newer numbers.');
+        } catch { /* best effort */ }
+      }
+    }
+
     const monitor = await monitorFor(clientId);
     if (snap) {
-      if (!fresh && !bird) extra.push('bird cannot run on this deployment (it needs the Mac\'s browser cookies); this is the last snapshot the Mac wrote. Run scripts/x-content/pull-recent-posts.mjs on the Mac to refresh it.');
+      if (!fresh && !bird) extra.push('bird cannot run on this deployment (it needs the Mac\'s browser cookies); this is the last snapshot the Mac wrote (it re-pulls hourly).');
       return shapeRecentPosts(snap, { hours, now: t, source, monitor, caveats: extra });
     }
     const fallback = monitor ? snapshotFromMonitor(monitor.audience, { handle: h, hours, now: t }) : null;

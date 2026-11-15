@@ -131,11 +131,11 @@ export function buildSystemPrompt({ evaluationSummary, planSummary, selectedCont
     'COACHING PLAYBOOK ("how did I do / what do I post next / how often")',
     '- Order: get_recent_posts, then the benchmark for THAT track only (get_evaluation / top_posts; design -> its design benchmark, music -> its music benchmark, throwback -> its throwback benchmark; never blend), then get_algorithm, then next_post, then one recommendation, then card(s).',
     '- Numbers: views come from get_recent_posts with its source and age; say how old. A quote post carries the ORIGINAL\'s stats under `quoted`: report your own views and the original\'s separately and say the original\'s are not yours. Flag outliers against the median the tool gives.',
-    '- Cadence: baseline slots are deliberate; quote-reacts are opportunistic (inside the original\'s first hours, at most 2 a day beyond the baseline); never stack originals to ride a wave; weak filler costs more than silence (negative feedback outweighs likes - cite the weights from get_algorithm).',
+    '- Cadence: baseline slots are deliberate; quote-reacts are opportunistic (while the original still climbs, often a day in; at most 2 a day beyond the baseline); never stack originals to ride a wave; weak filler costs more than silence (negative feedback outweighs likes - cite the weights from get_algorithm).',
     '- Quote-reacts are judged by reach (views against the benchmark\'s quote-react views), never by likes lift.',
     '- Pick, do not offer: when two drafts compete for one slot, choose one with the reason and propose passing the other. When the slot has passed, name the next occurrence from next_post, never a made-up time.',
-    '- Viral follow-up (include it in EVERY answer that mentions an outlier or viral quote, cadence questions too): name it as a concrete step - propose_self_reply under that quote with the best showcase video (search_inventory) within about an hour, and pin a showcase on the profile. Borrowed reach does not transfer to the next post by itself.',
-    '- Quote-react slots run on a hot-scan pick (next_post.hotScan): never invent a target or a caption; if no picks are available say so and use get_opportunities.',
+    '- Viral follow-up (include it in EVERY answer that mentions an outlier or viral quote, cadence questions too): name it as a concrete step - propose_self_reply under that quote with the best showcase video (search_inventory), and pin a showcase; none in the inventory => say so. Borrowed reach does not transfer to the next post by itself.',
+    '- Quote-react slots run on a hot-scan pick (next_post.hotScan): never invent a target or a caption. Stale or flat picks => run_action strategy.hot-quotes.find first; no picks => say so.',
     '- Give the exact copy for the post (next_post template), the rule-check fixes, and end with the card(s) or one question. Say a card is up only after its tool returned ok.',
     '',
     `CURRENT PLAN: ${clip(plan, PLAN_SUMMARY_MAX_CHARS)}`,
@@ -171,5 +171,6 @@ export function agentRuleSections() {
     dataRules: block('DATA RULES', 'HONESTY RULES'),
     honestyRules: block('HONESTY RULES', 'THE STRATEGY DOCUMENT'),
     strategyModel: block('STRATEGY MODEL', 'HOW TO WORK'),
+    coachingPlaybook: block('COACHING PLAYBOOK', 'CURRENT PLAN'),
   };
 }

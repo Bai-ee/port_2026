@@ -73,6 +73,9 @@ test('instructions: shared agent rules + MCP specifics', () => {
   assert.match(s, /HONESTY RULES/);
   assert.match(s, /STRATEGY MODEL/);
   assert.match(s, /LIKES-ONLY/);
+  assert.match(s, /COACHING PLAYBOOK/); // same coaching order as the in-app agent
+  assert.match(s, /strategy_get_recent_posts FIRST/);
+  assert.doesNotMatch(s, /first hours/);
   assert.doesNotMatch(s, /confirm_sync/);
   assert.match(s, /request_sync/);
   assert.match(s, /press(es)? Confirm/);
