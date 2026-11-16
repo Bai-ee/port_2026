@@ -2,7 +2,8 @@
 // Show, set or run a client's calendar syncs (client_configs/{clientId}.calendarSyncs, see
 // features/social-posting/calendar-sync.js): the other clients whose scheduled posts this client also publishes on
 // its own accounts, with the X mode (copy | repost | off), Instagram mode (copy | off), delay in minutes and mode
-// (draft = copies wait unscheduled on the calendar, the default | schedule = copies auto-post).
+// (draft = show only: the source calendar appears view-only on this client's calendar, nothing copied, the default
+// | schedule = copies auto-post). Only schedule entries are planned/run here.
 //
 // DEFAULT IS A DRY RUN: prints the current list, the proposed list and what a sync would create / retire.
 // Nothing is written and nothing is scheduled.
@@ -21,7 +22,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { requireClientArg } from './_client-arg.mjs';
-import { normalizeCalendarSyncs, readCalendarSyncs, planCalendarSync, runCalendarSync, instagramUsable } from '../../features/social-posting/calendar-sync.js';
+import { normalizeCalendarSyncs, readCalendarSyncs, planCalendarSync, runCalendarSync, instagramUsable, copyingEntries } from '../../features/social-posting/calendar-sync.js';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const require = createRequire(import.meta.url);
@@ -58,7 +59,7 @@ const svc = await import('../../features/social-posting/twitter-service.js');
 const { getSocialAccount } = await import('../../features/social-posting/social-accounts.js');
 const igAllowed = proposed.some((e) => e.instagram === 'copy') ? instagramUsable(await getSocialAccount(clientId, 'instagram').catch(() => null)) : false;
 const viewerPosts = await svc.readSocialQueue(clientId);
-for (const entry of proposed) {
+for (const entry of copyingEntries(proposed)) {
   const sourcePosts = await svc.readSocialQueue(entry.clientId);
   const plan = planCalendarSync({ entry, viewer: clientId, sourcePosts, viewerPosts, igAllowed });
   console.log(`plan     ${entry.clientId}: create ${plan.create.length}, retire ${plan.retire.length}, keep ${plan.keep.length}, skip ${plan.skipped.length}${entry.instagram === 'copy' && !igAllowed ? ' (Instagram off: no usable account)' : ''}`);
@@ -75,7 +76,7 @@ if (apply) {
   await db.collection('client_configs').doc(clientId).set({ calendarSyncs: proposed }, { merge: true });
   console.log(`written  ${fmt(await readCalendarSyncs(clientId, { db }))}`);
 }
-const result = await runCalendarSync(clientId, { db, svc });
+const result = await runCalendarSync(clientId, { db, svc, entries: copyingEntries(await readCalendarSyncs(clientId, { db })) });
 for (const e of result.entries) {
   console.log(`ran      ${e.clientId}: created ${e.created}, retired ${e.retired}, kept ${e.kept}, skipped ${e.skipped.length}`);
   for (const err of e.errors) console.log(`  ! ${err.stage} ${err.postId || err.sourcePostId || ''} ${err.code || ''} ${err.message}`);

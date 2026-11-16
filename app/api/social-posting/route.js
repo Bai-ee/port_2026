@@ -27,7 +27,8 @@ import {
   setPostTargets,
   getPostTargetOptions,
 } from '../../../features/social-posting/twitter-service.js';
-import { readCalendarSyncs, writeCalendarSyncs, runCalendarSync, runCalendarSyncForAllClients } from '../../../features/social-posting/calendar-sync.js';
+import { readCalendarSyncs, writeCalendarSyncs, runCalendarSync, runCalendarSyncForAllClients, copyingEntries } from '../../../features/social-posting/calendar-sync.js';
+import { bodyTargetsSyncedRow } from '../../../features/social-posting/synced-calendar.js';
 import { scoreXPost } from '../../../features/x-growth/index.js';
 import {
   getKnowledgeBaseRuntimeContext,
@@ -185,6 +186,8 @@ export async function POST(request) {
 
   try {
     const action = body.action || 'draft';
+    // Rows shown from a synced client's calendar are view-only here (features/social-posting/synced-calendar.js).
+    if (bodyTargetsSyncedRow(body)) return json({ error: 'This post is shown from another client\'s calendar and is view-only here.', code: 'synced-read-only' }, 409);
 
     // Lightweight, deterministic X-algo score — no LLM, no network, no KB fetch.
     // Powers the Copywriter notepad's live score-as-you-type, so it must
@@ -342,12 +345,13 @@ export async function POST(request) {
     if (action === 'set-calendar-syncs') {
       requirePilotOwner(context, decoded);
       const syncs = await writeCalendarSyncs(context.clientId, Array.isArray(body.syncs) ? body.syncs : []);
-      const run = await runCalendarSync(context.clientId, { entries: syncs });
+      // Only 'schedule' entries copy; 'draft' (Show only) entries appear view-only in the calendar (synced-calendar.js).
+      const run = await runCalendarSync(context.clientId, { entries: copyingEntries(syncs) });
       return json({ ok: true, syncs, run: run.entries });
     }
     if (action === 'run-calendar-sync') {
       requirePilotOwner(context, decoded);
-      const run = await runCalendarSync(context.clientId);
+      const run = await runCalendarSync(context.clientId, { entries: copyingEntries(await readCalendarSyncs(context.clientId)) });
       return json({ ok: true, run: run.entries });
     }
 

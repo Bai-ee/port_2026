@@ -4,10 +4,10 @@
 //     { clientId: 'bai-ees-discogs-TP37NQG0', x: 'copy', instagram: 'copy', offsetMinutes: 0, mode: 'draft' },
 //   ]
 //
-// mode 'draft' (the default): every mirror lands as an unscheduled DRAFT on the viewer's calendar at the source's
-// time (`plannedAt`, placed by features/x-content-inventory/month-calendar.js). Nothing publishes until the owner
-// schedules it there. An untouched draft follows its source (edited -> replaced, unscheduled/posted/gone ->
-// removed); once the owner edits, approves or schedules it, the row is theirs and the sync never touches it again.
+// mode 'draft' (the default, "Show only"): since 2026-11-16 nothing is copied. The source's whole calendar is shown
+// view-only inside the viewer's calendar instead (./synced-calendar.js, merged by the month-calendar action), so
+// production runs only reconcile 'schedule' entries (`copyingEntries`). The draft-mirror planner below is kept,
+// unreachable from the runners, for the tests and a possible return to draft copies.
 // mode 'schedule': the rest of this header — mirrors are scheduled and publish on their own.
 //
 // The viewer (e.g. the HITLOOP home client) opts in to a SOURCE client's calendar. Every scheduled source post
@@ -315,12 +315,15 @@ async function retireMirror(service, viewer, mirror) {
   return service.rejectDraft(viewer, draft.id, { reviewedBy: SOURCE });
 }
 
+/** The entries the runners act on: 'schedule' only. 'draft' entries are shown, not copied (./synced-calendar.js). */
+export const copyingEntries = (list) => (Array.isArray(list) ? list.filter((e) => e?.mode === 'schedule') : []);
+
 /** Every client with at least one sync entry (client_configs is small; filtered in memory, no index). */
 export async function listCalendarSyncViewers({ db } = {}) {
   const snap = await database(db).collection('client_configs').get();
   const out = [];
   for (const doc of snap.docs) {
-    const entries = normalizeCalendarSyncs(doc.data()?.calendarSyncs, doc.id);
+    const entries = copyingEntries(normalizeCalendarSyncs(doc.data()?.calendarSyncs, doc.id));
     if (entries.length) out.push({ viewer: doc.id, entries });
   }
   return out;
