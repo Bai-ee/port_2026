@@ -49,6 +49,7 @@ export function rowMark(row) {
 /** Filter chip match. Chips are about review work, so posted/held/failed only show under All. */
 export function matchesFilter(row, filter) {
   if (!filter || filter === 'all') return true;
+  if (row?.readOnly) return false; // shown from a synced client's calendar: not review work here (All only)
   const a = rowApproval(row);
   if (filter === 'unapproved') return a === 'unapproved';
   if (filter === 'approved') return a === 'approved' || a === 'scheduled';

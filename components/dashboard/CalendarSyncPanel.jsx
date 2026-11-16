@@ -6,9 +6,10 @@ import { readImpersonateClientId, withImpersonation } from '../../lib/dashboard/
 
 // Synced calendars — the loaded client also posts what OTHER clients' calendars schedule, on its own connected
 // accounts (features/social-posting/calendar-sync.js). One row per other client: X mode (copy / repost / off),
-// Instagram mode (copy / off), delay, and whether copies arrive as drafts (default: nothing posts until scheduled
-// here) or auto-post. Saving writes client_configs.calendarSyncs and reconciles at once, so the copies appear on
-// this client's calendar right away. Mounted inside the Social Accounts card (admin only).
+// Instagram mode (copy / off), delay, and Show only (default: the other client's whole calendar appears view-only
+// on this client's calendar, nothing is copied, features/social-posting/synced-calendar.js) or auto-post (copies
+// that publish here). Saving writes client_configs.calendarSyncs; auto-post rows reconcile at once.
+// Mounted inside the Social Accounts card (admin only).
 // Own <style jsx>: the parent's scoped styles do not reach a child component's elements.
 
 const X_MODES = [
@@ -21,7 +22,7 @@ const IG_MODES = [
   { value: 'off', label: 'Off' },
 ];
 const SYNC_MODES = [
-  { value: 'draft', label: 'Drafts (I schedule)' },
+  { value: 'draft', label: 'Show only (view)' },
   { value: 'schedule', label: 'Auto-post' },
 ];
 const OFF_ENTRY = (clientId) => ({ clientId, x: 'off', instagram: 'off', offsetMinutes: 0, mode: 'draft' });
@@ -93,7 +94,7 @@ export default function CalendarSyncPanel({ activeClientId, getIdToken }) {
       const data = await post({ action: 'set-calendar-syncs', syncs });
       setSyncs(data.syncs || []);
       setDirty(false);
-      setNotice({ kind: 'ok', text: data.run?.length ? `Saved. ${describeRun(data.run)}` : 'Saved. No calendars synced.' });
+      setNotice({ kind: 'ok', text: data.run?.length ? `Saved. ${describeRun(data.run)}` : (data.syncs?.length ? 'Saved. Show-only calendars appear on this client\'s calendar (view only).' : 'Saved. No calendars synced.') });
     } catch (err) {
       setNotice({ kind: 'error', text: err.message });
     } finally {
@@ -122,9 +123,10 @@ export default function CalendarSyncPanel({ activeClientId, getIdToken }) {
         <small>{active ? `${active} SOURCE${active === 1 ? '' : 'S'}` : 'OFF'}</small>
       </div>
       <p className="cs-sub">
-        Copy what another client&apos;s calendar schedules onto <strong>this</strong> client&apos;s calendar. Each copy is its own row (edit,
-        schedule or reject it here without touching the source). <strong>Drafts</strong>: copies wait at the source&apos;s time and nothing
-        posts until you schedule one. <strong>Auto-post</strong>: standing consent to publish them from this client&apos;s X and Instagram.
+        Show another client&apos;s calendar on <strong>this</strong> client&apos;s calendar. <strong>Show only</strong>: everything on their
+        calendar (drafts, scheduled, awaiting approval, posted) appears here view-only, tagged with their name; nothing is copied and
+        nothing can publish from here. <strong>Auto-post</strong>: standing consent to copy their scheduled posts and publish them from
+        this client&apos;s X and Instagram.
       </p>
       {!activeClientId ? (
         <div className="cs-empty">Load a client first.</div>

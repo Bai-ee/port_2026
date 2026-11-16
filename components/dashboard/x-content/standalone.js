@@ -121,7 +121,7 @@ export function useCalendarProps(call, clientId) {
   const load = useCallback(async (m = monthRef.current) => {
     setLoading(true);
     setError('');
-    try { setCalendar((await call('month-calendar', { month: m }))?.calendar || null); } catch (err) { setError(err.message || 'Could not load the calendar.'); } finally { setLoading(false); }
+    try { setCalendar((await call('month-calendar', { month: m, includeSynced: true }))?.calendar || null); } catch (err) { setError(err.message || 'Could not load the calendar.'); } finally { setLoading(false); }
   }, [call]);
   useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [clientId]);
   const actions = useCalendarActions(standaloneCallSocial, () => load());

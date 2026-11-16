@@ -20,6 +20,8 @@ import { quotedUrlOf } from '../../../../features/x-strategy/post-query.js';
 import { parseStatusUrl, findQuotedCandidate, buildQuotedPreview } from '../../../../features/x-quote-targets/quoted-preview.js';
 import { buildPostResults } from '../../../../features/x-content-inventory/results.js';
 import { recentPostsFromQueue } from '../../../../features/x-content-inventory/allocate-slot.js';
+import { readCalendarSyncs } from '../../../../features/social-posting/calendar-sync.js';
+import { mergeSyncedCalendars, shownEntries, bodyTargetsSyncedRow } from '../../../../features/social-posting/synced-calendar.js';
 import { readUnifiedCalendar, readQuoteState as readCalendarQuoteState, readCalendarQuoteTargets as readCalendarQuoteTargetsShared } from '../../../../features/x-content-inventory/calendar-reader.js';
 import { projectNow } from '../../../../features/x-content-inventory/now-projection.js';
 import { ctDate, toRow as calendarPostRow } from '../../../../features/x-content-inventory/month-calendar.js';
@@ -512,10 +514,36 @@ const readCalendarQuoteTargets = (clientId) => readCalendarQuoteTargetsShared(fb
 /** Dashboard Month calendar = the shared unified reader + row thumbnails (the only route-specific part). */
 async function handleMonthCalendar(context, body) {
   const month = typeof body?.month === 'string' ? body.month.trim() : '';
-  const { calendar, pkgs, baselineSlots, quoteBudget } = await readUnifiedCalendar(fb.adminDb, context.clientId, { month, now: Date.now() });
+  const now = Date.now();
+  const { calendar, pkgs, baselineSlots, quoteBudget } = await readUnifiedCalendar(fb.adminDb, context.clientId, { month, now });
   await withRowThumbs(calendar, pkgs, context.clientId);
+  // Synced calendars (Show only): opt-in per request so only the calendar view gets them, never counts/agents.
+  const merged = body?.includeSynced === true ? await withSyncedCalendars(calendar, context.clientId, now) : calendar;
   // Daily baseline slots (confirmed strategy doc) ride on the calendar so the Day view can mark them (display only).
-  return { ok: true, calendar: { ...calendar, baselineSlots, quoteBudget } };
+  return { ok: true, calendar: { ...merged, baselineSlots, quoteBudget } };
+}
+
+/**
+ * Merge the viewer's 'Show only' synced sources (features/social-posting/synced-calendar.js) into its month: each
+ * source's own calendar for the same month, view-only rows. Read-only; a failing source is reported, never thrown.
+ */
+async function withSyncedCalendars(calendar, viewer, now) {
+  let entries = [];
+  try { entries = shownEntries(await readCalendarSyncs(viewer)); } catch { return calendar; }
+  if (!entries.length) return calendar;
+  const sources = await Promise.all(entries.map(async (e) => {
+    try {
+      const [{ calendar: cal, pkgs }, clientDoc] = await Promise.all([
+        readUnifiedCalendar(fb.adminDb, e.clientId, { month: calendar.month, now }),
+        fb.adminDb.collection('clients').doc(e.clientId).get(),
+      ]);
+      await withRowThumbs(cal, pkgs, e.clientId);
+      return { clientId: e.clientId, name: clientDoc.data()?.companyName || e.clientId, calendar: cal };
+    } catch (err) {
+      return { clientId: e.clientId, error: err?.message || String(err) };
+    }
+  }));
+  return mergeSyncedCalendars(calendar, sources);
 }
 
 /** "Right now" strip: today's baseline slots (current/next, filled?, next action) + data freshness. Read-only, no X/model calls. */
@@ -1403,6 +1431,8 @@ export async function POST(request) {
   try {
     // Unlisted actions default to the gate. The client id is the server-resolved one (never body/model).
     if (actionNeedsPilot(action, body)) requirePilotOwner(context, decoded);
+    // Rows shown from a synced client's calendar are view-only here (features/social-posting/synced-calendar.js).
+    if (bodyTargetsSyncedRow(body)) return json({ error: 'This post is shown from another client\'s calendar and is view-only here.', code: 'synced-read-only' }, 409);
     if (action === 'draft-quote') {
       const result = await handleDraftQuote(context, body);
       return json(result);

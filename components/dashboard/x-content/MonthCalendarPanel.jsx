@@ -68,6 +68,7 @@ export function isQuoteWindowClosed(post, nowMs = Date.now()) {
 
 // onView (calendar day view only): the row and its VIEW POST button open the X preview instead of the editor.
 function PostRow({ post, busy, onOpen, onApprove, onReject, onApproveOnly, onUnapprove, onView, onPass }) {
+  if (post.readOnly) return <SyncedPostRow post={post} />;
   const windowClosed = isQuoteWindowClosed(post);
   // Once the data layer sends `approval`, the row's Approve button approves WITHOUT scheduling; the legacy approve-and-schedule check is kept only before that.
   const approvalAware = !!post.approval && !!onApproveOnly;
@@ -137,6 +138,28 @@ function PostRow({ post, busy, onOpen, onApprove, onReject, onApproveOnly, onUna
         </span>
       ) : null}
       {onPass ? <span className="xce-mc-row-actions"><PassRowButton row={post} busy={busy} onPass={onPass} /></span> : null}
+    </li>
+  );
+}
+
+// A post shown from a synced client's calendar (features/social-posting/synced-calendar.js): view-only, no actions,
+// tagged with the source client. Its state is the source's own (draft, scheduled, posted, ...).
+function SyncedPostRow({ post }) {
+  return (
+    <li id={`x-content-month-row-${post.id}`} className={`xce-mc-row xce-mc-row-synced xce-mc-state-${post.state}`} data-synced-client={post.synced?.clientId || ''}>
+      <div className="xce-mc-row-main" aria-disabled="true">
+        <span className="xce-mc-row-time">{post.time || '—'}</span>
+        {post.approval ? <ApprovalMark row={post} /> : <StateDot state={post.state} />}
+        <span className="xce-mc-row-body">
+          <span className="xce-mc-row-title">{post.title || '(no text)'}</span>
+          <span className="xce-mc-row-meta">
+            {STATE_LABEL[post.state]}
+            {post.proposed ? ' · proposed' : ''}
+            <span id={`x-content-month-row-synced-tag-${post.id}`} className="xce-mc-synced-tag"> · from {post.synced?.name || post.synced?.clientId} · view only</span>
+          </span>
+        </span>
+        {post.thumbUrl ? <span className="xce-mini-thumb"><img src={post.thumbUrl} alt="" loading="lazy" /></span> : null}
+      </div>
     </li>
   );
 }
@@ -401,7 +424,7 @@ function MonthCalendarPanelView({
 
   // Optimistic approve/unapprove marks live only until the next calendar load.
   useEffect(() => { setOverrides({}); }, [calendar]);
-  const visible = (rows) => (pendingOnly ? rows.filter((p) => NEEDS_ATTENTION.includes(p.state)) : rows);
+  const visible = (rows) => (pendingOnly ? rows.filter((p) => !p.readOnly && NEEDS_ATTENTION.includes(p.state)) : rows);
   // Everything a day shows: saved posts + suggestions + requotes, with optimistic overrides and the approval filter applied.
   const rowsFor = (d) => visible(filterRows(dayRows(d).map((r) => withOverride({ ...r, date: r.date || d.date }, overrides)), filter));
   const chipCounts = useMemo(() => {
@@ -608,11 +631,11 @@ function MonthCalendarPanelView({
                             key={p.id}
                             type="button"
                             id={`x-content-month-chip-${p.id}`}
-                            className={`xce-mc-chip xce-mc-state-${p.state}`}
+                            className={`xce-mc-chip xce-mc-state-${p.state}${p.readOnly ? ' xce-mc-chip-synced' : ''}`}
                             data-bucket={p.bucketColor ? p.bucketId || 'none' : undefined}
                             style={p.bucketColor ? { '--mc-bucket': p.bucketColor } : undefined}
-                            onClick={(e) => { e.stopPropagation(); setSelected(d.date); if (isSuggestionRow(p)) openDay(d.date); else setOpenId(p.id); }}
-                            title={`${p.time || ''} · ${STATE_LABEL[p.state] || (p.kind === 'requote' ? 'Requote' : 'Suggested')}${p.proposed ? ' (proposed)' : ''} · ${p.title || p.text || ''}`}
+                            onClick={(e) => { e.stopPropagation(); setSelected(d.date); if (isSuggestionRow(p) || p.readOnly) openDay(d.date); else setOpenId(p.id); }}
+                            title={`${p.time || ''} · ${STATE_LABEL[p.state] || (p.kind === 'requote' ? 'Requote' : 'Suggested')}${p.proposed ? ' (proposed)' : ''}${p.readOnly ? ` · from ${p.synced?.name || p.synced?.clientId} (view only)` : ''} · ${p.title || p.text || ''}`}
                           >
                             {p.approval ? <ApprovalMark row={p} /> : <StateDot state={p.state} />}
                             <span className="xce-mc-chip-time">{p.time || ''}</span>
