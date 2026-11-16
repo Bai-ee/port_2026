@@ -12,6 +12,7 @@ import { trackForPackage, bucketOfPackage, isBucketId } from '../x-strategy/cont
 import { resolveEngine } from './engines.js';
 import { hasPlaceholderStory } from './match.js';
 import { mediaOf } from './item-media.js';
+import { postTextForPackage } from '../social-posting/post-format.js';
 
 export const MAX_BATCH = 366; // one a day for a year
 const WRITE_CONCURRENCY = 10;
@@ -129,10 +130,16 @@ const storyFacts = (pkg) => (hasPlaceholderStory(pkg) ? '' : String(pkg?.story ?
   .replace(/\s*source:.*$/is, '').replace(/https?:\/\/\S+/g, '').replace(/\s+/g, ' ').trim());
 
 /**
- * Draft text: date · title, where, the item's facts, then the owner's story or the memory placeholder (a batch draft
- * always waits for the owner's own line unless they already wrote one). Always <= 280 chars.
+ * Draft text. A client with a live post format (features/social-posting/post-format.js: Discogs records, UE mix
+ * videos) gets that format, ready as written. Anything else: date · title, where, the item's facts, then the owner's
+ * story or the memory placeholder (waits for the owner's own line unless they already wrote one). Always <= 280 chars.
  */
+/** A batch/fill draft waits for the owner's line only when it is not already a complete formatted post. */
+export const needsOwnerStory = (pkg) => !ownerStory(pkg) && !postTextForPackage(pkg);
+
 export function draftTextFor(pkg) {
+  const formatted = postTextForPackage(pkg);
+  if (formatted) return formatted;
   const facets = pkg?.facets || {};
   const title = text(pkg?.title || (Array.isArray(facets.partyNames) ? facets.partyNames[0] : '') || pkg?.id, 120);
   const where = [Array.isArray(facets.venues) ? facets.venues[0] : '', Array.isArray(facets.cities) && !facets.venues?.length ? facets.cities[0] : '']
@@ -233,7 +240,7 @@ export function planCalendarBatch({ packages = [], tracks = [], spec, today, ope
     title: p.title ?? null,
     reviewOn,
     content: draftTextFor(p),
-    needsStory: !ownerStory(p),
+    needsStory: needsOwnerStory(p),
     engine: resolveEngine(p),
     bucketId: bucketOfPackage(p),
     nasSha: typeof p.nas?.sha256 === 'string' ? p.nas.sha256 : null,

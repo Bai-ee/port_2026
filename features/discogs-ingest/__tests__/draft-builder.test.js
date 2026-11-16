@@ -15,11 +15,11 @@ const body = {
   files: { images: ['a.jpg'], videos: ['a.mp4'] }, clip: { start: 1, end: 61, look: 'x' },
 };
 
-test('post text format and 280 cap', () => {
-  const t = buildPostText(body);
-  assert.equal(t, 'Aphex Twin – Windowlicker\nWarp Records · WAP 105 · 1999\n\n[add your memory]');
-  assert.equal(buildPostText({ ...body, year: null }).includes('105\n\n'), true);
-  assert.ok(buildPostText({ ...body, title: 'x'.repeat(500) }).length <= 280);
+test('post text: live format, one field per line, hashtag last, no placeholder or dashes', () => {
+  assert.equal(buildPostText(body), 'Aphex Twin\nWindowlicker\nWarp Records\nWAP 105 · 1999\n#baieesdiscogs');
+  assert.equal(buildPostText({ ...body, year: null }), 'Aphex Twin\nWindowlicker\nWarp Records\nWAP 105\n#baieesdiscogs');
+  assert.equal(buildPostText({ ...body, title: 'Come To Daddy \u2013 Remix' }).includes('\u2013'), false);
+  assert.equal(hasMemoryPlaceholder(buildPostText(body)), false);
 });
 
 test('draft payload shape', () => {
@@ -96,11 +96,14 @@ test('draft variants validation', () => {
 });
 
 test('content refresh rule only for untouched builder text', () => {
+  const legacy = 'Aphex Twin – Windowlicker\nWarp Records · WAP 105 · 1999\n\n[add your memory]';
   assert.equal(isBuilderContent(buildPostText(body)), true);
   assert.equal(isBuilderContent(buildPostText({ ...body, label: '', catno: '', year: null })), true);
-  assert.equal(isBuilderContent(buildPostText(body).replace('[add your memory]', 'I found this in Leeds')), false);
+  assert.equal(isBuilderContent(legacy), true);
+  assert.equal(isBuilderContent(legacy.replace('[add your memory]', 'I found this in Leeds')), false);
+  assert.equal(isBuilderContent(`I found this in Leeds\n\n${buildPostText(body)}`), false);
   assert.equal(isBuilderContent(buildPostText(body) + ' ok'), false);
-  assert.equal(isBuilderContent('Intro line\n' + buildPostText(body)), false);
+  assert.equal(isBuilderContent('Intro line\n\n' + buildPostText(body)), false);
   assert.equal(isBuilderContent('[add your memory]'), false);
   assert.equal(isBuilderContent(null), false);
 });

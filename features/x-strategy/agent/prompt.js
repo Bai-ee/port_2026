@@ -74,7 +74,7 @@ export function describeSelected(selected, resolved) {
  * @param {{evaluationSummary?: string, planSummary?: string|object}} input
  * @returns {string}
  */
-export function buildSystemPrompt({ evaluationSummary, planSummary, selectedContext, strategyDocText, responseStyle, today, brainState } = {}) {
+export function buildSystemPrompt({ evaluationSummary, planSummary, selectedContext, strategyDocText, responseStyle, today, brainState, postFormat } = {}) {
   const plan = typeof planSummary === 'string' ? planSummary : summarizePlan(planSummary);
   const lines = [
     'You are the owner\'s admin-level operator for their Content Engine: you read any of their data, explain their X account against its benchmarks, and can do anything the dashboard can do. You are talking to the owner, one turn at a time.',
@@ -144,6 +144,8 @@ export function buildSystemPrompt({ evaluationSummary, planSummary, selectedCont
   if (brainState?.brainStatus) {
     lines.push(`BRAIN: ${brainState.brainStatus}.${brainState.baselineAvailable ? ' A baseline strategy is available for its empty strategy sections: offer it (run_action brain.strategy.baseline.get, show it, then brain.strategy.adopt-baseline = a card; then offer buckets.upsert for bucketsToCreate).' : ''}`);
   }
+  // The client's live post format (features/social-posting/post-format.js formatRuleText): hard, not capped.
+  if (postFormat) lines.push('', postFormat);
   if (selectedContext) lines.push(clip(selectedContext, 700));
   if (evaluationSummary) lines.push(`DATA NOTE: ${clip(evaluationSummary, 400)}`);
   // The model has no clock: without this it guesses dates (it once asked the calendar for the wrong month).

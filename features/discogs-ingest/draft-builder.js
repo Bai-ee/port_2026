@@ -1,11 +1,14 @@
 // Pure builders for the Discogs -> X draft ingest. No firebase, no network.
 
 import { GEAR_ALIASES, normalizeFacets, normalizeTerm } from '../x-content-inventory/facets.js';
+import { formatRecordPost, formatFor } from '../social-posting/post-format.js';
 
 export const MEMORY_PLACEHOLDER_LINE = '[add your memory]';
 export const DISCOGS_SOURCE = 'discogs-ingest';
 export const DISCOGS_PACKAGE_SERIES = 'C1';
 export const DISCOGS_PACKAGE_PILLAR = 'found-this'; // SERIES.C1.pillar in x-content-inventory/categories.js
+// The Discogs client's closing hashtag (features/social-posting/post-format.js owns the format).
+export const DISCOGS_HASHTAG = formatFor('bai-ees-discogs-TP37NQG0').hashtag;
 
 const KIND_RULES = {
   video: { contentType: 'video/mp4', ext: 'mp4' },
@@ -77,26 +80,35 @@ export function buildMediaVariants(variants, urlByPath) {
 }
 
 /**
- * True when existing post text is still the untouched builder output: ends with the
- * exact placeholder line after a blank line, and has only the lines the builder emits
- * (head with ' – ', optional meta line). Any human edit breaks this shape.
+ * True when existing post text is still untouched builder output, so a re-ingest may refresh it. Two shapes:
+ *   current  `Artist / Title / Label / Catno · Year / #baieesdiscogs` with no blank line (no memory written yet)
+ *   legacy   `Artist – Title`, optional meta line, blank line, the `[add your memory]` placeholder
+ * Writing a memory (a blank line above the block) or any other added text breaks both shapes.
  */
 export function isBuilderContent(content) {
   if (typeof content !== 'string') return false;
   const lines = content.split('\n');
+  if (lines.length >= 2 && lines.length <= 5 && lines[lines.length - 1] === DISCOGS_HASHTAG && lines.every((l) => l.trim() !== '')) return true;
   if (lines.length < 3 || lines.length > 5) return false;
   if (lines[lines.length - 1] !== MEMORY_PLACEHOLDER_LINE || lines[lines.length - 2] !== '') return false;
   return lines[0].includes(' – ') && lines.slice(1, -2).every((l) => l.trim() !== '');
 }
 
 /**
- * Owner story from builder-shaped content: line 1 `Artist – Title`, optional line 2
- * meta (`Label · Catno · Year`), then the story. Null when the shape is not
- * recognised, the story is empty, or the placeholder is still present.
+ * The owner's story from builder-shaped content. Null when the shape is not recognised, the story is empty, or the
+ * placeholder is still present.
+ *   current  story (any lines), blank line, then the record block ending in #baieesdiscogs
+ *   legacy   `Artist – Title`, optional `Label · Catno · Year` meta line, then the story
  */
 export function extractStory(content) {
   if (typeof content !== 'string') return null;
   if (content.toLowerCase().includes(MEMORY_PLACEHOLDER_LINE)) return null;
+  const trimmed = content.trim();
+  if (trimmed.split('\n').pop().trim() === DISCOGS_HASHTAG) {
+    const cut = trimmed.lastIndexOf('\n\n');
+    const story = cut < 0 ? '' : trimmed.slice(0, cut).trim();
+    return story || null;
+  }
   const lines = content.split('\n');
   let i = 0;
   const next = () => { while (i < lines.length && lines[i].trim() === '') i += 1; };
@@ -215,14 +227,13 @@ export function buildDiscogsFacets(req) {
   });
 }
 
-/** Post text, always <= 280 chars (artist/title line is shortened if needed). */
+/**
+ * Post text in the Discogs client's live format (features/social-posting/post-format.js): one field per line, then
+ * #baieesdiscogs. No placeholder: the post is ready as written; the owner's memory, when written, goes above it.
+ * The draft still carries needsStory:true, so the record auto-scheduler waits for that memory.
+ */
 export function buildPostText({ artist, title, label, catno, year }) {
-  const meta = [label, catno, year].filter(Boolean).join(' · ');
-  const tail = `${meta ? `\n${meta}` : ''}\n\n${MEMORY_PLACEHOLDER_LINE}`;
-  let head = `${artist} – ${title}`;
-  const room = 280 - tail.length;
-  if (head.length > room) head = `${head.slice(0, Math.max(1, room - 1)).trimEnd()}…`;
-  return `${head}${tail}`;
+  return formatRecordPost({ artist, title, label, catno, year });
 }
 
 export function buildSelfReply({ discogsUrl, imageUrl, imageStoragePath }) {

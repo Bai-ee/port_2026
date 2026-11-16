@@ -1983,7 +1983,7 @@ export async function GET(request) {
         // A remix approval starts with factual, editable metadata matching the
         // lower-left video title block.
         const captions = {
-          remix: canonicalRemixCopy(remixCap?.createdWith || {}),
+          remix: canonicalRemixCopy(remixCap?.createdWith || {}, { clientId: videoSourceClientId }),
           promo: '',
         };
         // Scheduled sends are ZERO-LLM (policy.allowInlineLlm): no Haiku

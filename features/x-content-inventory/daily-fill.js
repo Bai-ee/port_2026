@@ -13,7 +13,7 @@
 import { trackForPackage, bucketOfPackage } from '../x-strategy/content-tracks.js';
 import { resolveEngine } from './engines.js';
 import { mergeEngineConfig } from './engine-quota.js';
-import { addDays, draftTextFor, eventMonthDay } from './calendar-batch.js';
+import { addDays, draftTextFor, eventMonthDay, needsOwnerStory } from './calendar-batch.js';
 import { TAKE_PLACEHOLDER } from '../social-posting/self-reply.js';
 import { mediaOf } from './item-media.js';
 
@@ -42,7 +42,6 @@ const isPlain = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const clip = (v, max) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 const dayNumber = (d) => Math.floor(Date.parse(`${d}T00:00:00Z`) / DAY_MS);
 const slug = (v) => clip(v, 80).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
-const ownerStory = (pkg) => String(pkg?.humanEdits?.story ?? '').trim();
 
 /** Validate a fill spec from the owner, the agent or a route body. Never throws. */
 export function normalizeFillSpec(raw, { today } = {}) {
@@ -242,7 +241,7 @@ export function planDailyFill({
         if (kind === 'client-work') clientWorkDay.set(date, (clientWorkDay.get(date) || 0) + 1);
         rows.push({
           date, kind, trackId: track.id, bucketId: bucketOfPackage(c.p), packageId: c.p.id, title: c.p.title ?? null,
-          text: draftTextFor(c.p), needsStory: !ownerStory(c.p), engine: resolveEngine(c.p),
+          text: draftTextFor(c.p), needsStory: needsOwnerStory(c.p), engine: resolveEngine(c.p),
           nasSha: typeof c.p.nas?.sha256 === 'string' ? c.p.nas.sha256 : null,
           reason: c.dated ? `event date ${md} falls on this day`
             : `${c.tier === 1 ? 'media ready' : 'library item'}; ${c.prior ? `last used ${c.prior}` : 'not used before'}`,
