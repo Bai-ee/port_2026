@@ -73,6 +73,11 @@ test('postTextForPackage: no discogsSummary -> never invents label/catno; the ch
   assert.deepEqual(codes(checkLiveReady({ content: t, mediaUrl: 'v' }, { clientId: DISCOGS })), ['record-fields']);
 });
 
+test('postTextForPackage: falls back to the ingest record block; strips Discogs (2) suffixes', () => {
+  const t = postTextForPackage(discogsPkg({ discogsSummary: null, record: { artists: ['Kojak (2)'], title: 'Hold Me', label: 'Pro-Zak Trax (3)', catno: '19805', year: 1998 } }));
+  assert.equal(t, 'Kojak\nHold Me\nPro-Zak Trax\n19805 · 1998\n#baieesdiscogs');
+});
+
 test('postTextForPackage: UE mix video; other clients / kinds -> null (generic text kept)', () => {
   assert.equal(postTextForPackage(mixPkg()), 'BAI-EE\nLoft Livin\'\nCirca \'05\n#mixtapesfromchicago');
   assert.equal(postTextForPackage(mixPkg({ eraYear: null })), 'BAI-EE\nLoft Livin\'\n#mixtapesfromchicago');
@@ -101,4 +106,30 @@ test('chat agent: the client format rule rides in the prompt, change only on a s
   assert.equal(buildSystemPrompt({}).includes('POST FORMAT'), false);
   assert.equal(formatRuleText('other'), '');
   assert.equal(cleanLine(' A – B '), 'A, B');
+});
+
+import { rewritePostText, memoryFromContent } from '../post-format.js';
+
+test('memoryFromContent: legacy builder, current shape, none', () => {
+  assert.equal(memoryFromContent('A – B\nLabel · CAT · 1999\n\nFound it in Leeds.'), 'Found it in Leeds.');
+  assert.equal(memoryFromContent('A – B\n\n[add your memory]'), '');
+  assert.equal(memoryFromContent('Some good things in \'05\n\nDirty Kicks\nGet Your Kicks\nGallery\nGMG 010 · 2005'), 'Some good things in \'05');
+  assert.equal(memoryFromContent('Kojak\nHold Me\nPro-Zak Trax\n19805 · 1998'), '');
+});
+
+test('rewritePostText: Discogs placeholder draft rebuilt from the package; owner-complete lines kept + hashtag', () => {
+  const pkg = discogsPkg();
+  assert.deepEqual(rewritePostText({ content: 'Kojak – Hold Me\n\n[add your memory]', mediaUrl: 'v' }, pkg, DISCOGS), { content: 'Kojak\nHold Me\nPro-Zak Trax\n19805 · 1998\n#baieesdiscogs' });
+  assert.deepEqual(rewritePostText({ content: 'Kojak – Hold Me\nPro-Zak Trax · 19805 · 1998\n\nMy story', mediaUrl: 'v' }, pkg, DISCOGS), { content: 'My story\n\nKojak\nHold Me\nPro-Zak Trax\n19805 · 1998\n#baieesdiscogs' });
+  assert.deepEqual(rewritePostText({ content: 'Washerman, James Johnston\nSplit Slam EP\nDeep Down Slam\nDDSR001 · 2013', mediaUrl: 'v' }, pkg, DISCOGS), { content: 'Washerman, James Johnston\nSplit Slam EP\nDeep Down Slam\nDDSR001 · 2013\n#baieesdiscogs' });
+  assert.deepEqual(rewritePostText({ content: 'Happy birthday Ice Cube. Lethal Injection is on my shelf.', source: 'artist-birthday' }, null, DISCOGS), { content: 'Happy birthday Ice Cube. Lethal Injection is on my shelf.\n#baieesdiscogs' });
+});
+
+test('rewritePostText: UE video lines get the hashtag; fill mix rebuilt; takes and other clients skipped; idempotent', () => {
+  assert.deepEqual(rewritePostText({ content: 'BAI-EE\nThe Gusto', mediaUrl: 'v', source: 'daily-video:x:2026-11-11' }, null, UE), { content: 'BAI-EE\nThe Gusto\n#mixtapesfromchicago' });
+  assert.deepEqual(rewritePostText({ content: 'BAI-EE – Loft Livin\'\n\n[add your memory]', mediaUrl: 'v' }, mixPkg(), UE), { content: 'BAI-EE\nLoft Livin\'\nCirca \'05\n#mixtapesfromchicago' });
+  assert.deepEqual(rewritePostText({ content: 'Archive thing\n\nWhere it shows up in my work: [add your take]' }, null, UE), { skip: 'quote-or-narrative' });
+  assert.deepEqual(rewritePostText({ content: 'x' }, null, 'other'), { skip: 'no-format' });
+  const once = rewritePostText({ content: 'BAI-EE\nThe Gusto', mediaUrl: 'v' }, null, UE).content;
+  assert.equal(rewritePostText({ content: once, mediaUrl: 'v' }, null, UE).content, once);
 });

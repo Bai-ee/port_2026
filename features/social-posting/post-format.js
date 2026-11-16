@@ -37,7 +37,9 @@ export function cleanLine(value) {
 }
 /** Owner memory/story text above the data block: keeps its own line breaks, dashes become ", ". */
 const cleanMemory = (value) => String(value ?? '').split('\n').map((l) => l.replace(DASHES_RE, ', ').replace(/[ \t]+/g, ' ').trim()).join('\n').trim();
-const joinNames = (v) => (Array.isArray(v) ? v.map(cleanLine).filter(Boolean).join(', ') : cleanLine(v));
+// Discogs disambiguates same-name artists/labels with " (2)": never part of the name on a post.
+const cleanName = (v) => cleanLine(String(v ?? '').replace(/\s*\(\d+\)\s*$/, ''));
+const joinNames = (v) => (Array.isArray(v) ? v.map(cleanName).filter(Boolean).join(', ') : cleanName(v));
 const withMemory = (memory, block) => {
   const m = cleanMemory(memory);
   return m ? `${m}\n\n${block}` : block;
@@ -49,7 +51,7 @@ const withMemory = (memory, block) => {
  */
 export function formatRecordPost({ artists, artist, title, label, catno, year, memory } = {}, { hashtag = CLIENT_POST_FORMATS['bai-ees-discogs-TP37NQG0'].hashtag } = {}) {
   const last = [cleanLine(catno), cleanLine(year)].filter(Boolean).join(' · ');
-  const lines = [joinNames(artists?.length ? artists : artist), cleanLine(title), cleanLine(label), last].filter(Boolean);
+  const lines = [joinNames(artists?.length ? artists : artist), cleanLine(title), cleanName(label), last].filter(Boolean);
   return withMemory(memory, [...lines, hashtag].join('\n'));
 }
 
@@ -73,23 +75,26 @@ const ownerMemory = (pkg) => {
 
 /**
  * Post text for a library package in its client's format, or null when the client has no format or the package is
- * not the client's post kind (callers keep their generic text). Discogs: discogsSummary is the full release
- * (artists, title, labels, catalogNumbers, year); without it only the title/year are known and the post is incomplete.
+ * not the client's post kind (callers keep their generic text). Missing fields are never invented.
  */
 export function postTextForPackage(pkg, clientId = pkg?.clientId) {
   const fmt = formatFor(clientId);
   if (!fmt || !pkg) return null;
   const memory = ownerMemory(pkg);
   if (fmt.kind === 'record' && pkg.source?.kind === 'discogs') {
+    // Discogs' own release data first (discogsSummary, scripts/discogs/refresh-releases.mjs), then what the ingest
+    // worker read (pkg.record, draft-builder buildContentPackage), then the package title/year.
     const sum = pkg.discogsSummary || {};
+    const rec = pkg.record || {};
+    const first = (...lists) => lists.map((l) => (Array.isArray(l) ? l[0] : l)).find((v) => String(v ?? '').trim()) || '';
     const split = splitArtistTitle(pkg.title);
     return formatRecordPost({
-      artists: Array.isArray(sum.artists) && sum.artists.length ? sum.artists : null,
+      artists: [sum.artists, rec.artists].find((l) => Array.isArray(l) && l.length) || null,
       artist: split.artist,
-      title: sum.title || split.title,
-      label: Array.isArray(sum.labels) ? sum.labels[0] : '',
-      catno: Array.isArray(sum.catalogNumbers) ? sum.catalogNumbers[0] : '',
-      year: sum.year || pkg.eraYear || '',
+      title: first(sum.title, rec.title, split.title),
+      label: first(sum.labels, rec.label),
+      catno: first(sum.catalogNumbers, rec.catno),
+      year: first(sum.year, rec.year, pkg.eraYear),
       memory,
     }, { hashtag: fmt.hashtag });
   }
@@ -168,4 +173,62 @@ export function checkLiveReady(post, { clientId } = {}) {
     }
   }
   return { ready: issues.length === 0, issues };
+}
+
+// ---- Rewriting existing drafts into the format (scripts/x-content/rewrite-drafts-format.mjs) ------------------
+
+const TAKE_RE = /\[add your take\]/i;
+const MEMORY_RE = /\[add your memory\]/gi;
+
+/** The owner's own words above the data block, from any earlier draft shape. '' when there are none. */
+export function memoryFromContent(content) {
+  const text = String(content ?? '').replace(/\r\n/g, '\n').replace(MEMORY_RE, '').trim();
+  if (!text) return '';
+  const lines = text.split('\n');
+  // Legacy builder: "Artist – Title" head, optional "Label · Catno · Year" meta, blank line, story.
+  if (/ [\u2013\u2014] /.test(lines[0])) {
+    let i = 1;
+    if (lines[i] && lines[i].includes(' · ')) i += 1;
+    return lines.slice(i).join('\n').trim();
+  }
+  // Current shape: memory, blank line, data block (3+ lines, optionally the hashtag).
+  const cut = text.lastIndexOf('\n\n');
+  if (cut > -1) {
+    const tail = text.slice(cut + 2).split('\n').filter((l) => !/^#\w+$/.test(l.trim()));
+    if (tail.length >= 2) return text.slice(0, cut).trim();
+  }
+  return '';
+}
+
+/** Keep the text's own lines, clean dashes per line, and end with the hashtag (once). */
+function withHashtag(content, hashtag) {
+  const lines = String(content ?? '').replace(/\r\n/g, '\n').trim().split('\n')
+    .map((l) => (l.trim() ? l.replace(DASHES_RE, ', ').replace(/[ \t]+/g, ' ').trim() : ''))
+    .filter((l, i, a) => !(l === hashtag && i !== a.length - 1));
+  while (lines.length && lines[lines.length - 1] === '') lines.pop();
+  if (lines[lines.length - 1] !== hashtag) lines.push(hashtag);
+  return lines.join('\n');
+}
+
+/**
+ * Pure. The post's text rewritten into its client's live format, or { skip } with the reason.
+ * Rebuilds from the package when the current data block is incomplete; keeps the owner's own data lines when they
+ * are already complete (they may carry the owner's corrections) and only fixes dashes and the hashtag.
+ * @returns {{ content: string } | { skip: string }}
+ */
+export function rewritePostText(post, pkg, clientId) {
+  const fmt = formatFor(clientId);
+  if (!fmt) return { skip: 'no-format' };
+  const content = String(post?.content ?? '');
+  if (TAKE_RE.test(content) || post?.fillKind === 'quote' || post?.fillKind === 'narrative') return { skip: 'quote-or-narrative' };
+  if (post?.replyTo && (post.replyTo.url || post.replyTo.text)) return { skip: 'reply' };
+  if (SENTENCE_SOURCES.has(post?.source)) return { content: withHashtag(content.replace(MEMORY_RE, ''), fmt.hashtag) };
+  const current = withHashtag(content.replace(MEMORY_RE, ''), fmt.hashtag);
+  const check = checkLiveReady({ content: current, mediaUrl: post?.mediaUrl || 'x', source: post?.source }, { clientId });
+  const fieldsOk = !check.issues.some((i) => i.code === 'record-fields' || i.code === 'mix-fields' || i.code === 'placeholder');
+  if (fieldsOk) return { content: current };
+  const memory = memoryFromContent(content);
+  const rebuilt = pkg ? postTextForPackage({ ...pkg, humanEdits: { ...(pkg.humanEdits || {}), story: memory } }, clientId) : null;
+  if (rebuilt) return { content: rebuilt };
+  return { content: current }; // no package to rebuild from: best effort on the post's own text
 }

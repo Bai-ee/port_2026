@@ -32,6 +32,11 @@ test('draft payload shape', () => {
   assert.equal('content' in patch, false); assert.equal('status' in patch, false);
 });
 
+test('content package keeps the release fields as read (record block)', () => {
+  const pkg = buildContentPackage(body);
+  assert.deepEqual(pkg.record, { artists: ['Aphex Twin'], title: 'Windowlicker', label: 'Warp Records', catno: 'WAP 105', year: 1999 });
+});
+
 test('content package validates and keeps human story/status', () => {
   const pkg = buildContentPackage(body);
   assert.equal(pkg.id, 'discogs-74379'); assert.equal(pkg.eraYear, 1999); assert.equal(pkg.pillar, SERIES.C1.pillar);

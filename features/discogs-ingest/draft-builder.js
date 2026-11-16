@@ -363,6 +363,15 @@ export function buildContentPackage(req, existing = null) {
     platforms: ['x'],
     cta: req.discogsUrl,
     eraYear: yearNum,
+    // The release as the worker read it (proper case), so the post can always be written in full
+    // (features/social-posting/post-format.js). A newer ingest refreshes it.
+    record: {
+      artists: Array.isArray(req.artists) && req.artists.length ? req.artists : [req.artist].filter(Boolean),
+      title: req.title || null,
+      label: req.label || null,
+      catno: req.catno || null,
+      year: yearNum,
+    },
     entities: normalizeEntities([req.artist, req.label]),
     // Machine facets. A newer request refreshes the keys it carries; keys it lacks keep their stored value.
     // humanEdits is never written here (owner edits win at read time via effectiveFacets).
