@@ -4,6 +4,15 @@ import { extractStory, storySyncPlan } from '../draft-builder.js';
 
 const head = 'Deep Touch – Deep Touch\nLabel · CAT1 · 1995';
 
+const block = 'Deep Touch\nDeep Touch\nLabel\nCAT1 · 1995\n#baieesdiscogs';
+
+test('extractStory (current format): memory above the record block; none -> null', () => {
+  assert.equal(extractStory(`Bought this in Chicago.\n\n${block}`), 'Bought this in Chicago.');
+  assert.equal(extractStory(`Line one\n\nLine two\n\n${block}`), 'Line one\n\nLine two');
+  assert.equal(extractStory(block), null);
+  assert.equal(extractStory(`[add your memory]\n\n${block}`), null);
+});
+
 test('extractStory: story after header and meta', () => {
   assert.equal(extractStory(`${head}\n\nBought this in Chicago.`), 'Bought this in Chicago.');
 });

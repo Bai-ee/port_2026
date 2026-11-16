@@ -137,7 +137,7 @@ async function resolveMediaContext(decoded, post) {
 function readyPayload(post, mediaContext, extra = {}) {
   return {
     state: 'ready',
-    caption: post.content || canonicalRemixCopy(mediaContext.metadata),
+    caption: post.content || canonicalRemixCopy(mediaContext.metadata, { clientId: post.clientId }),
     videoUrl: post.mediaUrl || null,
     metadata: mediaContext.metadata,
     remix: post.remixPending || null,
@@ -269,7 +269,7 @@ export async function POST(request) {
 
     if (action === 'refresh-copy') {
       try {
-        const content = canonicalRemixCopy(mediaContext.metadata);
+        const content = canonicalRemixCopy(mediaContext.metadata, { clientId: decoded.clientId });
         const updated = await updateSocialPost(decoded.clientId, decoded.postId, { content });
         return json({ ok: true, ...readyPayload(updated, mediaContext) });
       } catch (err) {
@@ -341,7 +341,7 @@ export async function POST(request) {
           mediaJobId: capture.jobId || job.jobId,
           mediaAssetClientId: pending.assetClientId,
           mediaMetadata: nextMetadata,
-          content: canonicalRemixCopy(nextMetadata),
+          content: canonicalRemixCopy(nextMetadata, { clientId: decoded.clientId }),
         });
         return json({
           ok: true,
