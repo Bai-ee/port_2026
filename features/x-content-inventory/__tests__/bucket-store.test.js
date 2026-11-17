@@ -11,8 +11,10 @@ import { validatePackage } from '../schema.js';
 import seedRows from '../content-packages.json' with { type: 'json' };
 
 // Minimal nested-collection fake keyed by full path.
-function makeDb() {
+function makeDb({ legacyItem = true } = {}) {
   const docs = new Map();
+  // client-a is a legacy client: one library item with no bucketId, so it keeps the seed buckets (usesDefaultBuckets).
+  if (legacyItem) docs.set('x_content_packages/legacy-item', { clientId: 'client-a' });
   const FieldValue = { increment: (n) => ({ __inc: n }), serverTimestamp: () => ({ __ts: true }) };
   const apply = (prev, patch, merge) => {
     const out = merge ? { ...(prev || {}) } : {};
@@ -55,6 +57,13 @@ function makeDb() {
 }
 const C = 'client-a';
 const pkg = (o = {}) => ({ ...seedRows[1], id: 'p1', series: 'C1', status: 'idea', ...o });
+
+test('a new client (no stored buckets, no items) gets NO seed buckets; its own tracks only once added', async () => {
+  const db = makeDb({ legacyItem: false });
+  assert.deepEqual(await listBuckets('new-client', { db }), []);
+  await upsertBucket('new-client', { name: 'Live play', sourceKind: 'manual' }, { db });
+  assert.deepEqual((await listBuckets('new-client', { db })).map((b) => b.name), ['Live play']);
+});
 
 test('listBuckets returns defaults when nothing stored', async () => {
   const b = await listBuckets(C, { db: makeDb() });

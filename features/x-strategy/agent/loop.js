@@ -13,6 +13,7 @@ import {
 import { effectiveResponseStyle } from '../response-style.js';
 import { ACTION_TOOL_NAMES, runActionTool } from './action-runtime.js';
 import { formatRuleText } from '../../social-posting/post-format.js';
+import { setupStatusText } from '../setup-check.js';
 
 export { STRATEGY_AGENT_MODEL };
 
@@ -189,7 +190,9 @@ export function createAgentLoop({
     try { responseStyle = effectiveResponseStyle(await toolDeps?.getResponseStyle?.()); } catch { responseStyle = effectiveResponseStyle(null); }
     let brainState = null;
     try { brainState = await toolDeps?.getBrainState?.(); } catch { brainState = null; }
-    const system = buildSystemPrompt({ planSummary: planSummary ?? null, brainState, strategyDocText, selectedContext: typeof selectedContext === 'string' ? selectedContext : '', responseStyle, today, postFormat: formatRuleText(clientId) });
+    let setupStatus = '';
+    try { setupStatus = setupStatusText(await toolDeps?.getSetupStatus?.()); } catch { setupStatus = ''; }
+    const system = buildSystemPrompt({ planSummary: planSummary ?? null, brainState, strategyDocText, selectedContext: typeof selectedContext === 'string' ? selectedContext : '', responseStyle, today, postFormat: formatRuleText(clientId), setupStatus });
 
     const account = async (resp, ok) => {
       const u = resp?.usage || {};
