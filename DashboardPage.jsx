@@ -51,6 +51,8 @@ import onboardingConfig from './onboarding/questions.config.cjs';
 import { resolveAnalyzerSource, buildCardDescription, buildModuleStateDescription } from './features/scout-intake/card-description-builder.mjs';
 import { BRIEF_TIER_ACCESS, BRIEF_PRODUCERS } from './features/scout-intake/brief-sections.cjs';
 import { deriveFindings } from './features/scout-intake/derived-findings.mjs';
+import { SHOWCASE_CLIENTS } from './features/showcase/clients.js';
+import useShowcaseSummary from './components/dashboard/showcase/useShowcaseSummary';
 import ModuleCardControls from './components/dashboard/ModuleCardControls';
 import SubscribeModal from './components/payments/SubscribeModal';
 import DashboardCreationFailedModal from './components/dashboard/DashboardCreationFailedModal';
@@ -96,6 +98,11 @@ const OnboardingChatModal = dynamic(() => import('./onboarding/OnboardingChatMod
   loading: () => null,
 });
 
+// SITE SHOWCASE card panel (Creative Team bucket, admin + HITLOOP client only) — client-only and lazy.
+const ShowcasePanel = dynamic(() => import('./components/dashboard/showcase/ShowcasePanel'), {
+  ssr: false,
+  loading: () => null,
+});
 const TileDetailAnalysisContent = dynamic(() => import('./components/dashboard/TileDetailAnalysisContent'), {
   loading: () => null,
 });
@@ -746,6 +753,17 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	  const [uiTeaserRenders, setUiTeaserRenders] = useState([]);
 	  const [uiTeaserRenderLoading, setUiTeaserRenderLoading] = useState(false);
 	  const [uiTeaserError, setUiTeaserError] = useState('');
+
+	  // SITE SHOWCASE — the card shows only for an admin whose active client is in SHOWCASE_CLIENTS (the server gate
+	  // in app/api/dashboard/showcase/route.js stays authoritative). The summary feeds the card face; the panel in the
+	  // card's modal owns the options / render / poll flow and calls refresh when a render starts or ends.
+	  const showcaseClientId = bootstrap?.effectiveClientId || client?.clientId || client?.id || '';
+	  const showcaseEnabled = Boolean(isAdmin && user && SHOWCASE_CLIENTS[showcaseClientId]);
+	  const showcaseFetch = useCallback(async (path, init = {}) => {
+	    const token = await user.getIdToken();
+	    return fetch(apiPath(path), { ...init, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...(init.headers || {}) } });
+	  }, [user, apiPath]);
+	  const showcaseSummary = useShowcaseSummary({ enabled: showcaseEnabled, authedFetch: showcaseFetch });
 	  const [uiTeaserDeleteBusy, setUiTeaserDeleteBusy] = useState(''); // filename being deleted
 	  const uiTeaserVariationRef = useRef(0); // cycles UI_TEASER_VARIATIONS per run
 	  useEffect(() => {
@@ -2911,6 +2929,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	    if (id === 'mockup-studio') { setModalTab('setup'); return; }
 	    if (id === 'video-remix') { setModalTab('remix'); return; }
 	    if (id === 'ui-teaser') { setModalTab('render'); return; }
+	    if (id === 'site-showcase') { setModalTab('render'); return; }
 	    if (id === 'media-library') { setModalTab('source'); return; }
 	    if (id === 'archive-publishing') { setModalTab('archive'); return; }
 	    setModalTab(CUSTOM_DETAIL_CARD_IDS.has(id) ? 'solutions' : 'report');
@@ -8789,6 +8808,46 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         },
       };
     })()] : []),
+    // SITE SHOWCASE — admin-only, HITLOOP client only (Creative Team bucket, next to Video Remix / UI Teaser). Queues a
+    // render of one of three suggested site showcases in the showcase-render Cloud Run service; the full panel
+    // (options, theme, shuffle, render, progress, player, history) lives in the card's modal.
+    ...(showcaseEnabled ? [(() => {
+      const jobs = showcaseSummary.jobs;
+      const latest = jobs[0] || null;
+      const latestDone = jobs.find((j) => j.status === 'done' && j.downloadUrl) || null;
+      const active = jobs.find((j) => j.status === 'queued' || j.status === 'rendering') || null;
+      const quota = showcaseSummary.quota;
+      const statusText = active ? (active.status === 'rendering' ? 'Rendering…' : 'Queued…') : latest ? (latest.status === 'done' ? 'Done' : latest.status === 'failed' ? 'Failed' : latest.status) : 'Idle';
+      const openShowcase = () => openCapabilityCard({
+        id: 'site-showcase', domId: 'site-showcase-card', category: 'content', number: 'SS', label: 'SITE SHOWCASE', title: 'Site Showcase Video', description: '', rows: [],
+      });
+      return {
+        id: 'site-showcase',
+        domId: 'site-showcase-card',
+        category: 'content',
+        number: 'SS',
+        label: 'SITE SHOWCASE',
+        title: 'Site Showcase Video',
+        description: 'Pick one of three suggested showcases of the HITLOOP site and render it to video on demand. Rendered off-platform in about 3–6 minutes.',
+        placeholderLabel: active ? 'RENDERING\n…' : latestDone ? 'SHOWCASE\nREADY' : 'RENDER\nSHOWCASE',
+        rows: [
+          { key: 'ss-latest', label: 'Latest', value: latest ? `${latest.title || latest.focusId} · ${latest.format}` : 'No renders yet' },
+          { key: 'ss-when',   label: 'Rendered', value: latest?.createdAt ? new Date(latest.createdAt).toLocaleString() : '—' },
+          { key: 'ss-quota',  label: 'Renders today', value: quota ? `${quota.used} / ${quota.max}` : '—' },
+          { key: 'ss-status', label: 'Status', value: statusText },
+        ],
+        footerLeft: statusText,
+        footerRight: 'ACTIVE',
+        readinessBadge: active ? { tone: 'partial', label: statusText } : latestDone ? { tone: 'ok', label: 'Passed' } : null,
+        deliverableAsset: latestDone ? {
+          title: 'Site Showcase',
+          cardId: 'site-showcase',
+          kind: 'video',
+          items: [{ src: latestDone.downloadUrl, filename: `hitloop-showcase-${latestDone.jobId}.mp4` }],
+        } : null,
+        footerAction: { label: 'OPEN', onClick: openShowcase },
+      };
+    })()] : []),
     (() => {
       const ap = dashboardState?.archivePublishing || {};
       const archivedCount = Array.isArray(ap.archivedAssets) ? ap.archivedAssets.length : 0;
@@ -11545,7 +11604,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   if (activeCapabilityFilter === 'content') {
                     // Creative Director: intake → produce → ship.
                     // media-library anchors under INTAKE (visual-dna); video-remix + holo-cloth under DESIGNER (client-brief).
-                    const order = ['visual-dna', 'media-library', 'brand-voice', 'style-guide', 'brand-system', 'client-brief', 'video-remix', 'holo-cloth', 'ui-teaser', 'client-mockup-creative'];
+                    const order = ['visual-dna', 'media-library', 'brand-voice', 'style-guide', 'brand-system', 'client-brief', 'video-remix', 'holo-cloth', 'ui-teaser', 'site-showcase', 'client-mockup-creative'];
                     const ai = order.indexOf(a.id); const bi = order.indexOf(b.id);
                     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
                   }
@@ -17807,6 +17866,18 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
 	                    </div>
 	                  );
 	                })()}
+
+	                {/* Site Showcase — options, render, progress, player and history (owner-only, HITLOOP client) */}
+	                {showcaseEnabled && activeTileModal.cardId === 'site-showcase' && (
+	                  <div
+	                    id="site-showcase-modal-panel-container"
+	                    className="vrk-scope tile-detail-bento-cell panel"
+	                  >
+	                    <div className="panel-body">
+	                      <ShowcasePanel isNarrow={false} authedFetch={showcaseFetch} user={user} isAdmin={showcaseEnabled} onChange={showcaseSummary.refresh} />
+	                    </div>
+	                  </div>
+	                )}
 
 	                {/* UI Teaser — render controls + saved teaser assets (local library) */}
 	                {activeTileModal.cardId === 'ui-teaser' && (
