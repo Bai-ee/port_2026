@@ -1,20 +1,21 @@
-// synced-calendar.js — show other clients' calendars inside a viewer's calendar, view-only.
+// synced-calendar.js — show other clients' calendars inside a viewer's calendar; open a row to make it the viewer's own.
 //
 // A viewer (e.g. the HITLOOP client) lists source clients in client_configs/{viewer}.calendarSyncs. For every entry
 // in 'draft' mode ("Show only", the default) the month-calendar action builds the SOURCE's own month calendar and
 // merges its post rows into the viewer's days: drafts, proposals, scheduled, awaiting approval, posted, failed —
-// exactly where the source's calendar puts them. Nothing is written: no copy rows, no approvals, nothing to publish.
+// exactly where the source's calendar puts them. Showing writes nothing.
 //
 // Every merged row is re-keyed `synced:<sourceClientId>:<postId>` and carries `readOnly: true` plus
-// `synced: { clientId, name, postId }`. The UI hides its actions; the dashboard routes refuse any action whose post
-// id is a synced id (`isSyncedId`), and the id cannot match a real social_posts row in the viewer's scope anyway.
+// `synced: { clientId, name, postId }`. The dashboard routes refuse every action on a synced id (`isSyncedId`) except
+// SYNCED_ADOPT_ACTION below; the id cannot match a real social_posts row in the viewer's scope anyway.
 // The viewer's own counts, totals, flags and review queue are untouched (they describe the viewer's own posts).
 // 'schedule' entries keep the mirror-copy behaviour of ./calendar-sync.js and are not shown here (no double rows).
 //
-// HITLOOP REVIEW (owner rule 2026-11-17): the viewer can open a synced row, read its copy + creative and approve or
-// unapprove it FOR THE VIEWER ONLY. The decision lives in synced_reviews/{viewer}__{source}__{postId}; the source's
-// post (its status, schedule, copy) is never written. Pushing viewer approvals to the source channels is a separate,
-// owner-asked step (chat), not something this does.
+// OPEN = ADOPT (owner rule 2026-11-17): opening a synced row makes the viewer's OWN copy of that post (a draft on the
+// viewer's calendar, `adoptedFrom: { clientId, postId }`) and opens it in the normal editor: copy, creative, X /
+// Instagram, approve, schedule are all the viewer's. The source's post is read once and never written. Once adopted,
+// the synced row is hidden and the viewer's copy shows in its place. Pushing anything back to the source channels is
+// a separate, owner-asked step (chat).
 
 export const SYNCED_ID_PREFIX = 'synced:';
 
@@ -29,11 +30,45 @@ export function parseSyncedId(id) {
   return { clientId: rest.slice(0, i), postId: rest.slice(i + 1) };
 }
 
-/** The only action allowed on a synced row: the viewer's own approve / unapprove. */
-export const SYNCED_REVIEW_ACTION = 'synced-review';
-export const SYNCED_REVIEWS_COLLECTION = 'synced_reviews';
-export const reviewDocId = (viewer, sourceClientId, postId) => `${viewer}__${sourceClientId}__${postId}`;
-export const reviewKey = (sourceClientId, postId) => `${sourceClientId}:${postId}`;
+/** The only action allowed on a synced row: make (or reuse) the viewer's own copy of it. */
+export const SYNCED_ADOPT_ACTION = 'synced-adopt';
+export const adoptKey = (sourceClientId, postId) => `${sourceClientId}:${postId}`;
+export const adoptIdempotencyKey = (sourceClientId, postId) => `synced-adopt:${sourceClientId}:${postId}`;
+
+/** adoptKeys of every source post the viewer already has its own copy of (any status). */
+export function adoptedKeys(viewerPosts) {
+  const out = new Set();
+  for (const p of Array.isArray(viewerPosts) ? viewerPosts : []) {
+    if (p?.adoptedFrom?.clientId && p.adoptedFrom.postId) out.add(adoptKey(p.adoptedFrom.clientId, p.adoptedFrom.postId));
+  }
+  return out;
+}
+
+/**
+ * Pure. The draft payload for the viewer's own copy of a source post (ensureDraftPost). Copy, creative and planned time
+ * come from the source; channels start on X only (the editor's X / Instagram toggles change them).
+ */
+export function adoptPayload(sourcePost, sourceClientId) {
+  const at = sourcePost?.scheduledAt || sourcePost?.plannedAt || null;
+  const planned = Number.isFinite(Date.parse(String(at || ''))) && Date.parse(at) > Date.now() ? at : null;
+  return {
+    idempotencyKey: adoptIdempotencyKey(sourceClientId, sourcePost.id),
+    content: sourcePost.content,
+    source: 'synced-adopt',
+    adoptedFrom: { clientId: sourceClientId, postId: sourcePost.id },
+    targets: { x: true, instagram: false },
+    ...(planned ? { plannedAt: planned } : {}),
+    ...(sourcePost.mediaUrl ? {
+      mediaUrl: sourcePost.mediaUrl,
+      mediaType: sourcePost.mediaType || null,
+      mediaContentType: sourcePost.mediaContentType || null,
+      mediaStoragePath: sourcePost.mediaStoragePath || null,
+      mediaJobId: sourcePost.mediaJobId || null,
+    } : {}),
+    ...(sourcePost.mediaVariants ? { mediaVariants: sourcePost.mediaVariants } : {}),
+    ...(sourcePost.nasSha ? { nasSha: sourcePost.nasSha } : {}),
+  };
+}
 
 /** The entries shown view-only (everything except auto-post copies). */
 export const shownEntries = (list) => (Array.isArray(list) ? list.filter((e) => e?.clientId && e.mode !== 'schedule') : []);
@@ -44,24 +79,13 @@ export function bodyTargetsSyncedRow(body) {
   return ['postId', 'id', 'rowId'].some((k) => isSyncedId(body[k]));
 }
 
-/**
- * The viewer's decision as the row shows it. An approval covers the copy + creative it was given on: when the source
- * changes either later, the row reads "changed since approval" and needs a fresh look.
- */
-export function viewerReviewOf(row, review) {
-  if (!review?.approved) return null;
-  const same = (review.content ?? null) === (row?.content ?? null) && (review.mediaUrl ?? null) === (row?.mediaUrl ?? null);
-  return same ? { approved: true, decidedAt: review.decidedAt || null } : { approved: false, changed: true, decidedAt: review.decidedAt || null };
-}
-
 /** One source row as a view-only row on the viewer's calendar. Pure. */
-export function toSyncedRow(row, source, review = null) {
+export function toSyncedRow(row, source) {
   return {
     ...row,
     id: `${SYNCED_ID_PREFIX}${source.clientId}:${row.id}`,
     readOnly: true,
     synced: { clientId: source.clientId, name: source.name || source.clientId, postId: row.id },
-    viewerReview: viewerReviewOf(row, review),
   };
 }
 
@@ -72,11 +96,11 @@ const rowMs = (r) => {
 
 /**
  * Pure. Merge source calendars (buildMonthCalendar shape) into the viewer's calendar for the same month.
- * sources: [{ clientId, name, calendar } | { clientId, error }]. reviews: Map reviewKey -> the viewer's review doc. Only `kind: 'post'` rows are shown (suggestions,
+ * sources: [{ clientId, name, calendar } | { clientId, error }]. adopted: Set of adoptKeys the viewer already copied (hidden). Only `kind: 'post'` rows are shown (suggestions,
  * requotes and tasks are the source's own working items, not its calendar of posts). Returns a new calendar with
  * `synced: [{ clientId, name, rows } | { clientId, error }]`; the input is not mutated.
  */
-export function mergeSyncedCalendars(calendar, sources = [], reviews = null) {
+export function mergeSyncedCalendars(calendar, sources = [], adopted = null) {
   if (!calendar || !Array.isArray(calendar.weeks)) return calendar;
   const extra = new Map();
   const summary = [];
@@ -90,8 +114,9 @@ export function mergeSyncedCalendars(calendar, sources = [], reviews = null) {
     for (const day of src.calendar.weeks.flat()) {
       for (const r of Array.isArray(day?.posts) ? day.posts : []) {
         if (r?.kind !== 'post' || !r.id) continue;
+        if (adopted?.has?.(adoptKey(src.clientId, r.id))) continue; // the viewer's own copy shows instead
         if (!extra.has(day.date)) extra.set(day.date, []);
-        extra.get(day.date).push(toSyncedRow(r, src, reviews?.get?.(reviewKey(src.clientId, r.id)) || null));
+        extra.get(day.date).push(toSyncedRow(r, src));
         rows += 1;
       }
     }

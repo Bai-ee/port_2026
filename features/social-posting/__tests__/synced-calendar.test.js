@@ -79,31 +79,32 @@ test('bodyTargetsSyncedRow: any id field naming a synced row is refused', () => 
   assert.equal(bodyTargetsSyncedRow(null), false);
 });
 
-import { parseSyncedId, viewerReviewOf, reviewDocId, reviewKey } from '../synced-calendar.js';
+import { parseSyncedId, adoptedKeys, adoptPayload, adoptKey } from '../synced-calendar.js';
 
 test('parseSyncedId: client + post id (post ids may contain colons); junk -> null', () => {
   assert.deepEqual(parseSyncedId('synced:bai-ees-discogs-TP37NQG0:abc'), { clientId: 'bai-ees-discogs-TP37NQG0', postId: 'abc' });
   assert.deepEqual(parseSyncedId('synced:ue:a:b'), { clientId: 'ue', postId: 'a:b' });
   for (const bad of ['abc', 'synced:', 'synced:ue', 'synced:ue:', null]) assert.equal(parseSyncedId(bad), null);
-  assert.equal(reviewDocId('v', 's', 'p'), 'v__s__p');
 });
 
-test('viewer review: approved while copy + creative match; changed source -> needs a fresh look', () => {
-  const row = { content: 'A\nB', mediaUrl: 'u1' };
-  assert.equal(viewerReviewOf(row, null), null);
-  assert.equal(viewerReviewOf(row, { approved: false }), null);
-  assert.deepEqual(viewerReviewOf(row, { approved: true, content: 'A\nB', mediaUrl: 'u1', decidedAt: 't' }), { approved: true, decidedAt: 't' });
-  assert.equal(viewerReviewOf(row, { approved: true, content: 'A\nC', mediaUrl: 'u1' }).changed, true);
-  assert.equal(viewerReviewOf(row, { approved: true, content: 'A\nB', mediaUrl: 'u2' }).changed, true);
+test('adoptPayload: the viewer\'s own draft copy (copy, creative, future time, X on); never the source id', () => {
+  const future = new Date(Date.now() + 86_400_000).toISOString();
+  const src = { id: 'p1', clientId: 'ue', status: 'awaiting_approval', content: 'BAI-EE\nMix\n#mixtapesfromchicago', mediaUrl: 'https://v/1.mp4', mediaType: 'video', scheduledAt: future };
+  const out = adoptPayload(src, 'ue');
+  assert.deepEqual(out.adoptedFrom, { clientId: 'ue', postId: 'p1' });
+  assert.equal(out.idempotencyKey, 'synced-adopt:ue:p1');
+  assert.deepEqual(out.targets, { x: true, instagram: false });
+  assert.equal(out.plannedAt, future);
+  assert.equal(out.mediaUrl, 'https://v/1.mp4');
+  assert.equal(out.status, undefined); // ensureDraftPost makes it a draft
+  assert.equal(adoptPayload({ ...src, scheduledAt: '2020-01-01T00:00:00Z' }, 'ue').plannedAt, undefined); // past time: not carried
 });
 
-test('mergeSyncedCalendars carries the viewer review onto the synced row; the source row is untouched', () => {
-  const src = { weeks: [[{ date: '2026-11-17', posts: [{ id: 'p1', kind: 'post', content: 'x', mediaUrl: 'm', scheduledAt: '2026-11-17T15:00:00Z' }] }]] };
+test('mergeSyncedCalendars hides source posts the viewer already adopted (its copy shows instead)', () => {
+  const src = { weeks: [[{ date: '2026-11-17', posts: [{ id: 'p1', kind: 'post', content: 'x' }, { id: 'p2', kind: 'post', content: 'y' }] }]] };
   const own = { weeks: [[{ date: '2026-11-17', posts: [] }]] };
-  const reviews = new Map([[reviewKey('ue', 'p1'), { approved: true, content: 'x', mediaUrl: 'm', decidedAt: 't' }]]);
-  const out = mergeSyncedCalendars(own, [{ clientId: 'ue', name: 'UE', calendar: src }], reviews);
-  const row = out.weeks[0][0].posts[0];
-  assert.equal(row.id, 'synced:ue:p1');
-  assert.deepEqual(row.viewerReview, { approved: true, decidedAt: 't' });
-  assert.equal(src.weeks[0][0].posts[0].viewerReview, undefined);
+  const adopted = adoptedKeys([{ id: 'mine', adoptedFrom: { clientId: 'ue', postId: 'p1' } }, { id: 'other' }]);
+  assert.equal(adopted.has(adoptKey('ue', 'p1')), true);
+  const out = mergeSyncedCalendars(own, [{ clientId: 'ue', name: 'UE', calendar: src }], adopted);
+  assert.deepEqual(out.weeks[0][0].posts.map((r) => r.id), ['synced:ue:p2']);
 });
