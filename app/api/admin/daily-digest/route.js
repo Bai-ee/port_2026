@@ -12,6 +12,7 @@ import {
 } from '../../../../features/social-posting/twitter-service.js';
 import { getSocialAccount, toPublicAccount } from '../../../../features/social-posting/social-accounts.js';
 import { canonicalRemixCopy } from '../../../../features/social-posting/remix-copy.js';
+import { pickFreshRender, usedCreative } from '../../../../features/social-posting/fresh-creative.js';
 import {
   appOrigin,
   appUrl,
@@ -1907,6 +1908,25 @@ export async function GET(request) {
     }
     if ((wantRemix || wantPromo) && homeClientId) {
       try {
+        // The daily remix is always FRESH (features/social-posting/fresh-creative.js): today's render when it is not on
+        // a post yet, else a random render from the last 3 weeks that no post of the video owner uses. A failed
+        // morning render therefore still yields one video for the day instead of re-picking yesterday's (which the
+        // duplicate gate skipped, leaving the day empty). A repeat send the same day keeps the day's video.
+        const pickDailyRemix = async (captures) => {
+          const todayKey = new Date(timestamp).toISOString().slice(0, 10);
+          let posts = [];
+          try { posts = await readSocialQueue(videoSourceClientId); } catch (e) { logWarn('daily_digest_fresh_remix_queue_failed', { error: e.message }); }
+          const todaysPost = posts.find((p) => String(p?.source || '').startsWith('daily-video:') && String(p.source).endsWith(`:${todayKey}`)
+            && !['rejected', 'failed', 'expired'].includes(p.status) && p.mediaUrl);
+          const list = Array.isArray(captures) ? captures : [];
+          if (todaysPost) {
+            const same = list.find((c) => c?.type === 'video_remix' && c.downloadUrl === todaysPost.mediaUrl);
+            if (same) return same;
+          }
+          const picked = pickFreshRender(list, usedCreative(posts), { nowMs: new Date(timestamp).getTime() || Date.now(), todayKey });
+          if (picked && picked.reason !== 'today') logInfo('daily_digest_fresh_remix_fallback', { clientId: videoSourceClientId, createdAt: picked.capture.createdAt });
+          return picked?.capture || null;
+        };
         const readLatestCaptures = async () => {
           const [videoSourceSnap, homeSnap] = await Promise.all([
             fb.adminDb.collection('dashboard_state').doc(videoAssetClientId).get(),
@@ -1920,7 +1940,7 @@ export async function GET(request) {
             .filter((c) => c?.type === type && c?.downloadUrl && (!requireFresh || isFreshVideoCapture(c)))
             .sort((a, b) => dateMs(b.createdAt) - dateMs(a.createdAt))[0] || null;
           return {
-            remix: wantRemix ? latestAvailable(videoSourceState.mediaCaptures, 'video_remix') : null,
+            remix: wantRemix ? await pickDailyRemix(videoSourceState.mediaCaptures) : null,
             promo: wantPromo ? latestAvailable(homeState.studioCaptures, 'studio_video', { requireFresh: true }) : null,
           };
         };

@@ -63,3 +63,14 @@ Read tools: `get_evaluation, get_plan, get_context, get_today_run, search_invent
 
 ## Content tracks + promotion loop (2026-10-11)
 UE-hosted mixes are `cleared` by owner policy (D1); suggestions carry track/promotion/media; NAS items need explicit staging. See [`CONTENT-TRACKS.md`](CONTENT-TRACKS.md).
+
+## Daily video + fresh creative (2026-11-16)
+
+- One daily video per day on the video owner's calendar (UE). The digest picks today's render if no post uses it,
+  else a random render from the last 3 weeks that no post of the owner uses (`features/social-posting/fresh-creative.js`).
+  A failed morning render no longer leaves the day empty. A repeat send the same day keeps that day's video.
+- The month calendar pins each `daily-video:<platform>:<day>` post to its own day (past days included); it is never
+  re-proposed into later days. Synced viewers (HITLOOP) see it through the view-only overlay.
+- Changing a creative = `post-fresh-creative` (quote-targets action, chat tool `queue.post.fresh-creative`): a random
+  unused render (video posts) or unused bucket item (others). Never an old creative or one already on a post.
+  Record (Discogs) posts are refused: their video is the record itself.
