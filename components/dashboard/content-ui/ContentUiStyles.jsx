@@ -295,8 +295,8 @@ export default function ContentUiStyles() {
         .xce-scope .xce-mc-chip-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .xce-scope .xce-mc-fill-badge { margin-left: 6px; padding: 0 6px; border: 1px solid color-mix(in srgb, var(--t-text) 30%, transparent); border-radius: 999px; font-size: 11px; }
         .xce-scope .xce-mc-fill-closed { margin-left: 6px; font-size: 11px; color: var(--t-danger); }
-        .xce-scope .xce-mc-row-synced { opacity: 0.72; }
-        .xce-scope .xce-mc-row-synced .xce-mc-row-main { cursor: default; }
+        .xce-scope .xce-mc-row-synced { opacity: 0.9; }
+        .xce-scope .xce-mc-synced-approved { color: var(--t-text); font-weight: 600; }
         .xce-scope .xce-mc-synced-tag { color: var(--t-text-secondary); }
         .xce-scope .xce-mc-chip-synced { opacity: 0.6; border-style: dashed; }
         .xce-scope .xce-mc-task { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 4px 8px; border: 1px dashed color-mix(in srgb, var(--t-text) 40%, transparent); border-radius: 8px; list-style: none; }

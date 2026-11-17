@@ -21,7 +21,7 @@ import { parseStatusUrl, findQuotedCandidate, buildQuotedPreview } from '../../.
 import { buildPostResults } from '../../../../features/x-content-inventory/results.js';
 import { recentPostsFromQueue } from '../../../../features/x-content-inventory/allocate-slot.js';
 import { readCalendarSyncs } from '../../../../features/social-posting/calendar-sync.js';
-import { mergeSyncedCalendars, shownEntries, bodyTargetsSyncedRow } from '../../../../features/social-posting/synced-calendar.js';
+import { mergeSyncedCalendars, shownEntries, bodyTargetsSyncedRow, parseSyncedId, reviewDocId, reviewKey, SYNCED_REVIEW_ACTION, SYNCED_REVIEWS_COLLECTION } from '../../../../features/social-posting/synced-calendar.js';
 import { readUnifiedCalendar, readQuoteState as readCalendarQuoteState, readCalendarQuoteTargets as readCalendarQuoteTargetsShared } from '../../../../features/x-content-inventory/calendar-reader.js';
 import { projectNow } from '../../../../features/x-content-inventory/now-projection.js';
 import { ctDate, toRow as calendarPostRow } from '../../../../features/x-content-inventory/month-calendar.js';
@@ -429,6 +429,7 @@ const SUPPORTED_ACTIONS = [
   'hires-media-use',
   'post-attach-item-media',
   'post-fresh-creative',
+  SYNCED_REVIEW_ACTION,
   'link-item-media',
   'set-rights',
   'create-draft-from-item',
@@ -546,7 +547,40 @@ async function withSyncedCalendars(calendar, viewer, now) {
       return { clientId: e.clientId, error: err?.message || String(err) };
     }
   }));
-  return mergeSyncedCalendars(calendar, sources);
+  // The viewer's own approve / unapprove of synced rows (never written to the source).
+  const reviews = new Map();
+  try {
+    const snap = await fb.adminDb.collection(SYNCED_REVIEWS_COLLECTION).where('viewerClientId', '==', viewer).get();
+    for (const d of snap.docs) { const r = d.data(); reviews.set(reviewKey(r.sourceClientId, r.postId), r); }
+  } catch { /* rows show unreviewed */ }
+  return mergeSyncedCalendars(calendar, sources, reviews);
+}
+
+/**
+ * Approve / unapprove a synced row FOR THE VIEWER ONLY (features/social-posting/synced-calendar.js). Writes only
+ * synced_reviews/{viewer}__{source}__{postId}; the source client's post is read, never changed.
+ */
+async function handleSyncedReview(context, body, decoded) {
+  const viewer = context.clientId;
+  const ref = parseSyncedId(String(body?.postId || ''));
+  const decision = body?.decision;
+  if (!ref || !['approve', 'unapprove'].includes(decision)) return { ok: false, status: 400, error: 'postId (a synced row id) and decision approve | unapprove are required.' };
+  const entries = shownEntries(await readCalendarSyncs(viewer));
+  if (!entries.some((e) => e.clientId === ref.clientId)) return { ok: false, status: 403, error: 'That calendar is not synced to this client.' };
+  const post = await getSocialPost(ref.clientId, ref.postId);
+  if (!post) return { ok: false, status: 404, error: 'That post no longer exists on its calendar.' };
+  const doc = {
+    viewerClientId: viewer,
+    sourceClientId: ref.clientId,
+    postId: ref.postId,
+    approved: decision === 'approve',
+    content: typeof post.content === 'string' ? post.content : null,
+    mediaUrl: post.mediaUrl || null,
+    decidedAt: new Date().toISOString(),
+    decidedBy: decoded?.uid || null,
+  };
+  await fb.adminDb.collection(SYNCED_REVIEWS_COLLECTION).doc(reviewDocId(viewer, ref.clientId, ref.postId)).set(doc);
+  return { ok: true, review: { approved: doc.approved, decidedAt: doc.decidedAt } };
 }
 
 /** "Right now" strip: today's baseline slots (current/next, filled?, next action) + data freshness. Read-only, no X/model calls. */
@@ -1466,7 +1500,11 @@ export async function POST(request) {
   try {
     // Unlisted actions default to the gate. The client id is the server-resolved one (never body/model).
     if (actionNeedsPilot(action, body)) requirePilotOwner(context, decoded);
-    // Rows shown from a synced client's calendar are view-only here (features/social-posting/synced-calendar.js).
+    // Rows shown from a synced client's calendar: only the viewer's own approve / unapprove; everything else refused.
+    if (action === SYNCED_REVIEW_ACTION) {
+      const result = await handleSyncedReview(context, body, decoded);
+      return json(result, result.ok === false ? (result.status || 422) : 200);
+    }
     if (bodyTargetsSyncedRow(body)) return json({ error: 'This post is shown from another client\'s calendar and is view-only here.', code: 'synced-read-only' }, 409);
     if (action === 'draft-quote') {
       const result = await handleDraftQuote(context, body);
