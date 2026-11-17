@@ -126,6 +126,11 @@ export const PROPOSAL_WINDOW = { startMin: 7 * 60, endMin: 21 * 60, stepMin: 30,
 const DAY_MS = 86_400_000;
 const MONTH_RE = /^(\d{4})-(\d{2})$/;
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+/** 'YYYY-MM-DD' of a daily-digest video post (`daily-video:<platform>:<day>`), else null. */
+export const dailyVideoDay = (p) => {
+  const m = /^daily-video:[^:]+:(\d{4}-\d{2}-\d{2})$/.exec(String(p?.source || ''));
+  return m ? m[1] : null;
+};
 const REVIEWABLE = new Set(['draft', 'approved', 'awaiting_approval']);
 
 /** YYYY-MM-DD plus n days. Noon-UTC stepping keeps DST safe. */
@@ -260,6 +265,13 @@ export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_EN
       reviewDated.push(row);
       continue;
     }
+    // The daily video (source `daily-video:<platform>:<YYYY-MM-DD>`, daily-digest) belongs on ITS day, past days
+    // included: one video a day, never re-proposed into later days as a backlog.
+    const videoDay = ms == null && REVIEWABLE.has(p.status) ? dailyVideoDay(p) : null;
+    if (videoDay) {
+      reviewDated.push({ ...row, pinDay: videoDay });
+      continue;
+    }
     // A synced-calendar draft (features/social-posting/calendar-sync.js) is meant for an exact time: show it there.
     // A past plannedAt falls through to a normal proposal.
     const plannedMs = ms == null && REVIEWABLE.has(p.status) ? Date.parse(p.plannedAt || '') : NaN;
@@ -283,9 +295,10 @@ export function buildMonthCalendar({ posts = [], month, now, config = DEFAULT_EN
   }
 
   // ── Review days (placed before proposals, so proposals see them) ─────────
-  reviewDated.sort((a, b) => a.reviewOn.localeCompare(b.reviewOn) || String(a.id).localeCompare(String(b.id)));
-  for (const row of reviewDated) {
-    const date = row.reviewOn;
+  const pinnedDay = (r) => r.pinDay || r.reviewOn;
+  reviewDated.sort((a, b) => pinnedDay(a).localeCompare(pinnedDay(b)) || String(a.id).localeCompare(String(b.id)));
+  for (const { pinDay, ...row } of reviewDated) {
+    const date = pinDay || row.reviewOn;
     if (!byDate.has(date)) byDate.set(date, []);
     const slots = byDate.get(date).filter((r) => r.state !== 'failed');
     let ms = null;
