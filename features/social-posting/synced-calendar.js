@@ -10,10 +10,30 @@
 // id is a synced id (`isSyncedId`), and the id cannot match a real social_posts row in the viewer's scope anyway.
 // The viewer's own counts, totals, flags and review queue are untouched (they describe the viewer's own posts).
 // 'schedule' entries keep the mirror-copy behaviour of ./calendar-sync.js and are not shown here (no double rows).
+//
+// HITLOOP REVIEW (owner rule 2026-11-17): the viewer can open a synced row, read its copy + creative and approve or
+// unapprove it FOR THE VIEWER ONLY. The decision lives in synced_reviews/{viewer}__{source}__{postId}; the source's
+// post (its status, schedule, copy) is never written. Pushing viewer approvals to the source channels is a separate,
+// owner-asked step (chat), not something this does.
 
 export const SYNCED_ID_PREFIX = 'synced:';
 
 export const isSyncedId = (id) => typeof id === 'string' && id.startsWith(SYNCED_ID_PREFIX);
+
+/** { clientId, postId } of a synced id, or null. Client ids never contain ':'; the post id is the rest. */
+export function parseSyncedId(id) {
+  if (!isSyncedId(id)) return null;
+  const rest = id.slice(SYNCED_ID_PREFIX.length);
+  const i = rest.indexOf(':');
+  if (i < 1 || i === rest.length - 1) return null;
+  return { clientId: rest.slice(0, i), postId: rest.slice(i + 1) };
+}
+
+/** The only action allowed on a synced row: the viewer's own approve / unapprove. */
+export const SYNCED_REVIEW_ACTION = 'synced-review';
+export const SYNCED_REVIEWS_COLLECTION = 'synced_reviews';
+export const reviewDocId = (viewer, sourceClientId, postId) => `${viewer}__${sourceClientId}__${postId}`;
+export const reviewKey = (sourceClientId, postId) => `${sourceClientId}:${postId}`;
 
 /** The entries shown view-only (everything except auto-post copies). */
 export const shownEntries = (list) => (Array.isArray(list) ? list.filter((e) => e?.clientId && e.mode !== 'schedule') : []);
@@ -24,13 +44,24 @@ export function bodyTargetsSyncedRow(body) {
   return ['postId', 'id', 'rowId'].some((k) => isSyncedId(body[k]));
 }
 
+/**
+ * The viewer's decision as the row shows it. An approval covers the copy + creative it was given on: when the source
+ * changes either later, the row reads "changed since approval" and needs a fresh look.
+ */
+export function viewerReviewOf(row, review) {
+  if (!review?.approved) return null;
+  const same = (review.content ?? null) === (row?.content ?? null) && (review.mediaUrl ?? null) === (row?.mediaUrl ?? null);
+  return same ? { approved: true, decidedAt: review.decidedAt || null } : { approved: false, changed: true, decidedAt: review.decidedAt || null };
+}
+
 /** One source row as a view-only row on the viewer's calendar. Pure. */
-export function toSyncedRow(row, source) {
+export function toSyncedRow(row, source, review = null) {
   return {
     ...row,
     id: `${SYNCED_ID_PREFIX}${source.clientId}:${row.id}`,
     readOnly: true,
     synced: { clientId: source.clientId, name: source.name || source.clientId, postId: row.id },
+    viewerReview: viewerReviewOf(row, review),
   };
 }
 
@@ -41,11 +72,11 @@ const rowMs = (r) => {
 
 /**
  * Pure. Merge source calendars (buildMonthCalendar shape) into the viewer's calendar for the same month.
- * sources: [{ clientId, name, calendar } | { clientId, error }]. Only `kind: 'post'` rows are shown (suggestions,
+ * sources: [{ clientId, name, calendar } | { clientId, error }]. reviews: Map reviewKey -> the viewer's review doc. Only `kind: 'post'` rows are shown (suggestions,
  * requotes and tasks are the source's own working items, not its calendar of posts). Returns a new calendar with
  * `synced: [{ clientId, name, rows } | { clientId, error }]`; the input is not mutated.
  */
-export function mergeSyncedCalendars(calendar, sources = []) {
+export function mergeSyncedCalendars(calendar, sources = [], reviews = null) {
   if (!calendar || !Array.isArray(calendar.weeks)) return calendar;
   const extra = new Map();
   const summary = [];
@@ -60,7 +91,7 @@ export function mergeSyncedCalendars(calendar, sources = []) {
       for (const r of Array.isArray(day?.posts) ? day.posts : []) {
         if (r?.kind !== 'post' || !r.id) continue;
         if (!extra.has(day.date)) extra.set(day.date, []);
-        extra.get(day.date).push(toSyncedRow(r, src));
+        extra.get(day.date).push(toSyncedRow(r, src, reviews?.get?.(reviewKey(src.clientId, r.id)) || null));
         rows += 1;
       }
     }

@@ -6,6 +6,8 @@ import { Check, ChevronLeft, ChevronRight, RefreshCw, X } from 'lucide-react';
 import { RetryError } from '../content-ui/Feedback.jsx';
 import LoadingRing from '../content-ui/ui/LoadingRing';
 import StagePostLevel from '../calendar-stage/StagePostLevel.jsx';
+import SyncedPostReview from './SyncedPostReview.jsx';
+import { isSyncedId } from '../../../features/social-posting/synced-calendar.js';
 import { ENGINE_TAG, STATE_LABEL, StateDot, dayHeading } from './calendar-bits.jsx';
 import { ApprovalMark, FilterChips, InlineApprovalButtons, PassRowButton, SuggestionRow, CalendarApprovalStyles } from './CalendarApprovalBits.jsx';
 import { buildDecideRequest, decideItems } from './post-editor-model.js';
@@ -68,7 +70,7 @@ export function isQuoteWindowClosed(post, nowMs = Date.now()) {
 
 // onView (calendar day view only): the row and its VIEW POST button open the X preview instead of the editor.
 function PostRow({ post, busy, onOpen, onApprove, onReject, onApproveOnly, onUnapprove, onView, onPass }) {
-  if (post.readOnly) return <SyncedPostRow post={post} />;
+  if (post.readOnly) return <SyncedPostRow post={post} onOpen={onOpen} />;
   const windowClosed = isQuoteWindowClosed(post);
   // Once the data layer sends `approval`, the row's Approve button approves WITHOUT scheduling; the legacy approve-and-schedule check is kept only before that.
   const approvalAware = !!post.approval && !!onApproveOnly;
@@ -142,12 +144,14 @@ function PostRow({ post, busy, onOpen, onApprove, onReject, onApproveOnly, onUna
   );
 }
 
-// A post shown from a synced client's calendar (features/social-posting/synced-calendar.js): view-only, no actions,
-// tagged with the source client. Its state is the source's own (draft, scheduled, posted, ...).
-function SyncedPostRow({ post }) {
+// A post shown from a synced client's calendar (features/social-posting/synced-calendar.js), tagged with the source
+// client. Its state is the source's own (draft, scheduled, posted, ...). Opening it shows the copy + creative and the
+// viewer's own Approve / Unapprove (SyncedPostReview), which never changes the source's post.
+function SyncedPostRow({ post, onOpen }) {
+  const review = post.viewerReview;
   return (
     <li id={`x-content-month-row-${post.id}`} className={`xce-mc-row xce-mc-row-synced xce-mc-state-${post.state}`} data-synced-client={post.synced?.clientId || ''}>
-      <div className="xce-mc-row-main" aria-disabled="true">
+      <button type="button" className="xce-mc-row-main" data-thumb={post.thumbUrl ? '' : undefined} onClick={() => onOpen && onOpen(post.id)}>
         <span className="xce-mc-row-time">{post.time || '—'}</span>
         {post.approval ? <ApprovalMark row={post} /> : <StateDot state={post.state} />}
         <span className="xce-mc-row-body">
@@ -155,11 +159,13 @@ function SyncedPostRow({ post }) {
           <span className="xce-mc-row-meta">
             {STATE_LABEL[post.state]}
             {post.proposed ? ' · proposed' : ''}
-            <span id={`x-content-month-row-synced-tag-${post.id}`} className="xce-mc-synced-tag"> · from {post.synced?.name || post.synced?.clientId} · view only</span>
+            <span id={`x-content-month-row-synced-tag-${post.id}`} className="xce-mc-synced-tag"> · from {post.synced?.name || post.synced?.clientId}</span>
+            {review?.approved ? <span id={`x-content-month-row-synced-review-${post.id}`} className="xce-mc-synced-approved"> · HITLOOP approved</span> : null}
+            {review?.changed ? <span id={`x-content-month-row-synced-review-${post.id}`} className="xce-mc-synced-tag"> · changed since approval</span> : null}
           </span>
         </span>
         {post.thumbUrl ? <span className="xce-mini-thumb"><img src={post.thumbUrl} alt="" loading="lazy" /></span> : null}
-      </div>
+      </button>
     </li>
   );
 }
@@ -505,6 +511,10 @@ function MonthCalendarPanelView({
 
   // POST level: the single View & Edit Post editor (components/dashboard/calendar-stage/StagePostLevel.jsx).
   if (level === 'post') {
+    // A synced row: its copy + creative and the viewer's own approve / unapprove (never the source's post).
+    if (isSyncedId(stagePostId)) {
+      return <SyncedPostReview key={stagePostId} row={byId.get(stagePostId) || null} calendarReady={!!calendar && !loading} call={call} onRefresh={onRefresh} nav={nav} />;
+    }
     return (
       <StagePostLevel
         key={stagePostId}
@@ -634,8 +644,8 @@ function MonthCalendarPanelView({
                             className={`xce-mc-chip xce-mc-state-${p.state}${p.readOnly ? ' xce-mc-chip-synced' : ''}`}
                             data-bucket={p.bucketColor ? p.bucketId || 'none' : undefined}
                             style={p.bucketColor ? { '--mc-bucket': p.bucketColor } : undefined}
-                            onClick={(e) => { e.stopPropagation(); setSelected(d.date); if (isSuggestionRow(p) || p.readOnly) openDay(d.date); else setOpenId(p.id); }}
-                            title={`${p.time || ''} · ${STATE_LABEL[p.state] || (p.kind === 'requote' ? 'Requote' : 'Suggested')}${p.proposed ? ' (proposed)' : ''}${p.readOnly ? ` · from ${p.synced?.name || p.synced?.clientId} (view only)` : ''} · ${p.title || p.text || ''}`}
+                            onClick={(e) => { e.stopPropagation(); setSelected(d.date); if (isSuggestionRow(p)) openDay(d.date); else setOpenId(p.id); }}
+                            title={`${p.time || ''} · ${STATE_LABEL[p.state] || (p.kind === 'requote' ? 'Requote' : 'Suggested')}${p.proposed ? ' (proposed)' : ''}${p.readOnly ? ` · from ${p.synced?.name || p.synced?.clientId}${p.viewerReview?.approved ? ' · HITLOOP approved' : ''}` : ''} · ${p.title || p.text || ''}`}
                           >
                             {p.approval ? <ApprovalMark row={p} /> : <StateDot state={p.state} />}
                             <span className="xce-mc-chip-time">{p.time || ''}</span>

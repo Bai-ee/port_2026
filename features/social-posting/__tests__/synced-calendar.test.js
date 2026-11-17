@@ -78,3 +78,32 @@ test('bodyTargetsSyncedRow: any id field naming a synced row is refused', () => 
   assert.equal(bodyTargetsSyncedRow({ postId: 'p1' }), false);
   assert.equal(bodyTargetsSyncedRow(null), false);
 });
+
+import { parseSyncedId, viewerReviewOf, reviewDocId, reviewKey } from '../synced-calendar.js';
+
+test('parseSyncedId: client + post id (post ids may contain colons); junk -> null', () => {
+  assert.deepEqual(parseSyncedId('synced:bai-ees-discogs-TP37NQG0:abc'), { clientId: 'bai-ees-discogs-TP37NQG0', postId: 'abc' });
+  assert.deepEqual(parseSyncedId('synced:ue:a:b'), { clientId: 'ue', postId: 'a:b' });
+  for (const bad of ['abc', 'synced:', 'synced:ue', 'synced:ue:', null]) assert.equal(parseSyncedId(bad), null);
+  assert.equal(reviewDocId('v', 's', 'p'), 'v__s__p');
+});
+
+test('viewer review: approved while copy + creative match; changed source -> needs a fresh look', () => {
+  const row = { content: 'A\nB', mediaUrl: 'u1' };
+  assert.equal(viewerReviewOf(row, null), null);
+  assert.equal(viewerReviewOf(row, { approved: false }), null);
+  assert.deepEqual(viewerReviewOf(row, { approved: true, content: 'A\nB', mediaUrl: 'u1', decidedAt: 't' }), { approved: true, decidedAt: 't' });
+  assert.equal(viewerReviewOf(row, { approved: true, content: 'A\nC', mediaUrl: 'u1' }).changed, true);
+  assert.equal(viewerReviewOf(row, { approved: true, content: 'A\nB', mediaUrl: 'u2' }).changed, true);
+});
+
+test('mergeSyncedCalendars carries the viewer review onto the synced row; the source row is untouched', () => {
+  const src = { weeks: [[{ date: '2026-11-17', posts: [{ id: 'p1', kind: 'post', content: 'x', mediaUrl: 'm', scheduledAt: '2026-11-17T15:00:00Z' }] }]] };
+  const own = { weeks: [[{ date: '2026-11-17', posts: [] }]] };
+  const reviews = new Map([[reviewKey('ue', 'p1'), { approved: true, content: 'x', mediaUrl: 'm', decidedAt: 't' }]]);
+  const out = mergeSyncedCalendars(own, [{ clientId: 'ue', name: 'UE', calendar: src }], reviews);
+  const row = out.weeks[0][0].posts[0];
+  assert.equal(row.id, 'synced:ue:p1');
+  assert.deepEqual(row.viewerReview, { approved: true, decidedAt: 't' });
+  assert.equal(src.weeks[0][0].posts[0].viewerReview, undefined);
+});
