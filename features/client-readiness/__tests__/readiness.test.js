@@ -67,3 +67,13 @@ test('home-shaped client (stale Brain, social doc without username, override + s
   const off = await seed({ brain: 'stale', username: null, xGrowth: { ownHandle: 'home_handle' } });
   await assert.rejects(assertClientReady(off, ID), denied('client-brain-not-approved'));
 });
+
+test('a strategy-only client (no X connected) is ready with the handle saved in the Strategy X profile', async () => {
+  const r = await assertClientReady(await seed({ username: false, xGrowth: { ownHandle: '@crittersquest' } }), ID);
+  assert.deepEqual([r.ready, r.xUsername, r.xHandle, r.xSource], [true, null, 'crittersquest', 'xgrowth-profile']);
+  // A connected account still wins and is reported as such.
+  const c = await readClientReadiness(await seed({ xGrowth: { ownHandle: 'other' } }), ID);
+  assert.deepEqual([c.xHandle, c.xSource], ['fixture_a', 'social-account']);
+  // Neither: still denied, and the fix names both ways.
+  await assert.rejects(assertClientReady(await seed({ username: false, xGrowth: { ownHandle: '' } }), ID), (e) => e.code === 'client-x-not-connected' && /Strategy > X profile/.test(e.message));
+});

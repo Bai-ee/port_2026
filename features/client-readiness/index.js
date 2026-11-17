@@ -2,8 +2,11 @@
 // Replaces the owner-only POC allowlist: a client may run the loop when ITS OWN records say it is set up, never
 // because it is the home client. Fails closed: a missing input denies with a code naming that input.
 //
-// Ready = approved Client Brain + a Strategy plan doc + a connected X account,
+// Ready = approved Client Brain + a Strategy plan doc + the client's X identity,
 //         OR an explicit per-client override `clients/{id}.contentLoop.enabled === true` (set by the owner).
+// X identity = a connected X account OR the handle saved in the Strategy X profile (xGrowth.ownHandle): the loop only
+// DRAFTS, so a strategy-only client (owner rule 2026-11-17: delegates who cannot connect the account) still gets it.
+// Publishing never relies on this gate; the publish path checks the connected account itself.
 // Reads only; writes nothing. `db` is an injected Firestore (admin SDK or the test fake).
 
 const CLIENT_ID_RE = /^[A-Za-z0-9_-]{3,80}$/;
@@ -12,7 +15,7 @@ const CLIENT_ID_RE = /^[A-Za-z0-9_-]{3,80}$/;
 export const READINESS_INPUTS = Object.freeze([
   { input: 'client-brain', code: 'client-brain-not-approved', fix: 'Approve the Client Brain (Client Brain card).' },
   { input: 'strategy-plan', code: 'client-plan-missing', fix: 'Build the Strategy plan (Marketing Director › Strategy).' },
-  { input: 'x-account', code: 'client-x-not-connected', fix: 'Connect X in the Social Accounts card.' },
+  { input: 'x-account', code: 'client-x-not-connected', fix: 'Save the X handle in Strategy > X profile, or connect X in the Social Accounts card.' },
 ]);
 
 const cleanHandle = (h) => String(h || '').trim().replace(/^@+/, '') || null;
@@ -28,29 +31,33 @@ async function readDoc(db, path) {
 
 /**
  * Read-only readiness report. Never throws for a not-ready client; throws only on a bad clientId or a db failure.
- * @returns {Promise<{clientId:string, exists:boolean, ready:boolean, override:boolean, missing:{input:string,code:string,fix:string}[], xUsername:string|null, brainStatus:string|null}>}
+ * @returns {Promise<{clientId:string, exists:boolean, ready:boolean, override:boolean, missing:{input:string,code:string,fix:string}[], xUsername:string|null, xHandle:string|null, xSource:'social-account'|'xgrowth-profile'|null, brainStatus:string|null}>}
  */
 export async function readClientReadiness(db, clientId) {
   if (!db) throw new Error('readClientReadiness: db is required');
   const id = String(clientId || '').trim();
   if (!CLIENT_ID_RE.test(id)) throw Object.assign(new Error('A valid clientId is required.'), { status: 400, code: 'client-id-required' });
 
-  const [client, brain, plan, social] = await Promise.all([
+  const [client, brain, plan, social, config] = await Promise.all([
     readDoc(db, `clients/${id}`),
     readDoc(db, `clients/${id}/client_brain/current`),
     readDoc(db, `x_strategy_plans/${id}`),
     readDoc(db, `social_accounts/${id}`),
+    readDoc(db, `client_configs/${id}`),
   ]);
   const brainStatus = brain?.status || null;
   const xUsername = cleanHandle(social?.platforms?.x?.username);
+  const profileHandle = cleanHandle(config?.marketingBriefConfig?.xGrowth?.ownHandle);
+  const xHandle = xUsername || profileHandle;
+  const xSource = xUsername ? 'social-account' : profileHandle ? 'xgrowth-profile' : null;
   const override = client?.contentLoop?.enabled === true;
   const has = {
     'client-brain': brainStatus === 'approved',
     'strategy-plan': !!plan,
-    'x-account': !!xUsername,
+    'x-account': !!xHandle,
   };
   const missing = READINESS_INPUTS.filter((r) => !has[r.input]);
-  return { clientId: id, exists: !!client, ready: !!client && (override || missing.length === 0), override, missing, xUsername, brainStatus };
+  return { clientId: id, exists: !!client, ready: !!client && (override || missing.length === 0), override, missing, xUsername, xHandle, xSource, brainStatus };
 }
 
 /**
