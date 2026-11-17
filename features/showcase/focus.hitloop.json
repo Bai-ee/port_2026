@@ -1,0 +1,134 @@
+{
+  "client": "hitloop",
+  "composition": "HL-Showcase",
+  "focuses": [
+    {
+      "id": "cta-hover",
+      "title": "The enter button",
+      "caption": "Hover the header button and HUMANS scrambles into ENTER. HITLOOP is an AI-assisted creative agency.",
+      "formats": [
+        "square",
+        "feed"
+      ],
+      "scenes": [
+        {
+          "kind": "hover-cta",
+          "params": {
+            "label": "HUMANS",
+            "hoverLabel": "ENTER"
+          }
+        }
+      ]
+    },
+    {
+      "id": "hero-line",
+      "title": "Human in the loop",
+      "caption": "The line on our home page turns into a way to connect. Real people stay in the loop at HITLOOP.",
+      "formats": [
+        "square",
+        "feed"
+      ],
+      "scenes": [
+        {
+          "kind": "hero-line",
+          "params": {
+            "text": "HUMAN IN THE LOOP",
+            "hoverText": "LET'S CONNECT"
+          }
+        }
+      ]
+    },
+    {
+      "id": "loading-dashboard",
+      "title": "Your dashboard is loading",
+      "caption": "What a client sees while their HITLOOP dashboard starts up.",
+      "formats": [
+        "square",
+        "feed",
+        "story"
+      ],
+      "scenes": [
+        {
+          "kind": "loading-dashboard",
+          "params": {}
+        }
+      ]
+    },
+    {
+      "id": "cta-then-loading",
+      "title": "Enter, then the dashboard",
+      "caption": "Hover the button, then watch the client dashboard load. A quick look inside HITLOOP.",
+      "formats": [
+        "square",
+        "feed"
+      ],
+      "scenes": [
+        {
+          "kind": "hover-cta",
+          "params": {
+            "label": "HUMANS",
+            "hoverLabel": "ENTER"
+          }
+        },
+        {
+          "kind": "loading-dashboard",
+          "params": {}
+        }
+      ]
+    },
+    {
+      "id": "hero-then-cta",
+      "title": "Human in the loop, then enter",
+      "caption": "From our home page line to the enter button. HITLOOP is an AI-assisted creative agency at hitloop.agency.",
+      "formats": [
+        "square",
+        "feed"
+      ],
+      "scenes": [
+        {
+          "kind": "hero-line",
+          "params": {
+            "text": "HUMAN IN THE LOOP",
+            "hoverText": "LET'S CONNECT"
+          }
+        },
+        {
+          "kind": "hover-cta",
+          "params": {
+            "label": "HUMANS",
+            "hoverLabel": "ENTER"
+          }
+        }
+      ]
+    },
+    {
+      "id": "site-tour",
+      "title": "A quick tour of HITLOOP",
+      "caption": "The home page line, the enter button and the dashboard loading, in one short clip.",
+      "formats": [
+        "square",
+        "feed"
+      ],
+      "scenes": [
+        {
+          "kind": "hero-line",
+          "params": {
+            "text": "HUMAN IN THE LOOP",
+            "hoverText": "LET'S CONNECT"
+          }
+        },
+        {
+          "kind": "hover-cta",
+          "params": {
+            "label": "HUMANS",
+            "hoverLabel": "ENTER"
+          }
+        },
+        {
+          "kind": "loading-dashboard",
+          "params": {}
+        }
+      ]
+    }
+  ]
+}
