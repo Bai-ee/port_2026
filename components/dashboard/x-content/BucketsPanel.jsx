@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Search } from 'lucide-react';
 import { Skeleton, RetryError } from '../content-ui/Feedback.jsx';
 
-import { mergeBuckets, resolveBucket } from '../../../features/x-content-inventory/buckets.js';
+import { resolveBucket } from '../../../features/x-content-inventory/buckets.js';
 import { itemsInFolder, folderCounts, suggestFolders } from '../../../features/x-content-inventory/folders.js';
 import { onThisDay, hasEventDate } from '../../../features/x-content-inventory/throwback.js';
 import { buildIndex, search } from '../../../features/x-content-inventory/search-index.js';
@@ -64,7 +64,7 @@ function sourceKindOf(list, id) {
 }
 
 export default function BucketsPanel({ call, mediaCall, packages, loading, error, onReload }) {
-  const [buckets, setBuckets] = useState(() => mergeBuckets([]));
+  const [buckets, setBuckets] = useState([]);
   const [folders, setFolders] = useState([]);
   const [metaLoading, setMetaLoading] = useState(true);
   const [metaError, setMetaError] = useState('');
@@ -110,7 +110,7 @@ export default function BucketsPanel({ call, mediaCall, packages, loading, error
     setMetaError('');
     try {
       const [b, f] = await Promise.all([call('list-buckets'), call('list-folders')]);
-      setBuckets(mergeBuckets(Array.isArray(b?.buckets) ? b.buckets : []));
+      setBuckets(Array.isArray(b?.buckets) ? b.buckets : []); // the server decides seed defaults per client (listBuckets)
       setFolders(Array.isArray(f?.folders) ? f.folders : []);
     } catch (err) {
       setMetaError(err.message || 'Could not load buckets.');

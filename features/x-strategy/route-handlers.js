@@ -21,6 +21,7 @@
 //       Strategy chat. Executes nothing; the owner still confirms in the UI. Needs a chatStore (else {ok:false,status:503}).
 
 import { createRequire } from 'node:module';
+import { strategySetupStatus } from './setup-check.js';
 import { DEFAULT_PLAN, EVALUATION_THRESHOLDS, MAX_BULK_PROPOSALS_PER_TURN, BULK_PROPOSAL_KINDS, AGENT_REFRESH_GROUP_IDS } from './contracts.js';
 import { evaluate as defaultEvaluate } from './evaluate.js';
 import { StrategyPlanError, createFirestorePlanStore } from './plan-store.js';
@@ -960,6 +961,18 @@ export function createStrategyHandlers({
           tracks, library: summarizeTrackLibrary(tracks, await readPackages(clientId)), profiles: await safeTrackProfiles(planDoc, profile),
           ...(dailyRules.length ? { dailyRules } : {}),
         };
+      },
+      // Setup blockers (setup-check.js): no own posts pulled / no tracks => the chat lists fixes instead of reviewing.
+      getSetupStatus: async () => {
+        const profile = preloaded.profile ?? (preloaded.profile = await loadProfile(clientId));
+        const own = safeHandle(profile.ownHandle);
+        const r = own ? await readHandle(own) : { rows: [], meta: null };
+        const buckets = typeof readBuckets === 'function' ? await readBuckets(clientId).catch(() => null) : null;
+        return strategySetupStatus({
+          handle: own, ownRows: (r.rows || []).length, ownPulledAt: r.meta?.pulledAt ?? null,
+          buckets: buckets ?? [{ id: 'unknown' }], // no reader on this deployment: do not claim the tracks are missing
+          benchmarkHandles: profile.benchmarkHandles || [],
+        });
       },
       getPlan: async () => ((await planStore.get(clientId)) ?? { version: 0, plan: DEFAULT_PLAN, history: [], isDefault: true }),
       // Stored doc or the seeded draft (version 0); absent docStore => null (prompt says none available).

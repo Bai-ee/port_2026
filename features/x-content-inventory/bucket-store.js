@@ -10,7 +10,7 @@
 // only touched by deleteBucket (count / reassign) via the `bucketId` field.
 
 import { createRequire } from 'node:module';
-import { DEFAULT_BUCKETS, bucketIdFromName, validateBucket, mergeBuckets } from './buckets.js';
+import { DEFAULT_BUCKETS, bucketIdFromName, validateBucket, mergeBuckets, usesDefaultBuckets } from './buckets.js';
 import { normalizeTerm } from './facets.js';
 
 const require = createRequire(import.meta.url);
@@ -36,9 +36,15 @@ async function readStoredBuckets(clientId, db) {
   return snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
 }
 
-/** Defaults merged with stored docs, sorted by order. */
+/** The client's buckets, sorted by order: stored docs, over the seed defaults only for clients built on them. */
 export async function listBuckets(clientId, { db } = {}) {
-  return mergeBuckets(await readStoredBuckets(clientId, db));
+  const stored = await readStoredBuckets(clientId, db);
+  const seedIds = new Set(DEFAULT_BUCKETS.map((b) => b.id));
+  if (stored.some((s) => seedIds.has(s.id))) return mergeBuckets(stored); // home: built on the seeds, no item read
+  // Otherwise the client's items decide (a bounded sample: legacy items carry no bucketId).
+  const snap = await database(db).collection(PACKAGES).where('clientId', '==', clientKey(clientId)).limit(stored.length ? 200 : 1).get();
+  const itemBucketIds = (snap.docs || []).map((d) => d.data()?.bucketId ?? null);
+  return mergeBuckets(stored, { withDefaults: usesDefaultBuckets(stored, { itemBucketIds }) });
 }
 
 /**

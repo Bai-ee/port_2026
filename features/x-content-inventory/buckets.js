@@ -68,10 +68,25 @@ export function resolveBucket(pkg, buckets = DEFAULT_BUCKETS) {
   return ids.has(engine) ? engine : 'identity';
 }
 
+/**
+ * Does this client use the seed buckets? Only clients built on them: a stored bucket with a seed id (the home client),
+ * or library items that are NOT filed in one of the client's own buckets (legacy items resolve to seed buckets by
+ * engine, e.g. UE / Discogs). A new client (nothing stored, no items) or one whose items all sit in its own tracks
+ * sees ITS tracks only, so the owner's Discogs / NAS / video lanes never leak into another client's strategy
+ * (owner rule 2026-11-17). itemBucketIds: bucketId of each library item (null when unset).
+ */
+export function usesDefaultBuckets(stored = [], { itemBucketIds = [] } = {}) {
+  const seed = new Set(DEFAULT_BUCKETS.map((b) => b.id));
+  const own = new Set((stored || []).map((s) => s?.id).filter(Boolean));
+  if ([...own].some((id) => seed.has(id))) return true;
+  return (itemBucketIds || []).some((id) => !id || !own.has(id));
+}
+
 /** Merge stored bucket docs over the defaults (stored wins; unknown stored
- * buckets are kept — that is how the owner adds new ones). Sorted by order. */
-export function mergeBuckets(stored = []) {
-  const byId = new Map(DEFAULT_BUCKETS.map((b) => [b.id, { ...b }]));
+ * buckets are kept — that is how the owner adds new ones). Sorted by order.
+ * withDefaults:false = the client's stored buckets only (see usesDefaultBuckets). */
+export function mergeBuckets(stored = [], { withDefaults = true } = {}) {
+  const byId = new Map(withDefaults ? DEFAULT_BUCKETS.map((b) => [b.id, { ...b }]) : []);
   for (const s of stored) {
     if (!s?.id) continue;
     byId.set(s.id, { ...(byId.get(s.id) || {}), ...s, share: { ...(byId.get(s.id)?.share || {}), ...(s.share || {}) } });
