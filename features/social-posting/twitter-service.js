@@ -1033,6 +1033,11 @@ function buildSocialPostRecord(clientId, payload, id) {
         ...(payload.mirrorOf.mode === 'draft' ? { mode: 'draft' } : {}),
       },
     } : {}),
+    // Synced calendar (./synced-calendar.js): this client's OWN copy of another client's post, made when the owner
+    // opened that post on this client's calendar. Edits, channels and approval are this row's alone.
+    ...(payload.adoptedFrom && typeof payload.adoptedFrom === 'object' && payload.adoptedFrom.postId ? {
+      adoptedFrom: { clientId: cleanStr(payload.adoptedFrom.clientId, 80), postId: cleanStr(payload.adoptedFrom.postId, 160) },
+    } : {}),
     // Calendar sync draft mode: the time this unscheduled draft is meant for (the month calendar places it there).
     // Not a schedule: nothing publishes from it until the owner schedules the row.
     ...(Number.isFinite(Date.parse(String(payload.plannedAt || ''))) && !payload.scheduledAt
