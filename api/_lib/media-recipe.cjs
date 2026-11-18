@@ -24,6 +24,16 @@ const OVERLAY_EFFECT_RE = /^[a-z0-9_]{1,40}$/;
 const LOGO_NAME_RE = /^[A-Za-z0-9._-]{1,80}$/;
 const VIDEO_ORDER_NAME_RE = /^[A-Za-z0-9._ ()-]{1,180}$/;
 
+/** True when `name` is acceptable as a videoOrder.videoName (shared with the clip selector). */
+function isValidVideoOrderName(name) {
+  return typeof name === 'string'
+    && !!name
+    && !name.includes('/')
+    && !name.includes('\\')
+    && !name.includes('..')
+    && VIDEO_ORDER_NAME_RE.test(name);
+}
+
 // Strip ASCII/Unicode control chars so a free-text label can never carry hidden
 // terminators into a downstream filename or render arg.
 function stripControlChars(str) {
@@ -211,7 +221,7 @@ function validateRemixRecipe(input) {
         throw new Error('videoOrder segmentIndex must match its row index.');
       }
       const videoName = stripControlChars(item.videoName || '').slice(0, 180);
-      if (!videoName || videoName.includes('/') || videoName.includes('\\') || videoName.includes('..') || !VIDEO_ORDER_NAME_RE.test(videoName)) {
+      if (!isValidVideoOrderName(videoName)) {
         throw new Error('videoOrder.videoName has invalid characters.');
       }
       return { segmentIndex: index, videoName };
@@ -230,5 +240,6 @@ module.exports = {
   sanitizeFolderName,
   validateRemixRecipe,
   isValidArtistName,
+  isValidVideoOrderName,
   V1_OUTPUT,
 };

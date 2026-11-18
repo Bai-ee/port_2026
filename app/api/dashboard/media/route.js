@@ -15,6 +15,7 @@ const {
   listSourceFolders,
   listSourceFoldersWithCounts,
   listFolderMedia,
+  listFolderClipsForSelection,
   createUploadSession,
   getResumableStatus,
   renewResumableSession,
@@ -390,13 +391,13 @@ export async function POST(request) {
     if (!recipe.videoOrder && Array.isArray(recipe.sourceFolders) && recipe.sourceFolders.length === 1) {
       try {
         const folder = recipe.sourceFolders[0];
-        const media = await listFolderMedia(folder, { limit: 120 });
+        const media = await listFolderClipsForSelection(folder);
         const order = await clipSelector.buildVideoOrder({
           clientId: context.clientId,
           folder,
           files: Array.isArray(media?.files) ? media.files : [],
           segmentCount: clipSelector.DEFAULT_SEGMENT_COUNT,
-          antiRepeatLookback: 3,
+          antiRepeatLookback: 10,
           deps: { listMediaJobs: mediaJobs.listMediaJobs },
         });
         // A folder too small to fill the order falls through to the worker's own

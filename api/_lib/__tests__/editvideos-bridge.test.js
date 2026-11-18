@@ -138,3 +138,64 @@ test('normalizeSourceFileRef rejects traversal, deep paths, reserved folders, an
   assert.throws(() => normalizeSourceFileRef({ fullPath: 'logos/logo.png' }), /not available/);
   assert.throws(() => normalizeSourceFileRef({ folder: 'skyline', fileName: 'notes.txt' }), /Only media/);
 });
+
+// ── listFolderClipsForSelection (selector-only lister) ──────────────────────
+
+const {
+  listFolderClipsForSelection,
+  invalidateFolderCache,
+} = require('../editvideos-bridge.cjs');
+
+/** Minimal bucket: getFiles({prefix}) over a fixed list of {name, metadata}. */
+function fakeClipBucket(files) {
+  const bucket = {
+    calls: 0,
+    async getFiles({ prefix }) {
+      bucket.calls += 1;
+      return [files.filter((f) => f.name.startsWith(prefix))];
+    },
+  };
+  return bucket;
+}
+
+test('listFolderClipsForSelection: returns all 300 clips (no 120 cap) with selector fields only', async () => {
+  invalidateFolderCache();
+  const files = Array.from({ length: 300 }, (_, i) => ({
+    name: `skyline/clip${String(i).padStart(3, '0')}.mp4`,
+    metadata: { size: '1000', contentType: 'video/mp4', timeCreated: '2026-01-01T00:00:00Z' },
+  }));
+  const out = await listFolderClipsForSelection('skyline', { bucket: fakeClipBucket(files) });
+  assert.equal(out.files.length, 300);
+  assert.deepEqual(Object.keys(out.files[0]).sort(), ['fullPath', 'kind', 'name', 'size', 'timeCreated']);
+  assert.equal(out.files[0].kind, 'video');
+  assert.equal(out.files[0].size, 1000);
+  assert.equal(out.files[0].timeCreated, '2026-01-01T00:00:00Z');
+});
+
+test('listFolderClipsForSelection: filters non-media, ignores subfolder objects, falls back to updated/null', async () => {
+  invalidateFolderCache();
+  const files = [
+    { name: 'skyline/a.mov', metadata: { size: '5', updated: '2025-05-05T00:00:00Z' } },
+    { name: 'skyline/sub/a.mov', metadata: { size: '9', timeCreated: '2026-02-02T00:00:00Z' } },
+    { name: 'skyline/sub/z.mov', metadata: {} },
+    { name: 'skyline/b.jpg', metadata: { size: '5', contentType: 'image/jpeg' } },
+    { name: 'skyline/notes.txt', metadata: {} },
+  ];
+  const out = await listFolderClipsForSelection('skyline', { bucket: fakeClipBucket(files) });
+  assert.deepEqual(out.files.map((f) => f.name), ['a.mov', 'b.jpg']);
+  assert.equal(out.files[0].fullPath, 'skyline/a.mov');
+  assert.equal(out.files[0].timeCreated, '2025-05-05T00:00:00Z');
+  assert.equal(out.files[1].kind, 'image');
+  assert.equal(out.files[1].timeCreated, null);
+});
+
+test('listFolderClipsForSelection: cached until invalidateFolderCache', async () => {
+  invalidateFolderCache();
+  const bucket = fakeClipBucket([{ name: 'skyline/a.mov', metadata: {} }]);
+  await listFolderClipsForSelection('skyline', { bucket });
+  await listFolderClipsForSelection('skyline', { bucket });
+  assert.equal(bucket.calls, 1);
+  invalidateFolderCache();
+  await listFolderClipsForSelection('skyline', { bucket });
+  assert.equal(bucket.calls, 2);
+});

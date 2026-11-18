@@ -90,25 +90,44 @@ in the dashboard Video Remix UI.
 ## Clip selection — shared, randomized, anti-repeating (2026-07-20)
 
 `api/_lib/media-clip-selector.cjs` is the ONE selector for every queue path. It filters to videos
-at/above a size floor, puts clips **not used by the last N renders first** (shuffled), lets recently
-used clips fill only leftover slots, and pins the result as an explicit `videoOrder`.
+at/above a size floor with names valid for `videoOrder` (`isValidVideoOrderName`), puts clips **not used by the last N renders first** (age-weighted random
+draw, see Clip freshness below), lets recently used clips fill only leftover slots
+(least-recently-used first), and pins the result as an explicit `videoOrder`.
 
-- **Daily email** (`pre-digest-video`): `antiRepeatLookback: 3`, `minSizeBytes: 5MB`. An unfillable
+- **Daily email** (`pre-digest-video`): `antiRepeatLookback: 10`, `minSizeBytes: 5MB`. An unfillable
   folder is **fatal** (reported) — better than silently shipping a folder-only recipe.
 - **Card** (`create-video-remix`): when the caller sends **one folder and no manual clip order**, the
-  route auto-pins a randomized order (lookback 3). An explicit `videoOrder` is always respected;
+  route auto-pins a randomized order (lookback 10). An explicit `videoOrder` is always respected;
   multi-folder recipes are left to the worker (`validateRemixRecipe` rejects `videoOrder` unless
   there is exactly one folder). A folder too small to fill 6 segments falls through to the worker's
   own pick rather than failing the render.
+- **Social approve** (`social-approve`, `randomizeRecipe`): single-folder recipes get the same selector
+  (lookback 10, no `minSizeBytes`), using `assetClientId` for the anti-repeat memory. Failures fall
+  through to the worker's own pick.
 - ⚠️ **Why this matters:** the EditVideos worker's own clip pick is effectively **deterministic**
   (same root cause as the pinned-audio behavior). Any path that omits `videoOrder` can therefore
   render the same footage twice. Do not add a queue path that skips this selector.
 - ⚠️ Anti-repeat memory reads `media_jobs.recipeFull.videoOrder` **filtered to the same folder** —
   jobs enqueued without a `videoOrder` contribute nothing. A failed Firestore read degrades to a
   plain shuffle (still random), never throws.
-- ⚠️ `listFolderMedia` hard-clamps to **120 files** (`safeLimit = Math.min(120, …)`), slicing
-  bucket-lexicographic order. skyline is at 112 objects — past 120 the tail becomes permanently
-  unpickable. Paginate before folders grow further.
+- ⚠️ **Old 120-cap issue (fixed for selection):** `listFolderMedia` hard-clamps to 120 files
+  (bucket-lexicographic), so the selector only ever saw the first 120 of skyline's ~300 clips and
+  lookback was only 3 renders. All three selector callers (card, daily email, social-approve) now use
+  `listFolderClipsForSelection` (`editvideos-bridge.cjs`): whole folder (hard cap 2000, warns), no
+  signed URLs, no poster read, **top-level files only** (source folders are expected to be flat; subfolder
+  objects are ignored), own cache
+  entry (`sel:<folder>`, cleared by `invalidateFolderCache`). `kind` comes from the shared
+  `mediaKindFor` helper so both listers agree.
+- **Clip freshness:** among clips not used in the last 10 renders, picks are weighted random
+  (Efraimidis-Spirakis) by `timeCreated`: `w = FLOOR + (1-FLOOR) * 2^(-ageDays/HALF_LIFE)` with
+  `FRESHNESS_WEIGHT_FLOOR = 0.25`, `FRESHNESS_HALF_LIFE_DAYS = 45`; missing/invalid timestamp = floor.
+  Brand-new clips are ~4x as likely as old ones; old clips still surface. Reused clips fill leftovers
+  least-recently-used first. Job memory reads `listMediaJobs` with limit `clamp(lookback*4, 20, 60)`
+  because its `type` filter runs in memory after the limit.
+- ⚠️ GCS `timeCreated` resets when a clip is moved between folders (copy + delete), so moved clips
+  look brand-new and get the full weight.
+- **Non-goals (still capped at 120):** the manual clip picker (`folder-files`) and
+  `studio-remix-catalog` still use `listFolderMedia`. Multi-folder recipes are still worker-picked.
 - Tests: `api/_lib/__tests__/media-clip-selector.test.js` (rng injected for determinism).
 
 ## Files (Hitloop)
