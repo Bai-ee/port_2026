@@ -38,7 +38,7 @@ const BriefStudio = dynamic(() => import('./brief/BriefStudio'), { ssr: false })
 // REMIX mode (?tool=remix) — the EditVideos video-remix recipe builder. Client-only
 // and lazy; it only talks to /api/dashboard/media, nothing renders in the browser.
 const RemixStudio = dynamic(() => import('./remix/RemixStudio'), { ssr: false });
-// Admin-only review of rendered videos for the curated bucket (?tool=remix&view=review).
+// Public review of rendered videos for the curated bucket (?tool=remix&view=review).
 const RemixReview = dynamic(() => import('./remix/RemixReview'), { ssr: false });
 
 const VIEWPORTS = {
@@ -505,7 +505,7 @@ export default function StudioPage() {
   // the cloth/foil simulator). null until the mount effect reads the URL so
   // neither world builds prematurely and SSR/client markup stay identical.
   const [tool, setTool] = useState(null);
-  // REMIX sub-view: 'review' = curated-bucket review page (admin only); anything else = the builder.
+  // REMIX sub-view: 'review' = curated-bucket review page (public); anything else = the builder.
   const [remixView, setRemixView] = useState(null);
   const switchRemixView = useCallback((next) => {
     setRemixView(next);
@@ -2375,8 +2375,8 @@ export default function StudioPage() {
         </div>
       ) : null}
 
-      {/* REMIX sub-view switch (admin only): BUILD (recipe builder) ⇄ REVIEW (curated-bucket review). */}
-      {tool === 'remix' && isAdmin ? (
+      {/* REMIX sub-view switch (public): BUILD (recipe builder) ⇄ REVIEW (curated-bucket review). */}
+      {tool === 'remix' ? (
         <div
           id="remix-view-toggle"
           data-tooltip-disabled="true"
@@ -2407,8 +2407,8 @@ export default function StudioPage() {
           <LoopStudio isNarrow={isNarrow} railW={RAIL_W} authedFetch={authedFetch} />
         ) : tool === 'cloth' ? (
           <ClothStudio isNarrow={isNarrow} railW={RAIL_W} isAdmin={isAdmin} authedFetch={authedFetch} />
-        ) : tool === 'remix' && remixView === 'review' && isAdmin ? (
-          <RemixReview isNarrow={isNarrow} railW={0} authedFetch={authedFetch} />
+        ) : tool === 'remix' && remixView === 'review' ? (
+          <RemixReview isNarrow={isNarrow} railW={0} user={user} />
         ) : tool === 'remix' ? (
           <RemixStudio isNarrow={isNarrow} railW={RAIL_W} authedFetch={authedFetch} user={user} />
         ) : tool === 'invoice' ? (

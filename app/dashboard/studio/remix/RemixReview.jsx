@@ -1,14 +1,14 @@
 'use client';
 
-// REMIX review (?tool=remix&view=review, admin only) — owner curates rendered videos into the official
-// bucket. Data/API: features/rendered-videos/curation.js via /api/dashboard/quote-targets
-// (curation-list / curation-set / media-urls). Posters load lazily; a video element exists only for the
+// REMIX review (?tool=remix&view=review, PUBLIC — works signed out) — curate rendered videos into the official
+// bucket. Data/API: features/rendered-videos/curation.js via /api/public/remix-review
+// (list / set / media; Bearer token sent only when a user is signed in, votes are otherwise recorded as 'public'). Posters load lazily; a video element exists only for the
 // ONE tile being played (no metadata prefetch for the rest).
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GLASS, ui } from '../components/rail-ui';
 
-const API = '/api/dashboard/quote-targets';
+const API = '/api/public/remix-review';
 const TARGET = 30;
 const PAGE = 30;
 const POSTER_BATCH = 60;
@@ -24,7 +24,7 @@ function recount(items) {
   return c;
 }
 
-export default function RemixReview({ isNarrow = false, railW = 336, authedFetch = null }) {
+export default function RemixReview({ isNarrow = false, railW = 336, user = null }) {
   const [days, setDays] = useState(10);
   const [items, setItems] = useState(null); // null = loading
   const [approvedOutside, setApprovedOutside] = useState(0); // approved rows NOT in the loaded window (server total minus window)
@@ -32,7 +32,7 @@ export default function RemixReview({ isNarrow = false, railW = 336, authedFetch
   const [limit, setLimit] = useState(PAGE);
   const [truncated, setTruncated] = useState(false);
   const [error, setError] = useState(null); // { message }
-  const [notOwner, setNotOwner] = useState(false);
+  const [notConfigured, setNotConfigured] = useState(false);
   const [filter, setFilter] = useState('pending');
   const [posters, setPosters] = useState({});
   const [playing, setPlaying] = useState(null); // { id, url } | { id, loading:true }
@@ -49,12 +49,19 @@ export default function RemixReview({ isNarrow = false, railW = 336, authedFetch
   const mountedRef = useRef(true);
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
 
+  const userRef = useRef(user);
+  userRef.current = user;
   const call = useCallback(async (body) => {
-    const res = await authedFetch(API, { method: 'POST', body: JSON.stringify(body) });
+    const headers = { 'Content-Type': 'application/json' };
+    try {
+      const token = await userRef.current?.getIdToken?.();
+      if (token) headers.Authorization = `Bearer ${token}`;
+    } catch { /* signed-out behaviour */ }
+    const res = await fetch(API, { method: 'POST', headers, body: JSON.stringify(body) });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw Object.assign(new Error(data?.error || `Request failed (${res.status})`), { status: res.status });
     return data;
-  }, [authedFetch]);
+  }, []);
 
   const flash = useCallback((message) => setToast({ message }), []);
   useEffect(() => {
@@ -65,15 +72,14 @@ export default function RemixReview({ isNarrow = false, railW = 336, authedFetch
 
   // Load (and reload when "Load older" widens the window).
   useEffect(() => {
-    if (!authedFetch) return undefined;
     let cancelled = false;
     setError(null);
     setLoading(true);
     (async () => {
       try {
-        const data = await call({ action: 'curation-list', days });
+        const data = await call({ action: 'list', days });
         if (cancelled) return;
-        if (data.skipped === 'not-owner') { setNotOwner(true); setItems([]); return; }
+        if (data.skipped === 'not-configured') { setNotConfigured(true); setItems([]); return; }
         const list = data.items || [];
         confirmedRef.current = {};
         setItems(list);
@@ -81,21 +87,21 @@ export default function RemixReview({ isNarrow = false, railW = 336, authedFetch
         setTruncated(Boolean(data.truncated));
       } catch (err) {
         if (cancelled) return;
-        setError({ message: /pilot/i.test(`${err.message}`) || err.status === 403 ? 'Owner account only' : err.message });
+        setError({ message: err.message });
         setItems((cur) => cur || []);
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [authedFetch, call, days]);
+  }, [call, days]);
 
   const visible = useMemo(() => (items || []).filter((i) => filter === 'all' || stateOf(i) === filter), [items, filter]);
   const rendered = useMemo(() => visible.slice(0, limit), [visible, limit]);
   const renderedKey = rendered.map((i) => i.id).join(',');
   useEffect(() => { setLimit(PAGE); }, [filter]);
 
-  // Poster URLs only for rendered tiles, batches <=60 (media-urls cap). Each id is requested once.
+  // Poster URLs only for rendered tiles, batches <=60 (media cap). Each id is requested once.
   useEffect(() => {
     const need = renderedKey ? renderedKey.split(',').filter((id) => !requestedRef.current.has(id)) : [];
     if (!need.length) return;
@@ -104,7 +110,7 @@ export default function RemixReview({ isNarrow = false, railW = 336, authedFetch
       for (let i = 0; i < need.length; i += POSTER_BATCH) {
         const ids = need.slice(i, i + POSTER_BATCH);
         let urls = {};
-        try { urls = (await call({ action: 'media-urls', ids, kinds: ['thumb'] })).urls || {}; } catch { /* placeholder tiles */ }
+        try { urls = (await call({ action: 'media', ids, kinds: ['thumb'] })).urls || {}; } catch { /* placeholder tiles */ }
         if (!mountedRef.current) return;
         setPosters((cur) => { const next = { ...cur }; for (const id of ids) next[id] = urls[id]?.thumbUrl || null; return next; });
       }
@@ -122,8 +128,8 @@ export default function RemixReview({ isNarrow = false, railW = 336, authedFetch
     const apply = (curation) => setItems((cur) => (cur || []).map((i) => (i.id === id ? { ...i, curation } : i)));
     apply(state === 'pending' ? null : { state, at: new Date().toISOString() });
     try {
-      const data = await call({ action: 'curation-set', id, state });
-      if (data.skipped === 'not-owner') throw new Error('This client does not own rendered videos');
+      const data = await call({ action: 'set', id, state });
+      if (data.skipped === 'not-configured') throw new Error('Rendered videos owner is not configured');
       confirmedRef.current[id] = data.curation || null;
       if (seqRef.current[id] === seq) apply(data.curation || null);
     } catch (err) {
@@ -136,7 +142,7 @@ export default function RemixReview({ isNarrow = false, railW = 336, authedFetch
   const play = useCallback(async (id) => {
     setPlaying({ id, loading: true });
     try {
-      const data = await call({ action: 'media-urls', ids: [id], kinds: ['video'] });
+      const data = await call({ action: 'media', ids: [id], kinds: ['video'] });
       const url = data.urls?.[id]?.videoUrl;
       if (!url) throw new Error('No video URL');
       setPlaying((cur) => (cur?.id === id ? { id, url } : cur));
@@ -182,7 +188,7 @@ export default function RemixReview({ isNarrow = false, railW = 336, authedFetch
   }, [rendered, filter, focusId, decide, play, playing, reducedMotion]);
 
   const approvedTotal = approvedOutside + counts.approved;
-  const alertMessage = notOwner ? 'This client does not own rendered videos' : error?.message;
+  const alertMessage = notConfigured ? 'Rendered videos owner is not configured' : error?.message;
   const trans = reducedMotion ? 'none' : 'background 0.18s ease, box-shadow 0.18s ease';
   const small = { ...ui.btn(false), height: 28, padding: '0 12px', fontSize: 11 };
 
