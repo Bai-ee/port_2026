@@ -50,6 +50,10 @@
     {
       "path": "/api/worker/instagram-token-refresh",
       "schedule": "45 10 * * *"
+    },
+    {
+      "path": "/api/worker/cq-daily-video",
+      "schedule": "*/15 * * * *"
     }
   ]
 }
