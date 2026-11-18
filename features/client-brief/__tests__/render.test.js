@@ -47,11 +47,10 @@ test('invoice look: INVOICE_CSS + brief base CSS, invoice hero/cover, meta strip
   assert.ok(html.includes(INVOICE_CSS), 'INVOICE_CSS is embedded verbatim');
   assert.match(html, /class="invoice-sheet cb-sheet"/);
   assert.match(html, /<header class="invoice-hero cb-cover" id="client-brief-cover">/);
-  assert.match(html, /id="client-brief-doc-label">Client Brief</);
+  // Owner rule 2026-11-18: no small-caps label headers (no "Client Brief" eyebrow, no Client/Date/Prepared-by labels, no "• Section 0N").
+  assert.doesNotMatch(html, /client-brief-doc-label|cb-eyebrow|cb-dot|class="k"|>Section \d/);
   assert.match(html, /<h1 class="invoice-hero-title" id="client-brief-title">NTR Daily Update<\/h1>/);
-  assert.match(html, /<div class="k">Client<\/div><div class="v">Rosita&#39;s Tacos<\/div>/);
-  assert.match(html, /<div class="k">Date<\/div><div class="v">Nov 18, 2026<\/div>/);
-  assert.match(html, /<div class="k">Prepared by<\/div><div class="v">HITLOOP<\/div>/);
+  assert.match(html, /<p class="cb-byline" id="client-brief-byline">Rosita&#39;s Tacos · Nov 18, 2026 · Prepared by HITLOOP<\/p>/);
   assert.match(html, /family=Doto/);
   assert.match(html, /Space\+Grotesk/);
   assert.match(html, /id="client-brief-footer"/);
@@ -59,7 +58,7 @@ test('invoice look: INVOICE_CSS + brief base CSS, invoice hero/cover, meta strip
 
 test('## headings become brief-style sections, in source order, numbered 01..', () => {
   const html = render();
-  const order = ['Section 01', '>Snapshot<', 'Revenue:', '<table', '<ul', 'Sub heading', '<ol class="cb-list" start="3"', 'Section 02', '>Next steps<', '<blockquote', '<hr', '<pre'];
+  const order = ['id="client-brief-section-1"', '>Snapshot<', 'Revenue:', '<table', '<ul', 'Sub heading', '<ol class="cb-list" start="3"', 'id="client-brief-section-2"', '>Next steps<', '<blockquote', '<hr', '<pre'];
   let at = -1;
   for (const marker of order) {
     const next = html.indexOf(marker, at + 1);
@@ -67,7 +66,6 @@ test('## headings become brief-style sections, in source order, numbered 01..', 
     at = next;
   }
   assert.equal((html.match(/class="cb-section-head"/g) || []).length, 2);
-  assert.match(html, /<div class="cb-eyebrow"><span class="cb-dot"><\/span><span>Section 01<\/span><\/div>/);
   assert.match(html, /<span class="cb-sec-num" aria-hidden="true">02<\/span>/);
   assert.match(html, /<h2 class="cb-section-title">Snapshot<\/h2>/);
   // ### stays a sub-heading inside its section
