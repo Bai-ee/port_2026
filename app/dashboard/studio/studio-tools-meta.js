@@ -54,6 +54,13 @@ export const STUDIO_TOOLS_META = {
     image: '/img/og/studio-invoice.jpg',
     imageAlt: 'HITLOOP Invoice Studio — a live-editable invoice canvas',
   },
+  tapes: {
+    title: 'Tape Deck',
+    description:
+      'Before-and-after listening for restored DJ mixtapes: the original cassette on one deck, the cleaned-up version on the other.',
+    image: '/img/og/studio-tapes.jpg',
+    imageAlt: 'HITLOOP Tape Deck — two cassette decks, original and enhanced, side by side',
+  },
   brief: {
     title: 'Client Brief Studio',
     description:
