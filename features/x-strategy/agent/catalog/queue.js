@@ -53,7 +53,7 @@ export const QUEUE_ACTIONS = [
     tier: 3, external: 'paid', cost: 'About 2 metered X API read calls (verifyCredentials + users/me).' },
 
   { id: 'queue.draft.create', group: 'queue', title: 'Create a draft post',
-    description: 'Saves a new draft (status draft, never scheduled or posted). The route default when no action is sent.',
+    description: 'Saves a new draft (never scheduled/posted). Critters Quest video drafts: append "\\n\\nINTERNAL VIDEO BRIEF: howto=<id>" naming a request from video.howto.request.submit; free-text briefs still work.',
     route: 'social-posting', method: 'POST', action: 'draft',
     args: obj({ ...POST_FIELDS, platform: str('Platform key; default x.') }, ['content']), tier: 1 },
   { id: 'queue.reply-drafts.create', group: 'queue', title: 'Create reply drafts from targets',

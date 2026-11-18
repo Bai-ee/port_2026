@@ -29,7 +29,8 @@ export function planAttach(post, job, { force = false, now = new Date().toISOStr
   if (publicCopy.length > PUBLIC_MAX) return { ok: false, reason: 'public-copy-too-long' };
   if (!job.downloadUrl || !job.posterUrl) return { ok: false, reason: 'job-incomplete' };
   const agents = post.agents && typeof post.agents === 'object' ? { ...post.agents } : {};
-  agents.mediaGenerator = { status: 'complete', note: 'Attached brief video (CQ BriefCut template).', mediaUrl: job.downloadUrl, jobId: job.jobId };
+  const isHowto = job.kind === 'cq-howto';
+  agents.mediaGenerator = { status: 'complete', note: isHowto ? 'Attached how-to video (CQ HowTo template).' : 'Attached brief video (CQ BriefCut template).', mediaUrl: job.downloadUrl, jobId: job.jobId };
   const updated = {
     ...post,
     content: stripBrief(post.content),
@@ -41,7 +42,9 @@ export function planAttach(post, job, { force = false, now = new Date().toISOStr
     mediaStoragePath: job.outputPath || null,
     mediaJobId: job.jobId,
     posterUrl: job.posterUrl,
-    mediaMetadata: { source: 'cq-briefcut', templateVersion: job.templateVersion, width: job.width ?? null, height: job.height ?? null, durationInFrames: job.durationInFrames ?? null },
+    mediaMetadata: { source: isHowto ? 'cq-howto' : 'cq-briefcut', templateVersion: job.templateVersion, ...(isHowto ? { howtoId: job.howtoId ?? null, specHash: job.specHash ?? null } : {}), width: job.width ?? null, height: job.height ?? null, durationInFrames: job.durationInFrames ?? null },
+    // clear the visible brief status (set by the cron when a howto brief was waiting / invalid)
+    ...('videoBriefStatus' in post || 'videoBriefReason' in post ? { videoBriefStatus: null, videoBriefReason: null } : {}),
     agents,
     revision: (post.revision || 0) + 1,
     updatedAt: now,

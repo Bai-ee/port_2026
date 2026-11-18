@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { DAILY_BRIEF_VIDEO_CLIENTS, TEMPLATE_VERSION, MAX_ATTEMPTS, LOOKAHEAD_DAYS } from './clients.js';
+import { DAILY_BRIEF_VIDEO_CLIENTS, TEMPLATE_VERSION, HOWTO_TEMPLATE_VERSION, MAX_ATTEMPTS, LOOKAHEAD_DAYS } from './clients.js';
 import { parseBrief } from './brief.js';
 
 export const JOB_ID_RE = /^bv_[a-z0-9_]{6,40}$/;
@@ -7,6 +7,10 @@ export const JOB_ID_RE = /^bv_[a-z0-9_]{6,40}$/;
 /** Idempotent: the same post+brief+template+attempt always maps to the same job doc. */
 export const briefJobId = ({ postId, briefHash, templateVersion = TEMPLATE_VERSION, attempt = 1 }) =>
   'bv_' + createHash('sha256').update(`${postId}:${briefHash}:${templateVersion}:${attempt}`).digest('hex').slice(0, 20);
+
+/** cq-howto job id: also hashes the approved specHash, so a re-approved spec gets a fresh id. */
+export const howtoJobId = ({ postId, briefHash, specHash, attempt = 1 }) =>
+  'bv_' + createHash('sha256').update(`${postId}:${briefHash}:${HOWTO_TEMPLATE_VERSION}:${specHash}:${attempt}`).digest('hex').slice(0, 20);
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -23,22 +27,27 @@ export function addDaysIso(date, n) {
  */
 export const HOLD_RE = /\bHOLD\b/;
 
-export function selectCandidates(posts, { today, clients = DAILY_BRIEF_VIDEO_CLIENTS, lookaheadDays = LOOKAHEAD_DAYS } = {}) {
+export function selectCandidates(posts, { today, clients = DAILY_BRIEF_VIDEO_CLIENTS, lookaheadDays = LOOKAHEAD_DAYS, includeHowto = false } = {}) {
   const last = addDaysIso(today, lookaheadDays);
   return (posts || [])
     .filter((p) => p && clients[p.clientId] && p.status === 'draft' && !p.mediaUrl
       && DAY_RE.test(String(p.reviewOn || '')) && p.reviewOn >= today && p.reviewOn <= last)
     .map((post) => ({ post, parsed: parseBrief(post.content) }))
     .filter((c) => c.parsed && !HOLD_RE.test(c.parsed.brief))
+    // howto / invalid briefs never become a cq-brief job; with the howto flag on the worker still needs them (status + readiness).
+    .filter((c) => includeHowto || c.parsed.briefKind === 'freetext')
     .sort((a, b) => (a.post.reviewOn < b.post.reviewOn ? -1 : a.post.reviewOn > b.post.reviewOn ? 1 : String(a.post.id).localeCompare(String(b.post.id))));
 }
 
-export function newJobDoc({ post, parsed, attempt, now, videoClient = DAILY_BRIEF_VIDEO_CLIENTS[post.clientId] }) {
+export function newJobDoc({ post, parsed, attempt, now, videoClient = DAILY_BRIEF_VIDEO_CLIENTS[post.clientId], specHash = null }) {
+  if (parsed?.briefKind !== 'freetext' && !(parsed?.briefKind === 'howto' && specHash)) throw new Error(`newJobDoc: not renderable (briefKind=${parsed?.briefKind}${parsed?.briefKind === 'howto' ? ', no specHash' : ''})`);
   const iso = new Date(now).toISOString();
+  const howto = parsed.briefKind === 'howto' && Boolean(specHash);
   return {
     v: 1,
-    jobId: briefJobId({ postId: post.id, briefHash: parsed.briefHash, attempt }),
-    kind: 'cq-brief',
+    jobId: howto ? howtoJobId({ postId: post.id, briefHash: parsed.briefHash, specHash, attempt }) : briefJobId({ postId: post.id, briefHash: parsed.briefHash, attempt }),
+    kind: howto ? 'cq-howto' : 'cq-brief',
+    ...(howto ? { howtoId: parsed.howtoId, specHash } : {}),
     clientId: post.clientId,
     videoClient,
     postId: post.id,
@@ -46,7 +55,7 @@ export function newJobDoc({ post, parsed, attempt, now, videoClient = DAILY_BRIE
     brief: parsed.brief,
     briefHash: parsed.briefHash,
     hook: parsed.hook,
-    templateVersion: TEMPLATE_VERSION,
+    templateVersion: howto ? HOWTO_TEMPLATE_VERSION : TEMPLATE_VERSION,
     status: 'queued',
     createdAt: iso,
     updatedAt: iso,

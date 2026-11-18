@@ -11,7 +11,7 @@ const { safeSecretEquals } = require('../../../../api/_lib/auth.cjs');
 // and starts at most one new `brief_video_jobs` render for an allowlisted client's next brief draft. The Cloud Run
 // showcase-render service does the render; this route never renders or posts. Off unless DAILY_BRIEF_VIDEO_ENABLED=true.
 // ?dryRun=1 lists the parsed briefs and writes nothing (works while the flag is off). ?postId=&force=1 re-renders a
-// draft whose media came from a bv_ job. Same CRON_SECRET auth as instagram-token-refresh (fails closed in production).
+// draft whose media came from a bv_ job. `howto=<id>` briefs (CQ-HowTo) only render when CQ_HOWTO_ENABLED=true (worker.js). Same CRON_SECRET auth as instagram-token-refresh (fails closed in production).
 const isProduction = () => (process.env.VERCEL_ENV && process.env.VERCEL_ENV !== 'development') || process.env.NODE_ENV === 'production';
 
 function authorized(request) {
