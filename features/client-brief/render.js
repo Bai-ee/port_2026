@@ -1,7 +1,7 @@
 // Client Brief renderer (v3) - the INVOICE document look (invoice cover/hero,
-// meta strip, theme CSS, footer) with the pasted Markdown laid out as sections:
+// byline, theme CSS, footer) with the pasted Markdown laid out as sections:
 // each `##` heading opens a section with the brief section-header design
-// (eyebrow "SECTION 0N", outlined number, Doto title). Blocks stay exactly as
+// (outlined number + Doto title; no eyebrow labels). Blocks stay exactly as
 // parsed, in source order. Sections flow; nothing forces a page break.
 //
 // ONE renderer: the Studio canvas and the server publish route both call
@@ -125,8 +125,8 @@ function themeFontCss(theme) {
   const mono = fontStack(theme.fonts?.mono);
   return [
     `${sel('.cb-section-title')}, ${sel('.cb-sec-num')}, ${sel('.cb-h1')} { font-family:${display}; }`,
-    `${sel('.cb-eyebrow')}, ${sel('.cb-table th')}, ${sel('.cb-h4')}, ${sel('.cb-h5')}, ${sel('.cb-h6')}, ${sel('.cb-code')}, ${sel('.cb-pre')}, ${sel('.cb-footer')} { font-family:${mono}; }`,
-    `${sel('.cb-content')}, ${sel('.cb-h3')}, ${sel('.cb-table td')} { font-family:${body}; }`,
+    `${sel('.cb-table th')}, ${sel('.cb-h4')}, ${sel('.cb-h5')}, ${sel('.cb-h6')}, ${sel('.cb-code')}, ${sel('.cb-pre')}, ${sel('.cb-footer')} { font-family:${mono}; }`,
+    `${sel('.cb-content')}, ${sel('.cb-byline')}, ${sel('.cb-h3')}, ${sel('.cb-table td')} { font-family:${body}; }`,
   ].join('\n');
 }
 
@@ -155,7 +155,7 @@ function darkThemePrintCss(theme) {
 }
 
 // ── CSS ─────────────────────────────────────────────────────────────────
-// Layered on INVOICE_CSS (cover/hero, meta strip, link + PDF-button styles).
+// Layered on INVOICE_CSS (cover/hero, link + PDF-button styles); the cover has a plain byline.
 // Never wraps a whole section in .invoice-block / section.page: both force a
 // page jump in print (INVOICE_CSS `.invoice-block{break-inside:avoid}`,
 // BRIEF_CSS `section.page{page-break-after:always}`), so sections use their own
@@ -164,10 +164,8 @@ function darkThemePrintCss(theme) {
 export const CLIENT_BRIEF_CSS = `
   .cb-doc .cb-sheet{max-width:860px;margin:0 auto;padding:clamp(22px,4vw,44px) clamp(16px,4vw,40px) clamp(28px,5vw,52px)}
   .cb-doc .cb-cover{padding-bottom:16px;margin-bottom:20px}
-  .cb-doc .cb-cover-eyebrow{margin:0 0 8px}
+  .cb-doc .cb-byline{margin:14px 0 0;padding-top:12px;border-top:1px solid var(--line);font-family:inherit;font-size:15px;letter-spacing:0;text-transform:none;color:var(--ink-soft)}
   .cb-doc .cb-cover .invoice-hero-title{font-size:clamp(28px,5.4vw,52px);overflow-wrap:anywhere}
-  .cb-doc .cb-eyebrow{display:flex;align-items:center;gap:10px;margin:0 0 6px;font-family:"Space Mono",ui-monospace,monospace;font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-soft)}
-  .cb-doc .cb-eyebrow .cb-dot{width:6px;height:6px;border-radius:50%;background:var(--ink);flex:0 0 auto}
   .cb-doc .cb-content{font-family:"Space Grotesk",system-ui,sans-serif;font-size:14.5px;line-height:1.6;color:var(--ink);overflow-wrap:anywhere}
   .cb-doc .cb-intro{margin:0 0 22px}
   .cb-doc .cb-section{margin:0 0 26px}
@@ -206,18 +204,14 @@ export const CLIENT_BRIEF_CSS = `
     html,body{background:var(--bg) !important;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact}
     .cb-doc .cb-sheet{max-width:none;margin:0;padding:0}
     .cb-doc .cb-cover{padding-bottom:7pt;margin-bottom:10pt}
-    .cb-doc .cb-cover-eyebrow{font-size:7.5pt;margin:0 0 3pt}
+    .cb-doc .cb-byline{font-size:9pt;margin:6pt 0 0;padding-top:5pt}
     .cb-doc .cb-cover .invoice-hero-title{font-size:21pt;line-height:1}
     .cb-doc .cb-cover .invoice-hero-mark{margin:0}
     .cb-doc .cb-cover .invoice-hero-mark > img{max-height:34px;max-width:90px}
-    .cb-doc .cb-cover .meta{margin-top:7pt;padding-top:7pt;gap:4pt 22pt}
-    .cb-doc .cb-cover .meta .k{font-size:6.5pt;margin-bottom:2pt}
-    .cb-doc .cb-cover .meta .v{font-size:9pt}
     .cb-doc .cb-content{font-size:10pt;line-height:1.42}
     .cb-doc .cb-intro{margin-bottom:11pt}
     .cb-doc .cb-section{margin-bottom:12pt}
     .cb-doc .cb-section-head{margin-bottom:7pt;padding-bottom:5pt}
-    .cb-doc .cb-eyebrow{font-size:7pt;margin-bottom:3pt}
     .cb-doc .cb-section-title{font-size:15pt}
     .cb-doc .cb-sec-num{font-size:26pt}
     .cb-doc .cb-h{margin:9pt 0 3pt}
@@ -274,7 +268,6 @@ function renderSection(section, index) {
   return `<section class="cb-section" id="${id}" data-section="${id}">
   <header class="cb-section-head" id="${id}-header">
     <div class="cb-section-heading">
-      <div class="cb-eyebrow"><span class="cb-dot"></span><span>Section ${num}</span></div>
       <h2 class="cb-section-title">${renderInline(section.heading.tokens)}</h2>
     </div>
     <span class="cb-sec-num" aria-hidden="true">${num}</span>
@@ -329,16 +322,11 @@ export function renderClientBriefDocument(model, options = {}) {
     <header class="invoice-hero cb-cover" id="client-brief-cover">
       <div class="invoice-hero-mark">
         <div class="invoice-hero-text">
-          <p class="invoice-hero-sub cb-cover-eyebrow" id="client-brief-doc-label">Client Brief</p>
           <h1 class="invoice-hero-title" id="client-brief-title">${esc(title)}</h1>
         </div>
         ${mark}
       </div>
-      <div class="meta" id="client-brief-meta">
-        <div><div class="k">Client</div><div class="v">${esc(clientName || '—')}</div></div>
-        <div><div class="k">Date</div><div class="v">${esc(asOf || '—')}</div></div>
-        <div><div class="k">Prepared by</div><div class="v">HITLOOP</div></div>
-      </div>
+      <p class="cb-byline" id="client-brief-byline">${[clientName, asOf, 'Prepared by HITLOOP'].filter(Boolean).map(esc).join(' · ')}</p>
     </header>
     <div class="cb-content" id="client-brief-content">
       ${intro.length ? `<section class="cb-intro" id="client-brief-intro">${intro.map(renderBlock).join('\n')}</section>` : ''}
