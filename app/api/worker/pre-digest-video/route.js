@@ -29,7 +29,7 @@ const {
   enqueueVideoJob,
   triggerWorker,
   listSourceFolders,
-  listFolderMedia,
+  listFolderClipsForSelection,
   listOptions,
 } = require('../../../../api/_lib/editvideos-bridge.cjs');
 
@@ -55,7 +55,7 @@ const DAILY_EMAIL_VIDEO_PRODUCTION = Object.freeze({
   // antiRepeatLookback: clips used by the last N video-remix jobs are only
   // re-picked after every unused eligible clip has had a turn, so runs cycle
   // through the folder instead of re-rolling the same favorites.
-  videoOrder: { enabled: true, segmentCount: 6, minSizeBytes: 5 * 1024 * 1024, antiRepeatLookback: 3 },
+  videoOrder: { enabled: true, segmentCount: 6, minSizeBytes: 5 * 1024 * 1024, antiRepeatLookback: 10 },
   recipe: {
     filter: { key: 'look_hard_bw_street_doc', intensity: 0.8 },
     logos: { top: 'ue_barcode_white.png', end: 'mixtapes_white_square.png' },
@@ -151,7 +151,7 @@ async function buildDailyEmailVideoOrder(sourceFolders, clientId, production = D
 
   const folder = sourceFolders[0];
   const segmentCount = Math.max(1, Number(production.videoOrder.segmentCount || 6));
-  const media = await listFolderMedia(folder, { limit: 120 });
+  const media = await listFolderClipsForSelection(folder);
   const files = Array.isArray(media?.files) ? media.files : [];
 
   // Shuffle + anti-repeat now live in the shared selector so the Video Remix

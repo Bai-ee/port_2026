@@ -11,7 +11,7 @@ Frozen plan for making the Video Remix card (and the shared card-face video shel
 - The dashboard grid autoplayed multiple looping MP4s at once (Video Remix shell, Mockup Studio shell, Post Me mockup) that kept decoding while scrolled off-screen → scroll jank.
 - No posters, no pagination, no lazy loading.
 
-Explicitly NOT a bottleneck: server-side signed-URL generation (`getSignedUrl` v4 is local crypto, plus `listFolderMedia` caches per `folder:limit` in `editvideos-bridge.cjs`). The original "split metadata from preview URLs" idea was dropped for this reason.
+Explicitly NOT a bottleneck: server-side signed-URL generation (`getSignedUrl` v4 is local crypto, plus `listFolderMedia` caches per `folder:limit` in `editvideos-bridge.cjs`). The original "split metadata from preview URLs" idea was dropped for this reason. (The selector-only lister `listFolderClipsForSelection` skips signed URLs for clip selection only; it does not reopen that decision for display paths.)
 
 ## Phase 1 — lazy loading + pagination + off-screen pause (SHIPPED)
 
@@ -50,7 +50,7 @@ posters, i.e. the SAVED ASSETS / card-face video) remain **undone**:
 
 ## Phase 4 — only if needed after Phase 3
 
-- Real cursor pagination on `listFolderMedia` (not a growing limit) if folders exceed 120 files.
+- Real cursor pagination on `listFolderMedia` (not a growing limit) if folders exceed 120 files. (Covered for clip selection by `listFolderClipsForSelection`; still open for the manual picker/catalog display paths.)
 - Archive/hidden state for old remixes so history doesn't ride the active card UI forever (Firestore keeps 40 either way).
 - Dropped for good: metadata/signed-URL split (see Diagnosis).
 
