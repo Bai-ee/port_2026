@@ -127,11 +127,20 @@ const ruleForTrack = (track, rules) => {
   const hit = (track?.buckets || []).map((b) => rules[b]).find((r) => isPlain(r) && Number(r.perDay) >= 0);
   return hit ? { ...hit, perDay: Number(hit.perDay) } : null;
 };
-const matchesRule = (p, rule) => {
+export const matchesRule = (p, rule) => {
   const artists = Array.isArray(rule.artists) ? rule.artists.map((a) => String(a).toLowerCase()) : [];
   if (!artists.length) return true;
   if (p?.status === 'retired' || p?.mediaState !== 'video') return false;
   return (p.entities || []).some((e) => artists.includes(String(e).toLowerCase()));
+};
+// preferCurated (only applies with newestFirst): an owner-approved, never-used rv- video leads, oldest approval first
+// (FIFO); a missing or invalid curation.at sorts last. Ties fall through to newestUnusedFirst (which ends on id).
+const approvedAtMs = (c) => { const t = Date.parse(c.p.curation?.at); return Number.isFinite(t) ? t : Infinity; };
+const curatedFirst = (a, b) => {
+  if (a.curated !== b.curated) return a.curated ? -1 : 1;
+  if (!a.curated) return 0;
+  const x = approvedAtMs(a); const y = approvedAtMs(b);
+  return x === y ? 0 : x < y ? -1 : 1;
 };
 // Never-used first, newest render first (the morning's render leads); then least recently used, oldest use first.
 const newestUnusedFirst = (a, b) => (a.prior ? 1 : 0) - (b.prior ? 1 : 0)
@@ -152,11 +161,13 @@ const newestUnusedFirst = (a, b) => (a.prior ? 1 : 0) - (b.prior ? 1 : 0)
  *   lastUsed                   Map packageId -> 'YYYY-MM-DD' last posted / dated day (the 30-day spread)
  *   quoteTargets               [{id,url,text,author|handle,createdAt,trackId?}] open quote candidates; asOf.quotes
  *   marketSignals              shapeMarketSignals output (topics/opportunities); asOf.signals
- *   trackRules                 { [bucketId]: {perDay, artists?, newestFirst?, sameDay?} } overrides for a bucket's track (daily-mix-rule.js):
+ *   trackRules                 { [bucketId]: {perDay, artists?, newestFirst?, sameDay?, preferCurated?} } overrides for a bucket's track (daily-mix-rule.js):
  *                              perDay replaces the engine target; artists limits the pool to non-retired videos by those
- *                              artists; newestFirst ranks never-used items newest render first, then least recently used;
+ *                              artists; preferCurated ranks owner-approved (curation.state 'approved'), never-used items first,
+ *                              oldest approval first, and drops rejected ones from the pool; newestFirst ranks never-used items newest render first, then least recently used;
  *                              sameDay plans that track for `today` only (never days ahead) and, when a render newer than
- *                              every draft already holding today has arrived, adds it as today's draft anyway
+ *                              every draft already holding today has arrived, adds it as today's draft anyway (not when a
+ *                              held draft is already an approved curated pick)
  *   excludePackageIds          package ids that are never picked (the item the owner just replaced)
  *   replace                    {bucketId} replace-one-item mode: only the track(s) listing that bucket are filled, rejected earlier
  *                              fills no longer hold their slot, and at most ONE row is planned. Normal fills leave this unset.
@@ -192,7 +203,7 @@ export function planDailyFill({
     const perDay = rule ? rule.perDay : trackPostsPerDay(track, engineTargets);
     if (perDay <= 0) continue;
     const pool = (kind === 'client-work' && Array.isArray(clientWork) ? clientWork : packages)
-      .filter((p) => p?.id && trackForPackage(tracks, p)?.id === track.id && (!rule || matchesRule(p, rule)));
+      .filter((p) => p?.id && trackForPackage(tracks, p)?.id === track.id && (!rule || matchesRule(p, rule)) && (!rule?.preferCurated || p.curation?.state !== 'rejected')); // a rejected video is never picked and never feeds the sameDay override
     const buckets = new Set(track.buckets || []);
     const throwback = isThrowbackTrack(track);
     const pkgById = throwback ? new Map((packages || []).filter((p) => p?.id).map((p) => [p.id, p])) : null;
@@ -210,7 +221,9 @@ export function planDailyFill({
       if (kind === 'client-work') slots = Math.min(slots, 1 - (clientWorkDay.get(date) || 0));
       // sameDay: a newer render than every (non-rejected) draft holding today gets its own draft; the older drafts stay
       // for the owner to pass or delete. A rerun sees the new render already queued and adds nothing.
-      if (sameDay && slots <= 0) {
+      // preferCurated: a held draft whose package is approved already is today's curated pick; a newer render must not add a second.
+      const heldCurated = !!rule?.preferCurated && holding.some((f) => f.status !== 'rejected' && pool.find((p) => p.id === f.packageId)?.curation?.state === 'approved');
+      if (sameDay && slots <= 0 && !heldCurated) {
         const heldAt = holding.filter((f) => f.status !== 'rejected').map((f) => renderedOf(f.packageId));
         const newest = pool.filter((p) => !used.has(p.id) && !lastOf(p.id) && !openOf(p.id)).map((p) => String(p.renderedAt || '')).sort().pop() || '';
         if (newest && heldAt.every((r) => r < newest)) slots = 1;
@@ -228,10 +241,11 @@ export function planDailyFill({
         const placeable = open && typeof open === 'object' && open.status === 'draft' && !open.scheduledAt && !open.reviewOn && open.postId;
         if (open && !placeable) { skip({ date, packageId: p.id, reason: 'already-queued' }); continue; }
         const tier = dated ? 0 : mediaReady(p) ? 1 : 2;
-        ranked.push({ p, dated: !!dated, tier, prior, existingPostId: placeable ? open.postId : null });
+        const curated = !!rule?.preferCurated && p.curation?.state === 'approved' && !prior; // use-once: after a use it ranks as a normal LRU item
+        ranked.push({ p, dated: !!dated, tier, prior, curated, existingPostId: placeable ? open.postId : null });
       }
       if (throwback) ranked.sort(throwbackRank);
-      else if (rule?.newestFirst) ranked.sort(newestUnusedFirst);
+      else if (rule?.newestFirst) ranked.sort((a, b) => curatedFirst(a, b) || newestUnusedFirst(a, b));
       else ranked.sort((a, b) => a.tier - b.tier || (a.prior || '').localeCompare(b.prior || '') || String(a.p.id).localeCompare(String(b.p.id)));
       // A rule track holds many renders of the same mix: one title per fill window, so days don't repeat a mix.
       const picks = rule ? ranked.filter((c) => !ruleTitles.has(titleKey(c.p))) : ranked;
@@ -244,6 +258,7 @@ export function planDailyFill({
           text: draftTextFor(c.p), needsStory: needsOwnerStory(c.p), engine: resolveEngine(c.p),
           nasSha: typeof c.p.nas?.sha256 === 'string' ? c.p.nas.sha256 : null,
           reason: c.dated ? `event date ${md} falls on this day`
+            : c.curated ? 'owner-approved curated video'
             : `${c.tier === 1 ? 'media ready' : 'library item'}; ${c.prior ? `last used ${c.prior}` : 'not used before'}`,
           source: { type: 'library-item', id: c.p.id, asOf: today },
           ...(c.existingPostId ? { existingPostId: c.existingPostId } : {}),

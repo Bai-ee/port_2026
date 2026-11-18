@@ -261,6 +261,107 @@ test('sameDay rule (daily mix): today only; the morning render lands today even 
   assert.ok(all.rows.some((r) => r.trackId === 'record' && r.date === '2026-10-19'));
 });
 
+// ---- preferCurated (Video Remix P2c) ---------------------------------------------------------------------------------
+const cur = (state, at) => ({ curation: { state, at, by: 'owner' } });
+const crv = (id, renderedAt, extra = {}) => pkg(id, 'ue', { ...ready, entities: ['BAI-EE'], title: id, renderedAt, ...extra });
+const curFill = (packageId, reviewOn = TODAY, status = 'draft') => ({ postId: `p-${packageId}`, status, reviewOn, fillKind: 'baseline', bucketId: 'ue', packageId });
+const curRun = async (packages, extra = {}, rule = {}) => {
+  const { DAILY_MIX_RULE } = await import('../daily-mix-rule.js');
+  return planDailyFill({ tracks, packages, from: TODAY, days: 7, today: TODAY, include: ['baseline'], trackRules: { ue: { ...DAILY_MIX_RULE, ...rule } }, ...extra }).rows.filter((r) => r.trackId === 'ue');
+};
+
+test('preferCurated: DAILY_MIX_RULE turns it on', async () => {
+  const { DAILY_MIX_RULE } = await import('../daily-mix-rule.js');
+  assert.equal(DAILY_MIX_RULE.preferCurated, true);
+});
+
+test('preferCurated: an approved unused video beats a newer non-curated render on today', async () => {
+  const packages = [crv('rv-a', '2026-10-10T06:00:00Z', cur('approved', '2026-10-11T00:00:00Z')), crv('rv-new', '2026-10-17T06:00:00Z')];
+  assert.deepEqual((await curRun(packages)).map((r) => r.packageId), ['rv-a']);
+});
+
+test('preferCurated: two approved, the older approval wins (FIFO)', async () => {
+  const packages = [crv('rv-a', '2026-10-01T06:00:00Z', cur('approved', '2026-10-12T00:00:00Z')), crv('rv-b', '2026-10-09T06:00:00Z', cur('approved', '2026-10-11T00:00:00Z'))];
+  assert.deepEqual((await curRun(packages)).map((r) => r.packageId), ['rv-b']);
+});
+
+test('preferCurated: an approved video already used is not preferred (falls back to the fresh render)', async () => {
+  const packages = [crv('rv-a', '2026-10-01T06:00:00Z', cur('approved', '2026-10-11T00:00:00Z')), crv('rv-new', '2026-10-17T06:00:00Z')];
+  assert.deepEqual((await curRun(packages, { lastUsed: new Map([['rv-a', '2026-10-05']]) })).map((r) => r.packageId), ['rv-new']);
+});
+
+test('preferCurated: nothing approved behaves exactly like the plain sameDay rule', async () => {
+  const packages = [crv('rv-old', '2026-09-01T06:03:00Z'), crv('rv-mid', '2026-10-10T06:03:00Z'), crv('rv-today', '2026-10-17T06:03:00Z', cur('pending'))];
+  const held = { fillPosts: [curFill('rv-mid')], openPosts: new Set(['rv-mid']) };
+  assert.deepEqual((await curRun(packages)).map((r) => r.packageId), ['rv-today']);
+  assert.deepEqual((await curRun(packages, held)).map((r) => r.packageId), ['rv-today']);
+  assert.deepEqual(await curRun(packages, { fillPosts: [curFill('rv-today')], openPosts: new Set(['rv-today']) }), []);
+});
+
+test('preferCurated GATING: today held by a curated draft, a fresh render arrives: rerun adds nothing, twice', async () => {
+  const packages = [crv('rv-a', '2026-10-10T06:00:00Z', cur('approved', '2026-10-11T00:00:00Z')), crv('rv-new', '2026-10-17T06:00:00Z')];
+  assert.deepEqual((await curRun(packages)).map((r) => r.packageId), ['rv-a']);
+  // As in production, the held draft's item is lastUsed = today (route-handlers).
+  const held = () => ({ fillPosts: [curFill('rv-a')], openPosts: new Set(['rv-a']), lastUsed: new Map([['rv-a', TODAY]]) });
+  assert.deepEqual(await curRun(packages, held()), []);
+  assert.deepEqual(await curRun(packages, held()), []); // second rerun, same state
+});
+
+test('preferCurated GATING: today held by an older render, a newer render triggers the override which picks curated; reruns add nothing', async () => {
+  const packages = [crv('rv-mid', '2026-10-10T06:00:00Z'), crv('rv-new', '2026-10-17T06:00:00Z'), crv('rv-a', '2026-10-05T06:00:00Z', cur('approved', '2026-10-11T00:00:00Z'))];
+  const held = { fillPosts: [curFill('rv-mid')], openPosts: new Set(['rv-mid']), lastUsed: new Map([['rv-mid', TODAY]]) };
+  assert.deepEqual((await curRun(packages, held)).map((r) => r.packageId), ['rv-a']);
+  const after = { fillPosts: [curFill('rv-mid'), curFill('rv-a')], openPosts: new Set(['rv-mid', 'rv-a']), lastUsed: new Map([['rv-mid', TODAY], ['rv-a', TODAY]]) };
+  assert.deepEqual(await curRun(packages, after), []);
+  assert.deepEqual(await curRun(packages, after), []);
+});
+
+test('preferCurated: an older held non-curated render, no newer render, approved item waiting: rerun adds nothing', async () => {
+  const packages = [crv('rv-mid', '2026-10-10T06:00:00Z'), crv('rv-a', '2026-10-05T06:00:00Z', cur('approved', '2026-10-11T00:00:00Z'))];
+  const held = { fillPosts: [curFill('rv-mid')], openPosts: new Set(['rv-mid']), lastUsed: new Map([['rv-mid', TODAY]]) };
+  assert.deepEqual(await curRun(packages, held), []);
+});
+
+test('preferCurated: a calendar-rejected curated draft plus a held non-curated replacement: rerun adds nothing', async () => {
+  const packages = [crv('rv-a', '2026-10-05T06:00:00Z', cur('approved', '2026-10-11T00:00:00Z')), crv('rv-mid', '2026-10-10T06:00:00Z')];
+  const held = { fillPosts: [curFill('rv-a', TODAY, 'rejected'), curFill('rv-mid')], openPosts: new Set(['rv-mid']), lastUsed: new Map([['rv-mid', TODAY]]) };
+  assert.deepEqual(await curRun(packages, held), []);
+});
+
+test('preferCurated: a missing or invalid curation.at sorts last among approved', async () => {
+  const packages = [crv('rv-x', '2026-10-01T06:00:00Z', { curation: { state: 'approved' } }), crv('rv-y', '2026-10-02T06:00:00Z', { curation: { state: 'approved', at: 'garbage' } }), crv('rv-b', '2026-10-09T06:00:00Z', cur('approved', '2026-10-12T00:00:00Z'))];
+  assert.deepEqual((await curRun(packages)).map((r) => r.packageId), ['rv-b']);
+});
+
+test('preferCurated: a rejected newest render is never picked and grants no override slot', async () => {
+  const packages = [crv('rv-mid', '2026-10-10T06:00:00Z'), crv('rv-rej', '2026-10-17T06:00:00Z', cur('rejected', '2026-10-17T07:00:00Z'))];
+  assert.deepEqual((await curRun(packages)).map((r) => r.packageId), ['rv-mid']);
+  assert.deepEqual(await curRun(packages, { fillPosts: [curFill('rv-mid')], openPosts: new Set(['rv-mid']) }), []);
+});
+
+test('preferCurated: a rejected video never appears over 4 days with sameDay off', async () => {
+  const packages = [crv('rv-rej', '2026-10-17T06:00:00Z', cur('rejected')), crv('rv-1', '2026-10-01T06:00:00Z'), crv('rv-2', '2026-10-02T06:00:00Z', { title: 'two' }), crv('rv-3', '2026-10-03T06:00:00Z', { title: 'three' }), crv('rv-4', '2026-10-04T06:00:00Z', { title: 'four' })];
+  const rows = await curRun(packages, { days: 4 }, { sameDay: false });
+  assert.equal(rows.length, 4);
+  assert.ok(!rows.some((r) => r.packageId === 'rv-rej'));
+});
+
+test('preferCurated off: approved items rank like any render', async () => {
+  const packages = [crv('rv-a', '2026-10-10T06:00:00Z', cur('approved', '2026-10-11T00:00:00Z')), crv('rv-new', '2026-10-17T06:00:00Z')];
+  assert.deepEqual((await curRun(packages, {}, { preferCurated: false })).map((r) => r.packageId), ['rv-new']);
+});
+
+test('preferCurated: an approved non-BAI-EE video is never picked', async () => {
+  const packages = [crv('rv-x', '2026-10-10T06:00:00Z', { entities: ['Other DJ'], ...cur('approved', '2026-10-11T00:00:00Z') }), crv('rv-new', '2026-10-17T06:00:00Z')];
+  assert.deepEqual((await curRun(packages)).map((r) => r.packageId), ['rv-new']);
+});
+
+test('preferCurated: replace mode for ue picks the next curated item', async () => {
+  const packages = [crv('rv-a', '2026-10-01T06:00:00Z', cur('approved', '2026-10-11T00:00:00Z')), crv('rv-b', '2026-10-02T06:00:00Z', cur('approved', '2026-10-12T00:00:00Z')), crv('rv-new', '2026-10-17T06:00:00Z')];
+  const rows = await curRun(packages, { replace: { bucketId: 'ue' }, excludePackageIds: ['rv-a'], fillPosts: [curFill('rv-a', TODAY, 'rejected')] });
+  assert.deepEqual(rows.map((r) => r.packageId), ['rv-b']);
+});
+
 test('excludePackageIds: an excluded package is never picked; spec carries it only when given', () => {
   const base = plan({ days: 1, include: ['baseline'] });
   const first = where(base, 'baseline').find((r) => r.trackId === 'record');
