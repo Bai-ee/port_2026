@@ -141,6 +141,26 @@ test('readBriefRaw: injected readers, non-fatal sub-reads, no scoutBrief re-read
   await assert.rejects(() => readBriefRaw('', { db }));
 });
 
+test('readBriefRaw: publishedBrief ignores admin-only client briefs even when newer', async () => {
+  const doc = (data) => ({ exists: !!data, data: () => data });
+  const rows = [
+    { id: 'client-brief-20261118-aaaaaaaaaaaaaaaa', data: () => ({ kind: 'client-brief', publicClientSlug: 'cc', publicBriefSlug: 'client-brief-20261118-aaaaaaaaaaaaaaaa', updatedAt: hoursAgo(1) }) },
+    { id: 'daily-1', data: () => ({ publicClientSlug: 'cc', publicBriefSlug: 'bb', updatedAt: hoursAgo(30) }) },
+  ];
+  const db = {
+    collection: () => ({
+      doc: () => ({
+        get: async () => doc(null),
+        collection: () => ({ doc: () => ({ get: async () => doc(null) }), where: () => ({ limit: () => ({ get: async () => ({ docs: rows }) }) }) }),
+      }),
+    }),
+  };
+  const r = await readBriefRaw('c1', { db, projectBrief: () => ({}) });
+  assert.equal(r.publishedBrief.path, '/briefs/cc/bb');
+  rows.pop();
+  assert.equal((await readBriefRaw('c1', { db, projectBrief: () => ({}) })).publishedBrief, null);
+});
+
 test('get_brief / get_freshness tools: model never supplies clientId, bad part rejected, unavailable without the dep', async () => {
   assert.ok(READ_TOOLS.find((t) => t.name === 'get_brief').input_schema.properties.part.enum.includes('analysis'));
   const calls = [];

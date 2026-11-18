@@ -56,7 +56,7 @@ export async function POST(request) {
   const limit = await checkRateLimit(server.services.counters(), `mcp:${auth.email}`, { now: now(), cost: rpcCost(body) });
   if (!limit.allowed) return json({ error: `Rate limit: ${limit.limit} calls per 10 minutes.` }, 429, { 'retry-after': String(limit.retryAfterSec) });
 
-  const ctx = { db: server.db, email: auth.email, uid: await uidForEmail(auth.email), clientId: server.defaultClientId, now, services: server.services };
+  const ctx = { db: server.db, email: auth.email, uid: await uidForEmail(auth.email), clientId: server.defaultClientId, origin, now, services: server.services };
   const out = await handleRpc(body, {
     registry, ctx, instructions: server.getInstructions(),
     onCall: ({ tool, args, ok, ms }) => server.audit.write(auditEntry({ now: now(), email: auth.email, tool, args, ok, ms })),

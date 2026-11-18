@@ -1,5 +1,6 @@
 import { createRequire } from 'module';
 import {
+  briefPrivacyHeaders,
   contentDispositionFileName,
   fb,
   resolvePublicBrief,
@@ -112,6 +113,7 @@ export async function GET(_request, context) {
       'content-length': String(buffer.length),
       'content-disposition': contentDispositionFileName(fileName),
       'cache-control': 'private, max-age=0, no-transform',
+      ...(briefPrivacyHeaders(resolved.brief) || {}),
     },
   });
 }

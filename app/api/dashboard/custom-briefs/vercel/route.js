@@ -119,6 +119,9 @@ export async function POST(request) {
     }
 
     const brief = snapshot.data() || {};
+    if (brief.kind === 'client-brief') {
+      return NextResponse.json({ error: 'Client briefs are not deployed to Vercel.' }, { status: 400 });
+    }
     if (!brief.html) {
       return NextResponse.json({ error: 'Custom brief has no HTML to deploy.' }, { status: 400 });
     }
