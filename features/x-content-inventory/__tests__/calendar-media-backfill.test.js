@@ -108,3 +108,12 @@ test('backfill: a failing write is reported per post and never stops the pass; b
   assert.deepEqual(r.attached, ['p-2']);
   assert.equal((await backfillCalendarMedia(deps, { clientId: 'c1', from: 'soon' })).ok, false);
 });
+
+test('backfill: a draft still carrying an internal video brief gets no library media', async () => {
+  const packages = [discogs('discogs-1', '1')];
+  const drafts = [post('p-brief', 'discogs-1', { content: 'Copy.\n\nINTERNAL VIDEO BRIEF: 15s' }), post('p-plain', 'discogs-1', { content: 'Copy.' })];
+  const { deps, applied } = fakeDeps({ drafts, packages });
+  const r = await backfillCalendarMedia(deps, { clientId: 'c1', from: '2026-10-22', days: 7 });
+  assert.deepEqual(r.attached, ['p-plain']);
+  assert.equal(applied.length, 1);
+});

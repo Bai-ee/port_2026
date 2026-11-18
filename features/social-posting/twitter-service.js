@@ -695,7 +695,17 @@ async function uploadPostMedia(media) {
   return mediaId || null;
 }
 
+// An internal video brief rides in a draft's content until the video is attached (features/brief-video). It must never
+// go out publicly, so approval and every publish refuse content that still carries it.
+const INTERNAL_BRIEF_RE = /INTERNAL VIDEO BRIEF/i;
+function assertNoInternalBrief(...texts) {
+  if (texts.some((t) => INTERNAL_BRIEF_RE.test(String(t ?? '')))) {
+    throw Object.assign(new Error('This post still contains an internal video brief. Attach the video (or remove the brief) before approving or publishing.'), { status: 409, code: 'internal-brief-present' });
+  }
+}
+
 export async function postToTwitter(content, media = null, { clientId, platform = 'x', selfReply = null, idempotencyKey = null } = {}) {
+  assertNoInternalBrief(content, selfReply?.text);
   const text = normalizePostText(content);
   if (!text) {
     const err = new Error('Post content is required.');
@@ -774,6 +784,7 @@ async function publishStoredPost(post, now) {
     const result = { twitterId: post.twitterId, apiVersion: post.apiVersion || 'v2' };
     if (!owed) return { ...result, ...selfReplyFields(post, post, now) };
     try {
+      assertNoInternalBrief(post.selfReply?.text);
       const reply = await getAdapter(platform).publishReply({ clientId: post.clientId, inReplyToTweetId: post.twitterId, text: post.selfReply.text || '', media: post.selfReply });
       return { ...result, selfReplyTwitterId: reply.twitterId, selfReplyError: null };
     } catch (error) {
@@ -1074,6 +1085,7 @@ function sanitizeFillSource(v) {
 }
 
 export async function postNow(clientId, payload) {
+  assertNoInternalBrief(payload.content, payload.selfReply?.text);
   assertNoMemoryPlaceholder(normalizePostText(payload.content));
   assertNoMemoryPlaceholder(payload.selfReply?.text);
   const draft = await createSocialPost(clientId, { ...payload, status: 'posting' });
@@ -1387,6 +1399,7 @@ function approveInMemory(post, reviewedBy) {
   if (post.status !== 'draft') {
     throw Object.assign(new Error(`Only a draft can be approved (this post is ${post.status}).`), { status: 409, code: 'not-draft' });
   }
+  assertNoInternalBrief(post.content, post.selfReply?.text);
   post = stripPlaceholdersFromPost(post);
   const now = new Date().toISOString();
   const approved = {
@@ -1874,6 +1887,12 @@ async function postAndRecord(snapshot) {
     await settleClaimed(post, held);
     return { ok: false, updated: held };
   }
+  // Internal video brief guard: park as a draft (not failed / needs_review) so the owner just attaches the video.
+  if (INTERNAL_BRIEF_RE.test(String(post.content ?? '')) || INTERNAL_BRIEF_RE.test(String(post.selfReply?.text ?? ''))) {
+    const updated = { ...post, status: 'draft', error: 'internal-brief-present: the post still contains an internal video brief.', errorClass: 'internal-brief-present', updatedAt: new Date().toISOString() };
+    await settleClaimed(post, updated);
+    return { ok: false, updated };
+  }
   // Placeholder guard (same rule as post-now/schedule): never publish a draft
   // that still says "[add your memory]". Park it as a draft with a reason.
   if (hasMemoryPlaceholder(post.content) || hasMemoryPlaceholder(post.selfReply?.text)) {
@@ -1933,6 +1952,9 @@ let instagramLegDeps = null;
 export function __setInstagramLegDepsForTest(deps) { instagramLegDeps = deps; }
 
 async function runInstagramLeg(post) {
+  if (INTERNAL_BRIEF_RE.test(String(post.content ?? ''))) {
+    return { status: 'blocked', error: 'This post still contains an internal video brief.', at: new Date().toISOString() };
+  }
   const deps = instagramLegDeps || {
     getAccount: async (clientId) => (await import('./social-accounts.js')).getSocialAccount(clientId, 'instagram'),
     publish: async (payload, opts) => (await import('./adapters/instagram.js')).publish(payload, opts),
@@ -2229,6 +2251,7 @@ export async function retrySelfReply(clientId, postId) {
   if (post.selfReplyTwitterId) return post;
   if ((post.platform || 'x') !== 'x') throw Object.assign(new Error('Self-reply is only supported on X.'), { status: 400 });
   assertNoMemoryPlaceholder(post.selfReply.text);
+  assertNoInternalBrief(post.selfReply.text);
   const now = new Date().toISOString();
   try {
     const reply = await getAdapter(post.platform || 'x').publishReply({

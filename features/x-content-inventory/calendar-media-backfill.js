@@ -56,7 +56,7 @@ export async function backfillCalendarMedia(deps, { clientId, from, days = 7 } =
   const out = { ok: true, window: { from, to }, attached: [], staging: [], lent: [], bare: [], failed: [] };
   const drafts = ((await deps.readDrafts(clientId)) || []).filter((p) => {
     const day = dayOf(p);
-    return BACKFILL_STATUSES.includes(p?.status) && p.packageId && !p.mediaUrl && day && day >= from && day <= to;
+    return BACKFILL_STATUSES.includes(p?.status) && p.packageId && !p.mediaUrl && !/INTERNAL VIDEO BRIEF/i.test(String(p.content ?? '')) && day && day >= from && day <= to;
   });
   if (!drafts.length) return out;
   const packages = (await deps.readPackages(clientId)) || [];
