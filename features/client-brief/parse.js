@@ -55,7 +55,6 @@ export function safeLinkUrl(raw) {
     return null;
   }
 }
-export const safeHttpUrl = safeLinkUrl;
 
 function pushText(tokens, value) {
   if (!value) return;

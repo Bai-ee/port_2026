@@ -1,5 +1,5 @@
 // Client Brief group: create / update / unpublish / republish / list a CLIENT-FACING brief (hosted page + PDF).
-// Same route the dashboard's Admin > CLIENT BRIEF card and the MCP publish_client_brief tool call:
+// Same route the dashboard's Studio > CLIENT BRIEF (/dashboard/studio?tool=brief) and the MCP publish_client_brief tool call:
 // app/api/dashboard/custom-briefs (route key 'custom-briefs'). Docs: docs/source-of-truth/CLIENT-BRIEF.md.
 //  Auth: bearer + verifyAdminRequest (POST/PATCH) / verifyRequestUser (GET); the client = getDashboardBootstrap `?as=`.
 //  `fixed.kind` pins the route to the client-brief path (the agent can never switch it to invoice / pasted-HTML).
@@ -37,6 +37,7 @@ export const BRIEFS_ACTIONS = [
       title: str('Optional title; otherwise the first H1 of the text.', { maxLength: 140 }),
       briefSlug: slugArg,
       public: bool('Only pass to change visibility on purpose. Omitted: new briefs are published, updates keep their current visibility.'),
+      theme: str('Optional built-in document theme (ledger | editorial | studio-dark). Omitted: default look (new) or the current theme (update).', { enum: ['ledger', 'editorial', 'studio-dark'] }),
       ogLabel: str('Optional link-preview label.', { maxLength: 80 }),
       ogSubhead: str('Optional link-preview subhead.', { maxLength: 160 }),
       hideOgSubhead: bool('Hide the link-preview subhead.'),
@@ -58,7 +59,7 @@ export const BRIEFS_ACTIONS = [
     id: 'briefs.client.unpublish',
     group: 'briefs',
     title: 'Unpublish a client brief (take the link down)',
-    description: 'Takes a client brief offline: its public link and PDF stop working. The brief stays in Admin > CLIENT BRIEF and can be republished.',
+    description: 'Takes a client brief offline: its public link and PDF stop working. The brief stays in Studio > CLIENT BRIEF (/dashboard/studio?tool=brief) and can be republished.',
     keywords: 'unpublish take down remove client brief link pdf offline hide',
     route: 'custom-briefs', method: 'PATCH', action: null,
     fixed: { public: false },

@@ -54,6 +54,13 @@ export const STUDIO_TOOLS_META = {
     image: '/img/og/studio-invoice.jpg',
     imageAlt: 'HITLOOP Invoice Studio — a live-editable invoice canvas',
   },
+  brief: {
+    title: 'Client Brief Studio',
+    description:
+      'Turn a written breakdown into a themed, print-ready brief document with a hosted link, PDF and share image. Admin only.',
+    image: '/img/og/studio-invoice.jpg',
+    imageAlt: 'HITLOOP Client Brief Studio — a themed brief document',
+  },
 };
 
 // Normalize an arbitrary `?tool=` value to a known tool id.

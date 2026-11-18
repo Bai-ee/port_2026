@@ -147,7 +147,7 @@ test('publish: random-token slug (not from title), kind stored, text+model store
   assert.equal(json.brief.kind, 'client-brief');
   assert.equal(data.sourceText, BREAKDOWN);
   assert.equal(data.title, 'Secret Launch Plan');
-  assert.equal(data.layoutVersion, 2);
+  assert.equal(data.layoutVersion, 3);
   assert.ok(Array.isArray(data.blocks) && data.blocks[0].type === 'heading');
   assert.match(data.html, /Rosita&#39;s Tacos/);
   assert.equal(data.public, true);
@@ -158,7 +158,7 @@ test('publish: random-token slug (not from title), kind stored, text+model store
   assert.match(data.html, /noindex,nofollow/);
   assert.ok(data.html.includes(`/briefs/rositas/${slug}/pdf`));
   assert.equal(state.pdfCalls.length, 1);
-  assert.equal(state.pdfCalls[0].pdfMode, 'default', 'v2 client briefs print through the plain default mode');
+  assert.equal(state.pdfCalls[0].pdfMode, 'default', 'v3 client briefs print through the plain default mode');
   assert.equal(data.pdfArtifact.bucket, 'b');
   assert.equal(json.brief.publicPath, `/briefs/rositas/${slug}`);
 });
@@ -170,16 +170,61 @@ test('two publishes of the same title get different slugs', async () => {
   assert.equal(new Set(briefDocs().map(([k]) => k)).size, 2);
 });
 
-test('preview writes nothing: no Firestore, no Storage, no PDF', async () => {
+test('stale dashboard tab: client-brief preview:true is a 400, never a real publish', async () => {
   reset();
-  const res = await route.POST(req('POST', { kind: 'client-brief', text: BREAKDOWN, preview: true }));
-  assert.equal(res.status, 200);
-  const json = await res.json();
-  assert.match(json.html, /NTR Daily Update/);
+  const res = await route.POST(req('POST', { kind: 'client-brief', text: BREAKDOWN, preview: true, public: true }));
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).error, /Preview moved to Studio/);
+  assert.equal(briefDocs().length, 0);
   assert.equal(writes.length, 0);
-  assert.equal(store.size, 0);
   assert.equal(state.pdfCalls.length, 0);
-  assert.equal(storageDeletes.length + storagePrefixDeletes.length, 0);
+});
+
+test('theme: built-in id validated + stored; unknown/forged themes collapse to default; html carries the theme marker', async () => {
+  reset();
+  const ok = await (await route.POST(req('POST', { kind: 'client-brief', text: BREAKDOWN, public: false, theme: 'ledger' }))).json();
+  const okDoc = store.get(`clients/client-1/custom_briefs/${ok.brief.briefSlug}`);
+  assert.equal(okDoc.theme, 'ledger');
+  assert.equal(okDoc.layoutVersion, 3);
+  assert.match(okDoc.html, /data-invoice-theme="ledger"/);
+  assert.equal(ok.brief.theme, 'ledger');
+  const forged = await (await route.POST(req('POST', { kind: 'client-brief', text: BREAKDOWN, public: false, theme: { id: 'evil', colors: { paper: 'red;}</style><script>1</script>' } } }))).json();
+  const forgedDoc = store.get(`clients/client-1/custom_briefs/${forged.brief.briefSlug}`);
+  assert.equal(forgedDoc.theme, null);
+  assert.ok(!forgedDoc.html.includes('<script>1'));
+  assert.ok(!forgedDoc.html.includes('data-invoice-theme'));
+  const none = await (await route.POST(req('POST', { kind: 'client-brief', text: BREAKDOWN, public: false }))).json();
+  assert.equal(store.get(`clients/client-1/custom_briefs/${none.brief.briefSlug}`).theme, null);
+});
+
+test('update in place keeps slug and stored theme unless theme is passed; published doc carries the brand mark but no contact info', async () => {
+  reset();
+  const created = await (await route.POST(req('POST', { kind: 'client-brief', text: BREAKDOWN, public: true, theme: 'editorial' }))).json();
+  const slug = created.brief.briefSlug;
+  const docPath = `clients/client-1/custom_briefs/${slug}`;
+  const kept = await (await route.POST(req('POST', { kind: 'client-brief', text: `${BREAKDOWN}\nMore.`, public: true, briefSlug: slug }))).json();
+  assert.equal(kept.brief.briefSlug, slug);
+  assert.equal(store.get(docPath).theme, 'editorial', 'omitted theme keeps the stored one');
+  assert.match(store.get(docPath).html, /client-brief-brand-logo/);
+  assert.ok(!/@gmail|venmo|tax id/i.test(store.get(docPath).html));
+  await route.POST(req('POST', { kind: 'client-brief', text: BREAKDOWN, public: true, briefSlug: slug, theme: null }));
+  assert.equal(store.get(docPath).theme, null, 'explicit null resets to default');
+  assert.equal(store.get(docPath).layoutVersion, 3);
+});
+
+test('v2 docs are untouched by v3: stored html kept, lazy /pdf still prints through default mode', async () => {
+  reset();
+  const v2Slug = 'client-brief-20260101-eeeeeeeeeeeeeeee';
+  const v2Path = `clients/client-1/custom_briefs/${v2Slug}`;
+  store.set(v2Path, { kind: 'client-brief', layoutVersion: 2, public: true, html: '<html>v2 stored</html>', title: 'old', publicBriefSlug: v2Slug, sourceText: '# old' });
+  store.set('clients/client-1', { publicClientSlug: 'rositas' });
+  const list = (await (await route.GET(req('GET', null, { query: '?kind=client-brief' }))).json()).briefs;
+  assert.equal(list.find((b) => b.briefSlug === v2Slug)?.layoutVersion, 2);
+  assert.equal(store.get(v2Path).html, '<html>v2 stored</html>');
+  const pdfRoute = await import('../../../../briefs/[clientId]/[briefSlug]/pdf/route.js');
+  state.pdfCalls.length = 0;
+  await pdfRoute.GET({}, { params: { clientId: 'rositas', briefSlug: v2Slug } });
+  assert.equal(state.pdfCalls[0]?.pdfMode, 'default');
 });
 
 test('bad text is a 4xx and writes nothing; non-admin POST is 403', async () => {
@@ -462,7 +507,7 @@ test('invoice/brief POST can not overwrite a client brief that owns the doc id',
   assert.equal(after.html, before.html);
 });
 
-test('lazy /pdf: v2 client briefs use pdfMode default; v1 docs (no layoutVersion) keep edge-to-edge', async () => {
+test('lazy /pdf: v3 client briefs use pdfMode default; v1 docs (no layoutVersion) keep edge-to-edge', async () => {
   reset();
   const created = await (await route.POST(req('POST', { kind: 'client-brief', text: BREAKDOWN, public: true }))).json();
   const v2Path = `clients/client-1/custom_briefs/${created.brief.briefSlug}`;

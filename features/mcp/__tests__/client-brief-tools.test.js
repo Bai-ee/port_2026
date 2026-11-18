@@ -120,6 +120,17 @@ test('publish: OG args are forwarded (within limits; over-limit arrays rejected 
   assert.equal(s.calls.length, 1);
 });
 
+test('publish: optional built-in theme is forwarded; unknown theme rejected before any call', async () => {
+  const s = setup();
+  await s.call('publish_client_brief', { clientId: CLIENT, text: '# Hi', theme: 'studio-dark' });
+  assert.equal(s.calls[0].body.theme, 'studio-dark');
+  const bad = await s.call('publish_client_brief', { clientId: CLIENT, text: '# Hi', theme: 'neon' });
+  assert.equal(bad.isError, true);
+  assert.equal(s.calls.length, 1);
+  await s.call('publish_client_brief', { clientId: CLIENT, text: '# Hi' });
+  assert.ok(!('theme' in s.calls[1].body));
+});
+
 test('publish: briefSlug updates in place (forwarded to the route); non client-brief ids are rejected before any call', async () => {
   const s = setup();
   const slug = 'client-brief-20261118-0123456789abcdef';

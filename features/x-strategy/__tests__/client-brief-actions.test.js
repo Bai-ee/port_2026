@@ -62,6 +62,14 @@ test('invoke publish: POST, owner auth, ?as=, fixed kind, default public on crea
   assert.ok(!('sourceText' in out.json));
 });
 
+test('invoke publish: optional built-in theme is forwarded; the arg schema only allows built-in ids', async () => {
+  const r = fakeRoute();
+  await invokeAction(getAction('briefs.client.publish'), { text: '# Hi', theme: 'ledger' }, ctx, { routeModules: r.routeModules });
+  assert.equal(r.calls[0].body.theme, 'ledger');
+  assert.deepEqual(getAction('briefs.client.publish').args.properties.theme.enum, ['ledger', 'editorial', 'studio-dark']);
+  assert.ok(!getAction('briefs.client.publish').args.required.includes('theme'));
+});
+
 test('invoke publish UPDATE: never sends public unless the agent passes it', async () => {
   const r = fakeRoute();
   await invokeAction(getAction('briefs.client.publish'), { text: 'x', briefSlug: SLUG }, ctx, { routeModules: r.routeModules });
