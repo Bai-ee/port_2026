@@ -1,18 +1,21 @@
-// Client Brief parser — pure, deterministic, no I/O, no LLM.
+// Client Brief parser (v2) - pure, deterministic, no I/O, no LLM.
 //
-// Turns the Markdown-ish breakdown text an admin pastes (as ChatGPT writes it)
-// into a small, safe model the renderer lays out. Inline markup is emitted as
-// tokens ({t:'text'|'b'|'em'|'code'|'link'}) so the renderer never has to
-// trust or re-parse raw text.
+// Faithful Markdown -> flat, ordered block list, in SOURCE ORDER. Nothing is
+// grouped, sectioned, numbered or reordered. Raw HTML is never interpreted:
+// it is just text and the renderer escapes it.
 //
-// Model:
-//   { title, clientName, asOf,
-//     intro: [{ tokens: Inline }],       // paragraphs before the first heading
-//     sections: [{ heading, blocks: [
-//       { type:'stats', rows:[{ label, value: Inline[] }] },
-//       { type:'list',  ordered: boolean, items: [{ tokens: Inline }] },
-//       { type:'para',  text: Inline[] },
-//     ] }] }
+// Model: { title, clientName, asOf, blocks: Block[] }
+//   { type:'heading',    level:1-6, tokens }
+//   { type:'paragraph',  tokens }
+//   { type:'blockquote', paragraphs:[{ tokens }] }
+//   { type:'list',       ordered, start, items:[{ tokens, sub?:{ ordered, start, items:[{ tokens }] } }] }
+//   { type:'table',      align:['left'|'right'|'center'|''], header:{ cells:[{ tokens }] }, rows:[{ cells:[{ tokens }] }] }
+//   { type:'hr' }
+//   { type:'code',       lang, text }
+// Inline tokens: {t:'text',v} {t:'code',v} {t:'br'} {t:'b'|'em'|'bem', c:Token[]}
+//   {t:'link', href, c:Token[]}.
+// Firestore-safe: no array directly contains an array (table rows are
+// `{ cells }` objects).
 
 export const CLIENT_BRIEF_MAX_CHARS = 50000;
 export const CLIENT_BRIEF_DEFAULT_TITLE = 'Client Brief';
@@ -27,19 +30,32 @@ export class ClientBriefParseError extends Error {
 
 // ---------- inline ----------
 
-const INLINE_RE = /\*\*([^*]+?)\*\*|`([^`\n]+?)`|\[([^\]\n]+?)\]\(((?:[^()\s]|\([^()\s]*\))+)\)|(?<![*\w])\*([^*\s][^*\n]*?)\*(?![*\w])|(https?:\/\/[^\s<>()]+)/g;
+const INLINE_RE = new RegExp([
+  '\\\\([\\\\`*_{}\\[\\]()#+\\-.!|>~<])',                                  // 1 escape
+  '`([^`\\n]+?)`',                                                          // 2 code
+  '\\[((?:[^\\[\\]\\n]|\\[[^\\[\\]\\n]*\\])+)\\]\\(\\s*((?:[^()\\s]|\\([^()\\s]*\\))+)(?:\\s+"[^"]*")?\\s*\\)', // 3 label, 4 href
+  '\\*\\*\\*(?=\\S)([^\\n]+?)(?<=\\S)\\*\\*\\*',                            // 5 bold-italic
+  '\\*\\*(?=\\S)([^\\n]+?)(?<=\\S)\\*\\*(?!\\*)',                                  // 6 bold
+  '(?<![_\\w])__(?=\\S)([^\\n]+?)(?<=\\S)__(?![_\\w])',                     // 7 bold (underscore)
+  '(?<![*\\w])\\*(?=[^\\s*])([^*\\n]+?)(?<=[^\\s*])\\*(?![*\\w])',          // 8 italic
+  '(?<![_\\w])_(?=[^\\s_])([^_\\n]+?)(?<=[^\\s_])_(?![_\\w])',              // 9 italic (underscore)
+  '<((?:https?:\\/\\/|mailto:)[^\\s<>]+)>',                                 // 10 <autolink>
+  '(https?:\\/\\/[^\\s<>()]+)',                                             // 11 bare URL
+].join('|'), 'g');
 
-export function safeHttpUrl(raw) {
+// http(s) and mailto only; anything else is not a link.
+export function safeLinkUrl(raw) {
   const value = String(raw || '').trim();
   if (!value || value.length > 2000) return null;
   try {
     const url = new URL(value);
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    if (!['http:', 'https:', 'mailto:'].includes(url.protocol)) return null;
     return url.href;
   } catch {
     return null;
   }
 }
+export const safeHttpUrl = safeLinkUrl;
 
 function pushText(tokens, value) {
   if (!value) return;
@@ -48,36 +64,39 @@ function pushText(tokens, value) {
   else tokens.push({ t: 'text', v: value });
 }
 
-export function parseInline(input) {
+const MAX_DEPTH = 3;
+
+export function parseInline(input, depth = 0) {
   const text = String(input ?? '');
   const tokens = [];
   let cursor = 0;
-  INLINE_RE.lastIndex = 0;
-  let match;
-  while ((match = INLINE_RE.exec(text)) !== null) {
-    pushText(tokens, text.slice(cursor, match.index));
-    cursor = match.index + match[0].length;
-    if (match[1] !== undefined) {
-      tokens.push({ t: 'b', v: match[1] });
-    } else if (match[2] !== undefined) {
-      tokens.push({ t: 'code', v: match[2] });
-    } else if (match[3] !== undefined) {
-      const href = safeHttpUrl(match[4]);
-      if (href) tokens.push({ t: 'link', v: match[3], href });
-      else pushText(tokens, match[3]); // unsafe scheme: keep the label only
-    } else if (match[5] !== undefined) {
-      tokens.push({ t: 'em', v: match[5] });
-    } else if (match[6] !== undefined) {
-      // Bare URL: trim trailing punctuation that belongs to the sentence.
-      const trimmed = match[6].replace(/[.,;:!?'"\]]+$/, '');
-      const trailing = match[6].slice(trimmed.length);
-      const href = safeHttpUrl(trimmed);
+  const re = new RegExp(INLINE_RE.source, 'g');
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    pushText(tokens, text.slice(cursor, m.index));
+    cursor = m.index + m[0].length;
+    const nest = (s) => (depth + 1 < MAX_DEPTH ? parseInline(s, depth + 1) : [{ t: 'text', v: s }]);
+    if (m[1] !== undefined) pushText(tokens, m[1]);
+    else if (m[2] !== undefined) tokens.push({ t: 'code', v: m[2] });
+    else if (m[3] !== undefined) {
+      const href = safeLinkUrl(m[4]);
+      if (href) tokens.push({ t: 'link', href, c: depth === 0 ? nest(m[3]) : [{ t: 'text', v: m[3] }] });
+      else pushText(tokens, m[3]); // unsafe scheme: label only, as text
+    } else if (m[5] !== undefined) tokens.push({ t: 'bem', c: nest(m[5]) });
+    else if (m[6] !== undefined || m[7] !== undefined) tokens.push({ t: 'b', c: nest(m[6] ?? m[7]) });
+    else if (m[8] !== undefined || m[9] !== undefined) tokens.push({ t: 'em', c: nest(m[8] ?? m[9]) });
+    else if (m[10] !== undefined) {
+      const href = safeLinkUrl(m[10]);
+      if (href) tokens.push({ t: 'link', href, c: [{ t: 'text', v: m[10] }] });
+      else pushText(tokens, m[0]);
+    } else if (m[11] !== undefined) {
+      const trimmed = m[11].replace(/[.,;:!?'"\]]+$/, '');
+      const trailing = m[11].slice(trimmed.length);
+      const href = safeLinkUrl(trimmed);
       if (href) {
-        tokens.push({ t: 'link', v: trimmed, href });
+        tokens.push({ t: 'link', href, c: [{ t: 'text', v: trimmed }] });
         pushText(tokens, trailing);
-      } else {
-        pushText(tokens, match[6]);
-      }
+      } else pushText(tokens, m[11]);
     }
   }
   pushText(tokens, text.slice(cursor));
@@ -85,79 +104,54 @@ export function parseInline(input) {
 }
 
 export function inlineToPlain(tokens) {
-  return (Array.isArray(tokens) ? tokens : []).map((token) => token.v).join('');
+  return (Array.isArray(tokens) ? tokens : []).map((token) => {
+    if (!token) return '';
+    if (token.t === 'br') return ' ';
+    if (Array.isArray(token.c)) return inlineToPlain(token.c);
+    return token.v || '';
+  }).join('');
 }
 
-// ---------- block helpers ----------
-
-const FENCE_RE = /^\s*(```|~~~)/;
-const RULE_RE = /^\s*([-*_])(?:\s*\1){2,}\s*$/;
-const ATX_RE = /^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$/;
-const BOLD_ONLY_RE = /^\s*\*\*([^*]+?)\*\*\s*:?\s*$/;
-const BOLD_LABEL_RE = /^\s*\*\*([^*]+?)\*\*\s*:\s*(.+)$/; // **Label (x)**: value
-const BOLD_COLON_INSIDE_RE = /^\s*\*\*([^*]+?):\*\*\s*(.+)$/; // **Label:** value
-const PLAIN_LABEL_RE = /^\s*([A-Za-z0-9][^:*`\[\]|]{0,38}?):\s+(\S.*)$/; // Label: value
-const BULLET_RE = /^(\s*)([-*•]|\d{1,3}[.)])\s+(.*)$/;
-const TABLE_ROW_RE = /^\s*\|.*\|\s*$/;
-const TABLE_SEP_RE = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
-
-function stripFencedBlocks(lines) {
+// Lines of one paragraph -> tokens, each pasted line break kept as a <br>.
+function inlineLines(lines) {
   const out = [];
-  let inFence = false;
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i];
-    if (FENCE_RE.test(line)) {
-      if (!inFence) {
-        // Drop a bare "HITLOOP COMMAND" caption sitting right above the fence.
-        while (out.length && out[out.length - 1].trim() === '') out.pop();
-        if (out.length && /^\W*hitloop\s+command\W*$/i.test(out[out.length - 1])) out.pop();
-      }
-      inFence = !inFence;
-      continue;
-    }
-    if (!inFence) out.push(line);
-  }
+  lines.forEach((line, i) => {
+    if (i > 0) out.push({ t: 'br' });
+    out.push(...parseInline(line.replace(/(?:\s{2,}|\\)$/, '').trim()));
+  });
   return out;
 }
 
-function plainLabel(raw) {
-  return String(raw || '').replace(/\*\*|`/g, '').replace(/\s+/g, ' ').trim();
+// ---------- block patterns ----------
+
+const FENCE_RE = /^ {0,3}(`{3,}|~{3,})\s*(.*)$/;
+const HR_RE = /^ {0,3}([-*_])(?:\s*\1){2,}\s*$/;
+const ATX_RE = /^ {0,3}(#{1,6})\s+(.+?)(?:\s+#+)?\s*$/;
+const QUOTE_RE = /^ {0,3}>\s?(.*)$/;
+const LIST_RE = /^(\s*)([-*+•]|\d{1,9}[.)])\s+(.*)$/;
+const TABLE_SEP_RE = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
+const COMMAND_RE = /^\W*hitloop\s+command\W*$/i;
+
+function splitRow(line) {
+  let s = line.trim();
+  if (s.startsWith('|')) s = s.slice(1);
+  if (s.endsWith('|') && !s.endsWith('\\|')) s = s.slice(0, -1);
+  const cells = [];
+  let cur = '';
+  for (let i = 0; i < s.length; i += 1) {
+    if (s[i] === '\\' && s[i + 1] === '|') { cur += '|'; i += 1; } else if (s[i] === '|') { cells.push(cur.trim()); cur = ''; } else cur += s[i];
+  }
+  cells.push(cur.trim());
+  return cells;
 }
 
-function isShortPlainLabel(label) {
-  if (/^(https?|ftp|mailto)$/i.test(label)) return false;
-  return label.split(/\s+/).length <= 5;
+function isTableStart(lines, i) {
+  return i + 1 < lines.length && lines[i].includes('|') && lines[i + 1].includes('|') && TABLE_SEP_RE.test(lines[i + 1]);
 }
 
-function classify(line) {
-  if (!line.trim()) return { kind: 'blank' };
-  if (RULE_RE.test(line)) return { kind: 'rule' };
-  const atx = line.match(ATX_RE);
-  if (atx) return { kind: 'heading', level: atx[1].length, text: plainLabel(atx[2]) };
-  if (TABLE_SEP_RE.test(line) && line.includes('-') && line.includes('|')) return { kind: 'tablesep' };
-  if (TABLE_ROW_RE.test(line)) {
-    const cells = line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim()).filter(Boolean);
-    return { kind: 'bullet', text: cells.join(' · '), indent: 0 };
-  }
-  const bullet = line.match(BULLET_RE);
-  if (bullet && !RULE_RE.test(line)) return { kind: 'bullet', text: bullet[3].trim(), indent: bullet[1].length, ordered: /\d/.test(bullet[2]) };
-  const boldOnly = line.match(BOLD_ONLY_RE);
-  if (boldOnly) return { kind: 'heading', level: 3, text: plainLabel(boldOnly[1]) };
-  const boldColon = line.match(BOLD_COLON_INSIDE_RE) || line.match(BOLD_LABEL_RE);
-  if (boldColon && plainLabel(boldColon[1]).length <= 80) {
-    return { kind: 'stat', label: plainLabel(boldColon[1]), value: boldColon[2].trim() };
-  }
-  const plain = line.match(PLAIN_LABEL_RE);
-  if (plain) {
-    const label = plainLabel(plain[1]);
-    if (label && isShortPlainLabel(label) && !plain[2].startsWith('//')) {
-      return { kind: 'stat', label, value: plain[2].trim() };
-    }
-  }
-  // "Key wins:" style caption — a short line ending in a colon.
-  const caption = line.trim().match(/^([^:*`]{1,60}):$/);
-  if (caption) return { kind: 'caption', text: plainLabel(caption[1]) };
-  return { kind: 'text', text: line.trim().replace(/^>\s?/, '') };
+function startsBlock(lines, i) {
+  const line = lines[i];
+  return FENCE_RE.test(line) || HR_RE.test(line) || ATX_RE.test(line) || QUOTE_RE.test(line) || LIST_RE.test(line) || isTableStart(lines, i);
 }
 
 // ---------- main ----------
@@ -173,137 +167,154 @@ export function parseClientBrief(rawText, options = {}) {
     );
   }
 
-  const lines = stripFencedBlocks(rawText.replace(/\r\n?/g, '\n').split('\n'));
-  if (!lines.some((line) => line.trim())) {
-    throw new ClientBriefParseError('Nothing left to publish after removing code blocks.', 'empty');
+  const lines = rawText.replace(/\r\n?/g, '\n').replace(/\t/g, '    ').split('\n');
+  const blocks = [];
+  let i = 0;
+
+  const pushBlock = (b) => { blocks.push(b); };
+  const dropCommandCaption = () => {
+    // A bare "HITLOOP COMMAND" caption right above a stripped fence goes too.
+    const last = blocks[blocks.length - 1];
+    if (last && last.type === 'paragraph' && COMMAND_RE.test(inlineToPlain(last.tokens))) blocks.pop();
+  };
+
+  while (i < lines.length) {
+    const line = lines[i];
+    if (!line.trim()) { i += 1; continue; }
+
+    // fenced code
+    const fence = line.match(FENCE_RE);
+    if (fence) {
+      const marker = fence[1];
+      const info = fence[2].trim();
+      const body = [];
+      i += 1;
+      while (i < lines.length) {
+        const close = lines[i].match(/^ {0,3}(`{3,}|~{3,})\s*$/);
+        if (close && close[1][0] === marker[0] && close[1].length >= marker.length) { i += 1; break; }
+        body.push(lines[i]);
+        i += 1;
+      }
+      const firstLine = (body.find((l) => l.trim()) || '').trim();
+      const prev = blocks[blocks.length - 1];
+      const captioned = prev && prev.type === 'paragraph' && COMMAND_RE.test(inlineToPlain(prev.tokens));
+      if (captioned || /^\W*hitloop\s+command\b/i.test(info) || COMMAND_RE.test(firstLine)) {
+        dropCommandCaption();
+        continue;
+      }
+      pushBlock({ type: 'code', lang: info.split(/\s+/)[0].slice(0, 30), text: body.join('\n') });
+      continue;
+    }
+
+    if (HR_RE.test(line)) { pushBlock({ type: 'hr' }); i += 1; continue; }
+
+    const atx = line.match(ATX_RE);
+    if (atx) {
+      pushBlock({ type: 'heading', level: atx[1].length, tokens: parseInline(atx[2].trim()) });
+      i += 1;
+      continue;
+    }
+
+    if (QUOTE_RE.test(line)) {
+      const paragraphs = [];
+      let current = [];
+      while (i < lines.length && QUOTE_RE.test(lines[i])) {
+        const inner = lines[i].match(QUOTE_RE)[1];
+        if (!inner.trim()) { if (current.length) paragraphs.push(current); current = []; } else current.push(inner);
+        i += 1;
+      }
+      if (current.length) paragraphs.push(current);
+      pushBlock({ type: 'blockquote', paragraphs: paragraphs.map((p) => ({ tokens: inlineLines(p) })) });
+      continue;
+    }
+
+    if (isTableStart(lines, i)) {
+      const headerCells = splitRow(lines[i]);
+      const align = splitRow(lines[i + 1]).map((c) => {
+        const l = c.startsWith(':'); const r = c.endsWith(':');
+        return l && r ? 'center' : r ? 'right' : l ? 'left' : '';
+      });
+      const width = headerCells.length;
+      const fit = (cells) => Array.from({ length: Math.max(width, cells.length) }, (_, k) => ({ tokens: parseInline(cells[k] || '') }));
+      i += 2;
+      const rows = [];
+      while (i < lines.length && lines[i].trim() && lines[i].includes('|') && !FENCE_RE.test(lines[i])) {
+        rows.push({ cells: fit(splitRow(lines[i])) });
+        i += 1;
+      }
+      pushBlock({
+        type: 'table',
+        align: Array.from({ length: width }, (_, k) => align[k] || ''),
+        header: { cells: fit(headerCells) },
+        rows,
+      });
+      continue;
+    }
+
+    const first = line.match(LIST_RE);
+    if (first) {
+      const baseIndent = first[1].length;
+      const ordered = /\d/.test(first[2]);
+      const list = { type: 'list', ordered, start: ordered ? Math.max(0, parseInt(first[2], 10) || 1) : 1, items: [] };
+      let item = null;
+      while (i < lines.length) {
+        const cur = lines[i];
+        if (!cur.trim()) {
+          // a blank line continues the list only if the next non-blank is a list item
+          let j = i + 1;
+          while (j < lines.length && !lines[j].trim()) j += 1;
+          const nm = j < lines.length ? lines[j].match(LIST_RE) : null;
+          if (nm && (nm[1].length > baseIndent + 1 || (nm[1].length <= baseIndent + 1 && /\d/.test(nm[2]) === ordered))) { i = j; continue; }
+          break;
+        }
+        const m = cur.match(LIST_RE);
+        if (m) {
+          const indent = m[1].length;
+          const itemOrdered = /\d/.test(m[2]);
+          if (indent <= baseIndent + 1) {
+            if (itemOrdered !== ordered) break; // different list kind at top level: new list
+            item = { tokens: parseInline(m[3].trim()) };
+            list.items.push(item);
+          } else if (item) {
+            if (!item.sub) item.sub = { ordered: itemOrdered, start: itemOrdered ? Math.max(0, parseInt(m[2], 10) || 1) : 1, items: [] };
+            item.sub.items.push({ tokens: parseInline(m[3].trim()) }); // deeper levels flatten
+          }
+          i += 1;
+          continue;
+        }
+        if (/^\s+\S/.test(cur) && item) {
+          // continuation of the current (sub)item
+          const target = item.sub ? item.sub.items[item.sub.items.length - 1] : item;
+          target.tokens.push({ t: 'br' }, ...parseInline(cur.trim()));
+          i += 1;
+          continue;
+        }
+        break;
+      }
+      pushBlock(list);
+      continue;
+    }
+
+    // paragraph: consecutive lines until a blank or another block starts
+    const para = [line];
+    i += 1;
+    while (i < lines.length && lines[i].trim() && !startsBlock(lines, i)) { para.push(lines[i]); i += 1; }
+    pushBlock({ type: 'paragraph', tokens: inlineLines(para) });
+  }
+
+  if (!blocks.length) {
+    throw new ClientBriefParseError('Nothing left to publish after removing the command block.', 'empty');
   }
 
   const explicitTitle = String(options.title || '').replace(/\s+/g, ' ').trim();
-  let title = explicitTitle;
-
-  const preface = { heading: '', blocks: [] };
-  const sections = [];
-  let current = preface;
-  let paragraph = [];
-  let listItems = null;
-  let listOrdered = false;
-  let lastStatsBlock = null; // merge label lines even across blank lines
-  let sawContent = false;
-
-  const addBlock = (block) => {
-    current.blocks.push(block);
-    sawContent = true;
-  };
-  const flushParagraph = () => {
-    if (paragraph.length) {
-      addBlock({ type: 'para', text: parseInline(paragraph.join(' ')) });
-      paragraph = [];
-      lastStatsBlock = null;
-    }
-  };
-  const flushList = () => {
-    if (listItems) {
-      addBlock({ type: 'list', ordered: listOrdered, items: listItems });
-      listItems = null;
-      lastStatsBlock = null;
-    }
-  };
-  const flushAll = () => { flushParagraph(); flushList(); };
-  const startSection = (heading) => {
-    flushAll();
-    lastStatsBlock = null;
-    current = { heading, blocks: [] };
-    sections.push(current);
-    sawContent = true;
-  };
-
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i];
-    const item = classify(line);
-
-    if (item.kind === 'blank') {
-      flushParagraph();
-      // A blank line also ends a list, but not a stats group (merged below).
-      flushList();
-      continue;
-    }
-    if (item.kind === 'tablesep') continue; // table header divider: keep the table's rows in one list
-    if (item.kind === 'rule') {
-      flushAll();
-      lastStatsBlock = null;
-      continue;
-    }
-    if (item.kind === 'heading') {
-      if (!title && item.level === 1 && !sawContent) {
-        title = item.text; // first H1 on its own is the document title
-        continue;
-      }
-      startSection(item.text);
-      continue;
-    }
-    if (item.kind === 'caption') {
-      // Only a heading when a list/stat block follows; otherwise plain text.
-      let next = i + 1;
-      while (next < lines.length && !lines[next].trim()) next += 1;
-      const upcoming = next < lines.length ? classify(lines[next]).kind : 'blank';
-      if (upcoming === 'bullet' || upcoming === 'stat') {
-        startSection(item.text);
-        continue;
-      }
-      paragraph.push(`${item.text}:`);
-      continue;
-    }
-    if (item.kind === 'bullet') {
-      flushParagraph();
-      if (listItems && listOrdered !== Boolean(item.ordered)) flushList();
-      if (!listItems) { listItems = []; listOrdered = Boolean(item.ordered); }
-      listItems.push({ tokens: parseInline(item.text) });
-      continue;
-    }
-    if (item.kind === 'stat') {
-      flushAll();
-      const row = { label: item.label, value: parseInline(item.value) };
-      if (lastStatsBlock && current.blocks[current.blocks.length - 1] === lastStatsBlock) {
-        lastStatsBlock.rows.push(row);
-      } else {
-        lastStatsBlock = { type: 'stats', rows: [row] };
-        addBlock(lastStatsBlock);
-      }
-      continue;
-    }
-    // plain text: indented continuation of a bullet, else paragraph line
-    if (listItems && /^\s+\S/.test(line) && !paragraph.length) {
-      const last = listItems[listItems.length - 1];
-      last.tokens.push(...parseInline(` ${item.text}`));
-      continue;
-    }
-    flushList();
-    paragraph.push(item.text);
-  }
-  flushAll();
-
-  // Text before the first heading: all-paragraph preface -> intro; otherwise
-  // it becomes a first untitled section so lists/stats are not lost.
-  let intro = [];
-  if (preface.blocks.length) {
-    if (preface.blocks.every((block) => block.type === 'para')) {
-      intro = preface.blocks.map((block) => ({ tokens: block.text }));
-    } else {
-      sections.unshift(preface);
-    }
-  }
-
-  const finalSections = sections.filter((section) => section.heading || section.blocks.length);
-  if (!intro.length && !finalSections.length) {
-    throw new ClientBriefParseError('Nothing left to publish after cleaning the text.', 'empty');
-  }
+  const firstH1 = blocks.find((b) => b.type === 'heading' && b.level === 1);
+  const title = explicitTitle || (firstH1 ? inlineToPlain(firstH1.tokens).trim().slice(0, 140) : '') || CLIENT_BRIEF_DEFAULT_TITLE;
 
   return {
-    title: title || CLIENT_BRIEF_DEFAULT_TITLE,
+    title,
     clientName: String(options.clientName || '').replace(/\s+/g, ' ').trim(),
     asOf: String(options.asOf || '').trim(),
-    intro,
-    sections: finalSections,
+    blocks,
   };
 }
 

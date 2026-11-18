@@ -7,7 +7,10 @@ import { createKnowledgeItem, deleteKnowledgeItemCascade } from '../../../../fea
 import { ClientBriefParseError } from '../../../../features/client-brief/parse.js';
 import {
   CLIENT_BRIEF_KIND,
+  CLIENT_BRIEF_LAYOUT_VERSION,
   CLIENT_BRIEF_MAX_HTML_BYTES,
+  CLIENT_BRIEF_SLUG_RE,
+  clientBriefPdfMode,
   allowsFuzzyResolve,
   buildClientBrief,
   isClientBriefData,
@@ -382,6 +385,7 @@ function serializeBriefDoc({ doc, data, clientId, client, origin }) {
     ogSubhead: data.ogSubhead || '',
     ogLines: Array.isArray(data.ogLines) ? data.ogLines : [],
     ogTitleLines: Array.isArray(data.ogTitleLines) ? data.ogTitleLines : [],
+    ...(data.kind === CLIENT_BRIEF_KIND ? { sourceText: String(data.sourceText || ''), layoutVersion: Number(data.layoutVersion) || 1 } : {}),
     sourcePath: data.sourcePath || '',
     sourceHash: data.sourceHash || '',
     public: data.public === true,
@@ -409,70 +413,113 @@ function serializeBriefDoc({ doc, data, clientId, client, origin }) {
   };
 }
 
-// Client Brief publish/preview. The server parses and renders the pasted text
-// itself (never trusts client HTML). The client always comes from the admin's
-// effective-client bootstrap, never from the body. Never ingests into Client
-// Brain and never touches Vercel.
+// Client Brief publish/update/preview. The server parses and renders the pasted
+// text itself (never trusts client HTML). The client always comes from the
+// admin's effective-client bootstrap, never from the body. Never ingests into
+// Client Brain and never touches Vercel.
+//
+// POST with an existing client brief's `briefSlug` UPDATES it in place (same
+// slug and URL, createdAt kept); without one it creates a new random slug. An
+// update never falls through to create and never touches another kind/client.
 async function handleClientBriefPost({ request, decoded, bootstrap, clientId, body }) {
   const client = bootstrap?.client || null;
   const clientName = clientDisplayName(client, '');
   const noStore = { headers: { 'cache-control': 'no-store' } };
+  const parseFailure = (error) => {
+    if (error instanceof ClientBriefParseError) {
+      return NextResponse.json({ error: error.message }, { status: error.code === 'too_long' ? 413 : 400 });
+    }
+    return null;
+  };
 
   // Preview: pure render. No Firestore, no Storage, no PDF, no slug.
   if (body.preview === true) {
     try {
-      const { html } = buildClientBrief({ body, clientName });
-      return NextResponse.json({ ok: true, html }, noStore);
+      const { html, model } = buildClientBrief({ body, clientName });
+      return NextResponse.json({ ok: true, html, title: model.title }, noStore);
     } catch (error) {
-      if (error instanceof ClientBriefParseError) {
-        return NextResponse.json({ error: error.message }, { status: error.code === 'too_long' ? 413 : 400 });
-      }
+      const failure = parseFailure(error);
+      if (failure) return failure;
       throw error;
     }
   }
 
-  const briefSlug = newClientBriefSlug();
+  const collection = fb.adminDb.collection('clients').doc(clientId).collection('custom_briefs');
+  const requestedSlug = body.briefSlug === undefined || body.briefSlug === null ? '' : String(body.briefSlug).trim();
+  const isUpdate = Boolean(requestedSlug);
+  let existing = null;
+  if (isUpdate) {
+    if (!CLIENT_BRIEF_SLUG_RE.test(requestedSlug)) {
+      return NextResponse.json({ error: 'A valid client brief id is required.' }, { status: 400 });
+    }
+    const snapshot = await collection.doc(requestedSlug).get();
+    if (!snapshot.exists || !isClientBriefData(snapshot.data())) {
+      return NextResponse.json({ error: 'Client brief not found.' }, { status: 404 });
+    }
+    existing = snapshot.data() || {};
+  }
+
+  const briefSlug = isUpdate ? requestedSlug : newClientBriefSlug();
   const publicBriefSlug = briefSlug;
-  const publicClientSlug = publicClientSlugFor(client, clientId);
-  const publicPath = `/briefs/${publicClientSlug}/${publicBriefSlug}`;
+  const publicClientSlug = (isUpdate && existing.publicClientSlug) || publicClientSlugFor(client, clientId);
+  const publicPath = (isUpdate && existing.publicPath) || `/briefs/${publicClientSlug}/${publicBriefSlug}`;
 
   let built;
   try {
     built = buildClientBrief({ body, clientName, pdfPath: `${publicPath}/pdf` });
   } catch (error) {
-    if (error instanceof ClientBriefParseError) {
-      return NextResponse.json({ error: error.message }, { status: error.code === 'too_long' ? 413 : 400 });
-    }
+    const failure = parseFailure(error);
+    if (failure) return failure;
     throw error;
   }
-  const { model, html } = built;
+  const { model, html, og, description } = built;
   if (Buffer.byteLength(html, 'utf8') > CLIENT_BRIEF_MAX_HTML_BYTES) {
     return NextResponse.json({ error: 'Client brief is too large.' }, { status: 413 });
   }
 
   const title = model.title.slice(0, 140);
   const pdfFileName = titlePdfFileName(title, 'Client Brief');
-  const isPublic = body.public === true;
-  const ogLabel = String(body.ogLabel || 'HITLOOP').trim().slice(0, 80) || 'HITLOOP';
-  const ref = fb.adminDb.collection('clients').doc(clientId).collection('custom_briefs').doc(briefSlug);
+  // Update: an omitted `public` keeps the existing value.
+  const isPublic = isUpdate && typeof body.public !== 'boolean' ? existing.public === true : body.public === true;
+  const ref = collection.doc(briefSlug);
   const now = fb.FieldValue.serverTimestamp();
+
+  // Update: the old stored PDF is deleted BEFORE re-rendering (a title change
+  // alters the storage file name) and its pointers are cleared. If it cannot
+  // be removed nothing is written.
+  const clearedPdf = {};
+  if (isUpdate) {
+    const artifact = existing.pdfArtifact || null;
+    if (artifact?.storagePath) {
+      try {
+        await deleteStorageObjectStrict({ storagePath: artifact.storagePath, bucketName: artifact.bucket || null });
+      } catch {
+        return NextResponse.json({ error: 'The previous PDF could not be removed, so nothing was changed. Try again.' }, { status: 502 });
+      }
+    }
+    await deleteCustomBriefArtifacts({ clientId, briefDocId: briefSlug, brief: { ...existing, pdfArtifact: null } });
+    clearedPdf.pdfArtifact = fb.FieldValue.delete();
+    clearedPdf.pdfUrl = fb.FieldValue.delete();
+    clearedPdf.warnings = fb.FieldValue.delete();
+  }
 
   // Write the doc FIRST so a failed write can never leave an orphan PDF behind.
   await ref.set({
     clientId,
     kind: CLIENT_BRIEF_KIND,
+    layoutVersion: CLIENT_BRIEF_LAYOUT_VERSION,
     briefSlug,
     publicBriefSlug,
     title,
-    description: `Client brief for ${clientName || 'this client'}.`,
-    ogLabel,
-    hideOgSubhead: false,
-    ogSubhead: '',
-    ogLines: [],
-    ogTitleLines: [],
+    description,
+    ogLabel: og.ogLabel,
+    hideOgSubhead: og.hideOgSubhead,
+    ogSubhead: og.ogSubhead,
+    ogLines: og.ogLines,
+    ogTitleLines: og.ogTitleLines,
     html,
     sourceText: String(body.text),
-    model,
+    blocks: model.blocks,
     public: isPublic,
     publicClientSlug,
     pdfFileName,
@@ -482,8 +529,8 @@ async function handleClientBriefPost({ request, decoded, bootstrap, clientId, bo
     sourceHash: hashHtml(html),
     submittedBy: decoded.email || decoded.uid || 'admin',
     updatedAt: now,
-    importedAt: now,
-    createdAt: now,
+    ...(isUpdate ? {} : { importedAt: now, createdAt: now }),
+    ...clearedPdf,
     // Never part of Client Brain.
     addToClientBrain: false,
     knowledgeBaseStatus: 'skipped',
@@ -516,7 +563,7 @@ async function handleClientBriefPost({ request, decoded, bootstrap, clientId, bo
         fileName: pdfFileName,
         storageClientKey: publicClientSlug,
         storageBriefKey: publicBriefSlug,
-        pdfMode: 'edge-to-edge',
+        pdfMode: clientBriefPdfMode({ layoutVersion: CLIENT_BRIEF_LAYOUT_VERSION }),
       });
     } catch (error) {
       pdfResult = { ok: false, warning: { type: 'warning', code: 'client_brief_pdf_failed', message: error instanceof Error ? error.message : 'PDF render failed.' } };
@@ -549,6 +596,7 @@ async function handleClientBriefPost({ request, decoded, bootstrap, clientId, bo
   });
   return NextResponse.json({
     clientId,
+    updated: isUpdate,
     brief,
     pdf: pdfResult?.ok ? { ok: true } : { ok: false, skipped: !pdfResult, warning: pdfResult?.warning || null },
     brain: { ok: false, skipped: true, warning: null },
@@ -764,6 +812,11 @@ export async function POST(request) {
       .doc(briefSlug);
     const existing = await ref.get();
     const existingData = existing.exists ? existing.data() || {} : {};
+    // An invoice/brief publish must never overwrite a client brief that
+    // happens to own this doc id (it would turn it into kind 'brief').
+    if (existing.exists && isClientBriefData(existingData)) {
+      return NextResponse.json({ error: 'That id belongs to a client brief and cannot be overwritten here.' }, { status: 409 });
+    }
     const now = fb.FieldValue.serverTimestamp();
     const runId = `custom-brief-${briefSlug}-${Date.now()}`;
     const pdfResult = await persistBriefPdfArtifact({

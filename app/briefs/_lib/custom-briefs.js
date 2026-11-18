@@ -255,7 +255,10 @@ export function buildBriefOpenGraphMeta({ origin, clientId, client, brief, snaps
   const publicPath = publicBriefPath({ clientId, client, brief, snapshotId });
   const title = String(brief.title || brief.briefSlug || snapshotId || 'Custom Brief').trim();
   const invoiceFacts = invoiceOgFacts(brief);
-  const description = invoiceFacts ? invoiceFacts.description : briefDescription(brief, clientName);
+  const clientBrief = isClientBriefData(brief);
+  const description = invoiceFacts
+    ? invoiceFacts.description
+    : clientBrief ? clientBriefDescriptionOf(brief, clientName) : briefDescription(brief, clientName);
   const publicUrl = `${origin}${publicPath}`;
   const imageUrl = `${publicUrl}/og-image`;
   return {
@@ -273,7 +276,27 @@ export function buildBriefOpenGraphMeta({ origin, clientId, client, brief, snaps
     // Invoice-only overrides for the OG image (see invoiceOgFacts). Absent
     // on briefs, where og-image/route.js keeps its own defaults.
     ...(invoiceFacts ? { ogVariant: 'invoice', ogLogo: invoiceFacts.logo, ogLines: ogLinesOf(brief), ogTitleLines: ogTitleLinesOf(brief), ogSubhead: ogSubheadOverride(brief) ?? invoiceFacts.subhead, ogTiles: invoiceFacts.tiles } : {}),
-    ...(!invoiceFacts && ogSubheadOverride(brief) !== null ? { ogSubhead: ogSubheadOverride(brief) } : {}),
+    ...(clientBrief ? clientBriefOgFields(brief, description) : {}),
+    ...(!invoiceFacts && !clientBrief && ogSubheadOverride(brief) !== null ? { ogSubhead: ogSubheadOverride(brief) } : {}),
+  };
+}
+
+// Client briefs share with the invoice OG look (same 'invoice' variant of the
+// same renderer: big headline, subhead, optional extra lines, corner logo), so
+// the stored OG fields actually render. Description / subhead default: the
+// operator's subhead, else the stored description (first paragraph).
+function clientBriefDescriptionOf(brief, clientName) {
+  return (ogSubheadOverride(brief) || briefDescription(brief, clientName)).slice(0, 240);
+}
+
+function clientBriefOgFields(brief, description) {
+  return {
+    ogVariant: 'invoice',
+    ogLogo: null,
+    ogLines: ogLinesOf(brief),
+    ogTitleLines: ogTitleLinesOf(brief),
+    ogSubhead: ogSubheadOverride(brief) ?? description,
+    ogTiles: [],
   };
 }
 
@@ -315,5 +338,32 @@ export function buildInvoiceOgPreviewMeta({ title, invoice, ogLabel, ogSubhead, 
     hideOgSubhead: hideOgSubhead === true,
     ogLabel: briefOgLabel(brief),
     ...(invoiceFacts ? { ogVariant: 'invoice', ogLogo: invoiceFacts.logo, ogLines: ogLinesOf(brief), ogTitleLines: ogTitleLinesOf(brief), ogSubhead: ogSubheadOverride(brief) ?? invoiceFacts.subhead, ogTiles: invoiceFacts.tiles } : {}),
+  };
+}
+
+// Meta for the live OG preview of an UNSAVED client brief (og-preview route,
+// kind:'client-brief'). Same fields as buildBriefOpenGraphMeta() produces for
+// a stored client brief, so the preview matches what is shared.
+export function buildClientBriefOgPreviewMeta({ title, clientName, description, ogLabel, ogSubhead, hideOgSubhead, ogLines, ogTitleLines }) {
+  const brief = {
+    kind: 'client-brief',
+    title: String(title || '').trim() || 'Client Brief',
+    description,
+    ogLabel,
+    ogSubhead,
+    ogLines,
+    ogTitleLines,
+    hideOgSubhead: hideOgSubhead === true,
+  };
+  const desc = clientBriefDescriptionOf(brief, clientName);
+  return {
+    title: brief.title,
+    description: desc,
+    clientName: clientName || '',
+    website: '',
+    dateLabel: '',
+    hideOgSubhead: brief.hideOgSubhead,
+    ogLabel: briefOgLabel(brief),
+    ...clientBriefOgFields(brief, desc),
   };
 }

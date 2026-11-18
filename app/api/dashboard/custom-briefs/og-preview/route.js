@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
-import { buildInvoiceOgPreviewMeta } from '../../../../briefs/_lib/custom-briefs.js';
+import { buildClientBriefOgPreviewMeta, buildInvoiceOgPreviewMeta } from '../../../../briefs/_lib/custom-briefs.js';
+import { normalizeClientBriefOg } from '../../../../../features/client-brief/og.js';
 import { renderOgImageJpeg } from '../../../../briefs/_lib/og-image-render.js';
 
 const require = createRequire(import.meta.url);
@@ -25,19 +26,32 @@ export async function POST(request) {
     return NextResponse.json({ error: error?.message || 'Unauthorized' }, { status });
   }
   const body = await request.json().catch(() => ({}));
-  if (!body.invoice || typeof body.invoice !== 'object') {
-    return NextResponse.json({ error: 'invoice is required.' }, { status: 400 });
+  let meta;
+  if (body.kind === 'client-brief') {
+    // Client brief: no invoice needed. Fields go through the same
+    // normalizer as publish, so the preview matches what is stored.
+    const og = normalizeClientBriefOg(body);
+    meta = buildClientBriefOgPreviewMeta({
+      title: String(body.title || '').trim().slice(0, 140),
+      clientName: String(body.clientName || '').trim().slice(0, 80),
+      description: String(body.description || '').trim().slice(0, 240),
+      ...og,
+    });
+  } else {
+    if (!body.invoice || typeof body.invoice !== 'object') {
+      return NextResponse.json({ error: 'invoice is required.' }, { status: 400 });
+    }
+    meta = buildInvoiceOgPreviewMeta({
+      title: body.title,
+      invoice: body.invoice,
+      ogLabel: body.ogLabel,
+      ogSubhead: body.ogSubhead,
+      hideOgSubhead: body.hideOgSubhead === true,
+      ogLines: Array.isArray(body.ogLines) ? body.ogLines : [],
+      ogTitleLines: Array.isArray(body.ogTitleLines) ? body.ogTitleLines : [],
+      clientName: body.clientName,
+    });
   }
-  const meta = buildInvoiceOgPreviewMeta({
-    title: body.title,
-    invoice: body.invoice,
-    ogLabel: body.ogLabel,
-    ogSubhead: body.ogSubhead,
-    hideOgSubhead: body.hideOgSubhead === true,
-    ogLines: Array.isArray(body.ogLines) ? body.ogLines : [],
-    ogTitleLines: Array.isArray(body.ogTitleLines) ? body.ogTitleLines : [],
-    clientName: body.clientName,
-  });
   const jpg = await renderOgImageJpeg(meta);
   return new Response(jpg, {
     status: 200,

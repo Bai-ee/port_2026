@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  CLIENT_BRIEF_SLUG_RE, allowsFuzzyResolve, buildClientBrief, isClientBriefData, newClientBriefSlug, selectBriefsForViewer,
+  clientBriefPdfMode, CLIENT_BRIEF_SLUG_RE, allowsFuzzyResolve, buildClientBrief, isClientBriefData, newClientBriefSlug, selectBriefsForViewer,
 } from '../publish.js';
 
 const require = createRequire(import.meta.url);
@@ -48,6 +48,7 @@ test('buildClientBrief: parses + renders from body only; asOf defaults to today,
   const { model, html } = buildClientBrief({ body: { text: '## A\nK: v', title: 'T', asOf: 'garbage' }, clientName: 'Co', pdfPath: '/p/pdf', now });
   assert.equal(model.asOf, '2026-11-18');
   assert.equal(model.clientName, 'Co');
+  assert.ok(Array.isArray(model.blocks));
   assert.match(html, /Download PDF/);
   assert.throws(() => buildClientBrief({ body: { text: '' }, clientName: 'Co', now }), { code: 'empty' });
   // html in the body is never used
@@ -80,4 +81,39 @@ test('digest link: newest public brief ignores client briefs', async () => {
     delete require.cache[linkPath];
     if (prevFb) require.cache[fbPath] = prevFb; else delete require.cache[fbPath];
   }
+});
+
+test('pdf mode: v2 (layoutVersion 2) = default, v1 = edge-to-edge', () => {
+  assert.equal(clientBriefPdfMode({ layoutVersion: 2 }), 'default');
+  assert.equal(clientBriefPdfMode({}), 'edge-to-edge');
+  assert.equal(clientBriefPdfMode(null), 'edge-to-edge');
+});
+
+test('OG normalizer: invoice limits (3 title lines x40, 2 extra lines x120, subhead 160), HITLOOP default label', async () => {
+  const { normalizeClientBriefOg, suggestClientBriefOg } = await import('../og.js');
+  const og = normalizeClientBriefOg({ ogSubhead: 's'.repeat(300), ogTitleLines: ['a'.repeat(60), '', 'b', 'c', 'd'], ogLines: ['x', ' ', 'y', 'z'], hideOgSubhead: 'yes' });
+  assert.equal(og.ogLabel, 'HITLOOP');
+  assert.equal(og.ogSubhead.length, 160);
+  assert.deepEqual(og.ogTitleLines.map((l) => l.length), [40, 1, 1]);
+  assert.deepEqual(og.ogLines, ['x', 'y']);
+  assert.equal(og.hideOgSubhead, false);
+  const s = suggestClientBriefOg({ title: 'Weekly Growth Plan For November', clientName: 'Rosita', text: '# T\n\nFirst **para**.' });
+  assert.deepEqual(s.ogTitleLines, ['Weekly Growth Plan', 'For November']);
+  assert.equal(s.ogSubhead, 'Prepared for Rosita');
+  assert.deepEqual(s.ogLines, ['First para.', '']);
+});
+
+test('card placement: admin category next to invoice-builder, no Briefs-bucket entry or RUN BRIEF exclusion', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const src = await readFile(path.join(ROOT, 'DashboardPage.jsx'), 'utf8');
+  const at = src.indexOf("id: 'client-brief-publisher'");
+  assert.ok(at > 0);
+  assert.equal(src.indexOf("id: 'client-brief-publisher'", at + 1), -1, 'defined once');
+  assert.match(src.slice(at, at + 80), /category: 'admin'/);
+  const invoiceAt = src.indexOf("id: 'invoice-builder'");
+  assert.ok(at > invoiceAt && at - invoiceAt < 2500, 'sits right after invoice-builder');
+  assert.ok(!src.includes("card.id !== 'client-brief-publisher'"));
+  const tile = await readFile(path.join(ROOT, 'lib/dashboard/tile-config.js'), 'utf8');
+  assert.match(tile, /CUSTOM_DETAIL_CARD_IDS[\s\S]*'client-brief-publisher'[\s\S]*CARD_ACTION_EDIT/);
+  assert.match(tile.slice(tile.indexOf('CARD_ACTION_EDIT')), /'client-brief-publisher'/);
 });

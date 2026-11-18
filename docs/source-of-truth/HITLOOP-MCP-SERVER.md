@@ -8,7 +8,7 @@ A remote MCP server so the owner can talk to HITLOOP from ChatGPT and Claude (cu
 >
 > | Tool | Kind | What |
 > | --- | --- | --- |
-> | `publish_client_brief {clientId, text<=50000, title?}` | write | Same as Briefs > CLIENT BRIEF > Publish. Returns `{publicUrl, pdfUrl, briefSlug, clientId, title, warnings}`. Creates a PUBLIC page; text is client-facing. Capped at 20 publishes per UTC day (`reserveDailyClientBriefSlot`, `features/mcp/limits.js`). |
+> | `publish_client_brief {clientId, text<=50000, title?, ogLabel?, ogSubhead?, hideOgSubhead?, ogTitleLines?<=3, ogLines?<=2, briefSlug?}` | write | Same as Admin > CLIENT BRIEF > Publish (text rendered as pasted Markdown). `briefSlug` of an existing client brief updates it in place (same URL, PDF re-rendered). Returns `{publicUrl, pdfUrl, ogImageUrl, briefSlug, clientId, title, warnings}`. Creates a PUBLIC page; text is client-facing. Capped at 20 publishes per UTC day (updates count) (`reserveDailyClientBriefSlot`, `features/mcp/limits.js`). |
 > | `unpublish_client_brief {clientId, briefSlug}` | write | PATCH `public:false` (deletes the stored PDF). Returns `{ok, briefSlug, warning?}`. No republish here. |
 > | `list_client_briefs {clientId}` | read | `{title, date, public, publicUrl, pdfUrl, briefSlug}` per client brief. |
 >

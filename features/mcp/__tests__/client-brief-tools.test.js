@@ -9,7 +9,7 @@ const ORIGIN = 'https://hitloop.test';
 
 function setup({ auth = 'Bearer tok', respondClientId = CLIENT, status = 200, extra = {} } = {}) {
   const calls = [];
-  const brief = { briefSlug: 'cb-1', title: 'Weekly', kind: 'client-brief', public: true, publicUrl: `${ORIGIN}/briefs/notrug/cb-1`, pdfDownloadUrl: `${ORIGIN}/briefs/notrug/cb-1/pdf`, createdAt: '2026-11-18T00:00:00Z' };
+  const brief = { briefSlug: 'client-brief-20261118-0123456789abcdef', ogImageUrl: `${ORIGIN}/briefs/notrug/cb-1/og-image`, title: 'Weekly', kind: 'client-brief', public: true, publicUrl: `${ORIGIN}/briefs/notrug/cb-1`, pdfDownloadUrl: `${ORIGIN}/briefs/notrug/cb-1/pdf`, createdAt: '2026-11-18T00:00:00Z' };
   const mk = (method) => async (req) => {
     const body = method === 'GET' ? null : await req.json();
     calls.push({ method, url: new URL(req.url), authorization: req.headers.get('authorization'), body });
@@ -36,9 +36,10 @@ test('publish: auth + as=clientId + kind client-brief + text/title; returns URLs
   assert.equal(c.authorization, 'Bearer tok');
   assert.equal(c.url.searchParams.get('as'), CLIENT);
   assert.deepEqual(c.body, { kind: 'client-brief', text: '# Hi\nA: 1', public: true, title: 'Weekly' });
+  assert.equal(r.ogImageUrl, `${ORIGIN}/briefs/notrug/cb-1/og-image`);
   assert.equal(r.publicUrl, `${ORIGIN}/briefs/notrug/cb-1`);
   assert.equal(r.pdfUrl, `${ORIGIN}/briefs/notrug/cb-1/pdf`);
-  assert.equal(r.briefSlug, 'cb-1');
+  assert.equal(r.briefSlug, 'client-brief-20261118-0123456789abcdef');
   assert.equal(r.clientId, CLIENT);
   assert.deepEqual(r.warnings, ['PDF later']);
 });
@@ -102,4 +103,49 @@ test('publish_client_brief stops at the daily cap (20/UTC day) before calling th
   for (let i = 0; i < DAILY_CLIENT_BRIEF_CAP; i += 1) await reserveDailyClientBriefSlot(counters, { now });
   await assert.rejects(() => reserveDailyClientBriefSlot(counters, { now }), (e) => e.code === 'daily-cap');
   await reserveDailyClientBriefSlot(counters, { now: now + 86400000 }); // next UTC day resets
+});
+
+test('publish: OG args are forwarded (within limits; over-limit arrays rejected by the schema)', async () => {
+  const s = setup();
+  await s.call('publish_client_brief', {
+    clientId: CLIENT, text: '# Hi', ogLabel: 'NTR', ogSubhead: 'Sub', hideOgSubhead: true,
+    ogTitleLines: ['a', 'b', 'c'], ogLines: ['x', 'y'],
+  });
+  assert.deepEqual(s.calls[0].body, {
+    kind: 'client-brief', text: '# Hi', public: true, ogLabel: 'NTR', ogSubhead: 'Sub', hideOgSubhead: true,
+    ogTitleLines: ['a', 'b', 'c'], ogLines: ['x', 'y'],
+  });
+  const over = await s.call('publish_client_brief', { clientId: CLIENT, text: '# Hi', ogLines: ['x', 'y', 'z'] });
+  assert.equal(over.isError, true);
+  assert.equal(s.calls.length, 1);
+});
+
+test('publish: briefSlug updates in place (forwarded to the route); non client-brief ids are rejected before any call', async () => {
+  const s = setup();
+  const slug = 'client-brief-20261118-0123456789abcdef';
+  const r = out(await s.call('publish_client_brief', { clientId: CLIENT, text: '# Hi', briefSlug: slug }));
+  assert.equal(s.calls[0].body.briefSlug, slug);
+  assert.equal(r.briefSlug, slug);
+  const bad = await s.call('publish_client_brief', { clientId: CLIENT, text: '# Hi', briefSlug: 'some-invoice' });
+  assert.equal(bad.isError, true);
+  assert.equal(s.calls.length, 1);
+});
+
+test('tool descriptions + guide/instructions mention the OG args and in-place update', async () => {
+  const tool = registry.find((t) => t.name === 'publish_client_brief');
+  for (const key of ['ogLabel', 'ogSubhead', 'hideOgSubhead', 'ogTitleLines', 'ogLines', 'briefSlug']) assert.ok(tool.inputSchema.properties[key], key);
+  assert.match(tool.description, /UPDATE it in place/);
+  const { readFile } = await import('node:fs/promises');
+  const guide = await readFile(new URL('../guide.js', import.meta.url), 'utf8');
+  const instructions = await readFile(new URL('../instructions.js', import.meta.url), 'utf8');
+  assert.match(guide, /briefSlug\?/);
+  assert.match(instructions, /update an existing one in place/);
+});
+
+test('publish with briefSlug (update) never sends public, so an unpublished brief stays unpublished', async () => {
+  const s = setup({ extra: { brief: { briefSlug: 'client-brief-20261118-0123456789abcdef', title: 'Weekly', kind: 'client-brief', public: false, publicUrl: `${ORIGIN}/briefs/notrug/cb-1`, pdfDownloadUrl: `${ORIGIN}/briefs/notrug/cb-1/pdf` } } });
+  const r = out(await s.call('publish_client_brief', { clientId: CLIENT, text: '# Edited', briefSlug: 'client-brief-20261118-0123456789abcdef' }));
+  assert.equal('public' in s.calls[0].body, false);
+  assert.equal(s.calls[0].body.briefSlug, 'client-brief-20261118-0123456789abcdef');
+  assert.equal(r.public, false);
 });
