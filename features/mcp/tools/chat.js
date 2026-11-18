@@ -1,14 +1,22 @@
 // chat.js - conversation parity with the dashboard Strategy chat (Marketing Director > Strategy (chat)).
 // Same threads (x_strategy_chats), same agent turn (strategy-chat-send), same daily turn cap. Uses only the identity
-// the MCP server already verified (OAuth) and the in-process strategy handlers; passes NO authorization header, so the
-// action runtime turns every write into a confirm card and the owner confirms in the dashboard. Also exposes the
-// read-only action registry search and audit log.
+// the MCP server already verified (OAuth) and the in-process strategy handlers. chat_send carries the owner's own
+// dashboard authorization (../owner-session.js), so the action runtime treats it like the dashboard chat: tier-1
+// changes (calendar drafts, creative, dates, tracks) run, with Undo in the action log; approving, scheduling,
+// posting and spending stay confirm cards (owner rule 2026-11-17). Also exposes the action registry search and log.
 
 import { ToolError } from '../jsonrpc.js';
 import { defTool, resolveClientId, CLIENT_ID_PROP, str } from './common.js';
 import { ACTION_TOOLS } from '../../x-strategy/agent/action-runtime.js';
+import { ownerAuthorization } from '../owner-session.js';
 
 const authFor = (ctx) => ({ decoded: { email: ctx.email, uid: ctx.uid ?? null } });
+/** authFor + the owner's dashboard authorization, so the chat's tier-1 actions can run (null => cards, as before). */
+const actingAuthFor = async (ctx) => {
+  // By the verified admin email only (ctx.uid is the MCP identity, not necessarily the Firebase uid).
+  const authorization = await (ctx.services?.ownerAuthorization || ownerAuthorization)({ email: ctx.email });
+  return authorization ? { ...authFor(ctx), authorization, impersonating: true } : authFor(ctx);
+};
 const clip = (v, n) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const DASHBOARD_PATH = 'HITLOOP Marketing Director > Strategy (chat)';
 
@@ -66,14 +74,15 @@ const chatSend = defTool({
   name: 'chat_send',
   title: 'Send to Strategy chat',
   kind: 'propose',
-  description: `Send a message to the dashboard Strategy agent and return its reply. Runs the SAME agent turn as the dashboard chat (same tools, rules, memory of the thread), so it makes ONE model call and counts against the same daily turn cap (use sparingly). Omit threadId to start a new thread; pass a threadId from chat_threads to continue a dashboard thread. Anything that would change data comes back as a PENDING card in ${DASHBOARD_PATH}; nothing is applied until the owner confirms it there (there is no confirm tool). Tell the owner to confirm in the dashboard; never say it was done.`,
+  description: `Talk to the dashboard Strategy agent for a client (pass clientId) and return its reply. Runs the SAME agent turn as the dashboard chat (same tools, rules, memory of the thread, same permissions), so it makes ONE model call and counts against the same daily turn cap. Omit threadId to start a new thread; pass a threadId from chat_threads to continue a dashboard thread. Calendar and content changes the dashboard chat applies directly (draft text, creative, dates, tracks) are applied here too and listed under applied (undo from ${DASHBOARD_PATH} or the action log). Approving, scheduling, posting and anything paid come back as PENDING cards the owner confirms in the dashboard; never say those were done.`,
   inputSchema: { type: 'object', properties: { text: str('The message to send, as the owner would type it in the chat.'), threadId: str('Existing thread id to continue; omit to start a new thread.'), clientId: CLIENT_ID_PROP }, required: ['text'] },
   handler: async ({ args, ctx }) => {
     const clientId = await resolveClientId(ctx, args);
     const body = { clientId, text: args.text, ...(args.threadId ? { threadId: args.threadId } : {}) };
-    const r = unwrap(await handlersOf(ctx).handle('strategy-chat-send', body, { clientId, uid: ctx.uid ?? null, email: ctx.email }, authFor(ctx)), 'Chat turn');
+    const r = unwrap(await handlersOf(ctx).handle('strategy-chat-send', body, { clientId, uid: ctx.uid ?? null, email: ctx.email, impersonating: true }, await actingAuthFor(ctx)), 'Chat turn');
     return {
       threadId: r.threadId, reply: r.text, turnsUsedToday: r.turnsUsedToday, cap: r.cap,
+      applied: (r.toolResults || []).map((t) => ({ tool: t.tool, ...(t.undoId ? { undoId: t.undoId } : {}) })),
       cards: (r.proposals || []).map(cardOf),
       ...(r.droppedProposals?.length ? { droppedCards: r.droppedProposals } : {}),
       next: r.proposals?.length ? `${r.proposals.length} card(s) are PENDING and NOT applied. Tell the owner to confirm them in ${DASHBOARD_PATH} (thread ${r.threadId}).` : 'No cards were created.',

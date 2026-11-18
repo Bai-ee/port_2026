@@ -2,6 +2,8 @@
 
 A remote MCP server so the owner can talk to HITLOOP from ChatGPT and Claude (custom connectors): read client-admin data and the codebase, run free syncs, and propose changes (including paid syncs, which are proposal cards). **It can never post, schedule, approve, delete, send email/Telegram, write to X, or spend money by itself: every paid action needs the owner's Confirm click inside HITLOOP.**
 
+> **Chat parity (2026-11-17, owner rule):** `chat_send` runs the dashboard Strategy agent for any client (`clientId`) WITH the owner's own dashboard authorization (`features/mcp/owner-session.js` mints a real Firebase ID token for the verified admin email). Tier-1 changes the dashboard chat applies directly (draft text, creative, dates, tracks/buckets) are applied over MCP too and returned as `applied` (undo from the dashboard action log). Approve / schedule / post / paid stay confirm cards. Mint failure => cards, as before. The client-link server (`/api/client-mcp`) stays read-only.
+
 Code: `features/mcp/*` (pure logic + tools), `app/api/mcp/route.js`, `app/api/oauth/{register,authorize,token}/route.js`, `app/oauth/authorize/page.jsx`, `app/.well-known/oauth-*`. Plan: `docs/plans/CONTENT-CENTER-AND-MCP-MASTER-PLAN.md` (WS-B).
 The separate read-only, one-client-per-link server for clients is [CLIENT-MCP-SERVER.md](CLIENT-MCP-SERVER.md); it shares the OAuth code (tokens carry a client binding) but owner tokens and client tokens never cross.
 

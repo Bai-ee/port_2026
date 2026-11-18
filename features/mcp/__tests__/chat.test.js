@@ -82,3 +82,32 @@ test('find_actions and get_action_log are read-only and work without authorizati
   assert.equal(registry.find((t) => t.name === 'find_actions').annotations.readOnlyHint, true);
   assert.equal(registry.find((t) => t.name === 'chat_send').annotations.readOnlyHint, false);
 });
+
+test('chat_send with the owner authorization: tier-1 calendar change runs like the dashboard chat and is listed as applied', async () => {
+  const chatStore = createMemoryChatStore({ cap: 60 });
+  const invoked = [];
+  const stores = createMemoryActionStores();
+  const actionRuntime = createActionRuntime({ ...stores, invoke: async (e) => { invoked.push(e.id); return { ok: true, status: 200, json: { ok: true } }; } });
+  let seenCtx = null;
+  const agentLoopFactory = ({ toolDeps }) => ({
+    runTurn: async ({ userText }) => {
+      seenCtx = toolDeps.actions.ctx;
+      const out = await runActionTool('run_action', { actionId: 'queue.post.update', args: { postId: 'p1', content: userText } }, toolDeps);
+      return { text: 'done', proposals: out.proposal ? [out.proposal] : [], toolResults: out.proposal ? [] : [{ tool: 'run_action', undoId: out.result?.undoId || null }] };
+    },
+  });
+  const { h } = realHandlers({ actionRuntime, agentLoopFactory, chatStore });
+  const minted = [];
+  const ctx = {
+    db: createFakeDb({ [`clients/${OWNER}`]: { name: 'B' } }), email: 'bryanballi@gmail.com', clientId: OWNER, now: () => NOW,
+    services: { strategyHandlers: () => h, ownerAuthorization: async (who) => { minted.push(who); return 'Bearer owner-id-token'; } },
+  };
+  const r = await handleRpc({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'chat_send', arguments: { text: 'fix post p1' } } }, { registry, ctx, instructions: '' });
+  const sent = textOf(r.body.result);
+  assert.deepEqual(minted, [{ email: 'bryanballi@gmail.com' }]); // minted by the verified email only
+  assert.equal(seenCtx.authorization, 'Bearer owner-id-token');
+  assert.equal(seenCtx.impersonating, true);
+  assert.deepEqual(invoked, ['queue.post.update']);
+  assert.equal(sent.cards.length, 0);
+  assert.equal(sent.applied.length, 1);
+});
