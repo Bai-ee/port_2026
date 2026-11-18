@@ -38,6 +38,9 @@ const BriefStudio = dynamic(() => import('./brief/BriefStudio'), { ssr: false })
 // REMIX mode (?tool=remix) — the EditVideos video-remix recipe builder. Client-only
 // and lazy; it only talks to /api/dashboard/media, nothing renders in the browser.
 const RemixStudio = dynamic(() => import('./remix/RemixStudio'), { ssr: false });
+// TAPE DECK mode (?tool=tapes) — public before/after listening for restored
+// mixtapes. Client-only and lazy; reads /api/public/tape-deck, writes nothing.
+const TapeDeckStudio = dynamic(() => import('./tapes/TapeDeckStudio'), { ssr: false });
 
 const VIEWPORTS = {
   desktop: { width: 1440, height: 900,  bezel: 30, depth: 40, corner: 26, screenCorner: 14, camZ: 2700, label: 'DESKTOP' },
@@ -2344,7 +2347,7 @@ export default function StudioPage() {
             ...GLASS.surface,
           }}
         >
-          {[['mockup', 'MOCKUP VIDEO'], ['cloth', 'HOLO PAPER'], ['paint', 'PAINT'], ['loop', 'LOOPS'], ['remix', 'REMIX'], ['invoice', 'INVOICE'], ...(isAdmin ? [['brief', 'CLIENT BRIEF']] : [])].map(([id, label]) => (
+          {[['mockup', 'MOCKUP VIDEO'], ['cloth', 'HOLO PAPER'], ['paint', 'PAINT'], ['loop', 'LOOPS'], ['remix', 'REMIX'], ['invoice', 'INVOICE'], ['tapes', 'TAPE DECK'], ...(isAdmin ? [['brief', 'CLIENT BRIEF']] : [])].map(([id, label]) => (
             <button
               key={id}
               onClick={() => switchTool(id)}
@@ -2372,6 +2375,8 @@ export default function StudioPage() {
           <RemixStudio isNarrow={isNarrow} railW={RAIL_W} authedFetch={authedFetch} user={user} />
         ) : tool === 'invoice' ? (
           <InvoiceStudio isNarrow={isNarrow} railW={RAIL_W} isAdmin={isAdmin} authedFetch={authedFetch} user={user} />
+        ) : tool === 'tapes' ? (
+          <TapeDeckStudio isNarrow={isNarrow} railW={RAIL_W} />
         ) : tool === 'brief' ? (
           isAdmin ? (
             <BriefStudio isNarrow={isNarrow} railW={RAIL_W} isAdmin={isAdmin} authedFetch={authedFetch} />
