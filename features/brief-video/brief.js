@@ -26,13 +26,33 @@ export function firstSentence(publicCopy) {
   return (m ? m[1] : line).slice(0, HOOK_MAX).trim();
 }
 
-/** { brief, briefHash, hook, publicCopy } for a row's content, or null when it has no brief text. */
+const HOWTO_ID_RE = /^howto=([a-z0-9-]{3,48})$/;
+
+/**
+ * Classify the brief text (after the marker). `howto=<id>` -> CQ-HowTo; anything that starts with "howto" or carries
+ * a YAML `request_version:` is invalid and must never reach BriefCut; everything else is free text.
+ */
+export function classifyBrief(brief) {
+  const text = String(brief ?? '').trim();
+  const m = HOWTO_ID_RE.exec(text);
+  if (m) return { kind: 'howto', howtoId: m[1] };
+  if (/request_version:/i.test(text)) return { kind: 'invalid', reason: 'yaml-in-brief' };
+  if (/^howto/i.test(text)) return { kind: 'invalid', reason: 'malformed-howto-line' };
+  return { kind: 'freetext' };
+}
+
+/** { brief, briefHash, hook, publicCopy, briefKind, howtoId?, invalidReason? } for a row's content, or null when it has no brief text. */
 export function parseBrief(content) {
   const m = BRIEF_RE.exec(String(content ?? ''));
   const brief = m ? m[1].trim() : '';
   if (!brief) return null;
   const publicCopy = stripBrief(content);
-  return { brief, briefHash: briefHash(brief), hook: firstSentence(publicCopy), publicCopy };
+  return { brief, briefHash: briefHash(brief), hook: firstSentence(publicCopy), publicCopy, ...kindFields(brief) };
+}
+
+function kindFields(brief) {
+  const c = classifyBrief(brief);
+  return { briefKind: c.kind, ...(c.howtoId ? { howtoId: c.howtoId } : {}), ...(c.reason ? { invalidReason: c.reason } : {}) };
 }
 
 /** Brief for a stored row: parsed from content, else the already-moved videoBrief (after attach). */
@@ -41,5 +61,5 @@ export function briefOfPost(post) {
   if (parsed) return parsed;
   const brief = typeof post?.videoBrief === 'string' ? post.videoBrief.trim() : '';
   if (!brief) return null;
-  return { brief, briefHash: post.videoBriefHash || briefHash(brief), hook: firstSentence(post.content), publicCopy: String(post.content ?? '').trim() };
+  return { brief, briefHash: post.videoBriefHash || briefHash(brief), hook: firstSentence(post.content), publicCopy: String(post.content ?? '').trim(), ...kindFields(brief) };
 }

@@ -1,11 +1,12 @@
 import { createRequire } from 'node:module';
 import {
   DAILY_BRIEF_VIDEO_CLIENTS, BRIEF_VIDEO_JOBS as JOBS, BRIEF_VIDEO_STATE as STATE,
-  MAX_ATTEMPTS, MAX_RENDERS_PER_DAY, ACTIVE_MAX_MS, REPOKE_AFTER_MS,
+  MAX_ATTEMPTS, MAX_RENDERS_PER_DAY, ACTIVE_MAX_MS, REPOKE_AFTER_MS, howtoEnabled, HOWTO_STATUS_WRITES_PER_TICK,
 } from './clients.js';
 import { parseBrief } from './brief.js';
 import { selectCandidates, HOLD_RE, newJobDoc, briefJobId, addDaysIso } from './jobs.js';
 import { attachJobToPost } from './attach.js';
+import { howtoReadiness } from './howto.js';
 
 const require = createRequire(import.meta.url);
 const POSTS = 'social_posts';
@@ -55,20 +56,52 @@ async function readClientJobs(db, clientId) {
 }
 
 /** Dry run: writes nothing. Every brief draft with its parsed brief + hash, plus the candidates the next tick would consider. */
-export async function dryRun({ db, now = Date.now(), clients = DAILY_BRIEF_VIDEO_CLIENTS } = {}) {
+export async function dryRun({ db, now = Date.now(), clients = DAILY_BRIEF_VIDEO_CLIENTS, env = process.env } = {}) {
   const today = ctToday(now);
-  const out = { ok: true, dryRun: true, today, window: [today, addDaysIso(today, 7)], clients: {} };
+  const flag = howtoEnabled(env);
+  const out = { ok: true, dryRun: true, today, window: [today, addDaysIso(today, 7)], howtoEnabled: flag, clients: {} };
   for (const clientId of Object.keys(clients)) {
     const drafts = await readClientDrafts(db, clientId);
-    const briefs = drafts
-      .map((p) => ({ post: p, parsed: parseBrief(p.content) }))
-      .filter((c) => c.parsed)
-      .map(({ post, parsed }) => ({ postId: post.id, reviewOn: post.reviewOn || null, hasMedia: Boolean(post.mediaUrl), brief: parsed.brief, briefHash: parsed.briefHash, hook: parsed.hook, ...(HOLD_RE.test(parsed.brief) ? { skipReason: 'hold' } : {}) }))
-      .sort((a, b) => String(a.reviewOn).localeCompare(String(b.reviewOn)));
-    const candidates = selectCandidates(drafts, { today, clients }).map((c) => c.post.id);
+    const cache = new Map();
+    const briefs = [];
+    const ready = new Set();
+    for (const post of drafts) {
+      const parsed = parseBrief(post.content);
+      if (!parsed) continue;
+      const extra = {};
+      if (HOLD_RE.test(parsed.brief)) extra.skipReason = 'hold';
+      else if (parsed.briefKind === 'invalid') extra.skipReason = parsed.invalidReason;
+      else if (parsed.briefKind === 'howto') {
+        if (!flag) extra.skipReason = 'howto-disabled';
+        else {
+          const r = await howtoReadiness(db, { howtoId: parsed.howtoId, clientId, reviewOn: post.reviewOn }, cache);
+          if (r.ready) ready.add(post.id);
+          else if (r.state === 'waiting_howto') extra.waitingReason = r.reason;
+          else extra.skipReason = r.reason;
+        }
+      }
+      briefs.push({ postId: post.id, reviewOn: post.reviewOn || null, hasMedia: Boolean(post.mediaUrl), brief: parsed.brief, briefHash: parsed.briefHash, hook: parsed.hook, briefKind: parsed.briefKind, ...(parsed.howtoId ? { howtoId: parsed.howtoId } : {}), ...extra });
+    }
+    briefs.sort((a, b) => String(a.reviewOn).localeCompare(String(b.reviewOn)));
+    const candidates = selectCandidates(drafts, { today, clients, includeHowto: flag })
+      .filter((c) => c.parsed.briefKind === 'freetext' || (c.parsed.briefKind === 'howto' && ready.has(c.post.id)))
+      .map((c) => c.post.id);
     out.clients[clientId] = { drafts: drafts.length, briefCount: briefs.length, candidates, briefs };
   }
   return out;
+}
+
+/** Visible brief status on the draft (flag on only). Draft-only transaction; writes only the two status fields, only when they change. */
+async function writeBriefStatus(db, postId, { status, reason }) {
+  const ref = db.collection(POSTS).doc(postId);
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const cur = snap.exists ? snap.data() : null;
+    if (!cur || cur.status !== 'draft') return false;
+    if ((cur.videoBriefStatus ?? null) === status && (cur.videoBriefReason ?? null) === reason) return false;
+    tx.set(ref, { videoBriefStatus: status, videoBriefReason: reason }, { merge: true });
+    return true;
+  });
 }
 
 async function failTimedOut(db, job, now) {
@@ -112,6 +145,7 @@ async function createJob(db, job, { now, maxPerDay }) {
 export async function runTick({ db, now = Date.now(), clients = DAILY_BRIEF_VIDEO_CLIENTS, env = process.env, fetchImpl, postId = null, force = false, maxPerDay = MAX_RENDERS_PER_DAY } = {}) {
   const report = { ok: true, attached: null, failed: null, repoked: null, started: null, skipped: null };
   const poke = (id) => pokeService(id, { env, fetchImpl });
+  const flag = howtoEnabled(env);
   const jobsByClient = {};
   for (const clientId of Object.keys(clients)) jobsByClient[clientId] = await readClientJobs(db, clientId);
   const allJobs = Object.values(jobsByClient).flat();
@@ -135,6 +169,45 @@ export async function runTick({ db, now = Date.now(), clients = DAILY_BRIEF_VIDE
     report.repoked = { jobId: queuedOld.jobId };
   }
 
+  // Per-client scan (memoized): candidates with their readiness/status, plus drafts that carry a status but are no longer candidates.
+  const scans = new Map();
+  const scanClient = async (clientId) => {
+    if (scans.has(clientId)) return scans.get(clientId);
+    const drafts = await readClientDrafts(db, clientId);
+    const cache = new Map();
+    const items = [];
+    const candidateIds = new Set();
+    for (const c of selectCandidates(drafts, { today: ctToday(now), clients, includeHowto: flag })) {
+      candidateIds.add(c.post.id);
+      const kind = c.parsed.briefKind;
+      if (kind === 'invalid') { items.push({ c, ready: false, specHash: null, state: { status: 'invalid_brief', reason: c.parsed.invalidReason } }); continue; }
+      if (kind === 'howto') {
+        const r = await howtoReadiness(db, { howtoId: c.parsed.howtoId, clientId, reviewOn: c.post.reviewOn }, cache);
+        items.push(r.ready ? { c, ready: true, specHash: r.specHash, state: { status: null, reason: null } } : { c, ready: false, specHash: null, state: { status: r.state, reason: r.reason } });
+        continue;
+      }
+      items.push({ c, ready: true, specHash: null, state: { status: null, reason: null } });
+    }
+    const stale = flag ? drafts.filter((p) => !candidateIds.has(p.id) && (p.videoBriefStatus ?? null) !== null) : [];
+    const scan = { items, stale };
+    scans.set(clientId, scan);
+    return scan;
+  };
+  // Status sync runs every tick (flag on), before any early return; one cap shared across all clients.
+  let statusWrites = 0;
+  const sync = async (post, state) => {
+    if (!flag || statusWrites >= HOWTO_STATUS_WRITES_PER_TICK) return;
+    if ((post.videoBriefStatus ?? null) === state.status && (post.videoBriefReason ?? null) === state.reason) return;
+    if (await writeBriefStatus(db, post.id, state)) { statusWrites += 1; (report.statusWrites ||= []).push({ postId: post.id, status: state.status, reason: state.reason }); }
+  };
+  if (flag && !postId) {
+    for (const clientId of Object.keys(clients)) {
+      const { items, stale } = await scanClient(clientId);
+      for (const it of items) await sync(it.c.post, it.state);
+      for (const p of stale) await sync(p, { status: null, reason: null });
+    }
+  }
+
   // 2. Start one, only when nothing is active.
   if (failedId) { report.skipped = 'failed-this-tick'; return report; }
   const stillActive = allJobs.some((j) => isActive(j) && !isTimedOut(j, now));
@@ -150,6 +223,7 @@ export async function runTick({ db, now = Date.now(), clients = DAILY_BRIEF_VIDE
       if (post.status !== 'draft' || !String(post.mediaJobId || '').startsWith('bv_')) { report.skipped = 'force-not-eligible'; return report; }
       const parsed = parseBrief(post.content) || (post.videoBrief ? parseBrief(`INTERNAL VIDEO BRIEF: ${post.videoBrief}`) : null);
       if (!parsed) { report.skipped = 'no-brief'; return report; }
+      if (parsed.briefKind !== 'freetext') { report.skipped = 'howto-force-unsupported'; return report; }
       if (HOLD_RE.test(parsed.brief)) { report.skipped = 'hold'; return report; }
       const attempts = jobsByClient[clientId].filter((j) => j.postId === post.id && j.briefHash === parsed.briefHash).map((j) => Number(j.attempt) || 1);
       pick = { post, parsed, attempt: Math.max(0, ...attempts) + 1, replace: true };
@@ -157,21 +231,22 @@ export async function runTick({ db, now = Date.now(), clients = DAILY_BRIEF_VIDE
     if (!pick) { report.skipped = report.skipped || 'post-not-found'; return report; }
   } else {
     for (const clientId of Object.keys(clients)) {
-      const drafts = await readClientDrafts(db, clientId);
-      for (const c of selectCandidates(drafts, { today: ctToday(now), clients })) {
-        const mine = jobsByClient[clientId].filter((j) => j.postId === c.post.id && j.briefHash === c.parsed.briefHash);
+      const { items } = await scanClient(clientId);
+      for (const it of items) {
+        if (!it.ready || pick) continue; // status already synced above; keep only ready candidates for the pick
+        const { c, specHash } = it;
+        const mine = jobsByClient[clientId].filter((j) => j.postId === c.post.id && j.briefHash === c.parsed.briefHash && (j.specHash ?? null) === specHash);
         if (mine.some((j) => j.status !== 'failed')) continue; // queued/rendering/done already: reconcile owns it
         const attempts = mine.map((j) => Number(j.attempt) || 1);
         if (attempts.length >= MAX_ATTEMPTS) continue;
-        pick = { post: c.post, parsed: c.parsed, attempt: Math.max(0, ...attempts) + 1, replace: false };
-        break;
+        pick = { post: c.post, parsed: c.parsed, attempt: Math.max(0, ...attempts) + 1, replace: false, specHash };
       }
       if (pick) break;
     }
     if (!pick) { report.skipped = 'no-candidate'; return report; }
   }
 
-  const job = newJobDoc({ post: pick.post, parsed: pick.parsed, attempt: pick.attempt, now });
+  const job = newJobDoc({ post: pick.post, parsed: pick.parsed, attempt: pick.attempt, now, specHash: pick.specHash });
   if (pick.replace) job.replace = true;
   const created = await createJob(db, job, { now, maxPerDay });
   if (!created) { report.skipped = 'job-exists'; return report; }

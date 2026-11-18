@@ -51,11 +51,12 @@ import { QUEUE_ACTIONS } from './catalog/queue.js';
 import { CONTENT_ACTIONS } from './catalog/content.js';
 import { STRATEGY_ACTIONS } from './catalog/strategy.js';
 import { BRIEFS_ACTIONS } from './catalog/briefs.js';
+import { VIDEO_ACTIONS } from './catalog/video.js';
 import {
   BRAIN_ACTIONS, SIGNALS_ACTIONS, DIGEST_ACTIONS, REFRESH_ACTIONS, REFRESH_DAILY_ACTIONS, XMONITOR_ACTIONS, MEDIA_ACTIONS, OTHER_ACTIONS,
 } from './catalog/ops.js';
 
-export const GROUPS = Object.freeze(['queue', 'calendar', 'content', 'buckets', 'strategy', 'brain', 'signals', 'digest', 'refresh', 'xmonitor', 'media', 'nas', 'briefs', 'clients', 'other']);
+export const GROUPS = Object.freeze(['queue', 'calendar', 'content', 'buckets', 'strategy', 'brain', 'signals', 'digest', 'refresh', 'xmonitor', 'media', 'nas', 'briefs', 'video', 'clients', 'other']);
 export const TIERS = Object.freeze([0, 1, 2, 3]);
 export const EXTERNALS = Object.freeze(['x', 'email', 'arweave', 'paid']);
 
@@ -85,6 +86,7 @@ export const ROUTE_MODULES = Object.freeze({
   'media': () => import('../../../app/api/dashboard/media/route.js'),
   'archive-inbox': () => import('../../../app/api/dashboard/archive-inbox/route.js'),
   'custom-briefs': () => import('../../../app/api/dashboard/custom-briefs/route.js'),
+  'howto-requests': () => import('../../../app/api/dashboard/howto-requests/route.js'),
 });
 
 /** Route key -> repo-relative source file (used by tests to verify action literals; also documentation). */
@@ -113,6 +115,7 @@ export const ROUTE_FILES = Object.freeze({
   'media': 'app/api/dashboard/media/route.js',
   'archive-inbox': 'app/api/dashboard/archive-inbox/route.js',
   'custom-briefs': 'app/api/dashboard/custom-briefs/route.js',
+  'howto-requests': 'app/api/dashboard/howto-requests/route.js',
 });
 
 /**
@@ -148,12 +151,13 @@ export const ROUTE_AUTH = Object.freeze({
   'calendar-disconnect': { bearer: true, admin: false, pilotOwner: false, impersonation: true, clientFrom: 'context' },
   'media': { bearer: true, admin: 'mutations and archive actions', pilotOwner: false, impersonation: true, clientFrom: 'context', note: 'action is a QUERY param (?action=...), body carries the payload.' },
   'archive-inbox': { bearer: true, admin: true, pilotOwner: false, impersonation: true, clientFrom: 'context', note: 'action is a QUERY param.' },
+  'howto-requests': { bearer: true, admin: false, pilotOwner: false, impersonation: true, clientFrom: 'context', note: 'Firestore howto_requests only; the route allowlists the Critters Quest client and locks a request once the owner approved it.' },
   'custom-briefs': { bearer: true, admin: true, pilotOwner: false, impersonation: true, clientFrom: 'context', note: 'POST/PATCH verifyAdminRequest, GET verifyRequestUser (client briefs only for admins). Client = getDashboardBootstrap `?as=`; the response echoes clientId and the runtime refuses a mismatch (clientEcho).' },
 });
 
 const ALL = [
   ...QUEUE_ACTIONS, ...CONTENT_ACTIONS, ...STRATEGY_ACTIONS,
-  ...BRAIN_ACTIONS, ...SIGNALS_ACTIONS, ...DIGEST_ACTIONS, ...REFRESH_ACTIONS, ...REFRESH_DAILY_ACTIONS, ...XMONITOR_ACTIONS, ...MEDIA_ACTIONS, ...BRIEFS_ACTIONS, ...OTHER_ACTIONS,
+  ...BRAIN_ACTIONS, ...SIGNALS_ACTIONS, ...DIGEST_ACTIONS, ...REFRESH_ACTIONS, ...REFRESH_DAILY_ACTIONS, ...XMONITOR_ACTIONS, ...MEDIA_ACTIONS, ...BRIEFS_ACTIONS, ...VIDEO_ACTIONS, ...OTHER_ACTIONS,
 ];
 
 function deepFreeze(o) {
