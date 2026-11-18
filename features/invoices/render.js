@@ -717,7 +717,7 @@ const SECTION_BUILDERS = {
 
 // Invoice-specific classes layered on top of the shared BRIEF_CSS (which
 // already supplies .page/.card/.stat-row/.flow/.bento/print page-breaks).
-const INVOICE_CSS = `
+export const INVOICE_CSS = `
   /* Plain white ground, black type. BRIEF_CSS's palette is cream + tinted ink
      with a gradient body wash; an invoice is a document someone prints and
      files, so the tokens are overridden at the root and the wash is removed

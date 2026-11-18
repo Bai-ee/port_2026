@@ -385,7 +385,7 @@ function serializeBriefDoc({ doc, data, clientId, client, origin }) {
     ogSubhead: data.ogSubhead || '',
     ogLines: Array.isArray(data.ogLines) ? data.ogLines : [],
     ogTitleLines: Array.isArray(data.ogTitleLines) ? data.ogTitleLines : [],
-    ...(data.kind === CLIENT_BRIEF_KIND ? { sourceText: String(data.sourceText || ''), layoutVersion: Number(data.layoutVersion) || 1 } : {}),
+    ...(data.kind === CLIENT_BRIEF_KIND ? { sourceText: String(data.sourceText || ''), layoutVersion: Number(data.layoutVersion) || 1, theme: typeof data.theme === 'string' ? data.theme : null } : {}),
     sourcePath: data.sourcePath || '',
     sourceHash: data.sourceHash || '',
     public: data.public === true,
@@ -418,6 +418,8 @@ function serializeBriefDoc({ doc, data, clientId, client, origin }) {
 // admin's effective-client bootstrap, never from the body. Never ingests into
 // Client Brain and never touches Vercel.
 //
+// (The old `preview:true` server render was removed in v3: the Studio canvas renders
+// the same document client-side through features/client-brief/render.js.)
 // POST with an existing client brief's `briefSlug` UPDATES it in place (same
 // slug and URL, createdAt kept); without one it creates a new random slug. An
 // update never falls through to create and never touches another kind/client.
@@ -431,18 +433,6 @@ async function handleClientBriefPost({ request, decoded, bootstrap, clientId, bo
     }
     return null;
   };
-
-  // Preview: pure render. No Firestore, no Storage, no PDF, no slug.
-  if (body.preview === true) {
-    try {
-      const { html, model } = buildClientBrief({ body, clientName });
-      return NextResponse.json({ ok: true, html, title: model.title }, noStore);
-    } catch (error) {
-      const failure = parseFailure(error);
-      if (failure) return failure;
-      throw error;
-    }
-  }
 
   const collection = fb.adminDb.collection('clients').doc(clientId).collection('custom_briefs');
   const requestedSlug = body.briefSlug === undefined || body.briefSlug === null ? '' : String(body.briefSlug).trim();
@@ -464,15 +454,20 @@ async function handleClientBriefPost({ request, decoded, bootstrap, clientId, bo
   const publicClientSlug = (isUpdate && existing.publicClientSlug) || publicClientSlugFor(client, clientId);
   const publicPath = (isUpdate && existing.publicPath) || `/briefs/${publicClientSlug}/${publicBriefSlug}`;
 
+  // Same brand option the Studio canvas passes (admin-only dynamic import), so
+  // the published document matches the preview. Logo only; never contact info.
+  const { HITLOOP_BRAND } = await import('../../../../features/invoices/brand-marks.js');
+  // Update: an omitted `theme` keeps the stored one; an explicit value (or null) replaces it.
+  const themeArg = isUpdate && !Object.prototype.hasOwnProperty.call(body, 'theme') ? existing.theme : body.theme;
   let built;
   try {
-    built = buildClientBrief({ body, clientName, pdfPath: `${publicPath}/pdf` });
+    built = buildClientBrief({ body, clientName, pdfPath: `${publicPath}/pdf`, theme: themeArg === undefined ? null : themeArg, brand: HITLOOP_BRAND });
   } catch (error) {
     const failure = parseFailure(error);
     if (failure) return failure;
     throw error;
   }
-  const { model, html, og, description } = built;
+  const { model, html, og, description, themeId } = built;
   if (Buffer.byteLength(html, 'utf8') > CLIENT_BRIEF_MAX_HTML_BYTES) {
     return NextResponse.json({ error: 'Client brief is too large.' }, { status: 413 });
   }
@@ -508,6 +503,7 @@ async function handleClientBriefPost({ request, decoded, bootstrap, clientId, bo
     clientId,
     kind: CLIENT_BRIEF_KIND,
     layoutVersion: CLIENT_BRIEF_LAYOUT_VERSION,
+    theme: themeId,
     briefSlug,
     publicBriefSlug,
     title,
@@ -664,6 +660,11 @@ export async function POST(request) {
     // Client Brief: pasted breakdown text -> fixed template. Fully separate
     // path; the invoice / pasted-HTML paths below are untouched.
     if (body.kind === CLIENT_BRIEF_KIND) {
+      // The server-side preview moved to the Studio canvas. A stale dashboard tab
+      // that still sends preview:true must never be treated as a real publish.
+      if (body.preview === true) {
+        return NextResponse.json({ error: 'Preview moved to Studio (/dashboard/studio?tool=brief).' }, { status: 400 });
+      }
       return await handleClientBriefPost({ request, decoded, bootstrap, clientId, body });
     }
     // Only 'invoice' is a recognized alternate kind; anything else

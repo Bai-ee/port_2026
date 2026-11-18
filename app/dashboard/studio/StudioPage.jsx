@@ -19,6 +19,7 @@ import GlassTooltipLayer from '../../../components/GlassTooltipLayer';
 import { STUDIO_DEFAULT_TOOL, resolveStudioTool } from './studio-tools-meta';
 import { useRailReveal } from './components/useRailReveal';
 import { marqueeCardEdgeStyle, marqueeEdgeFadeStyle } from '../../../pageSurfaceSystem';
+import BriefAdminOnly from './brief/BriefAdminOnly';
 
 // HOLO PAPER mode (?tool=cloth) — the cloth/foil simulator. Client-only and
 // lazy so the mockup-video path pays nothing for it.
@@ -30,6 +31,10 @@ const PaintStudio = dynamic(() => import('./paint/PaintStudio'), { ssr: false })
 const LoopStudio = dynamic(() => import('./LoopStudio'), { ssr: false });
 // INVOICE mode (?tool=invoice) — live-editable invoice canvas. Client-only and lazy.
 const InvoiceStudio = dynamic(() => import('./invoice/InvoiceStudio'), { ssr: false });
+// CLIENT BRIEF mode (?tool=brief) — ADMIN ONLY. The editor chunk is only ever
+// requested when isAdmin (see the mount below); the "Admin only" panel for
+// everyone else is a separate, tiny, static component.
+const BriefStudio = dynamic(() => import('./brief/BriefStudio'), { ssr: false });
 // REMIX mode (?tool=remix) — the EditVideos video-remix recipe builder. Client-only
 // and lazy; it only talks to /api/dashboard/media, nothing renders in the browser.
 const RemixStudio = dynamic(() => import('./remix/RemixStudio'), { ssr: false });
@@ -2339,7 +2344,7 @@ export default function StudioPage() {
             ...GLASS.surface,
           }}
         >
-          {[['mockup', 'MOCKUP VIDEO'], ['cloth', 'HOLO PAPER'], ['paint', 'PAINT'], ['loop', 'LOOPS'], ['remix', 'REMIX'], ['invoice', 'INVOICE']].map(([id, label]) => (
+          {[['mockup', 'MOCKUP VIDEO'], ['cloth', 'HOLO PAPER'], ['paint', 'PAINT'], ['loop', 'LOOPS'], ['remix', 'REMIX'], ['invoice', 'INVOICE'], ...(isAdmin ? [['brief', 'CLIENT BRIEF']] : [])].map(([id, label]) => (
             <button
               key={id}
               onClick={() => switchTool(id)}
@@ -2367,6 +2372,12 @@ export default function StudioPage() {
           <RemixStudio isNarrow={isNarrow} railW={RAIL_W} authedFetch={authedFetch} user={user} />
         ) : tool === 'invoice' ? (
           <InvoiceStudio isNarrow={isNarrow} railW={RAIL_W} isAdmin={isAdmin} authedFetch={authedFetch} user={user} />
+        ) : tool === 'brief' ? (
+          isAdmin ? (
+            <BriefStudio isNarrow={isNarrow} railW={RAIL_W} isAdmin={isAdmin} authedFetch={authedFetch} />
+          ) : (
+            <BriefAdminOnly signedIn={Boolean(user)} loading={loading} />
+          )
         ) : tool === 'mockup' ? (
         <>
         {/* Canvas/board — the page bg shows through as the board surface. Desktop:

@@ -61,6 +61,7 @@ import { AdminEmailDigestView, AdminCreateClientView } from './components/AdminE
 import { CreativeBriefComposerView } from './components/dashboard/CreativeBriefComposerCard';
 import { InvoiceBuilderCard } from './components/dashboard/InvoiceBuilderCard';
 import { ClientBriefCard } from './components/dashboard/ClientBriefCard';
+import { briefStudioHref } from './features/client-brief/studio-link.js';
 import { AdminOperatingCostView } from './components/AdminCostView';
 import { CalendarConnectView } from './components/CalendarConnectModal';
 import { ContactCapabilitiesPanel } from './StackedSlidesSection';
@@ -9574,16 +9575,20 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       number: 'CB',
       label: 'CLIENT BRIEF',
       title: 'Client Brief',
-      description: 'Paste a client breakdown and publish it exactly as written as a hosted brief page with a downloadable PDF and share image for the selected client.',
+      description: 'Opens the Brief Studio: paste a client breakdown, pick a theme and publish it as a hosted brief page with a downloadable PDF and share image for the selected client.',
       placeholderLabel: 'CLIENT\nBRIEF',
       rows: [
         { key: 'cb-client', label: 'Client', value: client?.companyName || client?.name || client?.dashboardTitle || bootstrap?.effectiveClientId || 'Selected client' },
-        { key: 'cb-input', label: 'Input', value: 'Paste Markdown' },
+        { key: 'cb-input', label: 'Input', value: 'Paste Markdown in the Studio' },
         { key: 'cb-output', label: 'Output', value: 'Hosted URL + PDF + share image' },
         { key: 'cb-access', label: 'Access', value: 'Admin only' },
       ],
       footerLeft: 'Ready',
       footerRight: 'ADMIN',
+      footerAction: {
+        label: 'OPEN STUDIO',
+        onClick: () => window.open(briefStudioHref({ clientId: bootstrap?.effectiveClientId || client?.clientId || client?.id }), '_blank'),
+      },
       readinessBadge: { tone: 'ok', label: 'Ready' },
     }, {
       id: 'create-client',
@@ -14345,12 +14350,13 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                   <InvoiceBuilderCard user={user} apiPath={apiPath} />
                 )}
 
-                {/* Admin · Client Brief — paste breakdown -> hosted brief + PDF */}
+                {/* Admin · Client Brief — launcher for the Brief Studio + saved client briefs list */}
                 {activeTileModal.cardId === 'client-brief-publisher' && (
                   <ClientBriefCard
                     user={user}
                     apiPath={apiPath}
                     clientName={client?.companyName || client?.name || client?.dashboardTitle || ''}
+                    clientId={bootstrap?.effectiveClientId || client?.clientId || client?.id || ''}
                   />
                 )}
 

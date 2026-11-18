@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  clientBriefPdfMode, CLIENT_BRIEF_SLUG_RE, allowsFuzzyResolve, buildClientBrief, isClientBriefData, newClientBriefSlug, selectBriefsForViewer,
+  clientBriefPdfMode, CLIENT_BRIEF_LAYOUT_VERSION, normalizeClientBriefThemeId, CLIENT_BRIEF_SLUG_RE, allowsFuzzyResolve, buildClientBrief, isClientBriefData, newClientBriefSlug, selectBriefsForViewer,
 } from '../publish.js';
 
 const require = createRequire(import.meta.url);
@@ -56,6 +56,28 @@ test('buildClientBrief: parses + renders from body only; asOf defaults to today,
   assert.ok(!evil.html.includes('<script>1'));
 });
 
+test('layout versions: new docs are v3; v2 and v3 print via default mode, v1 (none) via edge-to-edge', () => {
+  assert.equal(CLIENT_BRIEF_LAYOUT_VERSION, 3);
+  assert.equal(clientBriefPdfMode({ layoutVersion: 3 }), 'default');
+  assert.equal(clientBriefPdfMode({ layoutVersion: 2 }), 'default');
+  assert.equal(clientBriefPdfMode({}), 'edge-to-edge');
+  assert.equal(clientBriefPdfMode({ layoutVersion: 1 }), 'edge-to-edge');
+  assert.equal(clientBriefPdfMode(null), 'edge-to-edge');
+});
+
+test('theme validation: built-in ids only (string or {id}); anything else is the default', () => {
+  assert.equal(normalizeClientBriefThemeId('ledger'), 'ledger');
+  assert.equal(normalizeClientBriefThemeId({ id: 'studio-dark', colors: { paper: 'red' } }), 'studio-dark');
+  for (const bad of ['neon', '', null, undefined, 5, {}, { id: 'x' }, ['ledger']]) assert.equal(normalizeClientBriefThemeId(bad), null);
+  const now = new Date('2026-11-18T10:00:00Z');
+  const a = buildClientBrief({ body: { text: '## A\nx', theme: 'editorial' }, clientName: 'Co', now });
+  assert.equal(a.themeId, 'editorial');
+  assert.match(a.html, /data-invoice-theme="editorial"/);
+  const b = buildClientBrief({ body: { text: '## A\nx', theme: 'editorial' }, clientName: 'Co', now, theme: null });
+  assert.equal(b.themeId, null, 'explicit arg wins over body');
+  assert.equal(buildClientBrief({ body: { text: '## A\nx', theme: 'nope' }, clientName: 'Co', now }).themeId, null);
+});
+
 test('digest link: newest public brief ignores client briefs', async () => {
   const docs = [
     { id: 'client-brief-20261118-aaaaaaaaaaaaaaaa', data: { kind: 'client-brief', public: true, publicClientSlug: 'cc', publicBriefSlug: 'client-brief-20261118-aaaaaaaaaaaaaaaa', updatedAt: '2026-11-18T10:00:00Z' } },
@@ -103,7 +125,7 @@ test('OG normalizer: invoice limits (3 title lines x40, 2 extra lines x120, subh
   assert.deepEqual(s.ogLines, ['First para.', '']);
 });
 
-test('card placement: admin category next to invoice-builder, no Briefs-bucket entry or RUN BRIEF exclusion', async () => {
+test('card placement: admin category next to invoice-builder; launcher with OPEN STUDIO -> ?tool=brief&as=', async () => {
   const { readFile } = await import('node:fs/promises');
   const src = await readFile(path.join(ROOT, 'DashboardPage.jsx'), 'utf8');
   const at = src.indexOf("id: 'client-brief-publisher'");
@@ -113,7 +135,20 @@ test('card placement: admin category next to invoice-builder, no Briefs-bucket e
   const invoiceAt = src.indexOf("id: 'invoice-builder'");
   assert.ok(at > invoiceAt && at - invoiceAt < 2500, 'sits right after invoice-builder');
   assert.ok(!src.includes("card.id !== 'client-brief-publisher'"));
+  const card = src.slice(at, src.indexOf("id: 'create-client'", at));
+  assert.match(card, /footerAction: \{\s*label: 'OPEN STUDIO'/);
+  assert.match(card, /briefStudioHref\(\{ clientId:/);
   const tile = await readFile(path.join(ROOT, 'lib/dashboard/tile-config.js'), 'utf8');
   assert.match(tile, /CUSTOM_DETAIL_CARD_IDS[\s\S]*'client-brief-publisher'[\s\S]*CARD_ACTION_EDIT/);
   assert.match(tile.slice(tile.indexOf('CARD_ACTION_EDIT')), /'client-brief-publisher'/);
+});
+
+test('launcher card: no leftover inline editor (paste / preview / OG UI) and no preview endpoint use', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const src = await readFile(path.join(ROOT, 'components/dashboard/ClientBriefCard.jsx'), 'utf8');
+  for (const gone of ['client-brief-paste-input', 'client-brief-preview-btn', 'client-brief-og-panel', 'og-preview', 'preview: true', 'suggestClientBriefOg']) {
+    assert.ok(!src.includes(gone), `${gone} should be gone`);
+  }
+  assert.match(src, /client-brief-open-studio-link/);
+  assert.match(src, /client-brief-published-list/);
 });
