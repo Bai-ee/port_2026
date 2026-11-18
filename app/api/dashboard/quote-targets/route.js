@@ -35,7 +35,8 @@ import { packageFromUpload, assertUploadPath, MAX_UPLOAD_FILES } from '../../../
 import { findMediaCandidates, linkMediaPatch, normalizeLinks } from '../../../../features/x-content-inventory/item-media.js';
 import { normalizeFacets } from '../../../../features/x-content-inventory/facets.js';
 import { resolveMediaUrls } from '../../../../features/rendered-videos/media-url.js';
-import { syncRenderedVideosForClient } from '../../../../features/rendered-videos/firestore-sync.js';
+import { syncRenderedVideosForClient, mediaOwnerClientId } from '../../../../features/rendered-videos/firestore-sync.js';
+import { setCuration, listCurationCandidates } from '../../../../features/rendered-videos/curation.js';
 import { resolveMediaUrlsBatch, MEDIA_URLS_MAX_IDS, MEDIA_KINDS, tokenUrlFor } from '../../../../features/x-content-inventory/thumbs.js';
 import { setRights, saveThumb, createDraftFromItem, pickMedia, pickMediaRef } from '../../../../features/x-content-inventory/item-actions.js';
 import { NAS_ACTIONS, handleNasAction } from '../../../../features/x-content-inventory/nas.js';
@@ -423,6 +424,8 @@ const SUPPORTED_ACTIONS = [
   'move-item',
   'media-url',
   'sync-rendered-videos',
+  'curation-list',
+  'curation-set',
   'media-urls',
   'save-thumb',
   'find-item-media',
@@ -908,6 +911,28 @@ async function handleSyncRenderedVideos(context, body) {
     clientId: context.clientId,
     force: body?.force === true,
   });
+}
+
+const CURATION_NOT_OWNER = { ok: true, skipped: 'not-owner' };
+
+// Video Remix curated bucket (features/rendered-videos/curation.js). Owner-only, same gate as sync-rendered-videos.
+async function handleCurationList(context, body) {
+  if (!context.clientId || context.clientId !== mediaOwnerClientId()) return CURATION_NOT_OWNER;
+  const n = Number(body?.days);
+  const days = Math.min(90, Math.max(1, Number.isFinite(n) ? Math.floor(n) : 10));
+  const snap = await fb.adminDb.collection(PKG_COLLECTION).where('clientId', '==', context.clientId).where('source.kind', '==', 'rendered-video').get();
+  const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
+  return { ok: true, ...listCurationCandidates(rows, { days, now: Date.now() }) };
+}
+
+async function handleCurationSet(context, decoded, body) {
+  if (!context.clientId || context.clientId !== mediaOwnerClientId()) return CURATION_NOT_OWNER;
+  const ref = (id) => fb.adminDb.collection(PKG_COLLECTION).doc(id);
+  return setCuration({
+    getDoc: async (id) => { const s = await ref(id).get(); return s.exists ? (s.data() || {}) : null; },
+    mergeDoc: (id, patch) => ref(id).set(patch, { merge: true }),
+    deleteField: () => fb.FieldValue.delete(),
+  }, { clientId: context.clientId, id: body?.id, state: body?.state, by: decoded?.email || decoded?.uid || null, now: Date.now() });
 }
 
 async function handleMediaUrls(context, body) {
@@ -1569,6 +1594,8 @@ export async function POST(request) {
     if (action === 'move-item') return json(await handleMoveItem(context, body));
     if (action === 'media-url') return json(await handleMediaUrl(context, body));
     if (action === 'sync-rendered-videos') return json(await handleSyncRenderedVideos(context, body));
+    if (action === 'curation-list') return json(await handleCurationList(context, body));
+    if (action === 'curation-set') return json(await handleCurationSet(context, decoded, body));
     if (action === 'media-urls') return json(await handleMediaUrls(context, body));
     if (action === 'save-thumb') return json(await handleSaveThumb(context, body));
     if (action === 'find-item-media') return json(await handleFindItemMedia(context, body));

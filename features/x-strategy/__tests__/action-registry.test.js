@@ -53,7 +53,9 @@ test('every action literal exists in its route source (or the route\'s declared 
 test('coverage: every action of the two core routes is catalogued or explicitly excluded', () => {
   const EXCLUDED_QT = new Set(['strategy-chat-send', 'strategy-chat-history', 'strategy-proposal-decide', 'strategy-review', 'save-thumb', 'media-url', 'strategy-autonomy-save', 'strategy-action-undo', 'strategy-reply-style-get', 'strategy-reply-style-save', 'strategy-unmet-list', 'strategy-unmet-status',
     // UI-only: follows a browser upload to signed URLs; the agent has no files to hand it.
-    'ingest-uploads']);
+    'ingest-uploads',
+    // Owner-only curated-bucket verdicts (Video Remix review page); the agent never curates.
+    'curation-list', 'curation-set']);
   // calendar-syncs / set-calendar-syncs / run-calendar-sync: the Synced-calendars toggle is the owner's standing spend
   // consent on this client's accounts (SOCIAL-AUTO-PUBLISH.md § Synced calendars); the agent never reads or flips it.
   const EXCLUDED_SP = new Set(['process-due-cron', 'set-targets', 'calendar-syncs', 'set-calendar-syncs', 'run-calendar-sync']);

@@ -10,7 +10,7 @@
 //               rights + rightsSource (+ approval, only while it is still none/needed)
 //               ONLY while `rightsSetBy !== 'human'` (owner decision D1).
 //   NEVER     : story, humanEdits, a human/approved approval, lastPostedAt, postCount,
-//               bucketId, thumbRef, rightsSetBy/At, any other field.
+//               bucketId, thumbRef, rightsSetBy/At, curation (owner verdict, see curation.js), any other field.
 //   RETIRE    : a stored rv- row missing from a COMPLETE, non-empty upstream listing
 //               gets status 'retired' + retiredReason 'source-missing' (never deleted).
 //               Only when `listVideos` reports `complete:true`; a bare array = unknown
@@ -83,6 +83,10 @@ function applyMachine(existing, m) {
   return next;
 }
 
+// `curation` is owner-only: omit it from every payload (upsertPackage merges, so the stored value survives
+// and a stale read at sync start cannot resurrect an old verdict).
+const withoutCuration = ({ curation, ...rest }) => rest;
+
 async function pool(items, n, fn) {
   let i = 0;
   await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => {
@@ -146,7 +150,7 @@ export async function syncRenderedVideos(deps, { force = false } = {}) {
     }
   }
 
-  await pool(writes, deps.concurrency || 8, async (w) => { await deps.upsert(w.pkg); counts[w.kind] += 1; });
+  await pool(writes, deps.concurrency || 8, async (w) => { await deps.upsert(withoutCuration(w.pkg)); counts[w.kind] += 1; });
 
   const lastSyncAt = new Date(now).toISOString();
   await deps.writeMeta({ lastSyncAt, lastSyncAtMs: now, counts });
