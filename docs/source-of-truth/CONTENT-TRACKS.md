@@ -90,6 +90,12 @@ One BAI-EE mix video draft a day on the calendar, from the daily email render.
 - ⚠️ **Cron media/ordering fix (2026-10-20):** the cron's fill now reads the FULL inventory (`readInventory`, as the dashboard route does). It used to get the suggestions step's `.select(PACKAGE_FIELDS)` projection, which drops `clientId` (so `mediaForItem` returned null — **no cron draft had media**), `renderedAt` (picks went by id, not newest) and `nas` (no throwback media link). If a cron-made draft lacks media again, check that projection first.
 - Code-owned on purpose: tracks round-trip through the Client Brain, which would drop a track-level field. Insights still shows the `ue` engine target from the plan; set it to 1/day in Strategy to match.
 
+## Curated video bucket (2026-11-18, P2a/P2b)
+- **Field:** owner verdict on `rv-` packages: `curation: {state:'approved'|'rejected', at, by}` (missing = pending). Human-owned: the rendered-video sync strips it from every write (`features/rendered-videos/sync.js`, NEVER list) and it is not part of `syncHash`. Logic in `features/rendered-videos/curation.js`.
+- **Actions** (`/api/dashboard/quote-targets`, owner-only via the pilot gate, media-owner client only, else `skipped:'not-owner'`): `curation-list {days=10, 1–90}` → newest-first rows (cap 200, retired excluded) + counts + `approvedTotal`; `curation-set {id, state}` → merge write of `curation`+`updatedAt` only; `pending` deletes the field (undo). `by` comes from the token. Both are excluded from the Strategy agent action registry.
+- **Review page:** `/dashboard/studio?tool=remix&view=review` (admin; BUILD/REVIEW pill `#remix-view-toggle`; `app/dashboard/studio/remix/RemixReview.jsx`). 30 tiles per page, poster first, video signed on play; keys j/k, a, r, u, space; target 30 approved.
+- **Not yet:** nothing reads `curation`; daily-fill and the calendar are unchanged, so rejected videos stay eligible until P2c (daily-fill prefers curated). Batch renders (P2d) are paid and need owner OK.
+
 ## Calendar media backfill (2026-10-22)
 
 Owner rule: **nothing on the calendar sits without an image or thumbnail when its item has one or can have one.** The fill wrote media only when a draft was created, so every draft made before its item was staged, or before the fill carried media / `nasSha` at all, stayed bare for good (home 2026-10-22: every throwback and most record/mix drafts for the week).

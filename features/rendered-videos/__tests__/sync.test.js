@@ -175,3 +175,63 @@ test('skips non-completed videos', async () => {
   const r = await syncRenderedVideos(d, { force: true });
   assert.equal(r.total, 1);
 });
+
+// Merging fake: Firestore set({merge:true}) semantics, so an omitted key keeps the stored value.
+function mergingDeps(videos, store) {
+  const d = makeDeps(videos, store);
+  d.upsert = async (p) => { d.calls.upsert.push(p); store.set(p.id, { ...(store.get(p.id) || {}), ...structuredClone(p) }); };
+  return d;
+}
+
+test('curation is never written by sync: updated payload omits it and the stored verdict survives', async () => {
+  const store = new Map();
+  await syncRenderedVideos(makeDeps([vid('a')], store), { force: true });
+  const curation = { state: 'approved', at: '2026-11-01T00:00:00Z', by: 'me' };
+  store.set('rv-a', { ...store.get('rv-a'), curation });
+  const d = mergingDeps([vid('a', { mixTitle: 'Renamed Mix' })], store);
+  d.advance(1);
+  assert.equal((await syncRenderedVideos(d, { force: true })).updated, 1);
+  assert.ok(!('curation' in d.calls.upsert[0]));
+  assert.deepEqual(store.get('rv-a').curation, curation);
+  // restored (comeback) path too
+  store.set('rv-a', { ...store.get('rv-a'), status: 'retired', retiredReason: 'source-missing', retiredFromStatus: 'idea' });
+  d.calls.upsert.length = 0;
+  assert.equal((await syncRenderedVideos(d, { force: true })).restored, 1);
+  assert.ok(!('curation' in d.calls.upsert[0]));
+  assert.deepEqual(store.get('rv-a').curation, curation);
+});
+
+test('curation does not change syncHash, and the retire write omits it', async () => {
+  const store = new Map();
+  await syncRenderedVideos(makeDeps([vid('a'), vid('b')], store), { force: true });
+  const curation = { state: 'rejected', at: '2026-11-01T00:00:00Z', by: 'me' };
+  store.set('rv-b', { ...store.get('rv-b'), curation });
+  store.set('rv-a', { ...store.get('rv-a'), curation: { ...curation, state: 'approved' } }); // unchanged row carries a verdict
+  const d = mergingDeps({ videos: [vid('a')], complete: true }, store);
+  d.listVideos = async () => ({ videos: [vid('a')], complete: true });
+  d.listStored = async () => [...store.values()].map((r) => structuredClone(r));
+  d.advance(1);
+  const r = await syncRenderedVideos(d, { force: true });
+  assert.deepEqual([r.unchanged, r.retired], [1, 1]);
+  const retire = d.calls.upsert.find((p) => p.id === 'rv-b');
+  assert.equal(retire.status, 'retired');
+  assert.ok(!('curation' in retire));
+  assert.deepEqual(store.get('rv-b').curation, curation);
+  assert.equal(store.get('rv-a').curation.state, 'approved');
+  assert.ok(!d.calls.upsert.some((p) => p.id === 'rv-a'));
+});
+
+test('a curation set after the sync read (before the write) survives the sync', async () => {
+  const store = new Map();
+  await syncRenderedVideos(makeDeps([vid('a')], store), { force: true });
+  const old = { state: 'approved', at: '2026-11-01T00:00:00Z', by: 'me' };
+  const newer = { state: 'rejected', at: '2026-11-18T00:00:00Z', by: 'me' };
+  store.set('rv-a', { ...store.get('rv-a'), curation: old });
+  const d = mergingDeps([vid('a', { mixTitle: 'Renamed Mix' })], store);
+  const read = d.readExisting;
+  d.readExisting = async (ids) => { const m = await read(ids); store.set('rv-a', { ...store.get('rv-a'), curation: newer }); return m; };
+  d.advance(1);
+  assert.equal((await syncRenderedVideos(d, { force: true })).updated, 1);
+  assert.deepEqual(store.get('rv-a').curation, newer);
+  assert.match(store.get('rv-a').title, /Renamed Mix/);
+});
