@@ -50,6 +50,18 @@ export async function reserveDailyPaidSlot(counters, { now, cap = DAILY_PAID_CAP
   return r;
 }
 
+// ---- daily cap for client-brief publishes (MCP) ----------------------------------------------------------------
+// publish_client_brief is the one MCP write without a confirm card; each call mints a public page + PDF render.
+export const DAILY_CLIENT_BRIEF_CAP = 20;
+export const dailyClientBriefKey = (now) => `client_brief_publish_${utcDay(now)}`;
+
+/** Take one of today's client-brief publish slots. Throws LimitError('daily-cap') when none is left. */
+export async function reserveDailyClientBriefSlot(counters, { now, cap = DAILY_CLIENT_BRIEF_CAP }) {
+  const r = await counters.reserve(dailyClientBriefKey(now), cap, now + 2 * 86400000);
+  if (!r.ok) throw new LimitError(`Daily limit reached: ${cap} client briefs published per day from MCP. It resets at 00:00 UTC; publish from HITLOOP Briefs > CLIENT BRIEF meanwhile.`, 'daily-cap');
+  return r;
+}
+
 // ---- memory stores (tests) ---------------------------------------------------------------------------------
 
 export function createMemoryCounters() {

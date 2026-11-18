@@ -7,10 +7,11 @@ import { codebaseTools } from './tools/codebase.js';
 import { syncTools } from './tools/syncs.js';
 import { playbookTools } from './tools/playbook.js';
 import { chatTools } from './tools/chat.js';
+import { clientBriefTools } from './tools/client-brief.js';
 import { siteAnalyticsTools } from './tools/site-analytics.js';
 import { guideTool } from './guide.js';
 
-export const registry = Object.freeze([guideTool, ...strategyTools, ...dataTools, ...siteAnalyticsTools, ...codebaseTools, ...syncTools, ...playbookTools, ...chatTools]);
+export const registry = Object.freeze([guideTool, ...strategyTools, ...dataTools, ...siteAnalyticsTools, ...codebaseTools, ...syncTools, ...playbookTools, ...chatTools, ...clientBriefTools]);
 
 export function findTool(name) {
   return registry.find((t) => t.name === name) || null;

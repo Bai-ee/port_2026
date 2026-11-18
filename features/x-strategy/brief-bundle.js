@@ -308,6 +308,7 @@ export async function readBriefRaw(clientId, deps = {}) {
     safe(async () => {
       const q = await db.collection('clients').doc(clientId).collection('custom_briefs').where('public', '==', true).limit(20).get();
       const best = q.docs.map((d) => ({ id: d.id, d: d.data() || {} }))
+        .filter((x) => x.d.kind !== 'client-brief') // admin-only, unlisted: never the "newest public brief"
         .map((x) => ({ ...x, ms: newest([x.d.updatedAt, x.d.createdAt]) ?? 0 })).sort((a, b) => b.ms - a.ms)[0];
       if (!best) return null;
       const seg = (s) => encodeURIComponent(String(s ?? ''));

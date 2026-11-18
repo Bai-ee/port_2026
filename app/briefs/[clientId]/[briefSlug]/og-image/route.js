@@ -1,4 +1,5 @@
 import {
+  briefPrivacyHeaders,
   buildBriefOpenGraphMeta,
   resolvePublicBrief,
   validId,
@@ -39,12 +40,14 @@ export async function GET(request, context) {
 
   const jpg = await renderOgImageJpeg(meta);
   const shouldDownload = new URL(request.url).searchParams.get('download') === '1';
+  const privacy = briefPrivacyHeaders(resolved.brief);
   return new Response(jpg, {
     status: 200,
     headers: {
       'content-type': 'image/jpeg',
       'content-length': String(jpg.length),
       'cache-control': 'public, max-age=3600, stale-while-revalidate=86400',
+      ...(privacy || {}),
       ...(shouldDownload ? { 'content-disposition': contentDispositionFileName(`${meta.title || 'custom-brief'} OG Image`) } : {}),
     },
   });

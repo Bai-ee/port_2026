@@ -40,7 +40,10 @@ async function getLatestPublishedBrief(clientId) {
   if (snap.empty) return null;
   const docs = snap.docs
     .map((d) => ({ id: d.id, data: d.data() || {} }))
+    // Client briefs are admin-only, unlisted documents — never the digest's "newest brief".
+    .filter((d) => d.data.kind !== 'client-brief')
     .sort((a, b) => Math.max(tsToMs(b.data.updatedAt), tsToMs(b.data.createdAt)) - Math.max(tsToMs(a.data.updatedAt), tsToMs(a.data.createdAt)));
+  if (!docs.length) return null;
   const top = docs[0];
   const publicClientSlug = top.data.publicClientSlug || compactSlug(top.id, clientId);
   const publicBriefSlug = top.data.publicBriefSlug || compactSlug(top.data.briefSlug || top.id, top.id);

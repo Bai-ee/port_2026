@@ -1,5 +1,6 @@
 import { createRequire } from 'module';
 import { formatMoney, resolveInvoiceLabels } from '../../../features/invoices/model.js';
+import { allowsFuzzyResolve, isClientBriefData } from '../../../features/client-brief/publish.js';
 
 const require = createRequire(import.meta.url);
 export const fb = require('../../../api/_lib/firebase-admin.cjs');
@@ -119,12 +120,14 @@ export async function resolveBriefSnapshot(clientId, briefKey) {
   const hyphenated = String(briefKey || '').replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
   if (hyphenated && hyphenated !== briefKey) {
     const hyphenDirect = await briefsRef.doc(hyphenated).get();
-    if (hyphenDirect.exists) return hyphenDirect;
+    // Client briefs resolve by exact id / exact public slug only.
+    if (hyphenDirect.exists && allowsFuzzyResolve(hyphenDirect.data())) return hyphenDirect;
   }
 
   const existingSnapshot = await briefsRef.limit(100).get();
   const matched = existingSnapshot.docs.find((doc) => {
     const data = doc.data() || {};
+    if (!allowsFuzzyResolve(data)) return false;
     return compactPathSlug(data.publicBriefSlug || data.briefSlug || doc.id, doc.id) === briefKey ||
       compactPathSlug(data.title || '', doc.id) === briefKey;
   });
@@ -150,6 +153,13 @@ export async function resolvePublicBrief(clientKey, briefKey) {
     snapshot,
     brief,
   };
+}
+
+// Client briefs are private-by-default documents: never cached, never indexed.
+export function briefPrivacyHeaders(brief) {
+  return isClientBriefData(brief)
+    ? { 'cache-control': 'no-store, max-age=0', 'x-robots-tag': 'noindex, nofollow' }
+    : null;
 }
 
 export function publicBriefPath({ clientId, client, brief, snapshotId }) {

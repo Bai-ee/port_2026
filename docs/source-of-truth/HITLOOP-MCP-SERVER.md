@@ -1,8 +1,18 @@
 # HITLOOP MCP server
 
-A remote MCP server so the owner can talk to HITLOOP from ChatGPT and Claude (custom connectors): read client-admin data and the codebase, run free syncs, and propose changes (including paid syncs, which are proposal cards). **It can never post, schedule, approve, delete, send email/Telegram, write to X, or spend money by itself: every paid action needs the owner's Confirm click inside HITLOOP.**
+A remote MCP server so the owner can talk to HITLOOP from ChatGPT and Claude (custom connectors): read client-admin data and the codebase, run free syncs, and propose changes (including paid syncs, which are proposal cards). **It can never post, schedule, approve, delete, send email/Telegram, write to X, or spend money by itself: every paid action needs the owner's Confirm click inside HITLOOP. One exception writes: `publish_client_brief` publishes a hosted client brief + PDF (a public link), only when the owner explicitly asks; `unpublish_client_brief` takes it down.**
 
 > **Chat parity (2026-11-17, owner rule):** `chat_send` runs the dashboard Strategy agent for any client (`clientId`) WITH the owner's own dashboard authorization (`features/mcp/owner-session.js` mints a real Firebase ID token for the verified admin email). Tier-1 changes the dashboard chat applies directly (draft text, creative, dates, tracks/buckets) are applied over MCP too and returned as `applied` (undo from the dashboard action log). Approve / schedule / post / paid stay confirm cards. Mint failure => cards, as before. The client-link server (`/api/client-mcp`) stays read-only.
+
+> **Client briefs (owner-MCP tools, `features/mcp/tools/client-brief.js`):**
+>
+> | Tool | Kind | What |
+> | --- | --- | --- |
+> | `publish_client_brief {clientId, text<=50000, title?}` | write | Same as Briefs > CLIENT BRIEF > Publish. Returns `{publicUrl, pdfUrl, briefSlug, clientId, title, warnings}`. Creates a PUBLIC page; text is client-facing. Capped at 20 publishes per UTC day (`reserveDailyClientBriefSlot`, `features/mcp/limits.js`). |
+> | `unpublish_client_brief {clientId, briefSlug}` | write | PATCH `public:false` (deletes the stored PDF). Returns `{ok, briefSlug, warning?}`. No republish here. |
+> | `list_client_briefs {clientId}` | read | `{title, date, public, publicUrl, pdfUrl, briefSlug}` per client brief. |
+>
+> Mechanism: the tools call `app/api/dashboard/custom-briefs/route.js` in-process (lazy import; injectable as `ctx.services.customBriefsRoute`) with the owner's authorization (`owner-session.js`) and `?as=<clientId>`; the result's `clientId` must equal the requested one or the tool throws. No owner session => a ToolError pointing to the dashboard card.
 
 Code: `features/mcp/*` (pure logic + tools), `app/api/mcp/route.js`, `app/api/oauth/{register,authorize,token}/route.js`, `app/oauth/authorize/page.jsx`, `app/.well-known/oauth-*`. Plan: `docs/plans/CONTENT-CENTER-AND-MCP-MASTER-PLAN.md` (WS-B).
 The separate read-only, one-client-per-link server for clients is [CLIENT-MCP-SERVER.md](CLIENT-MCP-SERVER.md); it shares the OAuth code (tokens carry a client binding) but owner tokens and client tokens never cross.

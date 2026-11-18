@@ -60,6 +60,7 @@ import ClientBrainOwnedTag from './components/dashboard/ClientBrainOwnedTag';
 import { AdminEmailDigestView, AdminCreateClientView } from './components/AdminEmailModals';
 import { CreativeBriefComposerView } from './components/dashboard/CreativeBriefComposerCard';
 import { InvoiceBuilderCard } from './components/dashboard/InvoiceBuilderCard';
+import { ClientBriefCard } from './components/dashboard/ClientBriefCard';
 import { AdminOperatingCostView } from './components/AdminCostView';
 import { CalendarConnectView } from './components/CalendarConnectModal';
 import { ContactCapabilitiesPanel } from './StackedSlidesSection';
@@ -9985,6 +9986,26 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       footerRight: 'ADMIN',
       readinessBadge: { tone: 'ok', label: 'Ready' },
     }] : []),
+    // Card id is 'client-brief-publisher' because 'client-brief' is already the
+    // DESIGNER-bucket Design Brief card.
+    ...(isAdmin ? [{
+      id: 'client-brief-publisher',
+      category: 'brief',
+      number: 'CB',
+      label: 'CLIENT BRIEF',
+      title: 'Client Brief',
+      description: 'Paste a client breakdown and publish it as a hosted brief page with a downloadable PDF for the selected client.',
+      placeholderLabel: 'CLIENT\nBRIEF',
+      rows: [
+        { key: 'cb-client', label: 'Client', value: client?.companyName || client?.name || client?.dashboardTitle || bootstrap?.effectiveClientId || 'Selected client' },
+        { key: 'cb-input', label: 'Input', value: 'Paste breakdown' },
+        { key: 'cb-output', label: 'Output', value: 'Hosted URL + PDF' },
+        { key: 'cb-access', label: 'Access', value: 'Admin only' },
+      ],
+      footerLeft: 'Ready',
+      footerRight: 'ADMIN',
+      readinessBadge: { tone: 'ok', label: 'Ready' },
+    }] : []),
     {
       id: 'marketing-brief-doc',
       category: 'onboarding',
@@ -12816,7 +12837,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                       </svg>
                                     </button>
                                   )}
-                                  {activeCapabilityFilter === 'brief' && !isRowLocked && card.id !== 'submit-custom-brief' && (
+                                  {activeCapabilityFilter === 'brief' && !isRowLocked && card.id !== 'submit-custom-brief' && card.id !== 'client-brief-publisher' && (
                                     <button
                                       type="button"
                                       className="cap-list-run"
@@ -14323,6 +14344,15 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 {/* Admin · Invoice Builder — line items/totals/terms editor, live preview, publish */}
                 {activeTileModal.cardId === 'invoice-builder' && (
                   <InvoiceBuilderCard user={user} apiPath={apiPath} />
+                )}
+
+                {/* Admin · Client Brief — paste breakdown -> hosted brief + PDF */}
+                {activeTileModal.cardId === 'client-brief-publisher' && (
+                  <ClientBriefCard
+                    user={user}
+                    apiPath={apiPath}
+                    clientName={client?.companyName || client?.name || client?.dashboardTitle || ''}
+                  />
                 )}
 
                 {/* Admin · Create Client — website-less workspace */}

@@ -1,16 +1,18 @@
 import {
+  briefPrivacyHeaders,
   buildBriefOpenGraphMeta,
   esc,
   resolvePublicBrief,
   validId,
 } from '../../_lib/custom-briefs.js';
 
-function htmlResponse(body, status = 200, cacheControl = 'public, max-age=60, stale-while-revalidate=300') {
+function htmlResponse(body, status = 200, cacheControl = 'public, max-age=60, stale-while-revalidate=300', extraHeaders = null) {
   return new Response(body, {
     status,
     headers: {
       'content-type': 'text/html; charset=utf-8',
       'cache-control': cacheControl,
+      ...(extraHeaders || {}),
     },
   });
 }
@@ -87,5 +89,12 @@ export async function GET(request, context) {
     snapshotId: resolved.snapshot.id,
   });
 
-  return htmlResponse(injectOpenGraphMetadata(String(resolved.brief.html), meta));
+  // Client briefs: no-store + noindex headers (null for every other kind).
+  const privacy = briefPrivacyHeaders(resolved.brief);
+  return htmlResponse(
+    injectOpenGraphMetadata(String(resolved.brief.html), meta),
+    200,
+    privacy ? privacy['cache-control'] : undefined,
+    privacy
+  );
 }
