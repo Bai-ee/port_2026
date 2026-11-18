@@ -5,7 +5,7 @@
 // Entry shape (frozen):
 //   id        dotted stable id ('queue.post.update')            group   one of GROUPS
 //   title, description (<=200 chars)
-//   route     key of ROUTE_MODULES                              method  'GET' | 'POST'
+//   route     key of ROUTE_MODULES                              method  'GET' | 'POST' | 'PATCH'
 //   action    body.action for POST routes with an action switch; null otherwise
 //   query?    fixed query params (media / archive-inbox / client-brain select their action here; refresh phases)
 //   fixed?    fixed body fields merged AFTER the agent's args (the agent can never override them)
@@ -21,6 +21,12 @@
 //   viaRefreshPanel?  true => too long for the chat request (270-300 s): run_action never invokes it, it returns a `refresh`
 //             proposal (clientAction 'marketing-refresh') for the dashboard Refresh panel. Needs refreshGroups (REFRESH_GROUP_IDS)
 //             or refreshGroupsByArg {arg, map:{argValue:[ids]}}; an unmapped arg value is "not runnable in chat".
+//   keywords? extra search words (find_actions weights them like description)
+//   defaultsUnlessArg? { arg, body } body defaults merged UNDER the agent's args only when `arg` is absent (create vs update)
+//   resultPick? { a:'dotted.path' } | { list, limit, pick } shrink the route JSON to what the agent must report (links, ids)
+//   clientEcho? true => the route answers with clientId; the runtime refuses a different client than the one asked for
+//   noUndoWhenArg? / noUndoNote?  no undo when that arg is present (a client-brief update); note shown instead
+//   dailyCap? 'client-brief' share the MCP publish cap (runtime counters dep, fails closed)   singleItem? true => items > 1 refused
 //   undo?     { actionId, argsFrom:{ param:'args.x' | 'result.x' | 'before.x' } } native undo action (preferred over snapshot)
 //
 // Tier rules: reads 0; versioned/reversible writes and draft creation 1; deletes/rejects/overwrites 2; anything that
@@ -44,11 +50,12 @@ import { REFRESH_GROUP_IDS } from '../contracts.js';
 import { QUEUE_ACTIONS } from './catalog/queue.js';
 import { CONTENT_ACTIONS } from './catalog/content.js';
 import { STRATEGY_ACTIONS } from './catalog/strategy.js';
+import { BRIEFS_ACTIONS } from './catalog/briefs.js';
 import {
   BRAIN_ACTIONS, SIGNALS_ACTIONS, DIGEST_ACTIONS, REFRESH_ACTIONS, REFRESH_DAILY_ACTIONS, XMONITOR_ACTIONS, MEDIA_ACTIONS, OTHER_ACTIONS,
 } from './catalog/ops.js';
 
-export const GROUPS = Object.freeze(['queue', 'calendar', 'content', 'buckets', 'strategy', 'brain', 'signals', 'digest', 'refresh', 'xmonitor', 'media', 'nas', 'clients', 'other']);
+export const GROUPS = Object.freeze(['queue', 'calendar', 'content', 'buckets', 'strategy', 'brain', 'signals', 'digest', 'refresh', 'xmonitor', 'media', 'nas', 'briefs', 'clients', 'other']);
 export const TIERS = Object.freeze([0, 1, 2, 3]);
 export const EXTERNALS = Object.freeze(['x', 'email', 'arweave', 'paid']);
 
@@ -77,6 +84,7 @@ export const ROUTE_MODULES = Object.freeze({
   'calendar-disconnect': () => import('../../../app/api/dashboard/calendar/disconnect/route.js'),
   'media': () => import('../../../app/api/dashboard/media/route.js'),
   'archive-inbox': () => import('../../../app/api/dashboard/archive-inbox/route.js'),
+  'custom-briefs': () => import('../../../app/api/dashboard/custom-briefs/route.js'),
 });
 
 /** Route key -> repo-relative source file (used by tests to verify action literals; also documentation). */
@@ -104,6 +112,7 @@ export const ROUTE_FILES = Object.freeze({
   'calendar-disconnect': 'app/api/dashboard/calendar/disconnect/route.js',
   'media': 'app/api/dashboard/media/route.js',
   'archive-inbox': 'app/api/dashboard/archive-inbox/route.js',
+  'custom-briefs': 'app/api/dashboard/custom-briefs/route.js',
 });
 
 /**
@@ -139,11 +148,12 @@ export const ROUTE_AUTH = Object.freeze({
   'calendar-disconnect': { bearer: true, admin: false, pilotOwner: false, impersonation: true, clientFrom: 'context' },
   'media': { bearer: true, admin: 'mutations and archive actions', pilotOwner: false, impersonation: true, clientFrom: 'context', note: 'action is a QUERY param (?action=...), body carries the payload.' },
   'archive-inbox': { bearer: true, admin: true, pilotOwner: false, impersonation: true, clientFrom: 'context', note: 'action is a QUERY param.' },
+  'custom-briefs': { bearer: true, admin: true, pilotOwner: false, impersonation: true, clientFrom: 'context', note: 'POST/PATCH verifyAdminRequest, GET verifyRequestUser (client briefs only for admins). Client = getDashboardBootstrap `?as=`; the response echoes clientId and the runtime refuses a mismatch (clientEcho).' },
 });
 
 const ALL = [
   ...QUEUE_ACTIONS, ...CONTENT_ACTIONS, ...STRATEGY_ACTIONS,
-  ...BRAIN_ACTIONS, ...SIGNALS_ACTIONS, ...DIGEST_ACTIONS, ...REFRESH_ACTIONS, ...REFRESH_DAILY_ACTIONS, ...XMONITOR_ACTIONS, ...MEDIA_ACTIONS, ...OTHER_ACTIONS,
+  ...BRAIN_ACTIONS, ...SIGNALS_ACTIONS, ...DIGEST_ACTIONS, ...REFRESH_ACTIONS, ...REFRESH_DAILY_ACTIONS, ...XMONITOR_ACTIONS, ...MEDIA_ACTIONS, ...BRIEFS_ACTIONS, ...OTHER_ACTIONS,
 ];
 
 function deepFreeze(o) {
@@ -170,6 +180,7 @@ export function summarizeArgs(args) {
   return props.map((k) => (req.has(k) ? `${k}*` : k));
 }
 
+const STOP_WORDS = new Set(['or', 'and', 'for', 'the', 'to', 'of', 'in', 'on', 'my', 'me', 'please', 'can', 'you', 'not', 'is', 'it', 'an', 'do', 'with', 'from', 'this', 'that', 'we', 'us', 'at', 'be', 'as']);
 const tokens = (s) => String(s || '').toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length > 1);
 
 /**
@@ -181,27 +192,43 @@ export function findActions(query = '', { group = null, maxTier = 3, limit = 12 
   const qs = tokens(query);
   const pool = ACTIONS.filter((a) => a.tier <= maxTier && (!group || a.group === group));
   const exact = String(query || '').trim();
+  const scoreOf = (a, list) => {
+    const idT = new Set(tokens(a.id));
+    const titleT = new Set(tokens(a.title));
+    const descT = new Set([...tokens(a.description), ...tokens(a.keywords)]);
+    const groupT = new Set(tokens(a.group));
+    const prefix = (set, q) => [...set].some((t) => t === q || (q.length >= 3 && t.startsWith(q)));
+    let score = 0;
+    let matched = 0;
+    for (const q of list) {
+      let hit = 0;
+      if (prefix(idT, q)) hit += 4;
+      if (prefix(titleT, q)) hit += 3;
+      if (prefix(groupT, q)) hit += 2;
+      if (prefix(descT, q)) hit += 1;
+      if (hit) matched += 1;
+      score += hit;
+    }
+    return { score, matched };
+  };
   const scored = [];
   for (const a of pool) {
     if (exact && a.id === exact) { scored.push({ a, score: 1e6 }); continue; }
     if (!qs.length) { scored.push({ a, score: 0 }); continue; }
-    const idT = new Set(tokens(a.id));
-    const titleT = new Set(tokens(a.title));
-    const descT = new Set(tokens(a.description));
-    const groupT = new Set(tokens(a.group));
-    let score = 0;
-    let all = true;
-    for (const q of qs) {
-      let hit = 0;
-      const prefix = (set) => [...set].some((t) => t === q || (q.length >= 3 && t.startsWith(q)));
-      if (prefix(idT)) hit += 4;
-      if (prefix(titleT)) hit += 3;
-      if (prefix(groupT)) hit += 2;
-      if (prefix(descT)) hit += 1;
-      if (!hit) { all = false; break; }
-      score += hit;
+    const { score, matched } = scoreOf(a, qs);
+    if (matched === qs.length) scored.push({ a, score }); // strict: every token hits somewhere
+  }
+  // Natural-language fallback ("create or save client brief report for Not The Rug"): nothing matched every word (a client
+  // name or filler never will), so drop stop words and accept entries that hit at least 2 words and 60% of the rest.
+  if (!scored.length && qs.length) {
+    const words = qs.filter((t) => !STOP_WORDS.has(t));
+    const need = Math.max(2, Math.ceil(words.length * 0.6));
+    if (words.length >= 2) {
+      for (const a of pool) {
+        const { score, matched } = scoreOf(a, words);
+        if (matched >= need) scored.push({ a, score });
+      }
     }
-    if (all) scored.push({ a, score });
   }
   const groupOrder = (g) => GROUPS.indexOf(g);
   scored.sort((x, y) => y.score - x.score || groupOrder(x.a.group) - groupOrder(y.a.group) || x.a.id.localeCompare(y.a.id));
@@ -219,7 +246,7 @@ export function validateAction(e) {
   if (!e.title || e.title.length > 80) p.push('title required, <=80 chars');
   if (!e.description || e.description.length > 200) p.push(`description required, <=200 chars (${(e.description || '').length})`);
   if (!Object.hasOwn(ROUTE_MODULES, e.route)) p.push(`route ${e.route} not in ROUTE_MODULES`);
-  if (!['GET', 'POST'].includes(e.method)) p.push('method must be GET or POST');
+  if (!['GET', 'POST', 'PATCH'].includes(e.method)) p.push('method must be GET, POST or PATCH');
   if (e.method === 'GET' && e.action != null) p.push('GET entries have no body.action');
   if (!(e.action === null || (typeof e.action === 'string' && e.action))) p.push('action must be a string or null');
   if (e.args?.type !== 'object' || typeof e.args.properties !== 'object' || !Array.isArray(e.args.required)) p.push('args must be an object schema with properties + required');

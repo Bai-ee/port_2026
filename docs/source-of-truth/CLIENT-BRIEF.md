@@ -47,10 +47,13 @@ Admin pastes a client's Markdown breakdown -> HITLOOP renders it **exactly as pa
 ## MCP (owner server)
 `publish_client_brief {clientId, text, title?, ogLabel?, ogSubhead?, hideOgSubhead?, ogTitleLines? (<=3), ogLines? (<=2), briefSlug?}` returns `{ publicUrl, pdfUrl, ogImageUrl, briefSlug, clientId, title, warnings }`; `briefSlug` of an existing client brief updates it in place. Updates count against the 20/UTC-day cap like publishes. `unpublish_client_brief` / `list_client_briefs` unchanged in shape (`features/mcp/tools/client-brief.js`); they call this same route in-process with the owner's authorization and `?as=<clientId>`, then verify the response's `clientId`. See `docs/source-of-truth/HITLOOP-MCP-SERVER.md`.
 
+## Strategy chat agent (registry actions)
+Group `briefs` in the Agent Action Registry (`features/x-strategy/agent/catalog/briefs.js`, route key `custom-briefs`): `briefs.client.publish` (create, or update in place with `briefSlug`; tier 1; `fixed.kind='client-brief'`; a NEW brief gets `public:true` by default, an UPDATE sends `public` only if the agent passes it; undo = `briefs.client.unpublish` for a NEW brief only — an update is not undoable (previous text is overwritten); one brief per call (`singleItem`)), `briefs.client.unpublish` (PATCH `public:false`, tier 1, undo = republish), `briefs.client.republish` (PATCH `public:true`, tier 1), `briefs.client.list` (GET `?kind=client-brief`, tier 0). The runtime calls the route in-process with the owner's authorization and `?as=<clientId>`, refuses an answer whose `clientId` differs (`clientEcho`), and returns only `{publicUrl, pdfUrl, ogImageUrl, briefSlug, title, public, clientId}` (`resultPick`; run_action `output`). Over MCP, `chat_send` can run it; the direct `publish_client_brief` tool is still the reliable path and does NOT go through find_actions/chat_send. The registry path shares the 20/UTC-day cap with the MCP tool (`dailyCap:'client-brief'` -> `reserveDailyClientBriefSlot`, Firestore counters wired in `features/x-strategy/route-handlers.js`; fails closed without counters).
+
 ## Tests (`node --test`, fakes only)
 - `features/client-brief/__tests__/{parse,render,publish}.test.js`
 - `app/api/dashboard/custom-briefs/__tests__/client-brief-route.test.js` (publish, OG fields, update in place + rejections, invoice-overwrite guard, lazy `/pdf` modes), `og-preview-route.test.js`
-- `features/x-strategy/__tests__/brief-bundle.test.js`, `features/mcp/__tests__/client-brief-tools.test.js`
+- `features/x-strategy/__tests__/brief-bundle.test.js`, `features/mcp/__tests__/client-brief-tools.test.js`, `features/x-strategy/__tests__/client-brief-actions.test.js`
 - Regression: `features/invoices/__tests__/*.test.js`, `lib/theme-migration/__tests__/*.test.js`
 
 ## Known limits

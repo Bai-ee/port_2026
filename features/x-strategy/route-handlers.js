@@ -57,6 +57,7 @@ import { createActionRuntime, TRUSTED_REFRESH_CAP_RANGE } from './agent/action-r
 import { runAgentRefresh, agentRefreshStatus, agentRefreshAvailability, X_READ_USD_PER_CALL } from './agent/refresh-engine.js';
 import { createFirestoreRefreshSpendStore, utcDayKey } from './agent/refresh-spend.js';
 import { createFirestoreActionStores } from './agent/action-stores.js';
+import { createFirestoreCounters } from '../mcp/limits.js';
 import { randomUUID } from 'node:crypto';
 import { StrategyDocError, createFirestoreStrategyDocStore } from './strategy-doc-store.js';
 import { draftDoc, STRATEGY_DOC_SECTIONS, describeDocChange } from './strategy-doc.js';
@@ -1799,7 +1800,7 @@ export function createStrategyHandlersFromDb(db, {
   },
   onXGrowthSaved, onBrainOwnedSaved, readBrainTrackTargets, saveXGrowthProfile = createXGrowthProfileSaver(db, { onSaved: onXGrowthSaved }), chatStore = createFirestoreChatStore(db, { env }),
   agentLoopFactory, callModel, logUsage, loadCommitted, docStore = createFirestoreStrategyDocStore(db),
-  actionRuntime = createActionRuntime(createFirestoreActionStores(db)),
+  actionRuntime = createActionRuntime({ ...createFirestoreActionStores(db), counters: () => createFirestoreCounters(db) }),
   responseStyleStore = createFirestoreResponseStyleStore(db),
   unmetStore = createFirestoreUnmetStore(db),
   ...passThrough // any other createStrategyHandlers dep (linkItemMedia, mediaForItem from the quote-targets route; test overrides), forwarded as-is
