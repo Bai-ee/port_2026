@@ -1,5 +1,7 @@
 # Social Auto-Publish
 
+> **Brief-video guard (2026-11-17):** `assertNoInternalBrief` in `twitter-service.js` refuses approve, `postNow`, `postToTwitter` and self-reply publish (409 `internal-brief-present`) for any text containing `INTERNAL VIDEO BRIEF`; the CQ daily brief video cron strips the brief into `videoBrief` when it attaches the video. See [`CQ-DAILY-BRIEF-VIDEO.md`](CQ-DAILY-BRIEF-VIDEO.md) section 5 (and [`SITE-SHOWCASE-VIDEO.md`](SITE-SHOWCASE-VIDEO.md) for the shared render service).
+
 **Status:** built (P1–P8 of `docs/plans/SOCIAL-AUTO-PUBLISH-PLAN.md`). Read that plan for the phase history; this doc is the as-built reference going forward.
 
 > **Multi-client (2026-10-14):** the global `system_flags/x_oauth_tokens` token and `TWITTER_*` env are served to the home client only; any other client without its own connection gets 409 `account-not-connected` (nothing falls back to @bai_ee). The Social Accounts card follows the switcher, and the same per-client connection is what `assertClientReady` checks for "X connected" and what scheduled posts (`process-due`), Compose and repost publish through. Note: home's own `social_accounts` X record currently points at @UGExistence (posting tests) while the legacy global panels below remain @bai_ee. See [`CONTENT-PILOT-OPERATIONS.md`](CONTENT-PILOT-OPERATIONS.md) §1b, §1d.
