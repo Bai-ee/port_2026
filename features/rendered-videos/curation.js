@@ -1,3 +1,6 @@
+import { matchesRule } from '../x-content-inventory/daily-fill.js';
+import { DAILY_MIX_RULE } from '../x-content-inventory/daily-mix-rule.js';
+
 // Curated bucket for rendered videos (Video Remix P2a). The owner approves/rejects rv-<jobId> packages;
 // the verdict lives on the package doc as `curation: { state, at, by }` (missing = pending).
 //
@@ -49,6 +52,7 @@ export function listCurationCandidates(rows, { days = 10, now = Date.now() } = {
     durationSec: r.durationSec ?? null,
     curation: r.curation ?? null,
     rights: r.rights ?? null,
+    feedsCalendar: matchesRule(r, DAILY_MIX_RULE), // same artist/video/retired test the daily fill applies to the ue bucket
   }));
   const approvedTotal = live.filter((r) => stateOf(r) === 'approved').length;
   return { items, counts, approvedTotal, days, truncated: inWindow.length > items.length };

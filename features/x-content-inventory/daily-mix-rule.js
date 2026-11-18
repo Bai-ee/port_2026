@@ -3,6 +3,11 @@
 // 06:00 daily email render, synced in by the daily-loop), then least recently used, so every BAI-EE video gets a turn
 // before one repeats. Drafts only, for owner approval.
 //
+// preferCurated (Video Remix P2c, 2026-11-18): an owner-approved, never-used rv- video (curation.state 'approved') beats
+// the fresh render, oldest approval first, each used once; with none left the fill falls back to the rule above. A
+// rejected video is never picked. The BAI-EE artist filter still applies to curated items. A held curated draft also
+// suppresses the sameDay override, so a rerun never adds a second draft.
+//
 // sameDay (2026-10-20): the fill plans this track for today only, never days ahead. A 7-day pre-fill held every day
 // with older renders, so the morning's render never reached the calendar the day it was made; now it is today's draft
 // even when an older (or rejected) draft already sits on today.
@@ -12,7 +17,7 @@
 
 import { mediaOwnerClientId } from '../rendered-videos/firestore-sync.js';
 
-export const DAILY_MIX_RULE = Object.freeze({ perDay: 1, artists: Object.freeze(['BAI-EE']), newestFirst: true, sameDay: true });
+export const DAILY_MIX_RULE = Object.freeze({ perDay: 1, artists: Object.freeze(['BAI-EE']), newestFirst: true, sameDay: true, preferCurated: true });
 
 /** `{ [bucketId]: rule }` for planDailyFill's `trackRules`; empty for every client but the rendered-video owner (RENDERED_VIDEOS_CLIENT_ID, else NAS_INVENTORY_CLIENT_ID). */
 export function dailyMixRulesFor(clientId, { ownerClientId = mediaOwnerClientId() } = {}) {

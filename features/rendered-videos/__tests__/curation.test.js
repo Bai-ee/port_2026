@@ -52,8 +52,14 @@ test('listCurationCandidates: window, newest first, counts, retired excluded, sl
   assert.deepEqual(r.items.map((i) => i.id), ['rv-new', 'rv-mid', 'rv-rej']);
   assert.deepEqual(r.counts, { pending: 1, approved: 1, rejected: 1 });
   assert.equal(r.approvedTotal, 2); // rv-old + rv-mid; retired excluded
-  assert.deepEqual(Object.keys(r.items[0]).sort(), ['curation', 'durationSec', 'id', 'renderedAt', 'rights', 'title']);
+  assert.deepEqual(Object.keys(r.items[0]).sort(), ['curation', 'durationSec', 'feedsCalendar', 'id', 'renderedAt', 'rights', 'title']);
   assert.equal(listCurationCandidates(rows, { days: 40, now: NOW }).items.length, 4);
+});
+
+test('listCurationCandidates: feedsCalendar follows the daily-fill rule (BAI-EE video only)', () => {
+  const row = (id, extra = {}) => ({ id, renderedAt: iso(1), mediaState: 'video', entities: ['BAI-EE'], ...extra });
+  const r = listCurationCandidates([row('rv-ok'), row('rv-other', { entities: ['Someone'] }), row('rv-none', { entities: [] }), row('rv-still', { mediaState: 'still' })], { days: 10, now: NOW });
+  assert.deepEqual(Object.fromEntries(r.items.map((i) => [i.id, i.feedsCalendar])), { 'rv-ok': true, 'rv-other': false, 'rv-none': false, 'rv-still': false });
 });
 
 test('listCurationCandidates caps at 200', () => {
