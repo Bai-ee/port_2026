@@ -1,7 +1,8 @@
 // syncs.js - sync requests. Free ones run directly; anything that costs money becomes a PROPOSAL CARD:
 //   request_sync -> validates + prices -> a "Run a paid sync" card in Marketing Director > Strategy (chat) (thread "MCP").
-// It runs only when the OWNER presses Confirm on that card inside HITLOOP (strategy-proposal-decide); MCP has no
+// It runs only when the OWNER presses Confirm on that card inside HITLOOP (strategy-proposal-decide); request_sync has no
 // confirm step and never receives a code. The executors live in ../paid-syncs.js (shared with the dashboard route).
+// The other paid path is MCP-OPS run_refresh (tools/ops.js): preview -> confirm:true -> capped background run.
 // NEVER exposed here: X API writes, posting, scheduling, approving, deleting, sending email, Telegram sends.
 
 import { ToolError } from '../jsonrpc.js';

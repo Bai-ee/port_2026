@@ -104,6 +104,27 @@ function getDefaultModuleState(hasUrl = false) {
   return state;
 }
 
+// Moved here from api/_lib/client-provisioning.cjs (pure; one implementation shared with MCP/module-toggle.mjs).
+function inferModuleStateFromDashboard(dashboardState) {
+  const base = getDefaultModuleState(false);
+  if (!dashboardState) return base;
+
+  if (dashboardState.artifacts?.homepageDeviceMockup) {
+    base['multi-device-view'] = { status: 'succeeded', enabled: true };
+  }
+
+  const seoStatus = dashboardState.seoAudit?.status;
+  if (seoStatus === 'ok' || seoStatus === 'partial') {
+    base['seo-performance'] = { status: 'succeeded', enabled: true };
+  }
+
+  if (dashboardState.siteMeta) {
+    base['social-preview'] = { status: 'succeeded', enabled: true };
+  }
+
+  return base;
+}
+
 module.exports = {
   REGISTRY,
   getModuleDefinition,
@@ -111,4 +132,5 @@ module.exports = {
   isFoundationalModule,
   getDefaultModuleConfig,
   getDefaultModuleState,
+  inferModuleStateFromDashboard,
 };

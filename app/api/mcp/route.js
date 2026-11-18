@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { createRequire } from 'node:module';
 import { handleRpc, RPC } from '../../../features/mcp/jsonrpc.js';
 import { registry } from '../../../features/mcp/registry.js';
@@ -13,7 +13,8 @@ export const maxDuration = 300;
 
 // HITLOOP MCP server - Streamable HTTP, stateless JSON-RPC. See docs/source-of-truth/HITLOOP-MCP-SERVER.md.
 // Auth: OAuth 2.1 access token (or a static MCP_OWNER_TOKEN of 32+ chars), admin accounts only. Fails closed (503) without
-// MCP_OAUTH_SECRET. Nothing here posts, schedules, approves, deletes or writes to X.
+// MCP_OAUTH_SECRET. Nothing here posts, schedules, approves, deletes or writes to X. Money is spent only by MCP-OPS run_refresh
+// (preview -> confirm:true, capped) and by cards the owner confirms in HITLOOP.
 
 const require = createRequire(import.meta.url);
 
@@ -56,7 +57,8 @@ export async function POST(request) {
   const limit = await checkRateLimit(server.services.counters(), `mcp:${auth.email}`, { now: now(), cost: rpcCost(body) });
   if (!limit.allowed) return json({ error: `Rate limit: ${limit.limit} calls per 10 minutes.` }, 429, { 'retry-after': String(limit.retryAfterSec) });
 
-  const ctx = { db: server.db, email: auth.email, uid: await uidForEmail(auth.email), clientId: server.defaultClientId, origin, now, services: server.services };
+  // defer: paid MCP-OPS runs continue after the response (next/server after()), within maxDuration; tools return a runId at once.
+  const ctx = { db: server.db, email: auth.email, uid: await uidForEmail(auth.email), clientId: server.defaultClientId, origin, now, services: { ...server.services, defer: (fn) => after(fn) } };
   const out = await handleRpc(body, {
     registry, ctx, instructions: server.getInstructions(),
     onCall: ({ tool, args, ok, ms }) => server.audit.write(auditEntry({ now: now(), email: auth.email, tool, args, ok, ms })),

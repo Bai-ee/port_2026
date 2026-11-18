@@ -1,0 +1,96 @@
+# MCP-OPS (as built, Phase 2)
+
+Run FREE refreshes and manage a small allowlist of dashboard settings from the owner MCP server (ChatGPT / Claude), for any client. Part of [HITLOOP-MCP-SERVER.md](HITLOOP-MCP-SERVER.md). Branch `feat/mcp-ops`.
+
+**Money rule (owner decision):** MCP spends only through `run_refresh` on a paid id: a cost preview, the owner's explicit yes in the conversation, then `confirm:true` with the single-use `previewToken`, within daily caps. `request_sync` cards still work (the owner confirms in HITLOOP). No trustedRefresh requirement and no env kill switch. No setting that spends money or sends email can be turned ON over MCP.
+
+Code: `features/mcp/ops/{catalog,runs,settings,stores}.js` (pure, injected deps), `features/mcp/tools/ops.js` (the 6 tools), wiring in `features/mcp/server.js` (`services.ops()`), one import + spread in `registry.js`. Tests: `features/mcp/__tests__/ops-{refresh,settings}.test.js` (+ `ops-world.js` fakes, `tools.test.js` pins).
+
+## Tools
+
+All take `clientId` (via `resolveClientId`: the owner defaults to the home client, any other admin must pass one; unknown client = refused). `runId` / `changeId` must belong to the resolved client or they read as "No such ... for this client". Kind: `sync` for run/set/undo (there is no `write` kind); the two settings writers are named exceptions in `tools.test.js` (`set_setting` next to `publish_client_brief`; the writer list is pinned).
+
+| Tool | Kind | What |
+| --- | --- | --- |
+| `list_refreshes {clientId?}` | read | Catalog: id, costClass, estimate, writes, runnable/availability, `usedToday`/`maxPerDay`; paid ones as `owner-signoff-pending`; the excluded list with reasons; `paidGate`. |
+| `run_refresh {refreshId, params?, confirm?, previewToken?, clientId?}` | sync | Free id: runs. Paid id without `confirm`: `{needsConfirm, estimate, effects, previewToken, expiresAt}` and invokes nothing; with `confirm:true` + `previewToken`: starts the run in the background and returns `{runId, status:'running'}`. Excluded id: `{ran:false, excluded:true, reason}`. Unknown id: error. |
+| `get_run_status {runId, clientId?}` | read | Follows the queue request via `agent-refresh-status` (pure read). Terminal states are written back. A run past its lease and not done reads `timed-out`, never `running`. |
+| `get_settings {clientId?}` | read | Allowlisted keys with current value and, per target value, `free` / `confirm` / `blocked`. Plus read-only schedule details, auto-publish modes, `autoPostX`, `trustedRefresh`. Never `recipientEmail`. |
+| `set_setting {key, value, confirm?, clientId?}` | sync | Changes ONE key under the per-client mutex. Returns `{applied, changeId, before, after, undoable}`, or `{needsConfirm}` / `{blocked, reason}` / `{unchanged}`. |
+| `undo_setting {changeId, confirm?, clientId?}` | sync | Restores `before` only if the current value still equals `after`; else `{conflict}` and nothing is written. The direction rule applies to the undo too. |
+
+## Refresh catalog
+
+Reuse path: free Mac groups go through the same engine `strategy_refresh_data` uses (`runAgentRefresh` via the strategy handler action `agent-refresh`, `features/x-strategy/agent/refresh-engine.js`), on an **ops-only handlers instance** created in `server.js` with `refreshSpendStore: null`. With no spend store the engine forces `trustedRefresh` off, so even a client with trustedRefresh enabled cannot spend through `run_refresh`. The shared `strategyHandlers` (and so `strategy_refresh_data`) got no new deps and is untouched. Before reserving a slot, `planGroup` (the engine's own free/paid table) is checked against the client's data sources: a client on the paid X API source for `strategy-accounts` / `quote-targets` is refused.
+
+| Refresh id | Cost class | Writes | Reuse path |
+| --- | --- | --- | --- |
+| `strategy-accounts` | free (Mac bird) | Mac refresh queue doc; x_corpora rows by the worker | agent-refresh -> `requestStrategyRefresh` (= `request_strategy_refresh`) |
+| `quote-targets` | free (Mac bird) | quote scan queue doc; candidates | agent-refresh -> `quoteScanQueue.request` (= `request_quote_scan`) |
+| `hot-quotes` | free + ~$0.002 judge (cap $0.04) | quote scan queue doc, mode hot; hot picks | agent-refresh -> `quoteScanQueue.request` mode hot |
+| `bookmarks` | free (Mac bird) | quote scan queue doc, mode bookmarks | agent-refresh -> `quoteScanQueue.request` |
+| `recent-posts` | free (Mac bird) | quote scan queue doc, mode recent-posts | agent-refresh -> `quoteScanQueue.request` |
+| `today-queue` | free (template, no model) | today daily-run doc; never posts/schedules | `services.regenerateToday` (= `regenerate_today_suggestions`), not the engine: the shared handlers have no `runDailyAction` |
+| `market-signals` | PAID, 3/day/client | marketingBrief; model + metered X watchlist reads (`runXScout`); creates or marks the digest delivery record (bookkeeping) | pre-digest-refresh `phase=signals`, group set `{market-signals}` |
+| `analysis` | PAID, 3/day/client | digest delivery record, summary LLM calls, MAY PUBLISH a fresh hosted Executive Brief (the preview says both) | pre-digest-refresh `phase=analysis`, group set `{analysis}` |
+| `renders` | PAID, 3/day/client | module card outputs; creates or marks the digest delivery record (bookkeeping) | pre-digest-refresh `phase=modules`, group set `{renders}` |
+| `x-monitor` | PAID, shares the 10/day paid-sync slots | x_monitor snapshots/posts/audience (metered X reads) | `executePaidSync` x_monitor_sync |
+| `strategy-review` | PAID, shares the 10/day paid-sync slots | strategy chat thread + pending proposals | `executePaidSync` strategy_review |
+| `site-showcase` | PAID, 2/day/client (route allows 6/day, one active job; home client only) | `showcase_jobs/{jobId}` + video | showcase route `POST ?action=create` in-process, owner auth, `?as=clientId` |
+
+**Paid flow (`features/mcp/ops/{preview,paid,runs}.js`).** Order: validate params -> (no confirm: preview, nothing invoked/reserved/consumed) -> verify the token -> consume it -> take the run lock -> reserve caps -> record the run -> run in the background -> mark done/failed, release the lock. Token: HMAC with `MCP_OAUTH_SECRET` over {jti, email, clientId, refreshId, params hash, estimate hash, expiry}; 10 min; single use via `.create()` of `mcp_ops_previews/{sha256(jti)}` (only the hash is stored). Refused: no token, bad/tampered token, other client/refresh/params/user, expired, reused, estimate changed since the preview (a double confirm race starts one run). Locks: `mcp_ops_locks/run_<clientId>_<refreshId>`, lease = the refresh's timeout (6 min digest/sync, 25 min showcase), released on completion or any throw before hand-off; a crashed run frees itself at lease expiry. Caps are pre-checked at preview time (no token burned) and reserved atomically after the lock: per refresh/client/day plus a global `ops_paid_<day>` of 10; x-monitor/strategy-review use only the existing `paid_sync_<day>` slot taken inside `executePaidSync`. Background execution: `ctx.services.defer(fn)` = next/server `after()` wired in `app/api/mcp/route.js` (inline when absent). The digest groups never pass `allowX`/`allowXWatchlist`; `x-search` stays excluded. Showcase: the job's `clientId` is verified from `showcase_jobs/{jobId}`; `get_run_status` calls the route's `GET ?action=status&jobId=` through `callDashboardRoute` (its healing path: re-pokes a lost trigger after 20 s, fails jobs older than 20 min; creates no job, uses no cap) and falls back to reading the job doc only when that call fails; the job's `clientId` is verified either way. Result: `{url: downloadUrl, sizeBytes, durationInFrames}`; failure shape `error:{stage,message}`. The MAC key is derived: `hmac(MCP_OAUTH_SECRET, 'mcp-ops-preview-v1')`. Only ALREADY_EXISTS from `.create()` means "already used"; any other store error fails closed with a generic message. The `previewToken` argument is redacted in `mcp_audit` (key regex `token`, pinned by a test); the exact key `refreshId` is exempt from redaction (`REDACT_KEY_EXEMPT`), while `refresh_token` / `refreshToken` stay redacted (pinned). If `defer()` throws synchronously the run is marked failed and the lock released. Digest runs are `failed` only when the preflight refused them (nothing ran); if any step ran they are `done` with a per-step summary (modules, scout, strategy, executiveSummary, freshBriefPath) and step errors noted. Cap honesty: caps are pre-checked at preview time, then the per-refresh and global slots are two separate atomic increments; counters have no atomic decrement, so if the global reserve loses a race after the per-refresh slot was taken that one slot is not refunded (rare, errs toward fewer runs). `list_refreshes.paidCaps` states that x-monitor and strategy-review share the existing 10/day request_sync slots instead of the ops global cap. Reuse is a direct call per group (not the agent engine, so no trustedRefresh involvement).
+
+Digest-group estimates use the engine's `PLACEHOLDER_USD` (rounded-up placeholders, not billing truth).
+
+**Excluded** (shown by `list_refreshes` with reasons): `x-search` (paid X search), paid X-API sources, CQ brief video worker (CRON_SECRET only), daily email video, digest send/retry, anything posting/publishing/scheduling/sending/deleting/billing, client provisioning.
+
+## Caps, runs, locks
+
+- Per refresh / client / UTC day via `counters.reserve`, key `ops_<refreshId>_<clientId>_<day>`: 10 for Mac groups, 5 for `today-queue`. Order: resolve client -> catalog gate -> source validation -> reserve cap -> run. A refusal never burns the cap.
+- No MCP lock for free Mac groups (the queues dedupe a second request). `today-queue` has the cap only. Paid runs lock (above).
+- `mcp_ops_runs/{runId}`: `{clientId, refreshId, email, startedAt, startedAtMs, leaseMs, status, requestId, detail, finishedAt?}`. Leases: 5 min (today-queue) to 30 min (hot-quotes).
+- `mcp_settings_log/{changeId}`: `{clientId, key, before, after, email, at, via:'mcp', undoable, undoneAt, undoneBy?}`.
+- `mcp_ops_locks/settings_<clientId>`: lease doc (transaction), 20 s lease, ~4 s of retries then a clear error. `mcp_ops_previews/{hash}`: consumed preview tokens.
+- These collections are denied to the data tools: `redact.js` `isDeniedCollectionName` blocks every `mcp_*` collection except `mcp_audit` (pinned by a test for `mcp_ops_runs`, `mcp_settings_log`, `mcp_ops_locks`, `mcp_ops_previews`). Inspect them from the Firebase console.
+- **Failed log write:** if the change-log write fails the result carries `changeLogged:false` and no `changeId`: that change cannot be undone over MCP.
+- **Lost-update window:** the settings mutex only serialises MCP calls. The dashboard routes do not take it, so a dashboard edit that lands between `set_setting`'s read and write (milliseconds) can be overwritten, and `undo_setting`'s conflict check only protects against edits that happened before the undo. The write is a read-modify-write of the whole include/schedule/refresh-daily object; it is not a transaction against the dashboard.
+
+## Settings allowlist
+
+Rule: reduce-risk runs directly; increase-risk is `confirm:true` when it only changes emailed content, BLOCKED (dashboard only) when it spends or sends. The rule is evaluated on the value being written, so `undo_setting` gets the same gate. `undoable` is false when the reverse would be blocked.
+
+| Key | Values | Direction rule |
+| --- | --- | --- |
+| `refresh-daily.enabled` | bool | OFF free; ON blocked (standing spend) |
+| `refresh-daily.group.<id>` (`market-signals`, `analysis`, `renders`, `today-queue`, `x-search`) | bool | OFF free; ON blocked |
+| `digest.schedule.enabled` | bool | OFF only; **not undoable** over MCP |
+| `digest.include.<section>` (every key of `sections.registry.cjs`) | bool | OFF free. ON fails CLOSED: `confirm:true` only for the pinned presentation-only keys `contactHuman`, `todayPlan`, `humanBrief`, `opportunities`, `suggestedReplies`, `signals`, `pressCoverage`, `suggestedPosts`, `planPreview`; ON blocked for every other key (cost, external-fetch, GA4, platform/user data). Turning one ON may cause free Firestore reads plus the weather lookup (`getBriefForClient`); there is no model or paid-API spend. The brief-derived keys (`humanBrief`, `opportunities`, `suggestedReplies`, `signals`, `pressCoverage`, `suggestedPosts`, `planPreview`) are BLOCKED ON when the client's `includeClientIds` is non-empty (the daily-digest route renders the briefs of every included client). The confirm message says the section is emailed to the configured recipient. `todayPlan` reads the plan for `homeClientId` (daily-digest route), not necessarily the client being edited. A test requires every registry key to be classified. |
+| `digest.dailyXSearch` | bool | OFF only. If the saved refresh-daily profile still has `x-search`, the paid search keeps running: the result carries a warning pointing to `refresh-daily.group.x-search` |
+| `digest.summaryEnabled` | bool | OFF free; ON blocked |
+| `digest.briefLinkMode` | `fresh`/`latest`/`off` | `off` free; `latest` `confirm:true` (adds a hosted-brief link to emails); `fresh` blocked |
+| `modules.<cardId>.enabled` | bool | OFF free; ON `confirm:true` |
+| `x-sources.strategyAccounts`, `x-sources.quoteTargets` | `mac`/`x-api` | `mac` free; `x-api` blocked |
+| `x-sources.autoDaily.strategyAccounts`, `.quoteTargets` | bool | OFF only |
+
+Read-only in `get_settings` ("change in HITLOOP"): send schedule details, auto-publish modes, `autoPostX`, `agentAutonomy.trustedRefresh`. Never exposed or writable: `recipientEmail`, `autoPublish`, `autoPostX`, `agentAutonomy`, tone/extraInstructions (they write the Brain), `homeClientId`/`includeClientIds`, `dailyVideo`.
+
+**`modules.<cardId>.enabled`** (ids from `module-registry.js`): OFF free, ON `confirm:true`. Turning a module ON shows its Run button AND adds the card to the daily refresh and to the paid `renders` run (`pre-digest-refresh/route.js` module selection), so it means RECURRING model spend; the confirm message says so. Written with `applyModuleToggle` (`features/scout-intake/module-toggle.mjs`), the SAME fixed writer the dashboard route now uses. **Bug fixed:** `modules/config/route.js` used `set({'moduleConfig.<id>.enabled': v}, {merge:true})`, which writes a literal dotted top-level field (only `update()` parses dot paths), so `modules/run`, the daily refresh and the bootstrap (all read nested `moduleConfig[id].enabled`) never saw UI toggles; the `dashboard_state.modules.*` write had the same flaw. Both writes are now nested maps, and the FIRST write never creates partial maps: a missing `moduleConfig` is seeded with `getDefaultModuleConfig()` plus the succeeded-inference bootstrap applies, a missing `dashboard_state.modules` is seeded from `inferModuleStateFromDashboard` (moved from `client-provisioning.cjs` into `module-registry.js`, one shared implementation), then the toggled card is merged. `modules.<id>.enabled` reads use the bootstrap's effective view (defaults under stored, succeeded cards without an explicit entry count as enabled). **No read fallback and no migration** for old literal keys: no reader ever honoured them, so they never took effect, and honouring them now would silently enable cards (and daily-refresh spend) from toggles made long ago. Existing literal keys are simply ignored.
+
+### Writer semantics (verified; do not simplify)
+
+- `saveDigestConfig` rebuilds `include` and `schedule` from defaults: always send the FULL current map. `todayPlan` is omitted unless it is the key being changed (sending it would freeze the home-client default ON into storage).
+- `saveRefreshDaily` replaces the whole object; omitted `enabled` means true: always send `enabled` + `groups`, starting from `readRefreshDaily`'s effective value (a never-saved client keeps its derived default groups).
+- Data sources use the same `saveDataSources` the `x-data-sources-save` handler calls (deep merge; only the touched key is sent).
+- Reads use `getDigestConfig` directly. `GET /api/admin/digest-config` is never called (its opportunisticSweep can send retry emails).
+
+## Tests
+
+`node --test features/mcp/__tests__/ops-*.test.js` (no Firebase/network): `ops-refresh` (free gates, caps, status, client resolution, real handlers with a null spend store, stores create-only), `ops-paid` (preview invokes nothing; every refusal case; double-confirm race; defer; single-item digest group Sets and no allowX; lock, throw release, lease expiry; caps incl. global and not-burned; x-monitor shares the existing slot; showcase client check and no re-poke; audit redaction), `ops-settings` (allowlist, fail-closed includes against the real registry, writer semantics, mutex, undo), `ops-modules` (bug reproduction, nested writer, legacy keys ignored, module settings). `tools.test.js`: tool count 96, `set_setting` exception, pinned writer list.
+
+## Open questions
+
+- **Analysis publishes** a hosted Executive Brief page when the client's brief link mode is `fresh`; accepted by the owner and stated in the preview. A no-publish mode would still be safer.
+- Estimates for digest groups are placeholders; real cost per run is not measured. Cap numbers (3/2/10, free 10/5) are defaults to tune.
+- Run completion for paid runs depends on `after()` finishing inside the route's 300 s; a killed run reads `timed-out` and its lock frees at lease expiry (the money may still have been spent).
+- `refresh-daily.group.today-queue` ON stays blocked although today-queue itself is free.
+- `get_run_status` takes `runId` only (no lookup by refreshId).

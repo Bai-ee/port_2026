@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
+import { applyModuleToggle } from '../../../../../features/scout-intake/module-toggle.mjs';
 
 const require = createRequire(import.meta.url);
 const fb = require('../../../../../api/_lib/firebase-admin.cjs');
@@ -66,35 +67,8 @@ export async function POST(request) {
     return json({ error: `Unknown cardId: "${cardId}".` }, 400);
   }
 
-  const now = fb.FieldValue.serverTimestamp();
-  const clientConfigRef  = fb.adminDb.collection('client_configs').doc(clientId);
-  const dashboardStateRef = fb.adminDb.collection('dashboard_state').doc(clientId);
-
-  // Read current module status to avoid clobbering succeeded/failed state on enable
-  const dashSnap = await dashboardStateRef.get();
-  const currentStatus = dashSnap.exists
-    ? (dashSnap.data()?.modules?.[cardId]?.status ?? 'disabled')
-    : 'disabled';
-
-  const dashUpdate = {
-    [`modules.${cardId}.enabled`]: enabled,
-    updatedAt: now,
-  };
-  // Enabling a disabled card → mark idle so the Run button appears.
-  // Leave succeeded/failed/running/queued status untouched.
-  if (enabled && currentStatus === 'disabled') {
-    dashUpdate[`modules.${cardId}.status`] = 'idle';
-  }
-  // Disabling a non-succeeded card → mark disabled.
-  // Leave succeeded status intact (preserve last result display).
-  if (!enabled && currentStatus !== 'succeeded') {
-    dashUpdate[`modules.${cardId}.status`] = 'disabled';
-  }
-
-  await Promise.all([
-    clientConfigRef.set({ [`moduleConfig.${cardId}.enabled`]: enabled, updatedAt: now }, { merge: true }),
-    dashboardStateRef.set(dashUpdate, { merge: true }),
-  ]);
+  // Nested writes (see features/scout-intake/module-toggle.mjs: the old dotted-key set() wrote a literal field no reader used).
+  await applyModuleToggle(fb.adminDb, clientId, cardId, enabled, { now: fb.FieldValue.serverTimestamp() });
 
   return json({ ok: true, cardId, enabled });
 }
