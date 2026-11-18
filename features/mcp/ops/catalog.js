@@ -27,7 +27,7 @@ const FREE = [
 ].map((r) => ({ ...r, costClass: 'free', group: r.id }));
 
 // PAID groups run from MCP only through preview -> confirm:true (runs.js), within caps. `effects` is shown to the owner
-// in the preview. kind: 'digest' = pre-digest-refresh phase in-process; 'sync' = executePaidSync; 'showcase' = route.
+// in the preview. kind: 'digest' = pre-digest-refresh phase in-process; 'x-search' = the same function with groups Set(['x-search']) (its own kind: digest kinds never reach X); 'sync' = executePaidSync; 'showcase' = route.
 const DIGEST_LEASE_MS = 6 * 60_000;
 export const PAID_GLOBAL_CAP_PER_DAY = 10;
 const PAID = [
@@ -40,6 +40,12 @@ const PAID = [
   { id: 'renders', label: 'Renders (pre-digest phase=modules)', kind: 'digest', phase: 'modules', maxPerDay: 3, leaseMs: DIGEST_LEASE_MS, estimate: usd(PLACEHOLDER_USD.renders),
     effects: ['Runs the enabled module cards through the model pipeline.', 'Rewrites module card outputs.', 'Creates or marks the digest delivery record (bookkeeping).'],
     writes: 'dashboard_state.modules outputs' },
+  { id: 'x-search', label: 'X search (Market Talk on X + Opportunity Signals with X)', kind: 'x-search', maxPerDay: 3, leaseMs: DIGEST_LEASE_MS, estimate: 'Paid X search reads, priced per post (exact call and post counts in the preview)',
+    effects: ['Runs ONLY the paid X search: Market Talk on X (up to 3 searches x 10 posts) and Opportunity Signals with X (one call per enabled query row, up to 8, each max(10, maxItemsPerPlatform) posts). Not Scout, not the watchlist, not analysis.',
+      'Real X API spend priced per post read; uses the owner/app X credentials (HITLOOP\'s X app), needs no client X connection, metered to this client in the X ledger; the X daily/source budget still applies inside.',
+      'Opportunity X also needs the ScrapeCreators key; the same run also does Reddit/Instagram ScrapeCreators searches for opportunity signals.',
+      'Creates or marks the digest delivery record (preflight) and writes dashboard_state.'],
+    writes: 'dashboard_state.marketingBrief (xMarketTalk platform test + status, opportunitySignals pool)' },
   { id: 'x-monitor', label: 'X Monitor sync', kind: 'sync', syncKind: 'x_monitor_sync', leaseMs: DIGEST_LEASE_MS, estimate: 'X API reads, metered per call (estimate shown in the preview)',
     effects: ['Reads from the X API (metered, real spend, invisible on the Operating Cost card). No writes to X.'],
     writes: 'x_monitor/{accountId} snapshots, posts, audience events' },
@@ -54,7 +60,6 @@ const PAID = [
 export const REFRESHES = Object.freeze([...FREE, ...PAID].map((r) => Object.freeze(r)));
 
 export const EXCLUDED = Object.freeze([
-  { id: 'x-search', reason: 'Paid X search (Market Talk on X): never model-driven; the owner runs it from the Refresh panel.' },
   { id: 'x-api-sources', reason: "Strategy accounts / Quote targets set to the paid X API: needs the owner's confirm row in the Refresh panel." },
   { id: 'cq-brief-video', reason: 'CQ brief video worker: CRON_SECRET only and env-gated; read its status instead.' },
   { id: 'daily-email-video', reason: 'Daily email video worker: not exposed.' },

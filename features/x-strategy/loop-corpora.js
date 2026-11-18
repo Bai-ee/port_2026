@@ -72,19 +72,14 @@ export async function loadLoopCorpora({ corpusStore, profileHandles, loadCommitt
 
 /**
  * The loop's corpora for ONE client, keyed on that client's own X handle (resolveClientXHandle). With no handle on
- * record the own corpus is EMPTY and ownHandle null (the saved profile's ownHandle is not consulted: the resolved
- * account handle decides). The benchmark side uses the client's saved profile only; none => no benchmark.
+ * record the own corpus is EMPTY and ownHandle null (the resolved handle decides: brand handle first). The benchmark side uses the client's saved profile only; none => no benchmark.
  * @param {object} p  loadLoopCorpora's args plus `ownHandle` (string|null)
  */
 export async function loadClientLoopCorpora({ ownHandle, profileHandles, ...rest } = {}) {
   const corpora = await loadLoopCorpora({ ...rest, profileHandles: { ...(profileHandles || {}), ownHandle: ownHandle || null } });
   if (!ownHandle) return { ...corpora, own: [], ownHandle: null, ownSource: NO_OWN };
-  // The connected X account decides the own handle; say so when it is not the handle saved in xGrowth.
-  const configured = profileHandles?.ownHandle ? String(profileHandles.ownHandle).replace(/^@+/, '').toLowerCase() : null;
-  const resolved = String(ownHandle).replace(/^@+/, '').toLowerCase();
-  if (configured && configured !== resolved) {
-    return { ...corpora, ownHandleMismatch: `Own handle @${resolved} comes from the connected X account, but xGrowth.ownHandle is @${configured}: check Social Accounts > X for this client.` };
-  }
+  // The own handle is the client's brand handle (xGrowth / Brain), or a connected account that is the client's own
+  // (resolveClientXHandle), so it can no longer disagree with xGrowth.ownHandle: no mismatch to report.
   return corpora;
 }
 

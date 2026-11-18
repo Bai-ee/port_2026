@@ -8,6 +8,7 @@
 import { ctDate, addDays, buildMonthCalendar as defaultBuildMonthCalendar } from '../x-content-inventory/month-calendar.js';
 import { runDocId } from '../x-content-inventory/daily-loop/run-store.js';
 import { LOOP_VERSION, CHANNEL } from '../x-content-inventory/daily-loop/config.js';
+import { resolveClientXHandle } from '../client-readiness/index.js';
 import { normalizeSuggestion } from './suggestions.js';
 
 export { ctDate, addDays };
@@ -156,9 +157,8 @@ export function createReadModels(deps = {}) {
   async function loadAccountHandle(clientId) {
     if (!db) return null;
     try {
-      const snap = await db.collection('social_accounts').doc(clientId).get();
-      const u = snap.exists ? snap.data()?.platforms?.x?.username : null;
-      return typeof u === 'string' && u.trim() ? u.trim().replace(/^@+/, '') : null;
+      const { handle } = await resolveClientXHandle(db, clientId);
+      return handle || null;
     } catch {
       return null;
     }

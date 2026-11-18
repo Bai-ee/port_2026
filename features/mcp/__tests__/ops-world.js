@@ -106,6 +106,7 @@ export function makeWorld({ email = OWNER_EMAIL, now = NOW, agentResults = {}, s
   const routeMode = { statusFails: false };
   const pending = []; // deferred paid work, run by the test with runDeferred()
   const showcaseJobs = new Map();
+  const xsearch = { marketingBriefConfig: { sourcePlatforms: ['x', 'reddit'], brandXHandle: 'acme', brandKeywords: ['acme tools', 'acme app'], opportunitySignals: { enabled: true, platforms: ['x', 'reddit'], maxQueriesPerRun: 4, maxItemsPerPlatform: 10, queries: [{ query: 'q1' }, { query: 'q2' }] } }, include: { xMarketTalk: true }, hasScrapeKey: true, pricing: { perPostReadUsd: 0.005 } }; // x-search plan inputs (tests mutate)
   const holds = { digest: null }; // set a promise to keep a paid digest run "in progress"
   let idn = 0;
   const sources = { strategyAccounts: 'mac', quoteTargets: 'mac' };
@@ -130,6 +131,7 @@ export function makeWorld({ email = OWNER_EMAIL, now = NOW, agentResults = {}, s
     paid: {
       digestRefresh: async (clientId, args) => { spies.digest.push({ clientId, args }); if (holds.digest) await holds.digest; return { ok: true }; },
       loadDigestCfg: async () => ({ include: { signals: true }, briefLinkMode: 'latest' }),
+      loadXSearchInputs: async (clientId) => { spies.xsearchInputs = (spies.xsearchInputs || []).concat(clientId); return structuredClone(xsearch); },
       xMonitor: async () => ({
         status: async () => ({ accountId: '1' }), estimateAudienceCalls: async () => ({ pages: 2 }),
         syncProfile: async () => { spies.xmonitor.push('profile'); return { callsMade: 1 }; }, syncPosts: async () => { spies.xmonitor.push('posts'); return { callsMade: 2 }; }, syncAudience: async () => { spies.xmonitor.push('audience'); return { callsMade: 2 }; },
@@ -171,5 +173,5 @@ export function makeWorld({ email = OWNER_EMAIL, now = NOW, agentResults = {}, s
   const json = (r) => JSON.parse(r.content[0].text);
   const runDeferred = async () => { while (pending.length) { const f = pending.shift(); await (typeof f === 'function' ? f() : f); } };
   const world = { showcaseJobClient: null };
-  return { routeMode, world, showcaseJobs, holds, runDeferred, pending, ctx, call, json, ops, services, counters, stores, settings, spies, sources, clock, db };
+  return { xsearch, routeMode, world, showcaseJobs, holds, runDeferred, pending, ctx, call, json, ops, services, counters, stores, settings, spies, sources, clock, db };
 }

@@ -1,11 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createReadModels, groupQueue } from '../read-models.js';
+import { __setReadinessDepsForTest } from '../../client-readiness/index.js';
 import { buildMonthCalendar } from '../../x-content-inventory/month-calendar.js';
 
 // Minimal Firestore double: collection(c).doc(id).get() -> {exists, data()}
 function fakeDb(docs) {
-  return { collection: (c) => ({ doc: (id) => ({ get: async () => { const d = docs[`${c}/${id}`]; return { exists: !!d, data: () => d }; } }) }) };
+  const docAt = (path) => ({
+    get: async () => { const d = docs[path]; return { exists: !!d, data: () => d }; },
+    collection: (c) => ({ doc: (id) => docAt(`${path}/${c}/${id}`) }),
+  });
+  return { collection: (c) => ({ doc: (id) => docAt(`${c}/${id}`) }) };
 }
 
 const NOW = Date.parse('2026-10-29T15:00:00Z');
@@ -74,10 +79,16 @@ test('loadCalendar within one month builds one month', async () => {
   assert.equal(c.week[6].date, '2026-10-16');
 });
 
-test('loadAccountHandle reads social_accounts platforms.x.username only', async () => {
-  const { rm } = make({ docs: { 'social_accounts/c1': { platforms: { x: { username: '@bai_ee', handle: 'other' }, ig: { username: 'nope' } } } } });
-  assert.equal(await rm.loadAccountHandle('c1'), 'bai_ee');
-  assert.equal(await rm.loadAccountHandle('zzz'), null);
+test('loadAccountHandle uses the client identity rule (brand handle first; owner account never counts)', async () => {
+  __setReadinessDepsForTest({ lookupOwnerUserId: async () => '18508964', lookupIsHome: async () => false });
+  try {
+    const x = { username: '@bai_ee', userId: '18508964' };
+    const brand = make({ docs: { 'social_accounts/cli-1': { platforms: { x } }, 'client_configs/cli-1': { marketingBriefConfig: { xGrowth: { ownHandle: '@crittersquest' } } } } }).rm;
+    assert.equal(await brand.loadAccountHandle('cli-1'), 'crittersquest');
+    assert.equal(await make({ docs: { 'social_accounts/cli-1': { platforms: { x } } } }).rm.loadAccountHandle('cli-1'), null);
+    assert.equal(await make({ docs: { 'social_accounts/cli-1': { platforms: { x: { username: 'own', userId: '42' } } } } }).rm.loadAccountHandle('cli-1'), 'own');
+    assert.equal(await brand.loadAccountHandle('zzz'), null);
+  } finally { __setReadinessDepsForTest(); }
 });
 
 test('loadPost uses injected getSocialPost, else scans the queue', async () => {

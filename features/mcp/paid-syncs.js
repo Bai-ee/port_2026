@@ -12,8 +12,10 @@
 // NEVER here: X API writes, posting, scheduling, approving, deleting, sending email, Telegram sends.
 //
 // ctx for execute: { email, clientId, now(), auth?, services: { strategyHandlers(), xMonitor(clientId), nas(action, body, email), counters() } }
-// x_monitor_sync is per client: ctx.clientId picks the X account (its own Social Accounts connection; the home client
-// with no per-client doc keeps the legacy global token). A missing clientId is refused, never defaulted.
+// x_monitor_sync is per client: ctx.clientId picks the X account to READ (a connected account, else the client's saved
+// X handle). Reads run on HITLOOP's own X app (owner credentials) and need NO connection; spend is metered in the X
+// ledger against that client. A missing clientId, or a client with neither an X account id nor a handle, is refused
+// (free, before any daily paid slot is taken).
 
 import { PAID_SYNC_KINDS } from '../x-strategy/contracts.js';
 import { reserveDailyPaidSlot } from './limits.js';
@@ -62,7 +64,7 @@ export function normalizeParams(kind, raw) {
 
 export const SYNC_SUMMARIES = Object.freeze({
   strategy_review: 'Run a Strategy review (one AI agent turn over the latest data)',
-  x_monitor_sync: 'Refresh X Monitor from the X API (reads only)',
+  x_monitor_sync: 'Refresh X Monitor from the X API (reads only, on HITLOOP owner credentials)',
   nas_analyze: 'Run AI analysis on NAS files (Anthropic batch, hard-capped)',
 });
 
@@ -75,16 +77,21 @@ export async function describePaidSync(kind, rawParams, ctx) {
     estimate = '~$0.17 Anthropic (Sonnet, up to 6 tool rounds). Counts as 1 of the daily strategy-chat turns. Creates a new chat thread; any proposals it makes are pending cards.';
   } else if (kind === 'x_monitor_sync') {
     const clientId = requireXMonitorClient(ctx);
-    let calls = (params.include.includes('profile') ? 1 : 0) + (params.include.includes('posts') ? 2 : 0); // posts: 1, or 2 on the public-metrics fallback
+    const x = await ctx.services.xMonitor(clientId);
+    const st = await requireXMonitorTarget(x); // free; throws before anything is spent
+    const wantsProfile = params.include.includes('profile');
+    let calls = (wantsProfile ? 1 : 0) + (params.include.includes('posts') ? 2 : 0); // posts: 1, or 2 on the public-metrics fallback
+    // Handle only (id not known yet): posts/audience run a profile lookup first, unless profile is already in the run.
+    const lookup = !st.accountId && !wantsProfile && (params.include.includes('posts') || params.include.includes('audience'));
+    if (lookup) calls += 1;
     let audiencePages = 0;
     if (params.include.includes('audience')) {
-      const x = await ctx.services.xMonitor(clientId);
-      const st = await x.status();
       const est = st.accountId ? await x.estimateAudienceCalls(st.accountId) : { pages: 1 };
       audiencePages = est.pages; calls += audiencePages;
     }
-    estimate = `Up to ${calls} metered X API READ call${calls === 1 ? '' : 's'}${audiencePages ? ` (including ~${audiencePages} follower page${audiencePages === 1 ? '' : 's'})` : ''}. X spend is invisible on the Operating Cost card. No writes.`;
-    summary = `Refresh X Monitor from the X API: up to ${calls} metered read call${calls === 1 ? '' : 's'}`;
+    const target = describeXMonitorTarget(st);
+    estimate = `Up to ${calls} metered X API READ call${calls === 1 ? '' : 's'}${audiencePages ? ` (including ~${audiencePages} follower page${audiencePages === 1 ? '' : 's'})` : ''}${lookup ? ' (including 1 profile lookup to learn the account id)' : ''}. Target: ${target}. Billed to HITLOOP's X app (owner credentials); no connected X account is needed. X spend is invisible on the Operating Cost card. No writes.`;
+    summary = `Refresh X Monitor for ${target}: up to ${calls} metered read call${calls === 1 ? '' : 's'} on HITLOOP's X app`;
   } else {
     estimate = `Hard-capped at $${params.capUsd.toFixed(2)} Anthropic (Haiku, batch pricing) for ${params.paths.length} path${params.paths.length === 1 ? '' : 's'}. Results arrive minutes to hours later.`;
     summary = `Run AI analysis on ${params.paths.length} NAS path${params.paths.length === 1 ? '' : 's'}, capped at $${params.capUsd.toFixed(2)}`;
@@ -100,7 +107,12 @@ export async function describePaidSync(kind, rawParams, ctx) {
  */
 export async function executePaidSync({ kind, params, ctx }) {
   const clean = normalizeParams(kind, params);
-  if (kind === 'x_monitor_sync') requireXMonitorClient(ctx); // refuse before a daily slot is taken
+  let xService = null;
+  if (kind === 'x_monitor_sync') {
+    const id = requireXMonitorClient(ctx); // refuse before a daily slot is taken
+    xService = await ctx.services.xMonitor(id);
+    await requireXMonitorTarget(xService); // no account id and no handle: refuse (free) before the slot too
+  }
   await reserveDailyPaidSlot(ctx.services.counters(), { now: ctx.now() });
   if (kind === 'strategy_review') {
     const out = unwrap(await ctx.services.strategyHandlers().handle('strategy-review', { clientId: ctx.clientId }, { clientId: ctx.clientId }, authFor(ctx)), 'Strategy review');
@@ -112,7 +124,7 @@ export async function executePaidSync({ kind, params, ctx }) {
   }
   if (kind === 'x_monitor_sync') {
     const clientId = requireXMonitorClient(ctx);
-    const x = await ctx.services.xMonitor(clientId);
+    const x = xService;
     const out = { kind, clientId, calls: 0, synced: [] };
     if (clean.include.includes('profile')) { const r = await x.syncProfile({ clientId }); out.calls += r?.callsMade || 0; out.synced.push('profile'); }
     if (clean.include.includes('posts')) { const r = await x.syncPosts({ clientId }); out.calls += r?.callsMade || 0; out.synced.push('posts'); }
@@ -129,6 +141,20 @@ function requireXMonitorClient(ctx) {
   return clientId;
 }
 
+/** Free: the account the client's X Monitor will read. Refuses when there is neither an account id nor a handle. */
+async function requireXMonitorTarget(x) {
+  const st = (await x.status()) || {};
+  if (!st.accountId && !st.handle) {
+    throw new PaidSyncError('This client has no X account id or handle on record. Save the X handle in Strategy > X profile or in the Client Brain first (no connection is needed).', 'client-x-handle-missing', 409);
+  }
+  return st;
+}
+
+function describeXMonitorTarget(st) {
+  const who = st.handle ? `@${st.handle}` : `X account ${st.accountId}`;
+  return st.source ? `${who} (source: ${st.source})` : who;
+}
+
 /**
  * Lazy, server-only X Monitor service for ONE client (same shape as features/mcp/server.js xMonitor(clientId)).
  * status() is free (stored ids only). Dynamic imports keep tests light.
@@ -137,7 +163,7 @@ export async function loadXMonitorService(clientId) {
   if (!clientId) throw new PaidSyncError('X Monitor needs a clientId.', 'client-required', 400);
   const xSync = await import('../x-monitor/sync.js');
   return {
-    status: async () => { const s = await xSync.resolveAccountId(clientId); return { accountId: s.accountId, username: s.username || null }; },
+    status: async () => { const s = await xSync.resolveAccountId(clientId); return { accountId: s.accountId, username: s.username || null, handle: s.handle || null, source: s.source || null }; },
     estimateAudienceCalls: xSync.estimateAudienceCalls,
     syncProfile: (opts = {}) => xSync.syncProfile({ ...opts, clientId }),
     syncPosts: (opts = {}) => xSync.syncPosts({ ...opts, clientId }),

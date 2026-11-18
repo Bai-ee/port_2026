@@ -222,3 +222,42 @@ test('x_monitor_sync is per client: the service and every sync get ctx.clientId;
   assert.match(d.estimate, /1 metered X API READ call/);
   assert.equal(seen.at(-1)[1], 'ue-client', 'the estimate prices THIS client\'s account');
 });
+
+test('x_monitor_sync describe names the target @handle + source and says it bills HITLOOP\'s X app (owner credentials)', async () => {
+  const services = { counters: () => createMemoryCounters(), xMonitor: async () => ({
+    status: async () => ({ accountId: '7', handle: 'ue_brand', source: 'xgrowth-profile' }), estimateAudienceCalls: async () => ({ pages: 1 }),
+  }) };
+  const d = await describePaidSync('x_monitor_sync', { include: ['profile', 'posts'] }, { clientId: 'ue-client', services });
+  assert.match(d.estimate, /Up to 3 metered X API READ calls/);
+  assert.match(d.estimate, /@ue_brand \(source: xgrowth-profile\)/);
+  assert.match(d.estimate, /HITLOOP's X app \(owner credentials\)/);
+  assert.match(d.estimate, /no connected X account is needed/);
+  assert.match(d.summary, /@ue_brand/);
+});
+
+test('x_monitor_sync with only a handle adds 1 profile lookup for posts/audience (not when profile is already included)', async () => {
+  const services = { counters: () => createMemoryCounters(), xMonitor: async () => ({
+    status: async () => ({ accountId: null, handle: 'ue_brand', source: 'client-brain' }), estimateAudienceCalls: async () => ({ pages: 1 }),
+  }) };
+  const posts = await describePaidSync('x_monitor_sync', { include: ['posts'] }, { clientId: 'ue-client', services });
+  assert.match(posts.estimate, /Up to 3 metered X API READ calls/); // posts 2 (fallback) + 1 lookup
+  assert.match(posts.estimate, /1 profile lookup/);
+  const withProfile = await describePaidSync('x_monitor_sync', { include: ['profile', 'posts'] }, { clientId: 'ue-client', services });
+  assert.match(withProfile.estimate, /Up to 3 metered X API READ calls/);
+  assert.doesNotMatch(withProfile.estimate, /profile lookup/);
+});
+
+test('x_monitor_sync with no account id and no handle fails in describe AND execute, before any daily paid slot', async () => {
+  let reserved = 0;
+  const counters = { reserve: async () => { reserved += 1; return { ok: true, count: reserved }; } };
+  const calls = [];
+  const services = { counters: () => counters, xMonitor: async () => ({
+    status: async () => ({ accountId: null, handle: null, source: null }), estimateAudienceCalls: async () => ({ pages: 1 }),
+    syncProfile: async () => { calls.push('profile'); return { callsMade: 1 }; },
+  }) };
+  const ctx = { email: 'o@x.test', clientId: 'bare-client', now: () => NOW, services };
+  await assert.rejects(describePaidSync('x_monitor_sync', {}, ctx), (err) => err instanceof PaidSyncError && err.code === 'client-x-handle-missing' && /Strategy > X profile/.test(err.message) && !/connect an/i.test(err.message));
+  await assert.rejects(executePaidSync({ kind: 'x_monitor_sync', params: {}, ctx }), (err) => err.code === 'client-x-handle-missing');
+  assert.equal(reserved, 0);
+  assert.deepEqual(calls, []);
+});

@@ -12,7 +12,7 @@ import {
 } from '../../features/x-monitor/audience-diff.js';
 import { relativeTime, windowTotals, withinRange } from '../../features/x-monitor/post-window.js';
 
-// X Monitor — read-only performance dashboard for the active client's connected X account
+// X Monitor — read-only performance dashboard for the active client's X account (reads need no connection)
 // (optional `clientId` prop → `?as=<clientId>`; omitted = the caller's own workspace).
 // Renders entirely from stored Firestore snapshots (free); every button that
 // reaches X arms a confirm row naming the exact metered call count first, per
@@ -174,6 +174,7 @@ export default function XMonitorCard({ getIdToken, hideRefresh = false, clientId
     if (!res.ok) {
       const err = new Error(payload?.error || `HTTP ${res.status}`);
       err.status = res.status;
+      err.code = payload?.code || null;
       throw err;
     }
     return payload;
@@ -209,7 +210,7 @@ export default function XMonitorCard({ getIdToken, hideRefresh = false, clientId
       setData(payload);
       setNotice({ kind: 'ok', text: syncSummary(body.action, payload) });
     } catch (err) {
-      setNotice({ kind: 'error', text: err.message });
+      setNotice({ kind: 'error', text: err.message, code: err.code || null });
     } finally {
       setBusy('');
       setArmed(null);
@@ -243,6 +244,13 @@ export default function XMonitorCard({ getIdToken, hideRefresh = false, clientId
 
   const connection = data?.connection || null;
   const connected = Boolean(connection?.connected);
+  // Reads run on the owner/app X credentials, so a connected account is NOT required: a known account id or a
+  // saved X handle is enough to sync. `target` comes from the route's free resolver.
+  const target = data?.target || null;
+  const canSync = connected || Boolean(target?.accountId) || Boolean(target?.handle);
+  const needsHandle = notice?.code === 'client-x-handle-missing';
+  const targetHandle = target?.handle || null;
+  const targetSourceLabel = { global: 'connected X account', social_accounts: 'connected X account', 'social-account': 'connected X account', x_monitor: 'previous sync', 'xgrowth-profile': 'Strategy X profile', 'client-brain': 'Client Brain' }[target?.source] || (target?.source ? String(target.source) : 'saved handle');
   const profile = data?.account?.profile || null;
   const sync = data?.account?.sync || null;
   const snapshots = data?.snapshots || [];
@@ -282,6 +290,9 @@ export default function XMonitorCard({ getIdToken, hideRefresh = false, clientId
 
   const impressionsMissing = posts.length > 0 && posts.every((p) => p.metrics?.impressions == null);
   const audienceCalls = estimate?.pages || 1;
+  // Handle-only target: posts/audience/deep first run a 1-call profile lookup to learn the account id (mirrors features/mcp/paid-syncs.js).
+  const lookupCalls = target?.accountId ? 0 : 1;
+  const plural = (n) => (n === 1 ? '' : 's');
   const totalCalls = 2 + audienceCalls;
   const spinner = <span className="comet-spinner" style={{ width: 14, height: 14, ['--comet-ring']: '2px' }} aria-hidden="true" />;
 
@@ -316,15 +327,15 @@ export default function XMonitorCard({ getIdToken, hideRefresh = false, clientId
       <section id="x-monitor-identity-panel" className="xm-panel">
         {loading ? (
           <div className="xm-empty">Loading stored snapshots…</div>
-        ) : !connected ? (
+        ) : !canSync ? (
           <>
             <div className="xm-head">
-              <span className="xm-kicker"><Link2 size={13} /> Connect an X account</span>
-              <small>OAUTH 2.0 · PKCE</small>
+              <span className="xm-kicker"><Link2 size={13} /> No X account to read yet</span>
+              <small>OWNER X CREDENTIALS</small>
             </div>
-            <p className="xm-sub">
-              Monitoring reads your own account&apos;s numbers — follower roster, per-post impressions, profile clicks — which X
-              only serves to the authenticated owner. Connecting is <strong>free</strong>; no metered call runs without a confirm.
+            <p id="x-monitor-handle-missing-row" className="xm-sub">
+              Save the X handle in Strategy &gt; X profile (or in the Client Brain) and X Monitor can read it with no connection.
+              Reads run on HITLOOP&apos;s own X credentials; no metered call runs without a confirm. Connecting an account is optional and free.
             </p>
             <div className="xm-actions">
               <button type="button" className="xm-primary" onClick={connect} disabled={!!busy || !connection?.config?.hasClientId}>
@@ -346,19 +357,29 @@ export default function XMonitorCard({ getIdToken, hideRefresh = false, clientId
                 ? <img className="xm-identity-avatar" src={profile.avatar} alt="" />
                 : <span className="xm-identity-avatar xm-aud-avatar-blank" aria-hidden="true" />}
               <div className="xm-identity-main">
-                <span className="xm-identity-name">{profile?.name || connection.username || 'Connected account'}</span>
-                <a className="xm-identity-handle" href={`https://x.com/${connection.username}`} target="_blank" rel="noopener noreferrer">
-                  @{connection.username}
-                </a>
+                <span className="xm-identity-name">{profile?.name || targetHandle || 'X account'}</span>
+                {targetHandle ? (
+                  <a className="xm-identity-handle" href={`https://x.com/${targetHandle}`} target="_blank" rel="noopener noreferrer">
+                    @{targetHandle}
+                  </a>
+                ) : null}
                 {profile?.bio ? <span className="xm-identity-bio">{profile.bio}</span> : null}
               </div>
               <div className="xm-identity-meta">
-                <span className="xm-chip">Connected</span>
+                <span className="xm-chip">{connected ? 'Connected' : 'Read-only'}</span>
                 <span className="xm-identity-when"><Clock size={11} /> Profile {fmtWhen(sync?.profileAt)}</span>
                 <span className="xm-identity-when"><Users size={11} /> Audience {fmtWhen(sync?.audienceAt)}</span>
                 <span className="xm-identity-when"><BarChart3 size={11} /> Posts {fmtWhen(sync?.postsAt)}</span>
               </div>
             </div>
+            <p id="x-monitor-target-row" className="xm-sub">
+              Will read {targetHandle ? <strong>@{targetHandle}</strong> : <strong>this client&apos;s X account</strong>} ({targetSourceLabel}) on HITLOOP&apos;s X credentials. No connection needed.
+            </p>
+            {needsHandle ? (
+              <p id="x-monitor-handle-missing-notice" className="xm-error">
+                Save the X handle in Strategy &gt; X profile (or in the Client Brain), then sync again.
+              </p>
+            ) : null}
             <div id="x-monitor-sync-controls-row" className="xm-actions">
               {!hideRefresh ? <>{gate('sync-all', {
                 label: 'Sync now', icon: <RefreshCw size={14} />, primary: true,
@@ -372,17 +393,17 @@ export default function XMonitorCard({ getIdToken, hideRefresh = false, clientId
               })}
               {gate('sync-posts', {
                 label: 'Posts only', icon: <BarChart3 size={14} />,
-                cost: '1 metered X API call — last 30 days of posts with impressions, profile clicks, and link clicks.',
+                cost: `${1 + lookupCalls} metered X API call${plural(1 + lookupCalls)}${lookupCalls ? ' (1 profile lookup + 1 posts)' : ''} — last 30 days of posts with impressions, profile clicks, and link clicks (own account only).`,
                 run: () => runGated('sync-posts', { action: 'sync-posts' }),
               })}
               {gate('sync-audience', {
                 label: 'Audience only', icon: <Users size={14} />,
-                cost: `≈${audienceCalls} metered X API call${audienceCalls === 1 ? '' : 's'} (1 per 1,000 followers) — pulls the follower roster and diffs it against the stored one.`,
+                cost: `≈${audienceCalls + lookupCalls} metered X API call${plural(audienceCalls + lookupCalls)} (1 per 1,000 followers${lookupCalls ? ', plus 1 profile lookup' : ''}) — pulls the follower roster and diffs it against the stored one.`,
                 run: () => runGated('sync-audience', { action: 'sync-audience' }),
               })}
               {gate('sync-posts-deep', {
                 label: 'Load older posts', icon: <Sparkles size={14} />,
-                cost: '2 metered X API calls — adds your older posts with public metrics only (X serves impressions for the last 30 days only).',
+                cost: `${2 + lookupCalls} metered X API calls${lookupCalls ? ' (including 1 profile lookup)' : ''} — adds your older posts with public metrics only (X serves impressions for the last 30 days only).`,
                 run: () => runGated('sync-posts-deep', { action: 'sync-posts', deep: true }),
               })}</> : null}
               <button type="button" onClick={() => load()} disabled={!!busy}>
@@ -402,7 +423,7 @@ export default function XMonitorCard({ getIdToken, hideRefresh = false, clientId
         ) : null}
       </section>
 
-      {connected ? (
+      {canSync ? (
         <>
           {/* ── KPI strip ──────────────────────────────────────────────── */}
           <section id="x-monitor-kpi-row" className="xm-kpis">

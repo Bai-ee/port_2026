@@ -144,13 +144,13 @@ test('loadClientLoopCorpora: no own handle => empty own corpus and null handle, 
   assert.deepEqual(inputs.strategyInputs.ownPosts, []);
 });
 
-test('loadClientLoopCorpora: connected account handle != xGrowth.ownHandle is flagged, matching handles are not', async () => {
+test('loadClientLoopCorpora: no connected-account mismatch is reported any more (the brand handle decides the identity)', async () => {
   const { loadClientLoopCorpora } = await import('../loop-corpora.js');
   const store = createMemoryCorpusStore({ loadCommitted: () => null });
   await store.writeMergedRows('bai_ee', rows(4), { pulledAt: PULLED });
-  const wrong = await loadClientLoopCorpora({ corpusStore: store, ownHandle: 'UGExistence', profileHandles: HOME, loadCommitted: () => null });
-  assert.deepEqual([wrong.ownHandle, wrong.own.length, wrong.ownSource], ['ugexistence', 0, 'no stored rows for @ugexistence']);
-  assert.match(wrong.ownHandleMismatch, /@ugexistence comes from the connected X account, but xGrowth\.ownHandle is @bai_ee/);
+  const other = await loadClientLoopCorpora({ corpusStore: store, ownHandle: 'UGExistence', profileHandles: HOME, loadCommitted: () => null });
+  assert.deepEqual([other.ownHandle, other.own.length, other.ownSource], ['ugexistence', 0, 'no stored rows for @ugexistence']);
+  assert.equal(other.ownHandleMismatch, undefined);
   const right = await loadClientLoopCorpora({ corpusStore: store, ownHandle: '@Bai_ee', profileHandles: HOME, loadCommitted: () => null });
   assert.equal(right.own.length, 4);
   assert.equal(right.ownHandleMismatch, undefined);

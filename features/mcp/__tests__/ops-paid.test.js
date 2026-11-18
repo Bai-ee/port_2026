@@ -186,7 +186,7 @@ test('token MAC key is derived from the secret (a token signed with the raw secr
 test('list_refreshes paidCaps: ops global cap scope vs the shared request_sync slots', async () => {
   const w = makeWorld();
   const out = w.json(await w.call('list_refreshes'));
-  assert.deepEqual(out.paidCaps.appliesTo, ['market-signals', 'analysis', 'renders', 'site-showcase']);
+  assert.deepEqual(out.paidCaps.appliesTo, ['market-signals', 'analysis', 'renders', 'x-search', 'site-showcase']);
   assert.equal(out.paidCaps.syncKindsShareDailyPaidSlots, 10);
   assert.match(out.paidCaps.syncKindsNote, /x-monitor and strategy-review .*share the existing 10\/day request_sync paid slots/);
 });

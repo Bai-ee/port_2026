@@ -151,3 +151,12 @@ test('getXProjectUsage stores the injected answer (no real call); readXUsage sur
   assert.equal(u.projectUsage.project_usage, '120');
   assert.equal(u.projectUsage.checkedAt, NOW);
 });
+
+test('raw get of users/by/username/<handle> is normalised and counted as a user lookup', async () => {
+  const { client } = fakeClient();
+  const c = instrumentXClient(client, { record: (x) => recordXApiCall(x, { now: NOW }) });
+  await withXUsage({ clientId: 'c1', source: 'x-monitor' }, async () => { await c.v2.get('users/by/username/Some_Handle', {}); });
+  const d = await day();
+  assert.equal(d.byEndpoint.users_by_username.userReads, 3, 'the fake get returns 3 rows, all counted as users');
+  assert.equal(d.byEndpoint.users_by_username.readPosts || 0, 0);
+});

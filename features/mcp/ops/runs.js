@@ -71,7 +71,7 @@ export async function listRefreshes({ ctx, clientId, ops }) {
     clientId,
     refreshes: rows,
     excluded: EXCLUDED.map((e) => ({ ...e })),
-    paidCaps: { globalPerDay: PAID_GLOBAL_CAP_PER_DAY, usedToday: await counters.get(opsPaidGlobalKey(now)).catch(() => 0), appliesTo: ['market-signals', 'analysis', 'renders', 'site-showcase'], syncKindsShareDailyPaidSlots: DAILY_PAID_CAP, syncKindsNote: 'x-monitor and strategy-review do not use the ops global cap: they share the existing 10/day request_sync paid slots.', syncKindsUsedToday: await counters.get(dailyPaidKey(now)).catch(() => 0) },
+    paidCaps: { globalPerDay: PAID_GLOBAL_CAP_PER_DAY, usedToday: await counters.get(opsPaidGlobalKey(now)).catch(() => 0), appliesTo: ['market-signals', 'analysis', 'renders', 'x-search', 'site-showcase'], syncKindsShareDailyPaidSlots: DAILY_PAID_CAP, syncKindsNote: 'x-monitor and strategy-review do not use the ops global cap: they share the existing 10/day request_sync paid slots.', syncKindsUsedToday: await counters.get(dailyPaidKey(now)).catch(() => 0) },
     note: 'Free refreshes run directly. Paid ones need a preview, the owner\'s explicit yes, then confirm:true with the previewToken.',
   };
 }
@@ -142,7 +142,9 @@ async function runPaid({ ctx, clientId, entry, params, confirm, previewToken, op
     if ((await counters.get(opsCapKey(entry.id, clientId, now)).catch(() => 0)) >= entry.maxPerDay) throw new LimitError(`Daily limit reached: ${entry.maxPerDay} "${entry.id}" runs per client per day over MCP. It resets at 00:00 UTC.`, 'daily-cap');
     if ((await counters.get(opsPaidGlobalKey(now)).catch(() => 0)) >= PAID_GLOBAL_CAP_PER_DAY) throw new LimitError(`Daily limit reached: ${PAID_GLOBAL_CAP_PER_DAY} paid MCP refreshes per day. It resets at 00:00 UTC.`, 'daily-cap');
   }
-  const { estimate, effects } = await describePaid(entry, clean, { clientId, ops });
+  const { estimate, effects, noop } = await describePaid(entry, clean, { clientId, ops });
+  // x-search that would make 0 X calls: refused before the token, the lock and every cap, so nothing is spent or counted.
+  if (noop) return refusal(entry, 'no-x-calls', { message: `Nothing ran: ${estimate} See effects for why. Fix the client's X search setup (brand X handle and X source, or Opportunity rows / platforms / ScrapeCreators key) first.`, effects });
 
   // 2. no confirm: preview only. Nothing is invoked or reserved.
   if (confirm !== true) {
