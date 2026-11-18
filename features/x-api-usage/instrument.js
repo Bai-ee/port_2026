@@ -23,7 +23,7 @@ const V1 = {
   updateAccountProfile: 'account/update_profile', createMediaMetadata: 'media/metadata/create',
 };
 
-const norm = (p) => String(p || '').replace(/^\/+/, '').replace(/^2\//, '').replace(/\?.*$/, '').replace(/\/\d{4,}(?=\/|$)/g, '/:id').replace(/^users\/\d{4,}/, 'users/:id');
+const norm = (p) => String(p || '').replace(/^\/+/, '').replace(/^2\//, '').replace(/\?.*$/, '').replace(/\/\d{4,}(?=\/|$)/g, '/:id').replace(/^users\/\d{4,}/, 'users/:id').replace(/^users\/by\/username\/.+$/, 'users/by/username');
 
 function endpointFor(ns, name, args) {
   if ((name === 'get' || name === 'post' || name === 'put' || name === 'delete' || name === 'patch') && typeof args[0] === 'string') {

@@ -9,7 +9,7 @@ import { planGroup } from '../../x-strategy/agent/refresh-engine.js';
 import { makeWorld, OWNER, OTHER, NOW } from './ops-world.js';
 
 const FREE_IDS = ['strategy-accounts', 'quote-targets', 'hot-quotes', 'bookmarks', 'recent-posts', 'today-queue'];
-const PAID_IDS = ['market-signals', 'analysis', 'renders', 'x-monitor', 'strategy-review', 'site-showcase'];
+const PAID_IDS = ['market-signals', 'analysis', 'renders', 'x-search', 'x-monitor', 'strategy-review', 'site-showcase'];
 const OPS_TOOLS = ['list_refreshes', 'run_refresh', 'get_run_status', 'get_settings', 'set_setting', 'undo_setting'];
 
 test('catalog: free ids are free in the engine, paid ids are paid or have no free path', () => {
@@ -21,7 +21,7 @@ test('catalog: free ids are free in the engine, paid ids are paid or have no fre
     assert.equal(planGroup(id, { sources: { strategyAccounts: 'x-api', quoteTargets: 'x-api' } }).paid, id === 'strategy-accounts' || id === 'quote-targets', `${id} with x-api sources`);
   }
   for (const id of PAID_IDS.filter((x) => AGENT_REFRESH_GROUP_IDS.includes(x))) assert.equal(planGroup(id, { sources: {} }).paid, true, id);
-  assert.ok(EXCLUDED.some((e) => e.id === 'x-search'));
+  assert.ok(!EXCLUDED.some((e) => e.id === 'x-search'), 'x-search is a paid refresh now');
 });
 
 test('list_refreshes: free runnable, paid preview-then-confirm with effects and caps, excluded shown, usage counted', async () => {
@@ -66,8 +66,8 @@ test('run_refresh today-queue: template regenerate, no agent call', async () => 
 
 test('gate: excluded ids refuse with a reason; unknown ids are an error; nothing invoked', async () => {
   const w = makeWorld();
-  const ex = w.json(await w.call('run_refresh', { refreshId: 'x-search' }));
-  assert.equal(ex.ran, false); assert.equal(ex.excluded, true); assert.match(ex.reason, /Paid X search/);
+  const ex = w.json(await w.call('run_refresh', { refreshId: 'digest-send' }));
+  assert.equal(ex.ran, false); assert.equal(ex.excluded, true); assert.match(ex.reason, /sending/i);
   const bad = await w.call('run_refresh', { refreshId: 'send-the-email' });
   assert.equal(bad.isError, true); assert.match(bad.content[0].text, /Unknown refreshId/);
   assert.equal(w.spies.agent.length, 0); assert.equal(w.counters._raw.size, 0);
@@ -112,7 +112,7 @@ test('caps: validation refusals (excluded, paid, x-api source, unknown client) n
   w.sources.strategyAccounts = 'x-api';
   for (let i = 0; i < 15; i += 1) {
     await w.call('run_refresh', { refreshId: 'strategy-accounts' });
-    await w.call('run_refresh', { refreshId: 'x-search' });
+    await w.call('run_refresh', { refreshId: 'digest-send' });
     await w.call('run_refresh', { refreshId: 'bookmarks', clientId: 'no-such-client' });
   }
   assert.equal(w.counters._raw.get(opsCapKey('strategy-accounts', OWNER, NOW)) ?? 0, 0);

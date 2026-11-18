@@ -4,8 +4,12 @@
 //
 // Ready = approved Client Brain + a Strategy plan doc + the client's X identity,
 //         OR an explicit per-client override `clients/{id}.contentLoop.enabled === true` (set by the owner).
-// X identity = a connected X account OR the handle saved in the Strategy X profile (xGrowth.ownHandle): the loop only
-// DRAFTS, so a strategy-only client (owner rule 2026-11-17: delegates who cannot connect the account) still gets it.
+// X identity = the client's OWN handle (owner rule 2026-11-18): the brand handle (xGrowth.ownHandle, else Brain
+// identity.xHandle), else the connected X account, which counts ONLY when it is not the owner's own account
+// (the owner connects @bai_ee to client workspaces just to get API access; that never makes @bai_ee the client's
+// identity). When a brand handle exists the connected account counts only if its username equals it. The home client
+// keeps the owner's account as its own. The loop only DRAFTS, so a strategy-only client (delegates who cannot connect
+// the account) still gets it. Posting is unchanged and never goes through this resolver.
 // Publishing never relies on this gate; the publish path checks the connected account itself.
 // Reads only; writes nothing. `db` is an injected Firestore (admin SDK or the test fake).
 
@@ -19,6 +23,87 @@ export const READINESS_INPUTS = Object.freeze([
 ]);
 
 const cleanHandle = (h) => String(h || '').trim().replace(/^@+/, '') || null;
+const sameHandle = (a, b) => !!a && !!b && String(a).toLowerCase() === String(b).toLowerCase();
+
+// Owner credential's X user id (free, parsed from the OAuth1 token). Lazy so this module stays light; null-safe.
+async function lookupOwnerUserId() {
+  try {
+    const { getOwnerReadIdentity } = await import('../social-posting/twitter-service.js');
+    return String(getOwnerReadIdentity()?.userId || '') || null;
+  } catch { return null; }
+}
+async function lookupIsHome(clientId) {
+  try {
+    const { createRequire } = await import('node:module');
+    const { resolveDigestClientId } = createRequire(import.meta.url)('../intelligence/_digest-config.js');
+    const home = await resolveDigestClientId();
+    return Boolean(home) && home === clientId;
+  } catch { return false; }
+}
+
+// Test seam: lets tests stub the lazy owner/home lookups so they never touch real Firestore or env.
+const deps = { lookupOwnerUserId, lookupIsHome };
+export function __setReadinessDepsForTest(over) {
+  deps.lookupOwnerUserId = over?.lookupOwnerUserId || lookupOwnerUserId;
+  deps.lookupIsHome = over?.lookupIsHome || lookupIsHome;
+}
+
+/**
+ * The connected account's X user id: x.userId, else the `<digits>-` prefix of an oauth1 access token. Null when neither.
+ */
+export function connectedAccountUserId(x) {
+  if (x?.userId) return String(x.userId);
+  const m = /^(\d+)-/.exec(String(x?.oauth1?.accessToken || ''));
+  return m ? m[1] : null;
+}
+
+/**
+ * Does the connected X account count as THIS client's identity? Pure.
+ * brand handle present -> only when the username equals it; no brand handle -> only when its userId is not
+ * the owner's (fails closed when the owner id is unknown); a userId-less doc counts only when it is the client's own
+ * oauth1 dev app. `isHome` (the owner's own client) always counts.
+ */
+export function connectedAccountCounts(x, { brandHandle, ownerUserId, isHome = false } = {}) {
+  const username = cleanHandle(x?.username);
+  if (isHome) return !!username;
+  if (!username) return false;
+  if (brandHandle) return sameHandle(username, brandHandle);
+  // A userId-less doc counts only when it is the client's OWN dev app (oauth1): the owner's cross-client
+  // connections go through HITLOOP's OAuth2 app. Anything else unverifiable fails closed.
+  const userId = connectedAccountUserId(x);
+  if (!userId) return Boolean(x?.oauth1);
+  if (!ownerUserId) return false;
+  return userId !== String(ownerUserId);
+}
+
+/** The client's brand handle only (never the connected account): xGrowth.ownHandle, then Brain identity.xHandle (any status). */
+export async function resolveBrandHandle(db, clientId, { xGrowth } = {}) {
+  if (!db) throw new Error('resolveBrandHandle: db is required');
+  const id = String(clientId || '').trim();
+  if (!CLIENT_ID_RE.test(id)) throw Object.assign(new Error('A valid clientId is required.'), { status: 400, code: 'client-id-required' });
+  const growth = xGrowth !== undefined ? xGrowth : (await readDoc(db, `client_configs/${id}`))?.marketingBriefConfig?.xGrowth;
+  const fromProfile = cleanHandle(growth?.ownHandle);
+  if (fromProfile) return { handle: fromProfile, source: 'xgrowth-profile' };
+  // Deliberately any Brain status: this only names the account (identity), it is not copy fed to a model.
+  const brain = await readDoc(db, `clients/${id}/client_brain/current`);
+  const fromBrain = cleanHandle(brain?.identity?.xHandle);
+  if (fromBrain) return { handle: fromBrain, source: 'client-brain' };
+  return { handle: null, source: null };
+}
+
+// Brand first; the connected account only under connectedAccountCounts. `isHome`/`ownerUserId` resolve lazily, and only
+// when they can matter (no brand handle and a connected account exists), so the common paths stay pure.
+async function pickIdentity(x, brand, { ownerUserId, isHome, clientId }) {
+  const username = cleanHandle(x?.username);
+  if (brand.handle) return brand;
+  if (!username) return { handle: null, source: null };
+  // The owner id only matters when the account has an id to compare; skip the lookup otherwise.
+  const owner = ownerUserId === undefined && connectedAccountUserId(x) ? await deps.lookupOwnerUserId() : (ownerUserId ?? null);
+  const counts = (home) => connectedAccountCounts(x, { brandHandle: null, ownerUserId: owner, isHome: home });
+  if (counts(false)) return { handle: username, source: 'social-account' };
+  const home = isHome === undefined ? await deps.lookupIsHome(clientId) : isHome;
+  return counts(home) ? { handle: username, source: 'social-account' } : { handle: null, source: null };
+}
 
 // collection/doc chaining (not db.doc(path)) so the in-memory test Firestore works too.
 async function readDoc(db, path) {
@@ -31,9 +116,10 @@ async function readDoc(db, path) {
 
 /**
  * Read-only readiness report. Never throws for a not-ready client; throws only on a bad clientId or a db failure.
- * @returns {Promise<{clientId:string, exists:boolean, ready:boolean, override:boolean, missing:{input:string,code:string,fix:string}[], xUsername:string|null, xHandle:string|null, xSource:'social-account'|'xgrowth-profile'|null, brainStatus:string|null}>}
+ * @param {object} [opts] { ownerUserId?: owner's X user id (default: lazy getOwnerReadIdentity, null-safe), isHome?: boolean (default: lazy digest-client lookup, only when needed) }
+ * @returns {Promise<{clientId:string, exists:boolean, ready:boolean, override:boolean, missing:{input:string,code:string,fix:string}[], xHandle:string|null, xSource:'social-account'|'xgrowth-profile'|'client-brain'|null, brainStatus:string|null}>}
  */
-export async function readClientReadiness(db, clientId) {
+export async function readClientReadiness(db, clientId, opts = {}) {
   if (!db) throw new Error('readClientReadiness: db is required');
   const id = String(clientId || '').trim();
   if (!CLIENT_ID_RE.test(id)) throw Object.assign(new Error('A valid clientId is required.'), { status: 400, code: 'client-id-required' });
@@ -46,10 +132,10 @@ export async function readClientReadiness(db, clientId) {
     readDoc(db, `client_configs/${id}`),
   ]);
   const brainStatus = brain?.status || null;
-  const xUsername = cleanHandle(social?.platforms?.x?.username);
   const profileHandle = cleanHandle(config?.marketingBriefConfig?.xGrowth?.ownHandle);
-  const xHandle = xUsername || profileHandle;
-  const xSource = xUsername ? 'social-account' : profileHandle ? 'xgrowth-profile' : null;
+  const brainHandle = cleanHandle(brain?.identity?.xHandle);
+  const brand = profileHandle ? { handle: profileHandle, source: 'xgrowth-profile' } : brainHandle ? { handle: brainHandle, source: 'client-brain' } : { handle: null, source: null };
+  const { handle: xHandle, source: xSource } = await pickIdentity(social?.platforms?.x, brand, { ownerUserId: opts.ownerUserId, isHome: opts.isHome, clientId: id });
   const override = client?.contentLoop?.enabled === true;
   const has = {
     'client-brain': brainStatus === 'approved',
@@ -57,15 +143,15 @@ export async function readClientReadiness(db, clientId) {
     'x-account': !!xHandle,
   };
   const missing = READINESS_INPUTS.filter((r) => !has[r.input]);
-  return { clientId: id, exists: !!client, ready: !!client && (override || missing.length === 0), override, missing, xUsername, xHandle, xSource, brainStatus };
+  return { clientId: id, exists: !!client, ready: !!client && (override || missing.length === 0), override, missing, xHandle, xSource, brainStatus };
 }
 
 /**
  * Throws 403 unless the client is ready. The error `code` names the first missing input
  * (`client-not-found` when the clients doc is absent); `missing` carries them all.
  */
-export async function assertClientReady(db, clientId) {
-  const r = await readClientReadiness(db, clientId);
+export async function assertClientReady(db, clientId, opts) {
+  const r = await readClientReadiness(db, clientId, opts);
   if (r.ready) return r;
   if (!r.exists) {
     throw Object.assign(new Error(`Client ${r.clientId} does not exist.`), { status: 403, code: 'client-not-found', missing: [] });
@@ -79,25 +165,16 @@ export async function assertClientReady(db, clientId) {
 
 /**
  * The client's own X handle, from its own records only (never a home/owner default):
- * social_accounts username → saved xGrowth profile ownHandle → Brain identity xHandle (any status).
- * @param {object} [opts] { xGrowth?: saved marketingBriefConfig.xGrowth (skips the client_configs read when given) }
+ * brand handle (xGrowth.ownHandle → Brain identity.xHandle, any status), else the connected social_accounts username
+ * ONLY when it is the client's own (see connectedAccountCounts: never the owner's @bai_ee used just for API access).
+ * @param {object} [opts] { xGrowth?: saved marketingBriefConfig.xGrowth (skips the client_configs read when given), ownerUserId?, isHome? }
  * @returns {Promise<{handle:string|null, source:string|null}>}
  */
-export async function resolveClientXHandle(db, clientId, { xGrowth } = {}) {
-  if (!db) throw new Error('resolveClientXHandle: db is required');
-  const id = String(clientId || '').trim();
-  if (!CLIENT_ID_RE.test(id)) throw Object.assign(new Error('A valid clientId is required.'), { status: 400, code: 'client-id-required' });
+export async function resolveClientXHandle(db, clientId, { xGrowth, ownerUserId, isHome } = {}) {
+  const brand = await resolveBrandHandle(db, clientId, { xGrowth });
+  const id = String(clientId).trim();
   const social = await readDoc(db, `social_accounts/${id}`);
-  const fromSocial = cleanHandle(social?.platforms?.x?.username);
-  if (fromSocial) return { handle: fromSocial, source: 'social-account' };
-  const growth = xGrowth !== undefined ? xGrowth : (await readDoc(db, `client_configs/${id}`))?.marketingBriefConfig?.xGrowth;
-  const fromProfile = cleanHandle(growth?.ownHandle);
-  if (fromProfile) return { handle: fromProfile, source: 'xgrowth-profile' };
-  // Deliberately any Brain status: this only names the account (identity), it is not copy fed to a model.
-  const brain = await readDoc(db, `clients/${id}/client_brain/current`);
-  const fromBrain = cleanHandle(brain?.identity?.xHandle);
-  if (fromBrain) return { handle: fromBrain, source: 'client-brain' };
-  return { handle: null, source: null };
+  return pickIdentity(social?.platforms?.x, brand, { ownerUserId, isHome, clientId: id });
 }
 
 /** Like resolveClientXHandle but throws 409 `client-x-handle-missing` when the client has no handle anywhere. */

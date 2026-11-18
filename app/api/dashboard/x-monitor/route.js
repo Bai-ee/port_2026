@@ -23,9 +23,9 @@ const { verifyRequestUser, isAdminEmail } = require('../../../../api/_lib/auth.c
 const { getEffectiveClientContext } = require('../../../../api/_lib/client-provisioning.cjs');
 const { resolveDigestClientId } = require('../../../../features/intelligence/_digest-config.js');
 
-// X Monitor — read-only performance surface over the active client's connected
-// X account (?as=<clientId> via the dashboard switcher; the home client with no
-// per-client X doc keeps the legacy global @bai_ee connection).
+// X Monitor — read-only performance surface over the active client's X account
+// (?as=<clientId> via the dashboard switcher). Reads never need a connected account: they run on the owner/app X
+// credentials against the resolved target (connected account, else the saved X handle; `target` in the overview).
 // Admin-only, same reasoning as the X Command Center route: these tokens control
 // a real account and every sync spends X API credits that the Operating Cost
 // card cannot see (docs/source-of-truth/X-API-AND-PROFILE-OPERATIONS.md §0/§3).
@@ -83,9 +83,10 @@ function callbackRedirectUri(request) {
 /** Free overview: this client's connection state + everything already stored for its account. */
 async function buildOverview(request, clientId) {
   const connection = await readClientConnection(clientId);
-  const { accountId } = await resolveAccountId(clientId);
+  const { accountId, handle, source } = await resolveAccountId(clientId);
+  const target = { accountId: accountId || null, handle: handle || null, source: source || null };
   if (!accountId) {
-    return { clientId, connection, callbackUrl: callbackRedirectUri(request), account: null, snapshots: [], posts: [], events: [], estimate: null };
+    return { clientId, connection, target, callbackUrl: callbackRedirectUri(request), account: null, snapshots: [], posts: [], events: [], estimate: null };
   }
 
   const [account, snapshots, posts, events, estimate] = await Promise.all([
@@ -99,6 +100,7 @@ async function buildOverview(request, clientId) {
   return {
     clientId,
     connection,
+    target,
     callbackUrl: callbackRedirectUri(request),
     accountId,
     account,
@@ -123,7 +125,7 @@ export async function GET(request) {
   try {
     return json({ ok: true, ...(await buildOverview(request, clientId)) });
   } catch (err) {
-    if (err?.status) return json({ error: err.message }, err.status);
+    if (err?.status) return json({ error: err.message, ...(err.code ? { code: err.code } : {}) }, err.status);
     const mapped = compactXOAuthError(err);
     return json({ error: mapped.message }, mapped.status || 500);
   }
@@ -184,7 +186,7 @@ export async function POST(request) {
     }
     return json({ error: `Unknown action: ${action}` }, 400);
   } catch (err) {
-    if (err?.status) return json({ error: err.message }, err.status);
+    if (err?.status) return json({ error: err.message, ...(err.code ? { code: err.code } : {}) }, err.status);
     const mapped = compactXOAuthError(err);
     return json({ error: mapped.message }, mapped.status || 500);
   }

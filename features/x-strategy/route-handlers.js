@@ -1955,18 +1955,20 @@ export function createStrategyHandlersFromDb(db, {
 /**
  * Stored X Monitor data for ONE client (free Firestore reads; never syncs). The account is resolved by id:
  * social_accounts/{clientId}.platforms.x.userId -> x_monitor/{userId}; else the x_monitor root whose `clientIds`
- * contains this client. Neither => {account:null} ("not available"), never another client's account.
+ * contains this client (only when no `resolveAccountId` is supplied; production always supplies it, and then it alone decides). Neither => {account:null} ("not available"), never another client's account.
  */
 export async function readClientAudience(db, clientId, { resolveAccountId } = {}) {
   if (!clientId || typeof clientId !== 'string') return { account: null };
   let doc = null;
   if (resolveAccountId) {
     // The X Monitor resolver (free reads): the account this client's card shows. A resolver failure falls through.
+    // It is the ONLY authority when supplied: the id/clientIds fallbacks below would hand a client the owner's @bai_ee
+    // account (connected for API access only), so a resolver miss or failure means "not available".
     const resolved = await resolveAccountId(clientId).catch(() => null);
-    if (resolved?.accountId) {
-      const snap = await db.collection('x_monitor').doc(String(resolved.accountId)).get();
-      if (snap.exists) doc = snap;
-    }
+    if (!resolved?.accountId) return { account: null };
+    const snap = await db.collection('x_monitor').doc(String(resolved.accountId)).get();
+    if (!snap.exists) return { account: null };
+    doc = snap;
   }
   const social = doc ? null : await db.collection('social_accounts').doc(clientId).get();
   const userId = social?.exists ? social.data()?.platforms?.x?.userId : null;

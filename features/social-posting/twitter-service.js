@@ -2424,3 +2424,14 @@ export async function searchXPosts(query, { limit = 10 } = {}) {
 export function getXReadClient() {
   return getTwitterClient();
 }
+
+/**
+ * Free (no X call): the X user id of the owner/app credentials that getXReadClient() signs with. An OAuth1
+ * access token is `<userId>-<secret>`, so the id is the digits before the first dash. Returns null when it
+ * cannot be parsed. Never returns or logs the token.
+ */
+export function getOwnerReadIdentity() {
+  const token = String(getResolvedTwitterCredentials().accessToken?.value || '');
+  const match = /^(\d+)-/.exec(token);
+  return match ? { userId: match[1] } : null;
+}

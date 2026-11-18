@@ -81,15 +81,32 @@ export async function saveSyncMeta(accountId, patch = {}, { clientId } = {}) {
  * social_accounts/{clientId}.platforms.x.userId, else an x_monitor root doc
  * whose clientIds contains the client (written by an earlier sync of that
  * client, e.g. a profile sync over an OAuth1 override that stores no userId).
- * Never another client's account; null when neither is known.
+ * Never another client's account; null when neither is known. Options (non-home identity rule, see sync.js):
+ * skipSocial, ownerUserId (ignore that doc), brandHandle (ignore docs whose profile.username differs).
  */
-export async function findAccountIdForClient(clientId) {
+export async function findAccountIdForClient(clientId, { skipSocial = false, ownerUserId = null, brandHandle = null } = {}) {
   if (!clientId) return null;
-  const social = await fb.adminDb.collection('social_accounts').doc(String(clientId)).get();
-  const userId = social.exists ? social.data()?.platforms?.x?.userId : null;
-  if (userId) return String(userId);
-  const snap = await fb.adminDb.collection(ROOT).where('clientIds', 'array-contains', String(clientId)).limit(1).get();
-  return snap.docs[0]?.id || null;
+  // Fail closed: the identity filter below needs an owner id or a brand handle; without either a stale owner tag could win.
+  if (skipSocial && !ownerUserId && !brandHandle) return null;
+  if (!skipSocial) {
+    const social = await fb.adminDb.collection('social_accounts').doc(String(clientId)).get();
+    const userId = social.exists ? social.data()?.platforms?.x?.userId : null;
+    if (userId) return String(userId);
+  }
+  // Several accounts can list one client (e.g. after a handle change): prefer the latest profile sync, not an
+  // arbitrary doc. Small result set, filtered in memory, so no composite index is needed.
+  const snap = await fb.adminDb.collection(ROOT).where('clientIds', 'array-contains', String(clientId)).limit(20).get();
+  const rank = (d) => Number(d.data()?.profileUpdatedAt) || Number(d.data()?.updatedAt) || 0;
+  // Identity filter (non-home): a doc tagged with this client is ignored when it is the owner's own account (stale tag from
+  // connecting the owner's X for API access) or, with a brand handle, when its profile username is not that handle.
+  const wanted = brandHandle ? String(brandHandle).toLowerCase() : null;
+  const eligible = snap.docs.filter((d) => {
+    if (ownerUserId && String(d.id) === String(ownerUserId)) return false;
+    if (wanted && String(d.data()?.profile?.username || '').toLowerCase() !== wanted) return false;
+    return true;
+  });
+  const best = [...eligible].sort((a, b) => rank(b) - rank(a))[0];
+  return best?.id || null;
 }
 
 /**
@@ -197,7 +214,9 @@ export async function writePosts(accountId, posts = [], at = Date.now()) {
 
   const ops = posts.map((post) => (batch) => {
     const prior = existing.get(post.id) || {};
-    const metrics = { ...(prior.metrics || {}), ...stripUndefined(post.metrics) };
+    // A public-only read carries no private counters; drop them so earlier captured values are not wiped.
+    const incoming = post.metricsSource === 'public' ? omitPrivate(post.metrics) : post.metrics;
+    const metrics = { ...(prior.metrics || {}), ...stripUndefined(incoming) };
     const entry = { at, ...metrics };
     const history = [...(prior.history || []), entry].slice(-POST_HISTORY_MAX);
     batch.set(collection.doc(post.id), {
@@ -214,6 +233,16 @@ export async function writePosts(accountId, posts = [], at = Date.now()) {
   });
   await commitInBatches(ops);
   return { written: posts.length };
+}
+
+const PRIVATE_METRIC_KEYS = ['impressions', 'profileClicks', 'linkClicks', 'engagements'];
+
+function omitPrivate(metrics = {}) {
+  const out = { ...metrics };
+  for (const key of PRIVATE_METRIC_KEYS) {
+    if (out[key] === null || out[key] === undefined) delete out[key];
+  }
+  return out;
 }
 
 function stripUndefined(obj = {}) {

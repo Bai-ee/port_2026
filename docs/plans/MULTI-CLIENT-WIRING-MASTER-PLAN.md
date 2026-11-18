@@ -52,7 +52,7 @@ Change: owner-id hardcodes → derived from the client's own records; inventory 
 - Non-home clients have no NAS; their inventory comes from Telegram intake, Timeline/social-archive ingest of their own X/IG, and Brain `Content Library`. Build/verify those three writers per client. Decision: whether a client gets a NAS collection at all.
 
 ### Phase 4 — Per-client X identity + priors (M, ~1–2 days)
-- X Monitor: `sync(clientId)` uses `getPlatformClient(clientId,'x')`; store key `x_monitor/{accountId}` plus a `clientId` field; card reads by the active client's account. Remove the global-token fallback at `x-oauth.js:286` for non-home clients.
+- X Monitor: `sync(clientId)` READS on the owner/app X credentials (`getXReadClient().readOnly`; no client connection needed, 2026-11-18; target = connected account, else the saved X handle, else 409 `client-x-handle-missing`; spend tagged to the client + `assertXBudget`). Writes still use `getPlatformClient`. Store key `x_monitor/{accountId}` plus a `clientId` field; card reads by the active client's account. Remove the global-token fallback at `x-oauth.js:286` for non-home clients.
 - Strategy `readAudience`: match on the client's account id, not username.
 - Quote targets: `WATCHLIST`, corpora, `DEFAULT_PROFILE` → per-client config sourced from the Brain (tracks + benchmarks already exist in the plan doc); home keeps today's values as its config. Scan: `--client` loop over `PILOT_CLIENT_IDS` under one launchd label (bird reads public timelines, so the owner's cookies still work).
 - Score weights/guard rules: keep global for now; document that they were measured on @bai_ee (product decision, not code).

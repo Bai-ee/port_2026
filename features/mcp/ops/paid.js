@@ -3,16 +3,18 @@
 // run lock -> reserve the caps. Reuse paths:
 //   market-signals / analysis / renders  the pre-digest-refresh phase for ONE group (same call as the dashboard's agent refresh
 //                                        wiring in quote-targets/route.js, source 'mcp-ops'); never allowX / allowXWatchlist
+//   x-search                             the SAME function with groups Set(['x-search']) only (its own kind, see xsearch.js); Market Talk + Opportunity with X, requested client only
 //   x-monitor / strategy-review          executePaidSync (features/mcp/paid-syncs.js), which takes the existing daily paid slot
 //   site-showcase                        the showcase route's create action in-process with the owner's authorization;
 //                                        status via the route's GET ?action=status (its healing path), doc read as fallback
 //
-// ops.paid = { digestRefresh(clientId, args), loadDigestCfg(clientId), xMonitor(clientId), loadShowcaseRoute(), readShowcaseJob(jobId) }
+// ops.paid = { digestRefresh(clientId, args), loadDigestCfg(clientId), loadXSearchInputs(clientId) -> {marketingBriefConfig, include, hasScrapeKey, pricing}, xMonitor(clientId), loadShowcaseRoute(), readShowcaseJob(jobId) }
 
 import { ToolError } from '../jsonrpc.js';
 import { describePaidSync, executePaidSync, normalizeParams as normalizeSyncParams } from '../paid-syncs.js';
 import { SHOWCASE_CLIENTS, validateCreateInput } from '../../showcase/registry.js';
 import { callDashboardRoute } from './dashboard-route.js';
+import { planXSearch, xSearchEstimate, xSearchEffects, xSearchOutcome } from './xsearch.js';
 
 const clip = (v, n = 300) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const nowOf = (ctx) => (typeof ctx.now === 'function' ? ctx.now() : Date.now());
@@ -22,7 +24,7 @@ export const showcaseClientOf = (clientId) => SHOWCASE_CLIENTS[clientId] || null
 /** Validate + normalize the params of one paid refresh. Pure; throws a refusal the model should read. */
 export function normalizePaidParams(entry, raw, { clientId }) {
   const params = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
-  if (entry.kind === 'digest') return {};
+  if (entry.kind === 'digest' || entry.kind === 'x-search') return {};
   if (entry.kind === 'sync') return normalizeSyncParams(entry.syncKind, params);
   const videoClient = showcaseClientOf(clientId);
   if (!videoClient) throw new ToolError('Site Showcase is not enabled for this client.');
@@ -31,8 +33,17 @@ export function normalizePaidParams(entry, raw, { clientId }) {
   return checked.value;
 }
 
-/** Price + describe. Writes nothing, spends nothing. @returns {{estimate:string, effects:string[]}} */
+/** The x-search plan for one client: free reads only (config, key presence, ledger pricing). */
+export async function loadXSearchPlan(clientId, ops) {
+  return planXSearch(await ops.paid.loadXSearchInputs(clientId));
+}
+
+/** Price + describe. Writes nothing, spends nothing. @returns {{estimate:string, effects:string[], noop?:boolean, plan?:object}} */
 export async function describePaid(entry, params, { clientId, ops }) {
+  if (entry.kind === 'x-search') {
+    const plan = await loadXSearchPlan(clientId, ops);
+    return { estimate: xSearchEstimate(plan), effects: [...entry.effects, ...xSearchEffects(plan)], noop: plan.calls === 0, plan };
+  }
   if (entry.kind === 'sync') {
     const d = await describePaidSync(entry.syncKind, params, { clientId, services: { xMonitor: ops.paid.xMonitor } });
     return { estimate: d.estimate, effects: [...entry.effects, d.summary] };
@@ -42,10 +53,27 @@ export async function describePaid(entry, params, { clientId, ops }) {
 }
 
 /**
+ * The pre-digest-refresh args for the paid X search: groups is EXACTLY Set(['x-search']) in phase 'signals' (only Market Talk
+ * on X + Opportunity with X run), for the requested client only. No allowX / allowXWatchlist (those are other paths).
+ */
+export function buildXSearchRefreshArgs({ clientId, cfg, actorUid, now }) {
+  return {
+    freshnessToken: `mcp-ops-${now.toString(36)}-${clientId.slice(0, 8)}`,
+    source: 'mcp-ops',
+    actorUid: actorUid ?? null,
+    phase: 'signals',
+    groups: new Set(['x-search']),
+    include: cfg?.include || {},
+    briefLinkMode: cfg?.briefLinkMode || 'fresh',
+  };
+}
+
+/**
  * The pre-digest-refresh args for ONE confirmed group. groups is ALWAYS a single-item Set, and there is deliberately no
  * allowX / allowXWatchlist key: the paid X search (x-search) is never reachable from here.
  */
 export function buildDigestRefreshArgs({ clientId, entry, cfg, actorUid, now }) {
+  if (entry.kind !== 'digest') throw new Error(`buildDigestRefreshArgs is for digest kinds only, not "${entry.id}".`);
   return {
     freshnessToken: `mcp-ops-${now.toString(36)}-${clientId.slice(0, 8)}`,
     source: 'mcp-ops',
@@ -83,6 +111,11 @@ export async function executePaid({ entry, params, ctx, clientId, ops }) {
     const cfg = await Promise.resolve(ops.paid.loadDigestCfg(clientId)).catch(() => null);
     const out = await ops.paid.digestRefresh(clientId, buildDigestRefreshArgs({ clientId, entry, cfg, actorUid: ctx.uid, now: nowOf(ctx) }));
     return digestOutcome(entry, out);
+  }
+  if (entry.kind === 'x-search') {
+    const [cfg, plan] = await Promise.all([Promise.resolve(ops.paid.loadDigestCfg(clientId)).catch(() => null), loadXSearchPlan(clientId, ops)]);
+    const out = await ops.paid.digestRefresh(clientId, buildXSearchRefreshArgs({ clientId, cfg, actorUid: ctx.uid, now: nowOf(ctx) }));
+    return xSearchOutcome(plan, out);
   }
   if (entry.kind === 'sync') {
     const res = await executePaidSync({

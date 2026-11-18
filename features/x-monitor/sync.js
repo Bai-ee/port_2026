@@ -15,18 +15,27 @@
 // view lookup. Reads stay on ScrapeCreators everywhere it can actually answer.
 
 //
-// Per client: every sync takes a required clientId. The X client comes from
-// that client's own Social Accounts connection (getPlatformClient); the X user
-// id from social_accounts/{clientId}.platforms.x.userId (or an x_monitor root
-// doc that already lists the client). The ONE documented exception is the home
-// client (resolveDigestClientId) with no per-client X doc: it keeps the legacy
-// global OAuth2 token and its userId, exactly as before multi-client. Every
-// other client without its own connection fails closed (409) — never @bai_ee.
+// Per client: every sync takes a required clientId, but READS NEVER NEED A CONNECTED X ACCOUNT. They always run on
+// the owner/app credentials (env OAuth1 keys, read-only view: getXReadClient().readOnly), the same credentials
+// x-search uses. Spend is metered in the x_api_usage ledger, tagged with the client the run was for (source
+// 'x-monitor'), and gated by assertXBudget. WRITES are out of scope here and stay on getPlatformClient.
+//
+// The TARGET account (whose numbers are read) resolves free. HOME: global connection -> social_accounts userId ->
+// an x_monitor doc listing it -> global userId -> saved handle. NON-HOME (owner rule 2026-11-18: a client's identity is
+// the client's own handle; the owner connects @bai_ee to client workspaces only for API access): the brand handle
+// (xGrowth.ownHandle -> Brain identity.xHandle, resolveClientHandle dep) -> the connected social_accounts account ONLY
+// when its username equals the brand handle (or, with no brand handle, its userId is not the owner's) -> an x_monitor
+// doc listing the client, ignoring the owner's own doc and, when a brand handle exists, any doc whose profile username
+// differs -> the brand handle alone (accountId null). With only a handle the
+// profile is read by username (users/by/username/:handle) which also stamps the id; posts/audience then run a
+// profile lookup first (1 extra call). With neither an id nor a handle: 409 client-x-handle-missing. Private metrics are requested only when the target id is the
+// owner credential's own user id (parsed from the OAuth1 token, no call); otherwise public fields only.
 
 import { createRequire } from 'node:module';
-import { withXUsage } from '../x-api-usage/index.js';
-import { getXOAuth2Client, getXOAuthConfigStatus, getXOAuthStatus } from '../social-posting/x-oauth.js';
-import { getPlatformClient, getSocialAccount, toPublicAccount } from '../social-posting/social-accounts.js';
+import { assertXBudget, withXUsage } from '../x-api-usage/index.js';
+import { getXOAuthConfigStatus, getXOAuthStatus } from '../social-posting/x-oauth.js';
+import { getSocialAccount, toPublicAccount } from '../social-posting/social-accounts.js';
+import { connectedAccountCounts, connectedAccountUserId } from '../client-readiness/index.js';
 import { compactUser, diffRosters } from './audience-diff.js';
 import {
   findAccountIdForClient,
@@ -44,9 +53,17 @@ import {
 const require = createRequire(import.meta.url);
 
 const defaultDeps = {
-  getPlatformClient: (clientId) => getPlatformClient(clientId, 'x'),
+  // Owner/app credentials, read-only view (instrumented by twitter-service, so every call lands in the ledger).
+  // Lazy import keeps this module light for tests and for routes that only call the free reads.
+  getOwnerReadClient: async () => (await import('../social-posting/twitter-service.js')).getXReadClient().readOnly,
+  getOwnerReadIdentity: async () => (await import('../social-posting/twitter-service.js')).getOwnerReadIdentity(),
+  assertXBudget,
+  // BRAND handle only (xGrowth / Brain): never the connected social username, which may be the owner's account.
+  resolveClientHandle: async (clientId) => {
+    const { resolveBrandHandle } = await import('../client-readiness/index.js');
+    return resolveBrandHandle(require('../../api/_lib/firebase-admin.cjs').adminDb, clientId);
+  },
   getSocialAccount: (clientId) => getSocialAccount(clientId, 'x'),
-  getXOAuth2Client,
   readGlobalStatus: () => getXOAuthStatus(),
   readConfigStatus: () => getXOAuthConfigStatus(),
   resolveHomeClientId: () => require('../intelligence/_digest-config.js').resolveDigestClientId(),
@@ -132,10 +149,6 @@ async function isHomeClient(clientId) {
 }
 
 /**
- * The metered X client for this client. Free to resolve (reads stored tokens;
- * may refresh an expiring OAuth2 token, which is not a metered call).
- */
-/**
  * Documented home exception: the home client's X Monitor stays on the legacy global connection (the account its
  * history lives under) whenever that connection exists, even if home ALSO has a per-client X doc (used for
  * publishing tests). Without a global connection, home behaves like any other client. Never true for a non-home
@@ -152,48 +165,103 @@ async function homeUsesGlobal(clientId, account) {
   }
 }
 
-async function getMonitorClient(clientId) {
-  const account = await deps.getSocialAccount(clientId);
-  if (await homeUsesGlobal(clientId, account)) {
-    // No clientId => the legacy global token (x-oauth.js); only ever reached for the home client.
-    const { client } = await deps.getXOAuth2Client(account ? null : clientId);
-    return client;
-  }
-  const { client } = await deps.getPlatformClient(clientId);
-  return client;
+/** The metered X client: ALWAYS the owner/app read-only client, whatever the client's own connection is. Free to resolve. */
+async function getMonitorClient() {
+  return deps.getOwnerReadClient();
 }
 
 /**
- * Resolve the X user id this client monitors without spending a call.
- * Order: (home with a global connection) the global token's userId → social_accounts userId → x_monitor doc
- * listing the client → (home only) the global token's userId. Returns { accountId: null } when unknown.
+ * Resolve the X account this client's monitor reads, without spending a call.
+ * HOME: (with a global connection) the global token's userId -> social_accounts userId -> x_monitor doc listing the
+ * client (latest profile sync wins) -> the global token's userId -> saved handle (accountId null).
+ * NON-HOME: brand handle, then the connected account only if it is the client's own, then a matching x_monitor doc,
+ * else the brand handle alone (accountId null); never the owner's account. Every result carries { accountId, username, handle, source }.
  */
 export async function resolveAccountId(clientId) {
   requireClientId(clientId);
   const account = await deps.getSocialAccount(clientId);
-  if (account && (await homeUsesGlobal(clientId, account))) {
-    const global = await deps.readGlobalStatus();
-    return { accountId: String(global.userId), username: global.username || null, source: 'global' };
-  }
-  if (account?.userId) return { accountId: String(account.userId), username: account.username || null, source: 'social_accounts' };
-  const stored = await deps.findAccountIdForClient(clientId);
-  if (stored) return { accountId: String(stored), username: account?.username || null, source: 'x_monitor' };
-  if (!account && (await isHomeClient(clientId))) {
-    const global = await deps.readGlobalStatus();
-    if (global?.userId) return { accountId: String(global.userId), username: global.username || null, source: 'global' };
-  }
-  return { accountId: null, username: account?.username || null, source: null };
+  const hit = (accountId, username, source) => ({ accountId: String(accountId), username: username || null, handle: username || null, source });
+  if (!(await isHomeClient(clientId))) return resolveNonHomeAccountId(clientId, account, hit);
+  return resolveHomeAccountId(clientId, account, hit);
 }
 
-async function requireAccountId(clientId) {
-  const resolved = await resolveAccountId(clientId);
-  if (!resolved.accountId) {
-    const err = new Error('The X user id for this client is not known yet. Run Sync profile first.');
-    err.status = 409;
-    err.code = 'account-id-unknown';
-    throw err;
+// HOME: its own account is the owner's, so the connected account / global token / x_monitor tag are all its own.
+async function resolveHomeAccountId(clientId, account, hit) {
+  if (account && (await homeUsesGlobal(clientId, account))) {
+    const global = await deps.readGlobalStatus();
+    return hit(global.userId, global.username, 'global');
   }
-  return resolved;
+  if (account?.userId) return hit(account.userId, account.username, 'social_accounts');
+  const stored = await deps.findAccountIdForClient(clientId);
+  if (stored) {
+    let storedUsername = null;
+    try { storedUsername = (await readAccount(stored))?.profile?.username || null; } catch { /* name is cosmetic */ }
+    // Free re-check: the saved handle (Strategy / Brain) may have changed since the id was stamped. When it differs from
+    // the stored account's username, follow the handle so a typo'd or old handle does not stay pinned to a stranger.
+    if (storedUsername) {
+      let saved = null;
+      try { saved = await deps.resolveClientHandle(clientId); } catch { saved = null; }
+      const savedHandle = String(saved?.handle || '').replace(/^@/, '');
+      if (savedHandle && savedHandle.toLowerCase() !== String(storedUsername).toLowerCase()) {
+        return { accountId: null, username: savedHandle, handle: savedHandle, source: saved.source || 'handle' };
+      }
+    }
+    return hit(stored, account?.username || storedUsername, 'x_monitor');
+  }
+  if (!account && (await isHomeClient(clientId))) {
+    const global = await deps.readGlobalStatus();
+    if (global?.userId) return hit(global.userId, global.username, 'global');
+  }
+  let resolved = null;
+  try { resolved = await deps.resolveClientHandle(clientId); } catch { resolved = null; }
+  if (resolved?.handle) return { accountId: null, username: resolved.handle, handle: resolved.handle, source: resolved.source || 'handle' };
+  return { accountId: null, username: account?.username || null, handle: account?.username || null, source: null };
+}
+
+// NON-HOME: identity is the client's own handle (see header). Free; never returns the owner's account.
+async function resolveNonHomeAccountId(clientId, account, hit) {
+  let ownerId = null;
+  try { ownerId = String((await deps.getOwnerReadIdentity())?.userId || '') || null; } catch { ownerId = null; }
+  let brand = null;
+  try { brand = await deps.resolveClientHandle(clientId); } catch { brand = null; }
+  const brandHandle = String(brand?.handle || '').replace(/^@+/, '') || null;
+  const counts = connectedAccountCounts(account, { brandHandle, ownerUserId: ownerId });
+  const accountUserId = connectedAccountUserId(account);
+  if (counts && accountUserId) return hit(accountUserId, account.username, 'social_accounts');
+  // Fail closed: with no owner id and no brand handle the owner-doc filter cannot run, so skip the x_monitor fallback.
+  const stored = (!ownerId && !brandHandle) ? null : await deps.findAccountIdForClient(clientId, { skipSocial: true, ownerUserId: ownerId, brandHandle });
+  if (stored) return hit(stored, brandHandle || (counts ? account.username : null), 'x_monitor');
+  if (brandHandle) return { accountId: null, username: brandHandle, handle: brandHandle, source: brand.source || 'handle' };
+  // No brand handle: only a connected account that is not the owner's can name the client (userId-less: by username).
+  if (counts) return { accountId: null, username: account.username, handle: account.username, source: null };
+  return { accountId: null, username: null, handle: null, source: null };
+}
+
+function handleMissingError() {
+  const err = new Error('No X account or handle is saved for this client. Save the X handle in Strategy > X profile or in the Client Brain, then run the sync again.');
+  err.status = 409;
+  err.code = 'client-x-handle-missing';
+  return err;
+}
+
+/**
+ * Budget gate (free: one ledger read). Runs before any X call; a cap hit throws XBudgetError (429).
+ * `estimatePosts` counts read units, like the other X readers.
+ */
+async function guardBudget(clientId, estimatePosts) {
+  await deps.assertXBudget({ source: 'x-monitor', clientId, estimatePosts });
+}
+
+/**
+ * Posts/audience need the numeric id. With only a handle, run the profile lookup first (1 extra call), which
+ * stamps the id, then continue. Never fails with account-id-unknown while a handle exists.
+ */
+async function ensureAccountId(clientId) {
+  const resolved = await resolveAccountId(clientId);
+  if (resolved.accountId) return { ...resolved, extraCalls: 0 };
+  if (!resolved.handle) throw handleMissingError();
+  const profile = await syncProfileImpl({ clientId });
+  return { accountId: profile.accountId, username: resolved.username, handle: resolved.handle, source: resolved.source, extraCalls: profile.callsMade };
 }
 
 function clientIdFrom(opts) {
@@ -203,24 +271,27 @@ function clientIdFrom(opts) {
 // ── Profile ──────────────────────────────────────────────────────────────────
 
 /**
- * 1 call. Reads the live profile + counters and writes today's snapshot.
- * The users/me response id is authoritative for where the rows land, so a
- * client whose stored X doc has no userId still gets a correct account (no
- * extra call).
+ * 1 call. Reads the live profile + counters and writes today's snapshot, on the owner read client.
+ * users/:id when the id is known, else users/by/username/:handle. The response id is authoritative for where the
+ * rows land, so a handle-only client gets its id stamped here (no extra call).
  */
 async function syncProfileImpl(opts = {}) {
   const clientId = requireClientId(clientIdFrom(opts));
-  const client = await getMonitorClient(clientId);
+  const target = await resolveAccountId(clientId);
+  if (!target.accountId && !target.handle) throw handleMissingError(); // never users/me: that is the owner, not this client
+  await guardBudget(clientId, 1);
+  const client = await getMonitorClient();
+  const path = target.accountId ? `users/${target.accountId}` : `users/by/username/${encodeURIComponent(target.handle)}`;
   let res;
   try {
-    res = await client.v2.get('users/me', { 'user.fields': USER_FIELDS });
+    res = await client.v2.get(path, { 'user.fields': USER_FIELDS });
   } catch (err) {
     logCalls(clientId, 'profile-sync', 1, { failed: true });
-    await recordFailure(clientId, 'profile', err);
+    await recordFailure(clientId, 'profile', err, target.accountId);
     throw err;
   }
   const user = res?.data;
-  if (!user?.id) throw new Error('X returned no profile for the connected account.');
+  if (!user?.id) throw new Error('X returned no profile for this account.');
   logCalls(clientId, 'profile-sync', 1);
 
   const metrics = user.public_metrics || {};
@@ -252,7 +323,7 @@ async function syncProfileImpl(opts = {}) {
 // ── Posts ────────────────────────────────────────────────────────────────────
 
 /**
- * 1 call (2 if the private-metric request is rejected and we retry public-only,
+ * 1 call (+1 profile lookup when only a handle is known; 2 if the private-metric request is rejected and we retry public-only,
  * or if `deep` asks for the older public-metrics page).
  *
  * Default window is 30 days because that is exactly how far back X will serve
@@ -261,27 +332,30 @@ async function syncProfileImpl(opts = {}) {
  */
 async function syncPostsImpl({ clientId: rawClientId, deep = false } = {}) {
   const clientId = requireClientId(rawClientId);
-  const client = await getMonitorClient(clientId); // 409 account-not-connected first
-  const { accountId } = await requireAccountId(clientId);
+  const { accountId, extraCalls } = await ensureAccountId(clientId); // handle-only: profile lookup first
+  await guardBudget(clientId, deep ? 200 : 100);
+  const client = await getMonitorClient();
+  const ownerId = (await deps.getOwnerReadIdentity())?.userId || null;
+  const privateAllowed = Boolean(ownerId) && String(accountId) === String(ownerId);
 
   const startTime = new Date(Date.now() - PRIVATE_METRIC_WINDOW_DAYS * 86_400_000).toISOString();
   const base = { max_results: 100, exclude: 'retweets' };
 
   let callsMade = 0;
-  let metricsSource = 'private';
+  let metricsSource = privateAllowed ? 'private' : 'public';
   let raw;
   try {
     raw = await client.v2.get(`users/${accountId}/tweets`, {
       ...base,
       start_time: startTime,
-      'tweet.fields': PRIVATE_TWEET_FIELDS,
+      'tweet.fields': privateAllowed ? PRIVATE_TWEET_FIELDS : PUBLIC_TWEET_FIELDS,
     });
     callsMade += 1;
   } catch (err) {
     callsMade += 1;
-    // Only a field-authorization refusal is worth a second call. A 429/402/401
+    // Only a field-authorization refusal on a PRIVATE request is worth a second call. A 429/402/401
     // means the retry would fail identically and just burn another credit.
-    if (err?.code !== 400 && err?.code !== 403) {
+    if (!privateAllowed || (err?.code !== 400 && err?.code !== 403)) {
       logCalls(clientId, 'posts-sync', callsMade, { failed: true });
       await recordFailure(clientId, 'posts', err, accountId);
       throw err;
@@ -315,7 +389,7 @@ async function syncPostsImpl({ clientId: rawClientId, deep = false } = {}) {
   await saveSyncMeta(accountId, { postsAt: at, postsCount: posts.length, metricsSource }, { clientId });
   logCalls(clientId, 'posts-sync', callsMade, { metricsSource, deep, posts: posts.length });
 
-  return { clientId, accountId, count: posts.length, metricsSource, callsMade };
+  return { clientId, accountId, count: posts.length, metricsSource, callsMade: callsMade + extraCalls };
 }
 
 function normalizePost(tweet, username, metricsSource) {
@@ -365,8 +439,10 @@ export async function estimateAudienceCalls(accountId) {
  */
 async function syncAudienceImpl({ clientId: rawClientId, maxPages = DEFAULT_MAX_FOLLOWER_PAGES } = {}) {
   const clientId = requireClientId(rawClientId);
-  const client = await getMonitorClient(clientId); // 409 account-not-connected first
-  const { accountId } = await requireAccountId(clientId);
+  const { accountId, extraCalls } = await ensureAccountId(clientId); // handle-only: profile lookup first
+  const est = await estimateAudienceCalls(accountId);
+  await guardBudget(clientId, Math.min(est.pages, maxPages) * FOLLOWER_PAGE_SIZE);
+  const client = await getMonitorClient();
 
   const users = [];
   let paginationToken = null;
@@ -426,7 +502,7 @@ async function syncAudienceImpl({ clientId: rawClientId, maxPages = DEFAULT_MAX_
   return {
     clientId,
     accountId,
-    callsMade: pages,
+    callsMade: pages + extraCalls,
     rosterSize: users.length,
     complete,
     truncated,

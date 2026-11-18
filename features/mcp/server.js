@@ -99,6 +99,12 @@ export function getServices() {
             // The pre-digest-refresh phase for ONE group, in-process (lazy: the route pulls in the whole digest pipeline).
             digestRefresh: async (clientId, args) => (await import('../../app/api/worker/pre-digest-refresh/route.js')).refreshDigestClient(clientId, args),
             loadDigestCfg: (clientId) => digest.getDigestConfig(clientId),
+            // x-search plan inputs: free reads only (client config, key presence, ledger pricing, digest include).
+            loadXSearchInputs: async (clientId) => {
+              const [cfgSnap, dcfg, { getXPricing }] = await Promise.all([db.collection('client_configs').doc(clientId).get(), digest.getDigestConfig(clientId).catch(() => null), import('../x-api-usage/index.js')]);
+              const { hasApiKey } = require('../scout-intake/external-scouts/scrapecreators-client.js');
+              return { marketingBriefConfig: (cfgSnap.exists ? cfgSnap.data() : {})?.marketingBriefConfig || {}, include: dcfg?.include || {}, hasScrapeKey: hasApiKey(), pricing: await getXPricing().catch(() => ({ perPostReadUsd: null })) };
+            },
             xMonitor: loadXMonitorService, // sync-capable X Monitor service; only reachable after a confirmed paid preview
             loadShowcaseRoute: () => import('../../app/api/dashboard/showcase/route.js'),
             readShowcaseJob: async (jobId) => { const s = await db.collection('showcase_jobs').doc(String(jobId)).get(); return s.exists ? s.data() : null; },
