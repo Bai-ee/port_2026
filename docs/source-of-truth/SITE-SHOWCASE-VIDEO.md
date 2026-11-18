@@ -119,7 +119,7 @@ No rules or index changes were needed (the list query is a single-field order by
 - Existing image only (rollout or roll back to a built tag): `gcloud run deploy showcase-render --region us-central1 --image us-central1-docker.pkg.dev/human-in-the-loop-a1a19/cloud-run-source-deploy/showcase-render:<tag>`. `gcloud run deploy --image` keeps the service's existing env and GPU settings.
 - After any redeploy: render one HITLOOP showcase and one CQ dry run to prove neither regressed.
 
-**Roll back by revision**: `gcloud run revisions list --service showcase-render --region us-central1`, then `gcloud run services update-traffic showcase-render --region us-central1 --to-revisions <rev>=100`. Revision 00003 is the known-good one for both HITLOOP and CQ.
+**Roll back by revision**: `gcloud run revisions list --service showcase-render --region us-central1`, then `gcloud run services update-traffic showcase-render --region us-central1 --to-revisions <rev>=100`. Revision 00005 (image tag `cqhowto-*`, hitloop-video `feat/hitloop-showcase` e9277c1, 2026-11-18) is live and adds the CQ `cq-howto` job kind; gate-tested for both `cq-howto` and `cq-brief`. Revision 00003 is the previous known-good one (roll back to it if 00005 misbehaves). Revision 00005 also carries the tag `cqhowto` (direct URL for tests, no traffic of its own).
 
 **Turn it off**: unset `SHOWCASE_RENDER_URL` in Vercel production and redeploy. `create` then returns 503 and nothing is queued. (Unsetting only the secret does the same.) The card stays visible but cannot start renders.
 
