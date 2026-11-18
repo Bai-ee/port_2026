@@ -1,4 +1,5 @@
 import { createRequire } from 'module';
+import { clientBriefPdfMode, isClientBriefData } from '../../../../../features/client-brief/publish.js';
 import {
   briefPrivacyHeaders,
   contentDispositionFileName,
@@ -69,7 +70,9 @@ export async function GET(_request, context) {
     // route), never the paginated edge-to-edge brief layout. The height
     // comes from re-running the renderer's own estimate over the stored
     // model; the stored HTML is still what gets printed.
-    let pdfMode = 'edge-to-edge';
+    // Client briefs: v2 (layoutVersion 2) prints through the plain 'default'
+    // mode; v1 docs keep the paged 'edge-to-edge' mode.
+    let pdfMode = isClientBriefData(resolved.brief) ? clientBriefPdfMode(resolved.brief) : 'edge-to-edge';
     let pdfHeightPx = null;
     if (resolved.brief.kind === 'invoice' && resolved.brief.invoice) {
       pdfMode = 'invoice';

@@ -9567,6 +9567,25 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       },
       readinessBadge: { tone: 'ok', label: 'Live' },
     }, {
+      // Card id is 'client-brief-publisher' because 'client-brief' is already the
+      // DESIGNER-bucket Design Brief card.
+      id: 'client-brief-publisher',
+      category: 'admin',
+      number: 'CB',
+      label: 'CLIENT BRIEF',
+      title: 'Client Brief',
+      description: 'Paste a client breakdown and publish it exactly as written as a hosted brief page with a downloadable PDF and share image for the selected client.',
+      placeholderLabel: 'CLIENT\nBRIEF',
+      rows: [
+        { key: 'cb-client', label: 'Client', value: client?.companyName || client?.name || client?.dashboardTitle || bootstrap?.effectiveClientId || 'Selected client' },
+        { key: 'cb-input', label: 'Input', value: 'Paste Markdown' },
+        { key: 'cb-output', label: 'Output', value: 'Hosted URL + PDF + share image' },
+        { key: 'cb-access', label: 'Access', value: 'Admin only' },
+      ],
+      footerLeft: 'Ready',
+      footerRight: 'ADMIN',
+      readinessBadge: { tone: 'ok', label: 'Ready' },
+    }, {
       id: 'create-client',
       category: 'admin',
       number: 'NC',
@@ -9981,26 +10000,6 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         { key: 'sc-existing', label: 'Saved briefs', value: customBriefsLoading ? 'Loading' : String(customBriefCount) },
         { key: 'sc-pdf', label: 'PDF export', value: 'Generated on save' },
         { key: 'sc-access', label: 'Access', value: 'Admin only' },
-      ],
-      footerLeft: 'Ready',
-      footerRight: 'ADMIN',
-      readinessBadge: { tone: 'ok', label: 'Ready' },
-    }] : []),
-    // Card id is 'client-brief-publisher' because 'client-brief' is already the
-    // DESIGNER-bucket Design Brief card.
-    ...(isAdmin ? [{
-      id: 'client-brief-publisher',
-      category: 'brief',
-      number: 'CB',
-      label: 'CLIENT BRIEF',
-      title: 'Client Brief',
-      description: 'Paste a client breakdown and publish it as a hosted brief page with a downloadable PDF for the selected client.',
-      placeholderLabel: 'CLIENT\nBRIEF',
-      rows: [
-        { key: 'cb-client', label: 'Client', value: client?.companyName || client?.name || client?.dashboardTitle || bootstrap?.effectiveClientId || 'Selected client' },
-        { key: 'cb-input', label: 'Input', value: 'Paste breakdown' },
-        { key: 'cb-output', label: 'Output', value: 'Hosted URL + PDF' },
-        { key: 'cb-access', label: 'Access', value: 'Admin only' },
       ],
       footerLeft: 'Ready',
       footerRight: 'ADMIN',
@@ -12837,7 +12836,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                                       </svg>
                                     </button>
                                   )}
-                                  {activeCapabilityFilter === 'brief' && !isRowLocked && card.id !== 'submit-custom-brief' && card.id !== 'client-brief-publisher' && (
+                                  {activeCapabilityFilter === 'brief' && !isRowLocked && card.id !== 'submit-custom-brief' && (
                                     <button
                                       type="button"
                                       className="cap-list-run"

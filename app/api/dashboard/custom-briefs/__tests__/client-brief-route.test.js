@@ -118,7 +118,7 @@ function req(method, body, { email = 'owner@example.com', query = '' } = {}) {
     json: async () => body,
   };
 }
-const BREAKDOWN = '# NTR Daily Update\n## Snapshot\n**Revenue**: $1,284\n- Reel worked\n';
+const BREAKDOWN = '# NTR Daily Update\n\nFirst paragraph here.\n\n## Snapshot\n**Revenue**: $1,284\n- Reel worked\n';
 function reset() {
   store.clear(); writes.length = 0; storageDeletes.length = 0; storagePrefixDeletes.length = 0;
   state.pdfCalls.length = 0; state.vercelCalls = 0; order.length = 0;
@@ -130,7 +130,7 @@ test('publish: random-token slug (not from title), kind stored, text+model store
   reset();
   const res = await route.POST(req('POST', {
     kind: 'client-brief', text: BREAKDOWN, title: 'Secret Launch Plan', public: true,
-    clientId: 'attacker-client', addToClientBrain: true, briefSlug: 'chosen-by-client', publicBriefSlug: 'chosen',
+    clientId: 'attacker-client', addToClientBrain: true, publicBriefSlug: 'chosen',
   }));
   assert.equal(res.status, 200);
   const json = await res.json();
@@ -146,8 +146,10 @@ test('publish: random-token slug (not from title), kind stored, text+model store
   assert.equal(data.kind, 'client-brief');
   assert.equal(json.brief.kind, 'client-brief');
   assert.equal(data.sourceText, BREAKDOWN);
-  assert.equal(data.model.title, 'Secret Launch Plan');
-  assert.equal(data.model.clientName, "Rosita's Tacos");
+  assert.equal(data.title, 'Secret Launch Plan');
+  assert.equal(data.layoutVersion, 2);
+  assert.ok(Array.isArray(data.blocks) && data.blocks[0].type === 'heading');
+  assert.match(data.html, /Rosita&#39;s Tacos/);
   assert.equal(data.public, true);
   assert.equal(data.addToClientBrain, false);
   assert.equal(data.knowledgeBaseStatus, 'skipped');
@@ -156,7 +158,7 @@ test('publish: random-token slug (not from title), kind stored, text+model store
   assert.match(data.html, /noindex,nofollow/);
   assert.ok(data.html.includes(`/briefs/rositas/${slug}/pdf`));
   assert.equal(state.pdfCalls.length, 1);
-  assert.equal(state.pdfCalls[0].pdfMode, 'edge-to-edge');
+  assert.equal(state.pdfCalls[0].pdfMode, 'default', 'v2 client briefs print through the plain default mode');
   assert.equal(data.pdfArtifact.bucket, 'b');
   assert.equal(json.brief.publicPath, `/briefs/rositas/${slug}`);
 });
@@ -279,15 +281,15 @@ test('fuzzy fallbacks still work for ordinary briefs (behavior unchanged)', asyn
   assert.equal((await resolver.resolvePublicBrief('rositas', 'mybrief'))?.snapshot.id, 'my-brief');
 });
 
-test('stored doc is Firestore-safe (intro + bullets + numbered list); numbered list kept as ordered', async () => {
+test('stored doc is Firestore-safe (table, nested list, ordered list start kept)', async () => {
   reset(); // the fake store's set() runs assertFirestoreSafe on every write
-  const text = 'Intro one.\n\nIntro two.\n\n## A\n- b1\n- b2\n\n1. n1\n2. n2\n';
+  const text = 'Intro.\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n3. n1\n   - sub\n4. n2\n';
   const res = await route.POST(req('POST', { kind: 'client-brief', text, public: true }));
   assert.equal(res.status, 200);
   const [, data] = briefDocs()[0];
-  assert.equal(data.model.intro.length, 2);
-  assert.equal(data.model.sections[0].blocks[1].ordered, true);
-  assert.match(data.html, /<ol class="cb-list">/);
+  assert.equal(data.blocks[1].type, 'table');
+  assert.equal(data.blocks[2].start, 3);
+  assert.match(data.html, /<ol class="cb-list" start="3">/);
 });
 
 test('publish writes the doc BEFORE the PDF, then links the PDF onto the doc', async () => {
@@ -345,4 +347,142 @@ test('DELETE: exact id deletes; a fuzzy key (compacted title) never matches a cl
   assert.equal(briefDocs().length, 1);
   assert.equal((await route.DELETE(req('DELETE', { briefSlug: slug }))).status, 200);
   assert.equal(briefDocs().length, 0);
+});
+
+// ---- v2: OG fields, update in place, guards ----
+const OG = { ogLabel: 'NTR', ogSubhead: 'Weekly plan', hideOgSubhead: true, ogTitleLines: ['A', 'B', 'C', 'D'], ogLines: ['one', 'two', 'three'] };
+
+test('OG fields are stored (invoice limits: 3 title lines, 2 extra lines) and served in the public meta', async () => {
+  reset();
+  const res = await route.POST(req('POST', { kind: 'client-brief', text: BREAKDOWN, public: true, ...OG }));
+  const json = await res.json();
+  const [, data] = briefDocs()[0];
+  assert.equal(data.ogLabel, 'NTR');
+  assert.equal(data.ogSubhead, 'Weekly plan');
+  assert.equal(data.hideOgSubhead, true);
+  assert.deepEqual(data.ogTitleLines, ['A', 'B', 'C']);
+  assert.deepEqual(data.ogLines, ['one', 'two']);
+  assert.equal(data.description, 'Weekly plan');
+  assert.equal(json.brief.ogImageUrl, `https://hitloop.test/briefs/rositas/${json.brief.briefSlug}/og-image`);
+  const resolved = await resolver.resolvePublicBrief('rositas', json.brief.briefSlug);
+  const meta = resolver.buildBriefOpenGraphMeta({ origin: 'https://hitloop.test', clientId: 'client-1', client: CLIENT, brief: resolved.brief, snapshotId: resolved.snapshot.id });
+  assert.equal(meta.ogVariant, 'invoice', 'client briefs reuse the invoice OG look so the fields render');
+  assert.deepEqual(meta.ogTitleLines, ['A', 'B', 'C']);
+  assert.deepEqual(meta.ogLines, ['one', 'two']);
+  assert.equal(meta.ogSubhead, 'Weekly plan');
+  assert.equal(meta.hideOgSubhead, true);
+  assert.equal(meta.imageUrl, `https://hitloop.test/briefs/rositas/${json.brief.briefSlug}/og-image`);
+});
+
+test('description defaults to the first paragraph when no subhead is given', async () => {
+  reset();
+  await route.POST(req('POST', { kind: 'client-brief', text: BREAKDOWN, public: true }));
+  const [, data] = briefDocs()[0];
+  assert.equal(data.description, 'First paragraph here.');
+  assert.equal(data.ogLabel, 'HITLOOP');
+});
+
+test('update in place: same slug and URL, createdAt kept, PDF replaced, omitted public keeps value', async () => {
+  reset();
+  const created = await (await route.POST(req('POST', { kind: 'client-brief', text: BREAKDOWN, title: 'One', public: true }))).json();
+  const slug = created.brief.briefSlug;
+  const docPath = `clients/client-1/custom_briefs/${slug}`;
+  const createdAt = store.get(docPath).createdAt;
+  store.get(docPath).createdAt = 'ORIGINAL';
+  const oldPdf = store.get(docPath).pdfArtifact.storagePath;
+  state.pdfCalls.length = 0;
+  const res = await route.POST(req('POST', { kind: 'client-brief', briefSlug: slug, text: '# Changed\n\nNew body.', title: 'Two', ...OG }));
+  assert.equal(res.status, 200);
+  const json = await res.json();
+  assert.equal(json.updated, true);
+  assert.equal(json.brief.briefSlug, slug);
+  assert.equal(json.brief.publicPath, created.brief.publicPath);
+  assert.equal(briefDocs().length, 1, 'no second doc');
+  const data = store.get(docPath);
+  assert.equal(data.createdAt, 'ORIGINAL');
+  assert.equal(data.title, 'Two');
+  assert.match(data.html, /New body/);
+  assert.equal(data.sourceText, '# Changed\n\nNew body.');
+  assert.equal(data.public, true, 'omitted public keeps the existing value');
+  assert.equal(data.ogSubhead, 'Weekly plan');
+  assert.ok(storageDeletes.includes(oldPdf), 'old PDF object deleted before the re-render');
+  assert.equal(state.pdfCalls.length, 1);
+  assert.equal(state.pdfCalls[0].pdfMode, 'default');
+  assert.ok(data.pdfArtifact, 'new PDF linked');
+  assert.ok(createdAt !== undefined);
+  // explicit public:false updates and keeps it private (no PDF render)
+  state.pdfCalls.length = 0;
+  await route.POST(req('POST', { kind: 'client-brief', briefSlug: slug, text: BREAKDOWN, public: false }));
+  assert.equal(store.get(docPath).public, false);
+  assert.equal(store.get(docPath).pdfArtifact, undefined);
+  assert.equal(state.pdfCalls.length, 0);
+  // omitted public on a private brief stays private
+  await route.POST(req('POST', { kind: 'client-brief', briefSlug: slug, text: BREAKDOWN }));
+  assert.equal(store.get(docPath).public, false);
+});
+
+test('update rejects non-client-brief docs, other clients, bad ids; never falls through to create', async () => {
+  reset();
+  store.set('clients/client-1/custom_briefs/client-brief-20261118-aaaaaaaaaaaaaaaa', { kind: 'brief', title: 'Plain', public: true });
+  store.set('clients/other-client/custom_briefs/client-brief-20261118-bbbbbbbbbbbbbbbb', { kind: 'client-brief', title: 'Theirs', public: true, html: 'x' });
+  const post = (briefSlug) => route.POST(req('POST', { kind: 'client-brief', text: BREAKDOWN, public: true, briefSlug }));
+  assert.equal((await post('client-brief-20261118-aaaaaaaaaaaaaaaa')).status, 404, 'other kind');
+  assert.equal((await post('client-brief-20261118-bbbbbbbbbbbbbbbb')).status, 404, 'other client (bootstrap client is client-1)');
+  assert.equal((await post('client-brief-20261118-cccccccccccccccc')).status, 404, 'missing');
+  assert.equal((await post('plain-brief')).status, 400, 'not a client-brief id');
+  assert.equal((await post('../x')).status, 400);
+  assert.equal(store.get('clients/client-1/custom_briefs/client-brief-20261118-aaaaaaaaaaaaaaaa').kind, 'brief');
+  assert.equal(store.get('clients/other-client/custom_briefs/client-brief-20261118-bbbbbbbbbbbbbbbb').title, 'Theirs');
+  assert.equal(briefDocs().length, 2, 'nothing created');
+  assert.equal(state.pdfCalls.length, 0);
+});
+
+test('update: if the old PDF cannot be deleted nothing is written', async () => {
+  reset();
+  const created = await (await route.POST(req('POST', { kind: 'client-brief', text: BREAKDOWN, title: 'Keep', public: true }))).json();
+  const docPath = `clients/client-1/custom_briefs/${created.brief.briefSlug}`;
+  state.failStorageDelete = true;
+  state.pdfCalls.length = 0;
+  const res = await route.POST(req('POST', { kind: 'client-brief', briefSlug: created.brief.briefSlug, text: '# X', title: 'Lost' }));
+  assert.equal(res.status, 502);
+  assert.equal(store.get(docPath).title, 'Keep');
+  assert.equal(state.pdfCalls.length, 0);
+});
+
+test('invoice/brief POST can not overwrite a client brief that owns the doc id', async () => {
+  reset();
+  const created = await (await route.POST(req('POST', { kind: 'client-brief', text: BREAKDOWN, title: 'Mine', public: true }))).json();
+  const slug = created.brief.briefSlug;
+  const before = { ...store.get(`clients/client-1/custom_briefs/${slug}`) };
+  const html = '<!doctype html><html><body>evil</body></html>';
+  const res = await route.POST(req('POST', { html, title: 'x', briefSlug: slug, public: true }));
+  assert.equal(res.status, 409);
+  const after = store.get(`clients/client-1/custom_briefs/${slug}`);
+  assert.equal(after.kind, 'client-brief');
+  assert.equal(after.html, before.html);
+});
+
+test('lazy /pdf: v2 client briefs use pdfMode default; v1 docs (no layoutVersion) keep edge-to-edge', async () => {
+  reset();
+  const created = await (await route.POST(req('POST', { kind: 'client-brief', text: BREAKDOWN, public: true }))).json();
+  const v2Path = `clients/client-1/custom_briefs/${created.brief.briefSlug}`;
+  store.set('clients/client-1', { publicClientSlug: 'rositas' });
+  delete store.get(v2Path).pdfArtifact; delete store.get(v2Path).pdfUrl; // force lazy render
+  const pdfRoute = await import('../../../../briefs/[clientId]/[briefSlug]/pdf/route.js');
+  state.pdfCalls.length = 0;
+  await pdfRoute.GET({}, { params: { clientId: 'rositas', briefSlug: created.brief.briefSlug } });
+  assert.equal(state.pdfCalls[0]?.pdfMode, 'default');
+  store.set('clients/client-1/custom_briefs/client-brief-20260101-dddddddddddddddd', { kind: 'client-brief', public: true, html: '<html></html>', title: 'v1', publicBriefSlug: 'client-brief-20260101-dddddddddddddddd' });
+  state.pdfCalls.length = 0;
+  await pdfRoute.GET({}, { params: { clientId: 'rositas', briefSlug: 'client-brief-20260101-dddddddddddddddd' } });
+  assert.equal(state.pdfCalls[0]?.pdfMode, 'edge-to-edge');
+});
+
+test('GET list serializes sourceText + OG fields for client briefs (card edit/load)', async () => {
+  reset();
+  await route.POST(req('POST', { kind: 'client-brief', text: BREAKDOWN, public: false, ...OG }));
+  const [b] = (await (await route.GET(req('GET', null, { query: '?kind=client-brief' }))).json()).briefs;
+  assert.equal(b.sourceText, BREAKDOWN);
+  assert.equal(b.ogSubhead, 'Weekly plan');
+  assert.deepEqual(b.ogTitleLines, ['A', 'B', 'C']);
 });

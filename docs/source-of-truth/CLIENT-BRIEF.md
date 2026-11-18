@@ -1,50 +1,61 @@
-# Client Brief (as built)
+# Client Brief (as built, v2)
 
-Admin pastes a client's breakdown text (the daily ChatGPT/MCP breakdown) -> HITLOOP parses it deterministically, renders it into a fixed template built on the existing brief design, and publishes a hosted, shareable URL plus PDF, like the invoice. Admin-only, per client (the selected/impersonated client). No live data fetch, no LLM. Build spec: `docs/plans/CLIENT-BRIEF-BUILD-SPEC.md`.
+Admin pastes a client's Markdown breakdown -> HITLOOP renders it **exactly as pasted** (same blocks, same order, no restructuring) in the house look, and publishes a hosted, shareable URL plus PDF and a share image, like the invoice. Admin-only, per client (the selected/impersonated client). No live data fetch, no LLM. v1 (sectioned template) was PR #102; v2 spec: `docs/plans/CLIENT-BRIEF-V2-SPEC.md`.
 
 ## Flow
-1. Dashboard > Briefs bucket > card `CLIENT BRIEF` (card id `client-brief-publisher`; `client-brief` is already the DESIGNER "Design Brief" card). Admin only.
-2. `ClientBriefCard.jsx`: title, paste textarea, Preview (iframe `srcdoc` of server HTML), Publish (confirm names the client), list of this client's client briefs.
-3. `POST /api/dashboard/custom-briefs` `{ kind:'client-brief', text, title?, public:true }`. Server parses + renders; the client never sends HTML. Client = admin's effective client from bootstrap (a `clientId` in the body is ignored).
-4. Preview: same POST with `preview:true` returns `{ html }` and writes nothing (no Firestore, Storage, PDF).
+1. Dashboard > **Admin** section > card `CLIENT BRIEF` (card id `client-brief-publisher`, right after `invoice-builder`; `client-brief` is already the DESIGNER "Design Brief" card). Admin only. It acts on the selected client (`apiPath` impersonation).
+2. `components/dashboard/ClientBriefCard.jsx`: title (blank = first H1), Markdown textarea, visibility (Public / Private), Share image (OG) section with live preview + fields, Preview (iframe `srcdoc` of server HTML), Publish / Update, copy link / open / download PDF, and the saved list (Edit loads a saved brief back into the editor, Unpublish / Republish / Delete).
+3. `POST /api/dashboard/custom-briefs` `{ kind:'client-brief', text, title?, public, ogLabel?, ogSubhead?, hideOgSubhead?, ogTitleLines?, ogLines?, briefSlug? }`. Server parses + renders; the client never sends HTML. Client = admin's effective client from bootstrap (a `clientId` in the body is ignored).
+4. Preview: same POST with `preview:true` returns `{ html, title }` and writes nothing.
+5. **Update in place**: `briefSlug` of an existing client brief updates it (same slug/URL, `createdAt` kept, `publicClientSlug`/`publicPath` reused, omitted `public` keeps the stored value). `briefSlug` must match `client-brief-<YYYYMMDD>-<16 hex>` (else 400); exact doc get on the admin's client; 404 if missing or not kind `client-brief` (never falls through to create, never touches another client's doc). Before re-rendering, the old stored PDF object is deleted (strict: if that fails nothing is written, 502) and `pdfArtifact`/`pdfUrl`/`warnings` are cleared, then the doc is rewritten and the PDF re-rendered. Without `briefSlug` a new random slug is created.
+
+## Rendering (parser + renderer)
+- `features/client-brief/parse.js`: Markdown -> `{ title, clientName, asOf, blocks }`, a flat ordered list. Blocks: `heading` (1-6), `paragraph`, `blockquote`, `list` (`ordered`, `start`, items with optional one-level `sub`; deeper levels flatten), `table` (GFM pipe table: `align[]`, `header:{cells}`, `rows:[{cells}]`), `hr` (`---`/`***`/`___`; never a setext heading), `code` (fenced; kept as preformatted text). A fenced block whose info string or first line is `HITLOOP COMMAND` (or that follows a bare `HITLOOP COMMAND` caption) is stripped. Inline tokens: text, bold, italic, bold-italic (nestable), code, links (http/https/mailto only; anything else renders as its label text), `br` (pasted line breaks inside a paragraph are kept). Raw HTML is never interpreted (escaped as text). No sections, no `Label: value` grouping, no numbering, no reordering. Title = `options.title` || first H1 text || "Client Brief" (the H1 stays in the body). Firestore-safe: no array directly contains an array (table rows are `{ cells }`). Empty rejected; cap 50 000 chars.
+- `features/client-brief/render.js`: one continuous document, max width ~760px, house fonts (Doto headings, Space Grotesk body, Space Mono labels/code) and `BRIEF_CSS`'s ink/paper variables. `BRIEF_CSS` is included only for variables/fonts; its body gradient is overridden with the flat paper colour and none of its cover/section/page layout is used. Small header (client + date) and footer (date + "Download PDF"). Tables have house-ink borders. `@media print` + `@page A4`: headings keep with the next block; table rows, list items, quotes, code and paragraphs do not split; table headers repeat. noindex, everything escaped, links `rel="noopener noreferrer"`, no owner contact/payment info.
+- `features/client-brief/og.js` (pure, browser-safe): `normalizeClientBriefOg` (same limits as invoices: label 80, subhead 160, title lines 3 x 40, extra lines 2 x 120), `suggestClientBriefOg` (card prefill), `firstParagraphText`.
+- `features/client-brief/publish.js`: slug generator, fuzzy-resolve guard, GET visibility, `buildClientBrief` (parse + render + OG + description), `CLIENT_BRIEF_LAYOUT_VERSION = 2`, `clientBriefPdfMode`.
+
+## Stored doc
+`kind:'client-brief'`, `layoutVersion:2`, `sourceText` (truth), `blocks`, `html`, `title`, `description`, OG fields (`ogLabel` default `HITLOOP`, `ogSubhead`, `hideOgSubhead`, `ogTitleLines`, `ogLines`), `public`, slugs/paths, `pdfArtifact`/`pdfUrl`, `addToClientBrain:false`. Description (link-preview text) = operator subhead, else first paragraph, else "Client brief for <client>".
+
+## Publishing, OG and PDF
+- Share image: `buildBriefOpenGraphMeta` (`app/briefs/_lib/custom-briefs.js`) has a client-brief branch that reuses the invoice OG look (`ogVariant:'invoice'`, same renderer `og-image-render.js`: headline lines, subhead, extra lines, corner logo) so the stored fields actually render. As for invoices, the label and tiles are not drawn in that variant. `app/briefs/[clientId]/[briefSlug]/route.js` head meta (og:title/description/image, twitter summary_large_image, canonical) is unchanged and fed the right title/description/image; `/og-image` uses the same builder.
+- Live preview: `POST /api/dashboard/custom-briefs/og-preview` accepts `kind:'client-brief'` (`{ title, clientName, description, ogLabel, ogSubhead, hideOgSubhead, ogTitleLines, ogLines }`, no invoice needed) via `buildClientBriefOgPreviewMeta` -> the same `renderOgImageJpeg`. Admin-only, writes nothing. The invoice branch is unchanged.
+- PDF: v2 docs (`layoutVersion >= 2`) use pdfMode `'default'` at publish/update and in the lazy `/pdf` route (no injected CSS, A4 with margins; the document's own print CSS paginates it). `api/_lib/browserless.cjs` is not changed. v1 docs (no `layoutVersion`) keep `'edge-to-edge'` in the lazy route.
+- Caveat: chat apps and social platforms cache link unfurls, so updating a brief (or its OG fields) does not refresh a preview that was already shared. The new text/image shows up for links shared after the cache expires (or a fresh URL).
 
 ## Files
-- `features/client-brief/parse.js` - pure parser -> `{ title, clientName, asOf, intro, sections[{heading, blocks}] }`. Blocks: `stats` (consecutive `Label: value` / `**Label**: value`), `list` (`ordered` true for `1.` lists, rendered as `<ol>`), `para`. The model is Firestore-safe: no array directly contains an array (`intro: [{tokens}]`, `items: [{tokens}]`). Inline tokens `b/em/code/link`; only http(s) links survive. Fenced blocks (incl. HITLOOP COMMAND) stripped; empty rejected; cap 50 000 chars.
-- `features/client-brief/render.js` - template over `BRIEF_CSS` (cover, numbered sections, stat rows). noindex, everything escaped, links `rel="noopener noreferrer"`, no owner contact/payment info. Print rules let long sections flow and avoid mid-block breaks.
-- `features/client-brief/publish.js` - pure decisions: slug generator, fuzzy-resolve guard, GET visibility, parse+render wrapper.
-- `app/api/dashboard/custom-briefs/route.js` - `handleClientBriefPost`, `PATCH`, GET filter, `serializeBriefDoc` keeps kind `client-brief`.
-- `app/briefs/_lib/custom-briefs.js` - exact-id/exact-slug resolution for client briefs; `briefPrivacyHeaders`.
+- `app/api/dashboard/custom-briefs/route.js` - `handleClientBriefPost` (create / update / preview), `PATCH`, GET filter, `serializeBriefDoc` (adds `sourceText`, `layoutVersion` for client briefs). The invoice/brief POST rejects (409) a `briefSlug` that belongs to an existing client brief instead of overwriting it as kind `brief` (deliberate exception to "invoice/brief kinds unchanged").
+- `app/briefs/_lib/custom-briefs.js` - exact-id/exact-slug resolution for client briefs; `briefPrivacyHeaders`; OG meta builders.
 - `app/briefs/[clientId]/[briefSlug]/{route,pdf/route,og-image/route}.js` - `cache-control: no-store` + `X-Robots-Tag: noindex, nofollow` for client briefs.
 - `app/api/dashboard/custom-briefs/vercel/route.js` - rejects client briefs (no Vercel side effects).
 - `features/intelligence/_digest-brief-link.js`, `features/x-strategy/brief-bundle.js` - skip client briefs when picking the newest public brief.
-- `components/dashboard/ClientBriefCard.jsx`, `DashboardPage.jsx`, `lib/dashboard/tile-config.js` (CUSTOM_DETAIL_CARD_IDS).
+- `components/dashboard/ClientBriefCard.jsx`, `DashboardPage.jsx` (Admin category), `lib/dashboard/tile-config.js` (`CUSTOM_DETAIL_CARD_IDS`, `CARD_ACTION_EDIT`).
 
 ## Privacy
 - Doc id AND `publicBriefSlug` = `client-brief-<YYYYMMDD>-<16 hex>` (64 random bits), never derived from the title.
 - Public resolution of a client brief is by exact doc id / exact `publicBriefSlug` only; hyphen-variant and compacted-title fallbacks skip client briefs.
-- `addToClientBrain` is forced false (no Client Brain ingest). No Vercel calls.
-- Non-admins never receive client briefs from GET. Admins get them (public or not) only with `?kind=client-brief`; the default GET list keeps its previous shape (public, non-client-brief) so existing consumers are unchanged.
-- OG label defaults to `HITLOOP` (not the owner's name).
+- `addToClientBrain` is forced false. No Vercel calls.
+- Non-admins never receive client briefs from GET. Admins get them (public or not) only with `?kind=client-brief`.
 
-## Unpublish semantics
-- `PATCH { briefSlug, public:false }` (admin): sets `public:false`, deletes the stored PDF object (and the brief-runs prefixes), clears `pdfArtifact` / `pdfUrl`. The public page, `/pdf` and `/og-image` then 404.
+## Unpublish semantics (unchanged from v1)
+- `PATCH { briefSlug, public:false }` (admin): `public:false`, deletes the stored PDF object (and the brief-runs prefixes), clears `pdfArtifact` / `pdfUrl`. The public page, `/pdf` and `/og-image` then 404. If the PDF cannot be deleted the doc is still unpublished but keeps the pointers and the response carries a `warning`.
 - `PATCH { briefSlug, public:true }`: republish; the PDF re-renders lazily on the next `/pdf` request.
-- `DELETE` (existing) still removes the doc, PDF artifacts and any brain references.
-- Publish order: Firestore doc first, then the PDF, then the doc is updated with `pdfArtifact`/`pdfUrl`. A failed PDF is a warning (doc stays; `/pdf` renders lazily). A failed doc write renders no PDF.
-- If unpublish cannot delete the stored PDF, the doc is still set `public:false` but keeps `pdfArtifact`/`pdfUrl` and the response carries a `warning`.
-- DELETE resolves a client brief by exact id / exact public slug only.
-- PDF is rendered at publish via `persistBriefPdfArtifact` in `edge-to-edge` mode; the `/pdf` route's lazy path works for this kind.
+- `DELETE` removes the doc, PDF artifacts and any brain references (exact id / exact public slug only).
+- Publish order: Firestore doc first, then the PDF, then the doc is updated with `pdfArtifact`/`pdfUrl`. A failed PDF is a warning; a failed doc write renders no PDF.
 
 ## MCP (owner server)
-`publish_client_brief {clientId, text, title?}` / `unpublish_client_brief {clientId, briefSlug}` / `list_client_briefs {clientId}` (`features/mcp/tools/client-brief.js`) call this same route in-process with the owner's authorization and `?as=<clientId>`, then verify the response's `clientId` matches. Example prompt to ChatGPT (connected to `/api/mcp`): "Make a client brief for Not The Rug from this: <pasted breakdown>" -> returns the hosted URL and PDF link. Only on explicit request; text is client-facing.
+`publish_client_brief {clientId, text, title?, ogLabel?, ogSubhead?, hideOgSubhead?, ogTitleLines? (<=3), ogLines? (<=2), briefSlug?}` returns `{ publicUrl, pdfUrl, ogImageUrl, briefSlug, clientId, title, warnings }`; `briefSlug` of an existing client brief updates it in place. Updates count against the 20/UTC-day cap like publishes. `unpublish_client_brief` / `list_client_briefs` unchanged in shape (`features/mcp/tools/client-brief.js`); they call this same route in-process with the owner's authorization and `?as=<clientId>`, then verify the response's `clientId`. See `docs/source-of-truth/HITLOOP-MCP-SERVER.md`.
 
 ## Tests (`node --test`, fakes only)
-- `features/client-brief/__tests__/parse.test.js`, `render.test.js`, `publish.test.js`
-- `app/api/dashboard/custom-briefs/__tests__/client-brief-route.test.js` (+ `next-server-stub-hooks.mjs`, test-only resolver for `next/server`)
-- `features/x-strategy/__tests__/brief-bundle.test.js` (client-brief case)
-- `features/mcp/__tests__/client-brief-tools.test.js` (MCP tools, fake route)
-- Regression: `features/invoices/__tests__/*.test.js`, `features/leadgen/__tests__/*.test.js`
+- `features/client-brief/__tests__/{parse,render,publish}.test.js`
+- `app/api/dashboard/custom-briefs/__tests__/client-brief-route.test.js` (publish, OG fields, update in place + rejections, invoice-overwrite guard, lazy `/pdf` modes), `og-preview-route.test.js`
+- `features/x-strategy/__tests__/brief-bundle.test.js`, `features/mcp/__tests__/client-brief-tools.test.js`
+- Regression: `features/invoices/__tests__/*.test.js`, `lib/theme-migration/__tests__/*.test.js`
 
 ## Known limits
-- The digest/bundle "newest public brief" queries are `limit(20)` then filtered, so 20+ newer public client briefs could hide an older ordinary brief.
-- Not verified in a real browser or a real Browserless PDF render (no network/dev server in the build sandbox).
+- Digest/bundle "newest public brief" queries are `limit(20)` then filtered, so 20+ newer public client briefs could hide an older ordinary brief.
+- Markdown subset: nested lists beyond one level flatten (a sub-list takes its first item's type); blockquotes hold paragraphs only (lists/headings inside a quote show as text); no setext headings (`Title` + `---` = paragraph + rule), strikethrough, images or footnotes; a line starting `N.` or `-` always starts a list, even mid-paragraph. Table rows wider than the header keep every cell.
+- The card's OG editor mirrors the invoice Publish card (subhead, 2 headline lines, 2 extra lines, hide subhead). `ogLabel` is stored but, as with invoices, the invoice OG variant does not draw it, so the card has no Label input (MCP can still set it).
+- MCP `publish_client_brief` with `briefSlug` (update) never sends `public`, so an unpublished brief stays unpublished.
+- Verified locally with Playwright (screen + A4 print of a sample); not yet against a real production Browserless render.

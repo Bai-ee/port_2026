@@ -1,156 +1,115 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { assertFirestoreSafe } from './firestore-safe.js';
-import { parseClientBrief, parseInline, CLIENT_BRIEF_MAX_CHARS, ClientBriefParseError } from '../parse.js';
+import { parseClientBrief, parseInline, inlineToPlain, CLIENT_BRIEF_MAX_CHARS, ClientBriefParseError } from '../parse.js';
 
-const plain = (tokens) => tokens.map((t) => t.v).join('');
+const plain = inlineToPlain;
+const types = (m) => m.blocks.map((b) => b.type);
 
-test('headings of every style start sections; first lone H1 is the title', () => {
-  const m = parseClientBrief('# Daily Update\n\n## Wins\nText one.\n\n### Risks\nText two.\n\n**Next steps**\nText three.\n\n**Watch list**:\nText four.');
-  assert.equal(m.title, 'Daily Update');
-  assert.deepEqual(m.sections.map((s) => s.heading), ['Wins', 'Risks', 'Next steps', 'Watch list']);
+test('every block type comes out in SOURCE ORDER, nothing grouped or reordered', () => {
+  const src = [
+    '# Title', '', 'Para one.', '', '> quoted', '', '- a', '- b', '', '---', '',
+    '1. x', '2. y', '', '| h1 | h2 |', '|---|---|', '| c1 | c2 |', '', '```js', 'const a = 1;', '```', '', '## Last', 'Revenue: $1,284',
+  ].join('\n');
+  const m = parseClientBrief(src);
+  assert.deepEqual(types(m), ['heading', 'paragraph', 'blockquote', 'list', 'hr', 'list', 'table', 'code', 'heading', 'paragraph']);
+  assert.equal(m.blocks[0].level, 1);
+  assert.equal(m.blocks[8].level, 2);
+  // "Label: value" is just a paragraph now (no stats grouping)
+  assert.equal(plain(m.blocks[9].tokens), 'Revenue: $1,284');
 });
 
-test('explicit title option wins; default title applies', () => {
-  assert.equal(parseClientBrief('# Heading\nbody', { title: 'Custom' }).title, 'Custom');
-  assert.equal(parseClientBrief('## A\nbody').title, 'Client Brief');
+test('all heading levels; the first H1 is the title but STAYS in the body', () => {
+  const m = parseClientBrief('# One\n## Two\n### Three\n#### Four\n##### Five\n###### Six');
+  assert.deepEqual(m.blocks.map((b) => b.level), [1, 2, 3, 4, 5, 6]);
+  assert.equal(m.title, 'One');
+  assert.equal(parseClientBrief('# One\nx', { title: 'Custom' }).title, 'Custom');
+  assert.equal(parseClientBrief('plain text').title, 'Client Brief');
 });
 
-test('bold-label and plain Label: value lines group into one stats block', () => {
-  const m = parseClientBrief('## Numbers\n**Revenue (USD)**: $1,200\n**Orders:** 14\nVisits: 300\n\nSome paragraph after.');
-  const [stats, para] = m.sections[0].blocks;
-  assert.equal(stats.type, 'stats');
-  assert.deepEqual(stats.rows.map((r) => r.label), ['Revenue (USD)', 'Orders', 'Visits']);
-  assert.equal(plain(stats.rows[0].value), '$1,200');
-  assert.equal(para.type, 'para');
+test('ordered list keeps its start number; unordered markers; one nested level, deeper flattens', () => {
+  const m = parseClientBrief('3. three\n4. four\n\n- a\n  - b\n    - c\n* d\n+ e');
+  const [ol, ul] = m.blocks;
+  assert.equal(ol.ordered, true);
+  assert.equal(ol.start, 3);
+  assert.equal(ul.ordered, false);
+  assert.deepEqual(ul.items.map((i) => plain(i.tokens)), ['a', 'd', 'e']);
+  assert.deepEqual(ul.items[0].sub.items.map((i) => plain(i.tokens)), ['b', 'c']);
+  assert.equal(ul.items[0].sub.items[0].sub, undefined);
 });
 
-test('stats stay one block across a blank line, split by other blocks', () => {
-  const m = parseClientBrief('## S\nA: 1\n\nB: 2\n\n- bullet\n\nC: 3');
-  assert.deepEqual(m.sections[0].blocks.map((b) => b.type), ['stats', 'list', 'stats']);
-  assert.equal(m.sections[0].blocks[0].rows.length, 2);
+test('GFM table: header, alignment, rows padded to header width, escaped pipes', () => {
+  const m = parseClientBrief('| Name | Qty | Note |\n|:--|--:|:-:|\n| a | 1 |\n| b \\| c | 2 | x | extra |');
+  const t = m.blocks[0];
+  assert.equal(t.type, 'table');
+  assert.deepEqual(t.align, ['left', 'right', 'center']);
+  assert.deepEqual(t.header.cells.map((c) => plain(c.tokens)), ['Name', 'Qty', 'Note']);
+  assert.equal(t.rows.length, 2);
+  assert.deepEqual(t.rows[0].cells.map((c) => plain(c.tokens)), ['a', '1', '']);
+  assert.equal(plain(t.rows[1].cells[0].tokens), 'b | c');
+  assert.equal(t.rows[1].cells.length, 4); // extra cells are kept, never dropped
 });
 
-test('bullets of every marker become one list; numbered and unicode too', () => {
-  const m = parseClientBrief('## L\n- one\n* two\n• three\n1. four\n2) five');
-  const [bullets, numbered] = m.sections[0].blocks;
-  assert.equal(bullets.type, 'list');
-  assert.equal(bullets.ordered, false);
-  assert.deepEqual(bullets.items.map((i) => plain(i.tokens)), ['one', 'two', 'three']);
-  assert.equal(numbered.ordered, true);
-  assert.deepEqual(numbered.items.map((i) => plain(i.tokens)), ['four', 'five']);
+test('thematic breaks: ---, ***, ___ (also never a setext heading)', () => {
+  const m = parseClientBrief('text\n---\n\n***\n\n___');
+  assert.deepEqual(types(m), ['paragraph', 'hr', 'hr', 'hr']);
 });
 
-test('model is Firestore-safe (no array directly inside an array) with intro + bullets + numbered list', () => {
-  const m = parseClientBrief('Intro one.\n\nIntro two.\n\n## A\n- b1\n- b2\n\n1. n1\n2. n2\nK: v\n\n| x | y |\n|---|---|\n| 1 | 2 |');
-  assert.equal(m.intro.length, 2);
-  assert.ok(Array.isArray(m.intro[0].tokens));
-  assertFirestoreSafe(m);
-  assert.throws(() => assertFirestoreSafe({ a: [[1]] }), /nested array/);
+test('fenced code is KEPT (backtick and tilde, language kept)', () => {
+  const m = parseClientBrief('```bash\nnpm run x\n  indented\n```\n\n~~~\nplain\n~~~');
+  assert.deepEqual(types(m), ['code', 'code']);
+  assert.equal(m.blocks[0].lang, 'bash');
+  assert.equal(m.blocks[0].text, 'npm run x\n  indented');
+  assert.equal(m.blocks[1].text, 'plain');
 });
 
-test('URLs and times are not mistaken for labels', () => {
-  const m = parseClientBrief('## X\nhttps://example.com/path is live.\nMeet at 10:30 tomorrow.');
-  assert.equal(m.sections[0].blocks.length, 1);
-  assert.equal(m.sections[0].blocks[0].type, 'para');
+test('HITLOOP COMMAND fenced blocks (info string or first line) and their caption are stripped', () => {
+  const a = parseClientBrief('Keep me.\n\nHITLOOP COMMAND\n```\nrun this\n```\n\nAfter.');
+  assert.deepEqual(a.blocks.map((b) => plain(b.tokens)), ['Keep me.', 'After.']);
+  const b = parseClientBrief('Keep.\n\n```HITLOOP COMMAND\nrun\n```');
+  assert.deepEqual(types(b), ['paragraph']);
+  const c = parseClientBrief('Keep.\n\n```\nHITLOOP COMMAND: do\nrun\n```'.replace('COMMAND: do', 'COMMAND'));
+  assert.deepEqual(types(c), ['paragraph']);
+  assert.throws(() => parseClientBrief('```\nHITLOOP COMMAND\nx\n```'), { code: 'empty' });
 });
 
-test('inline markup: bold, em, code, safe links; javascript: rejected', () => {
-  const t = parseInline('**b** *e* `c` [ok](https://a.com/x) [bad](javascript:alert(1)) [data](data:text/html,x) see https://b.com/y.');
-  assert.deepEqual(t.filter((x) => x.t !== 'text').map((x) => x.t), ['b', 'em', 'code', 'link', 'link']);
-  const links = t.filter((x) => x.t === 'link');
-  assert.equal(links[0].href, 'https://a.com/x');
-  assert.equal(links[1].href, 'https://b.com/y');
-  const joined = plain(t);
-  assert.ok(joined.includes('bad') && joined.includes('data'));
-  assert.ok(!JSON.stringify(t).includes('javascript:'));
-  assert.ok(!JSON.stringify(t).includes('data:text'));
+test('inline: bold, italic, bold-italic, code, links, nesting', () => {
+  const t = parseInline('a **b** *c* ***d*** `e` [f](https://x.com/p) **g [h](https://y.com)**');
+  assert.deepEqual(t.map((x) => x.t), ['text', 'b', 'text', 'em', 'text', 'bem', 'text', 'code', 'text', 'link', 'text', 'b']);
+  assert.equal(t[9].href, 'https://x.com/p');
+  assert.equal(t[11].c.find((x) => x.t === 'link').href, 'https://y.com/');
+  assert.equal(parseInline('mail [me](mailto:a@b.co)')[1].href, 'mailto:a@b.co');
+  assert.equal(parseInline('see https://x.com/a.')[1].href, 'https://x.com/a');
 });
 
-test('fenced code and HITLOOP COMMAND blocks are stripped, even unclosed', () => {
-  const m = parseClientBrief('## A\nkeep me\n\nHITLOOP COMMAND\n```\nrm -rf secret\n```\n\n```js\nconsole.log(1)\n```\nafter\n\n```\nunclosed internal');
-  const text = JSON.stringify(m);
-  assert.ok(!/secret|console|unclosed|HITLOOP COMMAND/.test(text), text);
-  assert.ok(text.includes('keep me') && text.includes('after'));
+test('line breaks inside a paragraph are kept as br tokens', () => {
+  const m = parseClientBrief('line one\nline two  \nline three');
+  assert.deepEqual(m.blocks[0].tokens.filter((t) => t.t === 'br').length, 2);
 });
 
-test('text before the first heading becomes intro; mixed preface becomes a section', () => {
-  const a = parseClientBrief('Hello there.\n\nSecond line.\n\n## Wins\n- x');
-  assert.equal(a.intro.length, 2);
-  const b = parseClientBrief('- early bullet\n\n## Wins\n- x');
-  assert.equal(b.intro.length, 0);
-  assert.equal(b.sections[0].heading, '');
-  assert.equal(b.sections.length, 2);
+test('raw HTML and unsafe links are never interpreted: html stays text, javascript: link is text only', () => {
+  const m = parseClientBrief('<script>alert(1)</script> <b>x</b> [bad](javascript:alert(1)) [d](data:text/html,x) ![i](https://x.com/a.png)');
+  const tokens = m.blocks[0].tokens;
+  assert.ok(tokens.every((t) => t.t !== 'link' || /^https?:/.test(t.href)));
+  assert.ok(plain(tokens).includes('<script>alert(1)</script>'));
+  assert.ok(!tokens.some((t) => t.href && /javascript|data:/i.test(t.href)));
+  assert.equal(plain(tokens).includes('javascript:'), false);
 });
 
-test('rules separate blocks and are not rendered; tables flatten to list rows', () => {
-  const m = parseClientBrief('## T\nline a\n---\nline b\n\n| Metric | Value |\n|---|---|\n| Sales | 5 |');
-  const types = m.sections[0].blocks.map((b) => b.type);
-  assert.deepEqual(types, ['para', 'para', 'list']);
-  assert.deepEqual(m.sections[0].blocks[2].items.map((i) => plain(i.tokens)), ['Metric · Value', 'Sales · 5']);
+test('model is Firestore-safe (no arrays directly in arrays, no undefined)', () => {
+  const src = '# T\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n1. x\n   - y\n\n> q\n\n```\nc\n```';
+  assertFirestoreSafe(parseClientBrief(src, { clientName: 'Co', asOf: '2026-11-18' }), 'model');
 });
 
-test('empty, whitespace-only, non-string, code-only and oversize input rejected', () => {
-  for (const bad of ['', '   \n  ', null, undefined, 5, '```\nonly code\n```']) {
-    assert.throws(() => parseClientBrief(bad), ClientBriefParseError);
-  }
-  assert.throws(() => parseClientBrief('x'.repeat(CLIENT_BRIEF_MAX_CHARS + 1)), (e) => e.code === 'too_long');
-  assert.doesNotThrow(() => parseClientBrief('x'.repeat(CLIENT_BRIEF_MAX_CHARS)));
+test('empty / oversized text is rejected with a coded error', () => {
+  assert.throws(() => parseClientBrief('   '), (e) => e instanceof ClientBriefParseError && e.code === 'empty');
+  assert.throws(() => parseClientBrief(null), { code: 'empty' });
+  assert.throws(() => parseClientBrief('x'.repeat(CLIENT_BRIEF_MAX_CHARS + 1)), { code: 'too_long' });
+  assert.equal(parseClientBrief('x'.repeat(CLIENT_BRIEF_MAX_CHARS)).blocks.length, 1);
 });
 
-test('deterministic: same input, same model', () => {
-  const src = '# T\n## A\nK: v\n- x';
-  assert.deepEqual(parseClientBrief(src, { clientName: 'C', asOf: '2026-11-18' }), parseClientBrief(src, { clientName: 'C', asOf: '2026-11-18' }));
-});
-
-const NTR_SAMPLE = `# NTR Daily Update
-
-Good morning. Here is where things stand for **Wednesday, Nov 18**.
-
----
-
-## Snapshot
-**Revenue (yesterday)**: $1,284.50 (+6% vs last Wed)
-**Orders**: 47
-**Website visits**: 912
-Top item: Al pastor taco plate
-
-## What worked
-- Instagram reel on Monday drove **2x** the usual saves
-- Email "Taco Tuesday" opened at 41%
-- Google review count is now 212 ([view](https://maps.google.com/?q=ntr))
-
-## Needs attention
-**Slow Thursday lunches**
-We are under target by about 18% between 11am and 1pm.
-
-Suggested moves:
-1. Post a lunch-special story Wednesday evening
-2. Test a $9 combo
-3. Ask regulars for a quick review
-
-## Next steps
-- Approve the weekend promo draft
-- Send updated menu photos
-
-\`\`\`
-HITLOOP COMMAND
-set-flag internal=true
-\`\`\`
-`;
-
-test('realistic NTR daily update parses into the expected structure', () => {
-  const m = parseClientBrief(NTR_SAMPLE, { clientName: 'NTR', asOf: '2026-11-18' });
-  assert.equal(m.title, 'NTR Daily Update');
-  assert.equal(m.intro.length, 1);
-  assert.deepEqual(m.sections.map((s) => s.heading), ['Snapshot', 'What worked', 'Needs attention', 'Slow Thursday lunches', 'Suggested moves', 'Next steps']);
-  const snapshot = m.sections[0].blocks[0];
-  assert.equal(snapshot.type, 'stats');
-  assert.equal(snapshot.rows.length, 4);
-  assert.equal(snapshot.rows[3].label, 'Top item');
-  const worked = m.sections[1].blocks[0];
-  assert.equal(worked.items.length, 3);
-  assert.ok(worked.items[2].tokens.some((t) => t.t === 'link' && t.href.startsWith('https://maps.google.com')));
-  assert.equal(m.sections[4].blocks[0].items.length, 3);
-  assert.ok(!JSON.stringify(m).includes('set-flag'));
+test('table rows wider than the header keep every cell (no content loss)', () => {
+  const m = parseClientBrief('| A | B |\n|---|---|\n| 1 | 2 | 3 |');
+  const table = m.blocks.find((b) => b.type === 'table');
+  assert.equal(table.rows[0].cells.length, 3);
 });
