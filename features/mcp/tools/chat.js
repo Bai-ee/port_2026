@@ -15,7 +15,9 @@ const authFor = (ctx) => ({ decoded: { email: ctx.email, uid: ctx.uid ?? null } 
 const actingAuthFor = async (ctx) => {
   // By the verified admin email only (ctx.uid is the MCP identity, not necessarily the Firebase uid).
   const authorization = await (ctx.services?.ownerAuthorization || ownerAuthorization)({ email: ctx.email });
-  return authorization ? { ...authFor(ctx), authorization, impersonating: true } : authFor(ctx);
+  // origin: routes that build absolute links (client brief publicUrl / pdfUrl) need the real public origin, not a placeholder.
+  const origin = String(ctx.origin || process.env.MCP_PUBLIC_ORIGIN || '').replace(/\/+$/, '') || null;
+  return authorization ? { ...authFor(ctx), authorization, impersonating: true, ...(origin ? { origin } : {}) } : authFor(ctx);
 };
 const clip = (v, n) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const DASHBOARD_PATH = 'HITLOOP Marketing Director > Strategy (chat)';
@@ -93,7 +95,7 @@ const chatSend = defTool({
 const findActions = defTool({
   name: 'find_actions',
   title: 'Find dashboard actions',
-  description: ACTION_TOOLS.find((t) => t.name === 'find_actions').description + ' Over MCP this only SEARCHES the registry (what the dashboard can do and its arguments); to have one run, use chat_send, which turns writes into cards the owner confirms in the dashboard.',
+  description: ACTION_TOOLS.find((t) => t.name === 'find_actions').description + ' Over MCP this only SEARCHES the registry (what the dashboard can do and its arguments); to have one run, use chat_send: reads and tier-1 reversible writes (e.g. briefs.client.*) run directly, while tier 2/3 actions become cards the owner confirms in the dashboard. Client briefs: prefer calling publish_client_brief directly.',
   inputSchema: { type: 'object', properties: { query: str('What to do, in plain words'), group: str('Optional group filter'), clientId: CLIENT_ID_PROP }, required: ['query'] },
   handler: async ({ args, ctx }) => {
     const clientId = await resolveClientId(ctx, args);

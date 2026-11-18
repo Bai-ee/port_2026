@@ -21,6 +21,7 @@
 import { randomUUID } from 'node:crypto';
 import { ROUTE_MODULES as DEFAULT_ROUTE_MODULES, ROUTE_FILES, ROUTE_AUTH, getAction as defaultGetAction, findActions as defaultFindActions } from './action-registry.js';
 import { REFRESH_GROUP_IDS } from '../contracts.js';
+import { reserveDailyClientBriefSlot } from '../../mcp/limits.js';
 import { REFRESH_GROUPS, estimateFor } from '../../../components/dashboard/marketing/refresh-groups.js';
 
 export const ACTION_ITEMS_MAX = 50;
@@ -234,6 +235,7 @@ export function normalizeActionPayload(raw, { registry } = {}) {
   const list = Array.isArray(p.items) ? p.items : isPlain(p.args) ? [p.args] : p.items === undefined && p.args === undefined ? [{}] : null;
   if (!list || !list.length) return { ok: false, errors: ['items must be a non-empty array of args'] };
   if (list.length > ACTION_ITEMS_MAX) return { ok: false, errors: [`at most ${ACTION_ITEMS_MAX} items per action`] };
+  if (entry.singleItem && list.length > 1) return { ok: false, errors: ['this action runs one item per call'] };
   const items = [];
   list.forEach((a, i) => {
     const v = validateActionArgs(entry, a ?? {});
@@ -287,6 +289,7 @@ export async function invokeAction(entry, args, ctx, { routeModules = DEFAULT_RO
   const explicit = auth.clientFrom === 'explicit';
   if (!explicit && ctx.impersonating && ctx.clientId) qs.set('as', ctx.clientId);
   const headers = { authorization: ctx.authorization, 'content-type': 'application/json' };
+  if (entry.clientEcho && !ctx.origin) throw new Error('the public origin is not known here, so the links would be wrong; use the dashboard Strategy chat or the dedicated MCP tool');
   const rel = (ROUTE_FILES[entry.route] || `app/api/dashboard/${entry.route}/route.js`).replace(/^app/, '').replace(/\/route\.js$/, '');
   let url = `${ctx.origin || 'http://internal'}${rel}`;
   let init;
@@ -298,15 +301,36 @@ export async function invokeAction(entry, args, ctx, { routeModules = DEFAULT_RO
     init = { method: 'GET', headers };
   } else {
     // Order: agent args, then `fixed` (the agent can never override it), then the system fields.
-    init = { method: entry.method, headers, body: JSON.stringify({ ...(args || {}), ...(entry.fixed || {}), ...(entry.action ? { action: entry.action } : {}), clientId: ctx.clientId }) };
+    // defaultsUnlessArg (create vs update): body defaults that apply only while `arg` is absent, and never override the agent.
+    const d = entry.defaultsUnlessArg;
+    const defaults = d && (args?.[d.arg] === undefined || args?.[d.arg] === null || args?.[d.arg] === '') ? d.body : {};
+    init = { method: entry.method, headers, body: JSON.stringify({ ...defaults, ...(args || {}), ...(entry.fixed || {}), ...(entry.action ? { action: entry.action } : {}), clientId: ctx.clientId }) };
   }
   const q = qs.toString();
   if (q) url += `?${q}`;
-  const res = await handler(new Request(url, init));
+  const request = new Request(url, init);
+  // Some routes read request.nextUrl (origin, searchParams), which a plain Request lacks.
+  Object.defineProperty(request, 'nextUrl', { value: new URL(url), enumerable: false });
+  const res = await handler(request);
   let json = null;
   try { json = await res.json(); } catch { json = null; }
-  const ok = res.status < 400 && json?.ok !== false && !(isPlain(json) && json.error);
+  let ok = res.status < 400 && json?.ok !== false && !(isPlain(json) && json.error);
+  // clientEcho: never trust the route's client resolution; the answer must be for the client that was asked for.
+  if (ok && entry.clientEcho && ctx.clientId && json?.clientId !== ctx.clientId) {
+    return { ok: false, status: res.status, json: { error: `Refused: the route answered for client "${json?.clientId ?? 'none'}", not "${ctx.clientId}". Check the dashboard before reporting anything as done.` } };
+  }
+  if (ok && entry.resultPick) json = pickResult(json, entry.resultPick);
   return { ok, status: res.status, json };
+}
+
+/** Boil a route response down to `pick` ({out:'dotted.path'}) or a capped list of picked rows ({list, limit, pick}). */
+export function pickResult(json, spec) {
+  const take = (src, pick) => Object.fromEntries(Object.entries(pick).map(([k, p]) => [k, getPath(src, p)]).filter(([, v]) => v !== undefined && v !== null && v !== ''));
+  if (spec.list) {
+    const rows = Array.isArray(json?.[spec.list]) ? json[spec.list] : [];
+    return { clientId: json?.clientId ?? null, count: rows.length, [spec.list]: rows.slice(0, spec.limit || 30).map((r) => take(r, spec.pick)) };
+  }
+  return take(json, spec);
 }
 
 // ---- the runtime ---------------------------------------------------------------------------------------------
@@ -328,7 +352,7 @@ const ARMED_POST_STATUSES = new Set(['scheduled', 'queued', 'manual', 'posting',
 const isArmedPost = (path, before) => String(path).startsWith('social_posts/') && !!before
   && (ARMED_POST_STATUSES.has(before.status) || !!before.scheduledAt);
 
-export function createActionRuntime({ audit, autonomy, docs, invoke, registry, clock = Date.now, idGen = () => randomUUID().replace(/-/g, '').slice(0, 20) } = {}) {
+export function createActionRuntime({ audit, autonomy, docs, invoke, registry, counters, clock = Date.now, idGen = () => randomUUID().replace(/-/g, '').slice(0, 20) } = {}) {
   const reg = { getAction: defaultGetAction, findActions: defaultFindActions, ...(registry || {}) };
   const call = invoke || ((entry, args, ctx) => invokeAction(entry, args, ctx, { routeModules: reg.ROUTE_MODULES || DEFAULT_ROUTE_MODULES }));
   const getAutonomy = async (clientId) => normalizeAutonomy(await autonomy.get(clientId));
@@ -361,10 +385,13 @@ export function createActionRuntime({ audit, autonomy, docs, invoke, registry, c
     return ref.field ? (getPath(doc, ref.field) ?? null) : doc;
   };
 
+  // noUndoWhenArg: an entry whose run with that arg present has no honest undo (e.g. a client-brief UPDATE overwrites text).
+  const hasUndo = (entry, args) => !!entry.undo && !(entry.noUndoWhenArg && args?.[entry.noUndoWhenArg]);
+
   async function snapshotBefore(entry, args, ctx) {
-    if (!entry.snapshot?.length) return { snaps: [], undoable: !!entry.undo };
+    if (!entry.snapshot?.length) return { snaps: [], undoable: hasUndo(entry, args) };
     const refs = refsFor(entry, args, ctx.clientId);
-    if (!refs) return { snaps: [], undoable: !!entry.undo };
+    if (!refs) return { snaps: [], undoable: hasUndo(entry, args) };
     const snaps = [];
     for (const ref of refs) {
       const before = await readRef(ref);
@@ -373,7 +400,7 @@ export function createActionRuntime({ audit, autonomy, docs, invoke, registry, c
       snaps.push({ path: ref.path, ...(ref.field ? { field: ref.field } : {}), before: clone(before) });
     }
     const size = JSON.stringify(snaps).length;
-    if (size > SNAPSHOT_MAX_CHARS) return { snaps: [], undoable: !!entry.undo, tooLarge: true };
+    if (size > SNAPSHOT_MAX_CHARS) return { snaps: [], undoable: hasUndo(entry, args), tooLarge: true };
     return { snaps, undoable: true };
   }
 
@@ -381,14 +408,22 @@ export function createActionRuntime({ audit, autonomy, docs, invoke, registry, c
   async function runItem(entry, args, ctx) {
     const snap = await snapshotBefore(entry, args, ctx);
     let out;
-    try { out = await call(entry, args, ctx); } catch (err) { out = { ok: false, status: 0, json: { error: String(err?.message || err).slice(0, 200) } }; }
+    try {
+      // dailyCap 'client-brief': shares the MCP publish_client_brief cap (limits.js). Fails CLOSED without counters.
+      if (entry.dailyCap === 'client-brief') {
+        const c = typeof counters === 'function' ? counters() : counters;
+        if (!c) throw new Error('The daily client-brief cap cannot be checked here, so nothing was published. Use the dashboard Admin > CLIENT BRIEF.');
+        await reserveDailyClientBriefSlot(c, { now: clock() });
+      }
+      out = await call(entry, args, ctx);
+    } catch (err) { out = { ok: false, status: 0, json: { error: String(err?.message || err).slice(0, 200) } }; }
     const item = { args: compactJson(args, 800), status: out.ok ? 'ok' : 'failed', httpStatus: out.status, result: compactJson(out.json, RESULT_MAX_CHARS) };
     if (out.ok && snap.undoable && snap.snaps.length) {
       item.snapshots = [];
       for (const s of snap.snaps) item.snapshots.push({ ...s, after: clone(await readRef(s)) });
     }
-    item.undoable = out.ok && snap.undoable && (!!entry.undo || !!item.snapshots?.length);
-    if (out.ok && entry.undo) item.undoArgs = nativeUndoArgs(entry, args, out.json);
+    item.undoable = out.ok && snap.undoable && (hasUndo(entry, args) || !!item.snapshots?.length);
+    if (out.ok && hasUndo(entry, args)) item.undoArgs = nativeUndoArgs(entry, args, out.json);
     return { item, raw: out };
   }
 
@@ -425,8 +460,10 @@ export function createActionRuntime({ audit, autonomy, docs, invoke, registry, c
     ok: exec.status !== 'failed',
     message: exec.status === 'ok' ? `${entry.title}: done${exec.results.length > 1 ? ` (${exec.done} of ${exec.results.length})` : ''}.${exec.undoable ? ' You can undo it.' : ''}`
       : exec.status === 'partial' ? `${entry.title}: ${exec.done} of ${exec.results.length} done; the rest failed.` : `${entry.title}: failed.`, status: exec.status, actionId: entry.id, done: exec.done, of: exec.results.length,
-    ...(exec.undoable ? { undoId: exec.id } : { undoNote: 'not undoable' }),
+    ...(exec.undoable ? { undoId: exec.id } : { undoNote: (exec.status !== 'failed' && entry.noUndoNote) || 'not undoable' }),
     results: exec.results.map((r) => ({ status: r.status, result: compactJson(r.result, 500) })).slice(0, 10),
+    // resultPick entries: the picked fields (links, ids) in full, so the agent can hand them to the owner verbatim.
+    ...(entry.resultPick && exec.rawResults?.length === 1 && exec.rawResults[0].ok ? { output: compactJson(exec.rawResults[0].json, 1500) } : {}),
   });
 
   return {
@@ -452,6 +489,7 @@ export function createActionRuntime({ audit, autonomy, docs, invoke, registry, c
       if (refused) return { kind: 'error', error: refused };
       const list = Array.isArray(items) ? items : [args ?? {}];
       if (!list.length || list.length > ACTION_ITEMS_MAX) return { kind: 'error', error: `items must hold 1-${ACTION_ITEMS_MAX} entries` };
+      if (entry.singleItem && list.length > 1) return { kind: 'error', error: `${entry.title} runs one item per call (one brief per run_action).` };
       const checked = list.map((a) => validateActionArgs(entry, a ?? {}));
       const bad = checked.map((c, i) => (c.ok ? null : `item ${i + 1}: ${c.errors.join('; ')}`)).filter(Boolean);
       if (bad.length) return { kind: 'error', error: bad.slice(0, 5).join(' | ') };
@@ -572,7 +610,7 @@ export function createActionRuntime({ audit, autonomy, docs, invoke, registry, c
 export const ACTION_TOOLS = Object.freeze([
   {
     name: 'find_actions',
-    description: 'Search the registry of everything the dashboard can do (queue, calendar, content, buckets, strategy, brain, signals, digest, refresh, X Monitor, media, NAS, clients). Call this FIRST whenever the owner asks for something you have no dedicated tool for. Returns id, title, tier (0 read, 1 reversible write, 2 destructive, 3 external or spend) and the argument names/types (* = required). Read-only.',
+    description: 'Search the registry of everything the dashboard can do (queue, calendar, content, buckets, strategy, brain, signals, digest, refresh, X Monitor, media, NAS, client briefs, clients). Call this FIRST whenever the owner asks for something you have no dedicated tool for. Returns id, title, tier (0 read, 1 reversible write, 2 destructive, 3 external or spend) and the argument names/types (* = required). Read-only.',
     input_schema: { type: 'object', properties: { query: { type: 'string', description: 'What to do, in plain words' }, group: { type: 'string', description: 'Optional group filter' } }, required: ['query'] },
   },
   {
