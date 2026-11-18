@@ -38,6 +38,8 @@ const BriefStudio = dynamic(() => import('./brief/BriefStudio'), { ssr: false })
 // REMIX mode (?tool=remix) — the EditVideos video-remix recipe builder. Client-only
 // and lazy; it only talks to /api/dashboard/media, nothing renders in the browser.
 const RemixStudio = dynamic(() => import('./remix/RemixStudio'), { ssr: false });
+// Admin-only review of rendered videos for the curated bucket (?tool=remix&view=review).
+const RemixReview = dynamic(() => import('./remix/RemixReview'), { ssr: false });
 
 const VIEWPORTS = {
   desktop: { width: 1440, height: 900,  bezel: 30, depth: 40, corner: 26, screenCorner: 14, camZ: 2700, label: 'DESKTOP' },
@@ -503,10 +505,23 @@ export default function StudioPage() {
   // the cloth/foil simulator). null until the mount effect reads the URL so
   // neither world builds prematurely and SSR/client markup stay identical.
   const [tool, setTool] = useState(null);
-  const switchTool = useCallback((next) => {
-    setTool(next);
+  // REMIX sub-view: 'review' = curated-bucket review page (admin only); anything else = the builder.
+  const [remixView, setRemixView] = useState(null);
+  const switchRemixView = useCallback((next) => {
+    setRemixView(next);
     try {
       const url = new URL(window.location.href);
+      if (next === 'review') url.searchParams.set('view', 'review');
+      else url.searchParams.delete('view');
+      window.history.replaceState(null, '', url.toString());
+    } catch { /* URL update is cosmetic */ }
+  }, []);
+  const switchTool = useCallback((next) => {
+    setTool(next);
+    setRemixView(null);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('view');
       // 'mockup' stays the clean, param-less default URL; every other tool
       // (cloth, paint, …) gets an explicit ?tool= value.
       if (next === STUDIO_DEFAULT_TOOL) url.searchParams.delete('tool');
@@ -658,6 +673,7 @@ export default function StudioPage() {
 	    // Same resolver the server wrapper's generateMetadata uses, so the tool
 	    // that mounts always matches the social preview the shared link showed.
 	    setTool(resolveStudioTool(params.get('tool')));
+	    if (params.get('view') === 'review') setRemixView('review');
 	  }, []);
 
   // Source the site from the account's established website (no manual input).
@@ -2359,6 +2375,29 @@ export default function StudioPage() {
         </div>
       ) : null}
 
+      {/* REMIX sub-view switch (admin only): BUILD (recipe builder) ⇄ REVIEW (curated-bucket review). */}
+      {tool === 'remix' && isAdmin ? (
+        <div
+          id="remix-view-toggle"
+          data-tooltip-disabled="true"
+          style={{
+            position: 'absolute', top: 56, zIndex: 30, display: 'flex', gap: 4, padding: 4, borderRadius: 999, ...GLASS.surface,
+            ...(isNarrow ? { left: 12 } : { left: 0, right: remixView === 'review' ? 0 : RAIL_W, width: 'fit-content', marginInline: 'auto' }),
+          }}
+        >
+          {[['build', 'BUILD'], ['review', 'REVIEW']].map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => switchRemixView(id === 'review' ? 'review' : null)}
+              style={{ ...ui.btn((remixView === 'review') === (id === 'review')), height: 26, padding: '0 14px', fontSize: 10, flexShrink: 0, whiteSpace: 'nowrap' }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       {/* Body — the canvas/board (with the exportable artboard on it) + the right rail.
           Stacks vertically on narrow screens; the board sits above, the UI below. */}
       <div id="studio-main-row" style={{ flex: 1, position: 'relative', minHeight: 0, display: isNarrow ? 'flex' : 'block', flexDirection: isNarrow ? 'column' : undefined }}>
@@ -2368,6 +2407,8 @@ export default function StudioPage() {
           <LoopStudio isNarrow={isNarrow} railW={RAIL_W} authedFetch={authedFetch} />
         ) : tool === 'cloth' ? (
           <ClothStudio isNarrow={isNarrow} railW={RAIL_W} isAdmin={isAdmin} authedFetch={authedFetch} />
+        ) : tool === 'remix' && remixView === 'review' && isAdmin ? (
+          <RemixReview isNarrow={isNarrow} railW={0} authedFetch={authedFetch} />
         ) : tool === 'remix' ? (
           <RemixStudio isNarrow={isNarrow} railW={RAIL_W} authedFetch={authedFetch} user={user} />
         ) : tool === 'invoice' ? (
