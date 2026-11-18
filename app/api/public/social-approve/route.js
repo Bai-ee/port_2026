@@ -25,7 +25,7 @@ const { validateRemixRecipe } = require('../../../../api/_lib/media-recipe.cjs')
 const clipSelector = require('../../../../api/_lib/media-clip-selector.cjs');
 const {
   enqueueVideoJob,
-  listFolderMedia,
+  listFolderClipsForSelection,
   listOptions,
   triggerWorker,
 } = require('../../../../api/_lib/editvideos-bridge.cjs');
@@ -172,13 +172,13 @@ async function randomizeRecipe(baseRecipe, assetClientId) {
   if (recipe.sourceFolders.length === 1) {
     try {
       const folder = recipe.sourceFolders[0];
-      const media = await listFolderMedia(folder, { limit: 120 });
+      const media = await listFolderClipsForSelection(folder);
       const order = await clipSelector.buildVideoOrder({
         clientId: assetClientId,
         folder,
         files: Array.isArray(media?.files) ? media.files : [],
         segmentCount: clipSelector.DEFAULT_SEGMENT_COUNT,
-        antiRepeatLookback: 3,
+        antiRepeatLookback: 10,
         deps: { listMediaJobs: mediaJobs.listMediaJobs },
       });
       if (order) recipe = validateRemixRecipe({ ...recipe, videoOrder: order });

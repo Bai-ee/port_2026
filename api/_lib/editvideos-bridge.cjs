@@ -324,6 +324,7 @@ async function getVideoJob(editJobId) {
 let _folderCache = { at: 0, folders: null };
 let _folderDetailsCache = { at: 0, folders: null };
 let _folderMediaCache = new Map();
+let _selectionClipCache = new Map(); // selector-only listing, key = folder
 let _corsCache = { at: 0, ok: false };
 let _usageCache = { at: 0, usage: null };
 
@@ -344,6 +345,7 @@ function invalidateFolderCache() {
   _folderCache = { at: 0, folders: null };
   _folderDetailsCache = { at: 0, folders: null };
   _folderMediaCache = new Map();
+  _selectionClipCache = new Map();
   _usageCache = { at: 0, usage: null };
 }
 
@@ -577,6 +579,12 @@ async function signReadUrl(fullPath) {
   }
 }
 
+/** 'video' or 'image' from the file extension / contentType. Shared by both folder listers. */
+function mediaKindFor(name, contentType = '') {
+  const ext = String(name || '').toLowerCase().split('.').pop();
+  return VIDEO_EXTENSIONS.has(ext) || String(contentType || '').startsWith('video/') ? 'video' : 'image';
+}
+
 async function listFolderMedia(folderName, { limit = 60 } = {}) {
   const folder = sanitizeExistingFolderPath(folderName);
   const safeLimit = Math.max(1, Math.min(120, Number(limit) || 60));
@@ -629,13 +637,12 @@ async function listFolderMedia(folderName, { limit = 60 } = {}) {
     const metadata = file.metadata || {};
     const name = String(file.name).split('/').pop();
     const contentType = metadata.contentType || '';
-    const ext = name.toLowerCase().split('.').pop();
     return {
       name,
       fullPath: file.name,
       size: Number(metadata.size || 0),
       contentType,
-      kind: VIDEO_EXTENSIONS.has(ext) || contentType.startsWith('video/') ? 'video' : 'image',
+      kind: mediaKindFor(name, contentType),
       updated: metadata.updated || null,
       url: readUrl,
       posterUrl,
@@ -644,6 +651,49 @@ async function listFolderMedia(folderName, { limit = 60 } = {}) {
 
   const result = { folder, files: items };
   _folderMediaCache.set(cacheKey, { at: Date.now(), result });
+  return result;
+}
+
+const SELECTION_CLIP_HARD_CAP = 2000;
+
+/**
+ * Selector-only folder listing for clip selection (media-clip-selector.cjs).
+ * Unlike listFolderMedia: no signed URLs, no poster index read, no 120 cap
+ * (hard cap SELECTION_CLIP_HARD_CAP), and it carries `timeCreated` so the
+ * selector can favour newer clips. Same media filter as listFolderMedia, but
+ * top-level files only (source folders are flat; subfolder objects are
+ * ignored). `bucket` is injectable for tests.
+ */
+async function listFolderClipsForSelection(folderName, { bucket = null } = {}) {
+  const folder = sanitizeExistingFolderPath(folderName);
+  const cacheKey = `sel:${folder}`;
+  const cached = _selectionClipCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < FOLDER_MEDIA_CACHE_TTL_MS) {
+    return cached.result;
+  }
+  const [files] = await (bucket || bridgeBucket()).getFiles({ prefix: `${folder}/` });
+  // Source folders are flat: only direct children count (no '/' after the prefix).
+  const prefix = `${folder}/`;
+  let mediaFiles = files.filter((file) => (
+    isMediaFilePath(file.name) && !String(file.name).slice(prefix.length).includes('/')
+  ));
+  if (mediaFiles.length > SELECTION_CLIP_HARD_CAP) {
+    console.warn(`[editvideos-bridge] ${folder}: ${mediaFiles.length} media files, selector sees first ${SELECTION_CLIP_HARD_CAP}`);
+    mediaFiles = mediaFiles.slice(0, SELECTION_CLIP_HARD_CAP);
+  }
+  const items = mediaFiles.map((file) => {
+    const name = String(file.name).slice(prefix.length);
+    const metadata = file.metadata || {};
+    return {
+      name,
+      fullPath: file.name,
+      size: Number(metadata.size || 0),
+      kind: mediaKindFor(name, metadata.contentType || ''),
+      timeCreated: metadata.timeCreated || metadata.updated || null,
+    };
+  });
+  const result = { folder, files: items };
+  _selectionClipCache.set(cacheKey, { at: Date.now(), result });
   return result;
 }
 
@@ -1488,6 +1538,7 @@ module.exports = {
   listSourceFolders,
   listSourceFoldersWithCounts,
   listFolderMedia,
+  listFolderClipsForSelection,
   signReadUrl,
   listRenderedVideos,
   bridgeBucket,

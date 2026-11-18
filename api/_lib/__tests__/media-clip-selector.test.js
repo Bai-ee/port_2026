@@ -128,3 +128,128 @@ test('listRecentlyUsedClipNames: honors the lookback depth', async () => {
   const used = await selector.listRecentlyUsedClipNames('c1', 'skyline', 2, { listMediaJobs });
   assert.deepEqual([...used].sort(), ['a.mov', 'b.mov'], 'only the two most recent jobs count');
 });
+
+// ── clip freshness (age-weighted sampling, LRU reuse, wider job window) ─────
+
+/** Small deterministic PRNG (mulberry32) for statistical tests. */
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const NOW = Date.parse('2026-06-01T00:00:00Z');
+const daysAgo = (d) => new Date(NOW - d * 86400000).toISOString();
+
+test('freshnessWeight: floor, half-life, missing and invalid timestamps', () => {
+  const { FRESHNESS_WEIGHT_FLOOR: FLOOR, FRESHNESS_HALF_LIFE_DAYS: HL } = selector;
+  assert.equal(FLOOR, 0.25);
+  assert.equal(HL, 45);
+  assert.ok(Math.abs(selector.freshnessWeight(daysAgo(0), NOW) - 1) < 1e-9);
+  assert.ok(Math.abs(selector.freshnessWeight(daysAgo(45), NOW) - (FLOOR + (1 - FLOOR) / 2)) < 1e-9);
+  assert.ok(Math.abs(selector.freshnessWeight(daysAgo(3650), NOW) - FLOOR) < 1e-6);
+  assert.equal(selector.freshnessWeight(null, NOW), FLOOR);
+  assert.equal(selector.freshnessWeight('not-a-date', NOW), FLOOR);
+  // future timestamps clamp to age 0
+  assert.ok(Math.abs(selector.freshnessWeight(daysAgo(-10), NOW) - 1) < 1e-9);
+});
+
+test('orderClipsFreshFirst: age-0 clip beats age-365 clip about 4:1 over 10k draws', () => {
+  const rng = mulberry32(12345);
+  const files = [
+    { ...clip('new.mov'), timeCreated: daysAgo(0) },
+    { ...clip('old.mov'), timeCreated: daysAgo(365) },
+  ];
+  let newFirst = 0;
+  const draws = 10000;
+  for (let i = 0; i < draws; i += 1) {
+    if (selector.orderClipsFreshFirst(files, new Map(), rng, NOW)[0].name === 'new.mov') newFirst += 1;
+  }
+  // P(new first) = w_new / (w_new + w_old); w_old ~ 0.25 + 0.75*2^(-8.1) ~ 0.253.
+  const ratio = newFirst / (draws - newFirst);
+  assert.ok(ratio > 3.6 && ratio < 4.4, `ratio ${ratio.toFixed(2)} not near 4`);
+});
+
+test('orderClipsFreshFirst: missing timeCreated is weighted like an ancient clip', () => {
+  const rng = mulberry32(777);
+  const files = [
+    { ...clip('new.mov'), timeCreated: daysAgo(0) },
+    clip('unknown.mov'),
+  ];
+  let newFirst = 0;
+  for (let i = 0; i < 10000; i += 1) {
+    if (selector.orderClipsFreshFirst(files, new Map(), rng, NOW)[0].name === 'new.mov') newFirst += 1;
+  }
+  const ratio = newFirst / (10000 - newFirst);
+  assert.ok(ratio > 3.6 && ratio < 4.4, `ratio ${ratio.toFixed(2)} not near 4`);
+});
+
+test('orderClipsFreshFirst: reused clips come last, least-recently-used first', () => {
+  const files = [clip('a.mov'), clip('b.mov'), clip('c.mov'), clip('fresh.mov')];
+  // b used by the newest job (0), a two jobs ago (2), c one job ago (1).
+  const usage = new Map([['b.mov', 0], ['c.mov', 1], ['a.mov', 2]]);
+  const out = selector.orderClipsFreshFirst(files, usage, mulberry32(1), NOW).map((f) => f.name);
+  assert.deepEqual(out, ['fresh.mov', 'a.mov', 'c.mov', 'b.mov']);
+});
+
+test('buildVideoOrder: pool >= lookback*6 yields zero overlap with the recently-used set', async () => {
+  const files = Array.from({ length: 300 }, (_, i) => ({ ...clip(`c${i}.mov`), timeCreated: daysAgo(i) }));
+  const jobs = Array.from({ length: 10 }, (_, j) => ({
+    recipeFull: {
+      sourceFolders: ['skyline'],
+      videoOrder: Array.from({ length: 6 }, (_, k) => ({ segmentIndex: k, videoName: `c${j * 6 + k}.mov` })),
+    },
+  }));
+  const used = new Set(jobs.flatMap((j) => j.recipeFull.videoOrder.map((o) => o.videoName)));
+  assert.equal(used.size, 60);
+  for (let seed = 1; seed <= 50; seed += 1) {
+    const order = await selector.buildVideoOrder({
+      clientId: 'c1', folder: 'skyline', files, segmentCount: 6, antiRepeatLookback: 10,
+      rng: mulberry32(seed), now: NOW, deps: { listMediaJobs: async () => jobs },
+    });
+    for (const o of order) assert.ok(!used.has(o.videoName), `${o.videoName} reused (seed ${seed})`);
+  }
+});
+
+test('listRecentClipUsage: records most recent use index per clip', async () => {
+  const job = (names) => ({
+    recipeFull: { sourceFolders: ['skyline'], videoOrder: names.map((videoName, segmentIndex) => ({ segmentIndex, videoName })) },
+  });
+  const listMediaJobs = async () => ([job(['a.mov', 'b.mov']), job(['b.mov', 'c.mov']), job(['d.mov'])]);
+  const usage = await selector.listRecentClipUsage('c1', 'skyline', 2, { listMediaJobs });
+  assert.deepEqual([...usage.entries()], [['a.mov', 0], ['b.mov', 0], ['c.mov', 1]]);
+});
+
+test('listRecentClipUsage: listMediaJobs limit = clamp(lookback*4, 20, 60)', async () => {
+  const limits = [];
+  const listMediaJobs = async (_c, opts) => { limits.push(opts.limit); return []; };
+  for (const n of [1, 3, 10, 15, 100]) {
+    await selector.listRecentClipUsage('c1', 'skyline', n, { listMediaJobs });
+  }
+  assert.deepEqual(limits, [20, 20, 40, 60, 60]);
+});
+
+test('eligibleClips/buildVideoOrder: names invalid for videoOrder are never picked and 6 still fill', async () => {
+  const bad = ["it's.mov", 'clip–dash.mov', 'a..b.mov', 'café.mov', 'x/y.mov', 'back\\slash.mov'];
+  const good = Array.from({ length: 8 }, (_, i) => clip(`ok ${i}.mov`));
+  const files = [...bad.map((n) => clip(n)), ...good];
+  assert.deepEqual(selector.eligibleClips(files, 0).map((f) => f.name), good.map((f) => f.name));
+  for (let seed = 1; seed <= 20; seed += 1) {
+    const order = await selector.buildVideoOrder({ clientId: 'c1', folder: 'skyline', files, segmentCount: 6, rng: mulberry32(seed), now: NOW });
+    assert.equal(order.length, 6);
+    for (const o of order) assert.ok(!bad.includes(o.videoName));
+  }
+});
+
+test('non-finite injected now falls back to Date.now()', () => {
+  const f = { ...clip('a.mov'), timeCreated: new Date().toISOString() };
+  for (const bad of [NaN, undefined, 'x', Infinity]) {
+    const w = selector.freshnessWeight(f.timeCreated, bad);
+    assert.ok(Number.isFinite(w) && w > 0.99, `weight ${w} for now=${bad}`);
+  }
+});
