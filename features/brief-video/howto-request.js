@@ -35,6 +35,8 @@ export function validateHowtoRequest(req) {
   need('banner', req.banner);
   need('host.name', req.host?.name);
   need('arrival.say', req.arrival?.say);
+  // Optional, owner request only: narration (voice-over) is off unless this is true.
+  if (req.narration !== undefined && typeof req.narration !== 'boolean') errors.push('narration must be true or false');
 
   const steps = req.steps;
   if (!Array.isArray(steps) || steps.length < 2 || steps.length > 4) errors.push('steps must be an array of 2 to 4 items');

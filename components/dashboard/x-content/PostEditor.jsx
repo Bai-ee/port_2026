@@ -239,6 +239,19 @@ function StatusLine({ id, tone = 'info', tag, children, role }) {
   );
 }
 
+// CQ video-brief drafts: read-only render status next to the brief text (row.videoProcessing, features/brief-video/videoStatus.js).
+const VIDEO_TONE = { attached: 'ok', failed: 'bad', invalid: 'bad', 'not-attached': 'warn', hold: 'warn', waiting: 'warn', skipped: 'warn', off: 'warn' };
+function VideoStatusLine({ postId, vp }) {
+  if (!vp?.label) return null;
+  return (
+    <div id={`calendar-post-video-status-${postId}`} data-section="calendar-post-video-status" data-state={vp.state}>
+      <StatusLine id={`calendar-post-video-status-line-${postId}`} tone={VIDEO_TONE[vp.state] || 'info'} tag="VIDEO">
+        {vp.label}{vp.detail ? ` (${vp.detail})` : ''}
+      </StatusLine>
+    </div>
+  );
+}
+
 export default function PostEditor({
   postId = null,
   row: rowProp = null,
@@ -536,6 +549,8 @@ export default function PostEditor({
           <span id="post-editor-count" className={over ? 'pe-over' : 'pe-muted'}>{count} / {MAX_CHARS}</span>
           {locked ? <span className="pe-muted">Locked: this post can't be edited here.</span> : null}
         </p>
+
+        <VideoStatusLine postId={row.id} vp={row.videoProcessing} />
 
         <QuotedTweetCard row={row} call={call} timeZone={tz} />
 

@@ -78,6 +78,27 @@ With the how-to flag on, a status sync runs before the steps above (section 13).
 
 **One attach per tick, and one start per tick.** Throughput is therefore about one video per 15 to 30 min. It also meant that the two gate-test jobs (postId `gate-test-not-attached`, stamped `attachSkipped`) occupied the first two ticks after going live before real drafts were attached.
 
+### Calendar status (read-side join)
+
+The calendar post editor (`components/dashboard/x-content/PostEditor.jsx`, under the post text, where the INTERNAL VIDEO BRIEF is shown and edited) shows a `[VIDEO]` status line from `row.videoProcessing`. Nothing is written to drafts. `features/brief-video/videoStatus.js` (`withVideoProcessing`, called by `calendar-reader.js` `loadInputs` for the month calendar and by the `post-status` handler with `full: true` in `app/api/dashboard/quote-targets/route.js`) reads `brief_video_jobs` for the posts that qualify and `toRow` passes `videoProcessing: {state, label, detail?, jobId?, updatedAt?}` through. Cost: only `DAILY_BRIEF_VIDEO_CLIENTS` clients, only posts with a brief (content has the marker, or `videoBrief`, or `mediaJobId` `bv_`), one query (`clientId ==` + `postId in` chunk of 30) per 30 posts; already attached posts need no query. A failed read just shows no status. Other clients' jobs are never joined. DOM: `#calendar-post-video-status-<postId>` (`data-section="calendar-post-video-status"`, `data-state`), line `#calendar-post-video-status-line-<postId>`.
+
+Newest job wins (highest attempt) among jobs with the post's current `briefHash`. Otherwise:
+
+| state | label |
+|---|---|
+| `attached` | Video attached (how-to / brief cut from `mediaMetadata.source`) |
+| `rendered` | Rendered, attaching on next tick |
+| `not-attached` | Not attached: `<attachSkipped>` |
+| `rendering` / `queued` | Rendering / Queued |
+| `failed` | Render failed: `<stage> <message>` (attempt n/2) |
+| `waiting` / `invalid` | Waiting: `<videoBriefReason>` / Brief not valid: `<reason>` (also `malformed-howto-line`, `yaml-in-brief`, `empty-brief`) |
+| `hold` | On hold (HOLD in brief) |
+| `later` | Renders when within 7 days of `<reviewOn>` (a past date shows `skipped`, no date shows `waiting`) |
+| `off` | How-to videos are off (howto brief, `CQ_HOWTO_ENABLED` not true) |
+| `pending` | Waiting for the next render tick |
+
+Posts that are not drafts, or have non-bv media, and have no job show no status.
+
 ## 4. Attach rules (`planAttach`)
 
 One transaction re-reads the post and the job and re-checks everything. On any failed rule the job is stamped `attachSkipped: <reason>` (permanent, the tick will not retry it) and the post is untouched.
@@ -214,7 +235,7 @@ Built 2026-11-18. Behind `CQ_HOWTO_ENABLED=true` (`howtoEnabled()` in `clients.j
 
 Not-ready never creates a job and never uses an attempt. `invalid` briefs (section 3) get state `invalid_brief` with their `invalidReason`. A howto draft with `reviewOn` more than 7 days out gets no status until it enters the window (by design). The HOLD rule and the candidate rules (draft, no media, `reviewOn` within today..+7 CT) apply to howto drafts too. A forced re-render (`postId` + `force=1`) of a howto draft returns `skipped: 'howto-force-unsupported'`.
 
-**Draft fields `videoBriefStatus` / `videoBriefReason`** (flag on only). Written by `writeBriefStatus`: a draft-only transaction (skipped if the post is missing or not `draft`) that merges just these two fields and only when the value changes. Content and media are never touched. With the flag off nothing is written or cleared. Written when a candidate draft is `waiting_howto` or `invalid_brief`. Set back to `null` when the draft becomes renderable, when it stops being a candidate (the brief was edited to freetext, it got media, left the 7-day window, or hit HOLD) while still carrying a status, and on attach (`planAttach` clears both). The sync runs every tick before the attach-result early returns (`active-job`, `failed-this-tick`), is skipped on forced re-render calls, and writes at most `HOWTO_STATUS_WRITES_PER_TICK` = 5 drafts per tick across all clients; the rest follow on later ticks. Reported as `statusWrites` in the tick report. **No UI renders these fields yet**: read them in Firestore or in `?dryRun=1` (as `waitingReason`/`skipReason`).
+**Draft fields `videoBriefStatus` / `videoBriefReason`** (flag on only). Written by `writeBriefStatus`: a draft-only transaction (skipped if the post is missing or not `draft`) that merges just these two fields and only when the value changes. Content and media are never touched. With the flag off nothing is written or cleared. Written when a candidate draft is `waiting_howto` or `invalid_brief`. Set back to `null` when the draft becomes renderable, when it stops being a candidate (the brief was edited to freetext, it got media, left the 7-day window, or hit HOLD) while still carrying a status, and on attach (`planAttach` clears both). The sync runs every tick before the attach-result early returns (`active-job`, `failed-this-tick`), is skipped on forced re-render calls, and writes at most `HOWTO_STATUS_WRITES_PER_TICK` = 5 drafts per tick across all clients; the rest follow on later ticks. Reported as `statusWrites` in the tick report. The calendar editor shows them through the Calendar status line (section 3). They are also in `?dryRun=1` (as `waitingReason`/`skipReason`).
 
 **Job.** A ready howto draft is picked like a freetext one (earliest `reviewOn`, then id) and gets a job with `kind: 'cq-howto'`, `howtoId`, `specHash`, `templateVersion: 'cq-howto-1'`, id as in section 10. Attempts and the "non-failed job exists" check are counted per `postId` + `briefHash` + `specHash`: a re-approved spec (new `specHash`) starts fresh, and a failed cq-brief job never counts against it. `MAX_ATTEMPTS` 2, daily cap 10 and the timeouts are shared with cq-brief. Attach is unchanged except `mediaMetadata` = `{source: 'cq-howto', templateVersion: 'cq-howto-1', howtoId, specHash, width, height, durationInFrames}` and `agents.mediaGenerator.note` names the CQ HowTo template. The brief moves to `videoBrief`, public copy stays, as for BriefCut.
 

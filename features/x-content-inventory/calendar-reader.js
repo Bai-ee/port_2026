@@ -16,6 +16,7 @@ import { createFirestoreStrategyDocStore } from '../x-strategy/strategy-doc-stor
 import { baselineSlotsOf } from '../x-strategy/daily-slots.js';
 import { hotPicksToTargets, quoteSlotTimes, quotesLeftToday, assignQuoteSlots } from '../x-quote-targets/hot-calendar.js';
 import { tracksOf } from '../x-strategy/content-tracks.js';
+import { withVideoProcessing } from '../brief-video/videoStatus.js';
 
 export const PKG_COLLECTION = 'x_content_packages';
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -92,7 +93,9 @@ async function loadInputs(db, clientId, now, deps) {
   }
   const planDoc = await (deps.readPlanDoc ? deps.readPlanDoc(clientId) : createFirestorePlanStore(db).get(clientId)).catch(() => null);
   const config = resolveCalendarEngineConfig({ planDoc, legacyOverrides: overrides });
-  const posts = await (deps.readQueue || readSocialQueue)(clientId);
+  const queued = await (deps.readQueue || readSocialQueue)(clientId);
+  // Video-processing status for CQ brief drafts (read-only join on brief_video_jobs; allowlisted clients only, advisory).
+  const posts = await (deps.withVideoProcessing ? deps.withVideoProcessing(queued, clientId) : withVideoProcessing(db, queued, { now }));
   const buckets = await (deps.listBuckets ? deps.listBuckets(clientId) : bucketStore.listBuckets(clientId, { db })).catch(() => null);
   const ids = [...new Set(posts.map((p) => p.packageId).filter(Boolean))];
   const pkgs = await (deps.readPackages ? deps.readPackages(ids) : readStoredPackages(db, ids)).catch(() => new Map());
