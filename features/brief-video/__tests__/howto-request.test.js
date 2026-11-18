@@ -161,3 +161,14 @@ test('approve script: applyApproval --write runs read+update in one transaction'
   await applyApproval({ db: f.db, args: { id: 'abc-def' }, spec, now });
   assert.deepEqual(f.log, ['plain-get']);
 });
+
+test('narration: optional boolean, default off, stored as given', async () => {
+  assert.deepEqual(validateHowtoRequest(good()), { errors: [], warnings: [] });
+  assert.deepEqual(validateHowtoRequest({ ...good(), narration: true }).errors, []);
+  assert.deepEqual(validateHowtoRequest({ ...good(), narration: false }).errors, []);
+  for (const bad of ['true', 1, null, {}]) assert.deepEqual(validateHowtoRequest({ ...good(), narration: bad }).errors, ['narration must be true or false']);
+  const r = await submit({ ...good(), narration: true });
+  assert.equal(r.ok, true);
+  const saved = (await db().collection('howto_requests').doc('gather-first-decision').get()).data();
+  assert.equal(saved.request.narration, true);
+});

@@ -24,6 +24,7 @@ import { readCalendarSyncs } from '../../../../features/social-posting/calendar-
 import { mergeSyncedCalendars, shownEntries, bodyTargetsSyncedRow, parseSyncedId, adoptedKeys, adoptPayload, SYNCED_ADOPT_ACTION } from '../../../../features/social-posting/synced-calendar.js';
 import { readUnifiedCalendar, readQuoteState as readCalendarQuoteState, readCalendarQuoteTargets as readCalendarQuoteTargetsShared } from '../../../../features/x-content-inventory/calendar-reader.js';
 import { projectNow } from '../../../../features/x-content-inventory/now-projection.js';
+import { withVideoProcessing } from '../../../../features/brief-video/videoStatus.js';
 import { ctDate, toRow as calendarPostRow } from '../../../../features/x-content-inventory/month-calendar.js';
 import { hotOpportunities, hotPicksToTargets, windowHoursOf } from '../../../../features/x-quote-targets/hot-calendar.js';
 import { decideCalendarItem } from '../../../../features/x-content-inventory/calendar-decide.js';
@@ -538,7 +539,8 @@ async function withSyncedCalendars(calendar, viewer, now) {
   const sources = await Promise.all(entries.map(async (e) => {
     try {
       const [{ calendar: cal, pkgs }, clientDoc] = await Promise.all([
-        readUnifiedCalendar(fb.adminDb, e.clientId, { month: calendar.month, now }),
+        // Another client's calendar: no videoProcessing (job ids / render errors stay with the owner).
+        readUnifiedCalendar(fb.adminDb, e.clientId, { month: calendar.month, now, deps: { withVideoProcessing: async (posts) => posts } }),
         fb.adminDb.collection('clients').doc(e.clientId).get(),
       ]);
       await withRowThumbs(cal, pkgs, e.clientId);
@@ -653,8 +655,10 @@ async function handlePostStatus(context, body) {
   // boolean other callers (chat agent, status strip) rely on, so it is strictly opt-in. Read-only.
   if (body?.full === true) {
     const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
-    return { ok: true, posts: rows.map((p) => ({
+    const withVideo = await withVideoProcessing(fb.adminDb, rows.map((p) => ({ ...p, clientId: p.clientId || context.clientId })));
+    return { ok: true, posts: rows.map((p, i) => ({
       ...postStatusRow(p),
+      videoProcessing: isObj(withVideo[i]?.videoProcessing) ? withVideo[i].videoProcessing : null,
       replyTo: isObj(p.replyTo) ? p.replyTo : null,
       selfReply: isObj(p.selfReply) ? p.selfReply : null,
       mediaVariants: isObj(p.mediaVariants) ? p.mediaVariants : null,
