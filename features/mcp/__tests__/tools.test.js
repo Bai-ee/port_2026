@@ -60,10 +60,14 @@ test('registry: the full promised catalogue exists, and nothing can post, schedu
   for (const n of ['list_collections', 'get_document', 'query_collection', 'get_client_overview', 'search_timeline', 'get_operating_costs', 'get_x_monitor',
     'list_repo_path', 'read_repo_file', 'search_repo', 'recent_commits', 'request_strategy_refresh', 'request_quote_scan', 'quote_scan_status', 'regenerate_today_suggestions',
     'nas_status', 'nas_browse', 'nas_estimate', 'request_sync', 'get_hitloop_guide', 'get_site_analytics', 'get_site_sessions']) assert.ok(names.includes(n), n);
-  assert.ok(!names.includes('confirm_sync'), 'there is no confirm tool: only the owner\'s click in HITLOOP runs a paid sync');
-  assert.equal(registry.length, 90); // +3 client brief tools (publish/unpublish/list_client_briefs); +2 get_site_analytics / get_site_sessions; +2 refresh_data / refresh_status; 54 strategy (incl. get_item, get_bookmark_picks) + guide + 7 data + 4 repo + 10 sync (incl. request_quote_scan, quote_scan_status, find_hot_quotes) + 2 playbook + 5 chat/actions (confirm_sync removed)
+  assert.ok(!names.includes('confirm_sync'), 'there is no confirm_sync tool: request_sync cards run only on the owner\'s click in HITLOOP (paid run_refresh has its own preview -> confirm:true)');
+  assert.equal(registry.length, 96); // +6 MCP-OPS tools (list_refreshes, run_refresh, get_run_status, get_settings, set_setting, undo_setting); +3 client brief tools (publish/unpublish/list_client_briefs); +2 get_site_analytics / get_site_sessions; +2 refresh_data / refresh_status; 54 strategy (incl. get_item, get_bookmark_picks) + guide + 7 data + 4 repo + 10 sync (incl. request_quote_scan, quote_scan_status, find_hot_quotes) + 2 playbook + 5 chat/actions (confirm_sync removed)
   // publish_client_brief is the one explicit writer (hosted client brief + PDF, owner-requested only).
-  for (const n of names.filter((x) => x !== 'publish_client_brief')) assert.doesNotMatch(n, /^(strategy_)?(post|publish|schedule|approve|delete|remove|send|tweet|reply|follow|unfollow|email|telegram|write|update|set)_/, n);
+  // set_setting is the second named exception (MCP-OPS: one allowlisted UI setting, reduce-risk direction or confirm-gated, change-logged + undoable).
+  for (const n of names.filter((x) => x !== 'publish_client_brief' && x !== 'set_setting')) assert.doesNotMatch(n, /^(strategy_)?(post|publish|schedule|approve|delete|remove|send|tweet|reply|follow|unfollow|email|telegram|write|update|set)_/, n);
+  // Pin the writers: any new write-capable tool must be added here on purpose (kind 'sync' / 'propose' / non-readOnly).
+  const writers = registry.filter((t) => t.annotations.readOnlyHint === false && !t.name.startsWith('strategy_')).map((t) => t.name).sort();
+  assert.deepEqual(writers, ['chat_send', 'find_hot_quotes', 'nas_browse', 'nas_estimate', 'publish_client_brief', 'regenerate_today_suggestions', 'request_quote_scan', 'request_strategy_refresh', 'request_sync', 'run_refresh', 'set_setting', 'undo_setting', 'unpublish_client_brief'].sort());
   const kinds = registry.find((t) => t.name === 'request_sync').inputSchema.properties.kind.enum;
   assert.deepEqual([...kinds].sort(), ['nas_analyze', 'strategy_review', 'x_monitor_sync']); // market_signals_refresh removed (paid X reads)
 });

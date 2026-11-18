@@ -3,7 +3,8 @@
 //     into a `paid-sync` proposal card;
 //   - the dashboard route (quote-targets) injects executePaidSync() as the `runPaidSync` dep of the strategy handlers,
 //     so the action runs ONLY when the owner presses Confirm on that card inside HITLOOP (strategy-proposal-decide).
-// Nothing in the MCP server calls executePaidSync. No model can spend money through MCP.
+// request_sync never calls executePaidSync. MCP spends money only through MCP-OPS run_refresh (preview -> confirm:true,
+// capped; features/mcp/ops/runs.js), which reuses executePaidSync for x-monitor / strategy-review, and through cards the owner confirms.
 //
 // Kinds: strategy_review (one Anthropic agent turn), x_monitor_sync (X API READS only, metered), nas_analyze (Anthropic
 // batch, hard-capped). market_signals_refresh was REMOVED: its signals phase runs paid X watchlist reads and the

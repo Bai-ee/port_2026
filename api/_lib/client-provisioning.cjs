@@ -2,7 +2,7 @@ const fb = require('./firebase-admin.cjs');
 const crypto = require('crypto');
 const { getMaster, listSources }        = require('../../features/intelligence/_store');
 const { buildIntelligencePayload }      = require('./intelligence-bootstrap-utils.cjs');
-const { getDefaultModuleConfig, getDefaultModuleState } = require('../../features/scout-intake/module-registry');
+const { getDefaultModuleConfig, getDefaultModuleState, inferModuleStateFromDashboard } = require('../../features/scout-intake/module-registry');
 const { ONBOARDING_STEPS, normalizeOnboardingSteps } = require('../../features/scout-intake/onboarding-steps');
 const { logWarn } = require('./observability.cjs');
 
@@ -813,26 +813,6 @@ async function createAdminClient({ adminUid, adminEmail, companyName, ideaDescri
     initialRun: run,
     initialRunCreated: run.created !== false,
   };
-}
-
-function inferModuleStateFromDashboard(dashboardState) {
-  const base = getDefaultModuleState(false);
-  if (!dashboardState) return base;
-
-  if (dashboardState.artifacts?.homepageDeviceMockup) {
-    base['multi-device-view'] = { status: 'succeeded', enabled: true };
-  }
-
-  const seoStatus = dashboardState.seoAudit?.status;
-  if (seoStatus === 'ok' || seoStatus === 'partial') {
-    base['seo-performance'] = { status: 'succeeded', enabled: true };
-  }
-
-  if (dashboardState.siteMeta) {
-    base['social-preview'] = { status: 'succeeded', enabled: true };
-  }
-
-  return base;
 }
 
 // Client-safe projection of an open dashboard-creation incident (see

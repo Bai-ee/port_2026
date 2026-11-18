@@ -24,6 +24,8 @@ const DENY_SUBCOLLECTIONS = Object.freeze({ members: 'clients' });
 const DENY_SET = new Set(DENY_COLLECTIONS.map((s) => s.toLowerCase()));
 export const DENY_NAME_RE = /token|secret|oauth|credential/i;
 export const REDACT_KEY_RE = /token|secret|password|passwd|api[_-]?key|app[_-]?key|consumer[_-]?key|private[_-]?key|credential|authorization|cookie|session|refresh|oauth|jwt|webhook|verifier|signature|dsn/i;
+/** The one exact key exempt from REDACT_KEY_RE (MCP-OPS refresh ids are not secrets). refresh_token / refreshToken stay redacted. */
+export const REDACT_KEY_EXEMPT = Object.freeze(['refreshId']);
 
 const SECRET_VALUE_RES = [
   /-----BEGIN [A-Z ]*-----[\s\S]*/g,
@@ -67,7 +69,7 @@ export function redactValue(value, opts = {}) {
 
 function walk(value, depth, key, keys) {
   if (value === null || value === undefined) return value ?? null;
-  const keyHit = keys && key && REDACT_KEY_RE.test(key);
+  const keyHit = keys && key && !REDACT_KEY_EXEMPT.includes(key) && REDACT_KEY_RE.test(key);
   const t = typeof value;
   if (t === 'number' || t === 'boolean') return value;
   if (keyHit) return REDACTED;
