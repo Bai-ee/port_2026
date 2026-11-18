@@ -21,7 +21,7 @@ export function validateHowtoRequest(req) {
   try { size = Buffer.byteLength(JSON.stringify(req)); } catch { errors.push('request is not JSON-serialisable'); }
   if (size > HOWTO_MAX_BYTES) errors.push(`request is ${size} bytes; the limit is ${HOWTO_MAX_BYTES}`);
 
-  if (req.request_version !== 3) errors.push('request_version must be 3');
+  if (![3, 3.1].includes(req.request_version)) errors.push('request_version must be 3 or 3.1');
   if (!HOWTO_ID_RE.test(String(req.id ?? ''))) errors.push('id must match [a-z0-9-]{3,48}');
   const need = (path, v) => { if (!text(v)) errors.push(`${path} is required`); };
   if (!DAY_RE.test(String(req.review_on ?? ''))) errors.push('review_on must be YYYY-MM-DD');

@@ -32,6 +32,7 @@ test('valid request: no errors or warnings', () => {
 test('validation errors', () => {
   const bad = (mut) => { const r = good(); mut(r); return validateHowtoRequest(r).errors.join('|'); };
   assert.match(bad((r) => { r.request_version = 2; }), /request_version/);
+  assert.doesNotMatch(bad((r) => { r.request_version = 3.1; }) || '', /request_version/);
   assert.match(bad((r) => { r.id = 'AB'; }), /id must match/);
   assert.match(bad((r) => { r.review_on = '18-11-2026'; }), /review_on/);
   assert.match(bad((r) => { r.type = 'ad'; }), /type/);
