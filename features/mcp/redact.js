@@ -143,5 +143,5 @@ export function capText(value, max = 40000) {
   try { text = JSON.stringify(value, null, 1); } catch { text = String(value); }
   if (text === undefined) text = 'null';
   if (text.length <= max) return { text, truncated: false };
-  return { text: `${text.slice(0, max)}\n...[truncated: ${text.length} chars total, showing ${max}. Narrow the query (limit, where, fields) to see the rest.]`, truncated: true };
+  return { text: `${text.slice(0, max)}\n...[truncated: ${text.length} chars total, showing ${max}. For a document, read one field at a time with get_document_field (path, field, offset/limit); for a collection, narrow query_collection (limit, where).]`, truncated: true };
 }
