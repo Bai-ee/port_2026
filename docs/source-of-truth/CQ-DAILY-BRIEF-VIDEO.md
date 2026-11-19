@@ -255,3 +255,12 @@ Then it renders composition `CQ-HowTo` with props = the spec, same flags as cq-b
 **`?dryRun=1` fields.** Top level adds `howtoEnabled`. Per brief: `briefKind` (`freetext|howto|invalid`), `howtoId?`, and one of `skipReason` (`hold`, the `invalidReason`, `howto-disabled`, `after-campaign`, `client-mismatch`) or `waitingReason` (`request-missing`, `request-<status>`, `request-no-spechash`). `candidates` lists freetext drafts, plus howto drafts that are ready when the flag is on.
 
 **Tests.** `features/brief-video/__tests__/{brief-video,howto,howto-request}.test.js`; video repo `services/showcase-render/__tests__`. Both repos test `howtoSpecHash` against one fixture.
+
+## 14. Auto request jobs and render now (v3.2, 2026-11-18)
+
+Details and rules: [`CQ-HOWTO-VIDEO-REQUESTS.md`](CQ-HOWTO-VIDEO-REQUESTS.md) section 8. Summary for the cron:
+
+- **Readiness** adds a second ready shape: `howto_requests/<id>` with `status: 'approved'`, `autoApproved: true`, `requestHash` (verified against the stored `request`) and no `specHash` gives `{ready, requestHash, request, narration}`. Legacy `specHash` requests are unchanged. Reasons: existing ones plus `request-hash-mismatch`.
+- **Job fields** (kind `cq-howto`, request jobs): `request`, `requestHash`, `narration`, `renderNow`; no `specHash`. Id = `bv_` + sha256(`postId:briefHash:cq-howto-1:requestHash:narration:attempt`).slice(0,20). `mediaMetadata` also carries `requestHash`.
+- **Render now** reuses `newJobDoc`, `createJob` (counter doc `brief_video_usage/<CT day>`, cap `RENDER_NOW_MAX_PER_DAY` 5) and `pokeService`. Tick report: `attachedRenderNow` (finished render-now jobs attach first, max 3, outside the one-per-tick attach).
+- **`replaceDraftMedia`** on a done job lets `planAttach` replace existing media on a still-draft post (local takeover); status is re-checked in the attach transaction.

@@ -12,6 +12,10 @@ export const briefJobId = ({ postId, briefHash, templateVersion = TEMPLATE_VERSI
 export const howtoJobId = ({ postId, briefHash, specHash, attempt = 1 }) =>
   'bv_' + createHash('sha256').update(`${postId}:${briefHash}:${HOWTO_TEMPLATE_VERSION}:${specHash}:${attempt}`).digest('hex').slice(0, 20);
 
+/** cq-howto job id for an auto-approved request job: hashes requestHash + narration instead of a baked specHash. */
+export const howtoRequestJobId = ({ postId, briefHash, requestHash, narration, attempt = 1 }) =>
+  'bv_' + createHash('sha256').update(`${postId}:${briefHash}:${HOWTO_TEMPLATE_VERSION}:${requestHash}:${narration}:${attempt}`).digest('hex').slice(0, 20);
+
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export function addDaysIso(date, n) {
@@ -39,15 +43,16 @@ export function selectCandidates(posts, { today, clients = DAILY_BRIEF_VIDEO_CLI
     .sort((a, b) => (a.post.reviewOn < b.post.reviewOn ? -1 : a.post.reviewOn > b.post.reviewOn ? 1 : String(a.post.id).localeCompare(String(b.post.id))));
 }
 
-export function newJobDoc({ post, parsed, attempt, now, videoClient = DAILY_BRIEF_VIDEO_CLIENTS[post.clientId], specHash = null }) {
-  if (parsed?.briefKind !== 'freetext' && !(parsed?.briefKind === 'howto' && specHash)) throw new Error(`newJobDoc: not renderable (briefKind=${parsed?.briefKind}${parsed?.briefKind === 'howto' ? ', no specHash' : ''})`);
+export function newJobDoc({ post, parsed, attempt, now, videoClient = DAILY_BRIEF_VIDEO_CLIENTS[post.clientId], specHash = null, request = null, requestHash = null, narration = false, renderNow = false }) {
+  const byRequest = Boolean(request && requestHash);
+  if (parsed?.briefKind !== 'freetext' && !(parsed?.briefKind === 'howto' && (specHash || byRequest))) throw new Error(`newJobDoc: not renderable (briefKind=${parsed?.briefKind}${parsed?.briefKind === 'howto' ? ', no specHash' : ''})`);
   const iso = new Date(now).toISOString();
-  const howto = parsed.briefKind === 'howto' && Boolean(specHash);
+  const howto = parsed.briefKind === 'howto' && (Boolean(specHash) || byRequest);
   return {
     v: 1,
-    jobId: howto ? howtoJobId({ postId: post.id, briefHash: parsed.briefHash, specHash, attempt }) : briefJobId({ postId: post.id, briefHash: parsed.briefHash, attempt }),
+    jobId: howto && byRequest ? howtoRequestJobId({ postId: post.id, briefHash: parsed.briefHash, requestHash, narration: Boolean(narration), attempt }) : howto ? howtoJobId({ postId: post.id, briefHash: parsed.briefHash, specHash, attempt }) : briefJobId({ postId: post.id, briefHash: parsed.briefHash, attempt }),
     kind: howto ? 'cq-howto' : 'cq-brief',
-    ...(howto ? { howtoId: parsed.howtoId, specHash } : {}),
+    ...(howto && byRequest ? { howtoId: parsed.howtoId, request, requestHash, narration: Boolean(narration), renderNow: Boolean(renderNow) } : howto ? { howtoId: parsed.howtoId, specHash } : {}),
     clientId: post.clientId,
     videoClient,
     postId: post.id,
@@ -61,6 +66,7 @@ export function newJobDoc({ post, parsed, attempt, now, videoClient = DAILY_BRIE
     updatedAt: iso,
     triggerAt: iso,
     attempt,
+    ...(renderNow && !(howto && byRequest) ? { renderNow: true } : {}),
   };
 }
 

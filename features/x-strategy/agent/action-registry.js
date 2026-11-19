@@ -151,7 +151,7 @@ export const ROUTE_AUTH = Object.freeze({
   'calendar-disconnect': { bearer: true, admin: false, pilotOwner: false, impersonation: true, clientFrom: 'context' },
   'media': { bearer: true, admin: 'mutations and archive actions', pilotOwner: false, impersonation: true, clientFrom: 'context', note: 'action is a QUERY param (?action=...), body carries the payload.' },
   'archive-inbox': { bearer: true, admin: true, pilotOwner: false, impersonation: true, clientFrom: 'context', note: 'action is a QUERY param.' },
-  'howto-requests': { bearer: true, admin: false, pilotOwner: false, impersonation: true, clientFrom: 'context', note: 'Firestore howto_requests only; the route allowlists the Critters Quest client and locks a request once the owner approved it.' },
+  'howto-requests': { bearer: true, admin: false, pilotOwner: false, impersonation: true, clientFrom: 'context', note: 'Firestore howto_requests + brief_video_jobs only; the route allowlists the Critters Quest client, locks a request once the owner approved it, and render-now is capped at 5 per day.' },
   'custom-briefs': { bearer: true, admin: true, pilotOwner: false, impersonation: true, clientFrom: 'context', note: 'POST/PATCH verifyAdminRequest, GET verifyRequestUser (client briefs only for admins). Client = getDashboardBootstrap `?as=`; the response echoes clientId and the runtime refuses a mismatch (clientEcho).' },
 });
 
