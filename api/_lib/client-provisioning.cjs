@@ -1174,6 +1174,31 @@ async function provisionClientFromProspect({ placeId, adminUid, adminEmail }) {
  */
 const RESEED_LOCK_MS = 60 * 1000;
 
+// Per-site module ids whose stored result belongs to the OLD site after a host change.
+const SITE_MODULE_IDS = ['multi-device-view', 'seo-performance', 'agent-readiness', 'social-preview', 'style-guide', 'design-evaluation'];
+
+/** dashboard_state merge fields that null every output derived from the previous site.
+ *  `snapshot` (user-edited brandOverview) is intentionally kept. */
+function buildStaleSiteOutputClear() {
+  const modules = {};
+  for (const id of SITE_MODULE_IDS) modules[id] = { result: null, lastSuccessAt: null };
+  return {
+    analyzerOutputs: null,
+    seoAudit: null,
+    siteMeta: null,
+    moduleBriefs: null,
+    artifacts: {
+      homepageScreenshot: null,
+      homepageScreenshots: null,
+      fullPageScreenshots: null,
+      homepageDeviceMockup: null,
+      skillDocs: null,
+    },
+    onboard: { socialPreview: null },
+    modules,
+  };
+}
+
 function stripWww(host) {
   return String(host || '').trim().toLowerCase().replace(/^www\./, '');
 }
@@ -1335,6 +1360,7 @@ async function reseedIntakeForClient({
           startedAt: now,
           message: `Re-running intake for ${normalized.hostname}...`,
         },
+        ...(hostChanged && hadPreviousHost ? buildStaleSiteOutputClear() : {}),
         updatedAt: now,
       },
       { merge: true }

@@ -89,3 +89,51 @@ test('reseedIntakeForClient: owner self-reseed to hitloop.agency (not impersonat
   const res = await mod.reseedIntakeForClient({ clientId: 'admin-own', ownClientId: 'admin-own', uid: 'u1', websiteUrl: 'hitloop.agency', impersonating: false });
   assert.equal(res.status, 'queued');
 });
+
+async function seedDashboard(fake, clientId) {
+  await fake.adminDb.collection('dashboard_state').doc(clientId).set({
+    clientId,
+    snapshot: { brandOverview: { headline: 'User edited' } },
+    analyzerOutputs: { 'seo-performance': { aggregate: 1 } },
+    seoAudit: { score: 90 },
+    siteMeta: { ogImage: 'https://old.test/og.png' },
+    moduleBriefs: { items: [{ id: 'x' }] },
+    artifacts: {
+      homepageScreenshot: { downloadUrl: 'a' }, homepageScreenshots: { desktop: {} }, fullPageScreenshots: { desktop: {} },
+      homepageDeviceMockup: { downloadUrl: 'b' }, skillDocs: { s: {} }, studioCaptures: ['keep'],
+    },
+    onboard: { socialPreview: { status: 'succeeded' } },
+    modules: {
+      'design-evaluation': { status: 'succeeded', result: { score: 1 }, lastSuccessAt: 1 },
+      'multi-device-view': { status: 'succeeded', result: { shots: 1 }, lastSuccessAt: 1 },
+    },
+  });
+}
+
+test('host change nulls old-site outputs but keeps snapshot and unrelated artifacts', async () => {
+  const { fake, mod } = loadWithFake();
+  await seedClient(fake, 'acme-1', { normalizedHost: 'acme.test', latestRunStatus: 'succeeded' });
+  await seedDashboard(fake, 'acme-1');
+  await mod.reseedIntakeForClient({ ...BASE, websiteUrl: 'other.test', confirmHostChange: true });
+  const d = fake.adminDb._raw('dashboard_state', 'acme-1');
+  for (const k of ['analyzerOutputs', 'seoAudit', 'siteMeta', 'moduleBriefs']) assert.equal(d[k], null, k);
+  for (const k of ['homepageScreenshot', 'homepageScreenshots', 'fullPageScreenshots', 'homepageDeviceMockup', 'skillDocs']) assert.equal(d.artifacts[k], null, k);
+  assert.deepEqual(d.artifacts.studioCaptures, ['keep']);
+  assert.equal(d.onboard.socialPreview, null);
+  assert.equal(d.modules['design-evaluation'].result, null);
+  assert.equal(d.modules['design-evaluation'].lastSuccessAt, null);
+  assert.equal(d.modules['multi-device-view'].result, null);
+  assert.equal(d.snapshot.brandOverview.headline, 'User edited');
+});
+
+test('same host reseed leaves old-site outputs untouched', async () => {
+  const { fake, mod } = loadWithFake();
+  await seedClient(fake, 'acme-1', { normalizedHost: 'acme.test', latestRunStatus: 'succeeded' });
+  await seedDashboard(fake, 'acme-1');
+  await mod.reseedIntakeForClient({ ...BASE, websiteUrl: 'acme.test' });
+  const d = fake.adminDb._raw('dashboard_state', 'acme-1');
+  assert.deepEqual(d.seoAudit, { score: 90 });
+  assert.equal(d.siteMeta.ogImage, 'https://old.test/og.png');
+  assert.deepEqual(d.modules['design-evaluation'].result, { score: 1 });
+  assert.ok(d.artifacts.homepageScreenshot);
+});
