@@ -425,3 +425,9 @@ export function friendlyBriefReasons(input) {
   const list = Array.isArray(input) ? input : String(input).replace(BRIEF_PREFIX_RE, '').split(/;\s*/);
   return list.map(friendlyBriefReason).filter(Boolean).join(' ');
 }
+
+/** Plain-English note for the server's 'similar-to-recent' result ([{ id, date }]); '' when none. Advice only. */
+export function similarVideoNote(similar) {
+  const first = Array.isArray(similar) ? similar.find((x) => x && x.date) : null;
+  return first ? ` This video looks like the one on ${first.date}; consider a different scene.` : '';
+}

@@ -6,7 +6,7 @@
 // Styles live in PostEditorStyles (#post-editor-root .pe-vb*).
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { friendlyBriefReason, friendlyBriefReasons } from './post-editor-model.js';
+import { friendlyBriefReason, friendlyBriefReasons, similarVideoNote } from './post-editor-model.js';
 
 const KIND_LABEL = { author: 'First version', feedback: 'Feedback', rollback: 'Restored' };
 const FEEDBACK_MAX = 2000;
@@ -49,7 +49,7 @@ export default function VideoBriefPanel({ row, callSocial, locked = false, onRow
       if (!res?.ok) throw new Error(res?.error || 'Save failed.');
       const b = res.brief || {};
       onRowPatch?.({ revision: b.revision ?? res.post?.revision ?? row.revision, videoBrief: b.videoBrief || null, videoBriefMeta: b.meta || null });
-      setMsg({ tone: 'ok', text: okText });
+      setMsg({ tone: 'ok', text: `${okText}${similarVideoNote(res.similar)}` });
     } catch (e) {
       setMsg({ tone: 'bad', text: friendlyBriefReasons(e?.message || 'Save failed.') });
     } finally {
@@ -88,7 +88,7 @@ export default function VideoBriefPanel({ row, callSocial, locked = false, onRow
       if (Array.isArray(res.versions)) setVersions(res.versions);
       if (body.action === 'video-brief-feedback') setFeedback('');
       setMsg(r.ok
-        ? { tone: 'ok', text: okText }
+        ? { tone: 'ok', text: `${okText}${similarVideoNote(res.similar)}` }
         : { tone: 'bad', text: `Saved, but the video could not re-render now: ${friendlyBriefReason(r.error) || 'unknown error'} Use "Render this version" to try again.` });
     } catch (e) {
       setMsg({ tone: 'bad', text: friendlyBriefReasons(e?.message || 'The video could not be revised.') });
@@ -109,7 +109,7 @@ export default function VideoBriefPanel({ row, callSocial, locked = false, onRow
       if (r.ok) patch.videoProcessing = { state: 'queued', label: r.existing ? 'Render already started' : 'Queued: rendering started', ...(r.jobId ? { jobId: r.jobId } : {}) };
       onRowPatch?.(patch);
       setMsg(r.ok
-        ? { tone: 'ok', text: r.existing ? 'Already rendering. The video attaches when it finishes.' : 'Rendering started. The video attaches to this post when it finishes.' }
+        ? { tone: 'ok', text: r.existing ? 'Already rendering. The video attaches when it finishes.' : 'Rendering started. The video attaches to this post when it finishes.' + similarVideoNote(res.similar) }
         : { tone: 'bad', text: `Approved, but the render could not start now: ${friendlyBriefReason(r.error) || 'unknown error'}` });
     } catch (e) {
       setMsg({ tone: 'bad', text: friendlyBriefReasons(e?.message || 'Render failed to start.') });

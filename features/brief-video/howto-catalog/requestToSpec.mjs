@@ -9,12 +9,13 @@
 // v3.3 adds `skeleton: "cursor"` (no host, exact windows; see cursorToSpec below). Extra reasons for it:
 //   unknown-skeleton:<v>  cursor-host-must-be-none  guide-host-none  cursor-narration-unsupported  seconds-invalid:<establish|n|end>
 //   establish-too-short  step-too-short:<step>  end-too-short  total-too-long  unknown-view:<panel>  view-must-be-canvas
-//   later-needs-completed-view:<step>  crop-invalid  crop-out-of-bounds
+//   later-needs-completed-view:<step>
+// (revised: the end shows the supplied image full-frame, so there is no crop; end.caption / end.cta / end.headline are optional post copy)
 // The result spec carries vo {} and narration from the request; the VO stage fills vo, the job decides the effective narration.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { CURSOR_FPS, CURSOR_TIMING, END_LAYOUT, minStepFrames } from "./cursorTiming.mjs";
+import { CURSOR_FPS, CURSOR_TIMING, minStepFrames } from "./cursorTiming.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ID_RE = /^[a-z0-9-]{3,48}$/;
@@ -27,24 +28,6 @@ export const loadCatalog = (dir = HERE) => ({
 
 const str = (v) => (typeof v === "string" && v.trim() ? v.trim() : "");
 const isObj = (v) => v && typeof v === "object" && !Array.isArray(v);
-
-/** Width/height of a PNG or JPEG file, or null (unreadable / other format: the crop bounds check is skipped). */
-const imageSize = (file) => {
-  try {
-    const b = fs.readFileSync(file);
-    if (b.length > 24 && b.readUInt32BE(0) === 0x89504e47) return { w: b.readUInt32BE(16), h: b.readUInt32BE(20) };
-    if (b[0] === 0xff && b[1] === 0xd8) {
-      let i = 2;
-      while (i + 9 < b.length) {
-        if (b[i] !== 0xff) { i++; continue; }
-        const m = b[i + 1];
-        if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) return { h: b.readUInt16BE(i + 5), w: b.readUInt16BE(i + 7) };
-        i += 2 + b.readUInt16BE(i + 2);
-      }
-    }
-  } catch { /* unreadable */ }
-  return null;
-};
 
 const publicFile = (publicDir, rel) => {
   const root = path.resolve(publicDir);
@@ -130,25 +113,16 @@ const cursorToSpec = (r, { catalog, publicDir }) => {
     });
   }
 
-  // end art
-  const endCaption = str(r.end?.caption); if (!endCaption) miss("end.caption");
-  const cta = str(r.end?.cta); if (!cta) miss("end.cta");
+  // end: the supplied image full-frame as is (art) or the approved end card with the campaign headline (no art)
   const endFrames = framesOf(r.end?.seconds);
   if (!endFrames) { if (r.end?.seconds === undefined) miss("end.seconds"); else reasons.push("seconds-invalid:end"); }
   else if (endFrames < CURSOR_TIMING.endMin) reasons.push("end-too-short");
   total += endFrames;
-  const src = str(r.end?.art?.src); if (!src) miss("end.art.src");
-  const c = r.end?.art?.crop;
-  const cropOk = isObj(c) && [c.x, c.y, c.w].every((v) => typeof v === "number" && Number.isFinite(v)) && c.x >= 0 && c.y >= 0 && c.w > 0 && c.w <= 1;
-  if (!cropOk) reasons.push("crop-invalid");
-  if (publicDir && src) {
-    const file = publicFile(publicDir, src);
-    if (!file) reasons.push(`art-missing:${src}`);
-    else if (cropOk) {
-      const size = imageSize(file);
-      if (size && (c.x + c.w > 1 + 1e-9 || c.y + (c.w * size.w * (1080 - END_LAYOUT.captionH - END_LAYOUT.ctaH)) / (1080 * size.h) > 1 + 1e-9)) reasons.push("crop-out-of-bounds");
-    }
-  } else if (cropOk && c.x + c.w > 1 + 1e-9) reasons.push("crop-out-of-bounds");
+  const src = str(r.end?.art?.src);
+  if (publicDir && src && !publicFile(publicDir, src)) reasons.push(`art-missing:${src}`);
+  const endCaption = str(r.end?.caption); // post copy only: never drawn
+  const cta = str(r.end?.cta);
+  const headline = str(r.end?.headline);
   if (total > 900) reasons.push("total-too-long");
 
   if (reasons.length) return { ok: false, reasons };
@@ -164,7 +138,7 @@ const cursorToSpec = (r, { catalog, publicDir }) => {
       label,
       establish: { caption: estCaption, seconds: r.establish.seconds, ...(estView ? { view: estView } : {}) },
       steps,
-      end: { caption: endCaption, cta, seconds: r.end.seconds, art: { src, crop: { x: c.x, y: c.y, w: c.w } } },
+      end: { seconds: r.end.seconds, ...(src ? { art: { src } } : {}), ...(headline ? { headline } : {}), ...(endCaption ? { caption: endCaption } : {}), ...(cta ? { cta } : {}) },
       music: true,
       narration: false,
       vo: {},

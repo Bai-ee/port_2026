@@ -56,6 +56,3 @@ export const minStepFrames = (actions, { later = false, panelMin = 0, local0 = 0
 
 /** Frame (step-local) where the later view cuts in: right after the last result. */
 export const laterCutAt = (schedule) => (schedule.length ? schedule[schedule.length - 1].doneAt : 0) + T.laterGap;
-
-/** End art layout (px on the 1080 frame): caption bar on top, CTA bar at the bottom, the art window between them. */
-export const END_LAYOUT = { captionH: 120, ctaH: 200 };

@@ -240,7 +240,7 @@ test('hub contract: a too-short step is fed back into the repair retry and repor
   assert.match(llm.calls[0].system, /30 fps/);
 });
 
-test('server fill (cursor): label, end defaults from the campaign, standard end art, narration off with a warning', () => {
+test('server fill (cursor): label, end defaults from the campaign, no default end art, narration off with a warning', () => {
   const { request, warnings } = fillCursorDefaults({ skeleton: 'cursor', host: { name: 'mayor' }, narration: true, end: {} }, campaign);
   assert.equal(request.label, 'CURRENT GAMEPLAY');
   assert.deepEqual(request.host, { name: 'none' });
@@ -249,9 +249,9 @@ test('server fill (cursor): label, end defaults from the campaign, standard end 
   assert.equal(request.end.caption, 'TITANS ARE COMING');
   assert.equal(request.end.cta, 'SEASON 3 · DEC 18');
   assert.equal(request.end.seconds, 3);
-  assert.deepEqual(request.end.art, { src: 'art/posters/s3-first-look.jpg', crop: { x: 0, y: 0.02, w: 1 } });
-  const kept = fillCursorDefaults({ skeleton: 'cursor', label: 'MINE', end: { caption: 'C', cta: 'D', seconds: 4, art: { src: 'art/posters/s3-first-look.jpg', crop: { x: 0, y: 0, w: 1 } } } }, campaign).request;
-  assert.equal(kept.label, 'MINE'); assert.equal(kept.end.seconds, 4); assert.equal(kept.end.art.crop.y, 0);
+  assert.equal(request.end.art, undefined);
+  const kept = fillCursorDefaults({ skeleton: 'cursor', label: 'MINE', end: { caption: 'C', cta: 'D', seconds: 4, art: { src: 'art/posters/s3-first-look.jpg' } } }, campaign).request;
+  assert.equal(kept.label, 'MINE'); assert.equal(kept.end.seconds, 4); assert.deepEqual(kept.end.art, { src: 'art/posters/s3-first-look.jpg' });
   assert.equal(fillCursorDefaults({ skeleton: 'guide' }, campaign).request.label, undefined);
 });
 
@@ -260,7 +260,7 @@ test('server fill: a model output without label, end art or narration still pass
   const out = await authorHowtoRequest({ post: { id: ID, content: 'c', reviewOn: '2026-11-19' }, creative: CREATIVE, catalog, campaign, llm: mockLlm(g) });
   assert.equal(out.ok, true);
   assert.equal(out.request.label, 'CURRENT GAMEPLAY');
-  assert.equal(out.request.end.art.src, 'art/posters/s3-first-look.jpg');
+  assert.equal(out.request.end.art, undefined);
   assert.deepEqual(out.warnings, ['narration-off-no-host']);
 });
 
@@ -324,4 +324,25 @@ test('lease: a concurrent approve on an unauthored brief is refused without a se
   assert.deepEqual([out.ok, out.status, out.reasons], [false, 409, ['authoring-in-progress']]);
   assert.equal(llm.calls.length, 0);
   assert.equal(raw(ID).videoBriefMeta.authorError, undefined, 'a busy lease is not an authoring failure');
+});
+
+test('variety check: signature overlap, 14-day window, own post skipped', async () => {
+  const { sceneSignature, sceneOverlap, findSimilarRecent, similarRecentWarnings } = await import('../brief-author.js');
+  const mk = (steps, view = 'town') => ({ id: 'x', establish: { view }, steps: steps.map(([panel, preset, action]) => ({ panel, preset, clicks: [{ action }] })) });
+  const a = mk([['spotTile', 'idle', 'selectSpot'], ['critterSelection', 'list', 'send'], ['spotClaimReward', 'claimable', 'claim']]);
+  assert.equal(sceneSignature(a).length, 4);
+  assert.equal(sceneOverlap(a, structuredClone(a)), 1);
+  assert.equal(sceneOverlap(a, mk([['spotInfo', 'idle', 'close'], ['spotInfo', 'idle', 'close'], ['spotInfo', 'idle', 'close']], 'other')), 0);
+  const now = Date.parse('2026-11-19T12:00:00Z');
+  const jobs = [
+    { postId: 'p1', status: 'done', request: a, reviewOn: '2026-11-10', createdAt: '2026-11-10T10:00:00Z' },
+    { postId: 'old', status: 'done', request: a, createdAt: '2026-10-01T10:00:00Z' },
+    { postId: 'queued', status: 'queued', request: a, createdAt: '2026-11-15T10:00:00Z' },
+    { postId: 'self', status: 'done', request: a, createdAt: '2026-11-15T10:00:00Z' },
+    { postId: 'diff', status: 'done', request: mk([['spotInfo', 'idle', 'close'], ['spotInfo', 'idle', 'close']], 'z'), createdAt: '2026-11-15T10:00:00Z' },
+  ];
+  assert.deepEqual(findSimilarRecent(a, jobs, { now, postId: 'self' }), [{ id: 'p1', date: '2026-11-10' }]);
+  const db = { collection: () => ({ where: () => ({ get: async () => ({ docs: jobs.map((j) => ({ data: () => j })) }) }) }) };
+  const out = await similarRecentWarnings(db, { clientId: CLIENT, request: a, postId: 'self', now });
+  assert.deepEqual(out.warnings, ['similar-to-recent:p1']);
 });

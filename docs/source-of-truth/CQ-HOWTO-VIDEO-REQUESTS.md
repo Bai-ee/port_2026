@@ -98,5 +98,6 @@ The reviewer watches the video in the calendar before approving. It is rebuilt U
 - `skeleton`: `guide` (default) or `cursor`. `host.name` may be `none` only with `cursor`.
 - `label` string <= 32; `establish` `{caption <= 40, seconds 1-10, view?}`.
 - `steps[].caption` <= 40, `steps[].seconds` 1-15, `steps[].later` boolean. `steps[].say` is optional with `cursor` (required for `guide`); `payoff` is optional with `cursor`.
-- `end` `{caption? <= 48, cta? <= 80, seconds? 1-10, art? {src: /^art\/[a-z0-9\/_-]+\.(png|jpg|jpeg|webp)$/, crop?: {x, y, w}}}`.
+- `end` `{caption? <= 48, cta? <= 80, headline? <= 60, seconds? 1-10, art? {src: /^art\/[a-z0-9\/_-]+\.(png|jpg|jpeg|webp)$/}}`. `end.art` is optional and has no crop: a supplied image is shown full-frame as is with nothing on top; with no art the render uses the approved campaign end card. `end.caption` / `end.cta` are post copy only and are never drawn. The Creative Brief author never defaults `end.art`.
+- Variety check: after a Creative Brief request is authored or revised the app compares its scene signature (establish view plus each step's panel, preset, actions) with this client's done/attached videos from the last 14 days; identical or >= 80% overlap adds the warning `similar-to-recent:<postId or howtoId>` (advice only, never blocks).
 

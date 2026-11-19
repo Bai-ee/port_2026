@@ -7,7 +7,7 @@ import { loadHowtoCatalog, catalogCheck, catalogHash } from './howto-catalog/ind
 import { stripBrief, briefHash } from './brief.js';
 import { creativeOf } from './brief-fields.js';
 import { requestHash } from './howto.js';
-import { authorId, reviseHowtoRequest, cappedLlm, authorKey, defaultLlm, FEEDBACK_MAX, AUTHOR_MODEL } from './brief-author.js';
+import { authorId, reviseHowtoRequest, similarRecentWarnings, cappedLlm, authorKey, defaultLlm, FEEDBACK_MAX, AUTHOR_MODEL } from './brief-author.js';
 import { listVersions, writeVersion, setVersionJob } from './brief-versions.js';
 import { renderReplace, replaceBlockReason } from './worker.js';
 import { takeLease, releaseLease } from './brief-lease.js';
@@ -70,7 +70,8 @@ async function applyRequest({ db, clientId, post, authored, request, kind, feedb
   let render = await renderReplace({ db, clientId, postId: post.id, now, env, fetchImpl });
   if (!render.ok && render.error === 'job-exists') render = { ok: true, existing: true, status: 'queued' };
   if (render.ok && render.jobId) await setVersionJob(db, post.id, request.id, render.jobId);
-  return { ok: true, post: wrote.post, render, version, versions: await listVersions(db, post.id), warnings };
+  const sim = kind === 'feedback' ? await similarRecentWarnings(db, { clientId, request, postId: post.id, now }) : { warnings: [], similar: [] };
+  return { ok: true, post: wrote.post, render, version, versions: await listVersions(db, post.id), warnings: [...warnings, ...sim.warnings], similar: sim.similar };
 }
 
 /** Owner feedback -> revised request -> replace render. Returns { ok:true, post, render, versions } | { ok:false, status, reasons }. */

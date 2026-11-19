@@ -200,6 +200,9 @@ test('v3.3 field errors', () => {
   const bad = (mut) => { const r = cursor33(); mut(r); return validateHowtoRequest(r).errors.join('|'); };
   assert.match(bad((r) => { r.skeleton = 'guide'; }), /host\.name "none"/);
   assert.match(bad((r) => { r.end.art.src = 'images/x.png'; }), /end\.art\.src/);
+  assert.match(bad((r) => { r.end.headline = 'x'.repeat(61); }), /end\.headline/);
+  assert.equal(bad((r) => { delete r.end.art; r.end.art = undefined; }), '');
+  assert.equal(bad((r) => { r.end.art = { src: 'art/posters/s3-first-look.png', crop: { x: 1 } }; }), '');
   assert.match(bad((r) => { r.steps[0].caption = 'x'.repeat(41); }), /steps\[0\]\.caption/);
   assert.match(bad((r) => { r.skeleton = 'guide'; r.host.name = 'mayor'; delete r.steps[0].say; }), /steps\[0\]\.say is required/);
 });

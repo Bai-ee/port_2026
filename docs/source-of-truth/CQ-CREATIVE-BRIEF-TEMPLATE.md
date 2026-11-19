@@ -6,23 +6,37 @@ Rules: describe only what the game scenes below can show. If a shot needs someth
 
 ## Fields
 
+Every field below is required (write "none" where nothing applies).
+
 - **Creative ID**: short code, e.g. CQ-S3-1119.
 - **Title**: working title.
 - **Type**: how-to | feature-promo.
 - **Format**: e.g. vertical 9:16 video.
 - **Length**: seconds, e.g. 21s.
 - **Host**: none | mayor. `none` = a cursor walks the game (no host character).
-- **Narration**: on | off.
+- **Narration**: on | off. With Host none it is always off.
 - **Audience**: who it is for.
 - **Goal**: what the viewer should do or understand.
 - **Hook**: the first line, in words.
 - **Opening banner**: 2-3 words, UPPERCASE.
-- **Shots**: table, one row per shot: time range | what viewers see (game scene) | on-screen text | LATER y/n. Use 2-4 gameplay shots; the opening town shot is separate.
 - **Gameplay label**: small on-screen tag, e.g. CURRENT GAMEPLAY.
+- **Shots**: table, one row per shot: time range | what viewers see (pick a scene from the list below) | caption (one per shot; "none" if no caption) | LATER y/n. Use 2-4 gameplay shots; the opening town shot is separate.
 - **Payoff**: what the viewer gets at the end of the gameplay.
-- **Ending**: art path under `art/...` or `standard end card`, end caption, CTA line.
+- **Ending**: the supplied art path under `art/...` (shown full-frame exactly as supplied, nothing drawn on top, no crop) or `standard end card` (the approved campaign end card).
+- **CTA**: post copy only (the call to action in the post; it is never drawn on the video).
 - **Audio**: music / sound notes.
 - **Post copy**: the public post text (280 chars max; it goes in the post, not the video).
+
+## Checklist before saving
+
+- [ ] Creative ID, Length, Host, Narration, Opening banner, Gameplay label are filled in.
+- [ ] Host is `none` or `mayor`; Narration is `off` when Host is `none`.
+- [ ] 2-4 gameplay shots; each has a time range, a scene from the list below, and a caption (or "none"); LATER is marked.
+- [ ] The shot times add up to the Length (30s maximum in total).
+- [ ] Ending is a real `art/...` path from the Art list or `standard end card`; nothing else is expected on the end frame.
+- [ ] CTA and Post copy are written (Post copy 280 chars max).
+- [ ] The gameplay scene differs from the last few CQ videos (check recent drafts/posts first).
+- [ ] Anything the scenes cannot show is written as "NEEDS: ...".
 
 ## Available game scenes
 
@@ -56,17 +70,18 @@ Hook: Before the Titans, your first gathering run.
 Opening banner: GATHER FIRST
 
 Shots:
-| Time    | What viewers see                         | On-screen text         | LATER |
+| Time    | What viewers see                         | Caption                | LATER |
 | 0-3s    | Town establishing shot                   | GATHER FIRST           | n     |
 | 3-7s    | spotTile: select a resource spot         | 1. SELECT A RESOURCE   | n     |
 | 7-11s   | critterSelection: choose a critter       | 2. CHOOSE YOUR CRITTER | n     |
 | 11-14s  | critterSelection: send it                | 3. SEND (LATER)        | y     |
 | 14-18s  | spotClaimReward: claim the reward        | 4. CLAIM               | n     |
-| 18-21s  | Ending art                               | TOMORROW: SEASON 3 FIRST LOOK | n |
+| 18-21s  | Ending: supplied art, full-frame         | none                   | n     |
 
 Gameplay label: CURRENT GAMEPLAY
 Payoff: the haul is claimed and stocks your town.
-Ending: art/posters/s3-first-look.jpg | TOMORROW: SEASON 3 FIRST LOOK | Return tomorrow for the Season 3 reveal.
+Ending: art/posters/s3-first-look.jpg (shown as supplied, nothing on top)
+CTA: Return tomorrow for the Season 3 reveal.
 Audio: light upbeat music, no voice-over.
 Post copy: Before the Titans arrive, do your first gathering run. Season 3 first look tomorrow.
 ```

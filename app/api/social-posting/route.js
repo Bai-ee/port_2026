@@ -180,7 +180,7 @@ export async function GET(request) {
 // Not applicable / already authored -> { ok:true, post:current }. Failure -> { ok:false, response } (409 with the reasons; the post keeps authorError).
 async function authorCreativeBrief(clientId, postId, decoded, current) {
   const out = await authorPostBrief({ db: adminDb(), clientId, postId: String(postId || ''), by: decoded?.email || decoded?.uid || null });
-  if (out.ok) return { ok: true, post: out.authored ? { ...current, ...out.post } : current, warnings: out.warnings || [] };
+  if (out.ok) return { ok: true, post: out.authored ? { ...current, ...out.post } : current, warnings: out.warnings || [], similar: out.similar || [] };
   const row = await getSocialPost(clientId, postId);
   return { ok: false, response: json({ ok: false, error: `Creative Brief could not be turned into a video: ${out.reasons.join('; ')}`, reasons: out.reasons, ...(row ? { brief: videoBriefView(row) } : {}) }, out.status || 409) };
 }
@@ -344,15 +344,17 @@ export async function POST(request) {
       const approve = action === 'video-brief-approve';
       const input = approve ? { status: 'approved' } : Object.fromEntries(['template', 'status', 'assets', 'shots', 'captions', 'audio', 'narration'].filter((k) => Object.prototype.hasOwnProperty.call(body, k)).map((k) => [k, body[k]]));
       let authorWarnings = [];
+      let similar = [];
       let post = await saveVideoBrief(context.clientId, body.postId, input, { by: decoded?.email || decoded?.uid || null, allowApprove: approve, expectedRevision: body.expectedRevision ?? null });
       if (approve) {
         const au = await authorCreativeBrief(context.clientId, body.postId, decoded, post);
         if (!au.ok) return au.response;
         post = au.post;
         authorWarnings = au.warnings;
+        similar = au.similar;
       }
       const warnings = [...briefWarnings(post), ...authorWarnings];
-      return json({ ok: true, post: { id: post.id, revision: post.revision, status: post.status }, brief: videoBriefView(post), ...(warnings.length ? { warnings } : {}) });
+      return json({ ok: true, post: { id: post.id, revision: post.revision, status: post.status }, brief: videoBriefView(post), ...(warnings.length ? { warnings } : {}), ...(similar.length ? { similar } : {}) });
     }
 
     // One click from the panel: approve the brief (if not yet) at the revision the owner saw, then start the render now.
@@ -380,7 +382,7 @@ export async function POST(request) {
       if (!render.ok && render.error === 'job-exists') render = { ok: true, existing: true, status: 'queued' };
       if (swap && render.ok && render.jobId) await setVersionJob(adminDb(), row.id, authoredId, render.jobId);
       const warnings = [...briefWarnings(row), ...authorWarnings];
-      return json({ ok: true, post: { id: row.id, revision: row.revision, status: row.status }, brief: videoBriefView(row), render, ...(warnings.length ? { warnings } : {}) });
+      return json({ ok: true, post: { id: row.id, revision: row.revision, status: row.status }, brief: videoBriefView(row), render, ...(warnings.length ? { warnings } : {}), ...(au.similar?.length ? { similar: au.similar } : {}) });
     }
 
     // Creative Brief revisions (draft only, never approve or schedule): owner feedback -> revised request -> replace render; rollback -> old version -> replace render.
@@ -398,7 +400,7 @@ export async function POST(request) {
         const row = await getSocialPost(context.clientId, body.postId);
         return json({ ok: false, error: `The video could not be revised: ${out.reasons.join('; ')}`, reasons: out.reasons, ...(row ? { brief: videoBriefView(row) } : {}) }, out.status || 409);
       }
-      return json({ ok: true, post: { id: out.post.id, revision: out.post.revision, status: out.post.status }, brief: videoBriefView(out.post), render: out.render, versions: out.versions, ...(out.warnings?.length ? { warnings: out.warnings } : {}) });
+      return json({ ok: true, post: { id: out.post.id, revision: out.post.revision, status: out.post.status }, brief: videoBriefView(out.post), render: out.render, versions: out.versions, ...(out.warnings?.length ? { warnings: out.warnings } : {}), ...(out.similar?.length ? { similar: out.similar } : {}) });
     }
 
     // Panel poll while a render runs: attaches a finished video right away (no wait for the cron tick), returns status.

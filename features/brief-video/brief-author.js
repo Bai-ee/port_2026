@@ -12,6 +12,7 @@ import { requestHash } from './howto.js';
 import { requestToSpec } from './howto-catalog/requestToSpec.mjs';
 import { writeVersion } from './brief-versions.js';
 import { takeLease, releaseLease } from './brief-lease.js';
+import { BRIEF_VIDEO_JOBS } from './clients.js';
 
 const require = createRequire(import.meta.url);
 
@@ -47,7 +48,7 @@ export function authorToolSchema(catalog) {
     },
     required: ['panel', 'clicks'],
   });
-  const art = { type: 'object', properties: { src: S({ pattern: '^art/[a-z0-9/_-]+\\.(png|jpg|jpeg|webp)$' }), crop: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' }, w: { type: 'number' } }, required: ['x', 'y', 'w'] } }, required: ['src'] };
+  const art = { type: 'object', description: 'Only when the brief supplies an image: shown full-frame with nothing on top. Otherwise omit end.art (standard end card).', properties: { src: S({ pattern: '^art/[a-z0-9/_-]+\\.(png|jpg|jpeg|webp)$' }) }, required: ['src'] };
   return {
     type: 'object',
     properties: {
@@ -65,7 +66,7 @@ export function authorToolSchema(catalog) {
           arrival: { type: 'object', properties: { say: S() } },
           steps: { type: 'array', minItems: 2, maxItems: 4, items: { anyOf: Object.entries(catalog.panels || {}).map(([panel, def]) => stepFor(panel, def)) } },
           payoff: { type: 'object', properties: { say: S(), spot_art: S(), town: { type: 'object', properties: { name: S(), level: { type: 'integer', minimum: 1, maximum: 15 } } } } },
-          end: { type: 'object', properties: { caption: S({ maxLength: 48 }), cta: S({ maxLength: 80 }), seconds: { type: 'number', minimum: 1, maximum: 10 }, art }, },
+          end: { type: 'object', properties: { caption: S({ maxLength: 48, description: 'Post copy only; never drawn on the video.' }), cta: S({ maxLength: 80, description: 'Post copy only; never drawn on the video.' }), headline: S({ maxLength: 60 }), seconds: { type: 'number', minimum: 1, maximum: 10 }, art }, },
         },
         required: ['type', 'skeleton', 'host', 'goal', 'audience', 'hook', 'banner', 'steps'],
       },
@@ -80,7 +81,7 @@ export function authorSystemPrompt(catalog, campaign) {
     'You turn a Critters Quest Creative Brief into one how-to video request by calling the author_request tool. Call it exactly once.',
     'Follow the brief\'s direction exactly: its topic, shots (in order), captions, timings, gameplay label, ending, host and narration choice. Never invent a different topic or add shots the brief does not have.',
     'Use ONLY the panels, presets and actions listed below. Pick the scene that matches what the shot shows. If the brief needs a scene, action, preset, host or on-screen element that is not listed, do not approximate: list it in `unsupported` (shot + what) and leave `request` out.',
-    'Skeleton: use "cursor" with host "none" when the brief says no host; use "guide" only when it asks for a host (host "mayor"). With "cursor" give establish (the opening town shot) and a caption and seconds for each step; LATER steps set later=true. End: caption, cta and seconds from the brief\'s Ending; use end.art only when the brief names an art path, otherwise omit it (standard end card).',
+    'Skeleton: use "cursor" with host "none" when the brief says no host; use "guide" only when it asks for a host (host "mayor"). With "cursor" give establish (the opening town shot) and a caption and seconds for each step; LATER steps set later=true. End: seconds from the brief\'s Ending (caption and cta are post copy only and are never drawn). Only set end.art when the brief supplies an image (it is shown full-frame as is, nothing on top, no crop); otherwise omit it for the standard end card.',
     'Narration: set narration from the brief (on = true, off = false). Without narration, say may be omitted.',
     `Do not set id, review_on, public_copy, request_version or season: the server fills them. Campaign: ${campaign.id}.`,
     `Game scenes (panel: meaning):\n${scenes}\nEstablishing shot: ${ESTABLISH_DESCRIPTION}\nend.art.src must be one of: ${ART_AVAILABLE.join(', ')}; if the brief names other art, list it in unsupported.`,
@@ -106,12 +107,10 @@ const userPrompt = (creative, publicCopy) => [
 export const authorId = (post, rev) => `cb-${String(post?.id || 'post').toLowerCase().replace(/[^a-z0-9]/g, '').slice(-8) || 'post'}-r${rev}`;
 const seasonOf = (campaign) => Number(/^s(\d+)/.exec(String(campaign?.id || ''))?.[1]) || 3;
 
-const DEFAULT_END_ART = Object.freeze({ src: 'art/posters/s3-first-look.jpg', crop: { x: 0, y: 0.02, w: 1 } });
-
 /**
  * Server-side defaults for a "cursor" request (no host), applied before validation so the model need not guess them:
- * label CURRENT GAMEPLAY; end caption/cta/seconds from the campaign end headline; the standard end art (only when it is in art.json)
- * when the brief names none; narration forced off (no host to speak), with warning 'narration-off-no-host' if the model asked for it.
+ * label CURRENT GAMEPLAY; end caption/cta/seconds from the campaign end headline; end.art is never defaulted (no art = the standard end card);
+ * narration forced off (no host to speak), with warning 'narration-off-no-host' if the model asked for it.
  */
 export function fillCursorDefaults(request, campaign) {
   const warnings = [];
@@ -125,10 +124,56 @@ export function fillCursorDefaults(request, campaign) {
   if (!String(end.caption || '').trim() && capLine) end.caption = capLine.slice(0, 48);
   if (!String(end.cta || '').trim() && ctaLine) end.cta = ctaLine.slice(0, 80);
   if (end.seconds === undefined) end.seconds = 3;
-  if (!end.art?.src) { if (ART_AVAILABLE.includes(DEFAULT_END_ART.src)) end.art = { src: DEFAULT_END_ART.src, crop: { ...DEFAULT_END_ART.crop } }; }
-  else if (!end.art.crop) end.art = { ...end.art, crop: { ...DEFAULT_END_ART.crop } };
+  if (end.art && !end.art.src) delete end.art;
   r.end = end;
   return { request: r, warnings };
+}
+
+// ── variety check (deterministic, never blocks) ─────────────────────────────────────────────────────────────
+
+export const SIMILAR_DAYS = 14;
+export const SIMILAR_RATIO = 0.8;
+
+/** Scene signature: the establish view plus one `panel|preset|actions` entry per step, in order. */
+export function sceneSignature(request) {
+  const sig = (Array.isArray(request?.steps) ? request.steps : []).map((s) => `${s?.panel || ''}|${s?.preset || ''}|${(Array.isArray(s?.clicks) ? s.clicks : []).map((c) => c?.action || '').join(',')}`);
+  return [`establish|${request?.establish?.view || ''}`, ...sig];
+}
+
+/** Share of matching signature entries (same position) between two requests, 0-1. */
+export function sceneOverlap(a, b) {
+  const x = sceneSignature(a);
+  const y = sceneSignature(b);
+  const n = Math.max(x.length, y.length);
+  if (!n) return 0;
+  return x.reduce((c, e, i) => c + (e === y[i] ? 1 : 0), 0) / n;
+}
+
+/**
+ * Pure: jobs = brief_video_jobs rows ({request?, status, postId, howtoId, reviewOn, createdAt, attachedAt}). Rows from the last 14 days that are
+ * done or attached, other than this post's own, whose scene overlap is >= 80%. Returns [{ id, date }] (id = postId, else howtoId).
+ */
+export function findSimilarRecent(request, jobs, { now = Date.now(), postId = null } = {}) {
+  const since = now - SIMILAR_DAYS * 86_400_000;
+  const out = [];
+  for (const j of Array.isArray(jobs) ? jobs : []) {
+    if (!j?.request || !(j.status === 'done' || j.attachedAt)) continue;
+    if (postId && j.postId === postId) continue;
+    if (j.howtoId && j.howtoId === request?.id) continue;
+    const at = Date.parse(j.attachedAt || j.updatedAt || j.createdAt || '');
+    if (!Number.isFinite(at) || at < since) continue;
+    if (sceneOverlap(request, j.request) >= SIMILAR_RATIO) out.push({ id: String(j.postId || j.howtoId || ''), date: String(j.reviewOn || new Date(at).toISOString().slice(0, 10)) });
+  }
+  return out.filter((o) => o.id);
+}
+
+/** Reads this client's jobs (same pattern as the worker) and returns { warnings: ['similar-to-recent:<id>'], similar: [{id, date}] }. A read failure yields none. */
+export async function similarRecentWarnings(db, { clientId, request, postId = null, now = Date.now() }) {
+  try {
+    const snap = await db.collection(BRIEF_VIDEO_JOBS).where('clientId', '==', clientId).get();
+    const similar = findSimilarRecent(request, snap.docs.map((d) => d.data()), { now, postId });
+    return { warnings: similar.map((o) => `similar-to-recent:${o.id}`), similar };
+  } catch { return { warnings: [], similar: [] }; }
 }
 
 // One forced-tool call + one repair retry. `build(request)` adds the server-set fields. Returns { ok:true, request, model } | { ok:false, reasons }.
@@ -307,7 +352,8 @@ export async function authorPostBrief({ db, clientId, postId, by = null, now = D
     if (!sub.ok) return fail([`submit-${sub.error || sub.status}`, ...(sub.errors || [])].slice(0, 8));
     const w = await apply({ key, requestId: out.request.id, requestHash: requestHash(out.request), at: iso, model: out.model || AUTHOR_MODEL, catalogHash: catalogHash(catalog, campaign) });
     if (w.ok) await writeVersion(db, post.id, { requestId: out.request.id, requestHash: requestHash(out.request), request: out.request, kind: 'author', by, now });
-    return w.ok ? { ok: true, post: w.post, authored: true, warnings: out.warnings || [] } : { ok: false, status: w.status, reasons: w.reasons };
+    const sim = await similarRecentWarnings(db, { clientId, request: out.request, postId: post.id, now });
+    return w.ok ? { ok: true, post: w.post, authored: true, warnings: [...(out.warnings || []), ...sim.warnings], similar: sim.similar } : { ok: false, status: w.status, reasons: w.reasons };
   } finally {
     await releaseLease(db, { postId: post.id, key });
   }

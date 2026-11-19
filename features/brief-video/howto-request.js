@@ -38,13 +38,11 @@ function validateV33Top(req, errors) {
     if (end.caption !== undefined && !str(end.caption, 48)) errors.push('end.caption must be a string of 48 characters or fewer');
     if (end.cta !== undefined && !str(end.cta, 80)) errors.push('end.cta must be a string of 80 characters or fewer');
     if (end.seconds !== undefined && !num(end.seconds, 1, 10)) errors.push('end.seconds must be a number 1-10');
+    if (end.headline !== undefined && !str(end.headline, 60)) errors.push('end.headline must be a string of 60 characters or fewer');
+    // end.art is optional (no art = the standard end card); when given it is shown full-frame as is, so there is no crop.
     if (end.art !== undefined) {
       if (!isObj(end.art)) errors.push('end.art must be an object');
-      else {
-        if (typeof end.art.src !== 'string' || !ART_RE.test(end.art.src)) errors.push('end.art.src must match art/<path>.(png|jpg|jpeg|webp)');
-        const c = end.art.crop;
-        if (c !== undefined && !(isObj(c) && ['x', 'y', 'w'].every((k) => typeof c[k] === 'number' && Number.isFinite(c[k])))) errors.push('end.art.crop must be {x, y, w} numbers');
-      }
+      else if (typeof end.art.src !== 'string' || !ART_RE.test(end.art.src)) errors.push('end.art.src must match art/<path>.(png|jpg|jpeg|webp)');
     }
   }
 }
