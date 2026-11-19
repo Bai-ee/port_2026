@@ -176,3 +176,30 @@ test('narration: optional boolean, default off, stored as given', async () => {
   const saved = (await db().collection('howto_requests').doc('gather-first-decision').get()).data();
   assert.equal(saved.request.narration, true);
 });
+
+const cursor33 = () => ({
+  request_version: 3.3, id: 'gather-first-cursor', review_on: '2026-11-19', type: 'how-to', season: 3,
+  goal: 'g', audience: 'new player', public_copy: 'Gather first in Critters Quest.', hook: 'What do you gather first?', banner: 'GATHER FIRST',
+  skeleton: 'cursor', label: 'CURRENT GAMEPLAY', narration: false, host: { name: 'none' },
+  establish: { caption: 'GATHER FIRST', seconds: 2 },
+  steps: ['1. SELECT A RESOURCE', '2. PICK A CRITTER', '3. SEND IT OUT', '4. COLLECT THE HAUL'].map((caption, i) => ({
+    caption, seconds: 4, later: i === 2, panel: 'spotTile', clicks: [{ action: 'selectSpot' }],
+  })),
+  end: { caption: 'GATHER FIRST', seconds: 3, art: { src: 'art/posters/s3-first-look.png' } },
+});
+
+test('v3.3 cursor request is valid and auto-approves', async () => {
+  assert.deepEqual(validateHowtoRequest(cursor33()).errors, []);
+  const r = await submit(cursor33());
+  assert.equal(r.ok, true);
+  assert.equal(r.autoApproved, true);
+  assert.equal(r.narration, false);
+});
+
+test('v3.3 field errors', () => {
+  const bad = (mut) => { const r = cursor33(); mut(r); return validateHowtoRequest(r).errors.join('|'); };
+  assert.match(bad((r) => { r.skeleton = 'guide'; }), /host\.name "none"/);
+  assert.match(bad((r) => { r.end.art.src = 'images/x.png'; }), /end\.art\.src/);
+  assert.match(bad((r) => { r.steps[0].caption = 'x'.repeat(41); }), /steps\[0\]\.caption/);
+  assert.match(bad((r) => { r.skeleton = 'guide'; r.host.name = 'mayor'; delete r.steps[0].say; }), /steps\[0\]\.say is required/);
+});

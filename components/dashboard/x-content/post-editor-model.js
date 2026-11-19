@@ -226,7 +226,7 @@ export function actionState({ row, content, when, tz, now = Date.now(), busy = f
   else if (isBriefOverLimit(content)) approveBlockedReason = `Internal video brief is over ${BRIEF_MAX_CHARS} characters.`;
   else if (over) approveBlockedReason = `Over ${MAX_CHARS} characters.`;
   else if (hasBrief) approveBlockedReason = 'Internal video brief still on this post: attach the video first.';
-  else if (row.videoBriefMeta && row.videoBriefMeta.status !== 'rendered' && !row.mediaUrl && String(row.videoBrief || '').trim()) approveBlockedReason = 'Video brief not rendered yet: wait for the video, or clear the brief.';
+  else if (row.videoBriefMeta && row.videoBriefMeta.status !== 'rendered' && !row.mediaUrl && String(row.videoBrief || '').trim()) approveBlockedReason = 'Creative Brief not rendered yet: wait for the video, or clear the brief.';
   else if (!gate.ok) approveBlockedReason = boundFieldsNotice(gate);
   else if (suggestion && row.windowOpen === false) approveBlockedReason = 'The window for this one has closed.';
   else if (!suggestion && row.status === 'needs_review') approveBlockedReason = 'Needs review before it can be approved.';
@@ -380,4 +380,48 @@ export function mergeServerPost(row, res) {
     }
   }
   return next;
+}
+
+// ── Creative Brief errors in plain English (VideoBriefPanel) ─────────────────────────────────────────────────────
+const BRIEF_ERR = {
+  'daily-cap': 'Render-now limit reached for today (5). The brief stays approved; the scheduled run picks it up.',
+  hold: 'The template contains HOLD, so it will not render.',
+  'has-media': 'This post already has creative that was not made from a brief. Remove it to render a new video.',
+  'video-disabled': 'Video rendering is switched off.',
+  'howto-disabled': 'How-to video rendering is switched off.',
+  'not-draft': 'Only drafts render and can be revised.',
+  'author-cap': 'The daily limit for turning briefs into video requests was reached. Try again tomorrow.',
+  'author-model-error': 'The video request could not be written just now. Try again in a minute.',
+  'author-no-output': 'The video request came back empty. Try again.',
+  'no-authored-request': 'Approve the brief first, so the video request is written. Then you can send feedback.',
+  'revision-conflict': 'This post changed somewhere else. Reload it and try again.',
+  'brief-changed': 'The brief changed while the video request was being written. Try again.',
+  'request-missing': 'The video request for this draft could not be found.',
+  'version-not-found': 'That version no longer exists.',
+  'feedback-empty': 'Write what should change first.',
+  'feedback-too-long': 'Feedback is limited to 2000 characters.',
+  'invalid-brief:howto-prose-needs-request': 'This reads like a how-to written as prose. Approve it as a Creative Brief so the video request is written for you, or set a howto id.',
+  'invalid-brief:after-campaign': 'The campaign window has ended for this post\'s date, so no video will render.',
+};
+const BRIEF_PREFIX_RE = /^(?:Creative Brief could not be turned into a video|The video could not be revised):\s*/;
+
+/** One reason code from the server -> a sentence. Unknown codes are shown as is. */
+export function friendlyBriefReason(code) {
+  const c = String(code ?? '').trim();
+  if (BRIEF_ERR[c]) return BRIEF_ERR[c];
+  let m = /^unsupported:([^:]*):(.*)$/.exec(c);
+  if (m) return `The video library cannot do this yet (${m[1].trim() || 'a shot'}: ${m[2].trim() || 'not available'}). Change that shot in the brief.`;
+  m = /^art-missing:(.+)$/.exec(c);
+  if (m) return `The artwork ${m[1]} is not in the video library. Use the standard end card or another art path.`;
+  m = /^unknown-(panel|action|preset|host):(?:(\d+):)?(.+)$/.exec(c);
+  if (m) return `${m[2] ? `Step ${m[2]}` : 'The brief'} uses ${m[1] === 'action' ? 'an' : 'a'} ${m[1] === 'panel' ? 'game scene' : m[1]} the video library does not have (${m[3]}). Pick one from the template's list.`;
+  if (/^invalid-brief:/.test(c)) return `This brief cannot render (${c.slice('invalid-brief:'.length)}). Fix the Video brief line or the Creative Brief.`;
+  return c;
+}
+
+/** A server message or reason list -> one readable string (the route's "...: a; b" error text is split back into reasons). */
+export function friendlyBriefReasons(input) {
+  if (!Array.isArray(input) && !BRIEF_PREFIX_RE.test(String(input ?? ''))) return friendlyBriefReason(input);
+  const list = Array.isArray(input) ? input : String(input).replace(BRIEF_PREFIX_RE, '').split(/;\s*/);
+  return list.map(friendlyBriefReason).filter(Boolean).join(' ');
 }

@@ -1,4 +1,4 @@
-// Video group: Critters Quest how-to video REQUESTS (template v3 / 3.1 / 3.2) and render-now. Route app/api/dashboard/howto-requests (key 'howto-requests').
+// Video group: Critters Quest how-to video REQUESTS (template v3 / 3.1 / 3.2 / 3.3) and render-now. Route app/api/dashboard/howto-requests (key 'howto-requests').
 // Firestore only (howto_requests/{id}); no render, no spend. The owner approves a request with scripts/cq-howto/approve-request.mjs;
 // only then does the daily cron render it. Logic + validation: features/brief-video/howto-request.js.
 import { str, obj, open, bool } from './_schema.js';
@@ -10,7 +10,7 @@ export const VIDEO_ACTIONS = [
     id: 'video.howto.request.submit',
     group: 'video',
     title: 'Submit a Critters Quest how-to video request',
-    description: 'Saves a how-to video request (v3.2 = auto-approved, renders with no owner step; 3/3.1 wait for the owner). Returns briefLine for the draft. Narration on by default for 3.2.',
+    description: 'Required for any gameplay/how-to video. Saves a request (v3.2/3.3 = auto-approved; 3/3.1 wait for the owner). Returns briefLine for the draft. Narration default on for 3.2+.',
     keywords: 'critters quest how-to video request template v3 howto brief render submit',
     route: 'howto-requests', method: 'POST', action: 'submit',
     args: obj({ request: open('The v3 request as JSON: request_version 3.2 (number), season (integer), id, review_on, type (how-to|feature-promo), game_commit (optional for 3.2), goal, audience, public_copy (<=280), hook, banner, host{name}, arrival{say}, steps[2-4]{say,panel,surface,clicks[{action (catalog action id), target?, handler?}]}, payoff{say,spot_art,town{name,level 1-15}}. Optional narration (boolean; default true for 3.2, false for older). Max 32 KB.') }, ['request']),

@@ -5,7 +5,7 @@ import {
   RENDER_NOW_MAX_PER_DAY, RENDER_NOW_ATTACH_PER_TICK, BRIEF_VIDEO_USAGE,
 } from './clients.js';
 import { parseBrief, briefOfPost } from './brief.js';
-import { panelBriefBlocksRender } from './brief-fields.js';
+import { panelBriefBlocksRender, panelBriefNeedsAuthoring } from './brief-fields.js';
 import { selectCandidates, HOLD_RE, newJobDoc, briefJobId, addDaysIso } from './jobs.js';
 import { attachJobToPost } from './attach.js';
 import { howtoReadiness } from './howto.js';
@@ -74,7 +74,8 @@ export async function dryRun({ db, now = Date.now(), clients = DAILY_BRIEF_VIDEO
       const parsed = briefOfPost(post);
       if (!parsed) continue;
       const extra = {};
-      if (panelBriefBlocksRender(post)) extra.skipReason = `brief-${post.videoBriefMeta.status}`;
+      if (panelBriefNeedsAuthoring(post)) extra.skipReason = 'needs-authoring';
+      else if (panelBriefBlocksRender(post)) extra.skipReason = `brief-${post.videoBriefMeta.status}`;
       else if (HOLD_RE.test(parsed.brief)) extra.skipReason = 'hold';
       else if (parsed.briefKind === 'invalid') extra.skipReason = parsed.invalidReason;
       else if (parsed.briefKind === 'howto') {
@@ -287,7 +288,25 @@ const hasAnyMedia = (p) => Boolean(p.mediaUrl) || Boolean(p.nasSha) || (Array.is
  * but ignores the 7-day window and counts against its own CT-day cap (brief_video_usage/<day>). Draft with a brief and no
  * media only; HOLD and the howto campaign date still apply. Returns { ok, jobId, status } or { ok:false, status, error }.
  */
-export async function renderNow({ db, clientId, postId, narration, now = Date.now(), env = process.env, fetchImpl, maxPerDay = RENDER_NOW_MAX_PER_DAY } = {}) {
+export const renderNow = (args = {}) => startRender(args, { replace: false });
+
+/** Why a draft's video may not be replaced (null when it may): draft-only, and existing media only when a brief job (bv_*) attached it. */
+export function replaceBlockReason(post) {
+  if (!post) return 'post-not-found';
+  if (post.status !== 'draft') return 'not-draft';
+  const other = Boolean(post.nasSha) || (Array.isArray(post.mediaVariants) ? post.mediaVariants.length > 0 : Boolean(post.mediaVariants && Object.keys(post.mediaVariants).length));
+  if (other || (post.mediaUrl && !String(post.mediaJobId || '').startsWith('bv_'))) return 'has-media';
+  return null;
+}
+
+/**
+ * Re-render a draft whose video came from a brief job (feedback / rollback). Same as renderNow (HOLD, campaign date, render-now cap)
+ * but allows existing media ONLY when post.mediaJobId starts with 'bv_' (never owner-uploaded media). The job carries replace:true,
+ * so the attach step swaps the video. A finished earlier job never blocks it; only a queued/rendering one does.
+ */
+export const renderReplace = (args = {}) => startRender(args, { replace: true });
+
+async function startRender({ db, clientId, postId, narration, now = Date.now(), env = process.env, fetchImpl, maxPerDay = RENDER_NOW_MAX_PER_DAY } = {}, { replace }) {
   const fail = (status, error) => ({ ok: false, status, error });
   if (!DAILY_BRIEF_VIDEO_CLIENTS[clientId]) return fail(403, `client-not-allowed:${clientId || 'none'}`);
   if (env.DAILY_BRIEF_VIDEO_ENABLED !== 'true') return fail(409, 'video-disabled');
@@ -297,9 +316,10 @@ export async function renderNow({ db, clientId, postId, narration, now = Date.no
   const post = snap.exists ? { id: postId, ...snap.data() } : null;
   if (!post || post.clientId !== clientId) return fail(404, 'post-not-found');
   if (post.status !== 'draft') return fail(409, 'not-draft');
-  if (hasAnyMedia(post)) return fail(409, 'has-media');
+  if (replace ? replaceBlockReason(post) : hasAnyMedia(post)) return fail(409, 'has-media');
   const parsed = briefOfPost(post);
   if (!parsed) return fail(409, 'no-brief');
+  if (panelBriefNeedsAuthoring(post)) return fail(409, 'needs-authoring');
   if (panelBriefBlocksRender(post)) return fail(409, 'brief-not-approved');
   if (HOLD_RE.test(parsed.brief)) return fail(409, 'hold');
   if (parsed.briefKind === 'invalid') return fail(409, `invalid-brief:${parsed.invalidReason}`);
@@ -312,10 +332,11 @@ export async function renderNow({ db, clientId, postId, narration, now = Date.no
     else Object.assign(extra, { request: r.request, requestHash: r.requestHash, narration: typeof narration === 'boolean' ? narration : r.narration });
   }
   const mine = (await readClientJobs(db, clientId)).filter((j) => j.postId === post.id && j.briefHash === parsed.briefHash && sameSource(j, { specHash: extra.specHash ?? null, requestHash: extra.requestHash ?? null }));
-  const live = mine.find((j) => j.status !== 'failed' && !j.attachSkipped);
+  const live = mine.find((j) => (replace ? isActive(j) : j.status !== 'failed' && !j.attachSkipped));
   if (live) return { ok: true, jobId: live.jobId, status: live.status, existing: true };
   const attempt = Math.max(0, ...mine.map((j) => Number(j.attempt) || 1)) + 1;
   const job = newJobDoc({ post, parsed, attempt, now, renderNow: true, ...extra });
+  if (replace) job.replace = true;
   const created = await createJob(db, job, { now, maxPerDay, counterRef: db.collection(BRIEF_VIDEO_USAGE).doc(ctToday(now)) });
   if (!created) return fail(409, 'job-exists');
   if (created.capped) return fail(429, 'daily-cap');

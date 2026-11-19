@@ -29,7 +29,7 @@ Catalog action in `features/x-strategy/agent/catalog/video.js` (tier 1, Firestor
 
 ## 2. Draft (`queue.draft.create`)
 
-`content` = `public_copy` + `"\n\n"` + `briefLine`. The brief text must be exactly `howto=<id>`: extra text, other case or YAML makes it `invalid` and it is never rendered (`CQ-DAILY-BRIEF-VIDEO.md` section 3). The draft's `reviewOn` must be on or before `2026-12-17` (`HOWTO_CAMPAIGN_UNTIL`), else `after-campaign`. Until the request is approved the draft waits (`videoBriefStatus: 'waiting_howto'`, flag on). The publish guard still blocks approving a draft whose brief is not yet attached.
+`content` = `public_copy` + `"\n\n"` + `briefLine`. The brief text must be exactly `howto=<id>`: extra text, other case or YAML makes it `invalid` and it is never rendered (`CQ-DAILY-BRIEF-VIDEO.md` section 3). A structured how-to prose brief (`Type: ...how-to/gameplay` plus 2+ field lines) is `invalid` (`howto-prose-needs-request`); `queue.draft.create` and the Video brief panel save still succeed but return `warnings`. The draft's `reviewOn` must be on or before `2026-12-17` (`HOWTO_CAMPAIGN_UNTIL`), else `after-campaign`. Until the request is approved the draft waits (`videoBriefStatus: 'waiting_howto'`, flag on). The publish guard still blocks approving a draft whose brief is not yet attached.
 
 ## 3. Build (owner, `hitloop-video`, `/cq-howto`)
 
@@ -90,3 +90,13 @@ The reviewer watches the video in the calendar before approving. It is rebuilt U
 - **Local takeover.** A `done` job with `source: 'local'` and `replaceDraftMedia: true` (hub `howto-attach.mjs`, id `bv_local_*`, no `briefHash`/`howtoId`) skips the brief-hash match (postId, clientId and draft checks stay) and strips the brief if present. It may replace media only when the post has none or its `mediaJobId` starts with `bv_` (never owner-uploaded media), only inside the attach transaction and only while the post is `draft`; `mediaVariants`/`nasSha` still block.
 - **Job matching.** The service rewrites `specHash` on finished jobs (8-hex on cq-brief, `howtoSpecHash` on cq-howto), so the cron and render-now match by source: request jobs by `requestHash`, baked-spec howto by `kind` + `specHash`, free text by `kind !== 'cq-howto'`.
 - **3.2 validation.** `season` integer, 2-4 steps, 1-3 clicks per step, `payoff.town.level` integer 1-15 are rejected at submit.
+
+## 9. Template v3.3 (cursor skeleton)
+
+`request_version: 3.3` follows every 3.2 rule (auto-approve, narration default true, `clicks[].action` required, `game_commit` optional, `season` integer) plus these optional fields, checked for type and size only (the render service does the deep validation):
+
+- `skeleton`: `guide` (default) or `cursor`. `host.name` may be `none` only with `cursor`.
+- `label` string <= 32; `establish` `{caption <= 40, seconds 1-10, view?}`.
+- `steps[].caption` <= 40, `steps[].seconds` 1-15, `steps[].later` boolean. `steps[].say` is optional with `cursor` (required for `guide`); `payoff` is optional with `cursor`.
+- `end` `{caption? <= 48, cta? <= 80, seconds? 1-10, art? {src: /^art\/[a-z0-9\/_-]+\.(png|jpg|jpeg|webp)$/, crop?: {x, y, w}}}`.
+

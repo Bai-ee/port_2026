@@ -14,6 +14,47 @@ const text = (v) => (typeof v === 'string' ? v.trim() : '');
 const words = (s) => text(s).split(/\s+/).filter(Boolean).length;
 const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
 
+const ART_RE = /^art\/[a-z0-9/_-]+\.(png|jpg|jpeg|webp)$/;
+const num = (v, lo, hi) => typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi;
+const str = (v, max) => typeof v === 'string' && v.length <= max;
+
+// v3.3 optional fields: type/size only. The render service does the deep validation.
+function validateV33Top(req, errors) {
+  if (req.skeleton !== undefined && !['guide', 'cursor'].includes(req.skeleton)) errors.push('skeleton must be "guide" or "cursor"');
+  if (req.host?.name === 'none' && req.skeleton !== 'cursor') errors.push('host.name "none" is only allowed when skeleton is "cursor"');
+  if (req.label !== undefined && !str(req.label, 32)) errors.push('label must be a string of 32 characters or fewer');
+  const est = req.establish;
+  if (est !== undefined) {
+    if (!isObj(est)) errors.push('establish must be an object');
+    else {
+      if (!str(est.caption, 40)) errors.push('establish.caption must be a string of 40 characters or fewer');
+      if (!num(est.seconds, 1, 10)) errors.push('establish.seconds must be a number 1-10');
+      if (est.view !== undefined && typeof est.view !== 'string') errors.push('establish.view must be a string');
+    }
+  }
+  const end = req.end;
+  if (end !== undefined) {
+    if (!isObj(end)) { errors.push('end must be an object'); return; }
+    if (end.caption !== undefined && !str(end.caption, 48)) errors.push('end.caption must be a string of 48 characters or fewer');
+    if (end.cta !== undefined && !str(end.cta, 80)) errors.push('end.cta must be a string of 80 characters or fewer');
+    if (end.seconds !== undefined && !num(end.seconds, 1, 10)) errors.push('end.seconds must be a number 1-10');
+    if (end.art !== undefined) {
+      if (!isObj(end.art)) errors.push('end.art must be an object');
+      else {
+        if (typeof end.art.src !== 'string' || !ART_RE.test(end.art.src)) errors.push('end.art.src must match art/<path>.(png|jpg|jpeg|webp)');
+        const c = end.art.crop;
+        if (c !== undefined && !(isObj(c) && ['x', 'y', 'w'].every((k) => typeof c[k] === 'number' && Number.isFinite(c[k])))) errors.push('end.art.crop must be {x, y, w} numbers');
+      }
+    }
+  }
+}
+
+function validateV33Step(s, p, errors) {
+  if (s.caption !== undefined && !str(s.caption, 40)) errors.push(`${p}.caption must be a string of 40 characters or fewer`);
+  if (s.seconds !== undefined && !num(s.seconds, 1, 15)) errors.push(`${p}.seconds must be a number 1-15`);
+  if (s.later !== undefined && typeof s.later !== 'boolean') errors.push(`${p}.later must be true or false`);
+}
+
 /** @returns {{errors: string[], warnings: string[]}} errors block the submit; warnings are the template section 3 copy budget. */
 export function validateHowtoRequest(req) {
   const errors = [];
@@ -23,8 +64,10 @@ export function validateHowtoRequest(req) {
   try { size = Buffer.byteLength(JSON.stringify(req)); } catch { errors.push('request is not JSON-serialisable'); }
   if (size > HOWTO_MAX_BYTES) errors.push(`request is ${size} bytes; the limit is ${HOWTO_MAX_BYTES}`);
 
-  if (![3, 3.1, 3.2].includes(req.request_version)) errors.push(`request_version must be the number 3, 3.1 or 3.2 (got ${JSON.stringify(req.request_version)})`);
-  const v32 = req.request_version === 3.2;
+  if (![3, 3.1, 3.2, 3.3].includes(req.request_version)) errors.push(`request_version must be the number 3, 3.1, 3.2 or 3.3 (got ${JSON.stringify(req.request_version)})`);
+  const v32 = req.request_version === 3.2 || req.request_version === 3.3; // 3.3 follows the 3.2 rules plus optional fields
+  const v33 = req.request_version === 3.3;
+  const cursor = v33 && req.skeleton === 'cursor';
   if (!HOWTO_ID_RE.test(String(req.id ?? ''))) errors.push('id must match [a-z0-9-]{3,48}');
   const need = (path, v) => { if (!text(v)) errors.push(`${path} is required`); };
   if (!DAY_RE.test(String(req.review_on ?? ''))) errors.push('review_on must be YYYY-MM-DD');
@@ -40,7 +83,8 @@ export function validateHowtoRequest(req) {
   need('hook', req.hook);
   need('banner', req.banner);
   if (!v32) need('host.name', req.host?.name); // 3.2: defaults to mayor
-  need('arrival.say', req.arrival?.say);
+  if (v33) validateV33Top(req, errors);
+  if (!cursor) need('arrival.say', req.arrival?.say); // 3.3 cursor: establish replaces arrival
   // Optional: narration (voice-over). Default is ON for 3.2 requests, OFF for 3 / 3.1 unless true.
   if (req.narration !== undefined && typeof req.narration !== 'boolean') errors.push('narration must be true or false');
 
@@ -55,7 +99,8 @@ export function validateHowtoRequest(req) {
     steps.forEach((s, i) => {
       const p = `steps[${i}]`;
       if (!isObj(s)) { errors.push(`${p} must be an object`); return; }
-      need(`${p}.say`, s.say);
+      if (!cursor) need(`${p}.say`, s.say); // 3.3 cursor skeleton: no narration line required
+      if (v33) validateV33Step(s, p, errors);
       need(`${p}.panel`, s.panel);
       if (!v32) need(`${p}.surface`, s.surface); // 3.2: informational only
       if (!Array.isArray(s.clicks) || s.clicks.length < 1) errors.push(`${p}.clicks needs at least 1 click`);
@@ -71,11 +116,13 @@ export function validateHowtoRequest(req) {
     });
   }
 
-  need('payoff.say', req.payoff?.say);
-  need('payoff.spot_art', req.payoff?.spot_art);
-  need('payoff.town.name', req.payoff?.town?.name);
-  const level = req.payoff?.town?.level;
-  if (!Number.isInteger(level) || level < 1 || level > 15) errors.push('payoff.town.level must be an integer 1-15');
+  if (!(cursor && req.payoff == null)) { // 3.3 cursor skeleton: payoff is optional
+    need('payoff.say', req.payoff?.say);
+    need('payoff.spot_art', req.payoff?.spot_art);
+    need('payoff.town.name', req.payoff?.town?.name);
+    const level = req.payoff?.town?.level;
+    if (!Number.isInteger(level) || level < 1 || level > 15) errors.push('payoff.town.level must be an integer 1-15');
+  }
 
   if (text(req.arrival?.say) && words(req.arrival.say) > 5) warnings.push(`arrival.say has ${words(req.arrival.say)} words (template budget <=5)`);
   const pn = words(req.payoff?.say);
@@ -91,8 +138,8 @@ export function validateHowtoRequest(req) {
 const briefLineOf = (id) => `INTERNAL VIDEO BRIEF: howto=${id}`;
 const fail = (status, error) => ({ ok: false, status, error });
 
-/** Create/overwrite howto_requests/{id}. A 3.2 request is auto-approved on submit; <=3.1 waits for the owner script. Locked once past that. */
-export async function submitHowtoRequest(db, { clientId, request, by = null, now = () => new Date().toISOString() }) {
+/** Create/overwrite howto_requests/{id} (`createOnly`: fail 409 request-locked:request-exists when the id is taken). A 3.2 request is auto-approved on submit; <=3.1 waits for the owner script. Locked once past that. */
+export async function submitHowtoRequest(db, { clientId, request, by = null, now = () => new Date().toISOString(), createOnly = false }) {
   if (!HOWTO_ALLOWED_CLIENTS.includes(clientId)) return fail(403, `client-not-allowed:${clientId || 'none'}`);
   const { errors, warnings } = validateHowtoRequest(request);
   if (errors.length) return { ok: false, status: 400, error: 'invalid-request', errors, warnings };
@@ -100,15 +147,16 @@ export async function submitHowtoRequest(db, { clientId, request, by = null, now
   const ref = db.collection(HOWTO_REQUESTS).doc(id);
   const stamp = now();
   let locked = null;
-  const auto = request.request_version === 3.2;
+  const auto = request.request_version === 3.2 || request.request_version === 3.3;
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     const cur = snap.exists ? snap.data() : null;
     // MCP may overwrite while submitted, or approved by auto-approval; never an owner-approved / building / rejected one.
+    if (cur && createOnly) { locked = 'request-exists'; return; } // app-authored ids never overwrite an existing request
     if (cur && !(cur.status === 'submitted' || (cur.status === 'approved' && cur.autoApproved === true))) { locked = String(cur.status); return; }
     if (cur && cur.clientId && cur.clientId !== clientId) { locked = 'other-client'; return; }
     const base = { id, clientId, request, submittedAt: cur?.submittedAt || stamp, submittedBy: by, updatedAt: stamp };
-    if (auto) tx.set(ref, { ...base, requestVersion: 3.2, status: 'approved', autoApproved: true, requestHash: computeRequestHash(request), approvedAt: stamp, approvedBy: 'auto' });
+    if (auto) tx.set(ref, { ...base, requestVersion: request.request_version, status: 'approved', autoApproved: true, requestHash: computeRequestHash(request), approvedAt: stamp, approvedBy: 'auto' });
     else tx.set(ref, { ...base, requestVersion: 3, status: 'submitted' });
   });
   if (locked) return fail(409, `request-locked:${locked}`);

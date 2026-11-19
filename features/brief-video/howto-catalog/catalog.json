@@ -1,0 +1,118 @@
+{
+  "v": 1,
+  "panels": {
+    "critterSelection": {
+      "actions": [
+        "selectCritter",
+        "send",
+        "continue"
+      ],
+      "presets": [
+        "list",
+        "selected",
+        "processing",
+        "sent"
+      ],
+      "surface": "card",
+      "minFrames": 0,
+      "actionTiming": {
+        "selectCritter": {},
+        "send": {
+          "processing": 45
+        },
+        "continue": {}
+      }
+    },
+    "spotClaimReward": {
+      "actions": [
+        "claim",
+        "close"
+      ],
+      "presets": [
+        "claimable",
+        "processing",
+        "claimed"
+      ],
+      "surface": "card",
+      "minFrames": 0,
+      "actionTiming": {
+        "claim": {
+          "processing": 30
+        },
+        "close": {
+          "exit": true
+        }
+      }
+    },
+    "spotInfo": {
+      "actions": [
+        "close"
+      ],
+      "presets": [
+        "idle",
+        "gathering",
+        "claimable",
+        "claimed"
+      ],
+      "surface": "card",
+      "minFrames": 0,
+      "actionTiming": {
+        "close": {
+          "exit": true
+        }
+      }
+    },
+    "spotTile": {
+      "actions": [
+        "selectSpot",
+        "openInfo",
+        "openTools",
+        "openClaim"
+      ],
+      "presets": [
+        "idle",
+        "selected",
+        "completed",
+        "ready",
+        "cycle"
+      ],
+      "surface": "canvas",
+      "minFrames": 0,
+      "actionTiming": {
+        "selectSpot": {},
+        "openInfo": {},
+        "openTools": {},
+        "openClaim": {}
+      }
+    },
+    "spotTileWide": {
+      "actions": [
+        "selectSpot",
+        "openInfo",
+        "openTools",
+        "openClaim"
+      ],
+      "presets": [
+        "idle",
+        "selected",
+        "completed",
+        "ready",
+        "cycle"
+      ],
+      "surface": "canvas",
+      "minFrames": 112,
+      "actionTiming": {
+        "selectSpot": {
+          "notBefore": 72
+        },
+        "openInfo": {},
+        "openTools": {},
+        "openClaim": {}
+      }
+    }
+  },
+  "hosts": [
+    "mayor",
+    "none"
+  ]
+}

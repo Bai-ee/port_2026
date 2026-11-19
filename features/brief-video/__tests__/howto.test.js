@@ -271,3 +271,23 @@ test('cq-howto: a re-approved spec (new specHash) gets fresh attempts; cq-brief 
   const r = await runTick({ db: ctx.adminDb, now: NOW + 700_000, env: ON, fetchImpl: noFetch });
   assert.equal(r.started.attempt, 1);
 });
+
+test('classifyBrief: structured how-to prose is invalid, narrow rule keeps teasers freetext', () => {
+  const incident = 'CQ-S3-1119 | Nov 19, 2026\nBefore the Titans: your first gathering run\nType: Gameplay how-to + tomorrow teaser. Season context: 3; footage: CURRENT GAMEPLAY.\nAudience: New and returning CQ players.\nGoal: Teach one gathering run.\nHook: Before the Titans, start with your town.\nBanner: GATHER FIRST.\nHost: None; real UI and cursor guide viewers.\nFormat: 1080x1080 square, 21 seconds; narration OFF.\nCTA: Return tomorrow for the Season 3 reveal.';
+  assert.deepEqual(classifyBrief(incident), { kind: 'invalid', reason: 'howto-prose-needs-request' });
+  for (const t of [
+    '15s: show two real options on the town screen, then follow the one you pick through its first step.',
+    'Capture map -> select a resource node -> gather -> show the inventory change; 15s.',
+    'Hook: x\nFormat: 15s\nCTA: y',
+    'Type: art teaser\nHook: a\nBanner: b',
+  ]) assert.equal(classifyBrief(t).kind, 'freetext', t);
+});
+
+test('briefWarnings: invalid brief warns, valid brief does not', async () => {
+  const { briefWarnings } = await import('../brief.js');
+  const bad = briefWarnings({ content: 'copy\n\nINTERNAL VIDEO BRIEF: Type: how-to\nHook: a\nBanner: b' });
+  assert.equal(bad.length, 1);
+  assert.match(bad[0], /video brief invalid: howto-prose-needs-request/);
+  assert.deepEqual(briefWarnings({ content: 'copy\n\nINTERNAL VIDEO BRIEF: howto=abc-123' }), []);
+  assert.deepEqual(briefWarnings({ content: 'no brief' }), []);
+});
