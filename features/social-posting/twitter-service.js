@@ -1413,6 +1413,9 @@ export async function saveVideoBrief(clientId, postId, input = {}, { by = null, 
     const snap = await tx.get(ref);
     const post = snap.exists ? snap.data() : null;
     if (!post || (clientId && post.clientId !== clientId)) throw Object.assign(new Error('Post not found.'), { status: 404 });
+    // Approving a brief that is already approved is a no-op success (a stale chat card must not fail on its own result).
+    const keys = Object.keys(input || {});
+    if (keys.length === 1 && input.status === 'approved' && post.videoBriefMeta?.status === 'approved' && String(post.videoBrief || '').trim()) return post;
     if (expectedRevision != null && (post.revision || 0) !== Number(expectedRevision)) throw conflict();
     if (post.status !== 'draft') throw Object.assign(new Error(`A video brief can only be saved on a draft (this post is ${post.status}).`), { status: 409, code: 'not-draft' });
     if (INTERNAL_BRIEF_RE.test(String(post.content ?? ''))) throw Object.assign(new Error('This post still has an INTERNAL VIDEO BRIEF in its text. Remove it from the post copy first, then save it in the Video brief panel.'), { status: 409, code: 'content-brief-present' });
