@@ -56,10 +56,10 @@ test('listCurationCandidates: window, newest first, counts, retired excluded, sl
   assert.equal(listCurationCandidates(rows, { days: 40, now: NOW }).items.length, 4);
 });
 
-test('listCurationCandidates: feedsCalendar follows the daily-fill rule (BAI-EE video only)', () => {
+test('listCurationCandidates: feedsCalendar = BAI-EE video, or any non-retired video with postable rights', () => {
   const row = (id, extra = {}) => ({ id, renderedAt: iso(1), mediaState: 'video', entities: ['BAI-EE'], ...extra });
-  const r = listCurationCandidates([row('rv-ok'), row('rv-other', { entities: ['Someone'] }), row('rv-none', { entities: [] }), row('rv-still', { mediaState: 'still' })], { days: 10, now: NOW });
-  assert.deepEqual(Object.fromEntries(r.items.map((i) => [i.id, i.feedsCalendar])), { 'rv-ok': true, 'rv-other': false, 'rv-none': false, 'rv-still': false });
+  const r = listCurationCandidates([row('rv-ok'), row('rv-other', { entities: ['Someone'] }), row('rv-none', { entities: [] }), row('rv-still', { mediaState: 'still', entities: ['Someone'] }), row('rv-blocked', { entities: ['Someone'], rights: 'never-public' }), row('rv-client', { entities: ['Someone'], rights: 'client-approval-needed' })], { days: 10, now: NOW });
+  assert.deepEqual(Object.fromEntries(r.items.map((i) => [i.id, i.feedsCalendar])), { 'rv-ok': true, 'rv-other': true, 'rv-none': true, 'rv-still': false, 'rv-blocked': false, 'rv-client': false });
 });
 
 test('listCurationCandidates caps at 200', () => {

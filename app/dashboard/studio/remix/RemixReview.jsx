@@ -269,7 +269,7 @@ export default function RemixReview({ isNarrow = false, railW = 336, user = null
                 <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <div style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.title || item.id}>{item.title || item.id}</div>
                   {item.feedsCalendar === false ? (
-                    <div id={`remix-review-tile-badge-${item.id}`} style={{ ...ui.label, fontSize: 10, color: '#a15c00' }}>Won&apos;t feed calendar — not BAI-EE</div>
+                    <div id={`remix-review-tile-badge-${item.id}`} style={{ ...ui.label, fontSize: 10, color: '#a15c00' }}>Won&apos;t feed calendar — rights blocked</div>
                   ) : null}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
                     <span style={ui.label}>{fmtDate(item.renderedAt)}</span>
