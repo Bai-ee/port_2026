@@ -98,8 +98,14 @@ One BAI-EE mix video draft a day on the calendar, from the daily email render.
 - **Sync (2026-11-18):** a `list` call schedules a background `syncRenderedVideosForClient` (`after()`, force:false) so new renders appear on the next load. It is guarded by a Firestore lease (`features/rendered-videos/sync-lease.js`: `meta/rendered-videos.syncStartedAtMs`, 5 min, plus the 10-min `lastSyncAtMs` throttle); failures are logged (`remix_review_sync_failed`) and never affect the response (`syncScheduled` boolean only).
 - **Cron:** the 11:30 daily-loop syncs the media owner (force:true, no lease) whenever it is in the pilot run (`PILOT_CLIENT_IDS`), even if its Daily today-queue is unticked.
 - **Review page:** `/dashboard/studio?tool=remix&view=review` (public; BUILD/REVIEW pill `#remix-view-toggle`; `app/dashboard/studio/remix/RemixReview.jsx`). 30 tiles per page, poster first, video signed on play; keys j/k, a, r, u, space; target 30 approved.
-- **Read by:** the daily fill (P2c, see "Daily mix video": approved first, rejected excluded). The calendar batch planner does not read it yet. Batch renders (P2d) are paid and need owner OK.
+- **Read by:** the daily fill (P2c, see "Daily mix video": approved first, rejected excluded) and the place-ahead script below. The generic calendar batch planner does not filter on it. Batch renders (P2d) are paid and need owner OK.
 - **Batch renders (2026-11-18):** owner-only `curation-render-batch {count}` (button `#remix-review-render-batch`) queues up to 5 random-artist renders under client `ue-curation` (not the media owner/digest client); caps 5 in flight / 20 per 24h. See VIDEO-REMIX-EDITVIDEOS-BRIDGE.md "Curation batch renders".
+- **Place ahead on the calendar (2026-11-19, PR #126):** `scripts/curated-calendar-batch.mjs` puts every approved, never-used `ue` video on the media owner's calendar as review drafts, one a day from tomorrow (client time zone), through the calendar-batch path (`strategy-calendar-batch-preview` / `-create`; idempotency key `calendar-batch:<id>`). Copy is the client mix format (Artist / Mix title / circa / `#mixtapesfromchicago`), video attached; drafts only, never approved, scheduled or published.
+  - Run from a worktree: `ENV_FILE=<main checkout>/.env.local node scripts/curated-calendar-batch.mjs` previews (read-only); add `--execute` to write (production data write: owner OK).
+  - "Already used" = any non-rejected `social_posts` row for the package; those are listed and skipped. Order: oldest approval first, never the same title on consecutive days. Stops if any item lacks postable copy or the preview would skip one.
+  - Each open draft holds its day: the 06:00 sameDay fill adds no second `ue` draft (see "Curated first").
+  - ⚠️ A later run also starts tomorrow (`dateRule.startDate` is not exposed yet), so it shares days with drafts already placed. Before re-running, add a `startDate` the day after the last placed draft.
+  - First run 2026-11-19: 14 drafts, 2026-11-20 → 2026-12-03 (3 approved videos skipped as already used).
 
 ## Calendar media backfill (2026-10-22)
 

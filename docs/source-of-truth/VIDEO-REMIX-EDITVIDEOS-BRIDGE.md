@@ -316,6 +316,9 @@ Owner button on the curated review page (`#remix-review-render-batch`) -> `POST 
 - Recipe = the daily-email path (`triggerCurationBatchRemix` in `app/api/worker/pre-digest-video/route.js`: skyline folder, daily look) with `randomAudio: {enabled:true, artists:[]}` = any artist. The 06:00 daily (BAI-EE) path is unchanged.
 - `planBatch` caps: 1-5 per click, 5 queued/processing at once, 20 created per rolling 24h (read from `listMediaJobs('ue-curation', {type:'video-remix', limit:60})`, filtered in memory). Skip reasons: `inflight-full`, `daily-cap`.
 - Finished renders reach the review page through the rendered-video sync (global EditVideos `videos` feed, any clientId); reload after ~10-20 min.
+- "Owner sign-in needed to render" on the button = no Firebase owner session in that browser (no request reaches the server; Vercel logs show no `quote-targets` call). Sign in at `/dashboard` in the same browser, then retry.
+- ⚠️ A green worker Actions run does NOT mean the render succeeded: grep the run log for `Status updated to 'failed'` vs `completed successfully`. Incident 2026-11-17/18: arweave.net 404'd mix audio, every render failed while runs were green; fixed by the worker's gateway fallback (fllstck → frostor → ardrive → turbo, Bai-ee/arweave-video-generator PR #7, 361da69b). Healthy logs show `Segment via arweave.fllstck.dev`.
+- Approved renders reach the calendar via the daily fill or `scripts/curated-calendar-batch.mjs` (CONTENT-TRACKS.md "Place ahead on the calendar").
 
 ## Env vars (Hitloop — local `.env.local` + Vercel production)
 
