@@ -57,11 +57,11 @@ test('registry: strategy tools are generated 1:1 from READ_TOOLS and PROPOSE_TOO
 
 test('registry: the full promised catalogue exists, and nothing can post, schedule, approve, delete or send', () => {
   const names = registry.map((t) => t.name);
-  for (const n of ['list_collections', 'get_document', 'query_collection', 'get_client_overview', 'search_timeline', 'get_operating_costs', 'get_x_monitor',
+  for (const n of ['list_collections', 'get_document', 'get_document_field', 'query_collection', 'get_client_overview', 'search_timeline', 'get_operating_costs', 'get_x_monitor',
     'list_repo_path', 'read_repo_file', 'search_repo', 'recent_commits', 'request_strategy_refresh', 'request_quote_scan', 'quote_scan_status', 'regenerate_today_suggestions',
     'nas_status', 'nas_browse', 'nas_estimate', 'request_sync', 'get_hitloop_guide', 'get_site_analytics', 'get_site_sessions']) assert.ok(names.includes(n), n);
   assert.ok(!names.includes('confirm_sync'), 'there is no confirm_sync tool: request_sync cards run only on the owner\'s click in HITLOOP (paid run_refresh has its own preview -> confirm:true)');
-  assert.equal(registry.length, 96); // +6 MCP-OPS tools (list_refreshes, run_refresh, get_run_status, get_settings, set_setting, undo_setting); +3 client brief tools (publish/unpublish/list_client_briefs); +2 get_site_analytics / get_site_sessions; +2 refresh_data / refresh_status; 54 strategy (incl. get_item, get_bookmark_picks) + guide + 7 data + 4 repo + 10 sync (incl. request_quote_scan, quote_scan_status, find_hot_quotes) + 2 playbook + 5 chat/actions (confirm_sync removed)
+  assert.equal(registry.length, 97); // +1 get_document_field; +6 MCP-OPS tools (list_refreshes, run_refresh, get_run_status, get_settings, set_setting, undo_setting); +3 client brief tools (publish/unpublish/list_client_briefs); +2 get_site_analytics / get_site_sessions; +2 refresh_data / refresh_status; 54 strategy (incl. get_item, get_bookmark_picks) + guide + 7 data + 4 repo + 10 sync (incl. request_quote_scan, quote_scan_status, find_hot_quotes) + 2 playbook + 5 chat/actions (confirm_sync removed)
   // publish_client_brief is the one explicit writer (hosted client brief + PDF, owner-requested only).
   // set_setting is the second named exception (MCP-OPS: one allowlisted UI setting, reduce-risk direction or confirm-gated, change-logged + undoable).
   for (const n of names.filter((x) => x !== 'publish_client_brief' && x !== 'set_setting')) assert.doesNotMatch(n, /^(strategy_)?(post|publish|schedule|approve|delete|remove|send|tweet|reply|follow|unfollow|email|telegram|write|update|set)_/, n);

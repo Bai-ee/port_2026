@@ -1,6 +1,6 @@
 // data.js - Firestore read tools (deny-list + redaction live in ../redact.js and ../firestore-query.js).
 
-import { runQuery, runGetDocument, runListCollections, QUERY_MAX_LIMIT } from '../firestore-query.js';
+import { runQuery, runGetDocument, runGetDocumentField, runListCollections, QUERY_MAX_LIMIT } from '../firestore-query.js';
 import { redactValue } from '../redact.js';
 import { ToolError } from '../jsonrpc.js';
 import { defTool, resolveClientId, CLIENT_ID_PROP, str, int } from './common.js';
@@ -27,6 +27,23 @@ const getDocumentTool = defTool({
   description: 'Read one Firestore document by path, e.g. "clients/bryan-balli-WUoltG84", "dashboard_state/<clientId>", "x_strategy_docs/<clientId>". Also lists the names of its subcollections (use query_collection with "clients/<id>/<sub>" to read them). Secret-looking fields (token, key, password, cookie, ...) are replaced with "[redacted]". Read-only.',
   inputSchema: { type: 'object', properties: { path: str('Document path with an even number of segments, e.g. "clients/abc".') }, required: ['path'] },
   handler: ({ args, ctx }) => runGetDocument(ctx.db, args.path),
+});
+
+const getDocumentFieldTool = defTool({
+  name: 'get_document_field',
+  title: 'Read one field of a Firestore document (paged)',
+  description: 'Read ONE field of a large Firestore document without truncation, e.g. path "dashboard_state/<clientId>", field "audienceSummary". field is a dot path (numeric parts index arrays, e.g. "audienceSummary.warmFollowers.3"); omit it for the whole document (or its top-level keys with sizes when it is too big). Strings page by character offset/limit, arrays by element offset/limit (default: as many whole elements as fit); keep calling with nextOffset until it is absent. An object too big for one read returns its keys with sizes: read each key in turn. Use this whenever get_document says truncated. Stored data only (no X or model calls); secret-looking fields are redacted and cannot be requested. Read-only.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      path: str('Document path with an even number of segments, e.g. "dashboard_state/<clientId>".'),
+      field: str('Dot path inside the document, e.g. "audienceSummary" or "audienceSummary.methodology". Omit for the whole document / its key map.'),
+      offset: int('Start position: characters for a string, elements for an array (default 0).', { minimum: 0 }),
+      limit: int('Characters (string) or elements (array) to return; capped to fit one result.', { minimum: 1 }),
+    },
+    required: ['path'],
+  },
+  handler: ({ args, ctx }) => runGetDocumentField(ctx.db, args),
 });
 
 const queryCollectionTool = defTool({
@@ -87,7 +104,7 @@ export async function buildClientOverview(db, clientId) {
     latestBriefRun: latestRun,
     strategyDocument: strategyDoc ? { version: strategyDoc.version ?? null, confirmed: Boolean(strategyDoc.confirmed), updatedAt: strategyDoc.updatedAt ?? null, lastReview: strategyDoc.lastReview ?? null } : null,
     strategyPlan: plan ? { version: plan.version ?? null, updatedAt: plan.updatedAt ?? null } : null,
-    hint: 'Use get_document("dashboard_state/<clientId>") for the full dashboard state, or strategy_* tools for the X strategy.',
+    hint: 'Use get_document("dashboard_state/<clientId>") for the dashboard state (get_document_field for one big key, e.g. audienceSummary), or strategy_* tools for the X strategy.',
   });
 }
 
@@ -196,4 +213,4 @@ const xMonitorTool = defTool({
   },
 });
 
-export const dataTools = Object.freeze([listCollectionsTool, getDocumentTool, queryCollectionTool, clientOverviewTool, searchTimelineTool, operatingCostsTool, xMonitorTool]);
+export const dataTools = Object.freeze([listCollectionsTool, getDocumentTool, getDocumentFieldTool, queryCollectionTool, clientOverviewTool, searchTimelineTool, operatingCostsTool, xMonitorTool]);
