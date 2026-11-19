@@ -276,6 +276,17 @@ function initRemixShellVideo(el) {
 
 // entranceReady: route-level signal that the loading overlay has finished its
 // fade — the dashboard entrance timeline holds hidden until it flips true.
+// Bare hostname (no www.) of a user-typed or stored URL; '' when unparseable.
+function hostOf(raw) {
+  const value = String(raw || '').trim();
+  if (!value) return '';
+  try {
+    return new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? value : `https://${value}`).hostname.replace(/^www\./i, '').toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
 const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) => {
   const { user, userProfile, signOutUser, isAdmin, adminReady } = useAuth();
   // Theme state lives in the global runtime (lib/theme-runtime): `theme` is the RESOLVED mode
@@ -1868,6 +1879,13 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
   const [reseedLoading, setReseedLoading] = useState(false);
   const [reseedError, setReseedError] = useState('');
   const [reseedSuccess, setReseedSuccess] = useState(false);
+  // Admin-only "Change website & rescan" (client-website-meta-row). Separate
+  // from the reseed form above so it never shares its draft or loading state.
+  const [websiteChangeOpen, setWebsiteChangeOpen] = useState(false);
+  const [websiteChangeUrl, setWebsiteChangeUrl] = useState('');
+  const [websiteChangeLoading, setWebsiteChangeLoading] = useState(false);
+  const [websiteChangeError, setWebsiteChangeError] = useState('');
+  const websiteChangeLockRef = useRef(false);
 
   const applyBootstrapResponse = useCallback((data) => {
     if (cancelledRef.current) return;
@@ -6185,6 +6203,15 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     setReseedUrl(client?.websiteUrl || '');
   }, [client?.clientId, client?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Drop any half-typed website change when the admin switches client.
+  useEffect(() => {
+    websiteChangeLockRef.current = false;
+    setWebsiteChangeOpen(false);
+    setWebsiteChangeUrl('');
+    setWebsiteChangeLoading(false);
+    setWebsiteChangeError('');
+  }, [impersonateId, client?.clientId]);
+
   // Detect run completion → start 3-second countdown before revealing dashboard.
   // Gated: hold the countdown until the onboarding survey is resolved so answers
   // can influence answer-dependent pipeline stages before reveal.
@@ -6546,8 +6573,13 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     // intake run — gate it behind an explicit confirm so a stray click on the
     // header button can't overwrite work. First-run (Create Dashboard) has
     // nothing to overwrite, so it stays one click.
+    const reseedOldHost = hostOf(client?.websiteUrl || client?.website);
+    const reseedNewHost = hostOf(reseedUrl);
+    const reseedHostChanged = Boolean(client && reseedOldHost && reseedNewHost && reseedOldHost !== reseedNewHost);
     if (client && typeof window !== 'undefined' && !window.confirm(
-      `Update & Rerun will re-run the full intake for ${reseedUrl.trim()} and overwrite the current dashboard content. Continue?`
+      reseedHostChanged
+        ? `Update & Rerun will re-run the full intake and change the website from ${reseedOldHost} to ${reseedNewHost}, overwriting the current dashboard content. Continue?`
+        : `Update & Rerun will re-run the full intake for ${reseedUrl.trim()} and overwrite the current dashboard content. Continue?`
     )) return;
     setReseedLoading(true);
     setReseedError('');
@@ -6559,7 +6591,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       const endpoint = isFirstRun ? '/api/clients/provision' : apiPath('/api/dashboard/reseed-intake');
       const body = isFirstRun
         ? { websiteUrl: reseedUrl.trim(), displayName: user.displayName || '', companyName: '' }
-        : { websiteUrl: reseedUrl.trim() };
+        : { websiteUrl: reseedUrl.trim(), ...(reseedHostChanged ? { confirmHostChange: true } : {}) };
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -6578,6 +6610,44 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       setReseedLoading(false);
     }
   }, [user, client, reseedUrl, reseedLoading, doBootstrap, apiPath]);
+
+  // Admin: point the viewed client at a new website and run the full paid intake.
+  const viewedClientMatches = !activeImpersonateId || client?.clientId === activeImpersonateId;
+  const handleWebsiteChange = useCallback(async () => {
+    const nextUrl = websiteChangeUrl.trim();
+    if (!user || !isAdmin || !client?.clientId || !nextUrl) return;
+    if (!viewedClientMatches || websiteChangeLockRef.current) return;
+    const oldHost = hostOf(client?.websiteUrl || client?.website);
+    const newHost = hostOf(nextUrl);
+    if (!newHost) { setWebsiteChangeError('Enter a valid website URL.'); return; }
+    if (newHost === oldHost) { setWebsiteChangeError('That is already this client\'s website.'); return; }
+    if (typeof window !== 'undefined' && !window.confirm(
+      `Rescan ${client.companyName || client.clientId} (${client.clientId}): ${oldHost || 'no website'} \u2192 ${newHost}. Runs the full paid intake (model analyzers + 1 GPU video) and clears old-site results. Continue?`
+    )) return;
+    websiteChangeLockRef.current = true;
+    setWebsiteChangeLoading(true);
+    setWebsiteChangeError('');
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(apiPath('/api/dashboard/reseed-intake'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ websiteUrl: nextUrl, confirmHostChange: true }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Request failed.');
+      trackPipelineRerun(nextUrl);
+      setWebsiteChangeOpen(false);
+      setWebsiteChangeUrl('');
+      setMarketingBriefConfig(null);
+      doBootstrap();
+    } catch (err) {
+      setWebsiteChangeError(err instanceof Error ? err.message : 'Request failed.');
+    } finally {
+      websiteChangeLockRef.current = false;
+      setWebsiteChangeLoading(false);
+    }
+  }, [user, isAdmin, client, websiteChangeUrl, viewedClientMatches, apiPath, doBootstrap, activeImpersonateId]);
 
 
   const handleModuleToggle = useCallback(async (cardId, enabled) => {
@@ -11248,6 +11318,50 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
                 </div>
               ) : null}
             </div>
+            {isAdmin && client?.clientId ? (
+              <div className="meta-row" id="client-website-meta-row">
+                <span className="label">SITE</span>
+                <span className="value">{hostOf(client?.websiteUrl || client?.website) || 'NONE'}</span>
+                <button
+                  type="button"
+                  id="client-website-change-btn"
+                  className="meta-row-action-btn"
+                  aria-label="Change website and rescan"
+                  title="Change website & rescan"
+                  disabled={!viewedClientMatches || websiteChangeLoading}
+                  onClick={() => { setWebsiteChangeOpen((open) => !open); setWebsiteChangeError(''); }}
+                >
+                  <Pencil size={12} strokeWidth={1.75} aria-hidden="true" />
+                </button>
+                {websiteChangeOpen ? (
+                  <form
+                    id="client-website-change-form"
+                    onSubmit={(e) => { e.preventDefault(); handleWebsiteChange(); }}
+                  >
+                    <input
+                      id="client-website-change-input"
+                      type="text"
+                      inputMode="url"
+                      autoComplete="off"
+                      placeholder="new-site.com"
+                      aria-label="New website for this client"
+                      value={websiteChangeUrl}
+                      disabled={websiteChangeLoading}
+                      onChange={(e) => { setWebsiteChangeUrl(e.target.value); setWebsiteChangeError(''); }}
+                    />
+                    <button
+                      type="submit"
+                      id="client-website-change-submit-btn"
+                      className="meta-row-action-btn"
+                      disabled={!viewedClientMatches || websiteChangeLoading || !websiteChangeUrl.trim()}
+                    >
+                      {websiteChangeLoading ? 'Rescanning…' : 'Rescan'}
+                    </button>
+                    {websiteChangeError ? <span role="alert" id="client-website-change-error">{websiteChangeError}</span> : null}
+                  </form>
+                ) : null}
+              </div>
+            ) : null}
             <div className="meta-row" id="account-meta-row">
               <span className="label">ACCOUNT</span>
               <span className="value">{user?.email || 'SIGNED IN'}</span>
