@@ -99,6 +99,7 @@ One BAI-EE mix video draft a day on the calendar, from the daily email render.
 - **Cron:** the 11:30 daily-loop syncs the media owner (force:true, no lease) whenever it is in the pilot run (`PILOT_CLIENT_IDS`), even if its Daily today-queue is unticked.
 - **Review page:** `/dashboard/studio?tool=remix&view=review` (public; BUILD/REVIEW pill `#remix-view-toggle`; `app/dashboard/studio/remix/RemixReview.jsx`). 30 tiles per page, poster first, video signed on play; keys j/k, a, r, u, space; target 30 approved.
 - **Read by:** the daily fill (P2c, see "Daily mix video": approved first, rejected excluded). The calendar batch planner does not read it yet. Batch renders (P2d) are paid and need owner OK.
+- **Batch renders (2026-11-18):** owner-only `curation-render-batch {count}` (button `#remix-review-render-batch`) queues up to 5 random-artist renders under client `ue-curation` (not the media owner/digest client); caps 5 in flight / 20 per 24h. See VIDEO-REMIX-EDITVIDEOS-BRIDGE.md "Curation batch renders".
 
 ## Calendar media backfill (2026-10-22)
 

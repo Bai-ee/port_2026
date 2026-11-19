@@ -7,7 +7,7 @@ const KEEP = [
   'calendar-approve', 'calendar-unapprove', 'calendar-suggestion-approve', 'calendar-item-decide', 'approve-package', 'reject-package',
   'upsert-bucket', 'delete-bucket', 'upsert-folder', 'delete-folder', 'move-item', 'update-item-facets', 'set-rights',
   'capture-client-story', 'inventory-save', 'inventory-delete', 'content-task-update', 'media-url', 'media-urls', 'save-thumb',
-  'find-hires-media', 'hires-media-use', 'post-attach-item-media', 'sync-rendered-videos', 'curation-list', 'curation-set', 'refresh-analysis',
+  'find-hires-media', 'hires-media-use', 'post-attach-item-media', 'sync-rendered-videos', 'curation-list', 'curation-set', 'curation-render-batch', 'refresh-analysis',
   'nas-process', 'nas-stage', 'nas-browse', 'discogs-apply',
   'strategy-proposal-decide', 'strategy-action-undo', 'strategy-autonomy-save', 'x-data-sources-save',
   'strategy-calendar-batch-create-unknown', 'anything-new',

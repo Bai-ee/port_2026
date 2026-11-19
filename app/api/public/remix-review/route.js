@@ -61,13 +61,14 @@ async function backgroundSync(ownerId) {
         merge: (patch) => t.set(metaRef, patch, { merge: true }),
       })),
     }, { now: Date.now() });
-    if (!lease.acquired) return;
+    if (!lease.acquired) { console.log(JSON.stringify({ event: 'remix_review_sync_skipped', reason: lease.skipped })); return; }
     const bridge = require('../../../../api/_lib/editvideos-bridge.cjs'); // after adminDb, so the default app initializes first
     const { upsertPackage } = await import('../../../../features/x-content-inventory/store.js');
-    await syncRenderedVideosForClient({
+    const r = await syncRenderedVideosForClient({
       db: fb.adminDb, bridge, clientId: ownerId, force: false,
       upsert: (pkg) => upsertPackage(pkg, { returnPackages: false, clientId: ownerId }),
     });
+    console.log(JSON.stringify({ event: 'remix_review_sync_done', created: r?.created ?? 0, updated: r?.updated ?? 0, unchanged: r?.unchanged ?? 0, total: r?.total ?? 0, throttled: !!r?.throttled }));
   } catch (err) {
     console.warn(JSON.stringify({ event: 'remix_review_sync_failed', error: String(err?.message || err).slice(0, 200) }));
   }

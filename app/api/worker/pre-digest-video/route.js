@@ -202,7 +202,24 @@ export async function triggerDailyEmailRemix(clientId, { sourceFolders } = {}) {
     ? sourceFolders
     : DEFAULT_DAILY_VIDEO_SOURCE_FOLDERS;
   const production = { ...DAILY_EMAIL_VIDEO_PRODUCTION, strictSourceFolders };
+  return renderRemixWithProduction(clientId, production);
+}
 
+/**
+ * Owner curation batch (features/rendered-videos/curation-batch.js): same recipe path as the daily email, but any
+ * artist's mix. `clientId` MUST be CURATION_BATCH_CLIENT_ID so these jobs stay out of the digest/auto-post pickers.
+ * Folder stays the daily default (skyline) so the look matches what the daily mix rule expects.
+ */
+export async function triggerCurationBatchRemix(clientId) {
+  if (!clientId) return { ok: false, error: 'no clientId' };
+  return renderRemixWithProduction(clientId, {
+    ...DAILY_EMAIL_VIDEO_PRODUCTION,
+    strictSourceFolders: DEFAULT_DAILY_VIDEO_SOURCE_FOLDERS,
+    randomAudio: { enabled: true, artists: [] },
+  });
+}
+
+async function renderRemixWithProduction(clientId, production) {
   let folders = [];
   try {
     const raw = await listSourceFolders();
@@ -263,7 +280,7 @@ export async function triggerDailyEmailRemix(clientId, { sourceFolders } = {}) {
     jobId,
     editJobId,
     folders: picked,
-    production: DAILY_EMAIL_VIDEO_PRODUCTION.name,
+    production: production.name,
     selectedAudio: {
       artist: recipe.artist || null,
       mixTitle: recipe.mixTitle || null,

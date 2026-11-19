@@ -37,6 +37,8 @@ import { normalizeFacets } from '../../../../features/x-content-inventory/facets
 import { resolveMediaUrls } from '../../../../features/rendered-videos/media-url.js';
 import { syncRenderedVideosForClient, mediaOwnerClientId } from '../../../../features/rendered-videos/firestore-sync.js';
 import { setCuration, listCurationCandidates } from '../../../../features/rendered-videos/curation.js';
+import { triggerCurationBatchRemix } from '../../worker/pre-digest-video/route.js';
+import { CURATION_BATCH_CLIENT_ID, BATCH_JOBS_LOOKBACK, planBatch } from '../../../../features/rendered-videos/curation-batch.js';
 import { resolveMediaUrlsBatch, MEDIA_URLS_MAX_IDS, MEDIA_KINDS, tokenUrlFor } from '../../../../features/x-content-inventory/thumbs.js';
 import { setRights, saveThumb, createDraftFromItem, pickMedia, pickMediaRef } from '../../../../features/x-content-inventory/item-actions.js';
 import { NAS_ACTIONS, handleNasAction } from '../../../../features/x-content-inventory/nas.js';
@@ -426,6 +428,7 @@ const SUPPORTED_ACTIONS = [
   'sync-rendered-videos',
   'curation-list',
   'curation-set',
+  'curation-render-batch',
   'media-urls',
   'save-thumb',
   'find-item-media',
@@ -933,6 +936,37 @@ async function handleCurationSet(context, decoded, body) {
     mergeDoc: (id, patch) => ref(id).set(patch, { merge: true }),
     deleteField: () => fb.FieldValue.delete(),
   }, { clientId: context.clientId, id: body?.id, state: body?.state, by: decoded?.email || decoded?.uid || null, now: Date.now() });
+}
+
+const BATCH_RENDER_BUDGET_MS = 50_000;
+
+// Owner-only PAID render batch (features/rendered-videos/curation-batch.js). Jobs go under CURATION_BATCH_CLIENT_ID,
+// never the owner/digest client. Sequential on purpose: each pick reads the previous jobs for clip anti-repeat.
+// No media-owner client check: the public review page calls this without `?as=`, so context is the owner's own client;
+// the pilot-owner uid gate (requirePilotOwner) is the guard, and jobs never touch context.clientId.
+async function handleCurationRenderBatch(context, body) {
+  if (!mediaOwnerClientId()) return CURATION_NOT_OWNER;
+  const mediaJobs = require('../../../../api/_lib/media-jobs.cjs');
+  const jobs = await mediaJobs.listMediaJobs(CURATION_BATCH_CLIENT_ID, { type: 'video-remix', limit: BATCH_JOBS_LOOKBACK });
+  const plan = planBatch({ requested: body?.count, jobs, now: Date.now() });
+  const queued = [];
+  const errors = [];
+  const startedAt = Date.now();
+  for (let i = 0; i < plan.count; i += 1) {
+    if (i > 0 && Date.now() - startedAt > BATCH_RENDER_BUDGET_MS) break;
+    // eslint-disable-next-line no-await-in-loop
+    const r = await triggerCurationBatchRemix(CURATION_BATCH_CLIENT_ID);
+    if (r.ok) queued.push({ jobId: r.jobId, artist: r.selectedAudio?.artist || null, mixTitle: r.selectedAudio?.mixTitle || null });
+    else errors.push(r.error);
+  }
+  return {
+    ok: true,
+    queued,
+    ...(plan.count === 0 ? { skipped: plan.reason } : {}),
+    ...(errors.length ? { errors: errors.slice(0, 3) } : {}),
+    inflight: plan.inflight + queued.length,
+    last24h: plan.last24h + queued.length,
+  };
 }
 
 async function handleMediaUrls(context, body) {
@@ -1596,6 +1630,7 @@ export async function POST(request) {
     if (action === 'sync-rendered-videos') return json(await handleSyncRenderedVideos(context, body));
     if (action === 'curation-list') return json(await handleCurationList(context, body));
     if (action === 'curation-set') return json(await handleCurationSet(context, decoded, body));
+    if (action === 'curation-render-batch') return json(await handleCurationRenderBatch(context, body));
     if (action === 'media-urls') return json(await handleMediaUrls(context, body));
     if (action === 'save-thumb') return json(await handleSaveThumb(context, body));
     if (action === 'find-item-media') return json(await handleFindItemMedia(context, body));
