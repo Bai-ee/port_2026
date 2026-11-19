@@ -1172,19 +1172,84 @@ async function provisionClientFromProspect({ placeId, adminUid, adminEmail }) {
  * @param {string} options.websiteUrl - raw URL string (will be normalized)
  * @returns {{ clientId, runId, status: 'queued', websiteUrl }}
  */
-async function reseedIntakeForClient({ clientId, uid, websiteUrl }) {
+const RESEED_LOCK_MS = 60 * 1000;
+
+function stripWww(host) {
+  return String(host || '').trim().toLowerCase().replace(/^www\./, '');
+}
+
+function reseedError(code, message, extra = {}) {
+  const err = new Error(message);
+  err.code = code;
+  err.status = 409;
+  Object.assign(err, extra);
+  return err;
+}
+
+/**
+ * Pure reseed guard. Returns null when allowed, else { code, message, ...extra }.
+ * Order: (1) admin impersonating a client and pointing it at the admin's own /
+ * the fallback host, (2) unconfirmed host change, (3) in-flight dedupe.
+ */
+function assessReseedRequest({
+  existing, newHost, impersonating, clientId, ownClientId, adminOwnHost,
+  confirmHostChange, confirmAdminHost, nowMs,
+}) {
+  const next = stripWww(newHost);
+  const { FALLBACK_BRIEF_SITE } = require('./brief-fallback.cjs');
+  let fallbackHost = '';
+  try { fallbackHost = stripWww(new URL(FALLBACK_BRIEF_SITE).hostname); } catch { /* ignore */ }
+  const adminHost = stripWww(adminOwnHost);
+
+  if (impersonating && clientId !== ownClientId && !confirmAdminHost
+    && next && (next === adminHost || next === fallbackHost)) {
+    return { code: 'host-matches-admin-client', message: 'That website belongs to the admin workspace, not this client.', newHost: next };
+  }
+  const prev = stripWww(existing?.normalizedHost);
+  if (prev && prev !== next && !confirmHostChange) {
+    return { code: 'confirm-host-change', message: 'Changing the website needs confirmation.', oldHost: prev, newHost: next };
+  }
+  const lock = existing?.reseedLock;
+  const inFlight = ['queued', 'running'].includes(existing?.latestRunStatus);
+  if (lock && Number.isFinite(lock.atMs) && (nowMs - lock.atMs) < RESEED_LOCK_MS && inFlight) {
+    return { code: 'reseed-in-flight', message: 'A rescan is already running.', runId: lock.runId || existing?.latestRunId || null };
+  }
+  return null;
+}
+
+async function reseedIntakeForClient({
+  clientId, uid, websiteUrl, impersonating = false, ownClientId = null, adminOwnHost = '',
+  confirmHostChange = false, confirmAdminHost = false,
+}) {
   const normalized = normalizeOptionalUrl(websiteUrl);
   if (!normalized) throw new Error('Invalid website URL.');
 
-  const existingClientSnap = await fb.adminDb.collection('clients').doc(clientId).get();
+  const clientRef = fb.adminDb.collection('clients').doc(clientId);
+  const existingClientSnap = await clientRef.get();
   const existingClientData = existingClientSnap.exists ? existingClientSnap.data() : null;
   const hostChanged = existingClientData?.normalizedHost !== normalized.hostname;
+  const hadPreviousHost = Boolean(existingClientData?.normalizedHost);
+
+  const runRef = fb.adminDb.collection('brief_runs').doc();
+  const runId = runRef.id;
+
+  // Guard + in-flight lock (checks → lock → existing writes).
+  const guardArgs = {
+    newHost: normalized.hostname, impersonating, clientId, ownClientId, adminOwnHost,
+    confirmHostChange, confirmAdminHost,
+  };
+  await fb.adminDb.runTransaction(async (tx) => {
+    const snap = await tx.get(clientRef);
+    const current = snap.exists ? snap.data() : null;
+    const verdict = assessReseedRequest({ ...guardArgs, existing: current, nowMs: Date.now() });
+    if (verdict) throw reseedError(verdict.code, verdict.message, verdict);
+    tx.set(clientRef, { reseedLock: { atMs: Date.now(), runId } }, { merge: true });
+  });
+
   const newCompanyName = hostChanged
     ? deriveCompanyName({ hostname: normalized.hostname, companyName: null, displayName: null, email: null })
     : null;
 
-  const runRef = fb.adminDb.collection('brief_runs').doc();
-  const runId = runRef.id;
   const now = fb.FieldValue.serverTimestamp();
 
   const runPayload = {
@@ -1290,6 +1355,7 @@ module.exports = {
   provisionClientForUser,
   createAdminClient,
   reseedIntakeForClient,
+  assessReseedRequest,
   loadAdminAccess,
   buildCreationFailureProjection,
   buildSignupProfile,
