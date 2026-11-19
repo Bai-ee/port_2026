@@ -6,10 +6,17 @@ import {
   appendUnlistedToIndex,
   buildIndexMarkdown,
   buildManifest,
+  normalizeBrainPath,
   slugify,
   todayIso,
 } from '../../../../../features/knowledge-base/brain-layout.js';
-import { attachSourceIds, listKnowledgeItems, readItemBytes } from '../../../../../features/knowledge-base/store.js';
+import {
+  attachSourceIds,
+  findItemByBrainPath,
+  listKnowledgeChunks,
+  listKnowledgeItems,
+  readItemBytes,
+} from '../../../../../features/knowledge-base/store.js';
 import { buildZip } from '../../../../../features/knowledge-base/zip.js';
 
 const require = createRequire(import.meta.url);
@@ -52,6 +59,8 @@ async function resolveContext(request) {
 //   ?format=zip       whole brain as <project>-brain-<date>.zip (default)
 //   ?format=manifest  generated manifest.json
 //   ?format=index     INDEX.md (uploaded index plus files it does not list yet)
+//   ?format=file&path=<brainPath>  one current file: raw text for text formats,
+//                     extracted text for PDF/DOCX (used by the MCP read tool)
 // Files are written byte-for-byte; manifest.json is regenerated from the
 // exported bytes so its hashes always match the zip.
 
@@ -75,6 +84,42 @@ function projectName(items, texts) {
   return null;
 }
 
+const TEXT_EXTENSIONS = /\.(md|markdown|txt|csv|tsv|json|jsonl|html?|xml|ya?ml|rtf|log)$/i;
+
+async function singleFile(clientId, path) {
+  const brainPath = normalizeBrainPath(path);
+  if (!brainPath) return json({ error: 'path is required.' }, 400);
+  const item = await findItemByBrainPath({ clientId, brainPath })
+    || (await listKnowledgeItems(clientId)).find((entry) => entry.brainPath === brainPath);
+  if (!item) return json({ error: `No file at ${brainPath}.`, clientId }, 404);
+  let text;
+  let extracted = false;
+  if (TEXT_EXTENSIONS.test(brainPath)) {
+    text = (await readItemBytes({ clientId, item })).toString('utf8');
+  } else {
+    const chunks = await listKnowledgeChunks({ clientId, itemId: item.id, limit: 500 });
+    text = chunks.map((chunk) => chunk.text).join('\n\n');
+    extracted = true;
+  }
+  return json({
+    ok: true,
+    clientId,
+    file: {
+      id: item.id,
+      path: item.brainPath,
+      role: item.brainRole,
+      date: item.brainDate,
+      title: item.title,
+      sha256: item.sha256,
+      sizeBytes: item.sizeBytes,
+      status: item.status,
+      legacy: item.legacy === true,
+      extracted,
+    },
+    text,
+  });
+}
+
 export async function GET(request) {
   let context;
   try {
@@ -83,8 +128,17 @@ export async function GET(request) {
     return json({ error: err.message || 'Unauthorized.' }, err.status || 401);
   }
 
-  const format = new URL(request.url).searchParams.get('format') || 'zip';
+  const params = new URL(request.url).searchParams;
+  const format = params.get('format') || 'zip';
   const today = todayIso();
+
+  if (format === 'file') {
+    try {
+      return await singleFile(context.clientId, params.get('path'));
+    } catch (err) {
+      return json({ error: err.message || 'Could not read the file.' }, err.status || 500);
+    }
+  }
 
   try {
     const items = await attachSourceIds({
