@@ -332,6 +332,25 @@ export async function POST(request) {
       return json({ ok: true, post: { id: post.id, revision: post.revision, status: post.status }, brief: videoBriefView(post) });
     }
 
+    // One click from the panel: approve the brief (if not yet) at the revision the owner saw, then start the render now.
+    // A render that cannot start leaves the brief approved, so the cron still picks it up; the reason is returned.
+    if (action === 'video-brief-render') {
+      await gatePilotRow(context, decoded, body.postId);
+      let row = await getSocialPost(context.clientId, body.postId);
+      if (!row) return json({ error: 'Post not found.' }, 404);
+      const st = row.videoBriefMeta?.status;
+      if (st === 'draft' || st === 'ready') {
+        row = await saveVideoBrief(context.clientId, body.postId, { status: 'approved' }, { by: decoded?.email || decoded?.uid || null, allowApprove: true, expectedRevision: body.expectedRevision ?? null });
+      } else if (st !== 'approved') {
+        return json({ error: 'Save a video brief first.' }, 409);
+      }
+      const { renderNow } = await import('../../../features/brief-video/worker.js');
+      let render = await renderNow({ db: require('../../../api/_lib/firebase-admin.cjs').adminDb, clientId: context.clientId, postId: body.postId });
+      // Double click / cron tick won the race: same idempotent job, not an error.
+      if (!render.ok && render.error === 'job-exists') render = { ok: true, existing: true, status: 'queued' };
+      return json({ ok: true, post: { id: row.id, revision: row.revision, status: row.status }, brief: videoBriefView(row), render });
+    }
+
     // draft -> approved (stamps reviewedAt/reviewedBy). Does not schedule or publish.
     if (action === 'approve-draft') {
       requirePilotOwner(context, decoded);

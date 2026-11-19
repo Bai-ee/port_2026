@@ -1,7 +1,7 @@
 'use client';
 
 // VideoBriefPanel — the internal "Video brief" of one calendar post (features/brief-video/brief-fields.js).
-// Saved on its own (social-posting `video-brief-save` / `video-brief-approve`): never touches the post copy, approval,
+// Saved on its own (social-posting `video-brief-save`; `video-brief-render` = approve + render now): never touches the post copy, approval,
 // schedule or publishing. A brief renders only after "Approve for render"; attaching the video marks it rendered.
 // Styles live in PostEditorStyles (#post-editor-root .pe-vb*).
 
@@ -59,7 +59,29 @@ export default function VideoBriefPanel({ row, callSocial, locked = false, onRow
     shots: f.shots, captions: f.captions, audio: f.audio,
     narration: f.narration === '' ? null : f.narration === 'on',
   }, f.template.trim() ? 'Brief saved. The post copy was not changed.' : 'Brief cleared.');
-  const approve = () => send({ action: 'video-brief-approve' }, 'Approved for render. The next render tick picks it up.');
+  const RENDER_ERR = { 'daily-cap': 'Render-now limit reached for today (5). The brief stays approved; the scheduled run picks it up.', hold: 'The template contains HOLD, so it will not render.', 'has-media': 'This post already has creative. Remove it to render a new video.', 'video-disabled': 'Video rendering is switched off.', 'not-draft': 'Only drafts render.' };
+  const renderNow = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      const res = await callSocial({ action: 'video-brief-render', postId: row.id, expectedRevision: row.revision ?? null });
+      const b = res.brief || {};
+      const r = res.render || {};
+      const patch = { revision: res.post?.revision ?? row.revision, videoBrief: b.template || null, videoBriefMeta: b.meta || null };
+      if (r.ok) patch.videoProcessing = { state: 'queued', label: r.existing ? 'Render already started' : 'Queued: rendering started', ...(r.jobId ? { jobId: r.jobId } : {}) };
+      onRowPatch?.(patch);
+      setMsg(r.ok
+        ? { tone: 'ok', text: r.existing ? 'Already rendering. The video attaches when it finishes.' : 'Rendering started. The video attaches to this post when it finishes.' }
+        : { tone: 'bad', text: `Approved, but the render could not start now: ${RENDER_ERR[r.error] || r.error || 'unknown error'}` });
+    } catch (e) {
+      setMsg({ tone: 'bad', text: e?.message || 'Render failed to start.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const vpState = row?.videoProcessing?.state;
+  const inFlight = vpState === 'queued' || vpState === 'rendering' || vpState === 'rendered';
+  const renderLabel = busy ? 'Starting…' : inFlight ? 'Rendering…' : (savedStatus === 'approved' ? 'Render now' : 'Approve & render now');
+  const canRender = editable && !busy && !dirty && hasSaved && !inFlight && savedStatus !== 'rendered' && !row?.mediaUrl;
 
   return (
     <details id="post-editor-video-brief-panel" className="pe-vb" open={hasSaved || undefined}>
@@ -102,10 +124,10 @@ export default function VideoBriefPanel({ row, callSocial, locked = false, onRow
         </div>
         <div id="post-editor-video-brief-actions-row" className="pe-vb-row">
           <button type="button" id="post-editor-video-brief-save-btn" className="pe-btn pe-btn-ghost" disabled={!editable || busy || !dirty} onClick={save}>{busy ? 'Saving…' : 'Save brief'}</button>
-          <button type="button" id="post-editor-video-brief-approve-btn" className="pe-btn pe-btn-ghost" disabled={!editable || busy || dirty || !hasSaved || savedStatus === 'approved' || savedStatus === 'rendered'} onClick={approve} title={dirty ? 'Save the brief first.' : ''}>Approve for render</button>
+          <button type="button" id="post-editor-video-brief-render-btn" className="pe-btn pe-btn-ghost" disabled={!canRender} onClick={renderNow} title={dirty ? 'Save the brief first.' : ''}>{renderLabel}</button>
         </div>
         {msg ? <p id="post-editor-video-brief-message" className={msg.tone === 'bad' ? 'pe-over' : 'pe-muted'} role={msg.tone === 'bad' ? 'alert' : 'status'}>{msg.text}</p> : null}
-        <p className="pe-muted">Saving never changes the post copy, approval or schedule. Editing an approved template sends it back to review. Rendering uses the template text.</p>
+        <p className="pe-muted">Saving never changes the post copy, approval or schedule. Render now approves the brief and starts the video immediately (max 5 a day). Editing an approved template sends it back to review. Rendering uses the template text.</p>
       </div>
     </details>
   );

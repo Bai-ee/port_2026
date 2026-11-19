@@ -275,10 +275,10 @@ The brief can live in its own fields instead of the post copy (`features/brief-v
   - `videoBriefMeta`: `{status, assets[], shots, captions, audio, narration, updatedAt, updatedBy}`.
   - Status flow: `draft` → `ready` → `approved` → `rendered`. Attach sets `rendered`.
 - **Saving:** `saveVideoBrief` (twitter-service) runs a transaction on draft rows only. It bumps the revision and leaves content, approval and schedule alone. It returns 409 while the content still carries the old `INTERNAL VIDEO BRIEF` marker. Editing an approved template drops it back to `ready`. An empty template clears the brief.
-- **Routes:** social-posting actions `video-brief-get`, `video-brief-save` (status draft or ready only) and `video-brief-approve`.
+- **Routes:** social-posting actions `video-brief-get`, `video-brief-save` (status draft or ready only), `video-brief-approve`, and `video-brief-render` (approves at the checked revision, then `renderNow`; `job-exists` returns as already running; a failed start leaves the brief approved).
 - **Connector:** `queue.post.video-brief.get` (tier 0), `.save` (tier 1), `.approve` (tier 2, confirm card).
 - **Render gate:** a panel brief renders only when `approved` (`selectCandidates`, dryRun, render-now). Legacy content briefs are unchanged. The status line shows `brief-not-approved`.
 - **Approval guard:** a draft with a panel brief that is not rendered and has no media cannot be approved (`video-brief-pending`).
-- **Editor:** `#post-editor-video-brief-panel` (`VideoBriefPanel.jsx`). It has its own Save brief and Approve for render buttons.
+- **Editor:** `#post-editor-video-brief-panel` (`VideoBriefPanel.jsx`). It has its own Save brief button and one render button: "Approve & render now", then "Render now", then "Rendering…".
 - **Not yet used by the renderer:** only the template text feeds the render. Assets, shots, captions, audio and narration are stored for people to read.
 
