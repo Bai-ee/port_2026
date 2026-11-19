@@ -235,6 +235,9 @@ test('saveVideoBrief: own fields only, bumps revision, draft-only, refuses conte
   // post approval is blocked while the panel brief has no video
   await assert.rejects(() => svc.approveDraft('c1', d.id, {}), (e) => e.status === 409 && e.code === 'video-brief-pending');
   const ok = await svc.saveVideoBrief('c1', d.id, { status: 'approved' }, { allowApprove: true });
+  // a stale approve card on an already-approved brief succeeds without a revision check
+  const again = await svc.saveVideoBrief('c1', d.id, { status: 'approved' }, { allowApprove: true, expectedRevision: 0 });
+  assert.equal(again.revision, ok.revision);
   assert.equal(raw(d.id).videoBriefMeta.status, 'approved');
   // editing the template sends it back to ready
   await svc.saveVideoBrief('c1', d.id, { template: 'Shot 1: changed.' }, { expectedRevision: ok.revision });
