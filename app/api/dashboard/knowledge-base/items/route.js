@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 
-import { getItemCount, listKnowledgeItems, MAX_ITEMS_PER_CLIENT } from '../../../../../features/knowledge-base/store.js';
+import { attachSourceIds, getItemCount, listKnowledgeItems, MAX_ITEMS_PER_CLIENT } from '../../../../../features/knowledge-base/store.js';
 
 const require = createRequire(import.meta.url);
 const { verifyRequestUser } = require('../../../../../api/_lib/auth.cjs');
@@ -53,7 +53,7 @@ export async function GET(request) {
     ]);
     return json({
       ok: true,
-      items,
+      items: await attachSourceIds({ clientId: context.clientId, items }),
       limits: {
         maxItems: MAX_ITEMS_PER_CLIENT,
         remaining: Math.max(0, MAX_ITEMS_PER_CLIENT - count),

@@ -393,6 +393,8 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
           const formData = new FormData();
           formData.append('file', file);
           formData.append('title', file.name);
+          // Local date, so a loose file is filed as sources/<today>-<name>.
+          formData.append('today', new Date().toLocaleDateString('en-CA'));
           const res = await fetch(apiPath('/api/dashboard/knowledge-base/upload'), {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}` },

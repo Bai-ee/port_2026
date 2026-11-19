@@ -16,6 +16,31 @@ export function clampTopK(value, fallback = DEFAULT_TOP_K) {
   return Math.max(1, Math.min(MAX_TOP_K, Math.floor(n)));
 }
 
+// Brain-aware ranking: consolidated docs (master, analysis, briefs) edge out
+// raw sources at similar distance; index/manifest rank lower, and superseded
+// version snapshots only appear when nothing current fills the results.
+const ROLE_DISTANCE_ADJUST = {
+  master: -0.03,
+  analysis: -0.02,
+  brief: -0.02,
+  source: 0,
+  index: 0.05,
+  manifest: 0.05,
+  version: 0.1,
+};
+
+export function rankBrainChunks(chunks, limit) {
+  const scored = (Array.isArray(chunks) ? chunks : []).map((chunk, order) => ({
+    chunk,
+    order,
+    score: (typeof chunk.distance === 'number' ? chunk.distance : 1) + (ROLE_DISTANCE_ADJUST[chunk.brainRole] || 0),
+  }));
+  scored.sort((a, b) => a.score - b.score || a.order - b.order);
+  const current = scored.filter((entry) => entry.chunk.brainRole !== 'version');
+  const versions = scored.filter((entry) => entry.chunk.brainRole === 'version');
+  return [...current, ...versions].slice(0, limit).map((entry) => entry.chunk);
+}
+
 function serializeChunkDoc(doc) {
   const data = doc.data() || {};
   const text = data.text || '';
@@ -131,6 +156,8 @@ async function enrichChunks({ clientId, chunks, query }) {
       sourceHref,
       sourceFileName: item.fileName || null,
       sourceType: type,
+      brainPath: item.brainPath || null,
+      brainRole: item.brainRole || null,
       sectionTitle: inferSectionTitle(chunk.text, sourceTitle),
       excerpt: buildExcerpt(chunk.text),
       matchedTerms,
@@ -173,14 +200,14 @@ export async function searchKnowledgeBase({ clientId, query, topK = DEFAULT_TOP_
       .findNearest({
         vectorField: 'embedding',
         queryVector,
-        limit,
+        limit: Math.min(MAX_TOP_K * 2, limit * 2),
         distanceMeasure: 'COSINE',
         distanceResultField: 'distance',
       })
       .get();
 
     const chunks = snap.docs.map(serializeChunkDoc);
-    return enrichChunks({ clientId, chunks, query: q });
+    return rankBrainChunks(await enrichChunks({ clientId, chunks, query: q }), limit);
   } catch (err) {
     throw annotateVectorIndexError(err);
   }

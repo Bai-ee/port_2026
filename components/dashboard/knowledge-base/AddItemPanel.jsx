@@ -2,6 +2,18 @@
 
 import React, { useEffect, useState } from 'react';
 
+import { isJunkPath } from '../../../features/knowledge-base/brain-layout.js';
+
+const UPLOADABLE_EXTENSIONS = ['.pdf', '.docx', '.txt', '.md', '.markdown', '.csv', '.tsv', '.json', '.jsonl', '.html', '.htm', '.xml', '.yaml', '.yml', '.rtf', '.log'];
+
+// Folder picks include everything; keep the files the Source Library can read.
+function isBrainUploadable(file) {
+  const path = file.webkitRelativePath || file.name || '';
+  if (isJunkPath(path)) return false;
+  const name = String(file.name || '').toLowerCase();
+  return UPLOADABLE_EXTENSIONS.some((ext) => name.endsWith(ext));
+}
+
 export default function AddItemPanel({ mode, busy, onSubmit }) {
   const [title, setTitle] = useState('');
   const [text, setText] = useState('');
@@ -80,12 +92,26 @@ export default function AddItemPanel({ mode, busy, onSubmit }) {
             id="kb-file-input"
             type="file"
             multiple
-            accept=".pdf,.docx,.txt,.md,.csv,.json,.html,.xml,.yaml,.yml,.rtf,.log"
+            accept={UPLOADABLE_EXTENSIONS.join(',')}
             onChange={(event) => setFiles(Array.from(event.target.files || []))}
             className="mu-input"
           />
-          <span style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5, marginTop: 4 }}>
-            Upload PDFs, DOCX, TXT, Markdown, CSV, JSON, HTML, XML, YAML, RTF, logs, and other text-based files. Select multiple files to add them in one batch. Max 10 MB each. Legacy .doc is not supported.
+          <label className="mu-label" htmlFor="kb-folder-input" style={{ marginTop: 10 }}>Or a Brain Folder</label>
+          <input
+            id="kb-folder-input"
+            type="file"
+            multiple
+            ref={(el) => {
+              if (el) {
+                el.setAttribute('webkitdirectory', '');
+                el.setAttribute('directory', '');
+              }
+            }}
+            onChange={(event) => setFiles(Array.from(event.target.files || []).filter(isBrainUploadable))}
+            className="mu-input"
+          />
+          <span id="kb-upload-help" style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5, marginTop: 4 }}>
+            Files are filed like the company brain: MASTER_BRAIN.md, INDEX.md and manifest.json at the root, dated analysis docs beside them, raw evidence in sources/, snapshots in versions/. A loose file is filed under sources/ with today&apos;s date. Re-uploading an unchanged file is skipped; a changed file replaces the current one and the old copy moves to versions/. PDF, DOCX, Markdown, TXT, CSV, JSON, HTML, XML, YAML, RTF and logs, max 10 MB each.
           </span>
           {files.length > 1 && (
             <span id="kb-file-count-hint" style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>

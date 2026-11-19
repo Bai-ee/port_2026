@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 
 import AddItemPanel from './knowledge-base/AddItemPanel.jsx';
 import ItemsList from './knowledge-base/ItemsList.jsx';
+import { stripCommonRoot } from '../../features/knowledge-base/brain-layout.js';
 
 const TABS = [
   { id: 'text', label: 'TEXT' },
@@ -28,6 +29,12 @@ function HighlightText({ text, terms = [] }) {
   });
 }
 
+function localDateIso() {
+  const now = new Date();
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
 function sourceTypeLabel(chunk) {
   const type = String(chunk?.sourceType || chunk?.type || '').toUpperCase();
   if (type === 'PDF') return 'PDF';
@@ -43,7 +50,7 @@ export default function KnowledgeBaseCard({ getIdToken, apiPath }) {
   const toApiPath = typeof apiPath === 'function' ? apiPath : (path) => path;
   const [activeTab, setActiveTab] = useState('text');
   const [items, setItems] = useState([]);
-  const [limits, setLimits] = useState({ maxItems: 100, remaining: 100 });
+  const [limits, setLimits] = useState({ maxItems: 500, remaining: 500 });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
@@ -55,6 +62,9 @@ export default function KnowledgeBaseCard({ getIdToken, apiPath }) {
   const [chatBusy, setChatBusy] = useState(false);
   const [chatAnswer, setChatAnswer] = useState('');
   const [chatSources, setChatSources] = useState([]);
+  const [uploadProgress, setUploadProgress] = useState('');
+  const [uploadSummary, setUploadSummary] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -67,7 +77,7 @@ export default function KnowledgeBaseCard({ getIdToken, apiPath }) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
       setItems(Array.isArray(data.items) ? data.items : []);
-      setLimits(data.limits || { maxItems: 100, remaining: 0 });
+      setLimits(data.limits || { maxItems: 500, remaining: 0 });
     } catch (err) {
       setError(err.message || 'Could not load Source Library items.');
     } finally {
@@ -88,9 +98,17 @@ export default function KnowledgeBaseCard({ getIdToken, apiPath }) {
       if (activeTab === 'upload') {
         const files = Array.isArray(payload.files) ? payload.files : [];
         const failures = [];
-        for (const file of files) {
+        // Paths inside a dropped brain folder, with the folder itself removed.
+        const relativePaths = stripCommonRoot(files.map((file) => file.webkitRelativePath || file.name));
+        const today = localDateIso();
+        const counts = { added: 0, skipped: 0, replaced: 0 };
+        setUploadSummary('');
+        for (const [index, file] of files.entries()) {
+          setUploadProgress(`Uploading ${index + 1} of ${files.length}: ${relativePaths[index]}`);
           const formData = new FormData();
           formData.append('file', file);
+          formData.append('relativePath', relativePaths[index]);
+          formData.append('today', today);
           if (payload.title && files.length === 1) formData.append('title', payload.title);
           try {
             const uploadRes = await fetch(toApiPath('/api/dashboard/knowledge-base/upload'), {
@@ -100,10 +118,15 @@ export default function KnowledgeBaseCard({ getIdToken, apiPath }) {
             });
             const uploadData = await uploadRes.json().catch(() => ({}));
             if (!uploadRes.ok) throw new Error(uploadData?.error || `HTTP ${uploadRes.status}`);
+            if (uploadData.skipped) counts.skipped += 1;
+            else if (uploadData.replaced) counts.replaced += 1;
+            else counts.added += 1;
           } catch (err) {
-            failures.push(`${file.name}: ${err.message || 'upload failed'}`);
+            failures.push(`${relativePaths[index]}: ${err.message || 'upload failed'}`);
           }
         }
+        setUploadProgress('');
+        setUploadSummary(`${counts.added} added · ${counts.replaced} replaced (old copy kept in versions/) · ${counts.skipped} unchanged, skipped${failures.length ? ` · ${failures.length} failed` : ''}`);
         await loadItems();
         if (failures.length) {
           setError(`${failures.length} of ${files.length} uploads failed — ${failures.join(' · ')}`);
@@ -129,6 +152,36 @@ export default function KnowledgeBaseCard({ getIdToken, apiPath }) {
       setError(err.message || 'Could not add Source Library item.');
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleExport() {
+    if (exporting) return;
+    setExporting(true);
+    setError('');
+    try {
+      const token = await getIdToken();
+      const res = await fetch(toApiPath('/api/dashboard/knowledge-base/brain?format=zip'), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || `HTTP ${res.status}`);
+      }
+      const disposition = res.headers.get('content-disposition') || '';
+      const fileName = disposition.match(/filename="([^"]+)"/)?.[1] || 'brain.zip';
+      const url = URL.createObjectURL(await res.blob());
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err.message || 'Brain export failed.');
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -229,7 +282,7 @@ export default function KnowledgeBaseCard({ getIdToken, apiPath }) {
 
       {approachingLimit && (
         <p id="kb-limit-warning" className="mu-notice">
-          Source Library is approaching the {limits.maxItems || 100}-item v1 limit.
+          Source Library is approaching the {limits.maxItems || 500}-item limit.
         </p>
       )}
 
@@ -254,17 +307,28 @@ export default function KnowledgeBaseCard({ getIdToken, apiPath }) {
             <span style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{activeTab === 'upload' ? 'Documents are extracted, chunked, and embedded.' : activeTab === 'url' ? 'Imports readable page text from one URL.' : 'Paste client-owned context directly.'}</span>
           </div>
           <AddItemPanel mode={activeTab} busy={busy} onSubmit={handleSubmit} />
+          {uploadProgress && (
+            <p id="kb-upload-progress" className="mu-notice" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{uploadProgress}</p>
+          )}
+          {!uploadProgress && uploadSummary && (
+            <p id="kb-upload-summary" className="mu-notice">{uploadSummary}</p>
+          )}
         </section>
 
         <section id="kb-list-section" className="kb-panel">
           <div className="kb-panel-head-row">
             <div className="kb-panel-head">
-              <span className="mu-label">Library Items</span>
-              <span style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{itemCount} saved · delete removes chunks and stored files.</span>
+              <span className="mu-label">Brain</span>
+              <span style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{itemCount} files · download gives the whole brain as a folder with a fresh INDEX.md and manifest.json.</span>
             </div>
-            <button type="button" className="mu-btn-outline" style={{ minHeight: 30, padding: '0 10px', fontSize: 11 }} onClick={loadItems} disabled={loading || busy}>
-              Refresh
-            </button>
+            <div id="kb-list-actions-row" style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+              <button id="kb-export-brain" type="button" className="mu-btn-outline" style={{ minHeight: 30, padding: '0 10px', fontSize: 11 }} onClick={handleExport} disabled={exporting || loading || !itemCount}>
+                {exporting ? 'Preparing...' : 'Download'}
+              </button>
+              <button type="button" className="mu-btn-outline" style={{ minHeight: 30, padding: '0 10px', fontSize: 11 }} onClick={loadItems} disabled={loading || busy}>
+                Refresh
+              </button>
+            </div>
           </div>
           <ItemsList items={items} loading={loading} deletingId={deletingId} onDelete={handleDelete} />
         </section>
@@ -407,7 +471,7 @@ export default function KnowledgeBaseCard({ getIdToken, apiPath }) {
           gap: 10px;
         }
         #kb-list-section {
-          max-height: 360px;
+          max-height: 520px;
           overflow: auto;
         }
         #kb-chat-panel {

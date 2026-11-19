@@ -3,7 +3,7 @@ import { createRequire } from 'module';
 
 import { chunkText, normalizeWhitespace } from '../../../../../features/knowledge-base/chunk.js';
 import { embedKnowledgeItemChunks } from '../../../../../features/knowledge-base/embed.js';
-import { createKnowledgeItem } from '../../../../../features/knowledge-base/store.js';
+import { createKnowledgeItem, saveItemRawText } from '../../../../../features/knowledge-base/store.js';
 
 const require = createRequire(import.meta.url);
 const { verifyRequestUser } = require('../../../../../api/_lib/auth.cjs');
@@ -73,6 +73,9 @@ export async function POST(request) {
       sourceUrl: null,
       chunks,
       status: 'processing',
+    });
+    await saveItemRawText({ clientId: context.clientId, itemId: item.id, text: text }).catch((err) => {
+      console.warn('[knowledge-base/ingest-text] raw text save failed:', err?.message || err);
     });
     after(async () => {
       try {
