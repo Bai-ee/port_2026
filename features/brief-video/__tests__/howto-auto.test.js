@@ -271,3 +271,28 @@ test('validate 3.2: season integer, 1-3 clicks per step, 2-4 steps, town level 1
   const old = { ...good32(), request_version: 3.1 }; delete old.season;
   assert.doesNotMatch(validateHowtoRequest(old).errors.join('|'), /season/);
 });
+
+test('3.2: game_commit is optional (provenance only); a given value must be a hex hash; <=3.1 still requires it', async () => {
+  const { validateHowtoRequest } = await import('../howto-request.js');
+  const base = { request_version: 3.2, season: 3, id: 'gather-auto-test', review_on: '2026-12-06', type: 'how-to', narration: false, goal: 'g', audience: 'new player', public_copy: 'p', hook: 'What do you gather first?', banner: 'GATHER NOW', host: { name: 'mayor' }, arrival: { say: 'Let me show you.' },
+    steps: [{ say: 'Tap a spot, then the axe.', panel: 'spotTile', surface: 'canvas', clicks: [{ action: 'selectSpot' }, { action: 'openTools' }] }, { say: 'Pick a critter and send it out.', panel: 'critterSelection', surface: 'card', clicks: [{ action: 'selectCritter' }] }],
+    payoff: { say: 'Every haul stocks your town!', spot_art: 'images/game/atlases/spots/Sapling.png', town: { name: 'Maple Hollow', level: 5 } } };
+  assert.deepEqual(validateHowtoRequest(base).errors, []);
+  assert.deepEqual(validateHowtoRequest({ ...base, game_commit: '3d70fa48f' }).errors, []);
+  assert.deepEqual(validateHowtoRequest({ ...base, game_commit: 'latest' }).errors, ['game_commit, when given, must be a 7-40 character hex git hash']);
+  const old = validateHowtoRequest({ ...base, request_version: 3.1, steps: base.steps.map((s) => ({ ...s, clicks: s.clicks.map((c) => ({ ...c, target: 't', handler: 'h' })) })) });
+  assert.ok(old.errors.includes('game_commit is required'));
+});
+
+test('3.2: host.name and surface optional; non-empty new_panels rejected; type errors say what was got', async () => {
+  const { validateHowtoRequest } = await import('../howto-request.js');
+  const base = { request_version: 3.2, season: 3, id: 'gather-auto-test', review_on: '2026-12-06', type: 'how-to', goal: 'g', audience: 'a', public_copy: 'p', hook: 'h', banner: 'GATHER NOW', arrival: { say: 'Let me show you.' },
+    steps: [{ say: 'Tap a spot, then the axe.', panel: 'spotTile', clicks: [{ action: 'selectSpot' }] }, { say: 'Pick a critter and send it out.', panel: 'critterSelection', clicks: [{ action: 'send' }] }],
+    payoff: { say: 'Every haul stocks your town!', spot_art: 'x.png', town: { name: 'T', level: 5 } } };
+  assert.deepEqual(validateHowtoRequest(base).errors, []);
+  assert.deepEqual(validateHowtoRequest({ ...base, new_panels: [] }).errors, []);
+  assert.deepEqual(validateHowtoRequest({ ...base, new_panels: [{ name: null, component: null, children: [] }] }).errors, []);
+  assert.match(validateHowtoRequest({ ...base, new_panels: [{ name: 'reward modal' }] }).errors.join(), /new_panels must be empty/);
+  assert.match(validateHowtoRequest({ ...base, season: '3' }).errors.join(), /got "3"/);
+  assert.match(validateHowtoRequest({ ...base, request_version: '3.2' }).errors.join(), /got "3.2"/);
+});
