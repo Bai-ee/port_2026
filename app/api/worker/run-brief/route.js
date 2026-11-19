@@ -258,14 +258,14 @@ async function handleRunBrief(request, { parseBody = true, source = 'worker' } =
       const { runModules } = getIntakePipeline();
       const { FALLBACK_BRIEF_SITE } = require('../../../../api/_lib/brief-fallback.cjs');
       // ownSiteUrl = the client's real site (null for website-less signups).
-      // assetSiteUrl = the site visual assets render from — own site, else the
-      // run's fallback site (hitloop.agency templated). Brand/scout synthesis is
-      // gated on ownSiteUrl so fallback content never pollutes brand data.
+      // assetSiteUrl = the site modules/assets render from — own site, else the
+      // run's real sourceUrl (never the fallback site). Null → no site to scan.
       const ownSiteUrl =
         clientConfig?.sourceInputs?.websiteUrl ||
         clientConfig?.websiteUrl ||
         null;
-      const assetSiteUrl = ownSiteUrl || claimedRun.sourceUrl || FALLBACK_BRIEF_SITE;
+      const assetSiteUrl = ownSiteUrl
+        || (claimedRun.sourceUrl && claimedRun.sourceUrl !== FALLBACK_BRIEF_SITE ? claimedRun.sourceUrl : null);
       const websiteUrl = assetSiteUrl;
 
       const enabledModuleIds = Object.entries(clientConfig.moduleConfig)
@@ -315,13 +315,18 @@ async function handleRunBrief(request, { parseBody = true, source = 'worker' } =
         moduleIdsToRun = Array.from(new Set([...enabledModuleIds, ...FRESH_EVERY_BRIEF, ...staleVisionIds]));
       }
 
-      const { results } = await runModules({
-        clientId,
-        runId,
-        websiteUrl,
-        moduleIds: moduleIdsToRun,
-        onProgress,
-      });
+      let results = [];
+      if (websiteUrl) {
+        ({ results } = await runModules({
+          clientId,
+          runId,
+          websiteUrl,
+          moduleIds: moduleIdsToRun,
+          onProgress,
+        }));
+      } else {
+        console.log(`[WORKER] site modules skipped for ${clientId}: no website`);
+      }
       // Per-stage LLM costs for this run — module skill calls now, scout-config
       // generation below. Rolled into providerUsage so ops pricing is accurate.
       const runStageCosts = results
@@ -432,7 +437,8 @@ async function handleRunBrief(request, { parseBody = true, source = 'worker' } =
         console.log(`[WORKER] studio video skipped for ${clientId} — no real client site yet (fallback only)`);
       }
 
-      const anyOk = results.some((r) => r.ok);
+      // A site-less run has nothing to scan — that is a clean success, not a failure.
+      const anyOk = !websiteUrl || results.some((r) => r.ok);
       const artifactRefs = results.flatMap((r) => Array.isArray(r.artifacts) ? r.artifacts : []);
       const warnings = results.flatMap((r) => {
         if (Array.isArray(r.warnings) && r.warnings.length > 0) {

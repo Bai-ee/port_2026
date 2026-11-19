@@ -145,3 +145,12 @@ test('handle normalization: URLs with or without a scheme, post links and query 
   assert.equal(ig('https://www.instagram.com/acme.co/?hl=en'), 'acme.co');
   assert.equal(ig('@acme.co'), 'acme.co');
 });
+
+test('website-less signup queues the run with an empty sourceUrl (no fallback site)', async () => {
+  const { fake, mod } = loadWithFake();
+  const result = await mod.provisionClientForUser({ ...BASE, websiteUrl: '', ideaDescription: 'A new widget idea' });
+  const run = fake.adminDb._raw('brief_runs', `${result.clientId}-signup`);
+  assert.equal(run.sourceUrl, '');
+  assert.equal(run.usesFallbackSite, false);
+  assert.ok(!JSON.stringify(run).includes('hitloop.agency'));
+});

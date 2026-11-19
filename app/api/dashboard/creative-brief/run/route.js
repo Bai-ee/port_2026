@@ -7,7 +7,6 @@ const require = createRequire(import.meta.url);
 const fb = require('../../../../../api/_lib/firebase-admin.cjs');
 const { verifyRequestUser } = require('../../../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../../../api/_lib/client-provisioning.cjs');
-const { FALLBACK_BRIEF_SITE } = require('../../../../../api/_lib/brief-fallback.cjs');
 
 function makeReqShim(request) {
   return {
@@ -56,10 +55,12 @@ export async function POST(request) {
     );
   }
 
-  // Own site → render it; website-less clients fall back to the templated site
-  // so they still get a Creative Brief (assets only; brand data untouched).
+  // No own site → nothing to render. Never fall back to a stand-in site.
   const ownSiteUrl = clientConfig?.sourceInputs?.websiteUrl || clientConfig?.websiteUrl || null;
-  const sourceUrl = ownSiteUrl || FALLBACK_BRIEF_SITE;
+  if (!ownSiteUrl) {
+    return json({ error: 'Add your website first.', code: 'no-website' }, 409);
+  }
+  const sourceUrl = ownSiteUrl;
 
   const runRef = fb.adminDb.collection('brief_runs').doc();
   const runId = runRef.id;
@@ -73,7 +74,7 @@ export async function POST(request) {
     source: 'user',
     status: 'queued',
     pipelineType: 'free-tier-intake',
-    usesFallbackSite: !ownSiteUrl,
+    usesFallbackSite: false,
     attempts: 0,
     workerLease: null,
     startedAt: null,
