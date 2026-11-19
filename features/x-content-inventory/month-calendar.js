@@ -214,6 +214,9 @@ export function toRow(p, colors = null) {
     reviewOn: DAY_RE.test(String(p.reviewOn ?? '')) ? p.reviewOn : null,
     // CQ video-brief drafts only (features/brief-video/videoStatus.js, read-side join): { state, label, detail?, jobId?, updatedAt? } or null.
     videoProcessing: isPlainObject(p.videoProcessing) ? p.videoProcessing : null,
+    // Internal Video brief panel (features/brief-video/brief-fields.js). Never published.
+    videoBrief: typeof p.videoBrief === 'string' ? p.videoBrief : null,
+    videoBriefMeta: isPlainObject(p.videoBriefMeta) ? p.videoBriefMeta : null,
     // Approval locks these in (lifecycle contentHash), so the editor must see the full objects, not booleans.
     // Always present (null when absent) so "unknown" and "none" stay distinguishable. Read-only.
     selfReply: isPlainObject(p.selfReply) ? p.selfReply : null,

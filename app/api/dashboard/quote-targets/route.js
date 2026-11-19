@@ -665,6 +665,8 @@ async function handlePostStatus(context, body) {
     return { ok: true, posts: rows.map((p, i) => ({
       ...postStatusRow(p),
       videoProcessing: isObj(withVideo[i]?.videoProcessing) ? withVideo[i].videoProcessing : null,
+      videoBrief: typeof p.videoBrief === 'string' ? p.videoBrief : null,
+      videoBriefMeta: isObj(p.videoBriefMeta) ? p.videoBriefMeta : null,
       replyTo: isObj(p.replyTo) ? p.replyTo : null,
       selfReply: isObj(p.selfReply) ? p.selfReply : null,
       mediaVariants: isObj(p.mediaVariants) ? p.mediaVariants : null,

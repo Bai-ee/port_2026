@@ -226,6 +226,7 @@ export function actionState({ row, content, when, tz, now = Date.now(), busy = f
   else if (isBriefOverLimit(content)) approveBlockedReason = `Internal video brief is over ${BRIEF_MAX_CHARS} characters.`;
   else if (over) approveBlockedReason = `Over ${MAX_CHARS} characters.`;
   else if (hasBrief) approveBlockedReason = 'Internal video brief still on this post: attach the video first.';
+  else if (row.videoBriefMeta && row.videoBriefMeta.status !== 'rendered' && !row.mediaUrl && String(row.videoBrief || '').trim()) approveBlockedReason = 'Video brief not rendered yet: wait for the video, or clear the brief.';
   else if (!gate.ok) approveBlockedReason = boundFieldsNotice(gate);
   else if (suggestion && row.windowOpen === false) approveBlockedReason = 'The window for this one has closed.';
   else if (!suggestion && row.status === 'needs_review') approveBlockedReason = 'Needs review before it can be approved.';
@@ -372,7 +373,7 @@ export function mergeServerPost(row, res) {
   const next = { ...row, ...(calRow || {}) };
   if (post) {
     for (const k of ['selfReply', 'mediaVariants', 'replyTo']) if (hasOwn(post, k)) next[k] = post[k];
-    for (const k of ['status', 'revision', 'scheduledAt', 'content', 'mediaUrl', 'mediaType', 'posterUrl', 'reviewedAt', 'error', 'errorClass']) if (hasOwn(post, k)) next[k] = post[k];
+    for (const k of ['status', 'revision', 'scheduledAt', 'content', 'mediaUrl', 'mediaType', 'posterUrl', 'reviewedAt', 'error', 'errorClass', 'videoBrief', 'videoBriefMeta']) if (hasOwn(post, k)) next[k] = post[k];
     if (!calRow && post.status) {
       next.state = ({ draft: 'pending', awaiting_approval: 'awaiting', needs_review: 'held', approved: 'approved', scheduled: 'scheduled', queued: 'scheduled', posted: 'posted', failed: 'failed' })[post.status] || next.state;
       next.approval = ({ pending: 'unapproved', awaiting: 'unapproved', held: 'held', approved: 'approved', scheduled: 'scheduled', posted: 'posted', failed: 'held' })[next.state] || next.approval;

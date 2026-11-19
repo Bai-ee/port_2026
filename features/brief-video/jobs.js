@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { DAILY_BRIEF_VIDEO_CLIENTS, TEMPLATE_VERSION, HOWTO_TEMPLATE_VERSION, MAX_ATTEMPTS, LOOKAHEAD_DAYS } from './clients.js';
-import { parseBrief } from './brief.js';
+import { parseBrief, briefOfPost } from './brief.js';
+import { panelBriefBlocksRender } from './brief-fields.js';
 
 export const JOB_ID_RE = /^bv_[a-z0-9_]{6,40}$/;
 
@@ -36,7 +37,9 @@ export function selectCandidates(posts, { today, clients = DAILY_BRIEF_VIDEO_CLI
   return (posts || [])
     .filter((p) => p && clients[p.clientId] && p.status === 'draft' && !p.mediaUrl
       && DAY_RE.test(String(p.reviewOn || '')) && p.reviewOn >= today && p.reviewOn <= last)
-    .map((post) => ({ post, parsed: parseBrief(post.content) }))
+    // Panel briefs (brief-fields.js) render only once the owner approved them; legacy content briefs are unchanged.
+    .filter((post) => !panelBriefBlocksRender(post))
+    .map((post) => ({ post, parsed: briefOfPost(post) }))
     .filter((c) => c.parsed && !HOLD_RE.test(c.parsed.brief))
     // howto / invalid briefs never become a cq-brief job; with the howto flag on the worker still needs them (status + readiness).
     .filter((c) => includeHowto || c.parsed.briefKind === 'freetext')

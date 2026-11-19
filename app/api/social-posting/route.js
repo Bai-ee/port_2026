@@ -1,3 +1,4 @@
+import { videoBriefView } from '../../../features/brief-video/brief-fields.js';
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 import { alertOnHeldPosts } from '../../../features/social-posting/publish-alert.js';
@@ -24,6 +25,7 @@ import {
   runPostingAgents,
   schedulePost,
   updateSocialPost,
+  saveVideoBrief,
   setPostTargets,
   getPostTargetOptions,
 } from '../../../features/social-posting/twitter-service.js';
@@ -314,6 +316,20 @@ export async function POST(request) {
         planOverride: overrideAllowed ? planOverrideFrom(body, decoded) : null,
       });
       return json({ ok: true, post });
+    }
+
+    // Internal Video brief panel: read / save / approve-for-render, each independent of the post copy, approval and publishing.
+    if (action === 'video-brief-get') {
+      const row = await getSocialPost(context.clientId, body.postId);
+      if (!row) return json({ error: 'Post not found.' }, 404);
+      return json({ ok: true, brief: videoBriefView(row) });
+    }
+    if (action === 'video-brief-save' || action === 'video-brief-approve') {
+      await gatePilotRow(context, decoded, body.postId);
+      const approve = action === 'video-brief-approve';
+      const input = approve ? { status: 'approved' } : Object.fromEntries(['template', 'status', 'assets', 'shots', 'captions', 'audio', 'narration'].filter((k) => Object.prototype.hasOwnProperty.call(body, k)).map((k) => [k, body[k]]));
+      const post = await saveVideoBrief(context.clientId, body.postId, input, { by: decoded?.email || decoded?.uid || null, allowApprove: approve, expectedRevision: body.expectedRevision ?? null });
+      return json({ ok: true, post: { id: post.id, revision: post.revision, status: post.status }, brief: videoBriefView(post) });
     }
 
     // draft -> approved (stamps reviewedAt/reviewedBy). Does not schedule or publish.

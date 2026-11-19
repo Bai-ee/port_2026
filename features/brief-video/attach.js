@@ -41,6 +41,7 @@ export function planAttach(post, job, { force = false, now = new Date().toISOStr
     ...post,
     content: stripBrief(post.content),
     ...(current ? { videoBrief: current.brief, videoBriefHash: current.briefHash } : {}),
+    ...(post.videoBriefMeta && typeof post.videoBriefMeta === 'object' ? { videoBriefMeta: { ...post.videoBriefMeta, status: 'rendered', updatedAt: now } } : {}),
     mediaUrl: job.downloadUrl,
     mediaType: 'video',
     mediaContentType: 'video/mp4',

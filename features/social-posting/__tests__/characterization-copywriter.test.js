@@ -222,3 +222,31 @@ test('internal video brief: only the public copy counts toward 280; brief capped
   await assert.rejects(() => svc.createSocialPost('c1', { content: 'INTERNAL VIDEO BRIEF: only a brief', status: 'draft' }), (e) => e.status === 400);
   await assert.rejects(() => svc.updateSocialPost('c1', d.id, { content: `${'p'.repeat(281)}\n\nINTERNAL VIDEO BRIEF: x` }), (e) => e.status === 400);
 });
+
+test('saveVideoBrief: own fields only, bumps revision, draft-only, refuses content brief, approve gated, blocks post approval until rendered', async () => {
+  const d = await svc.createSocialPost('c1', { content: 'Clean public copy.', status: 'draft' });
+  const saved = await svc.saveVideoBrief('c1', d.id, { template: 'Shot 1: hero.', assets: ['https://x/a.png'], narration: true, status: 'ready' }, { by: 'me', allowApprove: false });
+  assert.equal(saved.content, 'Clean public copy.');
+  assert.equal(saved.revision, (d.revision || 0) + 1);
+  assert.equal(raw(d.id).videoBrief, 'Shot 1: hero.');
+  assert.deepEqual(raw(d.id).videoBriefMeta.assets, ['https://x/a.png']);
+  assert.equal(raw(d.id).videoBriefMeta.status, 'ready');
+  await assert.rejects(() => svc.saveVideoBrief('c1', d.id, { status: 'approved' }, { allowApprove: false }), (e) => e.status === 403);
+  // post approval is blocked while the panel brief has no video
+  await assert.rejects(() => svc.approveDraft('c1', d.id, {}), (e) => e.status === 409 && e.code === 'video-brief-pending');
+  const ok = await svc.saveVideoBrief('c1', d.id, { status: 'approved' }, { allowApprove: true });
+  assert.equal(raw(d.id).videoBriefMeta.status, 'approved');
+  // editing the template sends it back to ready
+  await svc.saveVideoBrief('c1', d.id, { template: 'Shot 1: changed.' }, { expectedRevision: ok.revision });
+  assert.equal(raw(d.id).videoBriefMeta.status, 'ready');
+  await assert.rejects(() => svc.saveVideoBrief('c1', d.id, { template: 'x' }, { expectedRevision: 0 }), (e) => e.status === 409);
+  // clearing the template clears the panel and unblocks approval
+  await svc.saveVideoBrief('c1', d.id, { template: '' });
+  assert.equal(raw(d.id).videoBrief, null);
+  assert.equal(raw(d.id).videoBriefMeta, null);
+  await svc.approveDraft('c1', d.id, {});
+  await assert.rejects(() => svc.saveVideoBrief('c1', d.id, { template: 'y' }), (e) => e.status === 409);
+  const legacy = await svc.createSocialPost('c1', { content: 'Copy.\n\nINTERNAL VIDEO BRIEF: old', status: 'draft' });
+  await assert.rejects(() => svc.saveVideoBrief('c1', legacy.id, { template: 'new' }), (e) => e.code === 'content-brief-present');
+  await assert.rejects(() => svc.saveVideoBrief('c2', d.id, { template: 'z' }), (e) => e.status === 404);
+});
