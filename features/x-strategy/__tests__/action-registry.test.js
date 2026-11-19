@@ -55,7 +55,7 @@ test('coverage: every action of the two core routes is catalogued or explicitly 
     // UI-only: follows a browser upload to signed URLs; the agent has no files to hand it.
     'ingest-uploads',
     // Owner-only curated-bucket verdicts (Video Remix review page); the agent never curates.
-    'curation-list', 'curation-set']);
+    'curation-list', 'curation-set', 'curation-render-batch']);
   // calendar-syncs / set-calendar-syncs / run-calendar-sync: the Synced-calendars toggle is the owner's standing spend
   // consent on this client's accounts (SOCIAL-AUTO-PUBLISH.md § Synced calendars); the agent never reads or flips it.
   const EXCLUDED_SP = new Set(['process-due-cron', 'set-targets', 'calendar-syncs', 'set-calendar-syncs', 'run-calendar-sync']);

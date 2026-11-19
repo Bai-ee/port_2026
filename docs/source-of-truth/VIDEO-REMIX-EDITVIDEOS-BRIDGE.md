@@ -309,6 +309,14 @@ Each behavior change this session is one **isolated commit** — revert via `git
 - **Hitloop repo:** `pre-video-filters-phase1` (before the `FILTER_OPTIONS` rows). The
   `createdWith` snapshot shipped on `media-reconcile.cjs` (clean) + `DashboardPage.jsx`.
 
+## Curation batch renders
+
+Owner button on the curated review page (`#remix-review-render-batch`) -> `POST /api/dashboard/quote-targets {action:'curation-render-batch', count}` (owner + pilot gated, not pilot-free). **PAID GitHub Actions renders.**
+- Jobs are created under `CURATION_BATCH_CLIENT_ID = 'ue-curation'` (`features/rendered-videos/curation-batch.js`), never the media owner or digest client. That keeps them out of `mediaCaptures` (last-40 cap), `pickFreshRender` (daily digest + auto-post) and the owner's clip anti-repeat lookback.
+- Recipe = the daily-email path (`triggerCurationBatchRemix` in `app/api/worker/pre-digest-video/route.js`: skyline folder, daily look) with `randomAudio: {enabled:true, artists:[]}` = any artist. The 06:00 daily (BAI-EE) path is unchanged.
+- `planBatch` caps: 1-5 per click, 5 queued/processing at once, 20 created per rolling 24h (read from `listMediaJobs('ue-curation', {type:'video-remix', limit:60})`, filtered in memory). Skip reasons: `inflight-full`, `daily-cap`.
+- Finished renders reach the review page through the rendered-video sync (global EditVideos `videos` feed, any clientId); reload after ~10-20 min.
+
 ## Env vars (Hitloop — local `.env.local` + Vercel production)
 
 ```

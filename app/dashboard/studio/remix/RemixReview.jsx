@@ -38,6 +38,8 @@ export default function RemixReview({ isNarrow = false, railW = 336, user = null
   const [playing, setPlaying] = useState(null); // { id, url } | { id, loading:true }
   const [focusId, setFocusId] = useState(null);
   const [toast, setToast] = useState(null);
+  const [batchPending, setBatchPending] = useState(false);
+  const [batchStatus, setBatchStatus] = useState('');
   const reducedMotion = useMemo(() => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches, []);
   const itemsRef = useRef(items);
   itemsRef.current = items;
@@ -69,6 +71,37 @@ export default function RemixReview({ isNarrow = false, railW = 336, user = null
     const t = window.setTimeout(() => setToast(null), 5000);
     return () => window.clearTimeout(t);
   }, [toast]);
+
+  // Owner-only PAID render batch: needs the signed-in owner's token (the public review route cannot do this).
+  const renderBatch = useCallback(async () => {
+    const OWNER_MSG = 'Owner sign-in needed to render';
+    let token = null;
+    try { token = await userRef.current?.getIdToken?.(); } catch { /* treated as signed out */ }
+    if (!token) { flash(OWNER_MSG); return; }
+    setBatchPending(true);
+    try {
+      const res = await fetch('/api/dashboard/quote-targets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: 'curation-render-batch', count: 5 }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401 || res.status === 403 || data?.skipped === 'not-owner') { flash(OWNER_MSG); setBatchStatus(OWNER_MSG); return; }
+      if (!res.ok) throw new Error(data?.error || `Request failed (${res.status})`);
+      const n = data.queued?.length || 0;
+      const msg = n
+        ? `Queued ${n} render${n === 1 ? '' : 's'} — they appear here in ~10–20 min`
+        : data.skipped === 'daily-cap' ? 'Daily limit of 20 reached'
+          : data.skipped === 'inflight-full' ? '5 renders already in progress'
+            : `Nothing queued${data.errors?.[0] ? `: ${data.errors[0]}` : ''}`;
+      flash(msg);
+      setBatchStatus(`${msg} (${data.inflight ?? 0} in progress, ${data.last24h ?? 0} in last 24h)`);
+    } catch (err) {
+      flash(`Could not queue renders: ${err.message}`);
+    } finally {
+      if (mountedRef.current) setBatchPending(false);
+    }
+  }, [flash]);
 
   // Load (and reload when "Load older" widens the window).
   useEffect(() => {
@@ -207,6 +240,12 @@ export default function RemixReview({ isNarrow = false, railW = 336, user = null
               {label}{key !== 'all' ? ` ${counts[key]}` : ` ${(items || []).length}`}
             </button>
           ))}
+        </div>
+        <div id="remix-review-batch-controls" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <button id="remix-review-render-batch" type="button" disabled={batchPending} onClick={renderBatch} style={{ ...ui.btn(false), height: 30, padding: '0 14px', fontSize: 11, opacity: batchPending ? 0.6 : 1 }}>
+            {batchPending ? 'Queuing…' : 'Render 5 new (random artists)'}
+          </button>
+          {batchStatus ? <span id="remix-review-batch-status" aria-live="polite" style={{ ...ui.label, fontSize: 11 }}>{batchStatus}</span> : null}
         </div>
         <div id="remix-review-bucket-counter" aria-live="polite" style={{ ...ui.label, fontSize: 11 }}>
           Approved: {approvedTotal} / target {TARGET}
