@@ -3,7 +3,16 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const fb = require('../../api/_lib/firebase-admin.cjs');
 
-export const MAX_ITEMS_PER_CLIENT = 100;
+import {
+  brainPathForTitle,
+  findSourceRegister,
+  legacyBrainFields,
+  parseSourceRegister,
+  todayIso,
+  versionPathFor,
+} from './brain-layout.js';
+
+export const MAX_ITEMS_PER_CLIENT = 500;
 
 export function getKnowledgeBaseRefs(clientId) {
   const root = fb.adminDb.collection('knowledge_base').doc(clientId);
@@ -14,9 +23,32 @@ export function getKnowledgeBaseRefs(clientId) {
   };
 }
 
+function brainFieldsFromData(data, createdAt) {
+  if (data.brainPath) {
+    return {
+      brainPath: data.brainPath,
+      brainRole: data.brainRole || 'source',
+      brainDate: data.brainDate || null,
+      versionLabel: data.versionLabel || null,
+      legacy: false,
+    };
+  }
+  const derived = legacyBrainFields({ ...data, createdAt });
+  return {
+    brainPath: derived.brainPath,
+    brainRole: derived.brainRole,
+    brainDate: derived.brainDate,
+    versionLabel: derived.versionLabel,
+    legacy: true,
+  };
+}
+
 function publicItemFromDoc(doc) {
   const data = doc.data() || {};
+  const createdAt = data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || null;
   return {
+    ...brainFieldsFromData(data, createdAt),
+    sha256: data.sha256 || null,
     id: doc.id,
     title: data.title || '',
     type: data.type || 'text',
@@ -32,7 +64,7 @@ function publicItemFromDoc(doc) {
     documentParser: data.documentParser || null,
     documentPages: Number(data.documentPages) || null,
     documentWarnings: Array.isArray(data.documentWarnings) ? data.documentWarnings : [],
-    createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt || null,
+    createdAt,
     updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : data.updatedAt || null,
   };
 }
@@ -65,6 +97,8 @@ export async function createKnowledgeItem({
   fileName = null,
   contentType = null,
   sizeBytes = null,
+  brain = null,
+  sha256 = null,
 }) {
   if (!clientId) throw new Error('createKnowledgeItem: clientId is required');
   if (!Array.isArray(chunks) || chunks.length === 0) {
@@ -80,6 +114,7 @@ export async function createKnowledgeItem({
   const now = fb.FieldValue.serverTimestamp();
   const safeTitle = String(title || '').trim().slice(0, 160) || (type === 'url' ? 'Imported URL' : 'Pasted text');
   const totalChars = chunks.reduce((sum, chunk) => sum + (Number(chunk.charCount) || String(chunk.text || '').length), 0);
+  const brainFields = brain?.brainPath ? brain : brainPathForTitle(safeTitle, { ext: type === 'url' ? '.url.md' : '.md' });
 
   const itemPayload = {
     clientId,
@@ -94,6 +129,11 @@ export async function createKnowledgeItem({
     fileName,
     contentType,
     sizeBytes,
+    brainPath: brainFields.brainPath,
+    brainRole: brainFields.brainRole,
+    brainDate: brainFields.brainDate || null,
+    versionLabel: brainFields.versionLabel || null,
+    sha256: sha256 || null,
     createdAt: now,
     updatedAt: now,
   };
@@ -145,6 +185,32 @@ export async function listKnowledgeItems(clientId) {
   const { items } = getKnowledgeBaseRefs(clientId);
   const snap = await items.orderBy('createdAt', 'desc').limit(MAX_ITEMS_PER_CLIENT).get();
   return snap.docs.map(publicItemFromDoc);
+}
+
+// The current (non-version) item at a brain path, if any.
+export async function findItemByBrainPath({ clientId, brainPath }) {
+  if (!clientId || !brainPath) return null;
+  const { items } = getKnowledgeBaseRefs(clientId);
+  const snap = await items.where('brainPath', '==', brainPath).limit(10).get();
+  const doc = snap.docs.find((entry) => (entry.data() || {}).brainRole !== 'version');
+  return doc ? publicItemFromDoc(doc) : null;
+}
+
+// Keep the old copy of a replaced file under versions/<date>-before-<name>/.
+export async function moveItemToVersions({ clientId, itemId, brainPath, today = todayIso() }) {
+  const { items } = getKnowledgeBaseRefs(clientId);
+  const next = versionPathFor(brainPath, { today });
+  await items.doc(itemId).set(
+    {
+      brainPath: next.brainPath,
+      brainRole: 'version',
+      versionLabel: next.versionLabel,
+      brainDate: today,
+      updatedAt: fb.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+  return next;
 }
 
 export async function getKnowledgeItem({ clientId, itemId }) {
@@ -312,4 +378,53 @@ export async function deleteKnowledgeItemCascade({ clientId, itemId }) {
   }
 
   return { deletedChunks };
+}
+
+// Pasted text and imported URLs have no uploaded file. Save their text to
+// Storage so the brain export can write them out as files with a real hash.
+export async function saveItemRawText({ clientId, itemId, text }) {
+  const { createHash } = await import('node:crypto');
+  const buffer = Buffer.from(String(text || ''), 'utf8');
+  const storagePath = `knowledge-base/${clientId}/${itemId}.md`;
+  await fb.adminStorage.bucket().file(storagePath).save(buffer, {
+    resumable: false,
+    contentType: 'text/markdown; charset=utf-8',
+    metadata: { metadata: { clientId, itemId, uploadedAt: new Date().toISOString() } },
+  });
+  const sha256 = createHash('sha256').update(buffer).digest('hex');
+  await getKnowledgeBaseRefs(clientId).items.doc(itemId).set(
+    { storagePath, contentType: 'text/markdown', sizeBytes: buffer.length, sha256, updatedAt: fb.FieldValue.serverTimestamp() },
+    { merge: true }
+  );
+  return { storagePath, sha256, sizeBytes: buffer.length };
+}
+
+// Raw bytes of an item for export: the stored file when there is one,
+// otherwise the item's chunks rejoined (older pasted-text items).
+export async function readItemBytes({ clientId, item }) {
+  if (item.storagePath) {
+    try {
+      const [buffer] = await fb.adminStorage.bucket().file(item.storagePath).download();
+      return buffer;
+    } catch (err) {
+      console.warn('[knowledge-base] export read failed:', item.storagePath, err.message);
+    }
+  }
+  const chunks = await listKnowledgeChunks({ clientId, itemId: item.id, limit: 500 });
+  return Buffer.from(chunks.map((chunk) => chunk.text).join('\n\n'), 'utf8');
+}
+
+// Attach source IDs (D1, X1–X11, ...) from the brain's source register, when
+// one has been uploaded.
+export async function attachSourceIds({ clientId, items }) {
+  const register = findSourceRegister(items);
+  if (!register) return items;
+  try {
+    const text = (await readItemBytes({ clientId, item: register })).toString('utf8');
+    const ids = parseSourceRegister(text, { registerPath: register.brainPath });
+    return items.map((item) => (ids[item.brainPath] ? { ...item, sourceIds: ids[item.brainPath] } : item));
+  } catch (err) {
+    console.warn('[knowledge-base] source register read failed:', err.message);
+    return items;
+  }
 }

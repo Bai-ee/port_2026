@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { extname } from 'node:path';
 import { after, NextResponse } from 'next/server';
 import { createRequire } from 'module';
@@ -5,7 +6,13 @@ import { createRequire } from 'module';
 import { chunkText } from '../../../../../features/knowledge-base/chunk.js';
 import { extractDocumentText, validateDocumentFile } from '../../../../../features/knowledge-base/document.js';
 import { embedKnowledgeItemChunks } from '../../../../../features/knowledge-base/embed.js';
-import { createKnowledgeItem, updateKnowledgeItemStatus } from '../../../../../features/knowledge-base/store.js';
+import { classifyBrainPath, isJunkPath, todayIso } from '../../../../../features/knowledge-base/brain-layout.js';
+import {
+  createKnowledgeItem,
+  findItemByBrainPath,
+  moveItemToVersions,
+  updateKnowledgeItemStatus,
+} from '../../../../../features/knowledge-base/store.js';
 
 const require = createRequire(import.meta.url);
 const fb = require('../../../../../api/_lib/firebase-admin.cjs');
@@ -82,6 +89,15 @@ export async function POST(request) {
 
   const fileName = sanitizeFileName(file.name);
   const title = String(formData.get('title') || fileName || 'Uploaded document').trim();
+  // relativePath: the file's path inside a dropped brain folder (root folder
+  // already stripped by the client). A loose file just sends its name.
+  const relativePath = String(formData.get('relativePath') || '').trim() || fileName;
+  const clientToday = String(formData.get('today') || '').trim();
+  const today = /^\d{4}-\d{2}-\d{2}$/.test(clientToday) ? clientToday : todayIso();
+  if (isJunkPath(relativePath)) {
+    return json({ ok: true, skipped: true, reason: 'hidden or system file' }, 200);
+  }
+  const brain = classifyBrainPath(relativePath, { today });
   const contentType = file.type || 'application/octet-stream';
   const sizeBytes = Number(file.size) || 0;
   let item = null;
@@ -92,6 +108,14 @@ export async function POST(request) {
 
     stage = 'read';
     const buffer = Buffer.from(await file.arrayBuffer());
+    const sha256 = createHash('sha256').update(buffer).digest('hex');
+
+    stage = 'match';
+    const existing = await findItemByBrainPath({ clientId: context.clientId, brainPath: brain.brainPath });
+    if (existing && existing.sha256 === sha256) {
+      return json({ ok: true, skipped: true, reason: 'unchanged', item: existing }, 200);
+    }
+
     stage = 'extract';
     const extracted = await extractDocumentText({ buffer, fileName, contentType });
     stage = 'chunk';
@@ -112,6 +136,8 @@ export async function POST(request) {
       fileName,
       contentType,
       sizeBytes,
+      brain,
+      sha256,
     });
 
     stage = 'upload-storage';
@@ -126,6 +152,8 @@ export async function POST(request) {
           originalFileName: fileName,
           documentType: extracted.type || 'file',
           parser: extracted.parser || '',
+          brainPath: brain.brainPath,
+          sha256,
           uploadedAt: new Date().toISOString(),
         },
       },
@@ -149,6 +177,18 @@ export async function POST(request) {
         },
         { merge: true }
       );
+
+    // A changed file replaces the current one; the old copy moves to versions/.
+    let replaced = null;
+    if (existing) {
+      stage = 'version';
+      replaced = await moveItemToVersions({
+        clientId: context.clientId,
+        itemId: existing.id,
+        brainPath: brain.brainPath,
+        today,
+      });
+    }
 
     stage = 'embed';
     after(async () => {
@@ -174,6 +214,7 @@ export async function POST(request) {
         documentPages: extracted.pages || null,
       },
       chunkCount: chunks.length,
+      replaced,
       embedded: { queued: true },
       warnings: Array.isArray(extracted.warnings) ? extracted.warnings : [],
     }, 202);
