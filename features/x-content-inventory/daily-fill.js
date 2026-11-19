@@ -107,7 +107,7 @@ const mediaReady = (p) => (p?.mediaState === 'video' || p?.mediaState === 'still
 // Throwback track (Throwback Content): the track that lists the 'nas' bucket. It only ever posts a NAS archive item dated
 // to that day (anniversary) that links to a real asset on the drive; no dated item with media => nothing that day.
 export const isThrowbackTrack = (track) => (track?.buckets || []).includes('nas');
-const BLOCKED_RIGHTS = new Set(['never-public', 'client-approval-needed']);
+export const BLOCKED_RIGHTS = new Set(['never-public', 'client-approval-needed']);
 /** A NAS item that resolves to a real asset (sha + path + source) and is a video/still the owner may post. Staging is
  *  not required: the draft carries the link (packageId + nasSha) and the file is pulled when the owner schedules it. */
 export const hasNasMediaLink = (p) => !!(p?.nas?.sha256 && p.nas.relativePath && p.nas.sourceId)
@@ -133,6 +133,10 @@ export const matchesRule = (p, rule) => {
   if (p?.status === 'retired' || p?.mediaState !== 'video') return false;
   return (p.entities || []).some((e) => artists.includes(String(e).toLowerCase()));
 };
+// Curated bypass (owner decision 2026-11-18): an owner-approved, never-used, non-retired video of ANY artist with postable
+// rights may take the preferCurated slot. Once used it no longer qualifies, so a non-BAI-EE video never reaches the LRU fallback.
+export const curatedBypassEligible = (p, lastOf = () => null) => p?.curation?.state === 'approved' && !lastOf(p.id)
+  && p?.mediaState === 'video' && p?.status !== 'retired' && !BLOCKED_RIGHTS.has(p?.rights);
 // preferCurated (only applies with newestFirst): an owner-approved, never-used rv- video leads, oldest approval first
 // (FIFO); a missing or invalid curation.at sorts last. Ties fall through to newestUnusedFirst (which ends on id).
 const approvedAtMs = (c) => { const t = Date.parse(c.p.curation?.at); return Number.isFinite(t) ? t : Infinity; };
@@ -203,7 +207,7 @@ export function planDailyFill({
     const perDay = rule ? rule.perDay : trackPostsPerDay(track, engineTargets);
     if (perDay <= 0) continue;
     const pool = (kind === 'client-work' && Array.isArray(clientWork) ? clientWork : packages)
-      .filter((p) => p?.id && trackForPackage(tracks, p)?.id === track.id && (!rule || matchesRule(p, rule)) && (!rule?.preferCurated || p.curation?.state !== 'rejected')); // a rejected video is never picked and never feeds the sameDay override
+      .filter((p) => p?.id && trackForPackage(tracks, p)?.id === track.id && (!rule || (rule.preferCurated && curatedBypassEligible(p, lastOf)) || matchesRule(p, rule)) && (!rule?.preferCurated || p.curation?.state !== 'rejected')); // a rejected video is never picked and never feeds the sameDay override
     const buckets = new Set(track.buckets || []);
     const throwback = isThrowbackTrack(track);
     const pkgById = throwback ? new Map((packages || []).filter((p) => p?.id).map((p) => [p.id, p])) : null;
@@ -222,7 +226,7 @@ export function planDailyFill({
       // sameDay: a newer render than every (non-rejected) draft holding today gets its own draft; the older drafts stay
       // for the owner to pass or delete. A rerun sees the new render already queued and adds nothing.
       // preferCurated: a held draft whose package is approved already is today's curated pick; a newer render must not add a second.
-      const heldCurated = !!rule?.preferCurated && holding.some((f) => f.status !== 'rejected' && pool.find((p) => p.id === f.packageId)?.curation?.state === 'approved');
+      const heldCurated = !!rule?.preferCurated && holding.some((f) => f.status !== 'rejected' && (packages || []).find((p) => p?.id === f.packageId)?.curation?.state === 'approved'); // packages, not pool: a held non-BAI-EE curated pick is lastUsed today, so it has left the pool
       if (sameDay && slots <= 0 && !heldCurated) {
         const heldAt = holding.filter((f) => f.status !== 'rejected').map((f) => renderedOf(f.packageId));
         const newest = pool.filter((p) => !used.has(p.id) && !lastOf(p.id) && !openOf(p.id)).map((p) => String(p.renderedAt || '')).sort().pop() || '';

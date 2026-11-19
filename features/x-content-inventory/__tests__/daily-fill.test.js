@@ -351,9 +351,48 @@ test('preferCurated off: approved items rank like any render', async () => {
   assert.deepEqual((await curRun(packages, {}, { preferCurated: false })).map((r) => r.packageId), ['rv-new']);
 });
 
-test('preferCurated: an approved non-BAI-EE video is never picked', async () => {
-  const packages = [crv('rv-x', '2026-10-10T06:00:00Z', { entities: ['Other DJ'], ...cur('approved', '2026-10-11T00:00:00Z') }), crv('rv-new', '2026-10-17T06:00:00Z')];
+const other = (id, renderedAt, extra = {}) => crv(id, renderedAt, { entities: ['Other DJ'], ...extra });
+const ok = cur('approved', '2026-10-11T00:00:00Z');
+
+test('curated bypass: an approved unused non-BAI-EE video is picked over a newer BAI-EE render', async () => {
+  const packages = [other('rv-x', '2026-10-10T06:00:00Z', ok), crv('rv-new', '2026-10-17T06:00:00Z')];
+  assert.deepEqual((await curRun(packages)).map((r) => r.packageId), ['rv-x']);
+});
+
+test('curated bypass: an approved non-BAI-EE video already used is NOT picked (no LRU fallback)', async () => {
+  const packages = [other('rv-x', '2026-10-10T06:00:00Z', ok)];
+  assert.deepEqual(await curRun(packages, { lastUsed: new Map([['rv-x', '2026-10-05']]) }), []);
+  const withFresh = [...packages, crv('rv-new', '2026-10-17T06:00:00Z')];
+  assert.deepEqual((await curRun(withFresh, { lastUsed: new Map([['rv-x', '2026-10-05']]) })).map((r) => r.packageId), ['rv-new']);
+});
+
+test('curated bypass: a non-approved non-BAI-EE video is never picked', async () => {
+  for (const extra of [{}, cur('pending', '2026-10-11T00:00:00Z')]) {
+    assert.deepEqual((await curRun([other('rv-x', '2026-10-10T06:00:00Z', extra), crv('rv-new', '2026-10-17T06:00:00Z')])).map((r) => r.packageId), ['rv-new']);
+  }
+});
+
+test('curated bypass: an approved non-BAI-EE video with blocked rights is never picked', async () => {
+  for (const rights of ['never-public', 'client-approval-needed']) {
+    assert.deepEqual((await curRun([other('rv-x', '2026-10-10T06:00:00Z', { ...ok, rights }), crv('rv-new', '2026-10-17T06:00:00Z')])).map((r) => r.packageId), ['rv-new']);
+  }
+});
+
+test('curated bypass: a rejected non-BAI-EE video is never picked; non-video and retired are not eligible', async () => {
+  const packages = [other('rv-r', '2026-10-10T06:00:00Z', cur('rejected', '2026-10-11T00:00:00Z')), other('rv-s', '2026-10-10T06:00:00Z', { ...ok, mediaState: 'still' }), other('rv-t', '2026-10-10T06:00:00Z', { ...ok, status: 'retired' }), crv('rv-new', '2026-10-17T06:00:00Z')];
   assert.deepEqual((await curRun(packages)).map((r) => r.packageId), ['rv-new']);
+});
+
+test('curated bypass: the non-curated fallback stays BAI-EE only', async () => {
+  assert.deepEqual(await curRun([other('rv-x', '2026-10-17T06:00:00Z')]), []);
+});
+
+test('curatedBypassEligible: predicate', async () => {
+  const { curatedBypassEligible } = await import('../daily-fill.js');
+  const v = { id: 'a', mediaState: 'video', ...ok };
+  assert.equal(curatedBypassEligible(v, () => null), true);
+  assert.equal(curatedBypassEligible(v, () => '2026-10-01'), false);
+  assert.equal(curatedBypassEligible({ ...v, rights: 'never-public' }, () => null), false);
 });
 
 test('preferCurated: replace mode for ue picks the next curated item', async () => {
@@ -458,4 +497,12 @@ test('quotes: a hot pick uses its own window (72h music), carries no caption and
   assert.deepEqual(q.map((r) => r.quoteTarget.id), ['555']);
   assert.equal(q[0].text, 'https://x.com/h555/status/555');
   assert.equal(q[0].needsStory, false);
+});
+
+test('preferCurated GATING: today held by a NON-BAI-EE curated draft, a fresh BAI-EE render arrives: rerun adds nothing', async () => {
+  const packages = [other('rv-x', '2026-10-10T06:00:00Z', cur('approved', '2026-10-11T00:00:00Z')), crv('rv-new', '2026-10-17T06:00:00Z')];
+  assert.deepEqual((await curRun(packages)).map((r) => r.packageId), ['rv-x']);
+  const held = () => ({ fillPosts: [curFill('rv-x')], openPosts: new Set(['rv-x']), lastUsed: new Map([['rv-x', TODAY]]) });
+  assert.deepEqual(await curRun(packages, held()), []);
+  assert.deepEqual(await curRun(packages, held()), []);
 });

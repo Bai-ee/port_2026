@@ -5,7 +5,9 @@
 //
 // preferCurated (Video Remix P2c, 2026-11-18): an owner-approved, never-used rv- video (curation.state 'approved') beats
 // the fresh render, oldest approval first, each used once; with none left the fill falls back to the rule above. A
-// rejected video is never picked. The BAI-EE artist filter still applies to curated items. A held curated draft also
+// rejected video is never picked. Curated bypass (owner decision 2026-11-18): an approved, never-used, non-retired video of ANY
+// artist (rights not never-public / client-approval-needed) may take the slot; the BAI-EE artist filter applies only to the
+// non-curated fallback, and a used non-BAI-EE video never re-enters it. A held curated draft also
 // suppresses the sameDay override, so a rerun never adds a second draft.
 //
 // sameDay (2026-10-20): the fill plans this track for today only, never days ahead. A 7-day pre-fill held every day

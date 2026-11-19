@@ -176,7 +176,7 @@ publish total.
   token; the post-status guard guarantees that only the first approval
   publishes.
 - `app/api/social-posting/process-due` cron added (`*/30 * * * *`). **The 12h staleness guard shipped in the same change**: `twitter-service.js`'s `readDuePosts` marks any due post whose `scheduledAt` is more than 12h in the past as `expired` (not in `DUE_STATUSES`) and skips it, instead of posting it — without this, the cron's first run would flush the entire historical backlog of never-sent scheduled posts to a live account. Approval-mode publishing never depends on this cron (it publishes inline on the click).
-- Note (Video Remix P2c): the media owner's calendar draft for the daily mix video now prefers an owner-approved curated `rv-` video (daily-fill `preferCurated`), so it can differ from the 06:00 render emailed that day.
+- Note (Video Remix P2c): the media owner's calendar draft for the daily mix video now prefers an owner-approved curated `rv-` video (daily-fill `preferCurated`; any artist, never-used, rights postable), so it can differ from the 06:00 render emailed that day.
 
 ## 7. How to add a platform
 
