@@ -19,13 +19,17 @@ function buildRegistry() {
   let files;
   try {
     files = fs.readdirSync(SKILLS_DIR);
-  } catch {
+  } catch (err) {
+    console.error(`[skill-registry] cannot read ${SKILLS_DIR}: ${err?.message}. Every analyzer skill will fail with "not found in registry" (check next.config.mjs outputFileTracingIncludes).`);
     return entries;
   }
   for (const file of files) {
     if (!file.endsWith('.md') || file.startsWith('_')) continue;
     const skillId = file.replace(/\.md$/, '');
     entries[skillId] = path.join(SKILLS_DIR, file);
+  }
+  if (Object.keys(entries).length === 0) {
+    console.error(`[skill-registry] no skill .md files found in ${SKILLS_DIR}. Every analyzer skill will fail with "not found in registry" (check next.config.mjs outputFileTracingIncludes).`);
   }
   return entries;
 }

@@ -113,6 +113,9 @@ const nextConfig = {
       // App logic loaded at runtime via createRequire() from outside the app/ tree.
       // The tracer does not follow these external CJS/JS modules, so include them explicitly.
       './api/_lib/**/*',
+      // Analyzer skill prompts are read from disk at runtime (skills/_registry.js
+      // readdirSync + brand-system-*-vision modules); the tracer never sees them.
+      './features/scout-intake/skills/*.md',
       // firebase-admin transitive deps the tracer under-includes (see above).
       ...firebaseAdminTraceDeps,
       // Next runtime (Turbopack keeps these external to the route bundle).
