@@ -14,6 +14,7 @@ import { reserveInTx, releaseReservations } from './reservations.js';
 import { toMs, contentHash, LIFECYCLE_VERSION, OPEN_STATUSES, MANUAL_CLAIMABLE_STATUSES, APPROVAL_VOID_STATUSES, isV2, packageClearance, replyBlock, findPackageCollision, isMaterialEdit, deliveryBlock } from './lifecycle.js';
 import { assertNoMemoryPlaceholder, hasMemoryPlaceholder, stripBlockingPlaceholders, sanitizeMediaVariants, sanitizeSelfReply, sanitizeSourceRef } from './self-reply.js';
 import { sanitizeRepostOf, repostLabel } from './repost.js';
+import { stripBrief, parseBrief } from '../brief-video/brief.js';
 import { postTargets, normalizeTargets, instagramBlockReason, deliverInstagram } from './cross-post.js';
 
 const require = createRequire(import.meta.url);
@@ -955,6 +956,17 @@ async function deliveryHold(post) {
   return parked;
 }
 
+// A draft may carry "\n\nINTERNAL VIDEO BRIEF: <brief>" after the public copy (features/brief-video/brief.js). The brief is
+// never published (assertNoInternalBrief), so only the public copy counts toward X's 280; the brief has its own cap.
+export const VIDEO_BRIEF_MAX = 8000;
+function assertPostLength(content) {
+  const publicCopy = stripBrief(content);
+  if (!publicCopy) throw Object.assign(new Error('Post content is required (the internal video brief does not count as post text).'), { status: 400 });
+  if (publicCopy.length > 280) throw Object.assign(new Error('X posts must be 280 characters or fewer.'), { status: 400 });
+  const brief = parseBrief(content)?.brief || '';
+  if (brief.length > VIDEO_BRIEF_MAX) throw Object.assign(new Error(`Internal video brief must be ${VIDEO_BRIEF_MAX} characters or fewer.`), { status: 400 });
+}
+
 function buildSocialPostRecord(clientId, payload, id) {
   const now = new Date().toISOString();
   // kind:'repost' rows carry the target tweet; their content is a display label
@@ -972,11 +984,7 @@ function buildSocialPostRecord(clientId, payload, id) {
     err.status = 400;
     throw err;
   }
-  if (content.length > 280) {
-    const err = new Error('X posts must be 280 characters or fewer.');
-    err.status = 400;
-    throw err;
-  }
+  assertPostLength(content);
 
   const status = payload.status || 'draft';
   const media = extractMedia(payload);
@@ -1731,7 +1739,7 @@ export async function updateSocialPost(clientId, postId, payload = {}, opts = {}
   if (expected != null && (post.revision || 0) !== Number(expected)) throw conflict();
   const { updated } = await prepareUpdate(clientId, post, payload);
   const saved = await commitPostTransition(clientId, post, updated, { planOverride: opts.planOverride });
-  await syncDiscogsStory(post, saved.content);
+  await syncDiscogsStory(post, stripBrief(saved.content)); // never let an internal brief become the record's story
   return saved;
 }
 
@@ -1757,11 +1765,7 @@ async function prepareUpdate(clientId, post, payload = {}) {
     err.status = 400;
     throw err;
   }
-  if (content.length > 280) {
-    const err = new Error('X posts must be 280 characters or fewer.');
-    err.status = 400;
-    throw err;
-  }
+  assertPostLength(content);
 
   // scheduledAt is only touched when the caller explicitly sends the field.
   // '' or null clears the schedule (back to a plain draft); a valid time re-arms

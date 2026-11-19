@@ -6,7 +6,7 @@
 import { str, int, bool, arr, obj, open, iso, postId, expectedRevision } from './_schema.js';
 
 const POST_FIELDS = {
-  content: str('Post text, 280 chars max.', { maxLength: 280 }),
+  content: str('Public post text, 280 chars max. Optional tail "\\n\\nINTERNAL VIDEO BRIEF: <brief>" (never published, max 8000) is not counted.', { maxLength: 8400 }),
   selfReply: open('Optional first self-reply: {text, mediaUrl?, mediaType?}.'),
   mediaUrl: str('Attached media URL or storage ref.'),
   mediaType: str('image | video | gif.'),

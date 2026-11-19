@@ -209,3 +209,16 @@ test('update does not call Anthropic (only enhance does)', async () => {
   await call({ action: 'update', postId: d.id, content: 'Still no LLM.' });
   assert.equal(fetchCalls.filter((c) => c.url.includes('anthropic')).length, 0);
 });
+
+test('internal video brief: only the public copy counts toward 280; brief capped at 8000; brief alone is not post text', async () => {
+  const pub = 'p'.repeat(280);
+  const brief = 'Shot 1: wide. '.repeat(200); // ~2800 chars
+  const d = await svc.createSocialPost('c1', { content: `${pub}\n\nINTERNAL VIDEO BRIEF: ${brief}`, status: 'draft' });
+  assert.match(d.content, /INTERNAL VIDEO BRIEF: Shot 1/);
+  const u = await svc.updateSocialPost('c1', d.id, { content: `Short copy.\n\nINTERNAL VIDEO BRIEF: ${brief}longer` });
+  assert.match(u.content, /longer$/);
+  await assert.rejects(() => svc.createSocialPost('c1', { content: `${'p'.repeat(281)}\n\nINTERNAL VIDEO BRIEF: x`, status: 'draft' }), (e) => e.status === 400);
+  await assert.rejects(() => svc.createSocialPost('c1', { content: `ok\n\nINTERNAL VIDEO BRIEF: ${'b'.repeat(8001)}`, status: 'draft' }), (e) => e.status === 400 && /8000/.test(e.message));
+  await assert.rejects(() => svc.createSocialPost('c1', { content: 'INTERNAL VIDEO BRIEF: only a brief', status: 'draft' }), (e) => e.status === 400);
+  await assert.rejects(() => svc.updateSocialPost('c1', d.id, { content: `${'p'.repeat(281)}\n\nINTERNAL VIDEO BRIEF: x` }), (e) => e.status === 400);
+});

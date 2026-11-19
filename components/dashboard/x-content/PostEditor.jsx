@@ -7,7 +7,7 @@ import { useMarketingContentCall } from '../marketing/useMarketingContentCall.js
 import MiniThumb from './MiniThumb.jsx';
 import QuotedTweetCard from './QuotedTweetCard.jsx';
 import {
-  MAX_CHARS, MEDIA_CHANGED_MESSAGE, charCount, isOverLimit, initialWhen, zoneLabel, resolveTimeZone,
+  MAX_CHARS, BRIEF_MAX_CHARS, BRIEF_MARKER_RE, splitBrief, joinBrief, MEDIA_CHANGED_MESSAGE, charCount, isOverLimit, initialWhen, zoneLabel, resolveTimeZone,
   isSuggestion, isLockedRow, boundFields, boundFieldsGate, boundFieldsNotice, dirtyState, actionState, isScheduledStatus,
   buildSaveRequest, buildApproveRequest, buildApproveScheduleRequest, buildSuggestionApproveRequest, buildUnapproveRequest,
   buildRejectRequest, buildUnscheduleRequest, buildReconcileRequest, moreItems,
@@ -508,6 +508,15 @@ export default function PostEditor({
 
   const over = isOverLimit(content);
   const count = charCount(content);
+  const { publicCopy, brief, hasBrief } = splitBrief(content);
+  const briefOver = brief.trim().length > BRIEF_MAX_CHARS;
+  const attachedBrief = typeof row?.videoBrief === 'string' ? row.videoBrief.trim() : '';
+  const clearOk = () => { if (message?.tone === 'ok') setMessage(null); };
+  const onPublicChange = (value) => {
+    // The marker typed into the post box would silently move text into the brief: refuse it and say where it goes.
+    if (BRIEF_MARKER_RE.test(value)) { setMessage({ tone: 'bad', text: 'Put the video brief in the "Internal video brief" box below, not in the post.' }); return; }
+    setContent(joinBrief(value, brief)); clearOk();
+  };
 
   if (!row) {
     return (
@@ -538,10 +547,10 @@ export default function PostEditor({
           id="post-editor-text"
           ref={textRef}
           className="pe-text"
-          value={content}
+          value={publicCopy}
           readOnly={locked}
-          rows={Math.min(14, Math.max(4, content.split('\n').length + 2))}
-          onChange={(e) => { setContent(e.target.value); if (message?.tone === 'ok') setMessage(null); }}
+          rows={Math.min(14, Math.max(4, publicCopy.split('\n').length + 2))}
+          onChange={(e) => onPublicChange(e.target.value)}
           aria-describedby="post-editor-count"
           aria-invalid={over || undefined}
         />
@@ -549,6 +558,32 @@ export default function PostEditor({
           <span id="post-editor-count" className={over ? 'pe-over' : 'pe-muted'}>{count} / {MAX_CHARS}</span>
           {locked ? <span className="pe-muted">Locked: this post can't be edited here.</span> : null}
         </p>
+
+        {!suggestion && (!locked || hasBrief || attachedBrief) ? (
+          <div id="post-editor-video-brief-panel" className="pe-brief">
+            <label htmlFor="post-editor-video-brief" className="pe-brief-label">Internal video brief <span className="pe-muted">(never published)</span></label>
+            {attachedBrief && !hasBrief ? (
+              <pre id="post-editor-video-brief-attached" className="pe-brief-attached">{attachedBrief}</pre>
+            ) : (
+              <>
+                <textarea
+                  id="post-editor-video-brief"
+                  className="pe-text pe-brief-text"
+                  value={brief}
+                  readOnly={locked}
+                  placeholder="Shot-by-shot template, artwork refs, or howto=<id>. Renders the video for this post; removed when the video attaches."
+                  rows={Math.min(18, Math.max(3, brief.split('\n').length + 1))}
+                  onChange={(e) => { setContent(joinBrief(publicCopy, e.target.value)); clearOk(); }}
+                  aria-describedby="post-editor-video-brief-count"
+                  aria-invalid={briefOver || undefined}
+                />
+                <p id="post-editor-video-brief-count-row" className="pe-count-row">
+                  <span id="post-editor-video-brief-count" className={briefOver ? 'pe-over' : 'pe-muted'}>{brief.trim().length} / {BRIEF_MAX_CHARS}</span>
+                </p>
+              </>
+            )}
+          </div>
+        ) : null}
 
         <VideoStatusLine postId={row.id} vp={row.videoProcessing} />
 
@@ -761,6 +796,10 @@ function PostEditorStyles() {
       #post-editor-root .pe-text { width: 100%; resize: vertical; border: 0; outline: none; background: transparent; color: var(--t-text); font: inherit; font-size: 17px; line-height: 1.4; padding: 4px 0; min-height: 96px; }
       #post-editor-root .pe-text:focus-visible { outline: 2px solid var(--t-focus); outline-offset: 4px; border-radius: 6px; }
       #post-editor-root .pe-text[readonly] { opacity: 0.8; }
+      #post-editor-root .pe-brief { display: flex; flex-direction: column; gap: 6px; }
+      #post-editor-root .pe-brief-label { font-size: 12px; font-weight: 600; }
+      #post-editor-root .pe-brief-text { font-size: 13px; }
+      #post-editor-root .pe-brief-attached { margin: 0; max-height: 220px; overflow: auto; white-space: pre-wrap; font: inherit; font-size: 12px; opacity: 0.8; }
       #post-editor-root .pe-count-row { display: flex; justify-content: space-between; gap: 8px; margin: 0; font-size: 12px; }
       #post-editor-root .pe-over { color: var(--t-danger); font-weight: 700; }
       #post-editor-root .pe-quote-shell { display: flex; flex-direction: column; gap: 8px; }

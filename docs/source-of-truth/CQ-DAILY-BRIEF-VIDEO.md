@@ -52,6 +52,8 @@ Video repo (`hitloop-video`, branch `feat/hitloop-showcase`): `clients/critters-
 
 A draft's `content` is `"<public X copy>\n\nINTERNAL VIDEO BRIEF: <instructions>"`. `parseBrief` takes the text after the marker (trimmed) as `brief`, `briefHash = sha256(brief).slice(0,16)`, `hook` = first sentence of the public copy (max 280 chars; the mapper trims it to 60).
 
+Length rule (2026-11-19): only the public copy counts toward X's 280 (`twitter-service.js assertPostLength`, the agent/MCP `queue.*` `content` field, and the dashboard editor). The brief has its own cap, `VIDEO_BRIEF_MAX` = 8000 chars, and the public copy must not be empty. The View & Edit Post editor shows the brief in its own box, `#post-editor-video-brief` ("Internal video brief (never published)"). The box writes back into `content` with this same marker. After attach, the moved `videoBrief` shows read-only (`#post-editor-video-brief-attached`). Approve stays blocked while a brief is on the post. An edit never syncs the brief into a Discogs record story.
+
 **Candidate rules** (`selectCandidates`): `clientId` in the allowlist, `status === 'draft'`, no `mediaUrl`, `reviewOn` is `YYYY-MM-DD` within today..today+7 (**America/Chicago** date), a non-empty brief, and the brief does **not** match `/\bHOLD\b/`. Sorted by `reviewOn` then id.
 
 **Brief kinds** (`classifyBrief` in `brief.js`, applied to the brief text after the marker, trimmed):

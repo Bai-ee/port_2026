@@ -4,7 +4,7 @@ import {
   MAX_CHARS, charCount, isOverLimit, formatInZone, zonedWallToMs, whenToIso, initialWhen, isFutureEnough, resolveTimeZone,
   statusPill, boundFields, boundFieldsGate, dirtyState, actionState, buildApproveRequest, buildApproveScheduleRequest,
   buildSaveRequest, buildSuggestionApproveRequest, classifyError, approvalVoided, mergeServerPost, moreItems, OWNER_ONLY_MESSAGE,
-  decideItems, buildDecideRequest, decideResultText, replacementRowId,
+  decideItems, buildDecideRequest, decideResultText, replacementRowId, splitBrief, joinBrief, BRIEF_MAX_CHARS,
 } from '../post-editor-model.js';
 
 const FULL = { selfReply: null, mediaVariants: null, replyTo: null };
@@ -240,4 +240,23 @@ test('decideResultText and replacementRowId', () => {
   assert.equal(replacementRowId({ replacement: { kind: 'post', postId: 'p2' } }), 'p2');
   assert.equal(replacementRowId({ replacement: { kind: 'requote', targetId: 't3' } }), 'requote:t3');
   assert.equal(replacementRowId({ replacement: null }), null);
+});
+
+test('splitBrief/joinBrief round-trip; count and limits use the public copy only', () => {
+  const c = 'Hook line.\n\nINTERNAL VIDEO BRIEF: Shot 1\nShot 2';
+  const s = splitBrief(c);
+  assert.deepEqual(s, { publicCopy: 'Hook line.', brief: 'Shot 1\nShot 2', hasBrief: true });
+  assert.equal(joinBrief(s.publicCopy, s.brief), c);
+  assert.equal(joinBrief('Hook line.', ''), 'Hook line.');
+  assert.deepEqual(splitBrief('plain'), { publicCopy: 'plain', brief: '', hasBrief: false });
+  assert.equal(joinBrief('typing ', 'b'), 'typing \n\nINTERNAL VIDEO BRIEF: b');
+  assert.equal(splitBrief(joinBrief('typing ', 'b')).publicCopy, 'typing ');
+  const long = `${'p'.repeat(280)}\n\nINTERNAL VIDEO BRIEF: ${'b'.repeat(3000)}`;
+  assert.equal(charCount(long), 280);
+  assert.equal(isOverLimit(long), false);
+  const st = actionState({ row: draft({ content: long }), content: long, when: { date: '', time: '' }, tz: 'UTC', now: NOW });
+  assert.equal(st.approveBlockedReason, 'Internal video brief still on this post: attach the video first.');
+  const tooBig = `ok\n\nINTERNAL VIDEO BRIEF: ${'b'.repeat(BRIEF_MAX_CHARS + 1)}`;
+  assert.equal(actionState({ row: draft(), content: tooBig, when: { date: '', time: '' }, tz: 'UTC', now: NOW }).canSave, false);
+  assert.equal(actionState({ row: draft(), content: 'INTERNAL VIDEO BRIEF: x', when: { date: '', time: '' }, tz: 'UTC', now: NOW }).canSave, false);
 });
