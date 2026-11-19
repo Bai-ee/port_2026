@@ -137,3 +137,30 @@ test('same host reseed leaves old-site outputs untouched', async () => {
   assert.deepEqual(d.modules['design-evaluation'].result, { score: 1 });
   assert.ok(d.artifacts.homepageScreenshot);
 });
+
+test('two concurrent reseeds: exactly one succeeds, the other is reseed-in-flight (fake serializes transactions, so the interleave is the second tx running after the first commits)', async () => {
+  const { fake, mod } = loadWithFake();
+  await seedClient(fake, 'acme-1', { normalizedHost: 'acme.test', latestRunStatus: 'succeeded' });
+  const results = await Promise.allSettled([
+    mod.reseedIntakeForClient({ ...BASE, websiteUrl: 'acme.test' }),
+    mod.reseedIntakeForClient({ ...BASE, websiteUrl: 'acme.test' }),
+  ]);
+  const ok = results.filter((r) => r.status === 'fulfilled');
+  const bad = results.filter((r) => r.status === 'rejected');
+  assert.equal(ok.length, 1);
+  assert.equal(bad.length, 1);
+  assert.equal(bad[0].reason.code, 'reseed-in-flight');
+  assert.equal(bad[0].reason.runId, ok[0].value.runId);
+  assert.equal(fake.adminDb._raw('clients', 'acme-1').latestRunStatus, 'queued');
+});
+
+test('www.foo.com -> foo.com is not a host change: no confirm, no nulling, no rename', async () => {
+  const { fake, mod } = loadWithFake();
+  await seedClient(fake, 'acme-1', { normalizedHost: 'www.acme.test', companyName: 'Acme Original', latestRunStatus: 'succeeded' });
+  await seedDashboard(fake, 'acme-1');
+  await mod.reseedIntakeForClient({ ...BASE, websiteUrl: 'acme.test' });
+  assert.equal(fake.adminDb._raw('clients', 'acme-1').companyName, 'Acme Original');
+  const d = fake.adminDb._raw('dashboard_state', 'acme-1');
+  assert.deepEqual(d.seoAudit, { score: 90 });
+  assert.deepEqual(d.modules['design-evaluation'].result, { score: 1 });
+});

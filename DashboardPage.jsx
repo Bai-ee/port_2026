@@ -6573,7 +6573,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     // intake run — gate it behind an explicit confirm so a stray click on the
     // header button can't overwrite work. First-run (Create Dashboard) has
     // nothing to overwrite, so it stays one click.
-    const reseedOldHost = hostOf(client?.websiteUrl || client?.website);
+    const reseedOldHost = hostOf(client?.normalizedHost || client?.websiteUrl || client?.website);
     const reseedNewHost = hostOf(reseedUrl);
     const reseedHostChanged = Boolean(client && reseedOldHost && reseedNewHost && reseedOldHost !== reseedNewHost);
     if (client && typeof window !== 'undefined' && !window.confirm(
@@ -6592,12 +6592,20 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       const body = isFirstRun
         ? { websiteUrl: reseedUrl.trim(), displayName: user.displayName || '', companyName: '' }
         : { websiteUrl: reseedUrl.trim(), ...(reseedHostChanged ? { confirmHostChange: true } : {}) };
-      const res = await fetch(endpoint, {
+      const post = (payload) => fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(body),
+        body: JSON.stringify(payload),
       });
-      const data = await res.json().catch(() => ({}));
+      let res = await post(body);
+      let data = await res.json().catch(() => ({}));
+      // Server saw a host change the client did not flag: confirm with its hosts, retry once.
+      if (res.status === 409 && data?.code === 'confirm-host-change' && !isFirstRun
+        && typeof window !== 'undefined'
+        && window.confirm(`Change the website from ${data.oldHost} to ${data.newHost}? This re-runs the full intake and overwrites the current dashboard content.`)) {
+        res = await post({ ...body, confirmHostChange: true });
+        data = await res.json().catch(() => ({}));
+      }
       if (!res.ok) throw new Error(data?.error || 'Request failed.');
       if (isFirstRun) trackDashboardCreated(reseedUrl.trim());
       else trackPipelineRerun(reseedUrl.trim());
@@ -6617,7 +6625,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
     const nextUrl = websiteChangeUrl.trim();
     if (!user || !isAdmin || !client?.clientId || !nextUrl) return;
     if (!viewedClientMatches || websiteChangeLockRef.current) return;
-    const oldHost = hostOf(client?.websiteUrl || client?.website);
+    const oldHost = hostOf(client?.normalizedHost || client?.websiteUrl || client?.website);
     const newHost = hostOf(nextUrl);
     if (!newHost) { setWebsiteChangeError('Enter a valid website URL.'); return; }
     if (newHost === oldHost) { setWebsiteChangeError('That is already this client\'s website.'); return; }
@@ -6635,6 +6643,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
         body: JSON.stringify({ websiteUrl: nextUrl, confirmHostChange: true }),
       });
       const data = await res.json().catch(() => ({}));
+      // confirmHostChange is always sent here, so a 409 means in-flight / admin-host: show the server message.
       if (!res.ok) throw new Error(data?.error || 'Request failed.');
       trackPipelineRerun(nextUrl);
       setWebsiteChangeOpen(false);
@@ -6647,7 +6656,7 @@ const DashboardPage = ({ entranceReady = true, onInitialContentReady = null }) =
       websiteChangeLockRef.current = false;
       setWebsiteChangeLoading(false);
     }
-  }, [user, isAdmin, client, websiteChangeUrl, viewedClientMatches, apiPath, doBootstrap, activeImpersonateId]);
+  }, [user, isAdmin, client, websiteChangeUrl, viewedClientMatches, apiPath, doBootstrap]);
 
 
   const handleModuleToggle = useCallback(async (cardId, enabled) => {

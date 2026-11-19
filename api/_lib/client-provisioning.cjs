@@ -588,33 +588,31 @@ async function provisionClientForUser({ uid, email, displayName, companyName, we
   // site; without one the run has no site to scan (empty sourceUrl) and the
   // worker skips site modules — no fallback/stand-in site is ever used.
   let run = null;
-  {
-    run = await queueInitialBriefRun({
-      clientId,
-      uid,
-      websiteUrl: normalized?.websiteUrl || '',
-      usesFallbackSite: false,
-    });
+  run = await queueInitialBriefRun({
+    clientId,
+    uid,
+    websiteUrl: normalized?.websiteUrl || '',
+    usesFallbackSite: false,
+  });
 
-    await Promise.all([
-      clientRef.set(
-        {
-          latestRunId: run.runId,
-          latestRunStatus: run.status,
-          updatedAt: now,
-        },
-        { merge: true }
-      ),
-      dashboardStateRef.set(
-        {
-          latestRunId: run.runId,
-          latestRunStatus: run.status,
-          updatedAt: now,
-        },
-        { merge: true }
-      ),
-    ]);
-  }
+  await Promise.all([
+    clientRef.set(
+      {
+        latestRunId: run.runId,
+        latestRunStatus: run.status,
+        updatedAt: now,
+      },
+      { merge: true }
+    ),
+    dashboardStateRef.set(
+      {
+        latestRunId: run.runId,
+        latestRunStatus: run.status,
+        updatedAt: now,
+      },
+      { merge: true }
+    ),
+  ]);
 
   return {
     clientId,
@@ -1252,8 +1250,8 @@ async function reseedIntakeForClient({
   const clientRef = fb.adminDb.collection('clients').doc(clientId);
   const existingClientSnap = await clientRef.get();
   const existingClientData = existingClientSnap.exists ? existingClientSnap.data() : null;
-  const hostChanged = existingClientData?.normalizedHost !== normalized.hostname;
-  const hadPreviousHost = Boolean(existingClientData?.normalizedHost);
+  const hostChanged = stripWww(existingClientData?.normalizedHost) !== stripWww(normalized.hostname);
+  const hadPreviousHost = Boolean(stripWww(existingClientData?.normalizedHost));
 
   const runRef = fb.adminDb.collection('brief_runs').doc();
   const runId = runRef.id;
@@ -1268,7 +1266,8 @@ async function reseedIntakeForClient({
     const current = snap.exists ? snap.data() : null;
     const verdict = assessReseedRequest({ ...guardArgs, existing: current, nowMs: Date.now() });
     if (verdict) throw reseedError(verdict.code, verdict.message, verdict);
-    tx.set(clientRef, { reseedLock: { atMs: Date.now(), runId } }, { merge: true });
+    // latestRunStatus is written here (not later) so a concurrent submit sees the run as in flight.
+    tx.set(clientRef, { reseedLock: { atMs: Date.now(), runId }, latestRunId: runId, latestRunStatus: 'queued' }, { merge: true });
   });
 
   const newCompanyName = hostChanged
