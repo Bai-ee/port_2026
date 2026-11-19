@@ -16,9 +16,32 @@ const hasOwn = (o, k) => !!o && Object.prototype.hasOwnProperty.call(o, k);
 
 // ---- text ----
 
-export const charCount = (text) => String(text ?? '').length;
+// A draft may carry "\n\nINTERNAL VIDEO BRIEF: <brief>" after the public copy (features/brief-video/brief.js). The brief is
+// never published, so the count, the limit and "empty" look at the public copy only. The editor shows it in its own box.
+export const BRIEF_MARKER_RE = /INTERNAL VIDEO BRIEF/i;
+export const BRIEF_MAX_CHARS = 8000;
+const BRIEF_SEP = '\n\n';
+const BRIEF_PREFIX = 'INTERNAL VIDEO BRIEF: ';
+
+/** { publicCopy, brief, hasBrief } — exact inverse of joinBrief for content joinBrief produced. */
+export function splitBrief(content) {
+  const text = String(content ?? '');
+  const m = BRIEF_MARKER_RE.exec(text);
+  if (!m) return { publicCopy: text, brief: '', hasBrief: false };
+  let publicCopy = text.slice(0, m.index);
+  if (publicCopy.endsWith(BRIEF_SEP)) publicCopy = publicCopy.slice(0, -BRIEF_SEP.length);
+  const brief = text.slice(m.index).replace(/^INTERNAL VIDEO BRIEF:? ?/i, '');
+  return { publicCopy, brief, hasBrief: true };
+}
+
+/** Public copy + brief back into one content string; an empty brief drops the marker. */
+export const joinBrief = (publicCopy, brief) => (String(brief ?? '') === '' ? String(publicCopy ?? '') : `${publicCopy ?? ''}${BRIEF_SEP}${BRIEF_PREFIX}${brief}`);
+
+export const charCount = (text) => splitBrief(text).publicCopy.length;
 export const isOverLimit = (text, max = MAX_CHARS) => charCount(text) > max;
-export const isEmptyText = (text) => !String(text ?? '').trim();
+export const isEmptyText = (text) => !splitBrief(text).publicCopy.trim();
+export const briefText = (text) => splitBrief(text).brief;
+export const isBriefOverLimit = (text) => briefText(text).trim().length > BRIEF_MAX_CHARS;
 
 // ---- time zone ----
 
@@ -186,8 +209,9 @@ export function actionState({ row, content, when, tz, now = Date.now(), busy = f
   const locked = isLockedRow(row);
   const iso = whenToIso(when, tz);
   const isFuture = isFutureEnough(iso, now);
-  const over = isOverLimit(content);
+  const over = isOverLimit(content) || isBriefOverLimit(content);
   const empty = isEmptyText(content);
+  const hasBrief = briefText(content).trim() !== '';
   const gate = boundFieldsGate(row);
   const d = dirty || dirtyState({ row, content, when, tz });
   const approved = isApprovedStatus(row);
@@ -199,7 +223,9 @@ export function actionState({ row, content, when, tz, now = Date.now(), busy = f
   if (busy) approveBlockedReason = 'Working…';
   else if (locked) approveBlockedReason = 'This post can no longer be approved here.';
   else if (empty) approveBlockedReason = 'Write something first.';
+  else if (isBriefOverLimit(content)) approveBlockedReason = `Internal video brief is over ${BRIEF_MAX_CHARS} characters.`;
   else if (over) approveBlockedReason = `Over ${MAX_CHARS} characters.`;
+  else if (hasBrief) approveBlockedReason = 'Internal video brief still on this post: attach the video first.';
   else if (!gate.ok) approveBlockedReason = boundFieldsNotice(gate);
   else if (suggestion && row.windowOpen === false) approveBlockedReason = 'The window for this one has closed.';
   else if (!suggestion && row.status === 'needs_review') approveBlockedReason = 'Needs review before it can be approved.';
