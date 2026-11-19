@@ -95,7 +95,7 @@ export async function POST(request) {
   const clientToday = String(formData.get('today') || '').trim();
   const today = /^\d{4}-\d{2}-\d{2}$/.test(clientToday) ? clientToday : todayIso();
   if (isJunkPath(relativePath)) {
-    return json({ ok: true, skipped: true, reason: 'hidden or system file' }, 200);
+    return json({ ok: true, clientId: context.clientId, skipped: true, reason: 'hidden or system file' }, 200);
   }
   const brain = classifyBrainPath(relativePath, { today });
   const contentType = file.type || 'application/octet-stream';
@@ -113,7 +113,7 @@ export async function POST(request) {
     stage = 'match';
     const existing = await findItemByBrainPath({ clientId: context.clientId, brainPath: brain.brainPath });
     if (existing && existing.sha256 === sha256) {
-      return json({ ok: true, skipped: true, reason: 'unchanged', item: existing }, 200);
+      return json({ ok: true, clientId: context.clientId, skipped: true, reason: 'unchanged', item: existing }, 200);
     }
 
     stage = 'extract';
@@ -201,6 +201,7 @@ export async function POST(request) {
 
     return json({
       ok: true,
+      clientId: context.clientId,
       item: {
         ...item,
         type: extracted.type || 'file',

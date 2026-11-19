@@ -62,6 +62,14 @@ ID (D1, X1–X11) and the other columns link to files. The item list shows those
   (`schema_version`, `project`, `files[{path, bytes, sha256}]`), so the hashes always match.
 - **Size limit.** The download is limited to 4 MB, because of the Vercel response size limit.
 
+## MCP
+
+The owner MCP (ChatGPT and Claude connectors) can list, read, upload and edit brain files:
+`source_library_list`, `source_library_read` and `source_library_save`. They call the same routes as the
+card, so the filing and versioning rules above apply as they are. For an edit, save the full new content to
+the same path with the `expectedSha256` you read. The old copy is kept in `versions/`. See
+[HITLOOP-MCP-SERVER.md](../../source-of-truth/HITLOOP-MCP-SERVER.md).
+
 ## Search
 
 `searchKnowledgeBase` fetches twice as many results and re-ranks them by role:

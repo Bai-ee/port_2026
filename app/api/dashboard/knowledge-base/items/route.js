@@ -53,6 +53,7 @@ export async function GET(request) {
     ]);
     return json({
       ok: true,
+      clientId: context.clientId,
       items: await attachSourceIds({ clientId: context.clientId, items }),
       limits: {
         maxItems: MAX_ITEMS_PER_CLIENT,
