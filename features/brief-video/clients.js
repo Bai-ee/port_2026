@@ -19,3 +19,8 @@ export const HOWTO_CAMPAIGN_UNTIL = '2026-12-17';
 export const HOWTO_REQUESTS = 'howto_requests';
 export const HOWTO_STATUS_WRITES_PER_TICK = 5;
 export const howtoEnabled = (env = process.env) => env?.CQ_HOWTO_ENABLED === 'true';
+
+// Render now (MCP video.render.now): own CT-day cap, counted in brief_video_usage/<YYYY-MM-DD CT>; finished jobs attach first.
+export const BRIEF_VIDEO_USAGE = 'brief_video_usage';
+export const RENDER_NOW_MAX_PER_DAY = 5;
+export const RENDER_NOW_ATTACH_PER_TICK = 3;

@@ -121,7 +121,10 @@ test('catalog: entries valid, routed to howto-requests, tiers', () => {
   assert.deepEqual([s.tier, s.method, s.action, s.route], [1, 'POST', 'submit', 'howto-requests']);
   assert.deepEqual([g.tier, g.method, g.query.action], [0, 'GET', 'get']);
   assert.match(getAction('queue.draft.create').description, /INTERNAL VIDEO BRIEF: howto=<id>/);
-  assert.ok(ACTIONS.filter((a) => a.group === 'video').length === 2);
+  assert.ok(ACTIONS.filter((a) => a.group === 'video').length === 3);
+  const rn = getAction('video.render.now');
+  assert.deepEqual(validateAction(rn), []);
+  assert.deepEqual([rn.tier, rn.method, rn.action, rn.route], [1, 'POST', 'render-now', 'howto-requests']);
 });
 
 test('approve script: parseArgs + planApproval (pure)', () => {

@@ -20,10 +20,16 @@ export function planAttach(post, job, { force = false, now = new Date().toISOStr
   if (post.status !== 'draft') return { ok: false, reason: 'not-draft' };
   const hasOtherMedia = (Array.isArray(post.mediaVariants) ? post.mediaVariants.length > 0 : Boolean(post.mediaVariants && Object.keys(post.mediaVariants).length)) || Boolean(post.nasSha);
   if (hasOtherMedia) return { ok: false, reason: 'has-media' };
-  if (post.mediaUrl && !(force && String(post.mediaJobId || '').startsWith('bv_'))) return { ok: false, reason: 'has-media' };
+  // replaceDraftMedia (local takeover job): may replace the draft's current video; still draft-only (status checked above, inside the attach transaction).
+  // Only media that a brief job (bv_*) attached may be replaced; never something the owner uploaded.
+  const fromBriefJob = String(post.mediaJobId || '').startsWith('bv_');
+  const canReplace = fromBriefJob && (force || job.replaceDraftMedia === true);
+  // Local takeover (hub howto-attach.mjs): no briefHash/howtoId on the job, so the brief match is skipped (postId/clientId/draft checks stay).
+  const takeover = job.source === 'local' && job.replaceDraftMedia === true;
+  if (post.mediaUrl && !canReplace) return { ok: false, reason: 'has-media' };
   const current = briefOfPost(post);
-  if (!current) return { ok: false, reason: 'no-brief' };
-  if (current.briefHash !== job.briefHash) return { ok: false, reason: 'brief-changed' };
+  if (!current && !takeover) return { ok: false, reason: 'no-brief' };
+  if (!takeover && current.briefHash !== job.briefHash) return { ok: false, reason: 'brief-changed' };
   const publicCopy = normalizePostText(stripBrief(post.content));
   if (!publicCopy) return { ok: false, reason: 'empty-public-copy' };
   if (publicCopy.length > PUBLIC_MAX) return { ok: false, reason: 'public-copy-too-long' };
@@ -34,15 +40,14 @@ export function planAttach(post, job, { force = false, now = new Date().toISOStr
   const updated = {
     ...post,
     content: stripBrief(post.content),
-    videoBrief: current.brief,
-    videoBriefHash: current.briefHash,
+    ...(current ? { videoBrief: current.brief, videoBriefHash: current.briefHash } : {}),
     mediaUrl: job.downloadUrl,
     mediaType: 'video',
     mediaContentType: 'video/mp4',
     mediaStoragePath: job.outputPath || null,
     mediaJobId: job.jobId,
     posterUrl: job.posterUrl,
-    mediaMetadata: { source: isHowto ? 'cq-howto' : 'cq-briefcut', templateVersion: job.templateVersion, ...(isHowto ? { howtoId: job.howtoId ?? null, specHash: job.specHash ?? null } : {}), width: job.width ?? null, height: job.height ?? null, durationInFrames: job.durationInFrames ?? null },
+    mediaMetadata: { source: isHowto ? 'cq-howto' : 'cq-briefcut', templateVersion: job.templateVersion, ...(isHowto ? { howtoId: job.howtoId ?? null, specHash: job.specHash ?? null, ...(job.requestHash ? { requestHash: job.requestHash } : {}) } : {}), width: job.width ?? null, height: job.height ?? null, durationInFrames: job.durationInFrames ?? null },
     // clear the visible brief status (set by the cron when a howto brief was waiting / invalid)
     ...('videoBriefStatus' in post || 'videoBriefReason' in post ? { videoBriefStatus: null, videoBriefReason: null } : {}),
     agents,

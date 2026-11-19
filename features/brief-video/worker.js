@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import {
   DAILY_BRIEF_VIDEO_CLIENTS, BRIEF_VIDEO_JOBS as JOBS, BRIEF_VIDEO_STATE as STATE,
   MAX_ATTEMPTS, MAX_RENDERS_PER_DAY, ACTIVE_MAX_MS, REPOKE_AFTER_MS, howtoEnabled, HOWTO_STATUS_WRITES_PER_TICK,
+  RENDER_NOW_MAX_PER_DAY, RENDER_NOW_ATTACH_PER_TICK, BRIEF_VIDEO_USAGE,
 } from './clients.js';
 import { parseBrief } from './brief.js';
 import { selectCandidates, HOLD_RE, newJobDoc, briefJobId, addDaysIso } from './jobs.js';
@@ -122,10 +123,11 @@ async function touchTrigger(db, jobId, now) {
 }
 
 /** Create the job doc (idempotent id) and count it against the CT-day cap in one transaction. Returns the job or null. */
-async function createJob(db, job, { now, maxPerDay }) {
-  const stateRef = db.collection(STATE).doc(`briefvideo_${job.clientId}`);
-  const jobRef = db.collection(JOBS).doc(job.jobId);
+async function createJob(db, job, { now, maxPerDay, counterRef = null }) {
   const day = ctToday(now);
+  // default counter: the cron's per-client CT-day state doc; render-now passes brief_video_usage/<day> instead.
+  const stateRef = counterRef || db.collection(STATE).doc(`briefvideo_${job.clientId}`);
+  const jobRef = db.collection(JOBS).doc(job.jobId);
   return db.runTransaction(async (tx) => {
     const [stateSnap, jobSnap] = await Promise.all([tx.get(stateRef), tx.get(jobRef)]);
     if (jobSnap.exists) return null;
@@ -151,8 +153,15 @@ export async function runTick({ db, now = Date.now(), clients = DAILY_BRIEF_VIDE
   const allJobs = Object.values(jobsByClient).flat();
 
   // 1. Reconcile.
-  const doneUnattached = allJobs.filter((j) => j.status === 'done' && !j.attachedAt && !j.attachSkipped)
+  const doneUnattachedAll = allJobs.filter((j) => j.status === 'done' && !j.attachedAt && !j.attachSkipped)
     .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+  // Finished render-now jobs attach first, outside the one-per-tick limit (cap RENDER_NOW_ATTACH_PER_TICK).
+  const nowIso = new Date(now).toISOString();
+  for (const j of doneUnattachedAll.filter((x) => x.renderNow === true).slice(0, RENDER_NOW_ATTACH_PER_TICK)) {
+    const res = await attachJobToPost(j, { db, force: j.replace === true, now: nowIso });
+    (report.attachedRenderNow ||= []).push({ jobId: j.jobId, postId: j.postId, ...res });
+  }
+  const doneUnattached = doneUnattachedAll.filter((x) => x.renderNow !== true);
   if (doneUnattached[0]) {
     const j = doneUnattached[0];
     const res = await attachJobToPost(j, { db, force: j.replace === true, now: new Date(now).toISOString() });
@@ -183,7 +192,7 @@ export async function runTick({ db, now = Date.now(), clients = DAILY_BRIEF_VIDE
       if (kind === 'invalid') { items.push({ c, ready: false, specHash: null, state: { status: 'invalid_brief', reason: c.parsed.invalidReason } }); continue; }
       if (kind === 'howto') {
         const r = await howtoReadiness(db, { howtoId: c.parsed.howtoId, clientId, reviewOn: c.post.reviewOn }, cache);
-        items.push(r.ready ? { c, ready: true, specHash: r.specHash, state: { status: null, reason: null } } : { c, ready: false, specHash: null, state: { status: r.state, reason: r.reason } });
+        items.push(r.ready ? { c, ready: true, specHash: r.specHash, byRequest: r.specHash ? null : { request: r.request, requestHash: r.requestHash, narration: r.narration }, state: { status: null, reason: null } } : { c, ready: false, specHash: null, state: { status: r.state, reason: r.reason } });
         continue;
       }
       items.push({ c, ready: true, specHash: null, state: { status: null, reason: null } });
@@ -234,19 +243,19 @@ export async function runTick({ db, now = Date.now(), clients = DAILY_BRIEF_VIDE
       const { items } = await scanClient(clientId);
       for (const it of items) {
         if (!it.ready || pick) continue; // status already synced above; keep only ready candidates for the pick
-        const { c, specHash } = it;
-        const mine = jobsByClient[clientId].filter((j) => j.postId === c.post.id && j.briefHash === c.parsed.briefHash && (j.specHash ?? null) === specHash);
+        const { c, specHash, byRequest } = it;
+        const mine = jobsByClient[clientId].filter((j) => j.postId === c.post.id && j.briefHash === c.parsed.briefHash && sameSource(j, { specHash, requestHash: byRequest?.requestHash ?? null }));
         if (mine.some((j) => j.status !== 'failed')) continue; // queued/rendering/done already: reconcile owns it
         const attempts = mine.map((j) => Number(j.attempt) || 1);
         if (attempts.length >= MAX_ATTEMPTS) continue;
-        pick = { post: c.post, parsed: c.parsed, attempt: Math.max(0, ...attempts) + 1, replace: false, specHash };
+        pick = { post: c.post, parsed: c.parsed, attempt: Math.max(0, ...attempts) + 1, replace: false, specHash, ...(byRequest || {}) };
       }
       if (pick) break;
     }
     if (!pick) { report.skipped = 'no-candidate'; return report; }
   }
 
-  const job = newJobDoc({ post: pick.post, parsed: pick.parsed, attempt: pick.attempt, now, specHash: pick.specHash });
+  const job = newJobDoc({ post: pick.post, parsed: pick.parsed, attempt: pick.attempt, now, specHash: pick.specHash, request: pick.request, requestHash: pick.requestHash, narration: pick.narration });
   if (pick.replace) job.replace = true;
   const created = await createJob(db, job, { now, maxPerDay });
   if (!created) { report.skipped = 'job-exists'; return report; }
@@ -254,6 +263,58 @@ export async function runTick({ db, now = Date.now(), clients = DAILY_BRIEF_VIDE
   await poke(job.jobId);
   report.started = { jobId: job.jobId, postId: job.postId, reviewOn: job.reviewOn, attempt: job.attempt };
   return report;
+}
+
+/**
+ * Does job `j` belong to the same render source? The service rewrites `specHash` on finished jobs (an 8-hex hash on cq-brief,
+ * howtoSpecHash on cq-howto), so a finished job must not be matched on it unless the source is a baked howto spec.
+ */
+const sameSource = (j, { specHash, requestHash }) => {
+  if (requestHash) return j.requestHash === requestHash;
+  if (specHash) return j.kind === 'cq-howto' && !j.requestHash && j.specHash === specHash;
+  return j.kind !== 'cq-howto';
+};
+
+const hasAnyMedia = (p) => Boolean(p.mediaUrl) || Boolean(p.nasSha) || (Array.isArray(p.mediaVariants) ? p.mediaVariants.length > 0 : Boolean(p.mediaVariants && Object.keys(p.mediaVariants).length));
+
+/**
+ * Render now (MCP video.render.now): start the video for ONE draft immediately. Same job doc + service poke as the cron,
+ * but ignores the 7-day window and counts against its own CT-day cap (brief_video_usage/<day>). Draft with a brief and no
+ * media only; HOLD and the howto campaign date still apply. Returns { ok, jobId, status } or { ok:false, status, error }.
+ */
+export async function renderNow({ db, clientId, postId, narration, now = Date.now(), env = process.env, fetchImpl, maxPerDay = RENDER_NOW_MAX_PER_DAY } = {}) {
+  const fail = (status, error) => ({ ok: false, status, error });
+  if (!DAILY_BRIEF_VIDEO_CLIENTS[clientId]) return fail(403, `client-not-allowed:${clientId || 'none'}`);
+  if (env.DAILY_BRIEF_VIDEO_ENABLED !== 'true') return fail(409, 'video-disabled');
+  if (narration !== undefined && typeof narration !== 'boolean') return fail(400, 'narration must be true or false');
+  if (!postId || typeof postId !== 'string') return fail(400, 'postId is required');
+  const snap = await db.collection(POSTS).doc(postId).get();
+  const post = snap.exists ? { id: postId, ...snap.data() } : null;
+  if (!post || post.clientId !== clientId) return fail(404, 'post-not-found');
+  if (post.status !== 'draft') return fail(409, 'not-draft');
+  if (hasAnyMedia(post)) return fail(409, 'has-media');
+  const parsed = parseBrief(post.content);
+  if (!parsed) return fail(409, 'no-brief');
+  if (HOLD_RE.test(parsed.brief)) return fail(409, 'hold');
+  if (parsed.briefKind === 'invalid') return fail(409, `invalid-brief:${parsed.invalidReason}`);
+  const extra = {};
+  if (parsed.briefKind === 'howto') {
+    if (!howtoEnabled(env)) return fail(409, 'howto-disabled');
+    const r = await howtoReadiness(db, { howtoId: parsed.howtoId, clientId, reviewOn: post.reviewOn });
+    if (!r.ready) return fail(409, r.reason);
+    if (r.specHash) extra.specHash = r.specHash;
+    else Object.assign(extra, { request: r.request, requestHash: r.requestHash, narration: typeof narration === 'boolean' ? narration : r.narration });
+  }
+  const mine = (await readClientJobs(db, clientId)).filter((j) => j.postId === post.id && j.briefHash === parsed.briefHash && sameSource(j, { specHash: extra.specHash ?? null, requestHash: extra.requestHash ?? null }));
+  const live = mine.find((j) => j.status !== 'failed' && !j.attachSkipped);
+  if (live) return { ok: true, jobId: live.jobId, status: live.status, existing: true };
+  const attempt = Math.max(0, ...mine.map((j) => Number(j.attempt) || 1)) + 1;
+  const job = newJobDoc({ post, parsed, attempt, now, renderNow: true, ...extra });
+  const created = await createJob(db, job, { now, maxPerDay, counterRef: db.collection(BRIEF_VIDEO_USAGE).doc(ctToday(now)) });
+  if (!created) return fail(409, 'job-exists');
+  if (created.capped) return fail(429, 'daily-cap');
+  await pokeService(job.jobId, { env, fetchImpl });
+  return { ok: true, jobId: job.jobId, status: job.status };
 }
 
 export const defaultDb = () => require('../../api/_lib/firebase-admin.cjs').adminDb;
