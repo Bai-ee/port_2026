@@ -6,8 +6,7 @@
 // then a synthesis pass combines all per-image results into a unified
 // cross-image direction summary.
 
-const fs = require('fs');
-const path = require('path');
+const { readSkillFile } = require('../skills/_skills-dir.js');
 const { callAnthropic } = require('../_anthropic-client.js');
 
 const VISION_MODEL = 'claude-sonnet-4-6';
@@ -15,10 +14,7 @@ const VISION_MAX_TOKENS = 1500;
 const SYNTHESIS_MAX_TOKENS = 1000;
 
 function loadPrompt() {
-  return fs.readFileSync(
-    path.join(__dirname, '..', 'skills', 'brand-system-mood-vision.md'),
-    'utf8'
-  );
+  return readSkillFile('brand-system-mood-vision.md');
 }
 
 function buildImageBlock(img) {

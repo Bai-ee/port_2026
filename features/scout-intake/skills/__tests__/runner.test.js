@@ -170,3 +170,50 @@ test('runCardSkills: cards without analyzerSkill are skipped silently', async ()
   // Either way, no throw.
   assert.ok(true, 'runCardSkills is non-fatal');
 });
+
+// ── Citation normalization (mocked LLM) ───────────────────────────────────────
+
+test('runSkill: findings with missing/mis-typed citation are defaulted, not failed', async () => {
+  const llmPath    = require.resolve('../_llm-client');
+  const runnerPath = require.resolve('../_runner');
+  const realLlm    = require.cache[llmPath].exports.callLLM;
+  const prevRunner = require.cache[runnerPath];
+  const origWarn   = console.warn;
+  const warnings   = [];
+
+  const mk = (id, extra) => ({ id, severity: 'info', label: id, detail: 'd', impact: 'i', remediation: 'r', ...extra });
+  require.cache[llmPath].exports.callLLM = async () => ({
+    stop_reason: 'max_tokens',
+    usage: { input_tokens: 1, output_tokens: 1 },
+    content: [{
+      type: 'tool_use',
+      name: 'write_seo_depth_audit',
+      input: {
+        findings: [
+          mk('a'),
+          mk('b', { citation: null }),
+          mk('c', { citation: 42 }),
+          mk('d', { citation: { field: 'x' } }),
+          mk('e', { citation: 'site.meta.title' }),
+        ],
+        gaps: [], readiness: 'healthy', highlights: [],
+      },
+    }],
+  });
+  delete require.cache[runnerPath];
+  console.warn = (...a) => warnings.push(a.join(' '));
+  try {
+    const { runSkill: run } = require('../_runner');
+    const result = await run('seo-depth-audit', { sourcePayloads: {} });
+    assert.strictEqual(result.ok, true, result.error);
+    const cites = result.output.findings.map((f) => f.citation);
+    assert.deepStrictEqual(cites, ['', '', '42', '{"field":"x"}', 'site.meta.title']);
+    assert.ok(warnings.some((w) => w.includes('normalized 4')));
+    assert.ok(warnings.some((w) => w.includes('max_tokens')));
+  } finally {
+    console.warn = origWarn;
+    require.cache[llmPath].exports.callLLM = realLlm;
+    delete require.cache[runnerPath];
+    if (prevRunner) require.cache[runnerPath] = prevRunner;
+  }
+});

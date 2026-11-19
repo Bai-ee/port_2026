@@ -6,18 +6,14 @@
 // Multiple screenshots are sent in one call. The model maps the competitive
 // visual landscape and identifies differentiation opportunities.
 
-const fs = require('fs');
-const path = require('path');
+const { readSkillFile } = require('../skills/_skills-dir.js');
 const { callAnthropic } = require('../_anthropic-client.js');
 
 const VISION_MODEL = 'claude-sonnet-4-6';
 const VISION_MAX_TOKENS = 1500;
 
 function loadPrompt() {
-  return fs.readFileSync(
-    path.join(__dirname, '..', 'skills', 'brand-system-competitor-vision.md'),
-    'utf8'
-  );
+  return readSkillFile('brand-system-competitor-vision.md');
 }
 
 function buildImageBlock(img) {
