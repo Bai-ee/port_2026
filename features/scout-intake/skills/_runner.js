@@ -369,7 +369,23 @@ async function runSkill(skillId, { card = null, sourcePayloads = {} } = {}) {
   // 10. Build full output (runner adds envelope fields the LLM doesn't fill).
   // Readiness is a required enum, but LLMs occasionally drop it. Derive a safe
   // default from the findings so the skill doesn't hard-fail contract validation.
-  const findings = toolInput.findings || [];
+  // The same applies to each finding's `citation`: Haiku sometimes drops or
+  // mis-types it. Coerce to a string (other fields untouched) and warn.
+  let normalizedCitations = 0;
+  const findings = (toolInput.findings || []).map((f) => {
+    if (!f || typeof f !== 'object' || typeof f.citation === 'string') return f;
+    normalizedCitations += 1;
+    const c = f.citation;
+    const citation = c == null ? ''
+      : (typeof c === 'object' ? JSON.stringify(c) : String(c));
+    return { ...f, citation };
+  });
+  if (normalizedCitations > 0) {
+    console.warn(`[skills] ${fm.id}: normalized ${normalizedCitations} non-string finding citation(s)`);
+  }
+  if (response.stop_reason === 'max_tokens') {
+    console.warn(`[skills] ${fm.id}: response hit max_tokens; output may be truncated`);
+  }
   const gaps     = toolInput.gaps     || [];
   const VALID_READINESS = new Set(['healthy', 'partial', 'critical']);
   let readiness = toolInput.readiness;
