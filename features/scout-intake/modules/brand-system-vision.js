@@ -6,16 +6,14 @@
 // doesn't pick up new exports added to a previously-loaded CJS module — fresh
 // file path → fresh module entry, no cache-staleness.
 
-const fs = require('fs');
-const path = require('path');
+const { readSkillFile } = require('../skills/_skills-dir.js');
 const { callAnthropic } = require('../_anthropic-client.js');
 
 const VISION_MODEL = 'claude-sonnet-4-6';
 const VISION_MAX_TOKENS = 1500;
 
 function loadVisionSystemPrompt() {
-  const skillPath = path.join(__dirname, '..', 'skills', 'brand-system-vision.md');
-  return fs.readFileSync(skillPath, 'utf8');
+  return readSkillFile('brand-system-vision.md');
 }
 
 /**

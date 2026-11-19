@@ -21,3 +21,15 @@ test('next.config.mjs bundles the skill .md files into every route', () => {
   const src = fs.readFileSync(path.resolve(__dirname, '../../../../next.config.mjs'), 'utf8');
   assert.ok(src.includes("'./features/scout-intake/skills/*.md'"));
 });
+
+test('resolveSkillsDir falls back to the next candidate when the first is unreadable or empty', () => {
+  const { resolveSkillsDir } = require('../_skills-dir');
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'skills-cwd-'));
+  const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'skills-empty-'));
+  fs.writeFileSync(path.join(tmp, 'demo-skill.md'), '# demo');
+  fs.writeFileSync(path.join(empty, '_runner.js'), '');
+  const missing = path.join(tmp, 'does-not-exist');
+  assert.equal(resolveSkillsDir([missing, empty, tmp]), tmp);
+  assert.equal(resolveSkillsDir([missing, empty]), null);
+});

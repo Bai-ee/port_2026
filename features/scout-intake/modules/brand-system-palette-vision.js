@@ -3,18 +3,14 @@
 // brand-system-palette-vision.js — Extracts hex values and color relationships
 // from an uploaded color palette image (Coolors, Adobe Color, Figma, etc.).
 
-const fs = require('fs');
-const path = require('path');
+const { readSkillFile } = require('../skills/_skills-dir.js');
 const { callAnthropic } = require('../_anthropic-client.js');
 
 const VISION_MODEL = 'claude-sonnet-4-6';
 const VISION_MAX_TOKENS = 1500;
 
 function loadPrompt() {
-  return fs.readFileSync(
-    path.join(__dirname, '..', 'skills', 'brand-system-palette-vision.md'),
-    'utf8'
-  );
+  return readSkillFile('brand-system-palette-vision.md');
 }
 
 /**
