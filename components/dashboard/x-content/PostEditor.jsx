@@ -507,6 +507,15 @@ export default function PostEditor({
     } catch { /* the panel already told the operator */ }
   };
 
+  // Video brief panel updates (save / render / attach poll). Server content only replaces the text box when the
+  // owner has no unsaved edits; otherwise the edits stay and a notice asks for a reload.
+  const onBriefPatch = (patch) => {
+    const { content: serverContent, ...rest } = patch || {};
+    setRow((r) => ({ ...r, ...rest, ...(serverContent !== undefined ? { content: serverContent } : {}) }));
+    if (serverContent === undefined || serverContent === content) return;
+    if (dirty.contentDirty) setMessage({ tone: 'info', text: 'The video was attached and the post text changed on the server. Save or reload to sync.' });
+    else setContent(serverContent ?? '');
+  };
   const over = isOverLimit(content);
   const count = charCount(content);
 
@@ -551,7 +560,7 @@ export default function PostEditor({
           {locked ? <span className="pe-muted">Locked: this post can't be edited here.</span> : null}
         </p>
 
-        {!suggestion ? <VideoBriefPanel row={row} callSocial={callSocial} locked={locked} onRowPatch={(patch) => setRow((r) => ({ ...r, ...patch }))} /> : null}
+        {!suggestion ? <VideoBriefPanel row={row} callSocial={callSocial} locked={locked} onRowPatch={onBriefPatch} /> : null}
 
         <VideoStatusLine postId={row.id} vp={row.videoProcessing} />
 

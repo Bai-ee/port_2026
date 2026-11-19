@@ -80,7 +80,30 @@ export default function VideoBriefPanel({ row, callSocial, locked = false, onRow
   };
   const vpState = row?.videoProcessing?.state;
   const inFlight = vpState === 'queued' || vpState === 'rendering' || vpState === 'rendered';
-  const renderLabel = busy ? 'Starting…' : inFlight ? 'Rendering…' : (savedStatus === 'approved' ? 'Render now' : 'Approve & render now');
+  const IN_FLIGHT_LABEL = { queued: 'Queued…', rendering: 'Rendering…', rendered: 'Rendered, attaching…' };
+  const renderLabel = busy ? 'Starting…' : inFlight ? IN_FLIGHT_LABEL[vpState] : (savedStatus === 'approved' ? 'Render now' : 'Approve & render now');
+
+  // While a render runs, poll every 10 s: the server attaches the finished video at once (no wait for the cron tick).
+  const postId = row?.id;
+  useEffect(() => {
+    if (!inFlight || !postId) return undefined;
+    let stopped = false;
+    const started = Date.now();
+    const tick = async () => {
+      if (stopped || (typeof document !== 'undefined' && document.hidden)) return;
+      if (Date.now() - started > 20 * 60_000) { stopped = true; return; }
+      try {
+        const res = await callSocial({ action: 'video-brief-status', postId });
+        if (stopped || !res?.ok) return;
+        const p = res.post || {};
+        onRowPatch?.({ revision: p.revision, status: p.status, content: p.content, mediaUrl: p.mediaUrl, mediaType: p.mediaType, posterUrl: p.posterUrl, mediaJobId: p.mediaJobId, videoBrief: p.videoBrief, videoBriefMeta: p.videoBriefMeta, videoProcessing: res.videoProcessing || null }, { attached: res.attached });
+        if (res.attached) setMsg({ tone: 'ok', text: 'Video attached to this post.' });
+      } catch { /* next tick */ }
+    };
+    const id = setInterval(tick, 10_000);
+    tick();
+    return () => { stopped = true; clearInterval(id); };
+  }, [inFlight, postId, callSocial]); // eslint-disable-line react-hooks/exhaustive-deps
   const canRender = editable && !busy && !dirty && hasSaved && !inFlight && savedStatus !== 'rendered' && !row?.mediaUrl;
 
   return (
@@ -126,6 +149,9 @@ export default function VideoBriefPanel({ row, callSocial, locked = false, onRow
           <button type="button" id="post-editor-video-brief-save-btn" className="pe-btn pe-btn-ghost" disabled={!editable || busy || !dirty} onClick={save}>{busy ? 'Saving…' : 'Save brief'}</button>
           <button type="button" id="post-editor-video-brief-render-btn" className="pe-btn pe-btn-ghost" disabled={!canRender} onClick={renderNow} title={dirty ? 'Save the brief first.' : ''}>{renderLabel}</button>
         </div>
+        {row?.mediaUrl && row?.mediaType === 'video' && String(row?.mediaJobId || '').startsWith('bv_') ? (
+          <p id="post-editor-video-brief-video-row" className="pe-muted"><a id="post-editor-video-brief-open-link" href={row.mediaUrl} target="_blank" rel="noreferrer">Open video</a> · attached to this post</p>
+        ) : null}
         {msg ? <p id="post-editor-video-brief-message" className={msg.tone === 'bad' ? 'pe-over' : 'pe-muted'} role={msg.tone === 'bad' ? 'alert' : 'status'}>{msg.text}</p> : null}
         <p className="pe-muted">Saving never changes the post copy, approval or schedule. Render now approves the brief and starts the video immediately (max 5 a day). Editing an approved template sends it back to review. Rendering uses the template text.</p>
       </div>

@@ -9,6 +9,8 @@ import { panelBriefBlocksRender } from './brief-fields.js';
 import { selectCandidates, HOLD_RE, newJobDoc, briefJobId, addDaysIso } from './jobs.js';
 import { attachJobToPost } from './attach.js';
 import { howtoReadiness } from './howto.js';
+import { classifyVideoProcessing } from './videoStatus.js';
+import { howtoEnabled as howtoFlag } from './clients.js';
 
 const require = createRequire(import.meta.url);
 const POSTS = 'social_posts';
@@ -319,6 +321,28 @@ export async function renderNow({ db, clientId, postId, narration, now = Date.no
   if (created.capped) return fail(429, 'daily-cap');
   await pokeService(job.jobId, { env, fetchImpl });
   return { ok: true, jobId: job.jobId, status: job.status };
+}
+
+/**
+ * Attach-on-demand (the Video brief panel polls this while a render runs): if one of THIS post's jobs is done and not
+ * yet attached, attach it now instead of waiting for the 15-min tick. attachJobToPost decides (same as the cron, and its
+ * transaction refuses a job the cron already attached). At most one attach per call. Returns the post + its status.
+ */
+export async function attachIfDone({ db, clientId, postId, now = Date.now(), env = process.env } = {}) {
+  const read = async () => { const s = await db.collection(POSTS).doc(postId).get(); return s.exists ? { id: postId, ...s.data() } : null; };
+  let post = await read();
+  if (!post || post.clientId !== clientId) return { ok: false, status: 404, error: 'post-not-found' };
+  const jobsOf = async () => (await db.collection(JOBS).where('postId', '==', postId).where('clientId', '==', clientId).get()).docs.map((d) => d.data());
+  let jobs = await jobsOf();
+  let attached = null;
+  const ready = jobs.filter((j) => j.status === 'done' && j.downloadUrl && !j.attachedAt && !j.attachSkipped)
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))[0];
+  if (ready) {
+    attached = await attachJobToPost(ready, { db, force: ready.replace === true, now: new Date(now).toISOString() });
+    post = await read();
+    jobs = await jobsOf();
+  }
+  return { ok: true, post, attached, videoProcessing: classifyVideoProcessing(post, jobs, { today: ctToday(now), howto: howtoFlag(env) }) };
 }
 
 export const defaultDb = () => require('../../api/_lib/firebase-admin.cjs').adminDb;

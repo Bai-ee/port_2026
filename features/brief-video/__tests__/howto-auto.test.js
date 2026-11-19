@@ -9,7 +9,7 @@ const { validateHowtoRequest, submitHowtoRequest, getHowtoRequest } = await impo
 const { howtoRequestJobId, newJobDoc, JOB_ID_RE } = await import('../jobs.js');
 const { parseBrief } = await import('../brief.js');
 const { planAttach, attachJobToPost } = await import('../attach.js');
-const { runTick, renderNow } = await import('../worker.js');
+const { runTick, renderNow, attachIfDone } = await import('../worker.js');
 
 const CLIENT = 'paradice-dbBQCHUX';
 const NOW = Date.parse('2026-11-18T15:00:00Z'); // 2026-11-18 CT
@@ -295,4 +295,19 @@ test('3.2: host.name and surface optional; non-empty new_panels rejected; type e
   assert.match(validateHowtoRequest({ ...base, new_panels: [{ name: 'reward modal' }] }).errors.join(), /new_panels must be empty/);
   assert.match(validateHowtoRequest({ ...base, season: '3' }).errors.join(), /got "3"/);
   assert.match(validateHowtoRequest({ ...base, request_version: '3.2' }).errors.join(), /got "3.2"/);
+});
+
+test('attachIfDone: a finished panel-brief video attaches on demand; second call is a no-op', async () => {
+  const { briefHash } = await import('../brief.js');
+  await seed({ id: 'p', clientId: CLIENT, platform: 'x', status: 'draft', reviewOn: '2026-11-18', content: 'Clean copy.', revision: 3, videoBrief: 'Shot 1', videoBriefMeta: { status: 'approved' } });
+  await db().collection('brief_video_jobs').doc('bv_p1').set({ jobId: 'bv_p1', postId: 'p', clientId: CLIENT, status: 'done', briefHash: briefHash('Shot 1'), downloadUrl: 'https://v/p.mp4', posterUrl: 'https://v/p.jpg', createdAt: '2026-11-18T14:00:00Z', kind: 'cq-brief' });
+  const r = await attachIfDone({ db: db(), clientId: CLIENT, postId: 'p', now: NOW, env: ENV });
+  assert.equal(r.ok, true);
+  assert.equal(r.attached.attached, true);
+  assert.equal(r.post.mediaUrl, 'https://v/p.mp4');
+  assert.equal(r.post.videoBriefMeta.status, 'rendered');
+  assert.equal(r.videoProcessing.state, 'attached');
+  const again = await attachIfDone({ db: db(), clientId: CLIENT, postId: 'p', now: NOW, env: ENV });
+  assert.equal(again.attached, null);
+  assert.equal((await attachIfDone({ db: db(), clientId: 'other', postId: 'p', now: NOW, env: ENV })).status, 404);
 });
