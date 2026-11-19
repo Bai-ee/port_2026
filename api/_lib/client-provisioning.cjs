@@ -242,9 +242,9 @@ async function queueInitialBriefRun({ clientId, uid, websiteUrl, usesFallbackSit
     artifactRefs: [],
     providerUsage: null,
     moduleSnapshot: null,
-    // sourceUrl drives asset generation (mockup/screenshots/studio). For
-    // website-less signups this is the templated fallback site; usesFallbackSite
-    // tells the worker to skip brand/scout synthesis from it.
+    // sourceUrl drives asset generation (mockup/screenshots/studio). Website-less
+    // signups queue with an empty sourceUrl: the worker skips site modules and
+    // never renders a stand-in site.
     sourceUrl: websiteUrl,
     usesFallbackSite,
     createdAt: now,
@@ -584,40 +584,35 @@ async function provisionClientForUser({ uid, email, displayName, companyName, we
     console.warn('[provisionClientForUser] non-fatal: failed to update adminDashboards', adminWriteErr?.message);
   }
 
-  // Always queue the first Creative Brief run. With a website we render the
-  // client's own site; without one we fall back to the templated site so a
-  // website-less signup still gets a brief (assets are templated; brand data
-  // is not synthesized from the fallback — see worker usesFallbackSite gate).
-  const { FALLBACK_BRIEF_SITE } = require('./brief-fallback.cjs');
-  const usesFallbackSite = !normalized?.websiteUrl;
+  // Always queue the first run. With a website we render the client's own
+  // site; without one the run has no site to scan (empty sourceUrl) and the
+  // worker skips site modules — no fallback/stand-in site is ever used.
   let run = null;
-  {
-    run = await queueInitialBriefRun({
-      clientId,
-      uid,
-      websiteUrl: normalized?.websiteUrl || FALLBACK_BRIEF_SITE,
-      usesFallbackSite,
-    });
+  run = await queueInitialBriefRun({
+    clientId,
+    uid,
+    websiteUrl: normalized?.websiteUrl || '',
+    usesFallbackSite: false,
+  });
 
-    await Promise.all([
-      clientRef.set(
-        {
-          latestRunId: run.runId,
-          latestRunStatus: run.status,
-          updatedAt: now,
-        },
-        { merge: true }
-      ),
-      dashboardStateRef.set(
-        {
-          latestRunId: run.runId,
-          latestRunStatus: run.status,
-          updatedAt: now,
-        },
-        { merge: true }
-      ),
-    ]);
-  }
+  await Promise.all([
+    clientRef.set(
+      {
+        latestRunId: run.runId,
+        latestRunStatus: run.status,
+        updatedAt: now,
+      },
+      { merge: true }
+    ),
+    dashboardStateRef.set(
+      {
+        latestRunId: run.runId,
+        latestRunStatus: run.status,
+        updatedAt: now,
+      },
+      { merge: true }
+    ),
+  ]);
 
   return {
     clientId,
@@ -1175,19 +1170,110 @@ async function provisionClientFromProspect({ placeId, adminUid, adminEmail }) {
  * @param {string} options.websiteUrl - raw URL string (will be normalized)
  * @returns {{ clientId, runId, status: 'queued', websiteUrl }}
  */
-async function reseedIntakeForClient({ clientId, uid, websiteUrl }) {
+const RESEED_LOCK_MS = 60 * 1000;
+
+// Per-site module ids whose stored result belongs to the OLD site after a host change.
+const SITE_MODULE_IDS = ['multi-device-view', 'seo-performance', 'agent-readiness', 'social-preview', 'style-guide', 'design-evaluation'];
+
+/** dashboard_state merge fields that null every output derived from the previous site.
+ *  `snapshot` (user-edited brandOverview) is intentionally kept. */
+function buildStaleSiteOutputClear() {
+  const modules = {};
+  for (const id of SITE_MODULE_IDS) modules[id] = { result: null, lastSuccessAt: null };
+  return {
+    analyzerOutputs: null,
+    seoAudit: null,
+    siteMeta: null,
+    moduleBriefs: null,
+    artifacts: {
+      homepageScreenshot: null,
+      homepageScreenshots: null,
+      fullPageScreenshots: null,
+      homepageDeviceMockup: null,
+      skillDocs: null,
+    },
+    onboard: { socialPreview: null },
+    modules,
+  };
+}
+
+function stripWww(host) {
+  return String(host || '').trim().toLowerCase().replace(/^www\./, '');
+}
+
+function reseedError(code, message, extra = {}) {
+  const err = new Error(message);
+  err.code = code;
+  err.status = 409;
+  Object.assign(err, extra);
+  return err;
+}
+
+/**
+ * Pure reseed guard. Returns null when allowed, else { code, message, ...extra }.
+ * Order: (1) admin impersonating a client and pointing it at the admin's own /
+ * the fallback host, (2) unconfirmed host change, (3) in-flight dedupe.
+ */
+function assessReseedRequest({
+  existing, newHost, impersonating, clientId, ownClientId, adminOwnHost,
+  confirmHostChange, confirmAdminHost, nowMs,
+}) {
+  const next = stripWww(newHost);
+  const { FALLBACK_BRIEF_SITE } = require('./brief-fallback.cjs');
+  let fallbackHost = '';
+  try { fallbackHost = stripWww(new URL(FALLBACK_BRIEF_SITE).hostname); } catch { /* ignore */ }
+  const adminHost = stripWww(adminOwnHost);
+
+  if (impersonating && clientId !== ownClientId && !confirmAdminHost
+    && next && (next === adminHost || next === fallbackHost)) {
+    return { code: 'host-matches-admin-client', message: 'That website belongs to the admin workspace, not this client.', newHost: next };
+  }
+  const prev = stripWww(existing?.normalizedHost);
+  if (prev && prev !== next && !confirmHostChange) {
+    return { code: 'confirm-host-change', message: 'Changing the website needs confirmation.', oldHost: prev, newHost: next };
+  }
+  const lock = existing?.reseedLock;
+  const inFlight = ['queued', 'running'].includes(existing?.latestRunStatus);
+  if (lock && Number.isFinite(lock.atMs) && (nowMs - lock.atMs) < RESEED_LOCK_MS && inFlight) {
+    return { code: 'reseed-in-flight', message: 'A rescan is already running.', runId: lock.runId || existing?.latestRunId || null };
+  }
+  return null;
+}
+
+async function reseedIntakeForClient({
+  clientId, uid, websiteUrl, impersonating = false, ownClientId = null, adminOwnHost = '',
+  confirmHostChange = false, confirmAdminHost = false,
+}) {
   const normalized = normalizeOptionalUrl(websiteUrl);
   if (!normalized) throw new Error('Invalid website URL.');
 
-  const existingClientSnap = await fb.adminDb.collection('clients').doc(clientId).get();
+  const clientRef = fb.adminDb.collection('clients').doc(clientId);
+  const existingClientSnap = await clientRef.get();
   const existingClientData = existingClientSnap.exists ? existingClientSnap.data() : null;
-  const hostChanged = existingClientData?.normalizedHost !== normalized.hostname;
+  const hostChanged = stripWww(existingClientData?.normalizedHost) !== stripWww(normalized.hostname);
+  const hadPreviousHost = Boolean(stripWww(existingClientData?.normalizedHost));
+
+  const runRef = fb.adminDb.collection('brief_runs').doc();
+  const runId = runRef.id;
+
+  // Guard + in-flight lock (checks → lock → existing writes).
+  const guardArgs = {
+    newHost: normalized.hostname, impersonating, clientId, ownClientId, adminOwnHost,
+    confirmHostChange, confirmAdminHost,
+  };
+  await fb.adminDb.runTransaction(async (tx) => {
+    const snap = await tx.get(clientRef);
+    const current = snap.exists ? snap.data() : null;
+    const verdict = assessReseedRequest({ ...guardArgs, existing: current, nowMs: Date.now() });
+    if (verdict) throw reseedError(verdict.code, verdict.message, verdict);
+    // latestRunStatus is written here (not later) so a concurrent submit sees the run as in flight.
+    tx.set(clientRef, { reseedLock: { atMs: Date.now(), runId }, latestRunId: runId, latestRunStatus: 'queued' }, { merge: true });
+  });
+
   const newCompanyName = hostChanged
     ? deriveCompanyName({ hostname: normalized.hostname, companyName: null, displayName: null, email: null })
     : null;
 
-  const runRef = fb.adminDb.collection('brief_runs').doc();
-  const runId = runRef.id;
   const now = fb.FieldValue.serverTimestamp();
 
   const runPayload = {
@@ -1273,6 +1359,7 @@ async function reseedIntakeForClient({ clientId, uid, websiteUrl }) {
           startedAt: now,
           message: `Re-running intake for ${normalized.hostname}...`,
         },
+        ...(hostChanged && hadPreviousHost ? buildStaleSiteOutputClear() : {}),
         updatedAt: now,
       },
       { merge: true }
@@ -1293,6 +1380,7 @@ module.exports = {
   provisionClientForUser,
   createAdminClient,
   reseedIntakeForClient,
+  assessReseedRequest,
   loadAdminAccess,
   buildCreationFailureProjection,
   buildSignupProfile,

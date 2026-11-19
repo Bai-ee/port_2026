@@ -38,7 +38,6 @@ const digestDelivery = require('../../../../api/_lib/digest-delivery.cjs');
 const { checkDigestRefreshPreflight } = require('../../../../api/_lib/digest-refresh-preflight.cjs');
 const { buildModuleBriefs } = require('../../../../features/scout-intake/module-brief-builder.js');
 const { getDefaultModuleConfig } = require('../../../../features/scout-intake/module-registry');
-const { FALLBACK_BRIEF_SITE } = require('../../../../api/_lib/brief-fallback.cjs');
 const { collectRedditSignals, collectInstagramSignals, collectXMarketTalkSignals, filterRelevantSignals } = require('../../../../features/intelligence/_platform-signals.js');
 const { searchReddit: scSearchReddit, searchInstagram: scSearchInstagram, redditQueriesFromCustomRows: scRedditQueries, hasApiKey: scHasApiKey } = require('../../../../features/scout-intake/external-scouts/scrapecreators-client.js');
 const { refreshOpportunitySignals } = require('../../../../features/scout-intake/opportunity-signals-search.js');
@@ -325,7 +324,8 @@ async function refreshSiteCreativeModules(clientId, freshnessToken = '', { sourc
   }
 
   const ownSiteUrl = clientConfig?.sourceInputs?.websiteUrl || clientConfig?.websiteUrl || null;
-  const websiteUrl = ownSiteUrl || FALLBACK_BRIEF_SITE;
+  if (!ownSiteUrl) return { ok: true, skipped: true, reason: 'no-website' };
+  const websiteUrl = ownSiteUrl;
   // Only ids with a REGISTERED runner — moduleConfig can carry enabled flags
   // for custom cards (a stray autoEnable once flipped site-recreate on, which
   // has no runner and failed every nightly module run until filtered here).

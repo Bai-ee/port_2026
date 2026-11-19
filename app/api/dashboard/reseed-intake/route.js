@@ -29,9 +29,13 @@ export async function POST(request) {
 
   // Parse body
   let websiteUrl;
+  let confirmHostChange = false;
+  let confirmAdminHost = false;
   try {
     const body = await request.json().catch(() => ({}));
     websiteUrl = String(body.websiteUrl || '').trim();
+    confirmHostChange = body.confirmHostChange === true;
+    confirmAdminHost = body.confirmAdminHost === true;
   } catch {
     return json({ error: 'Invalid JSON body.' }, 400);
   }
@@ -54,6 +58,18 @@ export async function POST(request) {
     return json({ error: 'No client associated with this account.' }, 404);
   }
 
+  // Impersonating admin: the admin's own workspace host, so the guard can
+  // refuse pointing a client at it (or the fallback site) by mistake.
+  let adminOwnHost = '';
+  if (context.impersonating && context.ownClientId) {
+    try {
+      const ownSnap = await fb.adminDb.collection('clients').doc(context.ownClientId).get();
+      adminOwnHost = ownSnap.exists ? String(ownSnap.data()?.normalizedHost || '') : '';
+    } catch {
+      adminOwnHost = '';
+    }
+  }
+
   // Queue reseed
   let result;
   try {
@@ -61,8 +77,22 @@ export async function POST(request) {
       clientId,
       uid: decoded.uid,
       websiteUrl,
+      impersonating: Boolean(context.impersonating),
+      ownClientId: context.ownClientId || null,
+      adminOwnHost,
+      confirmHostChange,
+      confirmAdminHost,
     });
   } catch (err) {
+    if (err?.code === 'host-matches-admin-client' || err?.code === 'confirm-host-change' || err?.code === 'reseed-in-flight') {
+      return json({
+        error: err.message,
+        code: err.code,
+        ...(err.oldHost ? { oldHost: err.oldHost } : {}),
+        ...(err.newHost ? { newHost: err.newHost } : {}),
+        ...(err.runId ? { runId: err.runId } : {}),
+      }, 409);
+    }
     return json(
       { error: err instanceof Error ? err.message : 'Reseed failed.' },
       500

@@ -258,3 +258,15 @@ test('retry after a half-finished draft: an existing generated (non-Markdown) Br
   }
   assert.deepEqual(marks, [['c-half', 'draft']]);
 });
+
+test('no-website run: site modules are skipped (no runModules call) and the run still succeeds', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'app/api/worker/run-brief/route.js'), 'utf8');
+  // assetSiteUrl never falls back to the stand-in site.
+  assert.match(src, /const assetSiteUrl = ownSiteUrl\s*\|\| \(claimedRun\.sourceUrl && claimedRun\.sourceUrl !== FALLBACK_BRIEF_SITE \? claimedRun\.sourceUrl : null\)/);
+  assert.ok(!/ownSiteUrl \|\| claimedRun\.sourceUrl \|\| FALLBACK_BRIEF_SITE/.test(src));
+  // runModules only runs when there is a site; otherwise skipped + logged.
+  assert.match(src, /if \(websiteUrl\) \{\s*\(\{ results \} = await runModules\(/);
+  assert.match(src, /site modules skipped for \$\{clientId\}: no website/);
+  // An empty site-less run is a success, not `failed`.
+  assert.match(src, /const anyOk = !websiteUrl \|\| results\.some\(/);
+});
