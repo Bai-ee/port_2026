@@ -140,7 +140,8 @@ async function runDailyFillStep({ db, committedCorpusRows }, clientIds, today) {
 
 // Rendered videos -> content library (Dj Mix Videos bucket): the 06:00 daily email render is done by ~06:03, so syncing
 // here (before suggestions and the fill) puts it in the bucket the same day without anyone opening the Content Engine.
-// Only the rendered-video owner (RENDERED_VIDEOS_CLIENT_ID, else NAS_INVENTORY_CLIENT_ID) has the feed; everyone else is a no-op. Non-fatal; reported as
+// Only the rendered-video owner (RENDERED_VIDEOS_CLIENT_ID, else NAS_INVENTORY_CLIENT_ID) has the feed; it syncs whenever it is in the
+// pilot run's full clientIds, even if its Daily "today-queue" is unticked (the feed is not a suggestion). Otherwise a no-op. Non-fatal; reported as
 // `renderedVideos`. force: the cron runs once a day, so the dashboard's 10-minute throttle must not skip it.
 async function runRenderedVideoSyncStep(db, clientIds) {
   try {
@@ -209,7 +210,7 @@ async function run(request) {
     const groups = refreshDaily.cronGroupsFor(await refreshDaily.readRefreshDaily(clientId).catch(() => refreshDaily.resolveRefreshDaily({})));
     (groups.has('today-queue') ? todayIds : dailyOff).push(clientId);
   }
-  const renderedVideos = await runRenderedVideoSyncStep(db, todayIds);
+  const renderedVideos = await runRenderedVideoSyncStep(db, clientIds);
   const ran = todayIds.length ? await runScheduledDailyLoop({ store: createFirestoreRunStore(db), assertReady, readInputsFor }, { clientIds: todayIds }) : [];
   const results = [...ran, ...dailyOff.map((clientId) => ({ clientId, ok: true, skipped: 'not-in-daily-profile' }))];
   // The X API auto-daily step has its own per-client switch (X source autoDaily), independent of "Today and queue".
