@@ -5,13 +5,15 @@
 // `curation` + `updatedAt` of one rv- doc, nothing else (setCuration). Media: signed thumb/video URLs for rv- ids owned
 // by the media owner. `by` = the signed-in email when a valid Bearer token is sent, else 'public'.
 //
-//   POST {action:'list', days?}            -> curation-list result
+//   POST {action:'list', days?}            -> curation-list result (+ syncScheduled; a leased, throttled background sync runs after the response)
 //   POST {action:'set', id, state}         -> {ok, id, curation}
 //   POST {action:'media', ids[], kinds[]}  -> {ok, urls}
 // Not configured (no media owner) -> {ok:true, skipped:'not-configured'}.
 import { createRequire } from 'module';
+import { after } from 'next/server';
 import { listCurationCandidates, setCuration } from '../../../../features/rendered-videos/curation.js';
-import { mediaOwnerClientId } from '../../../../features/rendered-videos/firestore-sync.js';
+import { acquireSyncLease } from '../../../../features/rendered-videos/sync-lease.js';
+import { mediaOwnerClientId, syncRenderedVideosForClient } from '../../../../features/rendered-videos/firestore-sync.js';
 import { parseReviewRequest, ownedReviewPackages, publicizeReviewResult, REVIEW_PUBLIC_BY } from '../../../../features/rendered-videos/public-review.js';
 import { resolveMediaUrlsBatch } from '../../../../features/x-content-inventory/thumbs.js';
 
@@ -47,6 +49,37 @@ async function listFor(ownerId, { days }) {
   const snap = await fb.adminDb.collection(PKG_COLLECTION).where('clientId', '==', ownerId).where('source.kind', '==', 'rendered-video').get();
   const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
   return { ok: true, ...listCurationCandidates(rows, { days, now: Date.now() }) };
+}
+
+/** Leased, throttled rendered-video sync; runs after the response. Never throws (failures are logged only). */
+async function backgroundSync(ownerId) {
+  try {
+    const metaRef = fb.adminDb.collection('content_buckets').doc(ownerId).collection('meta').doc('rendered-videos');
+    const lease = await acquireSyncLease({
+      transact: (fn) => fb.adminDb.runTransaction(async (t) => fn({
+        read: async () => { const s = await t.get(metaRef); return s.exists ? s.data() : null; },
+        merge: (patch) => t.set(metaRef, patch, { merge: true }),
+      })),
+    }, { now: Date.now() });
+    if (!lease.acquired) return;
+    const bridge = require('../../../../api/_lib/editvideos-bridge.cjs'); // after adminDb, so the default app initializes first
+    const { upsertPackage } = await import('../../../../features/x-content-inventory/store.js');
+    await syncRenderedVideosForClient({
+      db: fb.adminDb, bridge, clientId: ownerId, force: false,
+      upsert: (pkg) => upsertPackage(pkg, { returnPackages: false, clientId: ownerId }),
+    });
+  } catch (err) {
+    console.warn(JSON.stringify({ event: 'remix_review_sync_failed', error: String(err?.message || err).slice(0, 200) }));
+  }
+}
+
+function scheduleSync(ownerId) {
+  try {
+    after(() => backgroundSync(ownerId));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function setFor(ownerId, request, { id, state }) {
@@ -89,7 +122,10 @@ export async function POST(request) {
     if (!ownerId) return json({ ok: true, skipped: 'not-configured' });
     const limit = await checkRateLimit({ key: `remix-review:${req.action}:ip:${getClientIp(request)}`, limit: LIMITS[req.action], windowSeconds: 3600, failOpen: true });
     if (!limit.allowed) return json({ error: 'Too many requests. Try again later.' }, 429);
-    if (req.action === 'list') return json(publicizeReviewResult(await listFor(ownerId, req)));
+    if (req.action === 'list') {
+      const result = publicizeReviewResult(await listFor(ownerId, req));
+      return json({ ...result, syncScheduled: scheduleSync(ownerId) });
+    }
     if (req.action === 'set') return json(publicizeReviewResult(await setFor(ownerId, request, req)));
     return json(await mediaFor(ownerId, req));
   } catch (err) {
