@@ -283,3 +283,16 @@ test('3.2: game_commit is optional (provenance only); a given value must be a he
   const old = validateHowtoRequest({ ...base, request_version: 3.1, steps: base.steps.map((s) => ({ ...s, clicks: s.clicks.map((c) => ({ ...c, target: 't', handler: 'h' })) })) });
   assert.ok(old.errors.includes('game_commit is required'));
 });
+
+test('3.2: host.name and surface optional; non-empty new_panels rejected; type errors say what was got', async () => {
+  const { validateHowtoRequest } = await import('../howto-request.js');
+  const base = { request_version: 3.2, season: 3, id: 'gather-auto-test', review_on: '2026-12-06', type: 'how-to', goal: 'g', audience: 'a', public_copy: 'p', hook: 'h', banner: 'GATHER NOW', arrival: { say: 'Let me show you.' },
+    steps: [{ say: 'Tap a spot, then the axe.', panel: 'spotTile', clicks: [{ action: 'selectSpot' }] }, { say: 'Pick a critter and send it out.', panel: 'critterSelection', clicks: [{ action: 'send' }] }],
+    payoff: { say: 'Every haul stocks your town!', spot_art: 'x.png', town: { name: 'T', level: 5 } } };
+  assert.deepEqual(validateHowtoRequest(base).errors, []);
+  assert.deepEqual(validateHowtoRequest({ ...base, new_panels: [] }).errors, []);
+  assert.deepEqual(validateHowtoRequest({ ...base, new_panels: [{ name: null, component: null, children: [] }] }).errors, []);
+  assert.match(validateHowtoRequest({ ...base, new_panels: [{ name: 'reward modal' }] }).errors.join(), /new_panels must be empty/);
+  assert.match(validateHowtoRequest({ ...base, season: '3' }).errors.join(), /got "3"/);
+  assert.match(validateHowtoRequest({ ...base, request_version: '3.2' }).errors.join(), /got "3.2"/);
+});
