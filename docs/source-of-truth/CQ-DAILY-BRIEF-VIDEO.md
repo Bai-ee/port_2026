@@ -266,3 +266,19 @@ Details and rules: [`CQ-HOWTO-VIDEO-REQUESTS.md`](CQ-HOWTO-VIDEO-REQUESTS.md) se
 - **Job fields** (kind `cq-howto`, request jobs): `request`, `requestHash`, `narration`, `renderNow`; no `specHash`. Id = `bv_` + sha256(`postId:briefHash:cq-howto-1:requestHash:narration:attempt`).slice(0,20). `mediaMetadata` also carries `requestHash`.
 - **Render now** reuses `newJobDoc`, `createJob` (counter doc `brief_video_usage/<CT day>`, cap `RENDER_NOW_MAX_PER_DAY` 5) and `pokeService`. Tick report: `attachedRenderNow` (finished render-now jobs attach first, max 3, outside the one-per-tick attach).
 - **`replaceDraftMedia`** on a done job lets `planAttach` replace existing media on a still-draft post (local takeover); status is re-checked in the attach transaction.
+
+## 15. Video brief panel (2026-11-19)
+
+The brief can live in its own fields instead of the post copy (`features/brief-video/brief-fields.js`). This is the preferred path for new briefs.
+- **Row fields:**
+  - `videoBrief`: the template text the renderer reads.
+  - `videoBriefMeta`: `{status, assets[], shots, captions, audio, narration, updatedAt, updatedBy}`.
+  - Status flow: `draft` → `ready` → `approved` → `rendered`. Attach sets `rendered`.
+- **Saving:** `saveVideoBrief` (twitter-service) runs a transaction on draft rows only. It bumps the revision and leaves content, approval and schedule alone. It returns 409 while the content still carries the old `INTERNAL VIDEO BRIEF` marker. Editing an approved template drops it back to `ready`. An empty template clears the brief.
+- **Routes:** social-posting actions `video-brief-get`, `video-brief-save` (status draft or ready only) and `video-brief-approve`.
+- **Connector:** `queue.post.video-brief.get` (tier 0), `.save` (tier 1), `.approve` (tier 2, confirm card).
+- **Render gate:** a panel brief renders only when `approved` (`selectCandidates`, dryRun, render-now). Legacy content briefs are unchanged. The status line shows `brief-not-approved`.
+- **Approval guard:** a draft with a panel brief that is not rendered and has no media cannot be approved (`video-brief-pending`).
+- **Editor:** `#post-editor-video-brief-panel` (`VideoBriefPanel.jsx`). It has its own Save brief and Approve for render buttons.
+- **Not yet used by the renderer:** only the template text feeds the render. Assets, shots, captions, audio and narration are stored for people to read.
+

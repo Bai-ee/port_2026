@@ -15,6 +15,7 @@ import { toMs, contentHash, LIFECYCLE_VERSION, OPEN_STATUSES, MANUAL_CLAIMABLE_S
 import { assertNoMemoryPlaceholder, hasMemoryPlaceholder, stripBlockingPlaceholders, sanitizeMediaVariants, sanitizeSelfReply, sanitizeSourceRef } from './self-reply.js';
 import { sanitizeRepostOf, repostLabel } from './repost.js';
 import { stripBrief, parseBrief } from '../brief-video/brief.js';
+import { mergeVideoBrief, isPanelBriefPending } from '../brief-video/brief-fields.js';
 import { postTargets, normalizeTargets, instagramBlockReason, deliverInstagram } from './cross-post.js';
 
 const require = createRequire(import.meta.url);
@@ -1402,12 +1403,37 @@ function stripPlaceholdersFromPost(post) {
   return out;
 }
 
+// Internal Video brief panel (features/brief-video/brief-fields.js): saved on its own, never touching content, approval
+// or schedule. Draft rows only (only drafts render). Bumps the revision in a transaction, because every other writer
+// rewrites the whole row after a revision check: the editor adopts the returned revision, so its next Save is safe.
+export async function saveVideoBrief(clientId, postId, input = {}, { by = null, allowApprove = true, expectedRevision = null } = {}) {
+  if (!postId) throw Object.assign(new Error('postId is required.'), { status: 400 });
+  const ref = postsCol().doc(String(postId));
+  return fb.adminDb.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const post = snap.exists ? snap.data() : null;
+    if (!post || (clientId && post.clientId !== clientId)) throw Object.assign(new Error('Post not found.'), { status: 404 });
+    if (expectedRevision != null && (post.revision || 0) !== Number(expectedRevision)) throw conflict();
+    if (post.status !== 'draft') throw Object.assign(new Error(`A video brief can only be saved on a draft (this post is ${post.status}).`), { status: 409, code: 'not-draft' });
+    if (INTERNAL_BRIEF_RE.test(String(post.content ?? ''))) throw Object.assign(new Error('This post still has an INTERNAL VIDEO BRIEF in its text. Remove it from the post copy first, then save it in the Video brief panel.'), { status: 409, code: 'content-brief-present' });
+    const next = mergeVideoBrief(post, input, { by, allowApprove });
+    const now = new Date().toISOString();
+    const patch = { videoBrief: next.videoBrief, videoBriefMeta: next.videoBriefMeta, videoBriefHash: null, revision: (post.revision || 0) + 1, updatedAt: now };
+    if (next.videoBrief !== (post.videoBrief ?? null)) Object.assign(patch, { videoBriefStatus: null, videoBriefReason: null });
+    tx.set(ref, patch, { merge: true });
+    return { ...post, ...patch };
+  });
+}
+
 function approveInMemory(post, reviewedBy) {
   if (post.status === 'approved') return post;
   if (post.status !== 'draft') {
     throw Object.assign(new Error(`Only a draft can be approved (this post is ${post.status}).`), { status: 409, code: 'not-draft' });
   }
   assertNoInternalBrief(post.content, post.selfReply?.text);
+  if (isPanelBriefPending(post)) {
+    throw Object.assign(new Error('This post has a video brief that has not been rendered yet. Wait for the video, or clear the brief, before approving.'), { status: 409, code: 'video-brief-pending' });
+  }
   post = stripPlaceholdersFromPost(post);
   const now = new Date().toISOString();
   const approved = {

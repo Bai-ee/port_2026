@@ -4,7 +4,8 @@ import {
   MAX_ATTEMPTS, MAX_RENDERS_PER_DAY, ACTIVE_MAX_MS, REPOKE_AFTER_MS, howtoEnabled, HOWTO_STATUS_WRITES_PER_TICK,
   RENDER_NOW_MAX_PER_DAY, RENDER_NOW_ATTACH_PER_TICK, BRIEF_VIDEO_USAGE,
 } from './clients.js';
-import { parseBrief } from './brief.js';
+import { parseBrief, briefOfPost } from './brief.js';
+import { panelBriefBlocksRender } from './brief-fields.js';
 import { selectCandidates, HOLD_RE, newJobDoc, briefJobId, addDaysIso } from './jobs.js';
 import { attachJobToPost } from './attach.js';
 import { howtoReadiness } from './howto.js';
@@ -67,10 +68,12 @@ export async function dryRun({ db, now = Date.now(), clients = DAILY_BRIEF_VIDEO
     const briefs = [];
     const ready = new Set();
     for (const post of drafts) {
-      const parsed = parseBrief(post.content);
+      if (post.mediaUrl && !parseBrief(post.content)) continue;
+      const parsed = briefOfPost(post);
       if (!parsed) continue;
       const extra = {};
-      if (HOLD_RE.test(parsed.brief)) extra.skipReason = 'hold';
+      if (panelBriefBlocksRender(post)) extra.skipReason = `brief-${post.videoBriefMeta.status}`;
+      else if (HOLD_RE.test(parsed.brief)) extra.skipReason = 'hold';
       else if (parsed.briefKind === 'invalid') extra.skipReason = parsed.invalidReason;
       else if (parsed.briefKind === 'howto') {
         if (!flag) extra.skipReason = 'howto-disabled';
@@ -293,8 +296,9 @@ export async function renderNow({ db, clientId, postId, narration, now = Date.no
   if (!post || post.clientId !== clientId) return fail(404, 'post-not-found');
   if (post.status !== 'draft') return fail(409, 'not-draft');
   if (hasAnyMedia(post)) return fail(409, 'has-media');
-  const parsed = parseBrief(post.content);
+  const parsed = briefOfPost(post);
   if (!parsed) return fail(409, 'no-brief');
+  if (panelBriefBlocksRender(post)) return fail(409, 'brief-not-approved');
   if (HOLD_RE.test(parsed.brief)) return fail(409, 'hold');
   if (parsed.briefKind === 'invalid') return fail(409, `invalid-brief:${parsed.invalidReason}`);
   const extra = {};

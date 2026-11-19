@@ -4,6 +4,7 @@
 import { DAILY_BRIEF_VIDEO_CLIENTS, BRIEF_VIDEO_JOBS, MAX_ATTEMPTS, LOOKAHEAD_DAYS, howtoEnabled } from './clients.js';
 import { briefOfPost, BRIEF_MARKER_RE } from './brief.js';
 import { addDaysIso, HOLD_RE } from './jobs.js';
+import { panelBriefBlocksRender } from './brief-fields.js';
 
 export const IN_CHUNK = 30;
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -58,6 +59,7 @@ export function classifyVideoProcessing(post, jobs = [], { today, howto = false 
   // No job yet. Only an open draft without media can still get one.
   if (post.status !== 'draft' || post.mediaUrl) return null;
   if (parsed.briefKind === 'invalid') return out('invalid', `Brief not valid: ${parsed.invalidReason}`);
+  if (panelBriefBlocksRender(post)) return out('brief-not-approved', `Brief ${post.videoBriefMeta.status}: approve it to render`);
   if (HOLD_RE.test(parsed.brief)) return out('hold', 'On hold (HOLD in brief)');
   const on = String(post.reviewOn || '');
   if (!DAY_RE.test(on)) return out('waiting', 'Needs a review date to render');
