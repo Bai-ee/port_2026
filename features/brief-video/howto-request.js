@@ -29,7 +29,10 @@ export function validateHowtoRequest(req) {
   const need = (path, v) => { if (!text(v)) errors.push(`${path} is required`); };
   if (!DAY_RE.test(String(req.review_on ?? ''))) errors.push('review_on must be YYYY-MM-DD');
   if (!['how-to', 'feature-promo'].includes(req.type)) errors.push('type must be how-to or feature-promo');
-  need('game_commit', req.game_commit);
+  // game_commit: provenance of hand-verified click handlers. Required for 3 / 3.1 (clicks carry handlers). Optional for 3.2:
+  // clicks carry catalog action ids and the renderer never reads code refs. Never filled in server-side.
+  if (!v32) need('game_commit', req.game_commit);
+  else if (req.game_commit != null && req.game_commit !== '' && !/^[0-9a-f]{7,40}$/i.test(String(req.game_commit))) errors.push('game_commit, when given, must be a 7-40 character hex git hash');
   need('goal', req.goal);
   need('audience', req.audience);
   need('public_copy', req.public_copy);

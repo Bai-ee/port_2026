@@ -13,7 +13,7 @@ export const VIDEO_ACTIONS = [
     description: 'Saves a how-to video request (v3.2 = auto-approved, renders with no owner step; 3/3.1 wait for the owner). Returns briefLine for the draft. Narration on by default for 3.2.',
     keywords: 'critters quest how-to video request template v3 howto brief render submit',
     route: 'howto-requests', method: 'POST', action: 'submit',
-    args: obj({ request: open('The v3 request as JSON: request_version 3.2, id, review_on, type (how-to|feature-promo), game_commit, goal, audience, public_copy (<=280), hook, banner, host{name}, arrival{say}, steps[2-4]{say,panel,surface,clicks[{action (catalog action id), target?, handler?}]}, payoff{say,spot_art,town{name,level 1-15}}. Optional narration (boolean; default true for 3.2, false for older). Max 32 KB.') }, ['request']),
+    args: obj({ request: open('The v3 request as JSON: request_version 3.2, id, review_on, type (how-to|feature-promo), game_commit (optional for 3.2), goal, audience, public_copy (<=280), hook, banner, host{name}, arrival{say}, steps[2-4]{say,panel,surface,clicks[{action (catalog action id), target?, handler?}]}, payoff{say,spot_art,town{name,level 1-15}}. Optional narration (boolean; default true for 3.2, false for older). Max 32 KB.') }, ['request']),
     tier: 1,
   },
   {
