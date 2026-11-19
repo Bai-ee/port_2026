@@ -199,3 +199,10 @@ test('listFolderClipsForSelection: cached until invalidateFolderCache', async ()
   await listFolderClipsForSelection('skyline', { bucket });
   assert.equal(bucket.calls, 2);
 });
+
+test('deployHeaders sends X-Deploy-Token only when EDITVIDEOS_DEPLOY_TOKEN is set', () => {
+  const { deployHeaders } = require('../editvideos-bridge.cjs');
+  assert.deepEqual(deployHeaders({}), { 'Content-Type': 'application/json' });
+  assert.deepEqual(deployHeaders({ EDITVIDEOS_DEPLOY_TOKEN: 'abc' }),
+    { 'Content-Type': 'application/json', 'X-Deploy-Token': 'abc' });
+});

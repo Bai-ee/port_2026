@@ -1376,6 +1376,16 @@ function requireApiBase() {
 }
 
 /**
+ * Headers for POST /api/deploy-website. EditVideos rejects deploys without the shared token once
+ * DEPLOY_WEBSITE_TOKEN is set there; EDITVIDEOS_DEPLOY_TOKEN here must hold the same value.
+ */
+function deployHeaders(env = process.env) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (env.EDITVIDEOS_DEPLOY_TOKEN) headers['X-Deploy-Token'] = env.EDITVIDEOS_DEPLOY_TOKEN;
+  return headers;
+}
+
+/**
  * Deploy an EXTERNAL static site (a zip HITLOOP hosts, e.g. a Site Recreate
  * mirror) to Arweave via the EditVideos app: it downloads the zip, unpacks,
  * uploads every file wallet-funded, and creates an Arweave path manifest.
@@ -1397,7 +1407,7 @@ async function deployExternalSite({ zipUrl, siteId } = {}) {
   try {
     res = await fetch(`${base}/api/deploy-website`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: deployHeaders(),
       body: JSON.stringify({ zipUrl, siteId: siteId || null }),
     });
   } catch (err) {
@@ -1463,7 +1473,7 @@ async function deployWebsite({ websiteDir } = {}) {
   const base = requireApiBase();
   const res = await fetch(`${base}/api/deploy-website`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: deployHeaders(),
     body: JSON.stringify(websiteDir ? { websiteDir } : {}),
   });
   let data = null;
@@ -1574,6 +1584,7 @@ module.exports = {
   archiveFirebaseFile,
   estimateWebsiteDeploy,
   deployWebsite,
+  deployHeaders,
   deployExternalSite,
   updateArns,
   editvideosApiBase,
