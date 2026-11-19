@@ -506,3 +506,48 @@ test('preferCurated GATING: today held by a NON-BAI-EE curated draft, a fresh BA
   assert.deepEqual(await curRun(packages, held()), []);
   assert.deepEqual(await curRun(packages, held()), []);
 });
+
+// ---- preferCurated: open calendar-batch drafts hold their day ---------------------------------------------------------
+const batchOpen = (id, reviewOn, status = 'draft') => [id, { postId: `b-${id}`, status, scheduledAt: null, reviewOn }];
+const newRender = () => crv('rv-new', '2026-10-17T06:00:00Z');
+const curA = () => crv('rv-a', '2026-10-05T06:00:00Z', cur('approved', '2026-10-11T00:00:00Z'));
+
+test('preferCurated HOLD: approved curated calendar-batch draft today holds the ue slot despite a newer BAI-EE render', async () => {
+  assert.deepEqual(await curRun([curA(), newRender()], { openPosts: new Map([batchOpen('rv-a', TODAY)]) }), []);
+});
+
+test('preferCurated HOLD: a batched non-BAI-EE approved video (lastUsed set to its day) still holds the day', async () => {
+  const packages = [other('rv-x', '2026-10-10T06:00:00Z', cur('approved', '2026-10-11T00:00:00Z')), newRender()];
+  assert.deepEqual(await curRun(packages, { openPosts: new Map([batchOpen('rv-x', TODAY)]), lastUsed: new Map([['rv-x', TODAY]]) }), []);
+});
+
+test('preferCurated HOLD: a daily-fill draft that is also open is not double counted', async () => {
+  // perDay 2: the fill draft holds one slot; counting its open post again would leave none.
+  const open = new Map([['rv-a', { postId: 'p-rv-a', status: 'draft', scheduledAt: null, reviewOn: TODAY }]]);
+  const r = await curRun([curA(), newRender()], { fillPosts: [curFill('rv-a')], openPosts: open, lastUsed: new Map([['rv-a', TODAY]]) }, { perDay: 2 });
+  assert.deepEqual(r.map((x) => x.packageId), ['rv-new']);
+});
+
+test('preferCurated HOLD: an approved-status open entry holds the day', async () => {
+  assert.deepEqual(await curRun([curA(), newRender()], { openPosts: new Map([batchOpen('rv-a', TODAY, 'approved')]) }), []);
+});
+
+test('preferCurated HOLD: an open draft today of a NOT-approved package does not hold the day', async () => {
+  const pending = crv('rv-p', '2026-10-06T06:00:00Z', cur('pending', '2026-10-11T00:00:00Z'));
+  assert.deepEqual((await curRun([curA(), pending, newRender()], { openPosts: new Map([batchOpen('rv-p', TODAY)]) })).map((r) => r.packageId), ['rv-a']);
+});
+
+test('preferCurated HOLD: an approved open post in another bucket does not hold ue', async () => {
+  const nasApproved = pkg('nas-a', 'nas', cur('approved', '2026-10-11T00:00:00Z'));
+  assert.deepEqual((await curRun([curA(), nasApproved, newRender()], { openPosts: new Map([batchOpen('nas-a', TODAY)]) })).map((r) => r.packageId), ['rv-a']);
+});
+
+test('preferCurated HOLD: without preferCurated the same open curated draft does not hold the day', async () => {
+  assert.deepEqual((await curRun([curA(), newRender()], { openPosts: new Map([batchOpen('rv-a', TODAY)]) }, { preferCurated: false })).map((r) => r.packageId), ['rv-new']);
+});
+
+test('preferCurated HOLD: a curated open post on a different day does not affect today', async () => {
+  const r = await curRun([curA(), newRender()], { openPosts: new Map([batchOpen('rv-a', '2026-10-21')]) });
+  assert.equal(r.length, 1);
+  assert.equal(r[0].date, TODAY);
+});

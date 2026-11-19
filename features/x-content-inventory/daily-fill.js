@@ -171,7 +171,7 @@ const newestUnusedFirst = (a, b) => (a.prior ? 1 : 0) - (b.prior ? 1 : 0)
  *                              oldest approval first, and drops rejected ones from the pool; newestFirst ranks never-used items newest render first, then least recently used;
  *                              sameDay plans that track for `today` only (never days ahead) and, when a render newer than
  *                              every draft already holding today has arrived, adds it as today's draft anyway (not when a
- *                              held draft is already an approved curated pick)
+ *                              held draft, or an open calendar-batch draft dated to that day, is already an approved curated pick)
  *   excludePackageIds          package ids that are never picked (the item the owner just replaced)
  *   replace                    {bucketId} replace-one-item mode: only the track(s) listing that bucket are filled, rejected earlier
  *                              fills no longer hold their slot, and at most ONE row is planned. Normal fills leave this unset.
@@ -210,7 +210,8 @@ export function planDailyFill({
       .filter((p) => p?.id && trackForPackage(tracks, p)?.id === track.id && (!rule || (rule.preferCurated && curatedBypassEligible(p, lastOf)) || matchesRule(p, rule)) && (!rule?.preferCurated || p.curation?.state !== 'rejected')); // a rejected video is never picked and never feeds the sameDay override
     const buckets = new Set(track.buckets || []);
     const throwback = isThrowbackTrack(track);
-    const pkgById = throwback ? new Map((packages || []).filter((p) => p?.id).map((p) => [p.id, p])) : null;
+    const allById = new Map((packages || []).filter((p) => p?.id).map((p) => [p.id, p]));
+    const pkgById = throwback ? allById : null;
     // sameDay rule (daily mix): today only, never days ahead, so each morning's render leads that day's draft.
     const sameDay = !!rule?.sameDay;
     const renderedOf = (id) => String(pool.find((p) => p.id === id)?.renderedAt || '');
@@ -222,11 +223,16 @@ export function planDailyFill({
       const holding = fills.filter((f) => !(replace && f.status === 'rejected') && f.reviewOn === date && (f.fillKind === 'baseline' || f.fillKind === 'client-work') && buckets.has(f.bucketId)
         && (!throwback || throwbackOk(pkgById.get(f.packageId), md)));
       slots -= holding.length;
+      // preferCurated: an open (e.g. calendar-batch) draft of an approved curated video on this day holds the slot; packages, not pool, since a batched pick has left the pool.
+      const holdingIds = new Set(holding.map((f) => f.postId));
+      const curatedOpen = !rule?.preferCurated || !(openPosts instanceof Map) ? 0 : [...openPosts].filter(([id, o]) => o?.reviewOn === date && !holdingIds.has(o.postId)
+        && allById.get(id)?.curation?.state === 'approved' && buckets.has(bucketOfPackage(allById.get(id)))).length;
+      slots -= curatedOpen;
       if (kind === 'client-work') slots = Math.min(slots, 1 - (clientWorkDay.get(date) || 0));
       // sameDay: a newer render than every (non-rejected) draft holding today gets its own draft; the older drafts stay
       // for the owner to pass or delete. A rerun sees the new render already queued and adds nothing.
       // preferCurated: a held draft whose package is approved already is today's curated pick; a newer render must not add a second.
-      const heldCurated = !!rule?.preferCurated && holding.some((f) => f.status !== 'rejected' && (packages || []).find((p) => p?.id === f.packageId)?.curation?.state === 'approved'); // packages, not pool: a held non-BAI-EE curated pick is lastUsed today, so it has left the pool
+      const heldCurated = !!rule?.preferCurated && (curatedOpen > 0 || holding.some((f) => f.status !== 'rejected' && (packages || []).find((p) => p?.id === f.packageId)?.curation?.state === 'approved')); // packages, not pool: a held non-BAI-EE curated pick is lastUsed today, so it has left the pool
       if (sameDay && slots <= 0 && !heldCurated) {
         const heldAt = holding.filter((f) => f.status !== 'rejected').map((f) => renderedOf(f.packageId));
         const newest = pool.filter((p) => !used.has(p.id) && !lastOf(p.id) && !openOf(p.id)).map((p) => String(p.renderedAt || '')).sort().pop() || '';
