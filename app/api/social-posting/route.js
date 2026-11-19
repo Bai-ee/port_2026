@@ -351,6 +351,17 @@ export async function POST(request) {
       return json({ ok: true, post: { id: row.id, revision: row.revision, status: row.status }, brief: videoBriefView(row), render });
     }
 
+    // Panel poll while a render runs: attaches a finished video right away (no wait for the cron tick), returns status.
+    if (action === 'video-brief-status') {
+      await gatePilotRow(context, decoded, body.postId);
+      const { attachIfDone } = await import('../../../features/brief-video/worker.js');
+      const out = await attachIfDone({ db: require('../../../api/_lib/firebase-admin.cjs').adminDb, clientId: context.clientId, postId: String(body.postId || '') });
+      if (!out.ok) return json({ error: out.error }, out.status || 400);
+      const p = out.post;
+      return json({ ok: true, attached: Boolean(out.attached?.attached), videoProcessing: out.videoProcessing,
+        post: { id: p.id, revision: p.revision, status: p.status, content: p.content, mediaUrl: p.mediaUrl || null, mediaType: p.mediaType || null, posterUrl: p.posterUrl || null, mediaJobId: p.mediaJobId || null, videoBrief: p.videoBrief || null, videoBriefMeta: p.videoBriefMeta || null } });
+    }
+
     // draft -> approved (stamps reviewedAt/reviewedBy). Does not schedule or publish.
     if (action === 'approve-draft') {
       requirePilotOwner(context, decoded);
