@@ -21,10 +21,20 @@ export default function VideoBriefV2Editor({ row, callSocial, editable, onRowPat
   const [msg, setMsg] = useState(null);
   const [frameNotes, setFrameNotes] = useState({});
   const [reviewNotes, setReviewNotes] = useState('');
+  const [episodeUrl, setEpisodeUrl] = useState(null);
   useEffect(() => { setF(initial); setFrameNotes({}); setReviewNotes(''); }, [initial]);
 
   const savedStatus = row?.videoBriefMeta?.status || null;
   const storyboard = row?.videoBriefMeta?.storyboard || null;
+  const episodeKey = storyboard?.episode?.outlineHash || null;
+  // The preview URL is derived server-side from Storage (the stored episode carries no URL).
+  useEffect(() => {
+    setEpisodeUrl(null);
+    if (!episodeKey || !row?.id) return undefined;
+    let live = true;
+    callSocial({ action: 'video-brief-get', postId: row.id }).then((res) => { if (live) setEpisodeUrl(res?.brief?.episodeVideoUrl || null); }).catch(() => {});
+    return () => { live = false; };
+  }, [episodeKey, row?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const dirty = JSON.stringify(f) !== JSON.stringify(initial);
   const missing = useMemo(() => formMissing(f), [f]);
   const total = formTotalSeconds(f);
@@ -38,7 +48,7 @@ export default function VideoBriefV2Editor({ row, callSocial, editable, onRowPat
       const res = await callSocial({ ...body, postId: row.id, expectedRevision: row.revision ?? null });
       if (!res?.ok) throw new Error(res?.error || 'Save failed.');
       const b = res.brief || {};
-      onRowPatch?.({ revision: res.post?.revision ?? row.revision, videoBrief: b.videoBrief || null, videoBriefMeta: b.meta || null });
+      onRowPatch?.({ revision: res.post?.revision ?? row.revision, videoBrief: b.videoBrief || null, videoBriefMeta: b.meta || null, ...(res.next === 'video-attached' ? { mediaUrl: b.mediaUrl || null, posterUrl: b.posterUrl || null, mediaType: 'video' } : {}) });
       setMsg({ tone: 'ok', text: afterOk ? afterOk(res) : okText });
     } catch (e) {
       setMsg({ tone: 'bad', text: friendlyBriefReasons(e?.message || 'Save failed.') });
@@ -51,6 +61,7 @@ export default function VideoBriefV2Editor({ row, callSocial, editable, onRowPat
   const review = (decision) => run(
     { action: 'video-brief-storyboard-review', decision, notes: reviewNotes.trim(), frameNotes: Object.fromEntries(Object.entries(frameNotes).filter(([, v]) => String(v).trim())) },
     decision === 'approve' ? 'Storyboard approved.' : 'Changes requested. The storyboard goes back to the Director.',
+    decision === 'approve' ? (res) => (res.next === 'video-attached' ? 'Storyboard approved. The video is on the post.' : 'Storyboard approved.') : undefined,
   );
 
   const ro = !editable;
@@ -180,6 +191,12 @@ export default function VideoBriefV2Editor({ row, callSocial, editable, onRowPat
             <pre id="video-brief-v2-storyboard-outline-text" className="pe-v2-outline">{storyboard.outline}</pre>
           </details>
         ) : null}
+        {storyboard?.episode ? (
+          <div id="storyboard-episode-preview-panel" data-section="storyboard-episode-preview">
+            {episodeUrl ? <video id="storyboard-episode-preview-video" src={episodeUrl} controls playsInline preload="metadata" style={{ width: '100%', maxWidth: 360, borderRadius: 8 }} /> : <p id="storyboard-episode-preview-loading" className="pe-muted">Loading the rendered video preview...</p>}
+            <p id="storyboard-episode-preview-caption" className="pe-muted">Rendered episode {storyboard.episode.episodeId}. Approving puts this video on the post.</p>
+          </div>
+        ) : null}
         {storyboard?.frames?.length ? (
           <div id="video-brief-v2-storyboard-frames-grid" className="pe-v2-frames">
             {storyboard.frames.map((fr, i) => (
@@ -201,7 +218,7 @@ export default function VideoBriefV2Editor({ row, callSocial, editable, onRowPat
               <textarea id="video-brief-v2-storyboard-review-notes" className="pe-text pe-v2-input" rows={3} maxLength={2000} value={reviewNotes} readOnly={!canReview} onChange={(e) => { setReviewNotes(e.target.value); setMsg(null); }} />
             </label>
             <div id="video-brief-v2-storyboard-actions-row" className="pe-vb-row">
-              <button type="button" id="video-brief-v2-storyboard-approve-btn" className="pe-btn pe-btn-ghost" disabled={!canReview} onClick={() => review('approve')}>Approve storyboard</button>
+              <button type="button" id="video-brief-v2-storyboard-approve-btn" className="pe-btn pe-btn-ghost" disabled={!canReview} onClick={() => review('approve')}>{storyboard.episode ? 'Approve storyboard + put video on post' : 'Approve storyboard'}</button>
               <button type="button" id="video-brief-v2-storyboard-changes-btn" className="pe-btn pe-btn-ghost" disabled={!canReview || !hasReviewNotes} onClick={() => review('changes')}>Request changes</button>
             </div>
           </>

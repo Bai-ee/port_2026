@@ -334,7 +334,8 @@ export function applyStoryboardSet(meta, input = {}, { by = null, now = new Date
     return { label, url: httpsUrl(`frames[${i + 1}].url`, f.url), ...(note ? { note } : {}) };
   });
   if (!outline && !frames.length) throw bad('A storyboard needs an outline or at least one frame.');
-  return { ...meta, storyboard: { status: 'ready', ...(outline ? { outline } : {}), frames, ...(notes ? { notes } : {}), updatedAt: now, updatedBy: by ? String(by).slice(0, 200) : null } };
+  // episode: null is explicit: the post write is merge:true, so a stale episode from an earlier storyboard would otherwise survive.
+  return { ...meta, storyboard: { status: 'ready', episode: null, ...(outline ? { outline } : {}), frames, ...(notes ? { notes } : {}), updatedAt: now, updatedBy: by ? String(by).slice(0, 200) : null } };
 }
 
 /** Owner decision on a ready storyboard: approve, or request changes (notes and/or per-frame notes by 0-based index). */
