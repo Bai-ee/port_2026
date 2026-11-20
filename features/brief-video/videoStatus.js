@@ -4,6 +4,7 @@
 import { DAILY_BRIEF_VIDEO_CLIENTS, BRIEF_VIDEO_JOBS, MAX_ATTEMPTS, LOOKAHEAD_DAYS, howtoEnabled } from './clients.js';
 import { briefOfPost, BRIEF_MARKER_RE } from './brief.js';
 import { addDaysIso, HOLD_RE } from './jobs.js';
+import { videoReviewChip } from './video-review.js';
 import { panelBriefBlocksRender, panelBriefNeedsAuthoring } from './brief-fields.js';
 
 export const IN_CHUNK = 30;
@@ -31,6 +32,10 @@ const newestFirst = (a, b) => (Number(b.attempt || 0) - Number(a.attempt || 0)) 
  */
 export function classifyVideoProcessing(post, jobs = [], { today, howto = false } = {}) {
   if (!hasVideoBrief(post)) return null;
+  // Owner feedback loop on a storyboard episode video (derived from videoReview + storyboard.status; never a stored videoBriefStatus).
+  const chip = post.status === 'draft' && String(post.mediaJobId || '').startsWith('cal_') ? videoReviewChip(post) : null;
+  if (chip === 'changes') return out('revision-requested', 'Revision requested', { detail: 'waiting for the Director' });
+  if (chip === 'ready') return out('revision-ready', 'Revision ready', { detail: 'review the new version' });
   if (isAttached(post)) {
     const src = post.mediaMetadata?.source;
     return out('attached', 'Video attached', { detail: src === 'cq-howto' ? 'how-to' : src === 'cq-briefcut' ? 'brief cut' : null, jobId: post.mediaJobId });

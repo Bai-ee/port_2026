@@ -6,6 +6,8 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { friendlyBriefReasons } from './post-editor-model.js';
+import VideoReviewPanel from './VideoReviewPanel.jsx';
+import { episodeIsOnPost, versionOfEpisode } from '../../../features/brief-video/video-review.js';
 import {
   BEAT_COLUMNS, STORYBOARD_LABEL, V2_BEAT_SECONDS_MAX, V2_TREATMENTS, beatsCap, secondsCap, V2_CELL_MAX, V2_POST_COPY_MAX, V2_SHORT_MAX, V2_TEXT_MAX,
   addBeat, formFromV2, formMissing, formTotalSeconds, moveBeat, overBudget, removeBeat, setBeatCell, toV2Body,
@@ -48,7 +50,7 @@ export default function VideoBriefV2Editor({ row, callSocial, editable, onRowPat
       const res = await callSocial({ ...body, postId: row.id, expectedRevision: row.revision ?? null });
       if (!res?.ok) throw new Error(res?.error || 'Save failed.');
       const b = res.brief || {};
-      onRowPatch?.({ revision: res.post?.revision ?? row.revision, videoBrief: b.videoBrief || null, videoBriefMeta: b.meta || null, ...(res.next === 'video-attached' ? { mediaUrl: b.mediaUrl || null, posterUrl: b.posterUrl || null, mediaType: 'video' } : {}) });
+      onRowPatch?.({ revision: res.post?.revision ?? row.revision, videoBrief: b.videoBrief || null, videoBriefMeta: b.meta || null, ...(res.next === 'video-attached' ? { mediaUrl: b.mediaUrl || null, posterUrl: b.posterUrl || null, mediaType: 'video', mediaJobId: b.mediaJobId || null, mediaStoragePath: b.mediaStoragePath || null, mediaMetadata: b.mediaMetadata || null } : {}) });
       setMsg({ tone: 'ok', text: afterOk ? afterOk(res) : okText });
     } catch (e) {
       setMsg({ tone: 'bad', text: friendlyBriefReasons(e?.message || 'Save failed.') });
@@ -64,6 +66,9 @@ export default function VideoBriefV2Editor({ row, callSocial, editable, onRowPat
     decision === 'approve' ? (res) => (res.next === 'video-attached' ? 'Storyboard approved. The video is on the post.' : 'Storyboard approved.') : undefined,
   );
 
+  // A new version is ready while a video is already on the post: show current vs new.
+  const replacing = Boolean(storyboard?.status === 'ready' && storyboard?.episode && row?.mediaUrl && !episodeIsOnPost(row, storyboard.episode));
+  const newV = replacing ? versionOfEpisode(row.videoBriefMeta, storyboard.episode) : null;
   const ro = !editable;
   const canReview = editable && !busy && !dirty && storyboard?.status === 'ready';
   const hasReviewNotes = reviewNotes.trim() || Object.values(frameNotes).some((v) => String(v).trim());
@@ -193,8 +198,17 @@ export default function VideoBriefV2Editor({ row, callSocial, editable, onRowPat
         ) : null}
         {storyboard?.episode ? (
           <div id="storyboard-episode-preview-panel" data-section="storyboard-episode-preview">
-            {episodeUrl ? <video id="storyboard-episode-preview-video" src={episodeUrl} controls playsInline preload="metadata" style={{ width: '100%', maxWidth: 360, borderRadius: 8 }} /> : <p id="storyboard-episode-preview-loading" className="pe-muted">Loading the rendered video preview...</p>}
-            <p id="storyboard-episode-preview-caption" className="pe-muted">Rendered episode {storyboard.episode.episodeId}. Approving puts this video on the post.</p>
+            {replacing ? (
+              <div id="storyboard-episode-compare-panel" data-section="storyboard-episode-compare" className="pe-vb-row">
+                <figure id="storyboard-episode-compare-current"><figcaption className="pe-muted">Current</figcaption>
+                  <video id="storyboard-episode-compare-current-video" src={row.mediaUrl} controls playsInline preload="metadata" style={{ width: '100%', maxWidth: 240, borderRadius: 8 }} />
+                </figure>
+                <figure id="storyboard-episode-compare-new"><figcaption className="pe-muted">New v{String(newV).padStart(2, '0')}</figcaption>
+                  {episodeUrl ? <video id="storyboard-episode-preview-video" src={episodeUrl} controls playsInline preload="metadata" style={{ width: '100%', maxWidth: 240, borderRadius: 8 }} /> : <p id="storyboard-episode-preview-loading" className="pe-muted">Loading the new version...</p>}
+                </figure>
+              </div>
+            ) : episodeUrl ? <video id="storyboard-episode-preview-video" src={episodeUrl} controls playsInline preload="metadata" style={{ width: '100%', maxWidth: 360, borderRadius: 8 }} /> : <p id="storyboard-episode-preview-loading" className="pe-muted">Loading the rendered video preview...</p>}
+            <p id="storyboard-episode-preview-caption" className="pe-muted">Rendered episode {storyboard.episode.episodeId}. Approving puts this video on the post{replacing ? ' and replaces the current one' : ''}.</p>
           </div>
         ) : null}
         {storyboard?.frames?.length ? (
@@ -218,12 +232,13 @@ export default function VideoBriefV2Editor({ row, callSocial, editable, onRowPat
               <textarea id="video-brief-v2-storyboard-review-notes" className="pe-text pe-v2-input" rows={3} maxLength={2000} value={reviewNotes} readOnly={!canReview} onChange={(e) => { setReviewNotes(e.target.value); setMsg(null); }} />
             </label>
             <div id="video-brief-v2-storyboard-actions-row" className="pe-vb-row">
-              <button type="button" id="video-brief-v2-storyboard-approve-btn" className="pe-btn pe-btn-ghost" disabled={!canReview} onClick={() => review('approve')}>{storyboard.episode ? 'Approve storyboard + put video on post' : 'Approve storyboard'}</button>
+              <button type="button" id="video-brief-v2-storyboard-approve-btn" className="pe-btn pe-btn-ghost" disabled={!canReview} onClick={() => review('approve')}>{replacing ? `Approve v${String(newV).padStart(2, '0')} + replace video` : storyboard.episode ? 'Approve storyboard + put video on post' : 'Approve storyboard'}</button>
               <button type="button" id="video-brief-v2-storyboard-changes-btn" className="pe-btn pe-btn-ghost" disabled={!canReview || !hasReviewNotes} onClick={() => review('changes')}>Request changes</button>
             </div>
           </>
         ) : null}
       </section>
+      <VideoReviewPanel row={row} callSocial={callSocial} editable={editable} onRowPatch={onRowPatch} />
       {msg ? <p id="video-brief-v2-message" className={msg.tone === 'bad' ? 'pe-over' : 'pe-muted'} role={msg.tone === 'bad' ? 'alert' : 'status'}>{msg.text}</p> : null}
       <p className="pe-muted">Saving never changes the post copy, approval or schedule. Approving a v2 brief asks for a storyboard; it does not render a video.</p>
     </div>

@@ -241,7 +241,7 @@ function StatusLine({ id, tone = 'info', tag, children, role }) {
 }
 
 // CQ video-brief drafts: read-only render status next to the brief text (row.videoProcessing, features/brief-video/videoStatus.js).
-const VIDEO_TONE = { attached: 'ok', failed: 'bad', invalid: 'bad', 'not-attached': 'warn', hold: 'warn', waiting: 'warn', skipped: 'warn', off: 'warn' };
+const VIDEO_TONE = { 'revision-requested': 'warn', 'revision-ready': 'info', attached: 'ok', failed: 'bad', invalid: 'bad', 'not-attached': 'warn', hold: 'warn', waiting: 'warn', skipped: 'warn', off: 'warn' };
 function VideoStatusLine({ postId, vp }) {
   if (!vp?.label) return null;
   return (
