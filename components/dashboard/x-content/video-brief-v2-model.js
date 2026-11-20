@@ -23,7 +23,7 @@ export const emptyForm = () => ({
   format: '', treatment: '', cast: '', bubbles: '', lesson: '', host: '', focus: '', angle: '',
   posterIdea: '', posterHero: '', posterBanner: '', posterDateLine: '', posterBubble: '',
   hero: '', theme: '', beats: [emptyBeat(), emptyBeat(), emptyBeat()],
-  payoff: '', end: '', mustNot: '', voiceMode: '', narrationLines: '', needs: '', postCopy: '',
+  payoff: '', end: '', mustNot: '', voiceMode: '', voiceReason: '', narrationLines: '', needs: '', postCopy: '',
 });
 
 const s = (v) => (v == null ? '' : String(v));
@@ -36,7 +36,7 @@ export function formFromV2(v2) {
     posterIdea: s(v2.poster?.idea), posterHero: s(v2.poster?.hero), posterBanner: s(v2.poster?.banner), posterDateLine: s(v2.poster?.dateLine), posterBubble: s(v2.poster?.bubble),
     hero: s(v2.hero), theme: s(v2.theme),
     beats: (Array.isArray(v2.beats) && v2.beats.length ? v2.beats : [emptyBeat()]).map((b) => ({ ...emptyBeat(), ...Object.fromEntries(Object.entries(b || {}).map(([k, v]) => [k, s(v)])) })),
-    payoff: s(v2.payoff), end: s(v2.end), mustNot: s(v2.mustNot), voiceMode: s(v2.voiceMode),
+    payoff: s(v2.payoff), end: s(v2.end), mustNot: s(v2.mustNot), voiceMode: s(v2.voiceMode), voiceReason: s(v2.voiceReason),
     narrationLines: (v2.narrationLines || []).join('\n'), needs: (v2.needs || []).join('\n'), postCopy: s(v2.postCopy),
   };
 }
@@ -51,7 +51,7 @@ export function toV2Body(f) {
     poster: { idea: f.posterIdea, hero: f.posterHero, banner: f.posterBanner, dateLine: f.posterDateLine, bubble: f.posterBubble },
     hero: f.hero, theme: f.theme,
     beats: f.beats.map((b) => ({ purpose: b.purpose, screen: b.screen, camera: b.camera, cursor: b.cursor, response: b.response, caption: b.caption, transition: b.transition, seconds: n(b.seconds) })),
-    payoff: f.payoff, end: f.end, mustNot: f.mustNot, voiceMode: f.voiceMode,
+    payoff: f.payoff, end: f.end, mustNot: f.mustNot, voiceMode: f.voiceMode, voiceReason: f.voiceReason,
     narrationLines: lines(f.narrationLines), needs: lines(f.needs), postCopy: f.postCopy,
   };
 }
@@ -64,7 +64,7 @@ export const overBudget = (f) => formTotalSeconds(f) > secondsCap(f);
 /** Fields still empty for 'ready' (same rule as the server, shown live). */
 export const formMissing = (f) => v2Missing({
   format: f.format, treatment: f.treatment, cast: lines(f.cast), bubbles: lines(f.bubbles), lesson: f.lesson, angle: f.angle, poster: { banner: f.posterBanner, idea: f.posterIdea, hero: f.posterHero }, hero: f.hero, theme: f.theme,
-  beats: f.beats, payoff: f.payoff, end: f.end, voiceMode: f.voiceMode, narrationLines: lines(f.narrationLines),
+  beats: f.beats, payoff: f.payoff, end: f.end, voiceMode: f.voiceMode, voiceReason: f.voiceReason, needs: lines(f.needs), narrationLines: lines(f.narrationLines),
 });
 /** Soft warnings for the form (same rule as the server's v2Warnings). */
 export const formWarnings = (f) => v2Warnings({ format: f.format, poster: { hero: f.posterHero }, beats: f.beats, voiceMode: f.voiceMode, narrationLines: lines(f.narrationLines) });

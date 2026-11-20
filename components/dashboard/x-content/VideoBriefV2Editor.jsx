@@ -8,6 +8,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { friendlyBriefReasons } from './post-editor-model.js';
 import VideoReviewPanel from './VideoReviewPanel.jsx';
 import { episodeIsOnPost, versionOfEpisode } from '../../../features/brief-video/video-review.js';
+import { directorNotesOf } from '../../../features/brief-video/director-notes.js';
 import {
   BEAT_COLUMNS, STORYBOARD_LABEL, V2_BEAT_SECONDS_MAX, V2_TREATMENTS, beatsCap, secondsCap, V2_CELL_MAX, V2_POST_COPY_MAX, V2_SHORT_MAX, V2_TEXT_MAX, V2_POSTER_HERO_MAX,
   addBeat, formFromV2, formMissing, formTotalSeconds, formWarnings, moveBeat, overBudget, removeBeat, setBeatCell, toV2Body,
@@ -29,6 +30,7 @@ export default function VideoBriefV2Editor({ row, callSocial, editable, onRowPat
 
   const savedStatus = row?.videoBriefMeta?.status || null;
   const storyboard = row?.videoBriefMeta?.storyboard || null;
+  const directorNotes = directorNotesOf(row);
   const episodeKey = storyboard?.episode?.outlineHash || null;
   // The preview URL is derived server-side from Storage (the stored episode carries no URL).
   useEffect(() => {
@@ -89,6 +91,17 @@ export default function VideoBriefV2Editor({ row, callSocial, editable, onRowPat
   return (
     <div id="video-brief-v2-editor" className="pe-vb-body" data-section="video-brief-v2">
       <p className="pe-muted">Creative Brief v2: the structured brief the video Director works from. Every beat shows something happening on a real game screen.</p>
+      {directorNotes ? (
+        <section id="video-brief-director-notes-panel" className="pe-v2-fieldset" data-section="video-brief-director-notes">
+          <div id="video-brief-director-notes-header-row" className="pe-vb-row">
+            <strong>Director notes</strong>
+            <span id="video-brief-director-notes-status-chip" className="pe-vb-pill">{directorNotes.status === 'revise' ? 'Revise' : 'Sufficient'}</span>
+          </div>
+          {directorNotes.notes ? <p id="video-brief-director-notes-text" className="pe-muted">{directorNotes.notes}</p> : null}
+          {directorNotes.items.length ? <ul id="video-brief-director-notes-items-list">{directorNotes.items.map((x, i) => <li key={i}>{x}</li>)}</ul> : null}
+          {directorNotes.at || directorNotes.by ? <p id="video-brief-director-notes-meta" className="pe-muted">{[directorNotes.by, directorNotes.at].filter(Boolean).join(' · ')}</p> : null}
+        </section>
+      ) : null}
       <div id="video-brief-v2-format-row" className="pe-vb-row">
         <label className="pe-vb-field" htmlFor="video-brief-v2-format">Format
           <select id="video-brief-v2-format" className="pe-input" value={f.format} disabled={ro} onChange={set('format')}>
@@ -101,6 +114,7 @@ export default function VideoBriefV2Editor({ row, callSocial, editable, onRowPat
           </select>
         </label>
       </div>
+      {f.voiceMode && f.voiceMode !== 'narrated' ? text('video-brief-v2-voice-reason', 'Voice reason (why not narrated; required)', 'voiceReason') : null}
       {f.format === 'promo' ? (
         <div id="video-brief-v2-promo-panel" className="pe-v2-grid">
           <label className="pe-vb-field" htmlFor="video-brief-v2-treatment">Treatment

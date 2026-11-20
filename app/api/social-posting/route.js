@@ -1,6 +1,6 @@
 import { buildBriefContext } from '../../../features/brief-video/brief-context.js';
 import { briefWarnings } from '../../../features/brief-video/brief.js';
-import { videoBriefView, isV2Brief } from '../../../features/brief-video/brief-fields.js';
+import { videoBriefView, isV2Brief, postsNeedingRevision } from '../../../features/brief-video/brief-fields.js';
 import { episodeAlreadyAttached } from '../../../features/brief-video/attach.js';
 import { postCopyDrift } from '../../../features/brief-video/brief-v2.js';
 import { authorPostBrief } from '../../../features/brief-video/brief-author.js';
@@ -363,6 +363,11 @@ export async function POST(request) {
       if (postId) await gatePilotRow(context, decoded, postId);
       const out = await buildBriefContext({ clientId: context.clientId, postId, readPost: getSocialPost, readPosts: (cid, n) => readSocialQueue(cid, { limit: n }), readJobs: readRecentBriefJobs });
       return json(out);
+    }
+    // Read only: this client's posts the Director marked directorNotes.status 'revise' (bounded newest-first read, never a scan).
+    if (action === 'video-brief-revise-list') {
+      const posts = await readSocialQueue(context.clientId, { limit: 200 });
+      return json({ ok: true, use: 'For each post: fix every directorNotes.items entry in the v2 brief and re-save with queue.post.video-brief.save. The Director re-reviews; saving does not clear the notes.', posts: postsNeedingRevision(posts) });
     }
     if (action === 'video-brief-save' || action === 'video-brief-approve') {
       await gatePilotRow(context, decoded, body.postId);

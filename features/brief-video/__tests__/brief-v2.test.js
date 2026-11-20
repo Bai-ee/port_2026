@@ -9,7 +9,7 @@ import { renderNow } from '../worker.js';
 import { getAction, validateAction } from '../../x-strategy/agent/action-registry.js';
 
 const CQ = 'paradice-dbBQCHUX';
-const beat = (n) => ({ purpose: `purpose ${n}`, screen: `Valdara lava map, state ${n}`, camera: 'push in', cursor: 'click the castle', response: 'the window opens', caption: `CAPTION ${n}`, transition: 'continuous push', seconds: 5 });
+const beat = (n) => ({ purpose: `purpose ${n}`, screen: `gravitax.arrival: Valdara lava map, state ${n}`, camera: 'push in', cursor: 'click the castle', response: 'the window opens', caption: `CAPTION ${n}`, transition: 'continuous push', seconds: 5 });
 const full = (over = {}) => ({
   format: 'feature', angle: 'Readiness, not the fight.', poster: { idea: 'Gravitax left', hero: 'gravitax, lava map, idle, facing camera', banner: 'WHICH FIGHT FIRST?', dateLine: 'TITANS LAND DEC 18', bubble: 'Is your squad ready?' },
   hero: 'The ready squad is picked.', theme: 'Check before you swing.', beats: [beat(1), beat(2), beat(3), beat(4)],
@@ -61,7 +61,7 @@ test('ready gating: a draft may be incomplete, ready / approved are refused with
   const sparse = { format: '', beats: [{ purpose: '', screen: '', camera: '', cursor: '', response: '', caption: '', transition: '', seconds: 3 }], poster: {} };
   const d = m({}, { v2: sparse, status: 'draft' });
   assert.equal(d.videoBriefMeta.status, 'draft');
-  assert.throws(() => m({}, { v2: sparse, status: 'ready' }), (e) => e.status === 400 && /Missing: .*format.*angle.*poster\.banner.*hero.*theme.*beats \(at least 3.*payoff.*end.*voiceMode/.test(e.message) && Array.isArray(e.missing));
+  assert.throws(() => m({}, { v2: sparse, status: 'ready' }), (e) => e.status === 400 && /Missing: .*format.*angle.*hero.*theme.*beats \(at least 3.*payoff.*poster\.banner.*poster\.hero.*end.*narrationLines/.test(e.message) && Array.isArray(e.missing));
   assert.throws(() => m({}, { v2: sparse, status: 'approved' }), /Missing/);
   assert.ok(v2Missing(normalizeV2(full({ beats: [beat(1), { ...beat(2), screen: '' }, { ...beat(3), cursor: '', response: '' }, { ...beat(4), caption: '' }] }))).join().includes('beats[2].screen'));
   assert.deepEqual(v2Missing(normalizeV2(full())), []);
@@ -190,7 +190,7 @@ test('MCP: queue.post.video-brief.save carries the v2 schema', () => {
   assert.match(getAction('queue.post.video-brief.get').description, /storyboard/);
   assert.ok(!a.args.required.includes('template'));
   // every v2 schema key is one normalizeV2 reads back
-  const n = normalizeV2(full({ lesson: 'L', host: 'mayor', focus: 'f', treatment: 'faceOff', cast: ['A'], bubbles: ['b'] }));
+  const n = normalizeV2(full({ lesson: 'L', host: 'mayor', focus: 'f', treatment: 'faceOff', cast: ['A'], bubbles: ['b'], voiceReason: 'r' }));
   for (const k of Object.keys(v2.properties)) assert.ok(k in n, `normalizeV2 drops ${k}`);
 });
 
@@ -207,7 +207,7 @@ test('template doc: the worked example validates, is ready, and the field table 
 });
 
 test('promo format: treatment, cast, bubbles, 1-3 beats, 15-23 s, own ready rule', () => {
-  const promo = (o = {}) => ({ format: 'promo', treatment: 'faceOff', cast: ['Gravitax', 'Axiom'], bubbles: ['Ready?', 'Always.'], poster: { idea: 'clash', banner: 'WHO WINS' }, theme: 't', beats: [{ ...beat(1), cursor: 'none', seconds: 9 }, { ...beat(2), cursor: 'none', seconds: 8 }], end: 'none', voiceMode: 'music', ...o });
+  const promo = (o = {}) => ({ format: 'promo', treatment: 'faceOff', cast: ['Gravitax', 'Axiom'], bubbles: ['Ready?', 'Always.'], poster: { idea: 'clash', banner: 'WHO WINS', hero: 'gravitax, lava map, idle, facing camera' }, theme: 't', beats: [{ ...beat(1), cursor: 'none', seconds: 9 }, { ...beat(2), cursor: 'none', seconds: 8 }], end: 'none', voiceMode: 'music', voiceReason: 'silent poster', ...o });
   const n = normalizeV2(promo());
   assert.deepEqual(v2Missing(n), []);
   assert.equal(n.treatment, 'faceOff'); assert.deepEqual(n.bubbles, ['Ready?', 'Always.']);
@@ -219,7 +219,7 @@ test('promo format: treatment, cast, bubbles, 1-3 beats, 15-23 s, own ready rule
   const short = v2Missing(normalizeV2(promo({ beats: [{ ...beat(1), seconds: 5 }] }))).join();
   assert.match(short, /15-23/);
   const bare = v2Missing(normalizeV2({ format: 'promo', poster: {}, beats: [{ ...beat(1), seconds: 15 }] })).join();
-  assert.match(bare, /treatment.*cast.*poster\.banner.*bubbles or hero.*theme.*end.*voiceMode/);
+  assert.match(bare, /treatment.*cast.*bubbles or hero.*theme.*poster\.banner.*poster\.hero.*end/);
   assert.doesNotMatch(bare, /angle|payoff/);
   assert.throws(() => m({}, { v2: { format: 'promo', poster: {}, beats: [beat(1)] }, status: 'ready' }), /Missing: .*treatment/);
   assert.equal(m({}, { v2: promo(), status: 'ready' }).videoBriefMeta.status, 'ready');
@@ -286,7 +286,7 @@ test('route wires video-brief-context', () => {
 
 // ── READY gate hardening (2026-11-20): the brief writer cannot dodge the episode rules ─────────────────────────────────────
 const gate = (v2, opts) => v2Missing(normalizeV2(v2), opts).join(' | ');
-const promoOf = (o = {}) => ({ format: 'promo', treatment: 'heroRise', cast: ['Axiom'], bubbles: ['Ready?'], poster: { idea: 'Axiom rises', banner: 'TITANS RISE' }, hero: 'Axiom rises', theme: 't', beats: [{ ...beat(1), screen: 'Axiom background with the wordmark', cursor: 'none', response: 'Axiom rises from below', seconds: 9 }, { ...beat(2), screen: 'same background, date banner', cursor: 'none', seconds: 8 }], end: 'none', voiceMode: 'music', ...o });
+const promoOf = (o = {}) => ({ format: 'promo', treatment: 'heroRise', cast: ['Axiom'], bubbles: ['Ready?'], poster: { idea: 'Axiom rises', banner: 'TITANS RISE', hero: 'mayor, inside the town, idle, facing camera' }, hero: 'Axiom rises', theme: 't', beats: [{ ...beat(1), screen: 'titans.wake-on-map: Axiom background with the wordmark', cursor: 'none', response: 'Axiom rises from below', seconds: 9 }, { ...beat(2), screen: 'titans.window: same background, date banner', cursor: 'none', seconds: 8 }], end: 'none', voiceMode: 'music', voiceReason: 'silent poster, music bed only', ...o });
 
 test('gate 1: every beat needs camera, transition, cursor or response; poster.idea required (all formats)', () => {
   assert.deepEqual(v2Missing(normalizeV2(full())), []);
@@ -318,7 +318,7 @@ test('gate 2: feature/guide need 20-30 s, 2+ real cursor actions, no hold-only b
   assert.deepEqual(v2Missing(normalizeV2(promoOf({ beats: [{ ...promoOf().beats[0], response: 'the poster glides' }, promoOf().beats[1]] }))), []);
 });
 
-test('gate 3: promo treatment, cast characters, faceOff 2, mapConverge World Bank, no episode scene ids', () => {
+test('gate 3: promo treatment, cast characters, faceOff 2, mapConverge World Bank, promo beats are library scenes', () => {
   assert.match(gate(promoOf({ cast: ['Vault'] })), /cast for heroRise must be game characters.*"Vault" is not a character/);
   assert.match(gate(promoOf({ treatment: 'hostPoster', cast: ['Town Hall'] })), /cast for hostPoster must be game characters/);
   assert.deepEqual(v2Missing(normalizeV2(promoOf({ treatment: 'hostPoster', cast: ['Mayor'] }))), []);
@@ -328,8 +328,7 @@ test('gate 3: promo treatment, cast characters, faceOff 2, mapConverge World Ban
   assert.match(gate(promoOf({ treatment: 'faceOff', cast: ['Gravitax', 'Axiom', 'Mayor'] })), /faceOff needs exactly 2/);
   assert.deepEqual(v2Missing(normalizeV2(promoOf({ treatment: 'mapConverge', cast: ['World Bank'] }))), []);
   assert.match(gate(promoOf({ treatment: 'mapConverge', cast: ['Vault'] })), /mapConverge target must be "World Bank"/);
-  assert.match(gate(promoOf({ beats: [{ ...promoOf().beats[0], screen: 'titans.mayor-dock the Mayor on his dock' }, promoOf().beats[1]] })), /feature\/guide scene "titans\.mayor-dock"/);
-  assert.match(gate(promoOf({ beats: [{ ...promoOf().beats[0], screen: 'titans.wake-on-map' }, promoOf().beats[1]] })), /titans\.wake-on-map/);
+  assert.deepEqual(v2Missing(normalizeV2(promoOf({ beats: [{ ...promoOf().beats[0], screen: 'titans.mayor-dock the Mayor on his dock' }, promoOf().beats[1]] }))), [], 'a promo beat is a library scene too');
   assert.deepEqual(v2Missing(normalizeV2(promoOf({ treatment: 'statCard', cast: ['Vault'] }))), [], 'statCard has no character rule');
 });
 
@@ -398,7 +397,7 @@ test('chapter is an accepted format (34 s cap) with no recipe-specific gate', ()
   assert.deepEqual(v2Missing(normalizeV2(full({ format: 'chapter', narrationLines: ['a', 'b', 'c', 'd', 'e'] }))), []);
 });
 
-test('ready gate on all non-promo formats: poster.hero and narration count (beats + 1)', () => {
+test('ready gate on every format incl. promo: poster.hero and narration count (beats + 1)', () => {
   for (const format of ['feature', 'chapter']) {
     assert.deepEqual(v2Missing(normalizeV2(full({ format }))), [], `${format} passes`);
     const noHero = v2Missing(normalizeV2(full({ format, poster: { idea: 'x', banner: 'y' } })));
@@ -406,20 +405,19 @@ test('ready gate on all non-promo formats: poster.hero and narration count (beat
     const short = v2Missing(normalizeV2(full({ format, narrationLines: ['one', 'two', 'three', 'four'] })));
     assert.ok(short.some((x) => x.startsWith('narrationLines') && x.includes('5 needed')), short.join(' | '));
   }
-  assert.deepEqual(v2Missing(normalizeV2(full({ voiceMode: 'caption-only', narrationLines: [] }))), [], 'count applies when narrated only');
-  assert.ok(v2Missing(normalizeV2(full({ end: '' }))).includes('end'));
+  assert.deepEqual(v2Missing(normalizeV2(full({ voiceMode: 'caption-only', voiceReason: 'silent teaser', narrationLines: [] }))), [], 'count applies when narrated only');
+  assert.ok(v2Missing(normalizeV2(full({ end: '' }))).some((x) => x.startsWith('end')));
   assert.ok(v2Missing(normalizeV2(full({ beats: [beat(1), beat(2), { ...beat(3), screen: '' }, beat(4)] }))).includes('beats[3].screen'));
 });
 
-test('CTA and promo hero/narration are warnings, never errors', () => {
+test('CTA is the only warning left; promo hero and narration count are errors now', () => {
   assert.deepEqual(v2Warnings(normalizeV2(full())), []);
   const noCta = full({ narrationLines: ['One.', 'Two.', 'Three.', 'Four.', 'The end.'] });
   assert.equal(v2Warnings(normalizeV2(noCta)).length, 1);
   assert.deepEqual(v2Missing(normalizeV2(noCta)), []);
-  const promo = { format: 'promo', treatment: 'heroRise', cast: ['Axiom'], poster: { idea: 'Axiom rises', banner: 'DEC 18' }, hero: 'rise', theme: 't', beats: [{ ...beat(1), screen: 'poster art', cursor: 'none', response: 'Axiom rises', seconds: 8 }, { ...beat(2), screen: 'poster art', cursor: 'none', response: 'the date slides in', seconds: 8 }], end: 'standard', voiceMode: 'narrated', narrationLines: ['Axiom rises.'] };
-  const n = normalizeV2(promo);
-  assert.deepEqual(v2Missing(n), []);
-  assert.ok(v2Warnings(n).some((x) => x.startsWith('poster.hero is empty')));
+  const promo = promoOf({ voiceMode: 'narrated', voiceReason: undefined, narrationLines: ['Axiom rises.'] });
+  assert.ok(v2Missing(normalizeV2(promo)).some((x) => x.startsWith('narrationLines') && x.includes('3 needed')));
+  assert.ok(v2Missing(normalizeV2(promoOf({ poster: { idea: 'x', banner: 'y' } }))).some((x) => x.startsWith('poster.hero')));
 });
 
 test('poster.hero round-trips (normalize, merge, render, editor form)', () => {
@@ -431,7 +429,7 @@ test('poster.hero round-trips (normalize, merge, render, editor form)', () => {
   assert.match(r.videoBriefMeta.creative, /POSTER HERO: gravitax/);
   assert.equal(toV2Body(formFromV2(n)).poster.hero, n.poster.hero);
   assert.equal(normalizeV2(full({ poster: { idea: 'x', banner: 'y' } })).poster.hero, undefined, 'omitted when empty');
-  assert.equal(formWarnings({ format: 'promo', posterHero: '', beats: [], voiceMode: '', narrationLines: '' }).length, 1);
+  assert.deepEqual(formWarnings({ format: 'promo', posterHero: '', beats: [], voiceMode: '', narrationLines: '' }), []);
 });
 
 test('library loads with the new keys; context tool + MCP instructions + save tool carry the standard', async () => {
@@ -450,4 +448,94 @@ test('library loads with the new keys; context tool + MCP instructions + save to
   assert.match(save.description, /video-brief\.context first; a brief is saved READY only when all six items are locked/);
   const props = save.args.properties.v2.properties;
   assert.ok(props.format.enum.includes('chapter') && props.poster.properties.hero);
+});
+
+// ── Gate 2 (2026-11-20): the same locks for every format, promo included ─────────────────────────────────────────────────
+import { directorNotesOf, postsNeedingRevision } from '../director-notes.js';
+import { closestSceneIds } from '../brief-v2.js';
+
+test('gate2: every beat.screen names a library scene id (promo too); unknown ids list the closest', () => {
+  const withScreen = (o, screen) => ({ ...o, beats: o.beats.map((b, i) => (i === 0 ? { ...b, screen } : b)) });
+  assert.match(gate(withScreen(promoOf(), 'Poster art: Axiom rising')), /beats\[1\]\.screen needs a library scene id/);
+  assert.match(gate(withScreen(promoOf(), 'real game world, full HUD')), /beats\[1\]\.screen needs a library scene id/);
+  assert.match(gate(withScreen(promoOf(), 'titans.nope: Axiom')), /names "titans\.nope": not a library scene id\. Closest: titans\./);
+  assert.match(gate(withScreen(full(), 'gravitax.arival: lava map')), /names "gravitax\.arival".*Closest: gravitax\.arrival/);
+  assert.deepEqual(v2Missing(normalizeV2(withScreen(promoOf(), 'TITANS.ROLL-CALL: all seven'))), []);
+  assert.deepEqual(v2Missing(normalizeV2(withScreen(full(), 'town.map, then gravitax.arrival'))), []);
+  assert.equal(closestSceneIds('gravitax.arival')[0], 'gravitax.arrival');
+});
+
+test('gate2: poster.hero required for promo, "undefined" and non-strings refused, banner required', () => {
+  assert.match(gate(promoOf({ poster: { idea: 'x', banner: 'y' } })), /poster\.hero/);
+  assert.match(gate(promoOf({ poster: { idea: 'x', banner: 'y', hero: 'undefined' } })), /poster\.hero/);
+  assert.match(gate(promoOf({ poster: { idea: 'x', hero: 'mayor, town, idle' } })), /poster\.banner/);
+  assert.throws(() => normalizeV2(promoOf({ poster: { idea: 'x', banner: 'y', hero: { id: 'mayor' } } })), /poster\.hero must be a string/);
+  assert.throws(() => m({}, { v2: promoOf({ poster: { idea: 'x', banner: 'y' } }), status: 'ready' }), /Missing: .*poster\.hero/);
+});
+
+test('gate2: voiceMode defaults to narrated; caption-only / music need voiceReason; narrated needs beats + 1 lines', () => {
+  const noMode = full({ voiceMode: '' });
+  assert.deepEqual(v2Missing(normalizeV2(noMode)), [], 'empty voiceMode = narrated, lines present');
+  assert.match(gate(full({ voiceMode: '', narrationLines: [] })), /narrationLines/);
+  for (const mode of ['caption-only', 'music']) {
+    assert.match(gate(full({ voiceMode: mode })), /voiceReason/);
+    assert.match(gate(promoOf({ voiceMode: mode, voiceReason: '  ' })), /voiceReason/);
+    assert.deepEqual(v2Missing(normalizeV2(full({ voiceMode: mode, voiceReason: 'silent teaser' }))), []);
+  }
+  assert.match(gate(promoOf({ voiceMode: 'narrated', narrationLines: ['one', 'two'] })), /narrationLines.*3 needed, 2 given/);
+  assert.deepEqual(v2Missing(normalizeV2(promoOf({ voiceMode: 'narrated', narrationLines: ['Axiom wakes.', 'The date.', 'Play now!'] }))), []);
+  assert.throws(() => m({}, { v2: promoOf({ voiceMode: 'music', voiceReason: '' }), status: 'ready' }), /voiceReason/);
+});
+
+test('gate2: end must be a string (an object is refused), none stays valid', () => {
+  assert.throws(() => normalizeV2(promoOf({ end: { card: 'campaign' } })), /end must be a string/);
+  assert.throws(() => normalizeV2(full({ end: ['x'] })), /end must be a string/);
+  assert.deepEqual(v2Missing(normalizeV2(promoOf({ end: 'none' }))), []);
+  assert.ok(v2Missing(normalizeV2(promoOf({ end: '' }))).some((x) => x.startsWith('end')));
+});
+
+test('gate2: a NEEDS entry naming something the library has is refused; website needs and needs-build scenes stay allowed', () => {
+  const needs = (...n) => gate(full({ needs: n }));
+  assert.match(needs('NEEDS: Floranix close-up'), /already in the library \("Floranix"\): use titans\./);
+  assert.match(needs('Gravitax boss art'), /already in the library \("Gravitax"\): use gravitax\./);
+  assert.match(needs('NEEDS: the world map with HUD'), /use town\.map/);
+  assert.match(needs('all seven Titans in a row'), /"Titans"/);
+  assert.match(needs('World Bank window'), /World Bank/);
+  assert.match(needs('the Mayor on the dock'), /Mayor/);
+  assert.match(needs('NEEDS: town.upgrade-panel in full state'), /use town\.upgrade-panel/);
+  assert.match(gate(promoOf({ needs: ['Floranix poster'] })), /already in the library/);
+  assert.equal(needs('NEEDS: capture of the hitloop website pricing page'), '');
+  assert.equal(needs('NEEDS: site capture of the Season 3 landing page'), '');
+  assert.equal(needs('NEEDS: shards.cracks scene (not built)'), '');
+  assert.equal(needs('NEEDS: a cooking minigame screen'), '');
+});
+
+test('directorNotes: read-only, survives a re-save, shown by the brief view and context, listed when revise', async () => {
+  const dn = { status: 'revise', notes: 'Beat 2 shows the wrong scene.', items: ['beat 2: use monsters.fight', 'add voiceReason'], at: '2026-11-20T12:00:00.000Z', by: 'director' };
+  const row = rowOf({ id: 'p1', videoBriefMeta: { creative: 'c', status: 'ready', briefVersion: 2, v2: normalizeV2(full()), directorNotes: dn } });
+  assert.deepEqual(directorNotesOf(row), dn);
+  assert.equal(directorNotesOf(rowOf({ videoBriefMeta: { directorNotes: { status: 'bogus' } } })), null);
+  assert.equal(directorNotesOf({}), null);
+  assert.equal(directorNotesOf(rowOf({ videoBriefMeta: { directorNotes: { status: 'sufficient', items: Array(30).fill('x'), notes: 'n'.repeat(5000) } } })).items.length, 12);
+  assert.deepEqual(videoBriefView(row).directorNotes, dn);
+  const saved = m(row, { v2: full({ angle: 'changed angle' }) });
+  assert.deepEqual(saved.videoBriefMeta.directorNotes, dn, 'a save clears nothing');
+  const ctx = await buildBriefContext({ clientId: CQ, postId: 'p1', readTemplateDoc: () => 'doc', readPost: async () => row, readPosts: async () => [], readJobs: async () => [] });
+  assert.deepEqual(ctx.directorNotes, dn);
+  assert.match(ctx.use, /directorNotes\.status is "revise", fix every item/);
+  const none = await buildBriefContext({ clientId: CQ, postId: 'p2', readTemplateDoc: () => 'doc', readPost: async () => rowOf({ id: 'p2' }), readPosts: async () => [], readJobs: async () => [] });
+  assert.equal(none.directorNotes, null);
+  const list = postsNeedingRevision([row, rowOf({ id: 'p3', videoBriefMeta: { directorNotes: { status: 'sufficient' } } }), rowOf({ id: 'p4' })]);
+  assert.equal(list.length, 1); assert.equal(list[0].postId, 'p1'); assert.deepEqual(list[0].directorNotes, dn);
+  const a = getAction('queue.post.video-briefs.revise');
+  assert.deepEqual(validateAction(a), []); assert.equal(a.tier, 0); assert.equal(a.action, 'video-brief-revise-list');
+  assert.match(fs.readFileSync(new URL('../../../app/api/social-posting/route.js', import.meta.url), 'utf8'), /video-brief-revise-list[\s\S]*postsNeedingRevision/);
+});
+
+test('MCP instructions carry the Gate 2 paragraph; the editor has the director notes panel', () => {
+  const ins = buildInstructions();
+  assert.match(ins, /Every beat names a library scene id\. Narrated by default\. Never write NEEDS for anything the library has\./);
+  assert.match(ins, /directorNotes/);
+  const jsx = fs.readFileSync(new URL('../../../components/dashboard/x-content/VideoBriefV2Editor.jsx', import.meta.url), 'utf8');
+  assert.match(jsx, /id="video-brief-director-notes-panel"/);
 });
