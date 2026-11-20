@@ -6,10 +6,8 @@
 // Storyboard: videoBriefMeta.storyboard {status pending|ready|approved|changes, outline?, frames[], notes?, updatedAt, updatedBy}.
 // Spec: hitloop-video-director clients/critters-quest/docs/calendar/CREATIVE_BRIEF_V2.md. Pure: no Firestore, no network.
 
-import { createRequire } from 'node:module';
 
-const requireJson = createRequire(import.meta.url);
-const LIBRARY = requireJson('./howto-catalog/cq-library.json');
+import LIBRARY from './howto-catalog/cq-library.json' with { type: 'json' }; // static JSON import: works on the server and in the client editor bundle (node:module does not)
 
 export const V2_FORMATS = ['feature', 'guide', 'promo'];
 // promo = a short animated poster built from an approved live treatment (see the template doc for what each means).
