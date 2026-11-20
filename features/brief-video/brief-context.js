@@ -5,11 +5,13 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { createRequire } from 'node:module';
 import { videoBriefView } from './brief-fields.js';
-import { READY_RULES } from './brief-v2.js';
+import { READY_RULES, FIRST_TIME_RIGHT } from './brief-v2.js';
+import LIBRARY from './howto-catalog/cq-library.json' with { type: 'json' }; // static JSON imports (no createRequire: it broke the build before)
+import STANDARD from './howto-catalog/cq-brief-standard.json' with { type: 'json' };
 
-const require = createRequire(import.meta.url);
+export { FIRST_TIME_RIGHT };
+
 export const TEMPLATE_DOC_PATH = 'docs/source-of-truth/CQ-CREATIVE-BRIEF-TEMPLATE.md';
 export const RECENT_EPISODES_MAX = 10;
 export const RECENT_POSTS_READ = 60; // bounded newest-first read of the client's posts; never a collection scan
@@ -17,7 +19,9 @@ export const RECENT_JOBS_READ = 40;
 const str = (v) => (v == null ? '' : String(v));
 const cut = (v, n) => str(v).slice(0, n);
 
-export const loadLibrary = () => require('./howto-catalog/cq-library.json');
+export const loadLibrary = () => LIBRARY;
+/** The owner brief standard (first-time-right items, writing rules, the gold "Keeps moving" example) as text. */
+export const loadBriefStandard = () => STANDARD.text;
 
 /** The template doc text. Vercel: the file is traced in via next.config.mjs outputFileTracingIncludes; cwd is the project root. */
 export function readTemplateDoc({ cwd = process.cwd() } = {}) {
@@ -67,7 +71,8 @@ export async function buildBriefContext({ clientId, postId = null, readTemplateD
   const [posts, jobs] = await Promise.all([readPosts(clientId, RECENT_POSTS_READ), readJobs(clientId, RECENT_JOBS_READ)]);
   return {
     ok: true,
-    use: 'Write the Creative Brief as the v2 object following templateDoc and library; never repeat a recentEpisodes angle or hero; never change the post\'s topic or copy (gaps go in needs); ' + READY_RULES + ' Save with queue.post.video-brief.save { postId, v2, status: "ready" }; never approve.',
+    use: 'Write the Creative Brief as the v2 object following briefStandard (the six locked items, the writing rules and one worked example), templateDoc and library; never repeat a recentEpisodes angle or hero; never change the post\'s topic or copy (gaps go in needs); ' + FIRST_TIME_RIGHT + ' ' + READY_RULES + ' Save with queue.post.video-brief.save { postId, v2, status: "ready" }; never approve.',
+    briefStandard: loadBriefStandard(),
     templateDoc: readDoc(),
     library,
     recentEpisodes: buildRecentEpisodes({ posts, jobs, excludePostId: postId }),

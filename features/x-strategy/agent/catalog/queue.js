@@ -36,7 +36,7 @@ const V2_BEAT = obj({
   seconds: num('Beat length, 1-15. Holds stay at about 2 s or less. All beats together: 30 s at most (aim 22-30).', { minimum: 1, maximum: 15 }),
 }, ['purpose', 'screen', 'camera', 'cursor', 'response', 'caption', 'transition', 'seconds']);
 const V2_BRIEF = obj({
-  format: str('feature = a story around one feature; guide = a host walks ONE in-game guide lesson (default for every "how does X work" post); promo = a short 15-23 s animated poster from a live treatment (set treatment, cast, bubbles; 1-3 beats, no cursor-action rule).', { enum: ['feature', 'guide', 'promo'] }),
+  format: str('feature = a story around one feature; guide = a host walks ONE in-game guide lesson (default for every "how does X work" post); promo = a short 15-23 s animated poster from a live treatment (set treatment, cast, bubbles; 1-3 beats, no cursor-action rule); chapter = a chapter story (library formats.chapterStory): 3-6 real scenes in order, each beat caption = its chapter banner (NAME / CHAPTER N), narrationLines = poster line + one per chapter, voiceMode narrated, up to 34 s.', { enum: ['feature', 'guide', 'promo', 'chapter'] }),
   treatment: str('promo only (required): faceOff = two game characters face off with an energy clash, two bubbles; mapConverge = the real map with full HUD, attack lines converging on a landmark, bubble + date banner (never a real player name); hostPoster = a host (Mayor, Gravitax, a Titan, an NPC) before the lockup with bubble + banner; heroRise = one Titan/character rises over its in-game background with logos + date banner; statCard = stat card with badge, building art, big line (money lines need owner OK).', { enum: ['faceOff', 'mapConverge', 'hostPoster', 'heroRise', 'statCard'] }),
   cast: arr(str('A game character or landmark, e.g. Gravitax, Axiom, World Bank.', { maxLength: 120 }), 'promo only (required): who or what is on the poster (max 6).', { maxItems: 6 }),
   bubbles: arr(str('One short speech-bubble line (never a real player name).', { maxLength: 120 }), 'promo only: up to 3 bubble lines (bubbles or hero is required).', { maxItems: 3 }),
@@ -46,6 +46,7 @@ const V2_BRIEF = obj({
   angle: str('feature/guide required. Why this episode exists and how it differs from the closest shipped or recent video (name it). Never change the post\'s topic.', { maxLength: 400 }),
   poster: obj({
     idea: str('The designed first frame (who is on it, the world/theme), never just beat one.', { maxLength: 400 }),
+    hero: str('Poster hero, required to mark ready (promo: warning): library posterHeroes character, real place, pose, e.g. "king-critter, inside the town, idle, facing camera".', { maxLength: 80 }),
     banner: str('Banner line, 2-4 words, an action phrase that sells what the player can DO.', { maxLength: 120 }),
     dateLine: str('Optional second banner line (a date or offer).', { maxLength: 120 }),
     bubble: str('Optional speech bubble text.', { maxLength: 120 }),
@@ -155,7 +156,7 @@ export const QUEUE_ACTIONS = [
     description: 'One post\'s Creative Brief: text, status (draft|ready|approved|rendered), and for v2 the structured `v2` plus its `storyboard` (pending|ready|approved|changes). Read only.',
     route: 'social-posting', method: 'POST', action: 'video-brief-get', args: obj({ postId }, ['postId']), tier: 0 },
   { id: 'queue.post.video-brief.save', group: 'queue', title: 'Save a post\'s Creative Brief',
-    description: 'Saves the internal Creative Brief (never published). CQ video: ALWAYS pass `v2` (guide: CQ-CREATIVE-BRIEF-TEMPLATE.md). status ready must pass the READY rules on the v2 argument.',
+    description: 'Saves the internal Creative Brief. Call queue.post.video-brief.context first; a brief is saved READY only when all six items are locked (READY rules on the v2 argument). Always pass v2.',
     route: 'social-posting', method: 'POST', action: 'video-brief-save',
     args: obj({ postId, v2: V2_BRIEF,
       template: str('v1 / optional for v2 (a v2 brief writes its own text). Free-text Creative Brief, max 8000 chars; only for an old-style brief.', { maxLength: 8000 }), status: str('draft | ready. ready is refused (400 with the missing fields) until the v2 brief is complete. Never approve.', { enum: ['draft', 'ready'] }),

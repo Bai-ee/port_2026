@@ -9,7 +9,10 @@
 
 import LIBRARY from './howto-catalog/cq-library.json' with { type: 'json' }; // static JSON import: works on the server and in the client editor bundle (node:module does not)
 
-export const V2_FORMATS = ['feature', 'guide', 'promo'];
+export const V2_FORMATS = ['feature', 'guide', 'promo', 'chapter'];
+// chapter = a chapter story (library formats.chapterStory); allowed as a format value only, it has no recipe-specific ready gate.
+export const CHAPTER_SECONDS_MAX = 34;
+export const V2_POSTER_HERO_MAX = 80;
 // promo = a short animated poster built from an approved live treatment (see the template doc for what each means).
 export const V2_TREATMENTS = ['faceOff', 'mapConverge', 'hostPoster', 'heroRise', 'statCard'];
 export const PROMO_BEATS_MAX = 3;
@@ -90,11 +93,12 @@ export function normalizeV2(input) {
     return out;
   });
   const total = beats.reduce((a, b) => a + b.seconds, 0);
-  const totalMax = promo ? PROMO_SECONDS_MAX : V2_TOTAL_SECONDS_MAX;
-  if (total > totalMax + 1e-9) throw bad(`The beats add up to ${Math.round(total * 10) / 10} s; ${promo ? 'a promo' : 'the video'} is ${totalMax} s at most.`);
+  const totalMax = promo ? PROMO_SECONDS_MAX : format === 'chapter' ? CHAPTER_SECONDS_MAX : V2_TOTAL_SECONDS_MAX;
+  if (total > totalMax + 1e-9) throw bad(`The beats add up to ${Math.round(total * 10) / 10} s; ${promo ? 'a promo' : format === 'chapter' ? 'a chapter story' : 'the video'} is ${totalMax} s at most.`);
   const lesson = text('lesson', input.lesson, V2_SHORT_MAX);
   const host = text('host', input.host, V2_SHORT_MAX);
   const focus = text('focus', input.focus, V2_TEXT_MAX);
+  const posterHero = text('poster.hero', poster.hero, V2_POSTER_HERO_MAX);
   const dateLine = text('poster.dateLine', poster.dateLine, V2_SHORT_MAX);
   const bubble = text('poster.bubble', poster.bubble, V2_SHORT_MAX);
   const cast = textList('cast', input.cast, V2_CAST_MAX, V2_SHORT_MAX);
@@ -106,7 +110,7 @@ export function normalizeV2(input) {
     ...(cast.length ? { cast } : {}), ...(bubbles.length ? { bubbles } : {}),
     ...(lesson ? { lesson } : {}), ...(host ? { host } : {}), ...(focus ? { focus } : {}),
     angle: text('angle', input.angle, V2_TEXT_MAX),
-    poster: { idea: text('poster.idea', poster.idea, V2_TEXT_MAX), banner: text('poster.banner', poster.banner, V2_SHORT_MAX), ...(dateLine ? { dateLine } : {}), ...(bubble ? { bubble } : {}) },
+    poster: { idea: text('poster.idea', poster.idea, V2_TEXT_MAX), banner: text('poster.banner', poster.banner, V2_SHORT_MAX), ...(posterHero ? { hero: posterHero } : {}), ...(dateLine ? { dateLine } : {}), ...(bubble ? { bubble } : {}) },
     hero: text('hero', input.hero, V2_TEXT_MAX),
     theme: text('theme', input.theme, V2_TEXT_MAX),
     beats,
@@ -143,6 +147,10 @@ const ACTION_VERBS = /\b(open|opens|click|clicks|tap|taps|pick|picks|select|sele
 export const isHoldOnly = (response) => HOLD_WORDS.test(str(response)) && !ACTION_VERBS.test(str(response));
 // Post copy that reads as a how-to / explainer must be a guide or feature, never a promo.
 const HOWTO_RE = /\b(how|here's how|before and after|what changed|tour|step|guide|learn)\b/i;
+const POSTER_HERO_MISSING = 'poster.hero (the poster hero: a library posterHeroes character, the real place, the pose, e.g. "king-critter, inside the town, idle, facing camera")';
+const narrationShort = (beats, lines) => `narrationLines (voiceMode is narrated: the poster line plus one line per beat = ${beats + 1} needed, ${lines} given)`;
+// The closing line of a narrated video should read as a call to action.
+const CTA_RE = /\b(play|join|download|start|get|come|visit|try|tap|watch|see you|ready|jump|claim|build|pick|choose|go)\b/i;
 const wordsOf = (t) => new Set(str(t).toLowerCase().match(/[a-z0-9']+/g) || []);
 
 /** Soft warning (never a block): the brief's postCopy no longer matches the post's own copy. '' when fine or not comparable. */
@@ -160,6 +168,7 @@ export const READY_RULES = 'READY rules (status ready is refused with the exact 
   + '(2) feature/guide: at least 3 beats, 20-30 s in total, at least 2 beats whose cursor is a real action (not "none"), and no beat that is only a hold/glide (give it an action: open, click, pick, send, claim, rise, swing). '
   + '(3) promo: treatment from the library promoTreatments; heroRise/hostPoster/faceOff cast must be characters (Mayor, Banker, Mandryll, Gravitax, the seven Titans; never a building such as Vault), faceOff exactly 2, mapConverge target is World Bank; a promo beat never uses a feature/guide scene id. '
   + '(4) A beat screen that names a needs-build scene is refused: keep the topic and put it in needs, or choose a ready scene. '
+  + '(2b) FIRST-TIME-RIGHT lock, every format: poster.idea + poster.banner + poster.hero (library posterHeroes character, real place, pose; a warning for promo); every beat a real screen + a visible happening + a caption/label; when narrated, narrationLines at least beats + 1 (poster line + one per beat; a warning for promo) and the last line a call to action (warning); end present. format chapter (library formats.chapterStory) is allowed, up to 34 s, with no recipe-specific gate. '
   + '(5) The format must fit the post: a how-to / what-changed / tour / step / guide post is guide or feature, never promo. The post\'s topic and copy are fixed: never rewrite the post; postCopy must match it. '
   + 'Promo is for announcements/hype only; how-to and "what changed" posts are guide or feature episodes. '
   + 'The town upgrade panel (town.upgrade-panel), the incoming-raid warning (raids.incoming-warning) and the Town Defense screen (raids.defense-tab) are REAL, owner-approved game UI rebuilt from the game code, not fake UI.';
@@ -234,12 +243,13 @@ export function v2Missing(v2, opts = {}) {
     if (!str(v2.end).trim()) m.push('end (write "none" if the treatment has no end card)');
     if (!v2.voiceMode) m.push('voiceMode');
     if (v2.voiceMode === 'narrated' && !(v2.narrationLines || []).length) m.push('narrationLines (voiceMode is narrated)');
-    return m;
+    return m; // promo: the poster hero, the narration count and the CTA are warnings (v2Warnings)
   }
   if (v2.format === 'guide' && !v2.lesson) m.push('lesson');
   if (!str(v2.angle).trim()) m.push('angle');
   if (!str(v2.poster?.banner).trim()) m.push('poster.banner');
   if (!str(v2.poster?.idea).trim()) m.push('poster.idea (the designed first frame: who is on it, the world/theme)');
+  if (!str(v2.poster?.hero).trim()) m.push(POSTER_HERO_MISSING);
   if (!str(v2.hero).trim()) m.push('hero');
   if (!str(v2.theme).trim()) m.push('theme');
   if (beats.length < V2_BEATS_READY_MIN) m.push(`beats (at least ${V2_BEATS_READY_MIN}, ${beats.length} given)`);
@@ -259,7 +269,32 @@ export function v2Missing(v2, opts = {}) {
   if (!str(v2.end).trim()) m.push('end');
   if (!v2.voiceMode) m.push('voiceMode');
   if (v2.voiceMode === 'narrated' && !(v2.narrationLines || []).length) m.push('narrationLines (voiceMode is narrated)');
+  else if (v2.voiceMode === 'narrated' && (v2.narrationLines || []).length < beats.length + 1) m.push(narrationShort(beats.length, (v2.narrationLines || []).length));
   return m;
+}
+
+// Owner standard 2026-11-20 (full text: howto-catalog/cq-brief-standard.json, served as briefStandard by the context tool). Also in the MCP instructions.
+export const FIRST_TIME_RIGHT = 'FIRST-TIME-RIGHT (a brief is saved READY only when all six are locked): '
+  + '(1) FORMAT: feature | guide | promo | chapter (library formats; chapterStory = 3-5 steps in order, one real scene per step). '
+  + '(2) POSTER HERO in poster.hero: ONE large character from the library posterHeroes, idle, facing camera, in a real game place (e.g. "king-critter, inside the town, idle, facing camera"), plus a two-line poster.banner; no Titans on the poster unless the topic is Titans. '
+  + '(3) STEPS/BEATS in order, each = a real library scene id + what visibly happens + its on-screen label (chapter: caption "MONSTERS / CHAPTER 3"); the scene must show exactly what its narration line says ("monsters" = a monster fight on the map, not the World Bank). '
+  + '(4) NARRATION verbatim and final: the poster line plus one short line per step, punchy, ellipses for beats ("Then... monsters!"), no verb repeated across lines, dates in words, numbers never spoken, the last line a call to action; voiceMode narrated, ONE steady pace, music bed under it. '
+  + '(5) END card: the still art and its banner with the CTA "CRITTERS QUEST / PLAY NOW!". '
+  + '(6) LENGTH 22-30 s (up to 34 s for a 5-chapter story). '
+  + 'Also: game art only, real UI in full state, money never the subject, no unverified Season 3 mechanics, no player names; anything the library lacks: keep the topic and write NEEDS: <what> in needs.';
+
+/** Soft warnings (never block 'ready'): First-time-right items that are still open. Promo gets the hero and narration count as warnings. */
+export function v2Warnings(v2) {
+  const w = [];
+  if (!isObj(v2)) return w;
+  const beats = Array.isArray(v2.beats) ? v2.beats : [];
+  const lines = Array.isArray(v2.narrationLines) ? v2.narrationLines : [];
+  if (v2.format === 'promo') {
+    if (!str(v2.poster?.hero).trim()) w.push(`${POSTER_HERO_MISSING.replace(/^poster\.hero/, 'poster.hero is empty')}`);
+    if (v2.voiceMode === 'narrated' && lines.length && lines.length < beats.length + 1) w.push(narrationShort(beats.length, lines.length));
+  }
+  if (v2.voiceMode === 'narrated' && lines.length && !CTA_RE.test(str(lines[lines.length - 1]))) w.push(`the last narration line ("${str(lines[lines.length - 1]).slice(0, 60)}") should read as a call to action (e.g. "Critters Quest. Play now!")`);
+  return w;
 }
 
 /** Throws a 400 listing the missing fields when a v2 brief is not complete enough for 'ready' / 'approved'. */
@@ -278,6 +313,7 @@ export function renderV2Text(v2) {
   if (v2.format === 'guide') { add('LESSON', v2.lesson); add('HOST', v2.host || 'mayor'); add('FOCUS', v2.focus); }
   add('ANGLE / FRESHNESS', v2.angle);
   add('POSTER', v2.poster?.idea);
+  if (v2.poster?.hero) add('POSTER HERO', v2.poster.hero);
   add('POSTER BANNER', v2.poster?.banner);
   if (v2.poster?.dateLine) add('POSTER DATE LINE', v2.poster.dateLine);
   if (v2.poster?.bubble) add('POSTER BUBBLE', v2.poster.bubble);

@@ -9,8 +9,8 @@ import { friendlyBriefReasons } from './post-editor-model.js';
 import VideoReviewPanel from './VideoReviewPanel.jsx';
 import { episodeIsOnPost, versionOfEpisode } from '../../../features/brief-video/video-review.js';
 import {
-  BEAT_COLUMNS, STORYBOARD_LABEL, V2_BEAT_SECONDS_MAX, V2_TREATMENTS, beatsCap, secondsCap, V2_CELL_MAX, V2_POST_COPY_MAX, V2_SHORT_MAX, V2_TEXT_MAX,
-  addBeat, formFromV2, formMissing, formTotalSeconds, moveBeat, overBudget, removeBeat, setBeatCell, toV2Body,
+  BEAT_COLUMNS, STORYBOARD_LABEL, V2_BEAT_SECONDS_MAX, V2_TREATMENTS, beatsCap, secondsCap, V2_CELL_MAX, V2_POST_COPY_MAX, V2_SHORT_MAX, V2_TEXT_MAX, V2_POSTER_HERO_MAX,
+  addBeat, formFromV2, formMissing, formTotalSeconds, formWarnings, moveBeat, overBudget, removeBeat, setBeatCell, toV2Body,
 } from './video-brief-v2-model.js';
 
 const STATUS_LABEL = { draft: 'Draft', ready: 'Ready for review', approved: 'Approved (storyboard next)', rendered: 'Rendered' };
@@ -39,6 +39,7 @@ export default function VideoBriefV2Editor({ row, callSocial, editable, onRowPat
   }, [episodeKey, row?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const dirty = JSON.stringify(f) !== JSON.stringify(initial);
   const missing = useMemo(() => formMissing(f), [f]);
+  const warnings = useMemo(() => formWarnings(f), [f]);
   const total = formTotalSeconds(f);
   const over = overBudget(f);
   const set = (k) => (e) => { setF((x) => ({ ...x, [k]: e.target.value })); setMsg(null); };
@@ -89,7 +90,7 @@ export default function VideoBriefV2Editor({ row, callSocial, editable, onRowPat
       <div id="video-brief-v2-format-row" className="pe-vb-row">
         <label className="pe-vb-field" htmlFor="video-brief-v2-format">Format
           <select id="video-brief-v2-format" className="pe-input" value={f.format} disabled={ro} onChange={set('format')}>
-            <option value="">Choose…</option><option value="feature">Feature episode</option><option value="guide">Guide episode</option><option value="promo">Promo piece (15-23 s)</option>
+            <option value="">Choose…</option><option value="feature">Feature episode</option><option value="guide">Guide episode</option><option value="promo">Promo piece (15-23 s)</option><option value="chapter">Chapter story (3-6 chapters, up to 34 s)</option>
           </select>
         </label>
         <label className="pe-vb-field" htmlFor="video-brief-v2-voice-mode">Voice mode
@@ -126,6 +127,7 @@ export default function VideoBriefV2Editor({ row, callSocial, editable, onRowPat
         <legend>Poster (the designed first frame)</legend>
         {text('video-brief-v2-poster-idea', 'Idea (who is on it, the world)', 'posterIdea')}
         <div id="video-brief-v2-poster-lines-row" className="pe-v2-grid">
+          {line('video-brief-v2-poster-hero', 'Poster hero (character, place, pose)', 'posterHero', { max: V2_POSTER_HERO_MAX, placeholder: 'king-critter, inside the town, idle, facing camera' })}
           {line('video-brief-v2-poster-banner', 'Banner (2-4 words)', 'posterBanner')}
           {line('video-brief-v2-poster-date-line', 'Date line (optional)', 'posterDateLine')}
           {line('video-brief-v2-poster-bubble', 'Bubble (optional)', 'posterBubble')}
@@ -176,6 +178,7 @@ export default function VideoBriefV2Editor({ row, callSocial, editable, onRowPat
       {text('video-brief-v2-post-copy', `Post copy (max ${V2_POST_COPY_MAX}; lives in the post, not the video)`, 'postCopy', { max: V2_POST_COPY_MAX })}
 
       {missing.length ? <p id="video-brief-v2-missing-list" className="pe-muted">To mark ready, still missing: {missing.join('; ')}.</p> : <p id="video-brief-v2-missing-list" className="pe-muted">All required fields are filled.</p>}
+      {warnings.length ? <p id="video-brief-v2-warnings-list" className="pe-muted">Heads up: {warnings.join('; ')}.</p> : null}
       <div id="video-brief-v2-actions-row" className="pe-vb-row">
         <button type="button" id="video-brief-v2-save-draft-btn" className="pe-btn pe-btn-ghost" disabled={ro || busy || !dirty || over} onClick={() => save('draft')}>{busy ? 'Saving…' : 'Save draft'}</button>
         <button type="button" id="video-brief-v2-mark-ready-btn" className="pe-btn pe-btn-ghost" disabled={ro || busy || over || (!dirty && savedStatus === 'ready')} onClick={() => save('ready')}>Mark ready</button>

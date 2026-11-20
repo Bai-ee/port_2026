@@ -37,6 +37,18 @@ Readiness (check before choosing a lesson; not ready is not a reason to change t
 - **Being built now**: Posting a Defender, Building a Squad / Your First Squad, The Town Hall (upgrades), Visiting a Town, Attacking a Monster. Use them and list the missing panel in `needs`.
 - **Owner-check (money is the subject)**: The Bank, Boosts, Vouchers, Resource Market, Speedup Wheel, The Market, Spin Wheels, The Clone Manifest. Do not schedule without the owner's OK; write `OWNER OK:` in `mustNot` only after the owner gave it.
 
+## First-time-right: what a brief must LOCK (owner standard, 2026-11-20)
+
+A brief is `ready` only when it fixes all six (the Director still picks camera and timing). Source: `CREATIVE_BRIEF_V2.md` "First-time-right", `formats/chapter-story.md`; the library's `formats.chapterStory` and `posterHeroes` hold the details.
+1. **Format**: feature | guide | promo | chapter (a chapter story: 3-5 steps in order, one real scene per step, `format: chapter`).
+2. **Poster hero** (`poster.hero`, at most 80 characters): a library `posterHeroes` character, the real place, idle, facing camera, e.g. "king-critter, inside the town, idle, facing camera"; plus a two-line `poster.banner`. No Titans on the poster unless the topic is Titans. Required for feature, guide and chapter; a warning for promo.
+3. **Steps / beats in order**: each = a real library scene id + what visibly happens in it + its label (chapter story: the beat `caption` is its chapter banner, "MONSTERS / CHAPTER 3"). The scene must show exactly what its narration line says.
+4. **Narration, verbatim and final**: one short line per step plus a poster line, ellipses for beats ("Then... monsters!"), no verb repeated across lines, dates in words, last line a call to action. `voiceMode: narrated`, one steady pace, music bed.
+5. **End card**: the still art and its banner with the CTA "CRITTERS QUEST / PLAY NOW!".
+6. **Length**: 22-30 s (up to 34 s for a 5-chapter story).
+
+Ready gate (every format): `poster.idea`, `poster.banner` and `poster.hero` present; each beat has a real `screen`, a visible happening (cursor or response) and a `caption`; when narrated, `narrationLines` at least beats + 1 (poster line + one per beat) and the last line a call to action (warning only); `end` present. For promo the hero, the narration count and the CTA are warnings. `chapter` is just an allowed format value (up to 34 s); the Director decides the structure from the brief.
+
 ## Story rules (an episode, not a short)
 
 - 22-30 s, square 1080x1080. Arc: designed poster (the thumbnail) -> where we are -> the one idea -> the ACTION -> payoff -> end card. Your beats add up to 30 s at most (the server refuses more); aim for about 20-27 s.
@@ -92,7 +104,7 @@ Drafts may stay incomplete; `ready` (and approval) runs these, and the error lis
 
 ## The v2 fields (exactly the `v2` argument of `queue.post.video-brief.save`)
 
-Required to mark `ready` for feature and guide: format, angle, poster.banner, hero, theme, at least 3 beats (each with screen, cursor or response, and a caption; write `none` for no caption), payoff, end, voiceMode (and narrationLines when narrated, lesson when guide). Required to mark a **promo** `ready`: format, treatment, cast, poster.banner, bubbles or hero, theme, at least 1 beat (screen, response or cursor, caption) totalling 15-23 s, end (`none` if the treatment has no end card), voiceMode (narrationLines when narrated). Everything may be empty in a `draft`.
+Required to mark `ready` for feature, guide and chapter: format, angle, poster.banner, poster.hero, hero, theme, at least 3 beats (each with screen, cursor or response, and a caption; write `none` for no caption), payoff, end, voiceMode (and narrationLines when narrated: at least beats + 1, lesson when guide). Required to mark a **promo** `ready`: format, treatment, cast, poster.banner, bubbles or hero, theme, at least 1 beat (screen, response or cursor, caption) totalling 15-23 s, end (`none` if the treatment has no end card), voiceMode (narrationLines when narrated). Everything may be empty in a `draft`.
 
 | Field | What to write | Limit |
 |---|---|---|
@@ -101,6 +113,7 @@ Required to mark `ready` for feature and guide: format, angle, poster.banner, he
 | `cast[]`, `bubbles[]` | promo only: game characters or landmarks on the poster (max 6); up to 3 short bubble lines | 120 each |
 | `lesson`, `host`, `focus` | guide only: the lesson title, its teacher (or `mayor`), the one slice of the UI | 120 / 120 / 400 |
 | `angle` | Why this episode exists and how it differs from the closest shipped or recent video (name it: E21 Vault Shards, E27 Fighting Gravitax, E30 Titans guide, E31 Titans teaser, or a recent draft): idea, hero moment, poster look | 400 |
+| `poster.hero` | The poster hero, at most 80 chars: a library posterHeroes character, the real place, the pose ("king-critter, inside the town, idle, facing camera"). Required to mark ready (a warning for promo) | 80 |
 | `poster.idea` | The designed first frame: who is on it, the world or theme (lava = Gravitax). Not a screenshot of beat one | 400 |
 | `poster.banner` | 2-4 words, an action phrase that sells what the player can DO | 120 |
 | `poster.dateLine`, `poster.bubble` | optional second banner line (date or offer); optional speech bubble | 120 |
@@ -138,6 +151,7 @@ Post `social_1795122401104_f4bhkx`. The v1 brief asked for: Valdara with a monst
   "angle": "Readiness, not the fight. E27 teaches HOW to attack; this is the decision before you swing: which squad is ready. Gravitax close-up on the left (E27 had him right), hero is the squad cards, no battle report.",
   "poster": {
     "idea": "Gravitax huge on the left under the wordmark and Season 3 numeral, lava theme; a designed frame, not a screenshot of beat one.",
+    "hero": "gravitax, lava map under the dome, idle, facing camera",
     "banner": "WHICH FIGHT FIRST?",
     "dateLine": "TITANS LAND DEC 18",
     "bubble": "Is your squad ready?"
@@ -158,7 +172,8 @@ Post `social_1795122401104_f4bhkx`. The v1 brief asked for: Valdara with a monst
     "Some of your squads are resting.",
     "Check the target first.",
     "Then choose the squad that is ready.",
-    "That first hit decides the fight."
+    "That first hit decides the fight.",
+    "Critters Quest. Play now!"
   ],
   "needs": [],
   "postCopy": "Get a ready squad in before December 18."
