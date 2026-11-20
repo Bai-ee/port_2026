@@ -2,6 +2,8 @@
 
 **Status:** live since 2026-11-17 22:30 CST (PR #100; the Site Showcase card is PR #96). Sister doc: [`SITE-SHOWCASE-VIDEO.md`](SITE-SHOWCASE-VIDEO.md) (the shared render service, its deploy and rollback live there).
 
+**Creative Brief v2 (2026-11-19):** a brief saved with the structured `v2` field (`videoBriefMeta.briefVersion` 2, `features/brief-video/brief-v2.js`) is never authored into a clip request and never rendered here: approving it only marks it approved and asks for a storyboard (`videoBriefMeta.storyboard`, actions `video-brief-storyboard-set` / `-review`). `panelBriefBlocksRender` is true for every v2 brief; the planned hook is a later `videoBriefMeta.directorRequestId` (not implemented). Template: [`CQ-CREATIVE-BRIEF-TEMPLATE.md`](CQ-CREATIVE-BRIEF-TEMPLATE.md).
+
 **How-to path (`howto=<id>` briefs, `CQ-HowTo` composition):** built 2026-11-18, behind `CQ_HOWTO_ENABLED` (default off), **not yet deployed**. Section 13. End-to-end lifecycle of a request: [`CQ-HOWTO-VIDEO-REQUESTS.md`](CQ-HOWTO-VIDEO-REQUESTS.md).
 
 Critters Quest (CQ) calendar drafts carry an **internal video brief** after the public X copy. A cron finds the next draft without media, renders a template video from the brief on the `showcase-render` Cloud Run service, and attaches the mp4 + poster to the draft. A human still reviews and approves the post in the calendar. Nothing is ever posted by this system.

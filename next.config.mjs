@@ -116,6 +116,8 @@ const nextConfig = {
       // Analyzer skill prompts are read from disk at runtime (skills/_registry.js
       // readdirSync + brand-system-*-vision modules); the tracer never sees them.
       './features/scout-intake/skills/*.md',
+      // The Creative Brief v2 template is read from disk by the video-brief context tool (features/brief-video/brief-context.js).
+      './docs/source-of-truth/CQ-CREATIVE-BRIEF-TEMPLATE.md',
       // firebase-admin transitive deps the tracer under-includes (see above).
       ...firebaseAdminTraceDeps,
       // Next runtime (Turbopack keeps these external to the route bundle).

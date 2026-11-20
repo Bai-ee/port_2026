@@ -16,6 +16,7 @@ import { assertNoMemoryPlaceholder, hasMemoryPlaceholder, stripBlockingPlacehold
 import { sanitizeRepostOf, repostLabel } from './repost.js';
 import { stripBrief, parseBrief } from '../brief-video/brief.js';
 import { mergeVideoBrief, isPanelBriefPending } from '../brief-video/brief-fields.js';
+import { applyStoryboardSet, applyStoryboardReview } from '../brief-video/brief-v2.js';
 import { postTargets, normalizeTargets, instagramBlockReason, deliverInstagram } from './cross-post.js';
 
 const require = createRequire(import.meta.url);
@@ -252,6 +253,12 @@ export async function getSocialPost(clientId, postId) {
   const data = snap.data();
   if (clientId && data.clientId !== clientId) return null;
   return data;
+}
+
+// Bounded newest-first read of a client's brief_video_jobs for the brief context (no ordering index needed; capped).
+export async function readRecentBriefJobs(clientId, limit = 40) {
+  const snap = await fb.adminDb.collection('brief_video_jobs').where('clientId', '==', clientId).limit(Math.max(1, Math.min(100, Math.floor(limit)))).get();
+  return snap.docs.map((d) => d.data());
 }
 
 // Persist a full post doc (id is the Firestore doc id).
@@ -1427,6 +1434,29 @@ export async function saveVideoBrief(clientId, postId, input = {}, { by = null, 
     return { ...post, ...patch };
   });
 }
+
+// v2 Storyboard (features/brief-video/brief-v2.js): the Director sets outline + frames, the owner approves or asks for changes.
+// Writes only videoBriefMeta.storyboard; never the post copy, status, schedule or media.
+async function writeStoryboard(clientId, postId, apply, { expectedRevision = null } = {}) {
+  if (!postId) throw Object.assign(new Error('postId is required.'), { status: 400 });
+  const ref = postsCol().doc(String(postId));
+  return fb.adminDb.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const post = snap.exists ? snap.data() : null;
+    if (!post || (clientId && post.clientId !== clientId)) throw Object.assign(new Error('Post not found.'), { status: 404 });
+    if (expectedRevision != null && (post.revision || 0) !== Number(expectedRevision)) throw conflict();
+    if (post.status !== 'draft') throw Object.assign(new Error(`A storyboard can only change on a draft (this post is ${post.status}).`), { status: 409, code: 'not-draft' });
+    const meta = post.videoBriefMeta && typeof post.videoBriefMeta === 'object' ? post.videoBriefMeta : null;
+    const nextMeta = apply(meta || {});
+    const patch = { videoBriefMeta: nextMeta, revision: (post.revision || 0) + 1, updatedAt: new Date().toISOString() };
+    tx.set(ref, patch, { merge: true });
+    return { ...post, ...patch };
+  });
+}
+export const setVideoBriefStoryboard = (clientId, postId, input, { by = null, expectedRevision = null } = {}) =>
+  writeStoryboard(clientId, postId, (meta) => applyStoryboardSet(meta, input, { by }), { expectedRevision });
+export const reviewVideoBriefStoryboard = (clientId, postId, input, { by = null, expectedRevision = null } = {}) =>
+  writeStoryboard(clientId, postId, (meta) => applyStoryboardReview(meta, input, { by }), { expectedRevision });
 
 function approveInMemory(post, reviewedBy) {
   if (post.status === 'approved') return post;
