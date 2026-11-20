@@ -71,7 +71,7 @@ export async function buildBriefContext({ clientId, postId = null, readTemplateD
   const [posts, jobs] = await Promise.all([readPosts(clientId, RECENT_POSTS_READ), readJobs(clientId, RECENT_JOBS_READ)]);
   return {
     ok: true,
-    use: 'Write the Creative Brief as the v2 object following briefStandard (the six locked items, the writing rules and one worked example), templateDoc and library; never repeat a recentEpisodes angle or hero; never change the post\'s topic or copy (gaps go in needs); ' + FIRST_TIME_RIGHT + ' ' + READY_RULES + ' Save with queue.post.video-brief.save { postId, v2, status: "ready" }; never approve. If directorNotes.status is "revise", fix every item in directorNotes.items and re-save (the Director re-reviews; saving does not clear the notes).',
+    use: 'Write the Creative Brief as the v2 object following briefStandard (the six locked items, the writing rules and one worked example), templateDoc and library; never repeat a recentEpisodes angle or hero; never change the post\'s topic or copy (gaps go in needs); ' + FIRST_TIME_RIGHT + ' ' + READY_RULES + ' Save with queue.post.video-brief.save { postId, v2, status: "ready" }; never approve. A brief is finished only when directorNotes.status is "accepted". If directorNotes.status is "revise", fix every item in directorNotes.items and re-save (a save resets it to pending for re-review). If "pending", the Director has not reviewed it yet: move on to the next post.',
     briefStandard: loadBriefStandard(),
     templateDoc: readDoc(),
     library,

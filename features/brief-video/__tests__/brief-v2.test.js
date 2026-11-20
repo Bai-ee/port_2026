@@ -451,7 +451,7 @@ test('library loads with the new keys; context tool + MCP instructions + save to
 });
 
 // ── Gate 2 (2026-11-20): the same locks for every format, promo included ─────────────────────────────────────────────────
-import { directorNotesOf, postsNeedingRevision } from '../director-notes.js';
+import { directorNotesOf, postsByDirectorStatus, briefHashOf, directorStatusLabel } from '../director-notes.js';
 import { closestSceneIds } from '../brief-v2.js';
 
 test('gate2: every beat.screen names a library scene id (promo too); unknown ids list the closest', () => {
@@ -510,32 +510,55 @@ test('gate2: a NEEDS entry naming something the library has is refused; website 
   assert.equal(needs('NEEDS: a cooking minigame screen'), '');
 });
 
-test('directorNotes: read-only, survives a re-save, shown by the brief view and context, listed when revise', async () => {
-  const dn = { status: 'revise', notes: 'Beat 2 shows the wrong scene.', items: ['beat 2: use monsters.fight', 'add voiceReason'], at: '2026-11-20T12:00:00.000Z', by: 'director' };
-  const row = rowOf({ id: 'p1', videoBriefMeta: { creative: 'c', status: 'ready', briefVersion: 2, v2: normalizeV2(full()), directorNotes: dn } });
-  assert.deepEqual(directorNotesOf(row), dn);
+test('directorNotes loop: a changed save resets to pending with the new briefHash; accepted/revise are shown; unchanged saves keep it', async () => {
+  const v2 = normalizeV2(full());
+  const first = m(rowOf({ id: 'p1' }), { v2: full() });
+  const d0 = first.videoBriefMeta.directorNotes;
+  assert.deepEqual({ status: d0.status, notes: d0.notes, items: d0.items, by: d0.by, briefHash: d0.briefHash }, { status: 'pending', notes: null, items: [], by: null, briefHash: briefHashOf(v2) });
+  const dn = { status: 'revise', notes: 'Beat 2 shows the wrong scene.', items: ['beat 2: use monsters.fight', 'add voiceReason'], at: '2026-11-20T12:00:00.000Z', by: 'director', briefHash: briefHashOf(v2) };
+  const row = rowOf({ id: 'p1', videoBriefMeta: { ...first.videoBriefMeta, directorNotes: dn } });
+  assert.deepEqual({ ...directorNotesOf(row), stale: undefined }, { ...dn, stale: undefined });
+  assert.equal(directorNotesOf(row).stale, false);
+  assert.equal(directorStatusLabel(directorNotesOf(row)), 'Director: revise (2 items)');
+  const same = m(row, { v2: full(), captions: 'x' });
+  assert.deepEqual(same.videoBriefMeta.directorNotes, dn, 'unchanged v2 keeps the verdict');
+  const changed = m(row, { v2: full({ angle: 'changed angle' }) });
+  const dc = changed.videoBriefMeta.directorNotes;
+  assert.equal(dc.status, 'pending'); assert.deepEqual(dc.items, []); assert.notEqual(dc.briefHash, dn.briefHash);
+  assert.equal(directorNotesOf({ videoBriefMeta: { ...changed.videoBriefMeta, directorNotes: dn } }).stale, true, 'old verdict on a new version is visible as stale');
+  const acc = rowOf({ id: 'p5', videoBriefMeta: { ...first.videoBriefMeta, directorNotes: { ...dn, status: 'accepted', items: [] } } });
+  assert.equal(directorStatusLabel(directorNotesOf(acc)), 'Director: accepted');
+  assert.equal(directorStatusLabel(directorNotesOf(first.videoBriefMeta && { videoBriefMeta: first.videoBriefMeta })), 'Director: pending review');
   assert.equal(directorNotesOf(rowOf({ videoBriefMeta: { directorNotes: { status: 'bogus' } } })), null);
   assert.equal(directorNotesOf({}), null);
-  assert.equal(directorNotesOf(rowOf({ videoBriefMeta: { directorNotes: { status: 'sufficient', items: Array(30).fill('x'), notes: 'n'.repeat(5000) } } })).items.length, 12);
-  assert.deepEqual(videoBriefView(row).directorNotes, dn);
-  const saved = m(row, { v2: full({ angle: 'changed angle' }) });
-  assert.deepEqual(saved.videoBriefMeta.directorNotes, dn, 'a save clears nothing');
+  assert.equal(directorNotesOf(rowOf({ videoBriefMeta: { directorNotes: { status: 'accepted', items: Array(30).fill('x'), notes: 'n'.repeat(5000) } } })).items.length, 12);
+  assert.deepEqual(videoBriefView(row).directorNotes, directorNotesOf(row));
+  // context: revise items surfaced at top level + the loop instructions
   const ctx = await buildBriefContext({ clientId: CQ, postId: 'p1', readTemplateDoc: () => 'doc', readPost: async () => row, readPosts: async () => [], readJobs: async () => [] });
-  assert.deepEqual(ctx.directorNotes, dn);
-  assert.match(ctx.use, /directorNotes\.status is "revise", fix every item/);
+  assert.deepEqual(ctx.directorNotes.items, dn.items); assert.equal(ctx.directorNotes.status, 'revise');
+  assert.match(ctx.use, /finished only when directorNotes\.status is "accepted"/);
+  assert.match(ctx.use, /"revise", fix every item/);
+  assert.match(ctx.use, /"pending", the Director has not reviewed it yet: move on/);
   const none = await buildBriefContext({ clientId: CQ, postId: 'p2', readTemplateDoc: () => 'doc', readPost: async () => rowOf({ id: 'p2' }), readPosts: async () => [], readJobs: async () => [] });
   assert.equal(none.directorNotes, null);
-  const list = postsNeedingRevision([row, rowOf({ id: 'p3', videoBriefMeta: { directorNotes: { status: 'sufficient' } } }), rowOf({ id: 'p4' })]);
-  assert.equal(list.length, 1); assert.equal(list[0].postId, 'p1'); assert.deepEqual(list[0].directorNotes, dn);
-  const a = getAction('queue.post.video-briefs.revise');
-  assert.deepEqual(validateAction(a), []); assert.equal(a.tier, 0); assert.equal(a.action, 'video-brief-revise-list');
-  assert.match(fs.readFileSync(new URL('../../../app/api/social-posting/route.js', import.meta.url), 'utf8'), /video-brief-revise-list[\s\S]*postsNeedingRevision/);
+  // listing by status
+  const posts = [row, acc, rowOf({ id: 'p6', videoBriefMeta: first.videoBriefMeta }), rowOf({ id: 'p4' })];
+  assert.deepEqual(postsByDirectorStatus(posts, 'revise').map((x) => x.postId), ['p1']);
+  assert.deepEqual(postsByDirectorStatus(posts, 'accepted').map((x) => x.postId), ['p5']);
+  assert.deepEqual(postsByDirectorStatus(posts, 'pending').map((x) => x.postId), ['p6']);
+  assert.equal(postsByDirectorStatus(posts).length, 3);
+  const a = getAction('queue.post.video-briefs.by-director-status');
+  assert.deepEqual(validateAction(a), []); assert.equal(a.tier, 0); assert.equal(a.action, 'video-brief-director-list');
+  assert.deepEqual(a.args.properties.status.enum, ['revise', 'pending', 'accepted']);
+  assert.match(fs.readFileSync(new URL('../../../app/api/social-posting/route.js', import.meta.url), 'utf8'), /video-brief-director-list[\s\S]*postsByDirectorStatus/);
 });
 
 test('MCP instructions carry the Gate 2 paragraph; the editor has the director notes panel', () => {
   const ins = buildInstructions();
   assert.match(ins, /Every beat names a library scene id\. Narrated by default\. Never write NEEDS for anything the library has\./);
-  assert.match(ins, /directorNotes/);
+  assert.match(ins, /finished only when directorNotes\.status is 'accepted'.*If 'revise', fix every item and re-save.*If 'pending', the Director has not reviewed it yet: move on to the next post/);
   const jsx = fs.readFileSync(new URL('../../../components/dashboard/x-content/VideoBriefV2Editor.jsx', import.meta.url), 'utf8');
   assert.match(jsx, /id="video-brief-director-notes-panel"/);
+  assert.match(jsx, /id="video-brief-director-status-chip"/);
+  assert.match(jsx, /Approve anyway \(owner override\)/);
 });

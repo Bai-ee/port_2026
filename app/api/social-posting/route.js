@@ -1,6 +1,6 @@
 import { buildBriefContext } from '../../../features/brief-video/brief-context.js';
 import { briefWarnings } from '../../../features/brief-video/brief.js';
-import { videoBriefView, isV2Brief, postsNeedingRevision } from '../../../features/brief-video/brief-fields.js';
+import { videoBriefView, isV2Brief, postsByDirectorStatus } from '../../../features/brief-video/brief-fields.js';
 import { episodeAlreadyAttached } from '../../../features/brief-video/attach.js';
 import { postCopyDrift } from '../../../features/brief-video/brief-v2.js';
 import { authorPostBrief } from '../../../features/brief-video/brief-author.js';
@@ -364,10 +364,12 @@ export async function POST(request) {
       const out = await buildBriefContext({ clientId: context.clientId, postId, readPost: getSocialPost, readPosts: (cid, n) => readSocialQueue(cid, { limit: n }), readJobs: readRecentBriefJobs });
       return json(out);
     }
-    // Read only: this client's posts the Director marked directorNotes.status 'revise' (bounded newest-first read, never a scan).
-    if (action === 'video-brief-revise-list') {
+    // Read only: this client's posts by directorNotes.status (revise | pending | accepted; omit = all with a verdict). Bounded newest-first read, never a scan.
+    if (action === 'video-brief-director-list') {
+      const status = body.status ? String(body.status) : null;
+      if (status && !['revise', 'pending', 'accepted'].includes(status)) return json({ error: 'status must be revise, pending or accepted.' }, 400);
       const posts = await readSocialQueue(context.clientId, { limit: 200 });
-      return json({ ok: true, use: 'For each post: fix every directorNotes.items entry in the v2 brief and re-save with queue.post.video-brief.save. The Director re-reviews; saving does not clear the notes.', posts: postsNeedingRevision(posts) });
+      return json({ ok: true, use: 'A brief is finished only when directorNotes.status is accepted. revise: fix every item and re-save with queue.post.video-brief.save (a save resets it to pending). pending: the Director has not reviewed it yet, move on to the next post.', posts: postsByDirectorStatus(posts, status) });
     }
     if (action === 'video-brief-save' || action === 'video-brief-approve') {
       await gatePilotRow(context, decoded, body.postId);
