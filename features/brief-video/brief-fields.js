@@ -79,7 +79,7 @@ export function mergeVideoBrief(post, input = {}, { by = null, now = new Date().
   // Storyboard (v2 only): created 'pending' when the brief is approved; any change to the v2 brief sends it back to 'pending'.
   let storyboard = v2 && cur.storyboard && typeof cur.storyboard === 'object' ? cur.storyboard : null;
   if (v2 && !storyboard && status === 'approved') storyboard = newStoryboard({ now, by });
-  else if (storyboard && v2Changed && storyboard.status !== 'pending') storyboard = { ...storyboard, status: 'pending', updatedAt: now, updatedBy: by ? String(by).slice(0, 200) : null };
+  else if (storyboard && v2Changed && storyboard.status !== 'pending') storyboard = { ...storyboard, status: 'pending', episode: null, updatedAt: now, updatedBy: by ? String(by).slice(0, 200) : null };
   return {
     videoBrief: !creativeChanged && machine ? machine : creative,
     videoBriefMeta: {
@@ -128,7 +128,7 @@ export function panelBriefNeedsAuthoring(post) {
 export const panelBriefBlocksRender = (post) => isPanelBrief(post) && (isV2Brief(post) || post.videoBriefMeta.status !== 'approved' || panelBriefNeedsAuthoring(post));
 
 /** What the connector / editor read back. */
-export function videoBriefView(post) {
+export function videoBriefView(post, { episodeVideoUrl = null } = {}) {
   return {
     postId: post?.id || null,
     postStatus: post?.status || null,
@@ -138,7 +138,9 @@ export function videoBriefView(post) {
     briefVersion: isV2Brief(post) ? 2 : 1,
     v2: isV2Brief(post) ? post.videoBriefMeta.v2 : null,
     storyboard: isV2Brief(post) ? (post.videoBriefMeta.storyboard || null) : null,
+    episodeVideoUrl: episodeVideoUrl || null, // derived server-side from the episode's storage object (route), never from the stored episode
     mediaUrl: post?.mediaUrl || null,
+    posterUrl: post?.posterUrl || null,
     renderState: post?.videoBriefStatus || null,
     revision: post?.revision ?? null,
   };

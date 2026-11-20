@@ -17,6 +17,7 @@ import { sanitizeRepostOf, repostLabel } from './repost.js';
 import { stripBrief, parseBrief } from '../brief-video/brief.js';
 import { mergeVideoBrief, isPanelBriefPending } from '../brief-video/brief-fields.js';
 import { applyStoryboardSet, applyStoryboardReview } from '../brief-video/brief-v2.js';
+import { planEpisodeAttach, resolveEpisodeMedia, episodeAlreadyAttached } from '../brief-video/attach.js';
 import { postTargets, normalizeTargets, instagramBlockReason, deliverInstagram } from './cross-post.js';
 
 const require = createRequire(import.meta.url);
@@ -1455,9 +1456,63 @@ async function writeStoryboard(clientId, postId, apply, { expectedRevision = nul
 }
 export const setVideoBriefStoryboard = (clientId, postId, input, { by = null, expectedRevision = null } = {}) =>
   writeStoryboard(clientId, postId, (meta) => applyStoryboardSet(meta, input, { by }), { expectedRevision });
-export const reviewVideoBriefStoryboard = (clientId, postId, input, { by = null, expectedRevision = null } = {}) =>
-  writeStoryboard(clientId, postId, (meta) => applyStoryboardReview(meta, input, { by }), { expectedRevision });
+/** Resolve a post's storyboard episode media (existence, content type, server-derived URLs) for the panel preview. null when none / not valid. */
+export async function episodeVideoUrlFor(post) {
+  const ep = post?.videoBriefMeta?.storyboard?.episode;
+  if (!ep) return null;
+  const r = await resolveEpisodeMedia(fb.adminStorage.bucket(), ep, { clientId: post.clientId });
+  return r.ok ? r.mediaUrl : null;
+}
 
+const EPISODE_REFUSALS = {
+  'has-media': 'This draft already has media that is not a calendar/brief video. Remove it first, then approve the storyboard again.',
+  'public-copy-too-long': 'The post copy is over 280 characters; shorten it before the video can be attached.',
+  'empty-public-copy': 'The post copy is empty; write it before the video can be attached.',
+};
+const episodeRefusal = (reason) => Object.assign(new Error(EPISODE_REFUSALS[reason] || `The storyboard video cannot be attached (${reason}).`), { status: 409, code: reason });
+
+// Owner decision. 'approve' with a non-null storyboard.episode also attaches that pre-rendered video to the draft in the same transaction.
+// Storage is checked BEFORE the transaction (no I/O inside it); the transaction re-reads the post and only uses that result if the episode is unchanged.
+export async function reviewVideoBriefStoryboard(clientId, postId, input, { by = null, expectedRevision = null } = {}) {
+  if (!postId) throw Object.assign(new Error('postId is required.'), { status: 400 });
+  const ref = postsCol().doc(String(postId));
+  const approve = String(input?.decision || '').trim() === 'approve';
+  let resolved = null; // { key, urls }
+  const keyOf = (ep) => `${ep.storagePath}|${ep.posterStoragePath}|${ep.outlineHash}`;
+  if (approve) {
+    const pre = await ref.get();
+    const p0 = pre.exists ? pre.data() : null;
+    const ep0 = p0 && (!clientId || p0.clientId === clientId) ? p0.videoBriefMeta?.storyboard?.episode : null;
+    if (ep0 && !episodeAlreadyAttached(p0, ep0)) {
+      const r = await resolveEpisodeMedia(fb.adminStorage.bucket(), ep0, { clientId: p0.clientId });
+      if (!r.ok) throw episodeRefusal(r.reason);
+      resolved = { key: keyOf(ep0), urls: { mediaUrl: r.mediaUrl, posterUrl: r.posterUrl } };
+    }
+  }
+  return fb.adminDb.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const post = snap.exists ? snap.data() : null;
+    if (!post || (clientId && post.clientId !== clientId)) throw Object.assign(new Error('Post not found.'), { status: 404 });
+    if (post.status !== 'draft') throw Object.assign(new Error(`A storyboard can only change on a draft (this post is ${post.status}).`), { status: 409, code: 'not-draft' });
+    const meta = post.videoBriefMeta && typeof post.videoBriefMeta === 'object' ? post.videoBriefMeta : null;
+    const episode = approve ? (meta?.storyboard?.episode || null) : null;
+    // Idempotent: already approved with this exact episode on the post -> success, nothing written.
+    if (episode && meta.storyboard.status === 'approved' && episodeAlreadyAttached(post, episode)) return post;
+    if (episode && (expectedRevision == null || (post.revision || 0) !== Number(expectedRevision))) throw conflict();
+    if (!episode && expectedRevision != null && (post.revision || 0) !== Number(expectedRevision)) throw conflict();
+    const now = new Date().toISOString();
+    const nextMeta = applyStoryboardReview(meta || {}, input, { by, now });
+    let patch = { videoBriefMeta: nextMeta, revision: (post.revision || 0) + 1, updatedAt: now };
+    if (episode) {
+      if (!resolved || resolved.key !== keyOf(episode)) throw conflict(); // episode changed between the Storage check and now
+      const plan = planEpisodeAttach(post, episode, { clientId: post.clientId, urls: resolved.urls, now });
+      if (!plan.ok) throw episodeRefusal(plan.reason);
+      patch = { ...plan.patch, videoBriefMeta: { ...nextMeta, ...plan.patch.videoBriefMeta } };
+    }
+    tx.set(ref, patch, { merge: true });
+    return { ...post, ...patch };
+  });
+}
 function approveInMemory(post, reviewedBy) {
   if (post.status === 'approved') return post;
   if (post.status !== 'draft') {

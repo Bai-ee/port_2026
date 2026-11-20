@@ -35,6 +35,7 @@ import {
   readRecentBriefJobs,
   setVideoBriefStoryboard,
   reviewVideoBriefStoryboard,
+  episodeVideoUrlFor,
   setPostTargets,
   getPostTargetOptions,
 } from '../../../features/social-posting/twitter-service.js';
@@ -97,6 +98,9 @@ function planOverrideFrom(body, decoded) {
   if (!reason) throw Object.assign(new Error('An override needs a written reason.'), { status: 400, code: 'override-reason-required' });
   return { by: decoded?.email || decoded?.uid || null, reason };
 }
+
+// Preview URL for a storyboard episode, derived server-side from Storage; never fails the request.
+const episodeVideoUrlSafe = (post) => (post?.videoBriefMeta?.storyboard?.episode ? episodeVideoUrlFor(post).catch(() => null) : Promise.resolve(null));
 
 function json(body, status = 200) {
   return NextResponse.json(body, { status, headers: { 'cache-control': 'no-store' } });
@@ -342,7 +346,7 @@ export async function POST(request) {
     if (action === 'video-brief-get') {
       const row = await getSocialPost(context.clientId, body.postId);
       if (!row) return json({ error: 'Post not found.' }, 404);
-      return json({ ok: true, brief: videoBriefView(row) });
+      return json({ ok: true, brief: videoBriefView(row, { episodeVideoUrl: await episodeVideoUrlSafe(row) }) });
     }
     // Read only: everything the brief writer (ChatGPT via the MCP) needs: template doc, library, recent episodes, the post.
     if (action === 'video-brief-context') {
@@ -383,7 +387,10 @@ export async function POST(request) {
       const post = review
         ? await reviewVideoBriefStoryboard(context.clientId, body.postId, { decision: body.decision, notes: body.notes, frameNotes: body.frameNotes }, { by, expectedRevision: body.expectedRevision ?? null })
         : await setVideoBriefStoryboard(context.clientId, body.postId, { outline: body.outline, frames: body.frames, notes: body.notes }, { by, expectedRevision: body.expectedRevision ?? null });
-      return json({ ok: true, post: { id: post.id, revision: post.revision, status: post.status }, brief: videoBriefView(post) });
+      // Review approve: 'video-attached' when the storyboard's episode video is on the post, else the render is still pending.
+      const ep = post.videoBriefMeta?.storyboard?.episode;
+      const next = review && body.decision === 'approve' ? (ep && post.mediaJobId === `cal_${ep.episodeId}` ? 'video-attached' : 'render-pending') : undefined;
+      return json({ ok: true, post: { id: post.id, revision: post.revision, status: post.status }, brief: videoBriefView(post, { episodeVideoUrl: await episodeVideoUrlSafe(post) }), ...(next ? { next } : {}) });
     }
 
     // One click from the panel: approve the brief (if not yet) at the revision the owner saw, then start the render now.
