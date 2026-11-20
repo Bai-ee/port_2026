@@ -28,6 +28,12 @@ for (const name of ['catalog.json', 'campaign.json']) {
   fs.writeFileSync(path.join(to, 'cq-library.json'), `${JSON.stringify(lib, null, 2)}\n`);
   console.log('synced cq-library.json');
 }
+// The owner brief standard (first-time-right + one worked example), vendored as { text } and served by the context tool. The hub file's last line ("Reply STANDARD LOADED...") is dropped.
+{
+  const md = fs.readFileSync(path.join(cq, 'docs', 'calendar', 'CHATGPT_BRIEF_STANDARD.md'), 'utf8').replace(/\n+Reply "STANDARD LOADED"[^\n]*\n?$/, '\n');
+  fs.writeFileSync(path.join(to, 'cq-brief-standard.json'), `${JSON.stringify({ text: md }, null, 2)}\n`);
+  console.log('synced cq-brief-standard.json');
+}
 // The hub's pure request -> spec check (plain ESM, imports ./cursorTiming.mjs): the author runs it so a request that passes here renders.
 for (const name of ['requestToSpec.mjs', 'cursorTiming.mjs']) {
   const body = fs.readFileSync(path.join(from, name), 'utf8');

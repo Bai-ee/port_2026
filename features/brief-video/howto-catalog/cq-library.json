@@ -2,81 +2,447 @@
   "schema": "cq-library/v1",
   "updated": "2026-11-20",
   "note": "What a Critters Quest calendar video can show TODAY. Served to the brief writer through the HITLOOP MCP (video-brief context). Vendored from the hub (hitloop-video clients/critters-quest/docs/calendar/cq-library.json); refreshed as the scene library grows. status: ready = the renderer can produce it now; building = in progress, OK to ask for; owner-check = needs the owner's OK; needs-build = ask for it, it gets queued.",
-  "campaign": { "headline": "TITANS ARE COMING / SEASON 3 · DEC 18", "date": "2026-12-18", "rule": "every promo drives to Season 3 on December 18; end card = campaign card" },
+  "campaign": {
+    "headline": "TITANS ARE COMING / SEASON 3 · DEC 18",
+    "date": "2026-12-18",
+    "rule": "every promo drives to Season 3 on December 18; end card = campaign card"
+  },
   "formats": {
-    "feature": { "what": "a story around one feature built from approved game scenes (bar: E27 Fighting Gravitax, E31 Titans Are Coming)", "length": "22-30 s", "rules": ["every beat shows something happening in the real game", "no hold longer than ~2 s", ">= 2 real cursor actions", "hero moment + visible payoff", "narrated by default"] },
-    "guide": { "what": "a host walks through ONE in-game guide lesson on the real UI (bar: E01 The Mayor's Guide, the gather how-to)", "length": "22-30 s", "ask": "FORMAT: guide · LESSON · HOST · FOCUS", "rules": ["follows the lesson's real click order", "host = the lesson's teacher or the Mayor", "narrated by the host"] },
-    "promo": { "what": "a short animated poster: parallax, one simple motion idea, 1-3 bubbles, a banner (bar: the six live X posts)", "length": "15-23 s", "ask": "FORMAT: promo · TREATMENT · CAST · BUBBLES · BANNER", "rules": ["something always moves (parallax, rise, clash, lines)", "cast from game art", "never a real player's name"] }
+    "feature": {
+      "what": "a story around one feature built from approved game scenes (bar: E27 Fighting Gravitax, E31 Titans Are Coming)",
+      "length": "22-30 s",
+      "rules": [
+        "every beat shows something happening in the real game",
+        "no hold longer than ~2 s",
+        ">= 2 real cursor actions",
+        "hero moment + visible payoff",
+        "narrated by default",
+        "poster hero large, facing camera, sharp (high-res art); narration even pace + music bed"
+      ]
+    },
+    "guide": {
+      "what": "a host walks through ONE in-game guide lesson on the real UI (bar: E01 The Mayor's Guide, the gather how-to)",
+      "length": "22-30 s",
+      "ask": "FORMAT: guide · LESSON · HOST · FOCUS",
+      "rules": [
+        "follows the lesson's real click order",
+        "host = the lesson's teacher or the Mayor",
+        "narrated by the host"
+      ]
+    },
+    "promo": {
+      "what": "a short animated poster: parallax, one simple motion idea, 1-3 bubbles, a banner (bar: the six live X posts)",
+      "length": "15-23 s",
+      "ask": "FORMAT: promo · TREATMENT · CAST · BUBBLES · BANNER",
+      "rules": [
+        "something always moves (parallax, rise, clash, lines)",
+        "cast from game art",
+        "never a real player's name"
+      ]
+    },
+    "chapterStory": {
+      "what": "a timeline through real game scenes, one chapter per shot, landing on the next big thing (bar: Keeps moving v09, owner-approved 2026-11-20)",
+      "length": "28-34 s",
+      "ask": "FORMAT: chapter story · POSTER HERO · STEPS (scene + label) · NARRATION (verbatim, one line per step) · END CTA",
+      "rules": [
+        "3-5 chapters in order, each a real scene that shows exactly what its line says",
+        "bottom banner per chapter: NAME / CHAPTER N; the last step is the payoff with the date",
+        "equal chapter lengths, one steady narration speed, music bed under the voice",
+        "poster = one large high-res character, idle, facing camera, in a real game place",
+        "end card = still art + CRITTERS QUEST / PLAY NOW!"
+      ]
+    }
   },
   "hosts": [
-    { "id": "mayor", "status": "ready" },
-    { "id": "banker", "status": "ready", "note": "game rig; soft at poster size" },
-    { "id": "mandryll", "status": "ready", "note": "game trainer rig; soft at poster size" },
-    { "id": "gravitax", "status": "ready", "note": "feature/promo host" }
+    {
+      "id": "mayor",
+      "status": "ready"
+    },
+    {
+      "id": "banker",
+      "status": "ready",
+      "note": "game rig; soft at poster size"
+    },
+    {
+      "id": "mandryll",
+      "status": "ready",
+      "note": "game trainer rig; soft at poster size"
+    },
+    {
+      "id": "gravitax",
+      "status": "ready",
+      "note": "feature/promo host"
+    }
   ],
   "scenes": [
-    { "id": "gravitax.poster", "kit": "gravitax", "status": "ready", "shows": "Gravitax huge under the logo + Season 3 numeral, bubble, banner (several layouts)" },
-    { "id": "gravitax.arrival", "kit": "gravitax", "status": "ready", "shows": "lava world map, full HUD + World Bank sign, cursor clicks the castle, dive inside" },
-    { "id": "gravitax.guardian", "kit": "gravitax", "status": "ready", "shows": "World Bank window, Gravitax in front, the shared health bar draining" },
-    { "id": "gravitax.squads", "kit": "gravitax", "status": "ready", "shows": "squad picker with ready / COOLDOWN / WALKING HOME squads, pick a squad, Attack; camera can push onto the cards" },
-    { "id": "gravitax.swing", "kit": "gravitax", "status": "ready", "shows": "Gravitax swings, the health bar drops" },
-    { "id": "gravitax.report", "kit": "gravitax", "status": "owner-check", "shows": "battle report HIT LANDED (rewards visible)" },
-    { "id": "titans.poster", "kit": "titans", "status": "ready", "shows": "seven Titans under the wordmark, banner reworded" },
-    { "id": "titans.mayor-dock", "kit": "titans", "status": "ready", "shows": "the Mayor on his dock on the map: the Titans are waking" },
-    { "id": "titans.wake-on-map", "kit": "titans", "status": "ready", "shows": "fly into the real map with full HUD, Floranix awake on its building" },
-    { "id": "titans.roll-call", "kit": "titans", "status": "ready", "shows": "the seven Titans rise on the map with names: Floranix, Terravus, Axiom, Aquaris, Chronos, Solus, Necrothis" },
-    { "id": "titans.line-up", "kit": "titans", "status": "owner-check", "shows": "attack wave, tags flip to ability names (names not confirmed final)" },
-    { "id": "titans.window", "kit": "titans", "status": "ready", "shows": "the real Titan window, Titan changes Terravus > Axiom > Chronos > Solus, squad picked, ATTACK (fee/rounds incidental)" },
-    { "id": "titans.spotlight", "kit": "titans", "status": "owner-check", "shows": "one Titan rises over its own in-game background" },
-    { "id": "titans.end", "kit": "titans", "status": "ready", "shows": "end card, Gravitax shadow behind the badge, campaign headline" },
-    { "id": "raids.poster", "kit": "raids", "status": "ready", "shows": "raid poster, banner + bubble" },
-    { "id": "raids.rival-target", "kit": "raids", "status": "ready", "shows": "two towns on the map, cursor taps the rival town" },
-    { "id": "raids.send", "kit": "raids", "status": "ready", "shows": "raid modal, pick a squad + loot token, Send Raid (numbers incidental)" },
-    { "id": "raids.march", "kit": "raids", "status": "ready", "shows": "red march line between towns, squad walks it" },
-    { "id": "raids.incoming-warning", "kit": "raids", "status": "ready", "shows": "defender's map: incoming-raid banner, Set defense / Shield now" },
-    { "id": "raids.defense-tab", "kit": "raids", "status": "ready", "shows": "Town Defense screen: DEFENDER tab, pick a squad, SET AS DEFENDER, defending; or the Shield tab" },
-    { "id": "town.map", "kit": "town", "status": "ready", "shows": "your town on the real world map (levels 1-14), neighbours, HUD, cursor taps TOWN" },
-    { "id": "town.upgrade-panel", "kit": "town", "status": "ready", "shows": "the game's UPGRADE TOWN panel: eligible -> start -> building countdown -> finished -> claim (costs incidental)" },
-    { "id": "town.before-after", "kit": "town", "status": "ready", "shows": "the same map view, town art + level plate change N -> N+1" },
-    { "id": "shards.cracks", "kit": "shards", "status": "needs-build", "shows": "the Vault dome cracks, shards scatter (frozen in E21, hook pending)" },
-    { "id": "gather.loop", "kit": "guide", "status": "ready", "shows": "spot, critter, send, gathering bar, claim (claim shows rewards: owner-check)" }
+    {
+      "id": "gravitax.poster",
+      "kit": "gravitax",
+      "status": "ready",
+      "shows": "Gravitax huge under the logo + Season 3 numeral, bubble, banner (several layouts)"
+    },
+    {
+      "id": "gravitax.arrival",
+      "kit": "gravitax",
+      "status": "ready",
+      "shows": "lava world map, full HUD + World Bank sign, cursor clicks the castle, dive inside"
+    },
+    {
+      "id": "gravitax.guardian",
+      "kit": "gravitax",
+      "status": "ready",
+      "shows": "World Bank window, Gravitax in front, the shared health bar draining"
+    },
+    {
+      "id": "gravitax.squads",
+      "kit": "gravitax",
+      "status": "ready",
+      "shows": "squad picker with ready / COOLDOWN / WALKING HOME squads, pick a squad, Attack; camera can push onto the cards"
+    },
+    {
+      "id": "gravitax.swing",
+      "kit": "gravitax",
+      "status": "ready",
+      "shows": "Gravitax swings, the health bar drops"
+    },
+    {
+      "id": "gravitax.report",
+      "kit": "gravitax",
+      "status": "owner-check",
+      "shows": "battle report HIT LANDED (rewards visible)"
+    },
+    {
+      "id": "titans.poster",
+      "kit": "titans",
+      "status": "ready",
+      "shows": "seven Titans under the wordmark, banner reworded"
+    },
+    {
+      "id": "titans.mayor-dock",
+      "kit": "titans",
+      "status": "ready",
+      "shows": "the Mayor on his dock on the map: the Titans are waking"
+    },
+    {
+      "id": "titans.wake-on-map",
+      "kit": "titans",
+      "status": "ready",
+      "shows": "fly into the real map with full HUD, Floranix awake on its building"
+    },
+    {
+      "id": "titans.roll-call",
+      "kit": "titans",
+      "status": "ready",
+      "shows": "the seven Titans rise on the map with names: Floranix, Terravus, Axiom, Aquaris, Chronos, Solus, Necrothis; works as the payoff chapter (THE TITANS / DEC 18)"
+    },
+    {
+      "id": "titans.line-up",
+      "kit": "titans",
+      "status": "owner-check",
+      "shows": "attack wave, tags flip to ability names (names not confirmed final)"
+    },
+    {
+      "id": "titans.window",
+      "kit": "titans",
+      "status": "ready",
+      "shows": "the real Titan window, Titan changes Terravus > Axiom > Chronos > Solus, squad picked, ATTACK (fee/rounds incidental)"
+    },
+    {
+      "id": "titans.spotlight",
+      "kit": "titans",
+      "status": "owner-check",
+      "shows": "one Titan rises over its own in-game background"
+    },
+    {
+      "id": "titans.end",
+      "kit": "titans",
+      "status": "ready",
+      "shows": "end card, Gravitax shadow behind the badge, campaign headline"
+    },
+    {
+      "id": "raids.poster",
+      "kit": "raids",
+      "status": "ready",
+      "shows": "raid poster, banner + bubble"
+    },
+    {
+      "id": "raids.rival-target",
+      "kit": "raids",
+      "status": "ready",
+      "shows": "two towns on the map, cursor taps the rival town"
+    },
+    {
+      "id": "raids.send",
+      "kit": "raids",
+      "status": "ready",
+      "shows": "raid modal, pick a squad + loot token, Send Raid (numbers incidental)"
+    },
+    {
+      "id": "raids.march",
+      "kit": "raids",
+      "status": "ready",
+      "shows": "red march line between towns, squad walks it"
+    },
+    {
+      "id": "raids.incoming-warning",
+      "kit": "raids",
+      "status": "ready",
+      "shows": "defender's map: incoming-raid banner, Set defense / Shield now"
+    },
+    {
+      "id": "raids.defense-tab",
+      "kit": "raids",
+      "status": "ready",
+      "shows": "Town Defense screen: DEFENDER tab, pick a squad, SET AS DEFENDER, defending; or the Shield tab"
+    },
+    {
+      "id": "town.map",
+      "kit": "town",
+      "status": "ready",
+      "shows": "your town on the real world map (levels 1-14), neighbours, HUD, cursor taps TOWN"
+    },
+    {
+      "id": "town.upgrade-panel",
+      "kit": "town",
+      "status": "ready",
+      "shows": "the game's UPGRADE TOWN panel: eligible -> start -> building countdown -> finished -> claim (costs incidental)"
+    },
+    {
+      "id": "town.before-after",
+      "kit": "town",
+      "status": "ready",
+      "shows": "the same map view, town art + level plate change N -> N+1"
+    },
+    {
+      "id": "shards.cracks",
+      "kit": "shards",
+      "status": "needs-build",
+      "shows": "the Vault dome cracks, shards scatter (frozen in E21, hook pending)"
+    },
+    {
+      "id": "gather.loop",
+      "kit": "guide",
+      "status": "ready",
+      "shows": "spot, critter, send, gathering bar, claim (claim shows rewards: owner-check)"
+    },
+    {
+      "id": "town.inside",
+      "kit": "town",
+      "status": "ready",
+      "shows": "inside the town: the real Town Hall plaza (game town map), poster hero critter in front, banner"
+    },
+    {
+      "id": "monsters.fight",
+      "kit": "monsters",
+      "status": "ready",
+      "shows": "real map + HUD: cursor taps a monster (goblin / rock golem / mushroom / slime), a critter squad walks in, the monster attacks, the squad hits back"
+    },
+    {
+      "id": "chapter.banner",
+      "kit": "mixed",
+      "status": "ready",
+      "shows": "any ready scene with a bottom banner NAME / CHAPTER N; scenes from different kits can be chained in one video"
+    }
   ],
   "promoTreatments": [
-    { "id": "faceOff", "status": "building", "from": "live Oct 16: Gravitax vs the skull duck, energy clash, two bubbles" },
-    { "id": "mapConverge", "status": "building", "from": "live Nov 5: World Bank Battle, real map + HUD, attack lines converging" },
-    { "id": "hostPoster", "status": "building", "from": "live Oct 13 THE GUIDE, Nov 6 LAST DAY IN SEASON 2" },
-    { "id": "heroRise", "status": "building", "from": "live Nov 13 DECEMBER 18TH: a Titan rises over its in-game background" },
-    { "id": "statCard", "status": "building", "from": "live Season 2 in numbers (money lines need the owner's OK)" }
+    {
+      "id": "faceOff",
+      "status": "building",
+      "from": "live Oct 16: Gravitax vs the skull duck, energy clash, two bubbles"
+    },
+    {
+      "id": "mapConverge",
+      "status": "building",
+      "from": "live Nov 5: World Bank Battle, real map + HUD, attack lines converging"
+    },
+    {
+      "id": "hostPoster",
+      "status": "building",
+      "from": "live Oct 13 THE GUIDE, Nov 6 LAST DAY IN SEASON 2"
+    },
+    {
+      "id": "heroRise",
+      "status": "building",
+      "from": "live Nov 13 DECEMBER 18TH: a Titan rises over its in-game background"
+    },
+    {
+      "id": "statCard",
+      "status": "building",
+      "from": "live Season 2 in numbers (money lines need the owner's OK)"
+    }
   ],
   "lessons": [
-    { "id": "townHall", "title": "The Town Hall", "host": "mayor", "status": "ready", "focus": "upgrading the town (upgrade panel, building, claim, before/after)" },
-    { "id": "townDefense", "title": "Posting a Defender", "host": "mandryll", "status": "ready" },
-    { "id": "squadBuilder", "title": "Building a Squad", "host": "mandryll", "status": "ready" },
-    { "id": "worldBank", "title": "The World Bank", "host": "banker", "status": "ready", "focus": "in parts: the guardian fight, squads, the seat" },
-    { "id": "shards", "title": "Vault Shards", "host": "banker", "status": "ready", "note": "Season 2 shard data shown" },
-    { "id": "pvpAttack", "title": "Raiding a Town", "host": "mandryll", "status": "ready" },
-    { "id": "firstSquad", "title": "Your First Squad", "host": "mandryll", "status": "building" },
-    { "id": "townVisit", "title": "Visiting a Town", "host": "mandryll", "status": "building" },
-    { "id": "monsterAttack", "title": "Attacking a Monster", "host": "mandryll", "status": "building" },
-    { "id": "monsterReport", "title": "Reading a Battle Report", "host": "mandryll", "status": "needs-build" },
-    { "id": "pvpReport", "title": "Reading a Raid Report", "host": "mandryll", "status": "needs-build" },
-    { "id": "profile", "title": "Your Profile", "host": "mayor", "status": "needs-build" },
-    { "id": "muddyAnvil", "title": "The Muddy Anvil", "host": "mayor", "status": "needs-build" },
-    { "id": "bubblingBarrel", "title": "The Bubbling Barrel", "host": "mayor", "status": "needs-build" },
-    { "id": "gleamingNest", "title": "The Gleaming Nest", "host": "mayor", "status": "needs-build" },
-    { "id": "mysticMirror", "title": "The Mystic Mirror", "host": "mayor", "status": "needs-build" },
-    { "id": "glowingCog", "title": "The Glowing Cog", "host": "mayor", "status": "needs-build" },
-    { "id": "ward", "title": "The Hospital", "host": "mayor", "status": "needs-build" },
-    { "id": "beachChest", "title": "Beach Chests", "host": "mayor", "status": "needs-build" },
-    { "id": "graveyard", "title": "The Graveyard", "host": "mayor", "status": "needs-build" },
-    { "id": "bank", "title": "The Bank", "host": "banker", "status": "owner-check" },
-    { "id": "boosts", "title": "The Boosts Tab", "host": "banker", "status": "owner-check" },
-    { "id": "vouchers", "title": "Vouchers", "host": "banker", "status": "owner-check" },
-    { "id": "resourceMarket", "title": "The Resource Market", "host": "banker", "status": "owner-check" },
-    { "id": "speedup", "title": "The Speedup Wheel", "host": "banker", "status": "owner-check" },
-    { "id": "market", "title": "The Market", "host": "mayor", "status": "owner-check" },
-    { "id": "gacha", "title": "The Spin Wheels", "host": "mayor", "status": "owner-check" },
-    { "id": "cloneShop", "title": "The Clone Manifest", "host": "mayor", "status": "owner-check" }
+    {
+      "id": "townHall",
+      "title": "The Town Hall",
+      "host": "mayor",
+      "status": "ready",
+      "focus": "upgrading the town (upgrade panel, building, claim, before/after)"
+    },
+    {
+      "id": "townDefense",
+      "title": "Posting a Defender",
+      "host": "mandryll",
+      "status": "ready"
+    },
+    {
+      "id": "squadBuilder",
+      "title": "Building a Squad",
+      "host": "mandryll",
+      "status": "ready"
+    },
+    {
+      "id": "worldBank",
+      "title": "The World Bank",
+      "host": "banker",
+      "status": "ready",
+      "focus": "in parts: the guardian fight, squads, the seat"
+    },
+    {
+      "id": "shards",
+      "title": "Vault Shards",
+      "host": "banker",
+      "status": "ready",
+      "note": "Season 2 shard data shown"
+    },
+    {
+      "id": "pvpAttack",
+      "title": "Raiding a Town",
+      "host": "mandryll",
+      "status": "ready"
+    },
+    {
+      "id": "firstSquad",
+      "title": "Your First Squad",
+      "host": "mandryll",
+      "status": "building"
+    },
+    {
+      "id": "townVisit",
+      "title": "Visiting a Town",
+      "host": "mandryll",
+      "status": "building"
+    },
+    {
+      "id": "monsterAttack",
+      "title": "Attacking a Monster",
+      "host": "mandryll",
+      "status": "building"
+    },
+    {
+      "id": "monsterReport",
+      "title": "Reading a Battle Report",
+      "host": "mandryll",
+      "status": "needs-build"
+    },
+    {
+      "id": "pvpReport",
+      "title": "Reading a Raid Report",
+      "host": "mandryll",
+      "status": "needs-build"
+    },
+    {
+      "id": "profile",
+      "title": "Your Profile",
+      "host": "mayor",
+      "status": "needs-build"
+    },
+    {
+      "id": "muddyAnvil",
+      "title": "The Muddy Anvil",
+      "host": "mayor",
+      "status": "needs-build"
+    },
+    {
+      "id": "bubblingBarrel",
+      "title": "The Bubbling Barrel",
+      "host": "mayor",
+      "status": "needs-build"
+    },
+    {
+      "id": "gleamingNest",
+      "title": "The Gleaming Nest",
+      "host": "mayor",
+      "status": "needs-build"
+    },
+    {
+      "id": "mysticMirror",
+      "title": "The Mystic Mirror",
+      "host": "mayor",
+      "status": "needs-build"
+    },
+    {
+      "id": "glowingCog",
+      "title": "The Glowing Cog",
+      "host": "mayor",
+      "status": "needs-build"
+    },
+    {
+      "id": "ward",
+      "title": "The Hospital",
+      "host": "mayor",
+      "status": "needs-build"
+    },
+    {
+      "id": "beachChest",
+      "title": "Beach Chests",
+      "host": "mayor",
+      "status": "needs-build"
+    },
+    {
+      "id": "graveyard",
+      "title": "The Graveyard",
+      "host": "mayor",
+      "status": "needs-build"
+    },
+    {
+      "id": "bank",
+      "title": "The Bank",
+      "host": "banker",
+      "status": "owner-check"
+    },
+    {
+      "id": "boosts",
+      "title": "The Boosts Tab",
+      "host": "banker",
+      "status": "owner-check"
+    },
+    {
+      "id": "vouchers",
+      "title": "Vouchers",
+      "host": "banker",
+      "status": "owner-check"
+    },
+    {
+      "id": "resourceMarket",
+      "title": "The Resource Market",
+      "host": "banker",
+      "status": "owner-check"
+    },
+    {
+      "id": "speedup",
+      "title": "The Speedup Wheel",
+      "host": "banker",
+      "status": "owner-check"
+    },
+    {
+      "id": "market",
+      "title": "The Market",
+      "host": "mayor",
+      "status": "owner-check"
+    },
+    {
+      "id": "gacha",
+      "title": "The Spin Wheels",
+      "host": "mayor",
+      "status": "owner-check"
+    },
+    {
+      "id": "cloneShop",
+      "title": "The Clone Manifest",
+      "host": "mayor",
+      "status": "owner-check"
+    }
   ],
   "rules": [
     "Game art only: every frame comes from the game's own art and UI or an approved scene; never supplied posters or new artwork.",
@@ -85,6 +451,27 @@
     "Money: natural game economy UI may appear incidentally; economic values are never the subject (not in banner, captions, VO or post copy): USD, SOL or token price, floor, ROI, yield, pool values, reward amounts, investment framing.",
     "No unverified Season 3 mechanics (rounds, fees, daily rotation, rewards, Titan count at launch); Titan names from the approved roll-call are fine.",
     "No real player names, no 'beta', no mint/price promises.",
-    "Captions are concrete and editorial, never vague moods. Narration: short lines, dates in words, numbers never spoken."
+    "Captions are concrete and editorial, never vague moods. Narration: short lines, dates in words, numbers never spoken.",
+    "First time right: lock the poster hero, the steps in order, verbatim narration lines, banners and the end CTA in the brief (CREATIVE_BRIEF_V2 First-time-right).",
+    "Narration: one steady pace, music bed under it, punchy lines with ellipses, no verb repeated across lines, last line = call to action.",
+    "Monsters means a monster fight on the map (monsters.fight); the World Bank is its own step."
+  ],
+  "posterHeroes": [
+    {
+      "id": "king-critter",
+      "what": "teal platypus, flaming gold crown, sword (approved poster hero)"
+    },
+    {
+      "id": "cow-wizard",
+      "what": "cow, wizard hat, fire staff, moon shield"
+    },
+    {
+      "id": "jester-critter",
+      "what": "tiger in a jester hat, gem shield, key"
+    },
+    {
+      "id": "mayor",
+      "what": "the Mayor (host rig)"
+    }
   ]
 }

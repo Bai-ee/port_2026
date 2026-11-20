@@ -11,10 +11,10 @@ import { getAction, validateAction } from '../../x-strategy/agent/action-registr
 const CQ = 'paradice-dbBQCHUX';
 const beat = (n) => ({ purpose: `purpose ${n}`, screen: `Valdara lava map, state ${n}`, camera: 'push in', cursor: 'click the castle', response: 'the window opens', caption: `CAPTION ${n}`, transition: 'continuous push', seconds: 5 });
 const full = (over = {}) => ({
-  format: 'feature', angle: 'Readiness, not the fight.', poster: { idea: 'Gravitax left', banner: 'WHICH FIGHT FIRST?', dateLine: 'TITANS LAND DEC 18', bubble: 'Is your squad ready?' },
+  format: 'feature', angle: 'Readiness, not the fight.', poster: { idea: 'Gravitax left', hero: 'gravitax, lava map, idle, facing camera', banner: 'WHICH FIGHT FIRST?', dateLine: 'TITANS LAND DEC 18', bubble: 'Is your squad ready?' },
   hero: 'The ready squad is picked.', theme: 'Check before you swing.', beats: [beat(1), beat(2), beat(3), beat(4)],
   payoff: 'The bar drops.', end: 'standard campaign end card', mustNot: 'pool values as subject', voiceMode: 'narrated',
-  narrationLines: ['Pick the ready squad.'], needs: [], postCopy: 'Get a ready squad in.', ...over,
+  narrationLines: ['Which fight first?', 'Check the squads.', 'Pick the ready one.', 'Then... swing.', 'Critters Quest. Play now!'], needs: [], postCopy: 'Get a ready squad in.', ...over,
 });
 const NOW = '2026-11-19T10:00:00.000Z';
 const m = (post, input, o = {}) => mergeVideoBrief(post, input, { now: NOW, by: 'o@x', ...o });
@@ -176,7 +176,7 @@ test('MCP: queue.post.video-brief.save carries the v2 schema', () => {
   assert.deepEqual(validateAction(a), []);
   const v2 = a.args.properties.v2;
   assert.equal(v2.type, 'object');
-  assert.deepEqual(v2.properties.format.enum, ['feature', 'guide', 'promo']);
+  assert.deepEqual(v2.properties.format.enum, ['feature', 'guide', 'promo', 'chapter']);
   assert.deepEqual(v2.properties.treatment.enum, ['faceOff', 'mapConverge', 'hostPoster', 'heroRise', 'statCard']);
   assert.equal(v2.properties.bubbles.maxItems, 3);
   assert.deepEqual(v2.properties.voiceMode.enum, ['narrated', 'caption-only', 'music']);
@@ -238,7 +238,7 @@ import { buildBriefContext, buildRecentEpisodes, loadLibrary, readTemplateDoc, R
 test('cq-library.json parses and has formats / scenes / lessons / rules (and the three formats)', () => {
   const lib = loadLibrary();
   for (const k of ['formats', 'scenes', 'lessons', 'rules', 'campaign', 'hosts', 'promoTreatments']) assert.ok(lib[k], `library misses ${k}`);
-  assert.deepEqual(Object.keys(lib.formats).sort(), ['feature', 'guide', 'promo']);
+  assert.deepEqual(Object.keys(lib.formats).sort(), ['chapterStory', 'feature', 'guide', 'promo']);
   assert.equal(JSON.parse(fs.readFileSync(new URL('../howto-catalog/cq-library.json', import.meta.url), 'utf8')).schema, lib.schema);
 });
 
@@ -380,4 +380,74 @@ test('gate 6: the context `use` text, MCP save description and template doc stat
   assert.match(doc, /are REAL, owner-approved game UI rebuilt from the game code, not fake UI\./);
   assert.match(doc, /Promo is for announcements\/hype only; how-to and "what changed" posts are guide or feature episodes\./);
   assert.match(doc, /## Ready rules/);
+});
+
+// ── First-time-right lock on every format; chapter is just an allowed format value (owner 2026-11-20) ──────────────────────
+import { V2_FORMATS, v2Warnings } from '../brief-v2.js';
+import { FIRST_TIME_RIGHT, loadBriefStandard } from '../brief-context.js';
+import { formFromV2, toV2Body, formWarnings } from '../../../components/dashboard/x-content/video-brief-v2-model.js';
+import { QUEUE_ACTIONS } from '../../x-strategy/agent/catalog/queue.js';
+import { buildInstructions } from '../../mcp/instructions.js';
+
+test('chapter is an accepted format (34 s cap) with no recipe-specific gate', () => {
+  assert.ok(V2_FORMATS.includes('chapter'));
+  const five = (sec) => [1, 2, 3, 4, 5].map((i) => ({ ...beat(i), seconds: sec }));
+  assert.equal(normalizeV2(full({ format: 'chapter', beats: five(6.8) })).format, 'chapter');
+  assert.throws(() => normalizeV2(full({ format: 'chapter', beats: five(7) })), /34 s at most/);
+  assert.throws(() => normalizeV2(full({ beats: five(7) })), /30 s at most/, 'other formats keep 30 s');
+  assert.deepEqual(v2Missing(normalizeV2(full({ format: 'chapter', narrationLines: ['a', 'b', 'c', 'd', 'e'] }))), []);
+});
+
+test('ready gate on all non-promo formats: poster.hero and narration count (beats + 1)', () => {
+  for (const format of ['feature', 'chapter']) {
+    assert.deepEqual(v2Missing(normalizeV2(full({ format }))), [], `${format} passes`);
+    const noHero = v2Missing(normalizeV2(full({ format, poster: { idea: 'x', banner: 'y' } })));
+    assert.ok(noHero.some((x) => x.startsWith('poster.hero')), noHero.join(' | '));
+    const short = v2Missing(normalizeV2(full({ format, narrationLines: ['one', 'two', 'three', 'four'] })));
+    assert.ok(short.some((x) => x.startsWith('narrationLines') && x.includes('5 needed')), short.join(' | '));
+  }
+  assert.deepEqual(v2Missing(normalizeV2(full({ voiceMode: 'caption-only', narrationLines: [] }))), [], 'count applies when narrated only');
+  assert.ok(v2Missing(normalizeV2(full({ end: '' }))).includes('end'));
+  assert.ok(v2Missing(normalizeV2(full({ beats: [beat(1), beat(2), { ...beat(3), screen: '' }, beat(4)] }))).includes('beats[3].screen'));
+});
+
+test('CTA and promo hero/narration are warnings, never errors', () => {
+  assert.deepEqual(v2Warnings(normalizeV2(full())), []);
+  const noCta = full({ narrationLines: ['One.', 'Two.', 'Three.', 'Four.', 'The end.'] });
+  assert.equal(v2Warnings(normalizeV2(noCta)).length, 1);
+  assert.deepEqual(v2Missing(normalizeV2(noCta)), []);
+  const promo = { format: 'promo', treatment: 'heroRise', cast: ['Axiom'], poster: { idea: 'Axiom rises', banner: 'DEC 18' }, hero: 'rise', theme: 't', beats: [{ ...beat(1), screen: 'poster art', cursor: 'none', response: 'Axiom rises', seconds: 8 }, { ...beat(2), screen: 'poster art', cursor: 'none', response: 'the date slides in', seconds: 8 }], end: 'standard', voiceMode: 'narrated', narrationLines: ['Axiom rises.'] };
+  const n = normalizeV2(promo);
+  assert.deepEqual(v2Missing(n), []);
+  assert.ok(v2Warnings(n).some((x) => x.startsWith('poster.hero is empty')));
+});
+
+test('poster.hero round-trips (normalize, merge, render, editor form)', () => {
+  const n = normalizeV2(full());
+  assert.equal(n.poster.hero, 'gravitax, lava map, idle, facing camera');
+  assert.throws(() => normalizeV2(full({ poster: { idea: 'x', banner: 'y', hero: 'h'.repeat(81) } })), /poster.hero must be 80/);
+  const r = m({}, { v2: full() });
+  assert.equal(r.videoBriefMeta.v2.poster.hero, n.poster.hero);
+  assert.match(r.videoBriefMeta.creative, /POSTER HERO: gravitax/);
+  assert.equal(toV2Body(formFromV2(n)).poster.hero, n.poster.hero);
+  assert.equal(normalizeV2(full({ poster: { idea: 'x', banner: 'y' } })).poster.hero, undefined, 'omitted when empty');
+  assert.equal(formWarnings({ format: 'promo', posterHero: '', beats: [], voiceMode: '', narrationLines: '' }).length, 1);
+});
+
+test('library loads with the new keys; context tool + MCP instructions + save tool carry the standard', async () => {
+  const lib = loadLibrary();
+  assert.ok(lib.formats.chapterStory && lib.posterHeroes.length);
+  const ids = (lib.scenes || []).map((x) => x.id);
+  for (const id of ['monsters.fight', 'town.inside', 'chapter.banner']) assert.ok(ids.includes(id), id);
+  const ctx = await buildBriefContext({ clientId: CQ, readTemplateDoc: () => 'T', readPosts: async () => [], readJobs: async () => [] });
+  assert.ok(ctx.briefStandard.includes('GOLD EXAMPLE') && ctx.briefStandard.includes('Keeps moving') && ctx.briefStandard.includes('NARRATION'));
+  assert.ok(!ctx.briefStandard.includes('STANDARD LOADED'));
+  assert.equal(ctx.briefStandard, loadBriefStandard());
+  assert.ok(ctx.library.formats.chapterStory && ctx.library.posterHeroes.length && ctx.library.scenes.length);
+  assert.ok(ctx.use.includes(FIRST_TIME_RIGHT) && /PLAY NOW/.test(ctx.use));
+  assert.ok(buildInstructions().includes(FIRST_TIME_RIGHT) && /briefStandard/.test(buildInstructions()));
+  const save = QUEUE_ACTIONS.find((a) => a.id === 'queue.post.video-brief.save');
+  assert.match(save.description, /video-brief\.context first; a brief is saved READY only when all six items are locked/);
+  const props = save.args.properties.v2.properties;
+  assert.ok(props.format.enum.includes('chapter') && props.poster.properties.hero);
 });
