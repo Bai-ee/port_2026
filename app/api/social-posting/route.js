@@ -1,6 +1,7 @@
 import { buildBriefContext } from '../../../features/brief-video/brief-context.js';
 import { briefWarnings } from '../../../features/brief-video/brief.js';
 import { videoBriefView, isV2Brief } from '../../../features/brief-video/brief-fields.js';
+import { episodeAlreadyAttached } from '../../../features/brief-video/attach.js';
 import { postCopyDrift } from '../../../features/brief-video/brief-v2.js';
 import { authorPostBrief } from '../../../features/brief-video/brief-author.js';
 import { applyFeedback, applyRollback } from '../../../features/brief-video/brief-feedback.js';
@@ -35,6 +36,9 @@ import {
   readRecentBriefJobs,
   setVideoBriefStoryboard,
   reviewVideoBriefStoryboard,
+  reviewVideoBriefVideo,
+  restoreVideoBriefVersion,
+  readRevisionRequests,
   episodeVideoUrlFor,
   setPostTargets,
   getPostTargetOptions,
@@ -100,7 +104,7 @@ function planOverrideFrom(body, decoded) {
 }
 
 // Preview URL for a storyboard episode, derived server-side from Storage; never fails the request.
-const episodeVideoUrlSafe = (post) => (post?.videoBriefMeta?.storyboard?.episode ? episodeVideoUrlFor(post).catch(() => null) : Promise.resolve(null));
+const episodeVideoUrlSafe = (post, opts) => (post?.videoBriefMeta?.storyboard?.episode ? episodeVideoUrlFor(post, opts).catch(() => null) : Promise.resolve(null));
 
 function json(body, status = 200) {
   return NextResponse.json(body, { status, headers: { 'cache-control': 'no-store' } });
@@ -346,7 +350,9 @@ export async function POST(request) {
     if (action === 'video-brief-get') {
       const row = await getSocialPost(context.clientId, body.postId);
       if (!row) return json({ error: 'Post not found.' }, 404);
-      return json({ ok: true, brief: videoBriefView(row, { episodeVideoUrl: await episodeVideoUrlSafe(row) }) });
+      // body.v: resolve ONE earlier version's video on demand (versionVideoUrl); the version list itself carries no URLs.
+      const versionVideoUrl = body.v != null ? await episodeVideoUrlSafe(row, { v: Number(body.v) }) : null;
+      return json({ ok: true, brief: videoBriefView(row, { episodeVideoUrl: body.v != null ? null : await episodeVideoUrlSafe(row) }), ...(body.v != null ? { versionVideoUrl } : {}) });
     }
     // Read only: everything the brief writer (ChatGPT via the MCP) needs: template doc, library, recent episodes, the post.
     if (action === 'video-brief-context') {
@@ -389,8 +395,25 @@ export async function POST(request) {
         : await setVideoBriefStoryboard(context.clientId, body.postId, { outline: body.outline, frames: body.frames, notes: body.notes }, { by, expectedRevision: body.expectedRevision ?? null });
       // Review approve: 'video-attached' when the storyboard's episode video is on the post, else the render is still pending.
       const ep = post.videoBriefMeta?.storyboard?.episode;
-      const next = review && body.decision === 'approve' ? (ep && post.mediaJobId === `cal_${ep.episodeId}` ? 'video-attached' : 'render-pending') : undefined;
+      const next = review && body.decision === 'approve' ? (ep && episodeAlreadyAttached(post, ep) ? 'video-attached' : 'render-pending') : undefined;
       return json({ ok: true, post: { id: post.id, revision: post.revision, status: post.status }, brief: videoBriefView(post, { episodeVideoUrl: await episodeVideoUrlSafe(post) }), ...(next ? { next } : {}) });
+    }
+
+    // Owner feedback loop on the attached video. Same gate as storyboard-review: the signed-in owner (not an admin-less impersonation) or an admin.
+    if (action === 'video-brief-video-review' || action === 'video-brief-video-restore') {
+      await gatePilotRow(context, decoded, body.postId);
+      if (context.impersonating && !context.isAdmin) return json({ error: 'Only the owner can review a video.' }, 403);
+      const by = decoded?.email || decoded?.uid || null;
+      const opts = { by, expectedRevision: body.expectedRevision ?? null };
+      const post = action === 'video-brief-video-review'
+        ? await reviewVideoBriefVideo(context.clientId, body.postId, { decision: body.decision, notes: body.notes, atSeconds: body.atSeconds, v: body.v, outlineHash: body.outlineHash }, opts)
+        : await restoreVideoBriefVersion(context.clientId, body.postId, { v: body.v }, opts);
+      return json({ ok: true, post: { id: post.id, revision: post.revision, status: post.status }, brief: videoBriefView(post), mediaUrl: post.mediaUrl || null, posterUrl: post.posterUrl || null });
+    }
+    // Director inbox: read only, no write path.
+    if (action === 'video-brief-revisions') {
+      if (context.impersonating && !context.isAdmin) return json({ error: 'Only the owner can read the revision inbox.' }, 403);
+      return json({ ok: true, revisions: await readRevisionRequests(context.clientId) });
     }
 
     // One click from the panel: approve the brief (if not yet) at the revision the owner saw, then start the render now.

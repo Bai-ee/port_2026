@@ -19,6 +19,7 @@ export const SETTABLE_STATUSES = ['draft', 'ready', 'approved'];
 
 import { classifyBrief } from './brief.js';
 import { HOWTO_ALLOWED_CLIENTS } from './howto-request.js';
+import { versionsOf, reviewRecord } from './video-review.js';
 import { normalizeV2, assertV2Ready, v2Missing, renderV2Text, sameV2, newStoryboard, isV2Meta, isV2Brief } from './brief-v2.js';
 
 export { isV2Brief };
@@ -58,7 +59,11 @@ export function mergeVideoBrief(post, input = {}, { by = null, now = new Date().
   const rendered = v2 && (v2Changed || !curCreative) ? renderV2Text(v2) : null;
   const creative = has('template') ? str(input.template).replace(/\r\n?/g, '\n').trim() : (rendered ?? curCreative);
   if (creative.length > VIDEO_BRIEF_MAX) throw bad(`The Creative Brief must be ${VIDEO_BRIEF_MAX} characters or fewer.`);
-  if (!creative) return { videoBrief: null, videoBriefMeta: null };
+  if (!creative) {
+    // Emptying the brief writes videoBriefMeta null, which would erase the version history and owner feedback.
+    if (versionsOf(cur).length) throw Object.assign(new Error('This brief has video versions and feedback; it cannot be emptied. Edit it instead.'), { status: 409, code: 'brief-has-versions' });
+    return { videoBrief: null, videoBriefMeta: null };
+  }
   let status = has('status') ? str(input.status).trim() : (cur.status || 'draft');
   if (!SETTABLE_STATUSES.includes(status)) throw bad(`status must be one of ${SETTABLE_STATUSES.join(', ')}.`);
   if (status === 'approved' && !allowApprove && cur.status !== 'approved') throw Object.assign(new Error('Approving a video brief starts a render: approve it in the post\'s Video brief panel.'), { status: 403, code: 'brief-approve-owner-only' });
@@ -79,7 +84,12 @@ export function mergeVideoBrief(post, input = {}, { by = null, now = new Date().
   // Storyboard (v2 only): created 'pending' when the brief is approved; any change to the v2 brief sends it back to 'pending'.
   let storyboard = v2 && cur.storyboard && typeof cur.storyboard === 'object' ? cur.storyboard : null;
   if (v2 && !storyboard && status === 'approved') storyboard = newStoryboard({ now, by });
-  else if (storyboard && v2Changed && storyboard.status !== 'pending') storyboard = { ...storyboard, status: 'pending', episode: null, updatedAt: now, updatedBy: by ? String(by).slice(0, 200) : null };
+  let videoReview = cur.videoReview || null;
+  // versions[] / feedback[] ride through the ...storyboard spread; the review state resets with the storyboard (explicit nulls: merge:true keeps omitted keys).
+  if (storyboard && v2Changed && storyboard.status !== 'pending') {
+    storyboard = { ...storyboard, status: 'pending', episode: null, updatedAt: now, updatedBy: by ? String(by).slice(0, 200) : null };
+    videoReview = reviewRecord({ status: 'pending', at: now });
+  }
   return {
     videoBrief: !creativeChanged && machine ? machine : creative,
     videoBriefMeta: {
@@ -87,6 +97,7 @@ export function mergeVideoBrief(post, input = {}, { by = null, now = new Date().
       creativeRev: (Number(cur.creativeRev) || 1) + (creativeChanged && curCreative ? 1 : 0),
       ...(v2 ? { briefVersion: 2, v2 } : {}),
       ...(storyboard ? { storyboard } : {}),
+      ...(videoReview ? { videoReview } : {}),
       ...(cur.directorRequestId ? { directorRequestId: cur.directorRequestId } : {}),
       ...(cur.authored ? { authored: cur.authored } : {}),
       ...(cur.authorError && !creativeChanged ? { authorError: cur.authorError } : {}),
@@ -127,6 +138,13 @@ export function panelBriefNeedsAuthoring(post) {
 // `videoBriefMeta.directorRequestId` (set when the Director has produced a request for an approved storyboard) will lift this block.
 export const panelBriefBlocksRender = (post) => isPanelBrief(post) && (isV2Brief(post) || post.videoBriefMeta.status !== 'approved' || panelBriefNeedsAuthoring(post));
 
+// Version history ships without each outlineJson (large; the Director keeps it in Firestore) and without URLs (resolved lazily per version).
+const slimMeta = (meta) => {
+  const vs = meta?.storyboard?.versions;
+  if (!Array.isArray(vs)) return meta || null;
+  return { ...meta, storyboard: { ...meta.storyboard, versions: vs.map((x) => (x?.episode ? { ...x, episode: Object.fromEntries(Object.entries(x.episode).filter(([k]) => k !== 'outlineJson')) } : x)) } };
+};
+
 /** What the connector / editor read back. */
 export function videoBriefView(post, { episodeVideoUrl = null } = {}) {
   return {
@@ -134,13 +152,16 @@ export function videoBriefView(post, { episodeVideoUrl = null } = {}) {
     postStatus: post?.status || null,
     template: creativeOf(post),
     videoBrief: str(post?.videoBrief),
-    meta: post?.videoBriefMeta || null,
+    meta: slimMeta(post?.videoBriefMeta),
     briefVersion: isV2Brief(post) ? 2 : 1,
     v2: isV2Brief(post) ? post.videoBriefMeta.v2 : null,
-    storyboard: isV2Brief(post) ? (post.videoBriefMeta.storyboard || null) : null,
+    storyboard: isV2Brief(post) ? (slimMeta(post.videoBriefMeta).storyboard || null) : null,
     episodeVideoUrl: episodeVideoUrl || null, // derived server-side from the episode's storage object (route), never from the stored episode
     mediaUrl: post?.mediaUrl || null,
     posterUrl: post?.posterUrl || null,
+    mediaJobId: post?.mediaJobId || null,
+    mediaStoragePath: post?.mediaStoragePath || null,
+    mediaMetadata: post?.mediaMetadata || null,
     renderState: post?.videoBriefStatus || null,
     revision: post?.revision ?? null,
   };

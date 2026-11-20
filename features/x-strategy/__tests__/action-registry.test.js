@@ -58,7 +58,7 @@ test('coverage: every action of the two core routes is catalogued or explicitly 
     'curation-list', 'curation-set', 'curation-render-batch']);
   // calendar-syncs / set-calendar-syncs / run-calendar-sync: the Synced-calendars toggle is the owner's standing spend
   // consent on this client's accounts (SOCIAL-AUTO-PUBLISH.md § Synced calendars); the agent never reads or flips it.
-  const EXCLUDED_SP = new Set(['process-due-cron', 'set-targets', 'calendar-syncs', 'set-calendar-syncs', 'run-calendar-sync', 'video-brief-render', 'video-brief-status', 'video-brief-versions', 'video-brief-rollback', 'video-brief-storyboard-set', 'video-brief-storyboard-review']); // owner-only panel actions
+  const EXCLUDED_SP = new Set(['process-due-cron', 'set-targets', 'calendar-syncs', 'set-calendar-syncs', 'run-calendar-sync', 'video-brief-render', 'video-brief-status', 'video-brief-versions', 'video-brief-rollback', 'video-brief-storyboard-set', 'video-brief-storyboard-review', 'video-brief-video-review', 'video-brief-video-restore', 'video-brief-revisions']); // owner-only panel actions
   const registered = (route) => new Set(ACTIONS.filter((a) => a.route === route).map((a) => a.action).filter(Boolean));
 
   // quote-targets: SUPPORTED_ACTIONS array in the route (spreads resolved through the imported lists).

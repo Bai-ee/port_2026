@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import { randomUUID, createHash } from 'node:crypto';
 import { stripBrief, briefOfPost } from './brief.js';
 import { fillVersionMedia } from './brief-versions.js';
+import { reviewRecord, versionOfEpisode } from './video-review.js';
 
 // Same normalisation as twitter-service normalizePostText (kept local so this module stays free of the X client).
 const normalizePostText = (c) => String(c || '').replace(/\r\n?/g, '\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
@@ -112,8 +113,8 @@ export async function resolveEpisodeMedia(bucket, episode, { clientId } = {}) {
   }
 }
 
-/** Already attached: this exact episode (same outline hash) is on the post. */
-export const episodeAlreadyAttached = (post, episode) => Boolean(episode && post?.mediaJobId === episodeJobId(episode) && post?.videoBriefMeta?.storyboard?.episode?.outlineHash === episode.outlineHash);
+/** Already attached: the media on the post IS this episode (same file and same outline hash; episodeId alone is shared by every version). */
+export const episodeAlreadyAttached = (post, episode) => Boolean(episode && post?.mediaJobId === episodeJobId(episode) && post?.mediaStoragePath === episode.storagePath && post?.mediaMetadata?.outlineHash === episode.outlineHash);
 
 /**
  * Pure decision for the review transaction on 'approve': may this storyboard's episode video go on this draft? Returns { ok:true, patch } (merge patch)
@@ -138,7 +139,7 @@ export function planEpisodeAttach(post, episode, { clientId, urls = {}, now = ne
   const newJobId = episodeJobId(episode);
   agents.mediaGenerator = { status: 'complete', note: 'Attached storyboard episode video (CQ calendar episode).', mediaUrl: urls.mediaUrl, jobId: newJobId };
   const patch = {
-    videoBriefMeta: { status: 'rendered', updatedAt: now },
+    videoBriefMeta: { status: 'rendered', updatedAt: now, videoReview: reviewRecord({ status: 'pending', v: versionOfEpisode(post.videoBriefMeta, episode), outlineHash: episode.outlineHash, at: now }) },
     mediaUrl: urls.mediaUrl,
     mediaType: 'video',
     mediaContentType: 'video/mp4',
