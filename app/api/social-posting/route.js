@@ -1,6 +1,7 @@
 import { buildBriefContext } from '../../../features/brief-video/brief-context.js';
 import { briefWarnings } from '../../../features/brief-video/brief.js';
 import { videoBriefView, isV2Brief } from '../../../features/brief-video/brief-fields.js';
+import { postCopyDrift } from '../../../features/brief-video/brief-v2.js';
 import { authorPostBrief } from '../../../features/brief-video/brief-author.js';
 import { applyFeedback, applyRollback } from '../../../features/brief-video/brief-feedback.js';
 import { listVersions, setVersionJob } from '../../../features/brief-video/brief-versions.js';
@@ -366,7 +367,8 @@ export async function POST(request) {
         authorWarnings = au.warnings;
         similar = au.similar;
       }
-      const warnings = [...briefWarnings(post), ...authorWarnings];
+      const drift = !approve && isV2Brief(post) ? postCopyDrift(post.videoBriefMeta.v2, post.content) : ''; // soft warning only; the post copy is never touched
+      const warnings = [...briefWarnings(post), ...authorWarnings, ...(drift ? [drift] : [])];
       return json({ ok: true, post: { id: post.id, revision: post.revision, status: post.status }, brief: videoBriefView(post), ...(warnings.length ? { warnings } : {}), ...(similar.length ? { similar } : {}) });
     }
 

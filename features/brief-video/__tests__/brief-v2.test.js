@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { mergeVideoBrief, panelBriefBlocksRender, panelBriefNeedsAuthoring, videoBriefView, isV2Brief } from '../brief-fields.js';
-import { normalizeV2, v2Missing, renderV2Text, applyStoryboardSet, applyStoryboardReview, v2TotalSeconds } from '../brief-v2.js';
+import { normalizeV2, v2Missing, postCopyDrift, renderV2Text, applyStoryboardSet, applyStoryboardReview, v2TotalSeconds } from '../brief-v2.js';
 import { selectCandidates } from '../jobs.js';
 import { classifyVideoProcessing } from '../videoStatus.js';
 import { renderNow } from '../worker.js';
@@ -282,4 +282,102 @@ test('route wires video-brief-context', () => {
   const src = fs.readFileSync(new URL('../../../app/api/social-posting/route.js', import.meta.url), 'utf8');
   assert.match(src, /action === 'video-brief-context'/);
   assert.match(src, /readRecentBriefJobs/);
+});
+
+// ── READY gate hardening (2026-11-20): the brief writer cannot dodge the episode rules ─────────────────────────────────────
+const gate = (v2, opts) => v2Missing(normalizeV2(v2), opts).join(' | ');
+const promoOf = (o = {}) => ({ format: 'promo', treatment: 'heroRise', cast: ['Axiom'], bubbles: ['Ready?'], poster: { idea: 'Axiom rises', banner: 'TITANS RISE' }, hero: 'Axiom rises', theme: 't', beats: [{ ...beat(1), screen: 'Axiom background with the wordmark', cursor: 'none', response: 'Axiom rises from below', seconds: 9 }, { ...beat(2), screen: 'same background, date banner', cursor: 'none', seconds: 8 }], end: 'none', voiceMode: 'music', ...o });
+
+test('gate 1: every beat needs camera, transition, cursor or response; poster.idea required (all formats)', () => {
+  assert.deepEqual(v2Missing(normalizeV2(full())), []);
+  assert.match(gate(full({ beats: [{ ...beat(1), camera: '' }, beat(2), beat(3), beat(4)] })), /beats\[1\]\.camera is empty/);
+  assert.match(gate(full({ beats: [beat(1), { ...beat(2), transition: '' }, beat(3), beat(4)] })), /beats\[2\]\.transition is empty/);
+  assert.match(gate(full({ beats: [beat(1), beat(2), { ...beat(3), cursor: '', response: '' }, beat(4)] })), /beats\[3\] needs a cursor or a response/);
+  assert.match(gate(full({ poster: { banner: 'X' } })), /poster\.idea/);
+  assert.match(gate(promoOf({ poster: { banner: 'X' } })), /poster\.idea/);
+  assert.match(gate(promoOf({ beats: [{ ...promoOf().beats[0], camera: '', transition: '' }, promoOf().beats[1]] })), /beats\[1\]\.camera is empty.*beats\[1\]\.transition is empty/);
+  assert.deepEqual(v2Missing(normalizeV2(promoOf())), []);
+  // a draft may stay incomplete
+  assert.equal(m({}, { v2: full({ poster: { banner: 'X' } }), status: 'draft' }).videoBriefMeta.status, 'draft');
+  assert.throws(() => m({}, { v2: full({ poster: { banner: 'X' } }), status: 'ready' }), /poster\.idea/);
+});
+
+test('gate 2: feature/guide need 20-30 s, 2+ real cursor actions, no hold-only beat', () => {
+  const b = (n, o = {}) => ({ ...beat(n), seconds: 6, ...o });
+  assert.deepEqual(v2Missing(normalizeV2(full({ beats: [b(1), b(2), b(3), b(4)] }))), []); // 24 s
+  assert.match(gate(full({ beats: [b(1), b(2), b(3)].map((x) => ({ ...x, seconds: 5 })) })), /20-30 s in total, 15 s given/);
+  assert.match(gate(full({ beats: [b(1, { cursor: 'none' }), b(2, { cursor: 'no cursor' }), b(3, { cursor: 'none' }), b(4)] })), /at least 2 beats with a real cursor action.*1 given/);
+  assert.match(gate(full({ beats: [b(1, { cursor: '' }), b(2, { cursor: 'none' }), b(3, { cursor: '' }), b(4)] })), /at least 2 beats with a real cursor action/);
+  // hold / glide only (no cursor, no action verb)
+  assert.match(gate(full({ beats: [b(1), b(2), b(3), b(4, { cursor: '', response: 'camera glides over the map' })] })), /beats\[4\] is only a hold or glide/);
+  assert.match(gate(full({ format: 'guide', lesson: 'The Town Hall', beats: [b(1), b(2), b(3), b(4, { cursor: 'none', response: 'the map holds' })] })), /beats\[4\] is only a hold or glide/);
+  // a glide WITH an action verb passes, and a hold with a real cursor passes
+  assert.doesNotMatch(gate(full({ beats: [b(1), b(2), b(3), b(4, { cursor: '', response: 'camera glides as the bar drops' })] })), /hold or glide/);
+  assert.doesNotMatch(gate(full({ beats: [b(1), b(2), b(3), b(4, { response: 'holds on the window' })] })), /hold or glide/);
+  // promo is exempt from rule 2
+  assert.deepEqual(v2Missing(normalizeV2(promoOf({ beats: [{ ...promoOf().beats[0], response: 'the poster glides' }, promoOf().beats[1]] }))), []);
+});
+
+test('gate 3: promo treatment, cast characters, faceOff 2, mapConverge World Bank, no episode scene ids', () => {
+  assert.match(gate(promoOf({ cast: ['Vault'] })), /cast for heroRise must be game characters.*"Vault" is not a character/);
+  assert.match(gate(promoOf({ treatment: 'hostPoster', cast: ['Town Hall'] })), /cast for hostPoster must be game characters/);
+  assert.deepEqual(v2Missing(normalizeV2(promoOf({ treatment: 'hostPoster', cast: ['Mayor'] }))), []);
+  assert.deepEqual(v2Missing(normalizeV2(promoOf({ cast: ['Necrothis'] }))), []);
+  assert.deepEqual(v2Missing(normalizeV2(promoOf({ treatment: 'faceOff', cast: ['Gravitax', 'Axiom'] }))), []);
+  assert.match(gate(promoOf({ treatment: 'faceOff', cast: ['Gravitax'] })), /faceOff needs exactly 2/);
+  assert.match(gate(promoOf({ treatment: 'faceOff', cast: ['Gravitax', 'Axiom', 'Mayor'] })), /faceOff needs exactly 2/);
+  assert.deepEqual(v2Missing(normalizeV2(promoOf({ treatment: 'mapConverge', cast: ['World Bank'] }))), []);
+  assert.match(gate(promoOf({ treatment: 'mapConverge', cast: ['Vault'] })), /mapConverge target must be "World Bank"/);
+  assert.match(gate(promoOf({ beats: [{ ...promoOf().beats[0], screen: 'titans.mayor-dock the Mayor on his dock' }, promoOf().beats[1]] })), /feature\/guide scene "titans\.mayor-dock"/);
+  assert.match(gate(promoOf({ beats: [{ ...promoOf().beats[0], screen: 'titans.wake-on-map' }, promoOf().beats[1]] })), /titans\.wake-on-map/);
+  assert.deepEqual(v2Missing(normalizeV2(promoOf({ treatment: 'statCard', cast: ['Vault'] }))), [], 'statCard has no character rule');
+});
+
+test('gate 4: a beat screen naming a needs-build scene blocks ready', () => {
+  const lib = JSON.parse(fs.readFileSync(new URL('../howto-catalog/cq-library.json', import.meta.url), 'utf8'));
+  assert.ok(lib.scenes.some((x) => x.id === 'shards.cracks' && x.status === 'needs-build'));
+  const withScreen = (screen) => full({ beats: [beat(1), { ...beat(2), screen }, beat(3), beat(4)] });
+  assert.match(gate(withScreen('shards.cracks: the Vault dome cracks')), /beats\[2\]\.screen names "shards\.cracks": this scene isn't built yet: keep the topic and put it in needs, or choose a ready scene/);
+  assert.match(gate(withScreen('Vault Shards approved dome/crack scene, shards cracks open')), /isn't built yet/);
+  assert.doesNotMatch(gate(withScreen('Valdara lava map, full HUD')), /isn't built yet/);
+  assert.doesNotMatch(gate(withScreen('town.upgrade-panel: the UPGRADE TOWN panel')), /isn't built yet/);
+});
+
+test('gate 5: post copy that reads as how-to cannot be a promo; save never touches the post copy; postCopy drift warns', () => {
+  const howto = 'Here is how to upgrade your town: before and after.';
+  assert.match(gate(promoOf(), { postContent: howto }), /format "promo" does not fit this post.*guide or feature/);
+  assert.match(gate(promoOf(), { postContent: 'What changed in the town upgrade panel' }), /does not fit this post/);
+  assert.deepEqual(v2Missing(normalizeV2(promoOf()), { postContent: 'The Titans arrive December 18th.' }), []);
+  assert.deepEqual(v2Missing(normalizeV2(full()), { postContent: howto }), []);
+  assert.deepEqual(v2Missing(normalizeV2(full({ format: 'guide', lesson: 'The Town Hall' })), { postContent: howto }), []);
+  // through the save merge: the row's own content feeds the check
+  assert.throws(() => m(rowOf({ content: howto }), { v2: promoOf(), status: 'ready' }), /does not fit this post/);
+  assert.equal(m(rowOf({ content: howto }), { v2: full(), status: 'ready' }).videoBriefMeta.status, 'ready');
+  assert.equal(m(rowOf({ content: howto }), { v2: promoOf(), status: 'draft' }).videoBriefMeta.status, 'draft');
+  // the merge result carries only the brief fields: the post's content is never written
+  const out = m(rowOf({ content: howto }), { v2: full({ postCopy: 'Totally different words about the Vault.' }), status: 'ready' });
+  assert.deepEqual(Object.keys(out).sort(), ['videoBrief', 'videoBriefMeta']);
+  assert.ok(!('content' in out));
+  // soft warning, not a block
+  assert.match(postCopyDrift({ postCopy: 'Totally different words about the Vault.' }, howto), /postCopy differs from the post; the post's topic is fixed - don't change it/);
+  assert.equal(postCopyDrift({ postCopy: 'Here is how to upgrade your town' }, howto), '');
+  assert.equal(postCopyDrift({}, howto), '');
+});
+
+test('gate 6: the context `use` text, MCP save description and template doc state the rules', async () => {
+  const { buildBriefContext } = await import('../brief-context.js');
+  const ctx = await buildBriefContext({ clientId: CQ, readTemplateDoc: () => 'doc', readPosts: async () => [], readJobs: async () => [] });
+  const { QUEUE_ACTIONS } = await import('../../x-strategy/agent/catalog/queue.js');
+  const saveAction = QUEUE_ACTIONS.find((a) => a.id === 'queue.post.video-brief.save');
+  const save = saveAction.args.properties.v2.description; // the full rules ride on the v2 argument (action descriptions are capped at 200 chars)
+  assert.match(saveAction.description, /READY rules/);
+  const doc = fs.readFileSync(new URL('../../../docs/source-of-truth/CQ-CREATIVE-BRIEF-TEMPLATE.md', import.meta.url), 'utf8');
+  for (const text of [ctx.use, save]) {
+    assert.match(text, /town upgrade panel \(town\.upgrade-panel\), the incoming-raid warning \(raids\.incoming-warning\) and the Town Defense screen \(raids\.defense-tab\) are REAL, owner-approved game UI rebuilt from the game code, not fake UI\./);
+    assert.match(text, /Promo is for announcements\/hype only; how-to and "what changed" posts are guide or feature episodes\./);
+    assert.match(text, /camera, transition/);
+  }
+  assert.match(doc, /are REAL, owner-approved game UI rebuilt from the game code, not fake UI\./);
+  assert.match(doc, /Promo is for announcements\/hype only; how-to and "what changed" posts are guide or feature episodes\./);
+  assert.match(doc, /## Ready rules/);
 });

@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { videoBriefView } from './brief-fields.js';
+import { READY_RULES } from './brief-v2.js';
 
 const require = createRequire(import.meta.url);
 export const TEMPLATE_DOC_PATH = 'docs/source-of-truth/CQ-CREATIVE-BRIEF-TEMPLATE.md';
@@ -66,7 +67,7 @@ export async function buildBriefContext({ clientId, postId = null, readTemplateD
   const [posts, jobs] = await Promise.all([readPosts(clientId, RECENT_POSTS_READ), readJobs(clientId, RECENT_JOBS_READ)]);
   return {
     ok: true,
-    use: 'Write the Creative Brief as the v2 object following templateDoc and library; never repeat a recentEpisodes angle or hero; never change the post\'s topic (gaps go in needs); save with queue.post.video-brief.save { postId, v2, status: "ready" }; never approve.',
+    use: 'Write the Creative Brief as the v2 object following templateDoc and library; never repeat a recentEpisodes angle or hero; never change the post\'s topic or copy (gaps go in needs); ' + READY_RULES + ' Save with queue.post.video-brief.save { postId, v2, status: "ready" }; never approve.',
     templateDoc: readDoc(),
     library,
     recentEpisodes: buildRecentEpisodes({ posts, jobs, excludePostId: postId }),

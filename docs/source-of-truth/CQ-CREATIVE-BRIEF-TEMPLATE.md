@@ -65,7 +65,8 @@ Write each beat's `screen` from this catalog (condensed from the Director's KIT_
 - **Vault Shards**: the dome cracks, shards scatter (ready to hook); shard map, window and contest are owner-check (Season 2 data).
 - **Gather loop**: town / map, select a resource spot, choose and send a critter, the gathering bar, claim reward (the claim screen shows rewards: money featured unless approved).
 - **Mayor's Guide (E01)**: Mayor dock, Charter panel, lesson play/go. The Season 2 poster and end card are owner-check.
-- **Not available yet**: town upgrade panels and before/after, the Town Defense tab, the squad builder modal, Visiting a Town view. A post about one of these keeps its topic and lists `NEEDS: <panel>`.
+- **Not available yet**: the squad builder modal, Visiting a Town view, and any scene the library marks `needs-build` (for example `shards.cracks`). A post about one of these keeps its topic and lists `NEEDS: <panel>`; never name it in a beat `screen`.
+- **Town and raid UI (real)**: the town upgrade panel (`town.upgrade-panel`), the incoming-raid warning (`raids.incoming-warning`) and the Town Defense screen (`raids.defense-tab`) are REAL, owner-approved game UI rebuilt from the game code, not fake UI.
 
 ### Fallback: older cursor-template scenes
 
@@ -78,6 +79,16 @@ Used only when no kit fits, and say so in `needs`. They cannot carry a poster, f
 - **spotClaimReward**: the claim reward screen. Actions: claim, close. States: claimable, processing, claimed.
 
 Host: mayor, or none.
+
+## Ready rules (the server refuses `status: ready` until all hold)
+
+Drafts may stay incomplete; `ready` (and approval) runs these, and the error lists exactly what to fix.
+
+1. **Every beat, every format:** non-empty `camera`, non-empty `transition`, and a `cursor` or a `response`. `poster.idea` is required.
+2. **feature and guide:** at least 3 beats; 20-30 s in total; at least 2 beats whose `cursor` is a real action (not empty, `none`, `no cursor`); no beat that is only a hold or glide (a `response` with hold / glide / pan / linger and no action verb such as open, click, tap, pick, select, press, set, rise, wake, swing, drop, march, claim, upgrade, start, complete, fill, send, appear, when the beat has no cursor action).
+3. **promo:** `treatment` is one of the library `promoTreatments`. `heroRise`, `hostPoster` and `faceOff` cast entries must be characters (Mayor, Banker, Mandryll, Gravitax, the seven Titans: Floranix, Terravus, Axiom, Aquaris, Chronos, Solus, Necrothis); a building such as "Vault" is not a character. `faceOff` needs exactly 2. `mapConverge` target is "World Bank" (the only landmark supported today). A promo beat never uses a feature/guide scene id (for example `titans.mayor-dock`).
+4. **Built scenes only:** a beat `screen` that names a scene the library marks `needs-build` is refused. Keep the topic and put it in `needs`, or choose a ready scene.
+5. **Format fits the post:** if the post's own copy reads as a how-to / "what changed" / tour / step / guide post, the format must be `guide` or `feature`, never `promo`. **Promo is for announcements/hype only; how-to and "what changed" posts are guide or feature episodes.** The post's topic and copy are fixed: saving a brief never changes the post, and `postCopy` should match it (a large difference is returned as a warning).
 
 ## The v2 fields (exactly the `v2` argument of `queue.post.video-brief.save`)
 
@@ -181,6 +192,7 @@ A promo example (also checked by a test):
 - [ ] `angle` names the closest shipped or recent video and what differs.
 - [ ] A designed poster (banner 2-4 words), a hero moment in one sentence, a theme in one sentence.
 - [ ] Promo: treatment, cast and banner set; 1-3 beats, 15-23 s, something happens in each. Otherwise: 3-6 beats; in EVERY beat something happens (cursor action and/or what the game does), on a real named screen and state; at least 2 cursor actions overall; holds about 2 s or less; total at most 30 s.
+- [ ] Every beat has camera, transition and a cursor or response; `poster.idea` set; feature/guide: 20-30 s, 2+ real cursor actions, no hold-only beat; promo: character cast per treatment, no feature/guide scene id; no needs-build scene in a `screen`; the format fits the post (how-to = guide/feature).
 - [ ] Captions are concrete; payoff visibly happens.
 - [ ] No money subject, no unverified Season 3 mechanics, no real player names; `end` is the campaign card or an approved `art/...` path; the call to action is in `postCopy` only.
 - [ ] Narrated: `narrationLines` written (short, dates in words, no numbers).
