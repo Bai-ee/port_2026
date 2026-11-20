@@ -10,8 +10,11 @@ export const DIRECTOR_NOTES_MAX = 2000;
 export const DIRECTOR_ITEMS_MAX = 12;
 
 /** Short stable hash (FNV-1a, 8 hex) of a normalised v2 brief; no crypto so the editor bundle can use it. */
+const sortDeep = (v) => (Array.isArray(v) ? v.map(sortDeep) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, sortDeep(v[k])])) : v);
+
+/** Keys are sorted deep first, so the hash does not depend on how a Firestore client orders map fields (the Director hashes over REST). */
 export function briefHashOf(v2) {
-  const s = JSON.stringify(v2 ?? null);
+  const s = JSON.stringify(sortDeep(v2 ?? null));
   let h = 0x811c9dc5;
   for (let i = 0; i < s.length; i += 1) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
   return h.toString(16).padStart(8, '0');
