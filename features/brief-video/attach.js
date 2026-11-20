@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import { stripBrief, briefOfPost } from './brief.js';
+import { fillVersionMedia } from './brief-versions.js';
 
 // Same normalisation as twitter-service normalizePostText (kept local so this module stays free of the X client).
 const normalizePostText = (c) => String(c || '').replace(/\r\n?/g, '\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
@@ -62,7 +63,7 @@ export function planAttach(post, job, { force = false, now = new Date().toISOStr
 export async function attachJobToPost(job, { db = require('../../api/_lib/firebase-admin.cjs').adminDb, force = false, now = new Date().toISOString() } = {}) {
   const postRef = db.collection(POSTS).doc(job.postId);
   const jobRef = db.collection(JOBS).doc(job.jobId);
-  return db.runTransaction(async (tx) => {
+  const out = await db.runTransaction(async (tx) => {
     const [postSnap, jobSnap] = await Promise.all([tx.get(postRef), tx.get(jobRef)]);
     const liveJob = jobSnap.exists ? jobSnap.data() : null;
     if (!liveJob || liveJob.status !== 'done') return { attached: false, reason: 'job-not-done' };
@@ -74,6 +75,9 @@ export async function attachJobToPost(job, { db = require('../../api/_lib/fireba
     }
     tx.set(postRef, plan.updated);
     tx.set(jobRef, { attachedAt: now, updatedAt: now }, { merge: true });
-    return { attached: true };
+    return { attached: true, liveJob };
   });
+  if (!out.attached) return out;
+  await fillVersionMedia(db, out.liveJob); // version history, best-effort
+  return { attached: true };
 }

@@ -28,6 +28,24 @@ export function firstSentence(publicCopy) {
 
 const HOWTO_ID_RE = /^howto=([a-z0-9-]{3,48})$/;
 
+const MD = '[*_#>\\s-]*'; // markdown bullets / bold / headings before and around a field name
+const HOWTO_TYPE_LINE_RE = new RegExp(`^${MD}type${MD}:${MD}.*\\b(how-?to|gameplay)\\b`, 'im');
+const HOWTO_FIELD_LINE_RE = new RegExp(`^${MD}(hook|banner|host|format|arrival|payoff|cta|steps?|goal|audience|restrictions|shots|captions)${MD}:`, 'i');
+
+/** Structured how-to prose: a `Type: ...how-to/gameplay` line plus at least 2 other field lines (Hook:, Banner:, CTA: ...). */
+function isHowtoProse(text) {
+  if (!HOWTO_TYPE_LINE_RE.test(text)) return false;
+  const others = text.split('\n').filter((l) => !new RegExp(`^${MD}type${MD}:`, 'i').test(l) && HOWTO_FIELD_LINE_RE.test(l));
+  return others.length >= 2;
+}
+
+/** Warnings for a saved row whose brief classifies invalid (the save is never rejected). */
+export function briefWarnings(post) {
+  const b = briefOfPost(post);
+  if (!b || b.briefKind !== 'invalid') return [];
+  return [`video brief invalid: ${b.invalidReason} \u2014 gameplay/how-to videos need video.howto.request.submit (v3.2), then the brief must be exactly howto=<id>; it will not render.`];
+}
+
 /**
  * Classify the brief text (after the marker). `howto=<id>` -> CQ-HowTo; anything that starts with "howto" or carries
  * a YAML `request_version:` is invalid and must never reach BriefCut; everything else is free text.
@@ -38,6 +56,7 @@ export function classifyBrief(brief) {
   if (m) return { kind: 'howto', howtoId: m[1] };
   if (/request_version:/i.test(text)) return { kind: 'invalid', reason: 'yaml-in-brief' };
   if (/^howto/i.test(text)) return { kind: 'invalid', reason: 'malformed-howto-line' };
+  if (isHowtoProse(text)) return { kind: 'invalid', reason: 'howto-prose-needs-request' };
   return { kind: 'freetext' };
 }
 

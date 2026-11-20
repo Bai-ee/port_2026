@@ -1,0 +1,50 @@
+{
+  "request_version": 3.3,
+  "id": "monster-first-decision-v33",
+  "review_on": "2026-11-19",
+  "type": "how-to",
+  "skeleton": "cursor",
+  "season": 3,
+  "narration": false,
+  "goal": "Before the Titans arrive, a player decides which monster fight comes first, then builds the squad for it.",
+  "audience": "returning player",
+  "public_copy": "Pick the fight. Then the squad.",
+  "hook": "Which fight first?",
+  "banner": "WHICH FIGHT FIRST?",
+  "host": {
+    "name": "none"
+  },
+  "label": "CURRENT GAMEPLAY",
+  "exclude": [
+    "money",
+    "S3",
+    "realPlayers"
+  ],
+  "establish": {
+    "caption": "WHICH FIGHT FIRST?",
+    "seconds": 3,
+    "scene": "gravitax.target"
+  },
+  "steps": [
+    {
+      "caption": "CHECK THE TARGET",
+      "seconds": 2.5,
+      "scene": "gravitax.target"
+    },
+    {
+      "caption": "BUILD THE SQUAD",
+      "seconds": 3,
+      "scene": "gravitax.squad"
+    }
+  ],
+  "end": {
+    "caption": "PICK THE FIGHT. THEN THE SQUAD.",
+    "headline": "PICK THE FIGHT. THEN THE SQUAD.",
+    "seconds": 4
+  },
+  "new_panels": [],
+  "must_show": "the monster and its health bar, then the squad pick",
+  "must_not": "no prices, pools, fees, rewards, host or voice",
+  "claims_allowed": "none",
+  "open_questions": []
+}

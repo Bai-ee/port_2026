@@ -4,6 +4,9 @@
   "functions": {
     "app/api/**/*": {
       "maxDuration": 120
+    },
+    "app/api/social-posting/route.js": {
+      "maxDuration": 300
     }
   },
   "crons": [

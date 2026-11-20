@@ -1,4 +1,8 @@
+import { briefWarnings } from '../../../features/brief-video/brief.js';
 import { videoBriefView } from '../../../features/brief-video/brief-fields.js';
+import { authorPostBrief } from '../../../features/brief-video/brief-author.js';
+import { applyFeedback, applyRollback } from '../../../features/brief-video/brief-feedback.js';
+import { listVersions, setVersionJob } from '../../../features/brief-video/brief-versions.js';
 import { NextResponse } from 'next/server';
 import { createRequire } from 'module';
 import { alertOnHeldPosts } from '../../../features/social-posting/publish-alert.js';
@@ -40,6 +44,8 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const require = createRequire(import.meta.url);
+const adminDb = () => require('../../../api/_lib/firebase-admin.cjs').adminDb;
+export const maxDuration = 300; // Creative Brief authoring / feedback make up to two model calls (45 s each) plus a render start
 const { verifyRequestUser, isAdminEmail } = require('../../../api/_lib/auth.cjs');
 const { getEffectiveClientContext } = require('../../../api/_lib/client-provisioning.cjs');
 const { revokeApprovalsForClient, revokeApprovalsForPost } = require('../../../api/_lib/social-approval.cjs');
@@ -168,6 +174,15 @@ export async function GET(request) {
   } catch (err) {
     return json({ error: err.message || 'Failed to load social posts.' }, err.status || 500);
   }
+}
+
+// After a brief is approved: turn a CQ Creative Brief into a how-to request (features/brief-video/brief-author.js).
+// Not applicable / already authored -> { ok:true, post:current }. Failure -> { ok:false, response } (409 with the reasons; the post keeps authorError).
+async function authorCreativeBrief(clientId, postId, decoded, current) {
+  const out = await authorPostBrief({ db: adminDb(), clientId, postId: String(postId || ''), by: decoded?.email || decoded?.uid || null });
+  if (out.ok) return { ok: true, post: out.authored ? { ...current, ...out.post } : current, warnings: out.warnings || [], similar: out.similar || [] };
+  const row = await getSocialPost(clientId, postId);
+  return { ok: false, response: json({ ok: false, error: `Creative Brief could not be turned into a video: ${out.reasons.join('; ')}`, reasons: out.reasons, ...(row ? { brief: videoBriefView(row) } : {}) }, out.status || 409) };
 }
 
 export async function POST(request) {
@@ -328,8 +343,18 @@ export async function POST(request) {
       await gatePilotRow(context, decoded, body.postId);
       const approve = action === 'video-brief-approve';
       const input = approve ? { status: 'approved' } : Object.fromEntries(['template', 'status', 'assets', 'shots', 'captions', 'audio', 'narration'].filter((k) => Object.prototype.hasOwnProperty.call(body, k)).map((k) => [k, body[k]]));
-      const post = await saveVideoBrief(context.clientId, body.postId, input, { by: decoded?.email || decoded?.uid || null, allowApprove: approve, expectedRevision: body.expectedRevision ?? null });
-      return json({ ok: true, post: { id: post.id, revision: post.revision, status: post.status }, brief: videoBriefView(post) });
+      let authorWarnings = [];
+      let similar = [];
+      let post = await saveVideoBrief(context.clientId, body.postId, input, { by: decoded?.email || decoded?.uid || null, allowApprove: approve, expectedRevision: body.expectedRevision ?? null });
+      if (approve) {
+        const au = await authorCreativeBrief(context.clientId, body.postId, decoded, post);
+        if (!au.ok) return au.response;
+        post = au.post;
+        authorWarnings = au.warnings;
+        similar = au.similar;
+      }
+      const warnings = [...briefWarnings(post), ...authorWarnings];
+      return json({ ok: true, post: { id: post.id, revision: post.revision, status: post.status }, brief: videoBriefView(post), ...(warnings.length ? { warnings } : {}), ...(similar.length ? { similar } : {}) });
     }
 
     // One click from the panel: approve the brief (if not yet) at the revision the owner saw, then start the render now.
@@ -344,18 +369,45 @@ export async function POST(request) {
       } else if (st !== 'approved') {
         return json({ error: 'Save a video brief first.' }, 409);
       }
-      const { renderNow } = await import('../../../features/brief-video/worker.js');
-      let render = await renderNow({ db: require('../../../api/_lib/firebase-admin.cjs').adminDb, clientId: context.clientId, postId: body.postId });
+      const au = await authorCreativeBrief(context.clientId, body.postId, decoded, row);
+      if (!au.ok) return au.response;
+      row = au.post;
+      const authorWarnings = au.warnings;
+      const { renderNow, renderReplace } = await import('../../../features/brief-video/worker.js');
+      // A revised (feedback / rollback) request whose replace render could not start earlier: retry it as a replace render.
+      const authoredId = row.videoBriefMeta?.authored?.requestId;
+      const swap = Boolean(row.mediaUrl && authoredId && String(row.mediaJobId || '').startsWith('bv_') && row.mediaMetadata?.howtoId !== authoredId);
+      let render = await (swap ? renderReplace : renderNow)({ db: adminDb(), clientId: context.clientId, postId: body.postId });
       // Double click / cron tick won the race: same idempotent job, not an error.
       if (!render.ok && render.error === 'job-exists') render = { ok: true, existing: true, status: 'queued' };
-      return json({ ok: true, post: { id: row.id, revision: row.revision, status: row.status }, brief: videoBriefView(row), render });
+      if (swap && render.ok && render.jobId) await setVersionJob(adminDb(), row.id, authoredId, render.jobId);
+      const warnings = [...briefWarnings(row), ...authorWarnings];
+      return json({ ok: true, post: { id: row.id, revision: row.revision, status: row.status }, brief: videoBriefView(row), render, ...(warnings.length ? { warnings } : {}), ...(au.similar?.length ? { similar: au.similar } : {}) });
+    }
+
+    // Creative Brief revisions (draft only, never approve or schedule): owner feedback -> revised request -> replace render; rollback -> old version -> replace render.
+    if (action === 'video-brief-versions') {
+      await gatePilotRow(context, decoded, body.postId);
+      const row = await getSocialPost(context.clientId, body.postId);
+      if (!row) return json({ error: 'Post not found.' }, 404);
+      return json({ ok: true, versions: await listVersions(adminDb(), row.id) });
+    }
+    if (action === 'video-brief-feedback' || action === 'video-brief-rollback') {
+      await gatePilotRow(context, decoded, body.postId);
+      const common = { db: adminDb(), clientId: context.clientId, postId: String(body.postId || ''), expectedRevision: body.expectedRevision ?? null, by: decoded?.email || decoded?.uid || null };
+      const out = action === 'video-brief-feedback' ? await applyFeedback({ ...common, feedback: body.feedback }) : await applyRollback({ ...common, n: body.n });
+      if (!out.ok) {
+        const row = await getSocialPost(context.clientId, body.postId);
+        return json({ ok: false, error: `The video could not be revised: ${out.reasons.join('; ')}`, reasons: out.reasons, ...(row ? { brief: videoBriefView(row) } : {}) }, out.status || 409);
+      }
+      return json({ ok: true, post: { id: out.post.id, revision: out.post.revision, status: out.post.status }, brief: videoBriefView(out.post), render: out.render, versions: out.versions, ...(out.warnings?.length ? { warnings: out.warnings } : {}), ...(out.similar?.length ? { similar: out.similar } : {}) });
     }
 
     // Panel poll while a render runs: attaches a finished video right away (no wait for the cron tick), returns status.
     if (action === 'video-brief-status') {
       await gatePilotRow(context, decoded, body.postId);
       const { attachIfDone } = await import('../../../features/brief-video/worker.js');
-      const out = await attachIfDone({ db: require('../../../api/_lib/firebase-admin.cjs').adminDb, clientId: context.clientId, postId: String(body.postId || '') });
+      const out = await attachIfDone({ db: adminDb(), clientId: context.clientId, postId: String(body.postId || '') });
       if (!out.ok) return json({ error: out.error }, out.status || 400);
       const p = out.post;
       return json({ ok: true, attached: Boolean(out.attached?.attached), videoProcessing: out.videoProcessing,
@@ -490,7 +542,8 @@ export async function POST(request) {
 
     const agents = body.agents || runPostingAgents(body.content, agentContext).agents;
     const post = await createSocialPost(context.clientId, { ...body, agents, status: 'draft' });
-    return json({ ok: true, post });
+    const warnings = briefWarnings(post);
+    return json({ ok: true, post, ...(warnings.length ? { warnings } : {}) });
   } catch (err) {
     return json(
       {

@@ -4,7 +4,7 @@ import {
   MAX_CHARS, charCount, isOverLimit, formatInZone, zonedWallToMs, whenToIso, initialWhen, isFutureEnough, resolveTimeZone,
   statusPill, boundFields, boundFieldsGate, dirtyState, actionState, buildApproveRequest, buildApproveScheduleRequest,
   buildSaveRequest, buildSuggestionApproveRequest, classifyError, approvalVoided, mergeServerPost, moreItems, OWNER_ONLY_MESSAGE,
-  decideItems, buildDecideRequest, decideResultText, replacementRowId, splitBrief, joinBrief, BRIEF_MAX_CHARS,
+  decideItems, buildDecideRequest, decideResultText, replacementRowId, splitBrief, joinBrief, BRIEF_MAX_CHARS, friendlyBriefReason, friendlyBriefReasons,
 } from '../post-editor-model.js';
 
 const FULL = { selfReply: null, mediaVariants: null, replyTo: null };
@@ -259,4 +259,16 @@ test('splitBrief/joinBrief round-trip; count and limits use the public copy only
   const tooBig = `ok\n\nINTERNAL VIDEO BRIEF: ${'b'.repeat(BRIEF_MAX_CHARS + 1)}`;
   assert.equal(actionState({ row: draft(), content: tooBig, when: { date: '', time: '' }, tz: 'UTC', now: NOW }).canSave, false);
   assert.equal(actionState({ row: draft(), content: 'INTERNAL VIDEO BRIEF: x', when: { date: '', time: '' }, tz: 'UTC', now: NOW }).canSave, false);
+});
+
+test('friendlyBriefReason: Creative Brief errors read as plain English', () => {
+  assert.match(friendlyBriefReason('invalid-brief:howto-prose-needs-request'), /Approve it as a Creative Brief so the video request is written for you, or set a howto id/);
+  assert.match(friendlyBriefReason('author-cap'), /daily limit/);
+  assert.match(friendlyBriefReason('unsupported:shot 2:trading screen'), /cannot do this yet \(shot 2: trading screen\)/);
+  assert.match(friendlyBriefReason('art-missing:art/posters/nope.jpg'), /art\/posters\/nope\.jpg is not in the video library/);
+  assert.match(friendlyBriefReason('unknown-action:2:fly'), /Step 2 uses an action the video library does not have \(fly\)/);
+  assert.match(friendlyBriefReason('unknown-host:wizard'), /The brief uses a host .*wizard/);
+  assert.match(friendlyBriefReason('invalid-brief:yaml-in-brief'), /cannot render \(yaml-in-brief\)/);
+  assert.equal(friendlyBriefReason('something-new'), 'something-new');
+  assert.match(friendlyBriefReasons('The video could not be revised: no-authored-request; not-draft'), /Approve the brief first.*Only drafts/);
 });

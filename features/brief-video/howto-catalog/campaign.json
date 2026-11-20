@@ -1,0 +1,16 @@
+{
+  "id": "s3-titans-dec18",
+  "until": "2026-12-17",
+  "poster": {
+    "bubble": "Season 3 lands Dec 18!",
+    "sayPrefix": "Season Three lands December eighteenth!"
+  },
+  "end": {
+    "headline": "TITANS ARE COMING\n[SEASON 3 · DEC 18]",
+    "say": "Critters Quest Season Three. December eighteenth."
+  },
+  "live": {
+    "headline": "TITANS ARE LIVE\n[PLAY NOW!]",
+    "say": "Critters Quest Season Three... the Titans are awake. Play now!"
+  }
+}

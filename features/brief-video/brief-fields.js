@@ -4,8 +4,10 @@
 // row, saved independently of the post copy, approval, rendering and publishing. A panel brief renders only after
 // the owner sets its status to 'approved'; 'rendered' is set by the attach step, never by a caller.
 //
-// Row fields: videoBrief (the template text the renderer reads; same field attach.js already writes) and
-// videoBriefMeta {status, assets[], shots, captions, audio, narration, updatedAt, updatedBy}.
+// Row fields: videoBriefMeta.creative (the owner's Creative Brief text, <= 8000), videoBrief (the line the renderer reads:
+// the creative text until a CQ brief is authored, then `howto=<id>`; same field attach.js already writes) and
+// videoBriefMeta {creative, creativeRev, status, assets[], shots, captions, audio, narration, authored?, authorError?, updatedAt, updatedBy}.
+// Rows saved before the split have no meta.creative: their videoBrief text is the creative.
 // Pure: no Firestore, no network.
 
 export const VIDEO_BRIEF_MAX = 8000;
@@ -14,8 +16,14 @@ export const BRIEF_ASSETS_MAX = 20;
 export const BRIEF_STATUSES = ['draft', 'ready', 'approved', 'rendered'];
 export const SETTABLE_STATUSES = ['draft', 'ready', 'approved'];
 
+import { classifyBrief } from './brief.js';
+import { HOWTO_ALLOWED_CLIENTS } from './howto-request.js';
+
 const bad = (message) => Object.assign(new Error(message), { status: 400, code: 'invalid-video-brief' });
 const str = (v) => (v == null ? '' : String(v));
+
+/** The owner's Creative Brief text of a row (back-compat: meta without .creative means videoBrief is the creative). */
+export const creativeOf = (post) => (typeof post?.videoBriefMeta?.creative === 'string' ? post.videoBriefMeta.creative : str(post?.videoBrief)).trim();
 
 function note(key, v) {
   const s = str(v).replace(/\r\n?/g, '\n').trim();
@@ -39,19 +47,26 @@ function assetList(v) {
 export function mergeVideoBrief(post, input = {}, { by = null, now = new Date().toISOString(), allowApprove = true } = {}) {
   const has = (k) => Object.prototype.hasOwnProperty.call(input, k);
   const cur = post?.videoBriefMeta && typeof post.videoBriefMeta === 'object' ? post.videoBriefMeta : {};
-  const template = has('template') ? str(input.template).replace(/\r\n?/g, '\n').trim() : str(post?.videoBrief).trim();
-  if (template.length > VIDEO_BRIEF_MAX) throw bad(`The video template must be ${VIDEO_BRIEF_MAX} characters or fewer.`);
-  if (!template) return { videoBrief: null, videoBriefMeta: null };
+  const curCreative = creativeOf(post);
+  const creative = has('template') ? str(input.template).replace(/\r\n?/g, '\n').trim() : curCreative;
+  if (creative.length > VIDEO_BRIEF_MAX) throw bad(`The Creative Brief must be ${VIDEO_BRIEF_MAX} characters or fewer.`);
+  if (!creative) return { videoBrief: null, videoBriefMeta: null };
   let status = has('status') ? str(input.status).trim() : (cur.status || 'draft');
   if (!SETTABLE_STATUSES.includes(status)) throw bad(`status must be one of ${SETTABLE_STATUSES.join(', ')}.`);
   if (status === 'approved' && !allowApprove && cur.status !== 'approved') throw Object.assign(new Error('Approving a video brief starts a render: approve it in the post\'s Video brief panel.'), { status: 403, code: 'brief-approve-owner-only' });
-  // Any change to the template sends an approved brief back to review, so a render never uses text nobody approved.
-  const templateChanged = template !== str(post?.videoBrief).trim();
-  if (templateChanged && !has('status') && status === 'approved') status = 'ready';
+  // Any change to the creative sends an approved brief back to review, so a render never uses text nobody approved.
+  // A changed creative also drops the authored machine line (videoBrief goes back to the creative text until re-authored).
+  const creativeChanged = creative !== curCreative;
+  if (creativeChanged && !has('status') && status === 'approved') status = 'ready';
+  const machine = str(post?.videoBrief).trim();
   const narration = has('narration') ? (input.narration === null || input.narration === '' ? null : Boolean(input.narration === true || input.narration === 'true' || input.narration === 'on')) : (cur.narration ?? null);
   return {
-    videoBrief: template,
+    videoBrief: !creativeChanged && machine ? machine : creative,
     videoBriefMeta: {
+      creative,
+      creativeRev: (Number(cur.creativeRev) || 1) + (creativeChanged && curCreative ? 1 : 0),
+      ...(cur.authored ? { authored: cur.authored } : {}),
+      ...(cur.authorError && !creativeChanged ? { authorError: cur.authorError } : {}),
       status,
       assets: has('assets') ? assetList(input.assets) : (Array.isArray(cur.assets) ? cur.assets : []),
       shots: has('shots') ? note('shots', input.shots) : str(cur.shots),
@@ -70,15 +85,29 @@ export const isPanelBrief = (post) => Boolean(post?.videoBriefMeta && typeof pos
 /** Panel brief still waiting for its video: blocks approval/publish. */
 export const isPanelBriefPending = (post) => isPanelBrief(post) && post.videoBriefMeta.status !== 'rendered' && !post.mediaUrl;
 
-/** Worker gate: a panel brief renders only once approved. Legacy briefs keep their old behaviour. */
-export const panelBriefBlocksRender = (post) => isPanelBrief(post) && post.videoBriefMeta.status !== 'approved';
+/**
+ * A CQ Creative Brief (or a how-to written as prose) whose machine line is not yet a valid `howto=<id>`: it must be authored into a
+ * request first and may NEVER fall back to the free-text BriefCut renderer. Allowlisted (CQ) clients only.
+ */
+export function panelBriefNeedsAuthoring(post) {
+  if (!HOWTO_ALLOWED_CLIENTS.includes(post?.clientId) || !isPanelBrief(post)) return false;
+  if (classifyBrief(str(post.videoBrief)).kind === 'howto') return false;
+  const creative = creativeOf(post);
+  const kind = classifyBrief(creative);
+  if (kind.kind === 'howto') return false;
+  return /^\s*[*_#\s-]*creative id\b/im.test(creative) || kind.reason === 'howto-prose-needs-request';
+}
+
+/** Worker gate: a panel brief renders only once approved (and, for a CQ Creative Brief, authored). Legacy briefs keep their old behaviour. */
+export const panelBriefBlocksRender = (post) => isPanelBrief(post) && (post.videoBriefMeta.status !== 'approved' || panelBriefNeedsAuthoring(post));
 
 /** What the connector / editor read back. */
 export function videoBriefView(post) {
   return {
     postId: post?.id || null,
     postStatus: post?.status || null,
-    template: str(post?.videoBrief),
+    template: creativeOf(post),
+    videoBrief: str(post?.videoBrief),
     meta: post?.videoBriefMeta || null,
     mediaUrl: post?.mediaUrl || null,
     renderState: post?.videoBriefStatus || null,

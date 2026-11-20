@@ -49,7 +49,7 @@ test('validate 3.2: click.action required and shaped; narration default true for
   assert.match(bad((r) => { delete r.steps[0].clicks[0].action; }), /clicks\[0\]\.action/);
   assert.match(bad((r) => { r.steps[0].clicks[0].action = '1bad'; }), /clicks\[0\]\.action/);
   assert.match(bad((r) => { r.steps[0].clicks[0].action = 'a b'; }), /clicks\[0\]\.action/);
-  assert.match(bad((r) => { r.request_version = 3.3; }), /request_version/);
+  assert.match(bad((r) => { r.request_version = 3.4; }), /request_version/);
   assert.equal(effectiveNarration(good32()), true);
   assert.equal(effectiveNarration({ ...good32(), narration: false }), false);
   assert.equal(effectiveNarration({ request_version: 3.1 }), false);

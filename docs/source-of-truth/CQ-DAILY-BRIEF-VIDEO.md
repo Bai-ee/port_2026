@@ -61,7 +61,7 @@ Length rule (2026-11-19): only the public copy counts toward X's 280 (`twitter-s
 | kind | rule | goes to |
 |---|---|---|
 | `howto` | text is exactly `howto=<id>`, `<id>` matches `[a-z0-9-]{3,48}`, case-sensitive | `CQ-HowTo` (section 13), only with `CQ_HOWTO_ENABLED=true` |
-| `invalid` | contains `request_version:` (`yaml-in-brief`), or starts with `howto` in any case but is not the exact line (`malformed-howto-line`) | nothing, ever |
+| `invalid` | contains `request_version:` (`yaml-in-brief`), or starts with `howto` in any case but is not the exact line (`malformed-howto-line`), or is structured how-to prose: a `Type:` line naming how-to/gameplay plus at least 2 other field lines such as `Hook:`/`Banner:`/`CTA:` (`howto-prose-needs-request`) | nothing, ever |
 | `freetext` | everything else | `CQ-BriefCut` (unchanged) |
 
 `parseBrief`/`briefOfPost` return `briefKind`, `howtoId?`, `invalidReason?`. `howto` and `invalid` briefs never reach BriefCut, even with the flag off: `selectCandidates` keeps only `freetext` unless the worker asks for howto (flag on), and `newJobDoc` throws for anything not `freetext` (or `howto` with a `specHash`).
@@ -282,3 +282,13 @@ The brief can live in its own fields instead of the post copy (`features/brief-v
 - **Editor:** `#post-editor-video-brief-panel` (`VideoBriefPanel.jsx`). It has its own Save brief button and one render button: "Approve & render now", then "Render now", then "Rendering…".
 - **Not yet used by the renderer:** only the template text feeds the render. Assets, shots, captions, audio and narration are stored for people to read.
 
+
+## 16. Feedback, versions and rollback (Creative Brief, C2)
+
+Once a Creative Brief is authored (`videoBriefMeta.authored`), the owner can change the video without rewriting the brief. Code: `brief-feedback.js`, `brief-versions.js`, `reviseHowtoRequest` in `brief-author.js`, `renderReplace` in `worker.js`.
+- **Feedback** (`video-brief-feedback {postId, feedback ≤2000, expectedRevision}`): draft only (409 `not-draft`), needs an authored request (409 `no-authored-request`). One capped model call (shares `brief_author_usage` with authoring; forced tool, same catalog enums) returns a revised full request. The server keeps `review_on`, `public_copy`, season and `request_version`; the Creative Brief stays the source of truth and the feedback is a delimited data block. Validation + catalog check + one repair retry. The revised request is submitted as `cb-<8>-r<creativeRev>-f<n>`, the draft points at `howto=<newId>`, and a replace render starts. A failure leaves the draft, request and video untouched.
+- **Replace render** (`renderReplace`): like `renderNow` (HOLD, campaign date, render-now cap) but allows existing media ONLY when `mediaJobId` starts with `bv_` (never owner-uploaded media), draft only. The job carries `replace:true`, so attach swaps the video. Only a queued/rendering job blocks it. `renderNow` itself still refuses a post with media. If the replace render cannot start, the new request stays and the panel offers "Render this version" (`video-brief-render` retries it as a replace).
+- **Versions:** `social_posts/{id}/video_versions/{n}` = `{n, requestId, requestHash, request, feedback|null, kind: author|feedback|rollback, fromN?, jobId, mediaUrl, posterUrl, createdAt, by}`. Written on authoring, feedback and rollback; `mediaUrl`/`posterUrl` are filled when the job attaches (`attachJobToPost`, best-effort). `video-brief-versions {postId}` lists them.
+- **Rollback** (`video-brief-rollback {postId, n}`, owner only, no model call): re-submits version `n`'s request as `cb-<8>-r<rev>-b<n>` (current `public_copy`/`review_on`), then a replace render. Repeatable.
+- **Connector:** `queue.post.video-brief.feedback` (tier 2, owner confirm, draft only). No rollback via the connector.
+- **Panel:** `#creative-brief-feedback-panel` (`-input`, `-submit`), `#creative-brief-version-list`, per-version "Use this version".
