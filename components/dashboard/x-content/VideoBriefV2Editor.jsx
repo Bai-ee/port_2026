@@ -24,6 +24,7 @@ export default function VideoBriefV2Editor({ row, callSocial, editable, onRowPat
   const [frameNotes, setFrameNotes] = useState({});
   const [reviewNotes, setReviewNotes] = useState('');
   const [episodeUrl, setEpisodeUrl] = useState(null);
+  const [episodeAudioUrl, setEpisodeAudioUrl] = useState(null);
   useEffect(() => { setF(initial); setFrameNotes({}); setReviewNotes(''); }, [initial]);
 
   const savedStatus = row?.videoBriefMeta?.status || null;
@@ -32,9 +33,10 @@ export default function VideoBriefV2Editor({ row, callSocial, editable, onRowPat
   // The preview URL is derived server-side from Storage (the stored episode carries no URL).
   useEffect(() => {
     setEpisodeUrl(null);
+    setEpisodeAudioUrl(null);
     if (!episodeKey || !row?.id) return undefined;
     let live = true;
-    callSocial({ action: 'video-brief-get', postId: row.id }).then((res) => { if (live) setEpisodeUrl(res?.brief?.episodeVideoUrl || null); }).catch(() => {});
+    callSocial({ action: 'video-brief-get', postId: row.id }).then((res) => { if (live) { setEpisodeUrl(res?.brief?.episodeVideoUrl || null); setEpisodeAudioUrl(res?.brief?.episodeAudioUrl || null); } }).catch(() => {});
     return () => { live = false; };
   }, [episodeKey, row?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const dirty = JSON.stringify(f) !== JSON.stringify(initial);
@@ -212,6 +214,12 @@ export default function VideoBriefV2Editor({ row, callSocial, editable, onRowPat
               </div>
             ) : episodeUrl ? <video id="storyboard-episode-preview-video" src={episodeUrl} controls playsInline preload="metadata" style={{ width: '100%', maxWidth: 360, borderRadius: 8 }} /> : <p id="storyboard-episode-preview-loading" className="pe-muted">Loading the rendered video preview...</p>}
             <p id="storyboard-episode-preview-caption" className="pe-muted">Rendered episode {storyboard.episode.episodeId}. Approving puts this video on the post{replacing ? ' and replaces the current one' : ''}.</p>
+          </div>
+        ) : null}
+        {storyboard?.episode?.audioPreviewPath && episodeAudioUrl ? (
+          <div id="storyboard-episode-listen-panel" data-section="storyboard-episode-listen">
+            <p id="storyboard-episode-listen-label" className="pe-muted">Listen: narration + music</p>
+            <audio id="storyboard-episode-listen-player" src={episodeAudioUrl} controls preload="none" style={{ width: '100%', maxWidth: 360 }} />
           </div>
         ) : null}
         {storyboard?.frames?.length ? (

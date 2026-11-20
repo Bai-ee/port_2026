@@ -79,6 +79,7 @@ export function validateEpisode(episode, { clientId } = {}) {
   if (!safePath(episode.storagePath, clientId, '.mp4')) return fail('episode-bad-path');
   if (episode.posterStoragePath != null && !safePath(episode.posterStoragePath, clientId, '.jpg')) return fail('episode-bad-poster-path');
   if (!episode.posterStoragePath) return fail('episode-bad-poster-path');
+  if (episode.audioPreviewPath != null && !safePath(episode.audioPreviewPath, clientId, '.mp3')) return fail('episode-bad-audio-path'); // optional: the Director's narration + music preview
   if (episode.outlineJson != null) { // verified when the Director stored the outline beside the hash
     let parsed = null;
     try { parsed = JSON.parse(episode.outlineJson); } catch { /* mismatch below */ }
@@ -110,6 +111,25 @@ export async function resolveEpisodeMedia(bucket, episode, { clientId } = {}) {
     return { ok: true, mediaUrl, posterUrl };
   } catch {
     return fail('episode-media-unreadable');
+  }
+}
+
+/** Optional narration + music preview (episode.audioPreviewPath). Returns a server-derived URL, or null when absent / invalid / missing / not audio/*; never fails the caller. */
+export async function resolveEpisodeAudio(bucket, episode, { clientId } = {}) {
+  if (!episode?.audioPreviewPath) return null;
+  const v = validateEpisode(episode, { clientId });
+  if (!v.ok) return null;
+  try {
+    const file = bucket.file(episode.audioPreviewPath);
+    const [exists] = await file.exists();
+    if (!exists) return null;
+    const [meta] = await file.getMetadata();
+    if (!String(meta?.contentType || '').toLowerCase().startsWith('audio/')) return null;
+    let token = String(meta?.metadata?.firebaseStorageDownloadTokens || '').split(',')[0].trim();
+    if (!token) { token = randomUUID(); await file.setMetadata({ metadata: { firebaseStorageDownloadTokens: token } }); }
+    return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(episode.audioPreviewPath)}?alt=media&token=${token}`;
+  } catch {
+    return null;
   }
 }
 

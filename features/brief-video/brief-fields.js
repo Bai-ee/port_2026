@@ -146,7 +146,7 @@ const slimMeta = (meta) => {
 };
 
 /** What the connector / editor read back. */
-export function videoBriefView(post, { episodeVideoUrl = null } = {}) {
+export function videoBriefView(post, { episodeVideoUrl = null, episodeAudioUrl = null } = {}) {
   return {
     postId: post?.id || null,
     postStatus: post?.status || null,
@@ -157,6 +157,7 @@ export function videoBriefView(post, { episodeVideoUrl = null } = {}) {
     v2: isV2Brief(post) ? post.videoBriefMeta.v2 : null,
     storyboard: isV2Brief(post) ? (slimMeta(post.videoBriefMeta).storyboard || null) : null,
     episodeVideoUrl: episodeVideoUrl || null, // derived server-side from the episode's storage object (route), never from the stored episode
+    episodeAudioUrl: episodeAudioUrl || null, // narration + music preview, derived server-side like episodeVideoUrl
     mediaUrl: post?.mediaUrl || null,
     posterUrl: post?.posterUrl || null,
     mediaJobId: post?.mediaJobId || null,
