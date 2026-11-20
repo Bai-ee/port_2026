@@ -112,6 +112,12 @@
       "shows": "battle report HIT LANDED (rewards visible)"
     },
     {
+      "id": "gravitax.end",
+      "kit": "gravitax",
+      "status": "ready",
+      "shows": "end card: campaign headline, Gravitax rises, level-up chime"
+    },
+    {
       "id": "titans.poster",
       "kit": "titans",
       "status": "ready",
@@ -196,6 +202,12 @@
       "shows": "Town Defense screen: DEFENDER tab, pick a squad, SET AS DEFENDER, defending; or the Shield tab"
     },
     {
+      "id": "raids.end",
+      "kit": "raids",
+      "status": "ready",
+      "shows": "standard campaign end card for a raid story"
+    },
+    {
       "id": "town.map",
       "kit": "town",
       "status": "ready",
@@ -230,6 +242,12 @@
       "kit": "town",
       "status": "ready",
       "shows": "inside the town: the real Town Hall plaza (game town map), poster hero critter in front, banner"
+    },
+    {
+      "id": "town.end",
+      "kit": "town",
+      "status": "ready",
+      "shows": "standard campaign end card for a town story"
     },
     {
       "id": "monsters.fight",
@@ -462,12 +480,16 @@
       "what": "teal platypus, flaming gold crown, sword (approved poster hero)"
     },
     {
+      "id": "jester-critter",
+      "what": "tiger in a jester hat, gem shield, key"
+    },
+    {
       "id": "cow-wizard",
       "what": "cow, wizard hat, fire staff, moon shield"
     },
     {
-      "id": "jester-critter",
-      "what": "tiger in a jester hat, gem shield, key"
+      "id": "mandryll-trainer",
+      "what": "Mandryll, the game trainer (high-res art, 847x976: the smallest hero, keep it modest)"
     },
     {
       "id": "mayor",

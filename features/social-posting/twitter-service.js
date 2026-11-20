@@ -17,7 +17,7 @@ import { sanitizeRepostOf, repostLabel } from './repost.js';
 import { stripBrief, parseBrief } from '../brief-video/brief.js';
 import { mergeVideoBrief, isPanelBriefPending } from '../brief-video/brief-fields.js';
 import { applyStoryboardSet, applyStoryboardReview } from '../brief-video/brief-v2.js';
-import { planEpisodeAttach, resolveEpisodeMedia, episodeAlreadyAttached } from '../brief-video/attach.js';
+import { planEpisodeAttach, resolveEpisodeMedia, resolveEpisodeAudio, episodeAlreadyAttached } from '../brief-video/attach.js';
 import { applyVideoReview, versionEntry, listRevisionRequests } from '../brief-video/video-review.js';
 import { postTargets, normalizeTargets, instagramBlockReason, deliverInstagram } from './cross-post.js';
 
@@ -1463,6 +1463,13 @@ export async function episodeVideoUrlFor(post, { v = null } = {}) {
   if (!ep) return null;
   const r = await resolveEpisodeMedia(fb.adminStorage.bucket(), ep, { clientId: post.clientId });
   return r.ok ? r.mediaUrl : null;
+}
+
+/** Same for the optional narration + music preview of the current episode (or of version `v`); null when there is none. */
+export async function episodeAudioUrlFor(post, { v = null } = {}) {
+  const ep = v == null ? post?.videoBriefMeta?.storyboard?.episode : versionEntry(post?.videoBriefMeta, v)?.episode;
+  if (!ep?.audioPreviewPath) return null;
+  return resolveEpisodeAudio(fb.adminStorage.bucket(), ep, { clientId: post.clientId });
 }
 
 const EPISODE_REFUSALS = {

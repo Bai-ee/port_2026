@@ -10,8 +10,8 @@ const fb = require('../../../api/_lib/firebase-admin.cjs');
 const { makeFakeContext } = require('../../../api/_lib/__tests__/fake-firestore.cjs');
 const CQ = 'paradice-dbBQCHUX';
 const svc = await import('../twitter-service.js');
-const { planEpisodeAttach, validateEpisode, outlineHashOf } = await import('../../brief-video/attach.js');
-const { mergeVideoBrief } = await import('../../brief-video/brief-fields.js');
+const { planEpisodeAttach, validateEpisode, outlineHashOf, resolveEpisodeAudio } = await import('../../brief-video/attach.js');
+const { mergeVideoBrief, videoBriefView } = await import('../../brief-video/brief-fields.js');
 
 const OUTLINE = { schema: 'cq-episode-outline/v0', id: 'cal-2026-11-21-x', beats: [{ b: 1, a: 2 }] };
 const EP = () => ({
@@ -160,4 +160,40 @@ test('stale episode is cleared: storyboard-set writes episode:null, a v2 brief e
   ctx.adminDb._patch('social_posts', id, { videoBriefMeta: { ...raw(id).videoBriefMeta, storyboard: { ...raw(id).videoBriefMeta.storyboard, status: 'ready' } } });
   await svc.reviewVideoBriefStoryboard(CQ, id, { decision: 'approve' }, { by: 'o' });
   assert.ok(!raw(id).mediaUrl);
+});
+
+// ── Audio preview (storyboard "Listen: narration + music") ─────────────────────────────────────────────────────────────
+const AUDIO = `clients/${CQ}/brief-videos/2026-11-21_x-v01-audio.mp3`;
+test('validateEpisode: audioPreviewPath is optional and follows the same prefix/dir rules (.mp3)', () => {
+  assert.equal(validateEpisode({ ...EP(), audioPreviewPath: AUDIO }, { clientId: CQ }).ok, true);
+  assert.equal(validateEpisode({ ...EP(), audioPreviewPath: null }, { clientId: CQ }).ok, true);
+  for (const bad of [`clients/${CQ}/brief-videos/x.wav`, 'clients/other/brief-videos/x.mp3', `clients/${CQ}/storyboards/x.mp3`, `clients/${CQ}/brief-videos/../x.mp3`, 42]) {
+    assert.equal(validateEpisode({ ...EP(), audioPreviewPath: bad }, { clientId: CQ }).reason, 'episode-bad-audio-path', String(bad));
+  }
+});
+
+test('resolveEpisodeAudio: server-derived URL for audio/*, null when absent / missing / wrong type; mints a token when missing', async () => {
+  const b = bucket();
+  assert.equal(await resolveEpisodeAudio(b, EP(), { clientId: CQ }), null, 'no audioPreviewPath');
+  const ep = { ...EP(), audioPreviewPath: AUDIO };
+  assert.equal(await resolveEpisodeAudio(b, ep, { clientId: CQ }), null, 'object missing');
+  objects.set(AUDIO, { contentType: 'video/mp4', metadata: { firebaseStorageDownloadTokens: 't' } });
+  assert.equal(await resolveEpisodeAudio(b, ep, { clientId: CQ }), null, 'not audio/*');
+  objects.set(AUDIO, { contentType: 'audio/mpeg', metadata: { firebaseStorageDownloadTokens: 'tok-a' } });
+  assert.equal(await resolveEpisodeAudio(b, ep, { clientId: CQ }), `https://firebasestorage.googleapis.com/v0/b/test-bucket/o/${encodeURIComponent(AUDIO)}?alt=media&token=tok-a`);
+  objects.set(AUDIO, { contentType: 'audio/mpeg', metadata: {} });
+  assert.match(await resolveEpisodeAudio(b, ep, { clientId: CQ }), /-audio\.mp3\?alt=media&token=[0-9a-f-]{36}$/);
+  assert.equal(await resolveEpisodeAudio(b, { ...ep, audioPreviewPath: 'clients/other/brief-videos/a.mp3' }, { clientId: CQ }), null, 'bad path never touches storage');
+});
+
+test('episodeAudioUrlFor resolves the current episode; videoBriefView carries episodeAudioUrl', async () => {
+  objects.set(AUDIO, { contentType: 'audio/mpeg', metadata: { firebaseStorageDownloadTokens: 'tok-a' } });
+  const id = await seed({ episode: { ...EP(), audioPreviewPath: AUDIO } });
+  const post = { ...raw(id), id };
+  const url = await svc.episodeAudioUrlFor(post);
+  assert.match(url, /tok-a$/);
+  assert.equal(await svc.episodeAudioUrlFor({ ...raw(await seed()), clientId: CQ }), null, 'episode without audio');
+  const view = videoBriefView(post, { episodeAudioUrl: url });
+  assert.equal(view.episodeAudioUrl, url);
+  assert.equal(videoBriefView(post).episodeAudioUrl, null);
 });

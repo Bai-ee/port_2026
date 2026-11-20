@@ -40,6 +40,7 @@ import {
   restoreVideoBriefVersion,
   readRevisionRequests,
   episodeVideoUrlFor,
+  episodeAudioUrlFor,
   setPostTargets,
   getPostTargetOptions,
 } from '../../../features/social-posting/twitter-service.js';
@@ -105,6 +106,8 @@ function planOverrideFrom(body, decoded) {
 
 // Preview URL for a storyboard episode, derived server-side from Storage; never fails the request.
 const episodeVideoUrlSafe = (post, opts) => (post?.videoBriefMeta?.storyboard?.episode ? episodeVideoUrlFor(post, opts).catch(() => null) : Promise.resolve(null));
+
+const episodeAudioUrlSafe = (post, opts) => (post?.videoBriefMeta?.storyboard?.episode?.audioPreviewPath ? episodeAudioUrlFor(post, opts).catch(() => null) : Promise.resolve(null));
 
 function json(body, status = 200) {
   return NextResponse.json(body, { status, headers: { 'cache-control': 'no-store' } });
@@ -352,7 +355,7 @@ export async function POST(request) {
       if (!row) return json({ error: 'Post not found.' }, 404);
       // body.v: resolve ONE earlier version's video on demand (versionVideoUrl); the version list itself carries no URLs.
       const versionVideoUrl = body.v != null ? await episodeVideoUrlSafe(row, { v: Number(body.v) }) : null;
-      return json({ ok: true, brief: videoBriefView(row, { episodeVideoUrl: body.v != null ? null : await episodeVideoUrlSafe(row) }), ...(body.v != null ? { versionVideoUrl } : {}) });
+      return json({ ok: true, brief: videoBriefView(row, { episodeVideoUrl: body.v != null ? null : await episodeVideoUrlSafe(row), episodeAudioUrl: body.v != null ? null : await episodeAudioUrlSafe(row) }), ...(body.v != null ? { versionVideoUrl } : {}) });
     }
     // Read only: everything the brief writer (ChatGPT via the MCP) needs: template doc, library, recent episodes, the post.
     if (action === 'video-brief-context') {
@@ -396,7 +399,7 @@ export async function POST(request) {
       // Review approve: 'video-attached' when the storyboard's episode video is on the post, else the render is still pending.
       const ep = post.videoBriefMeta?.storyboard?.episode;
       const next = review && body.decision === 'approve' ? (ep && episodeAlreadyAttached(post, ep) ? 'video-attached' : 'render-pending') : undefined;
-      return json({ ok: true, post: { id: post.id, revision: post.revision, status: post.status }, brief: videoBriefView(post, { episodeVideoUrl: await episodeVideoUrlSafe(post) }), ...(next ? { next } : {}) });
+      return json({ ok: true, post: { id: post.id, revision: post.revision, status: post.status }, brief: videoBriefView(post, { episodeVideoUrl: await episodeVideoUrlSafe(post), episodeAudioUrl: await episodeAudioUrlSafe(post) }), ...(next ? { next } : {}) });
     }
 
     // Owner feedback loop on the attached video. Same gate as storyboard-review: the signed-in owner (not an admin-less impersonation) or an admin.
