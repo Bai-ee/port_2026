@@ -65,8 +65,10 @@ export function mergeVideoBrief(post, input = {}, { by = null, now = new Date().
   // A v2 brief can be a draft with empty fields, but only a complete one can be 'ready' / 'approved' (forces the writer to fill it).
   // An edit that leaves a ready/approved v2 brief incomplete (no explicit status) drops it back to draft instead of failing the save.
   if (v2 && (status === 'ready' || status === 'approved')) {
-    if (has('status')) assertV2Ready(v2);
-    else if (v2Changed && v2Missing(v2).length) status = 'draft';
+    // The post's own copy feeds the format/topic-fit rule; it is only READ here, never written (the patch below never carries `content`).
+    const gate = { postContent: post?.content };
+    if (has('status')) assertV2Ready(v2, gate);
+    else if (v2Changed && v2Missing(v2, gate).length) status = 'draft';
   }
   // Any change to the creative sends an approved brief back to review, so a render never uses text nobody approved.
   // A changed creative also drops the authored machine line (videoBrief goes back to the creative text until re-authored).

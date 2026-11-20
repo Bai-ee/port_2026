@@ -6,6 +6,11 @@
 // Storyboard: videoBriefMeta.storyboard {status pending|ready|approved|changes, outline?, frames[], notes?, updatedAt, updatedBy}.
 // Spec: hitloop-video-director clients/critters-quest/docs/calendar/CREATIVE_BRIEF_V2.md. Pure: no Firestore, no network.
 
+import { createRequire } from 'node:module';
+
+const requireJson = createRequire(import.meta.url);
+const LIBRARY = requireJson('./howto-catalog/cq-library.json');
+
 export const V2_FORMATS = ['feature', 'guide', 'promo'];
 // promo = a short animated poster built from an approved live treatment (see the template doc for what each means).
 export const V2_TREATMENTS = ['faceOff', 'mapConverge', 'hostPoster', 'heroRise', 'statCard'];
@@ -117,25 +122,115 @@ export function normalizeV2(input) {
   };
 }
 
-/** Required-field names still empty (empty list = ready to be marked ready). Promo has its own, shorter list. */
-export function v2Missing(v2) {
+// ── READY gate rules (drafts may stay incomplete; only 'ready' / 'approved' run these) ───────────────────────────────────
+// Each rule appends a teaching message to the v2Missing list, so the API returns exactly what to fix to the brief writer.
+export const FEATURE_SECONDS_MIN = 20;
+export const CURSOR_ACTIONS_MIN = 2;
+export const PROMO_MAP_TARGET = 'World Bank'; // the only landmark mapConverge supports today (the library has no field for it)
+// Characters a promo cast may name: library hosts + the seven Titans + Gravitax + Mayor/Banker/Mandryll. Anything else (a building, "Vault") is not a character.
+export const TITAN_NAMES = ['Floranix', 'Terravus', 'Axiom', 'Aquaris', 'Chronos', 'Solus', 'Necrothis'];
+export const CHARACTERS = [...new Set([...(LIBRARY.hosts || []).map((h) => h.id), ...TITAN_NAMES, 'Gravitax', 'Mayor', 'Banker', 'Mandryll'].map((x) => String(x).toLowerCase()))];
+const CHARACTERS_LABEL = ['Mayor', 'Banker', 'Mandryll', 'Gravitax', ...TITAN_NAMES].join(', ');
+const castKey = (x) => str(x).replace(/\s*\(.*\)\s*$/, '').trim().toLowerCase();
+export const isCharacter = (x) => CHARACTERS.includes(castKey(x));
+export const PROMO_TREATMENT_IDS = (LIBRARY.promoTreatments || []).map((t) => t.id);
+// Scenes the library lists for feature/guide episodes (kit is not "promo"); a promo must not name one.
+const EPISODE_SCENES = (LIBRARY.scenes || []).filter((sc) => sc.kit !== 'promo');
+const NEEDS_BUILD_SCENES = (LIBRARY.scenes || []).filter((sc) => sc.status === 'needs-build');
+// A cursor that names a real action; "none" / "no cursor" / "n/a" do not count.
+export const isRealCursor = (c) => { const t = str(c).trim().toLowerCase(); return Boolean(t) && !/^(none|no cursor|n\/a|-|no)$/.test(t) && !/^no (cursor|click)/.test(t); };
+// A response that is only a hold or a glide: has hold/glide words and none of these action verbs (kept simple on purpose).
+const HOLD_WORDS = /\b(hold|holds|glide|glides|pan|pans|linger)\b/i;
+const ACTION_VERBS = /\b(open|opens|click|clicks|tap|taps|pick|picks|select|selects|press|presses|set|sets|rise|rises|wake|wakes|swing|swings|drop|drops|march|marches|claim|claims|upgrade|upgrades|start|starts|complete|completes|fill|fills|send|sends|appear|appears)\b/i;
+export const isHoldOnly = (response) => HOLD_WORDS.test(str(response)) && !ACTION_VERBS.test(str(response));
+// Post copy that reads as a how-to / explainer must be a guide or feature, never a promo.
+const HOWTO_RE = /\b(how|here's how|before and after|what changed|tour|step|guide|learn)\b/i;
+const wordsOf = (t) => new Set(str(t).toLowerCase().match(/[a-z0-9']+/g) || []);
+
+/** Soft warning (never a block): the brief's postCopy no longer matches the post's own copy. '' when fine or not comparable. */
+export function postCopyDrift(v2, postContent) {
+  const a = wordsOf(v2?.postCopy); const b = wordsOf(postContent);
+  if (!a.size || !b.size) return '';
+  let both = 0; for (const w of a) if (b.has(w)) both += 1;
+  const jaccard = both / (a.size + b.size - both);
+  return jaccard < 0.5 ? "postCopy differs from the post; the post's topic is fixed - don't change it. Write the post's own topic into the brief and put anything the video can't show in needs." : '';
+}
+
+// The rules above in one block of text: served in the context tool's `use` and the MCP save description (keep in step with v2Missing).
+export const READY_RULES = 'READY rules (status ready is refused with the exact list to fix): '
+  + '(1) EVERY beat of every format needs camera, transition, and a cursor or response; poster.idea is required. '
+  + '(2) feature/guide: at least 3 beats, 20-30 s in total, at least 2 beats whose cursor is a real action (not "none"), and no beat that is only a hold/glide (give it an action: open, click, pick, send, claim, rise, swing). '
+  + '(3) promo: treatment from the library promoTreatments; heroRise/hostPoster/faceOff cast must be characters (Mayor, Banker, Mandryll, Gravitax, the seven Titans; never a building such as Vault), faceOff exactly 2, mapConverge target is World Bank; a promo beat never uses a feature/guide scene id. '
+  + '(4) A beat screen that names a needs-build scene is refused: keep the topic and put it in needs, or choose a ready scene. '
+  + '(5) The format must fit the post: a how-to / what-changed / tour / step / guide post is guide or feature, never promo. The post\'s topic and copy are fixed: never rewrite the post; postCopy must match it. '
+  + 'Promo is for announcements/hype only; how-to and "what changed" posts are guide or feature episodes. '
+  + 'The town upgrade panel (town.upgrade-panel), the incoming-raid warning (raids.incoming-warning) and the Town Defense screen (raids.defense-tab) are REAL, owner-approved game UI rebuilt from the game code, not fake UI.';
+
+function beatRules(v2, beats, m) {
+  const promo = v2.format === 'promo';
+  beats.forEach((b, i) => {
+    const n = i + 1;
+    if (!str(b.camera).trim()) m.push(`beats[${n}].camera is empty: say how the camera moves (e.g. "slow push onto the castle", "pull back to the map")`);
+    if (!str(b.transition).trim()) m.push(`beats[${n}].transition is empty: say how it moves into the next beat (e.g. "continuous push", "cut on the click"; "end" for the last beat)`);
+    if (!str(b.cursor).trim() && !str(b.response).trim()) m.push(`beats[${n}] needs a cursor or a response: write what the player clicks and/or what the game does`);
+    if (!promo && !isRealCursor(b.cursor) && isHoldOnly(b.response)) m.push(`beats[${n}] is only a hold or glide ("${str(b.response).slice(0, 60)}"): every beat must show something HAPPENING (a click, a window opening, a bar moving, a unit walking). Give it a cursor action or a response with an action (open, click, pick, send, claim, rise, swing, appears...)`);
+  });
+  // Scenes the library says are not built: keep the topic, put the gap in needs.
+  const seen = new Set();
+  beats.forEach((b, i) => {
+    const screen = str(b.screen).toLowerCase();
+    for (const sc of NEEDS_BUILD_SCENES) {
+      const words = [...String(sc.id).toLowerCase().split(/[.\-]/), ...(sc.title ? [] : [])].filter(Boolean);
+      const byId = screen.includes(String(sc.id).toLowerCase());
+      const byTitle = sc.title && screen.includes(String(sc.title).toLowerCase());
+      const byWords = words.length > 1 && words.every((w) => new RegExp(`\\b${w}`, 'i').test(screen));
+      if ((byId || byTitle || byWords) && !seen.has(`${i}:${sc.id}`)) { seen.add(`${i}:${sc.id}`); m.push(`beats[${i + 1}].screen names "${sc.id}": this scene isn't built yet: keep the topic and put it in needs, or choose a ready scene`); }
+    }
+  });
+}
+
+/** Required-field names still empty / rules still broken (empty list = ready to be marked ready). `opts.postContent` = the post's own copy. */
+export function v2Missing(v2, opts = {}) {
   const m = [];
   if (!v2 || !isObj(v2)) return ['v2'];
   const beats = Array.isArray(v2.beats) ? v2.beats : [];
   if (!v2.format) m.push('format');
+  const postContent = str(opts.postContent);
+  if (v2.format === 'promo' && HOWTO_RE.test(postContent)) {
+    m.push(`format "promo" does not fit this post: its copy reads as a how-to / "what changed" post ("${postContent.replace(/\s+/g, ' ').trim().slice(0, 80)}"). Promo is for announcements/hype only; how-to and "what changed" posts are guide or feature episodes. Change format to "guide" (a host walks one lesson) or "feature" (a story around the feature), keep the post's topic`);
+  }
   if (v2.format === 'promo') {
     if (!v2.treatment) m.push('treatment');
+    else if (!PROMO_TREATMENT_IDS.includes(v2.treatment)) m.push(`treatment "${v2.treatment}" is not a library promo treatment (${PROMO_TREATMENT_IDS.join(', ')})`);
     if (!(v2.cast || []).length) m.push('cast');
+    else {
+      const cast = v2.cast;
+      const chars = ['heroRise', 'hostPoster', 'faceOff'];
+      if (chars.includes(v2.treatment)) {
+        const notChars = cast.filter((c) => !isCharacter(c));
+        if (notChars.length) m.push(`cast for ${v2.treatment} must be game characters (${CHARACTERS_LABEL}); "${notChars.join('", "')}" is not a character (a building or place can't be the cast). Pick a character, or choose another treatment`);
+      }
+      if (v2.treatment === 'faceOff' && cast.length !== 2) m.push(`faceOff needs exactly 2 characters in cast (${cast.length} given)`);
+      if (v2.treatment === 'mapConverge') {
+        const ok = cast.some((c) => castKey(c) === PROMO_MAP_TARGET.toLowerCase());
+        if (!ok) m.push(`mapConverge target must be "${PROMO_MAP_TARGET}" (the only landmark supported today): put "${PROMO_MAP_TARGET}" in cast, or choose another treatment`);
+        const other = cast.filter((c) => castKey(c) !== PROMO_MAP_TARGET.toLowerCase() && !isCharacter(c));
+        if (other.length) m.push(`cast for mapConverge may only hold "${PROMO_MAP_TARGET}" and game characters; "${other.join('", "')}" is neither`);
+      }
+    }
     if (!str(v2.poster?.banner).trim()) m.push('poster.banner');
+    if (!str(v2.poster?.idea).trim()) m.push('poster.idea (the designed first frame: who is on it, the world/theme)');
     if (!(v2.bubbles || []).length && !str(v2.hero).trim()) m.push('bubbles or hero');
     if (!str(v2.theme).trim()) m.push('theme');
     if (beats.length < 1) m.push('beats (at least 1)');
     beats.forEach((b, i) => {
       const n = i + 1;
       if (!str(b.screen).trim()) m.push(`beats[${n}].screen`);
-      if (!str(b.response).trim() && !str(b.cursor).trim()) m.push(`beats[${n}].response (something must happen)`);
       if (!str(b.caption).trim()) m.push(`beats[${n}].caption (write "none" if no caption)`);
+      const hit = EPISODE_SCENES.find((sc) => str(b.screen).toLowerCase().includes(String(sc.id).toLowerCase()));
+      if (hit) m.push(`beats[${n}].screen uses the feature/guide scene "${hit.id}": a promo is an animated poster from its treatment, not a gameplay episode. Describe the poster art instead, or make this a feature/guide episode`);
     });
+    beatRules(v2, beats, m);
     const total = v2TotalSeconds(v2);
     if (beats.length && total < PROMO_SECONDS_MIN) m.push(`beats seconds (a promo is ${PROMO_SECONDS_MIN}-${PROMO_SECONDS_MAX} s, ${total} s given)`);
     if (!str(v2.end).trim()) m.push('end (write "none" if the treatment has no end card)');
@@ -146,15 +241,22 @@ export function v2Missing(v2) {
   if (v2.format === 'guide' && !v2.lesson) m.push('lesson');
   if (!str(v2.angle).trim()) m.push('angle');
   if (!str(v2.poster?.banner).trim()) m.push('poster.banner');
+  if (!str(v2.poster?.idea).trim()) m.push('poster.idea (the designed first frame: who is on it, the world/theme)');
   if (!str(v2.hero).trim()) m.push('hero');
   if (!str(v2.theme).trim()) m.push('theme');
   if (beats.length < V2_BEATS_READY_MIN) m.push(`beats (at least ${V2_BEATS_READY_MIN}, ${beats.length} given)`);
   beats.forEach((b, i) => {
     const n = i + 1;
     if (!str(b.screen).trim()) m.push(`beats[${n}].screen`);
-    if (!str(b.cursor).trim() && !str(b.response).trim()) m.push(`beats[${n}].cursor or response`);
     if (!str(b.caption).trim()) m.push(`beats[${n}].caption (write "none" if no caption)`);
   });
+  beatRules(v2, beats, m);
+  if (v2.format === 'feature' || v2.format === 'guide') {
+    const total = v2TotalSeconds(v2);
+    if (beats.length && (total < FEATURE_SECONDS_MIN || total > V2_TOTAL_SECONDS_MAX)) m.push(`beats seconds (a ${v2.format} is ${FEATURE_SECONDS_MIN}-${V2_TOTAL_SECONDS_MAX} s in total, ${total} s given)`);
+    const actions = beats.filter((b) => isRealCursor(b.cursor)).length;
+    if (beats.length && actions < CURSOR_ACTIONS_MIN) m.push(`a ${v2.format} needs at least ${CURSOR_ACTIONS_MIN} beats with a real cursor action ("click the castle", "pick the ready squad"); ${actions} given. "none" does not count: show the player acting in the game`);
+  }
   if (!str(v2.payoff).trim()) m.push('payoff');
   if (!str(v2.end).trim()) m.push('end');
   if (!v2.voiceMode) m.push('voiceMode');
@@ -163,8 +265,8 @@ export function v2Missing(v2) {
 }
 
 /** Throws a 400 listing the missing fields when a v2 brief is not complete enough for 'ready' / 'approved'. */
-export function assertV2Ready(v2) {
-  const missing = v2Missing(v2);
+export function assertV2Ready(v2, opts = {}) {
+  const missing = v2Missing(v2, opts);
   if (missing.length) throw bad(`Creative Brief v2 is not complete. Missing: ${missing.join('; ')}.`, { missing, details: { missing } });
 }
 

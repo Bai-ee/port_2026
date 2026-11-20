@@ -4,6 +4,7 @@
 // (allowlisted owner uid + pilot client). Rows with lifecycleVersion>=2 are owner-only for update/attach/retry/approve-post.
 // A scheduled/queued social_posts row is published by the process-due cron, so ANYTHING that sets scheduledAt is tier 3 'x'.
 import { str, num, int, bool, arr, obj, open, iso, postId, expectedRevision } from './_schema.js';
+import { READY_RULES } from '../../../brief-video/brief-v2.js';
 
 const POST_FIELDS = {
   content: str('Public post text, 280 chars max. Put a Creative Brief in queue.post.video-brief.save, not here.', { maxLength: 8400 }),
@@ -59,7 +60,7 @@ const V2_BRIEF = obj({
   narrationLines: arr(str('One short calm line; dates in words, no numbers spoken, no word repeated across lines.', { maxLength: 200 }), 'Narration lines, up to 8 (required when voiceMode is narrated).', { maxItems: 8 }),
   needs: arr(str('"NEEDS: <scene or panel not built yet>". Gaps go here, never a changed topic.', { maxLength: 160 }), 'Anything the approved scenes cannot show yet.', { maxItems: 10 }),
   postCopy: str('The public post text (280 chars max; it lives in the post, not the video).', { maxLength: 280 }),
-}, ['format', 'poster', 'theme', 'beats', 'end', 'voiceMode']); // the server lists what else a format needs before 'ready'
+}, ['format', 'poster', 'theme', 'beats', 'end', 'voiceMode'], { description: READY_RULES }); // the server lists what else a format needs before 'ready'
 const SNAP_POST = [{ collection: 'social_posts', idArg: 'postId' }];
 
 export const QUEUE_ACTIONS = [
@@ -154,7 +155,7 @@ export const QUEUE_ACTIONS = [
     description: 'One post\'s Creative Brief: text, status (draft|ready|approved|rendered), and for v2 the structured `v2` plus its `storyboard` (pending|ready|approved|changes). Read only.',
     route: 'social-posting', method: 'POST', action: 'video-brief-get', args: obj({ postId }, ['postId']), tier: 0 },
   { id: 'queue.post.video-brief.save', group: 'queue', title: 'Save a post\'s Creative Brief',
-    description: 'Saves only the internal Creative Brief (never published). Draft posts. CQ video: ALWAYS pass `v2` (guide: docs/source-of-truth/CQ-CREATIVE-BRIEF-TEMPLATE.md). status ready needs every v2 field.',
+    description: 'Saves the internal Creative Brief (never published). CQ video: ALWAYS pass `v2` (guide: CQ-CREATIVE-BRIEF-TEMPLATE.md). status ready must pass the READY rules on the v2 argument.',
     route: 'social-posting', method: 'POST', action: 'video-brief-save',
     args: obj({ postId, v2: V2_BRIEF,
       template: str('v1 / optional for v2 (a v2 brief writes its own text). Free-text Creative Brief, max 8000 chars; only for an old-style brief.', { maxLength: 8000 }), status: str('draft | ready. ready is refused (400 with the missing fields) until the v2 brief is complete. Never approve.', { enum: ['draft', 'ready'] }),
