@@ -1,5 +1,6 @@
+import { buildBriefContext } from '../../../features/brief-video/brief-context.js';
 import { briefWarnings } from '../../../features/brief-video/brief.js';
-import { videoBriefView } from '../../../features/brief-video/brief-fields.js';
+import { videoBriefView, isV2Brief } from '../../../features/brief-video/brief-fields.js';
 import { authorPostBrief } from '../../../features/brief-video/brief-author.js';
 import { applyFeedback, applyRollback } from '../../../features/brief-video/brief-feedback.js';
 import { listVersions, setVersionJob } from '../../../features/brief-video/brief-versions.js';
@@ -30,6 +31,9 @@ import {
   schedulePost,
   updateSocialPost,
   saveVideoBrief,
+  readRecentBriefJobs,
+  setVideoBriefStoryboard,
+  reviewVideoBriefStoryboard,
   setPostTargets,
   getPostTargetOptions,
 } from '../../../features/social-posting/twitter-service.js';
@@ -339,13 +343,22 @@ export async function POST(request) {
       if (!row) return json({ error: 'Post not found.' }, 404);
       return json({ ok: true, brief: videoBriefView(row) });
     }
+    // Read only: everything the brief writer (ChatGPT via the MCP) needs: template doc, library, recent episodes, the post.
+    if (action === 'video-brief-context') {
+      const postId = body.postId ? String(body.postId) : null;
+      if (postId) await gatePilotRow(context, decoded, postId);
+      const out = await buildBriefContext({ clientId: context.clientId, postId, readPost: getSocialPost, readPosts: (cid, n) => readSocialQueue(cid, { limit: n }), readJobs: readRecentBriefJobs });
+      return json(out);
+    }
     if (action === 'video-brief-save' || action === 'video-brief-approve') {
       await gatePilotRow(context, decoded, body.postId);
       const approve = action === 'video-brief-approve';
-      const input = approve ? { status: 'approved' } : Object.fromEntries(['template', 'status', 'assets', 'shots', 'captions', 'audio', 'narration'].filter((k) => Object.prototype.hasOwnProperty.call(body, k)).map((k) => [k, body[k]]));
+      const input = approve ? { status: 'approved' } : Object.fromEntries(['template', 'status', 'assets', 'shots', 'captions', 'audio', 'narration', 'v2'].filter((k) => Object.prototype.hasOwnProperty.call(body, k)).map((k) => [k, body[k]]));
       let authorWarnings = [];
       let similar = [];
       let post = await saveVideoBrief(context.clientId, body.postId, input, { by: decoded?.email || decoded?.uid || null, allowApprove: approve, expectedRevision: body.expectedRevision ?? null });
+      // v2: approval marks the brief approved and asks for a storyboard (the owner's gate). It NEVER calls the clip author or a render.
+      if (approve && isV2Brief(post)) return json({ ok: true, post: { id: post.id, revision: post.revision, status: post.status }, brief: videoBriefView(post), next: 'storyboard' });
       if (approve) {
         const au = await authorCreativeBrief(context.clientId, body.postId, decoded, post);
         if (!au.ok) return au.response;
@@ -355,6 +368,20 @@ export async function POST(request) {
       }
       const warnings = [...briefWarnings(post), ...authorWarnings];
       return json({ ok: true, post: { id: post.id, revision: post.revision, status: post.status }, brief: videoBriefView(post), ...(warnings.length ? { warnings } : {}), ...(similar.length ? { similar } : {}) });
+    }
+
+    // v2 Storyboard. `set` (outline + frames, status 'ready') uses the panel's own session auth: no separate worker credential exists for
+    // brief-video (the only internal credential is the GET process-due cron secret). `review` is the owner's decision: the signed-in client
+    // owner (not an admin impersonating) or an admin.
+    if (action === 'video-brief-storyboard-set' || action === 'video-brief-storyboard-review') {
+      await gatePilotRow(context, decoded, body.postId);
+      const review = action === 'video-brief-storyboard-review';
+      if (review && context.impersonating && !context.isAdmin) return json({ error: 'Only the owner can review a storyboard.' }, 403);
+      const by = decoded?.email || decoded?.uid || null;
+      const post = review
+        ? await reviewVideoBriefStoryboard(context.clientId, body.postId, { decision: body.decision, notes: body.notes, frameNotes: body.frameNotes }, { by, expectedRevision: body.expectedRevision ?? null })
+        : await setVideoBriefStoryboard(context.clientId, body.postId, { outline: body.outline, frames: body.frames, notes: body.notes }, { by, expectedRevision: body.expectedRevision ?? null });
+      return json({ ok: true, post: { id: post.id, revision: post.revision, status: post.status }, brief: videoBriefView(post) });
     }
 
     // One click from the panel: approve the brief (if not yet) at the revision the owner saw, then start the render now.
@@ -369,6 +396,8 @@ export async function POST(request) {
       } else if (st !== 'approved') {
         return json({ error: 'Save a video brief first.' }, 409);
       }
+      // v2: no clip author, no render job. The brief is approved and the next step is the storyboard.
+      if (isV2Brief(row)) return json({ ok: true, post: { id: row.id, revision: row.revision, status: row.status }, brief: videoBriefView(row), render: { ok: false, error: 'storyboard-first' }, next: 'storyboard' });
       const au = await authorCreativeBrief(context.clientId, body.postId, decoded, row);
       if (!au.ok) return au.response;
       row = au.post;

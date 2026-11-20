@@ -3,7 +3,7 @@
 // NOT admin-gated by itself; approve-draft / approve-and-schedule / reject-draft / reconcile-post call requirePilotOwner
 // (allowlisted owner uid + pilot client). Rows with lifecycleVersion>=2 are owner-only for update/attach/retry/approve-post.
 // A scheduled/queued social_posts row is published by the process-due cron, so ANYTHING that sets scheduledAt is tier 3 'x'.
-import { str, int, bool, arr, obj, open, iso, postId, expectedRevision } from './_schema.js';
+import { str, num, int, bool, arr, obj, open, iso, postId, expectedRevision } from './_schema.js';
 
 const POST_FIELDS = {
   content: str('Public post text, 280 chars max. Put a Creative Brief in queue.post.video-brief.save, not here.', { maxLength: 8400 }),
@@ -23,6 +23,43 @@ const REPOST_FIELDS = {
   repostOf: str('X post URL or tweet id to repost.'),
   scheduledAt: iso('When to repost (schedule only).'),
 };
+// Creative Brief v2 (features/brief-video/brief-v2.js; guide: docs/source-of-truth/CQ-CREATIVE-BRIEF-TEMPLATE.md). Keep in step with normalizeV2.
+const V2_BEAT = obj({
+  purpose: str('Why this beat exists: arrival | the idea | the decision | the action | the payoff.', { maxLength: 160 }),
+  screen: str('A REAL game screen AND its state, e.g. "Valdara lava map, full HUD, Gravitax asleep" or "squad picker: two ready squads, one COOLDOWN, one WALKING HOME". Never a mood. A missing scene: keep the idea and put it in needs.', { maxLength: 160 }),
+  camera: str('Framing in words (creep, push onto the cards, pull back). No pixel or frame numbers.', { maxLength: 160 }),
+  cursor: str('What the player clicks, in the order the game needs ("click the castle", "hover COOLDOWN, click the ready squad, click Attack"), or "none".', { maxLength: 160 }),
+  response: str('What the game does next (window opens, bar drops, level plate changes). Every beat after the poster shows something HAPPENING.', { maxLength: 160 }),
+  caption: str('Concrete, editorial caption about what the viewer sees ("PICK A READY SQUAD"), never a mood; "none" only if narrated.', { maxLength: 160 }),
+  transition: str('Into the next beat; prefer continuous motion.', { maxLength: 160 }),
+  seconds: num('Beat length, 1-15. Holds stay at about 2 s or less. All beats together: 30 s at most (aim 22-30).', { minimum: 1, maximum: 15 }),
+}, ['purpose', 'screen', 'camera', 'cursor', 'response', 'caption', 'transition', 'seconds']);
+const V2_BRIEF = obj({
+  format: str('feature = a story around one feature; guide = a host walks ONE in-game guide lesson (default for every "how does X work" post); promo = a short 15-23 s animated poster from a live treatment (set treatment, cast, bubbles; 1-3 beats, no cursor-action rule).', { enum: ['feature', 'guide', 'promo'] }),
+  treatment: str('promo only (required): faceOff = two game characters face off with an energy clash, two bubbles; mapConverge = the real map with full HUD, attack lines converging on a landmark, bubble + date banner (never a real player name); hostPoster = a host (Mayor, Gravitax, a Titan, an NPC) before the lockup with bubble + banner; heroRise = one Titan/character rises over its in-game background with logos + date banner; statCard = stat card with badge, building art, big line (money lines need owner OK).', { enum: ['faceOff', 'mapConverge', 'hostPoster', 'heroRise', 'statCard'] }),
+  cast: arr(str('A game character or landmark, e.g. Gravitax, Axiom, World Bank.', { maxLength: 120 }), 'promo only (required): who or what is on the poster (max 6).', { maxItems: 6 }),
+  bubbles: arr(str('One short speech-bubble line (never a real player name).', { maxLength: 120 }), 'promo only: up to 3 bubble lines (bubbles or hero is required).', { maxItems: 3 }),
+  lesson: str('guide only: the in-game lesson title, e.g. "Posting a Defender".', { maxLength: 120 }),
+  host: str('guide only: the lesson\'s teacher (e.g. Mandryll, Banker) or "mayor".', { maxLength: 120 }),
+  focus: str('guide only: the one slice of the lesson (3-5 steps, 20-30 s).', { maxLength: 400 }),
+  angle: str('feature/guide required. Why this episode exists and how it differs from the closest shipped or recent video (name it). Never change the post\'s topic.', { maxLength: 400 }),
+  poster: obj({
+    idea: str('The designed first frame (who is on it, the world/theme), never just beat one.', { maxLength: 400 }),
+    banner: str('Banner line, 2-4 words, an action phrase that sells what the player can DO.', { maxLength: 120 }),
+    dateLine: str('Optional second banner line (a date or offer).', { maxLength: 120 }),
+    bubble: str('Optional speech bubble text.', { maxLength: 120 }),
+  }, ['idea', 'banner']),
+  hero: str('Required (promo: or bubbles). The ONE moment the viewer remembers, in one or two sentences. No hero moment = concept not ready.', { maxLength: 400 }),
+  theme: str('One sentence: what the viewer understands or feels at the end.', { maxLength: 400 }),
+  beats: arr(V2_BEAT, 'feature/guide: 3-6 beats (at least 3 to mark ready), at least 2 real cursor actions in the order the game requires, 30 s total at most. promo: 1-3 beats, 15-23 s total; something must still happen (parallax, a rise, a clash, converging lines, a card swap).', { minItems: 1, maxItems: 6 }),
+  payoff: str('feature/guide required. What visibly happens at the end of the gameplay.', { maxLength: 400 }),
+  end: str('The campaign end card (TITANS ARE COMING / SEASON 3 · DEC 18) or an approved supplied art path under art/...', { maxLength: 400 }),
+  mustNot: str('What this video may never say or show (money as subject, unverified Season 3 mechanics, real player names, post-specific bans).', { maxLength: 400 }),
+  voiceMode: str('narrated (default) | caption-only | music.', { enum: ['narrated', 'caption-only', 'music'] }),
+  narrationLines: arr(str('One short calm line; dates in words, no numbers spoken, no word repeated across lines.', { maxLength: 200 }), 'Narration lines, up to 8 (required when voiceMode is narrated).', { maxItems: 8 }),
+  needs: arr(str('"NEEDS: <scene or panel not built yet>". Gaps go here, never a changed topic.', { maxLength: 160 }), 'Anything the approved scenes cannot show yet.', { maxItems: 10 }),
+  postCopy: str('The public post text (280 chars max; it lives in the post, not the video).', { maxLength: 280 }),
+}, ['format', 'poster', 'theme', 'beats', 'end', 'voiceMode']); // the server lists what else a format needs before 'ready'
 const SNAP_POST = [{ collection: 'social_posts', idArg: 'postId' }];
 
 export const QUEUE_ACTIONS = [
@@ -110,18 +147,22 @@ export const QUEUE_ACTIONS = [
     route: 'social-posting', method: 'POST', action: 'trusted-schedule',
     args: obj({ postId, scheduledAt: iso('When to publish (ISO; at least the owner\'s lead time ahead, default 10 min).'), expectedRevision }, ['postId', 'scheduledAt']),
     tier: 3, external: 'x', trusted: 'schedule-approved', cost: 'One X API write when the cron publishes it.', snapshot: SNAP_POST },
+  { id: 'queue.post.video-brief.context', group: 'queue', title: 'Creative Brief context (call FIRST)',
+    description: 'Call before writing or rewriting any Critters Quest Creative Brief: returns the v2 template, what the video can show today, recent episodes to avoid repeating, the campaign and the rules.',
+    route: 'social-posting', method: 'POST', action: 'video-brief-context', args: obj({ postId: str('The post the brief is for (adds its copy, date and current brief). Omit for the general context.') }, []), tier: 0 },
   { id: 'queue.post.video-brief.get', group: 'queue', title: 'Read a post\'s Creative Brief',
-    description: 'The internal Creative Brief panel of one post: the brief text (template), the renderer line (videoBrief), assets, shots, captions, audio, narration, status (draft|ready|approved|rendered). Read only.',
+    description: 'One post\'s Creative Brief: text, status (draft|ready|approved|rendered), and for v2 the structured `v2` plus its `storyboard` (pending|ready|approved|changes). Read only.',
     route: 'social-posting', method: 'POST', action: 'video-brief-get', args: obj({ postId }, ['postId']), tier: 0 },
   { id: 'queue.post.video-brief.save', group: 'queue', title: 'Save a post\'s Creative Brief',
-    description: 'Saves only the internal Creative Brief (never published; copy, approval, schedule untouched). Draft posts; empty template clears it. CQ video: use docs/source-of-truth/CQ-CREATIVE-BRIEF-TEMPLATE.md.',
+    description: 'Saves only the internal Creative Brief (never published). Draft posts. CQ video: ALWAYS pass `v2` (guide: docs/source-of-truth/CQ-CREATIVE-BRIEF-TEMPLATE.md). status ready needs every v2 field.',
     route: 'social-posting', method: 'POST', action: 'video-brief-save',
-    args: obj({ postId, template: str('Creative Brief text (shot-by-shot; for CQ the template fields: Creative ID, Title, Type, Format, Length, Host none|mayor, Narration, Audience, Goal, Hook, Opening banner, Shots table, Gameplay label, Payoff, Ending, Audio, Post copy). Max 8000 chars.', { maxLength: 8000 }), status: str('draft | ready.', { enum: ['draft', 'ready'] }),
+    args: obj({ postId, v2: V2_BRIEF,
+      template: str('v1 / optional for v2 (a v2 brief writes its own text). Free-text Creative Brief, max 8000 chars; only for an old-style brief.', { maxLength: 8000 }), status: str('draft | ready. ready is refused (400 with the missing fields) until the v2 brief is complete. Never approve.', { enum: ['draft', 'ready'] }),
       assets: arr(str('Artwork / asset URL.'), 'Reference artwork and asset links (max 20).'), shots: str('Shot timings.'), captions: str('On-screen captions.'),
       audio: str('Audio direction.'), narration: bool('Narration on (true) or off (false).'), expectedRevision }, ['postId']),
     tier: 1, snapshot: SNAP_POST },
-  { id: 'queue.post.video-brief.approve', group: 'queue', title: 'Approve a Creative Brief for render',
-    description: 'Approves the Creative Brief for render (a CQ brief is first turned into its video request, one model call). Does not approve or publish the post.',
+  { id: 'queue.post.video-brief.approve', group: 'queue', title: 'Approve a Creative Brief',
+    description: 'Approves the Creative Brief. v2: marks it approved and asks for a storyboard, no render. v1: renders (CQ brief becomes a video request first). Does not approve or publish the post.',
     route: 'social-posting', method: 'POST', action: 'video-brief-approve', args: obj({ postId, expectedRevision }, ['postId']),
     tier: 2, snapshot: SNAP_POST },
   { id: 'queue.post.video-brief.feedback', group: 'queue', title: 'Send owner feedback on a draft video',

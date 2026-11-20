@@ -22,6 +22,12 @@ for (const name of ['catalog.json', 'campaign.json']) {
   fs.writeFileSync(path.join(to, name), `${JSON.stringify(parsed, null, 2)}\n`);
   console.log(`synced ${name}`);
 }
+// The brief writer's library (scenes, lessons, treatments, rules) lives next to the calendar docs in the hub; served by the video-brief context MCP tool.
+{
+  const lib = JSON.parse(fs.readFileSync(path.join(cq, 'docs', 'calendar', 'cq-library.json'), 'utf8'));
+  fs.writeFileSync(path.join(to, 'cq-library.json'), `${JSON.stringify(lib, null, 2)}\n`);
+  console.log('synced cq-library.json');
+}
 // The hub's pure request -> spec check (plain ESM, imports ./cursorTiming.mjs): the author runs it so a request that passes here renders.
 for (const name of ['requestToSpec.mjs', 'cursorTiming.mjs']) {
   const body = fs.readFileSync(path.join(from, name), 'utf8');

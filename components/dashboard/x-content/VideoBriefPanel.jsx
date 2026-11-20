@@ -7,6 +7,8 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { friendlyBriefReason, friendlyBriefReasons, similarVideoNote } from './post-editor-model.js';
+import VideoBriefV2Editor from './VideoBriefV2Editor.jsx';
+import { canUseV2, isV2Row } from './video-brief-v2-model.js';
 
 const KIND_LABEL = { author: 'First version', feedback: 'Feedback', rollback: 'Restored' };
 const FEEDBACK_MAX = 2000;
@@ -32,7 +34,9 @@ export default function VideoBriefPanel({ row, callSocial, locked = false, onRow
   const [msg, setMsg] = useState(null);
   const [feedback, setFeedback] = useState('');
   const [versions, setVersions] = useState([]);
+  const [pickV2, setPickV2] = useState(false);
   useEffect(() => { setF(initial); }, [initial]);
+  useEffect(() => { setPickV2(false); }, [row?.id]);
 
   const savedStatus = row?.videoBriefMeta?.status || null;
   const authorError = Array.isArray(row?.videoBriefMeta?.authorError?.reasons) ? row.videoBriefMeta.authorError : null;
@@ -41,6 +45,7 @@ export default function VideoBriefPanel({ row, callSocial, locked = false, onRow
   const editable = !locked && row?.status === 'draft' && !legacy;
   const dirty = ['template', 'status', 'assets', 'shots', 'captions', 'audio', 'narration'].some((k) => f[k] !== initial[k]);
   const set = (k) => (e) => { setF((x) => ({ ...x, [k]: e.target.value })); setMsg(null); };
+  const v2Mode = isV2Row(row) || pickV2; // v2 briefs (and a new CQ brief the owner starts as v2) use the structured editor; v1 is unchanged
 
   const send = async (body, okText) => {
     setBusy(true); setMsg(null);
@@ -153,11 +158,18 @@ export default function VideoBriefPanel({ row, callSocial, locked = false, onRow
     <details id="post-editor-video-brief-panel" className="pe-vb" open={hasSaved || undefined}>
       <summary id="post-editor-video-brief-summary">
         <span>Creative Brief <span className="pe-muted">· internal, never published</span></span>
-        {savedStatus ? <span id="post-editor-video-brief-status-pill" className="pe-vb-pill">{STATUS_LABEL[savedStatus] || savedStatus}</span> : null}
+        {savedStatus ? <span id="post-editor-video-brief-status-pill" className="pe-vb-pill">{isV2Row(row) && savedStatus === 'approved' ? 'Approved (storyboard next)' : (STATUS_LABEL[savedStatus] || savedStatus)}</span> : null}
       </summary>
       <div id="post-editor-video-brief-body" className="pe-vb-body">
         {legacy ? <p className="pe-muted">This post has an INTERNAL VIDEO BRIEF in its text. Move it out of the post copy (cut, save the post), then paste it here.</p> : null}
         {!legacy && row?.status !== 'draft' ? <p className="pe-muted">Briefs render only for drafts. This post is {row?.status}, so the brief is read-only.</p> : null}
+        {v2Mode ? <VideoBriefV2Editor row={row} callSocial={callSocial} editable={editable} onRowPatch={onRowPatch} /> : (<>
+        {editable && !hasSaved && canUseV2(row) ? (
+          <div id="post-editor-video-brief-v2-choice-row" className="pe-vb-row">
+            <button type="button" id="post-editor-video-brief-use-v2-btn" className="pe-btn pe-btn-ghost" onClick={() => setPickV2(true)}>Use the v2 form (structured)</button>
+            <span className="pe-muted">Recommended for Critters Quest episodes.</span>
+          </div>
+        ) : null}
         <label className="pe-vb-field" htmlFor="post-editor-video-brief-template">Creative Brief (shot-by-shot)
           <textarea id="post-editor-video-brief-template" className="pe-text" rows={Math.min(18, Math.max(5, f.template.split('\n').length + 1))} value={f.template} readOnly={!editable} onChange={set('template')} placeholder="Fill in the Creative Brief template. Max 8000 characters." />
           <span className="pe-muted">{f.template.trim().length} / 8000</span>
@@ -223,6 +235,7 @@ export default function VideoBriefPanel({ row, callSocial, locked = false, onRow
         {authorError ? <p id="post-editor-video-brief-author-error" className="pe-over" role="alert">Could not build the video from this Creative Brief: {friendlyBriefReasons(authorError.reasons)}</p> : null}
         {msg ? <p id="post-editor-video-brief-message" className={msg.tone === 'bad' ? 'pe-over' : 'pe-muted'} role={msg.tone === 'bad' ? 'alert' : 'status'}>{msg.text}</p> : null}
         <p className="pe-muted">Saving never changes the post copy, approval or schedule. Render now approves the brief and starts the video immediately (max 5 a day). Editing an approved template sends it back to review. A Critters Quest Creative Brief is turned into a video request when you approve it.</p>
+        </>)}
       </div>
     </details>
   );

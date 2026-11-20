@@ -780,6 +780,17 @@ function PostEditorStyles() {
       #post-editor-root .pe-vb-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
       #post-editor-root .pe-vb-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
       #post-editor-root .pe-vb-pill { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, currentColor 10%, transparent); }
+      #post-editor-root .pe-v2-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 8px; }
+      #post-editor-root .pe-v2-input { font-size: 14px; min-height: 0; border: 1px solid var(--t-control-border); border-radius: 8px; padding: 6px 8px; }
+      #post-editor-root .pe-v2-fieldset { border: 1px solid var(--t-control-border); border-radius: 10px; padding: 8px 10px; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+      #post-editor-root .pe-v2-beats { display: flex; flex-direction: column; gap: 8px; }
+      #post-editor-root .pe-v2-beat { border: 1px solid var(--t-border-faint); border-radius: 10px; padding: 8px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+      #post-editor-root .pe-v2-beats-head { justify-content: space-between; }
+      #post-editor-root .pe-v2-beat-head .pe-btn { min-height: 28px; padding: 2px 10px; }
+      #post-editor-root .pe-v2-frames { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 160px), 1fr)); gap: 8px; }
+      #post-editor-root .pe-v2-frame { margin: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12px; min-width: 0; }
+      #post-editor-root .pe-v2-frame img { width: 100%; height: auto; border-radius: 8px; display: block; background: var(--t-inset); }
+      #post-editor-root .pe-v2-outline { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 12px; margin: 6px 0 0; }
       #post-editor-root .pe-count-row { display: flex; justify-content: space-between; gap: 8px; margin: 0; font-size: 12px; }
       #post-editor-root .pe-over { color: var(--t-danger); font-weight: 700; }
       #post-editor-root .pe-quote-shell { display: flex; flex-direction: column; gap: 8px; }
