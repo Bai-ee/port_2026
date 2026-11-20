@@ -78,6 +78,8 @@ export function normalizeV2(input) {
   if (voiceMode && !V2_VOICE_MODES.includes(voiceMode)) throw bad(`voiceMode must be one of ${V2_VOICE_MODES.join(', ')}.`);
   const poster = isObj(input.poster) ? input.poster : {};
   if (input.poster != null && !isObj(input.poster)) throw bad('poster must be an object.');
+  if (input.end != null && typeof input.end !== 'string') throw bad('end must be a string (the end card text, or "none"), not an object.');
+  if (poster.hero != null && typeof poster.hero !== 'string') throw bad('poster.hero must be a string, e.g. "king-critter, inside the town, idle, facing camera".');
   if (input.beats != null && !Array.isArray(input.beats)) throw bad('beats must be a list.');
   const rawBeats = Array.isArray(input.beats) ? input.beats : [];
   const promo = format === 'promo';
@@ -104,6 +106,7 @@ export function normalizeV2(input) {
   const cast = textList('cast', input.cast, V2_CAST_MAX, V2_SHORT_MAX);
   const bubbles = textList('bubbles', input.bubbles, V2_BUBBLES_MAX, V2_SHORT_MAX);
   const postCopy = text('postCopy', input.postCopy, V2_POST_COPY_MAX);
+  const voiceReason = text('voiceReason', input.voiceReason, V2_SHORT_MAX);
   return {
     format,
     ...(treatment ? { treatment } : {}),
@@ -118,6 +121,7 @@ export function normalizeV2(input) {
     end: text('end', input.end, V2_TEXT_MAX),
     mustNot: text('mustNot', input.mustNot, V2_TEXT_MAX),
     voiceMode,
+    ...(voiceReason ? { voiceReason } : {}),
     narrationLines: textList('narrationLines', input.narrationLines, V2_NARRATION_MAX, V2_NARRATION_LINE_MAX),
     needs: textList('needs', input.needs, V2_NEEDS_MAX, V2_CELL_MAX),
     ...(postCopy ? { postCopy } : {}),
@@ -136,8 +140,6 @@ const CHARACTERS_LABEL = ['Mayor', 'Banker', 'Mandryll', 'Gravitax', ...TITAN_NA
 const castKey = (x) => str(x).replace(/\s*\(.*\)\s*$/, '').trim().toLowerCase();
 export const isCharacter = (x) => CHARACTERS.includes(castKey(x));
 export const PROMO_TREATMENT_IDS = (LIBRARY.promoTreatments || []).map((t) => t.id);
-// Scenes the library lists for feature/guide episodes (kit is not "promo"); a promo must not name one.
-const EPISODE_SCENES = (LIBRARY.scenes || []).filter((sc) => sc.kit !== 'promo');
 const NEEDS_BUILD_SCENES = (LIBRARY.scenes || []).filter((sc) => sc.status === 'needs-build');
 // A cursor that names a real action; "none" / "no cursor" / "n/a" do not count.
 export const isRealCursor = (c) => { const t = str(c).trim().toLowerCase(); return Boolean(t) && !/^(none|no cursor|n\/a|-|no)$/.test(t) && !/^no (cursor|click)/.test(t); };
@@ -166,12 +168,84 @@ export function postCopyDrift(v2, postContent) {
 export const READY_RULES = 'READY rules (status ready is refused with the exact list to fix): '
   + '(1) EVERY beat of every format needs camera, transition, and a cursor or response; poster.idea is required. '
   + '(2) feature/guide: at least 3 beats, 20-30 s in total, at least 2 beats whose cursor is a real action (not "none"), and no beat that is only a hold/glide (give it an action: open, click, pick, send, claim, rise, swing). '
-  + '(3) promo: treatment from the library promoTreatments; heroRise/hostPoster/faceOff cast must be characters (Mayor, Banker, Mandryll, Gravitax, the seven Titans; never a building such as Vault), faceOff exactly 2, mapConverge target is World Bank; a promo beat never uses a feature/guide scene id. '
+  + '(3) promo: treatment from the library promoTreatments; heroRise/hostPoster/faceOff cast must be characters (Mayor, Banker, Mandryll, Gravitax, the seven Titans; never a building such as Vault), faceOff exactly 2, mapConverge target is World Bank; a promo beat is a library scene too (the treatment animates it). '
   + '(4) A beat screen that names a needs-build scene is refused: keep the topic and put it in needs, or choose a ready scene. '
-  + '(2b) FIRST-TIME-RIGHT lock, every format: poster.idea + poster.banner + poster.hero (library posterHeroes character, real place, pose; a warning for promo); every beat a real screen + a visible happening + a caption/label; when narrated, narrationLines at least beats + 1 (poster line + one per beat; a warning for promo) and the last line a call to action (warning); end present. format chapter (library formats.chapterStory) is allowed, up to 34 s, with no recipe-specific gate. '
+  + '(2b) GATE 2, every format INCLUDING promo (errors): every beat.screen names a library scene id (scenes[].id, e.g. gravitax.arrival; an unknown id is refused with the closest ids); poster.hero (a string, never "undefined") + poster.banner; voiceMode defaults to narrated, caption-only/music need a non-empty voiceReason; narrated needs narrationLines at least beats + 1 (poster line + one per beat); end is a string; a NEEDS entry naming something the library has (a Titan, Gravitax, the map, World Bank, the Mayor, a scene id) is refused: use the library scene (website/site-capture needs stay allowed). Also: every beat a visible happening + a caption/label; the last narration line a call to action (warning). format chapter (library formats.chapterStory) is allowed, up to 34 s, with no recipe-specific gate. '
   + '(5) The format must fit the post: a how-to / what-changed / tour / step / guide post is guide or feature, never promo. The post\'s topic and copy are fixed: never rewrite the post; postCopy must match it. '
   + 'Promo is for announcements/hype only; how-to and "what changed" posts are guide or feature episodes. '
   + 'The town upgrade panel (town.upgrade-panel), the incoming-raid warning (raids.incoming-warning) and the Town Defense screen (raids.defense-tab) are REAL, owner-approved game UI rebuilt from the game code, not fake UI.';
+
+
+// ── Gate 2 (owner, 2026-11-20): every format locks the same things; promo no longer has soft gates ───────────────────────
+const LIB_SCENES = LIBRARY.scenes || [];
+const SCENE_ID_LIST = LIB_SCENES.map((sc) => String(sc.id));
+const BUILT_SCENE_IDS = LIB_SCENES.filter((sc) => sc.status === 'ready' || sc.status === 'owner-check').map((sc) => String(sc.id));
+const SCENE_PREFIXES = [...new Set(SCENE_ID_LIST.map((id) => id.split('.')[0]))];
+const SCENE_TOKEN_RE = new RegExp(`\\b(?:${SCENE_PREFIXES.join('|')})\\.[a-z0-9][a-z0-9-]*`, 'gi');
+const lev = (a, b) => {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j += 1) d[0][j] = j;
+  for (let i = 1; i <= a.length; i += 1) for (let j = 1; j <= b.length; j += 1) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length][b.length];
+};
+/** The 3 library scene ids closest to `word` (same kit first, then edit distance). */
+export function closestSceneIds(word, n = 3) {
+  const w = str(word).toLowerCase();
+  const kit = w.split('.')[0];
+  return [...BUILT_SCENE_IDS].sort((a, b) => (Number(b.startsWith(`${kit}.`)) - Number(a.startsWith(`${kit}.`))) || (lev(w, a) - lev(w, b))).slice(0, n);
+}
+const SOME_IDS = 'e.g. gravitax.arrival, town.map, titans.roll-call';
+/** Library scene ids named in a beat screen: known ones (any status), and unknown dotted ids with a known kit prefix. */
+export function sceneIdsIn(screen) {
+  const t = str(screen).toLowerCase();
+  const known = SCENE_ID_LIST.filter((id) => t.includes(id.toLowerCase()));
+  const unknown = [...new Set(t.match(SCENE_TOKEN_RE) || [])].filter((tok) => !SCENE_ID_LIST.some((id) => tok.startsWith(id.toLowerCase())));
+  return { known, unknown };
+}
+const NEEDS_SITE_RE = /\b(web ?site|web ?page|site|landing|url|link|screen ?capture|screenshot|browser)\b/i;
+// What the library already has, as need keywords -> the scene to use instead. Matched as whole words.
+const LIBRARY_THINGS = [
+  ...TITAN_NAMES.map((n) => [n, 'titans.roll-call']),
+  ['Titans?', 'titans.roll-call'], ['Gravitax', 'gravitax.arrival'], ['World Bank', 'gravitax.arrival'], ['(?:world |town |lava )?map', 'town.map'],
+  ['Mayor', 'titans.mayor-dock'], ['Banker', 'town.upgrade-panel'], ['Mandryll', 'raids.defense-tab'], ['town hall', 'town.inside'], ['king[- ]critter|cow[- ]wizard|jester[- ]critter|mandryll[- ]trainer', 'a posterHeroes id in poster.hero'],
+];
+function libraryHitForNeed(need) {
+  const t = str(need).replace(/^\s*needs?:\s*/i, '');
+  if (NEEDS_SITE_RE.test(t)) return null; // website / site-capture needs stay allowed
+  const lower = t.toLowerCase();
+  const id = SCENE_ID_LIST.find((x) => lower.includes(x.toLowerCase()));
+  if (id) { const sc = LIB_SCENES.find((x) => x.id === id); return sc && sc.status === 'needs-build' ? null : { what: id, use: id }; }
+  for (const [pat, use] of LIBRARY_THINGS) {
+    const hit = new RegExp(`\\b(?:${pat})\\b`, 'i').exec(t);
+    if (hit) return { what: hit[0], use };
+  }
+  return null;
+}
+
+/** The rules every format shares (promo included): poster, voice, end, scene ids, needs. Appends to `m`. */
+function lockRules(v2, beats, m) {
+  if (!str(v2.poster?.banner).trim()) m.push('poster.banner');
+  const hero = str(v2.poster?.hero).trim();
+  if (!hero || /^(undefined|null|none|n\/a)$/i.test(hero)) m.push(POSTER_HERO_MISSING);
+  beats.forEach((b, i) => {
+    const { known, unknown } = sceneIdsIn(b.screen);
+    const n = i + 1;
+    if (unknown.length) m.push(`beats[${n}].screen names "${unknown[0]}": not a library scene id. Closest: ${closestSceneIds(unknown[0]).join(', ')}`);
+    else if (!known.length && str(b.screen).trim()) m.push(`beats[${n}].screen needs a library scene id (${SOME_IDS}): found none in "${str(b.screen).slice(0, 50)}". Closest by topic: ${closestSceneIds(str(b.screen).match(/[a-z]+/i)?.[0] || '').join(', ')}`);
+  });
+  if (typeof v2.end !== 'string' || !str(v2.end).trim()) m.push('end (a string: the end card text, or "none")');
+  const mode = v2.voiceMode || 'narrated'; // narrated by default
+  if (mode !== 'narrated' && !str(v2.voiceReason).trim()) m.push(`voiceReason (voiceMode "${mode}" needs a reason; the default is narrated: give the poster line plus one line per beat)`);
+  if (mode === 'narrated') {
+    const got = (v2.narrationLines || []).length;
+    if (!got) m.push('narrationLines (voiceMode is narrated)');
+    else if (got < beats.length + 1) m.push(narrationShort(beats.length, got));
+  }
+  (v2.needs || []).forEach((x, i) => {
+    const hit = libraryHitForNeed(x);
+    if (hit) m.push(`needs[${i + 1}] "${str(x).slice(0, 50)}" is already in the library ("${hit.what}"): use ${hit.use}`);
+  });
+}
 
 function beatRules(v2, beats, m) {
   const promo = v2.format === 'promo';
@@ -225,7 +299,6 @@ export function v2Missing(v2, opts = {}) {
         if (other.length) m.push(`cast for mapConverge may only hold "${PROMO_MAP_TARGET}" and game characters; "${other.join('", "')}" is neither`);
       }
     }
-    if (!str(v2.poster?.banner).trim()) m.push('poster.banner');
     if (!str(v2.poster?.idea).trim()) m.push('poster.idea (the designed first frame: who is on it, the world/theme)');
     if (!(v2.bubbles || []).length && !str(v2.hero).trim()) m.push('bubbles or hero');
     if (!str(v2.theme).trim()) m.push('theme');
@@ -234,22 +307,16 @@ export function v2Missing(v2, opts = {}) {
       const n = i + 1;
       if (!str(b.screen).trim()) m.push(`beats[${n}].screen`);
       if (!str(b.caption).trim()) m.push(`beats[${n}].caption (write "none" if no caption)`);
-      const hit = EPISODE_SCENES.find((sc) => str(b.screen).toLowerCase().includes(String(sc.id).toLowerCase()));
-      if (hit) m.push(`beats[${n}].screen uses the feature/guide scene "${hit.id}": a promo is an animated poster from its treatment, not a gameplay episode. Describe the poster art instead, or make this a feature/guide episode`);
     });
     beatRules(v2, beats, m);
     const total = v2TotalSeconds(v2);
     if (beats.length && total < PROMO_SECONDS_MIN) m.push(`beats seconds (a promo is ${PROMO_SECONDS_MIN}-${PROMO_SECONDS_MAX} s, ${total} s given)`);
-    if (!str(v2.end).trim()) m.push('end (write "none" if the treatment has no end card)');
-    if (!v2.voiceMode) m.push('voiceMode');
-    if (v2.voiceMode === 'narrated' && !(v2.narrationLines || []).length) m.push('narrationLines (voiceMode is narrated)');
-    return m; // promo: the poster hero, the narration count and the CTA are warnings (v2Warnings)
+    lockRules(v2, beats, m);
+    return m; // promo: the same locks as every format (Gate 2); only the CTA stays a warning (v2Warnings)
   }
   if (v2.format === 'guide' && !v2.lesson) m.push('lesson');
   if (!str(v2.angle).trim()) m.push('angle');
-  if (!str(v2.poster?.banner).trim()) m.push('poster.banner');
   if (!str(v2.poster?.idea).trim()) m.push('poster.idea (the designed first frame: who is on it, the world/theme)');
-  if (!str(v2.poster?.hero).trim()) m.push(POSTER_HERO_MISSING);
   if (!str(v2.hero).trim()) m.push('hero');
   if (!str(v2.theme).trim()) m.push('theme');
   if (beats.length < V2_BEATS_READY_MIN) m.push(`beats (at least ${V2_BEATS_READY_MIN}, ${beats.length} given)`);
@@ -266,10 +333,7 @@ export function v2Missing(v2, opts = {}) {
     if (beats.length && actions < CURSOR_ACTIONS_MIN) m.push(`a ${v2.format} needs at least ${CURSOR_ACTIONS_MIN} beats with a real cursor action ("click the castle", "pick the ready squad"); ${actions} given. "none" does not count: show the player acting in the game`);
   }
   if (!str(v2.payoff).trim()) m.push('payoff');
-  if (!str(v2.end).trim()) m.push('end');
-  if (!v2.voiceMode) m.push('voiceMode');
-  if (v2.voiceMode === 'narrated' && !(v2.narrationLines || []).length) m.push('narrationLines (voiceMode is narrated)');
-  else if (v2.voiceMode === 'narrated' && (v2.narrationLines || []).length < beats.length + 1) m.push(narrationShort(beats.length, (v2.narrationLines || []).length));
+  lockRules(v2, beats, m);
   return m;
 }
 
@@ -289,11 +353,7 @@ export function v2Warnings(v2) {
   if (!isObj(v2)) return w;
   const beats = Array.isArray(v2.beats) ? v2.beats : [];
   const lines = Array.isArray(v2.narrationLines) ? v2.narrationLines : [];
-  if (v2.format === 'promo') {
-    if (!str(v2.poster?.hero).trim()) w.push(`${POSTER_HERO_MISSING.replace(/^poster\.hero/, 'poster.hero is empty')}`);
-    if (v2.voiceMode === 'narrated' && lines.length && lines.length < beats.length + 1) w.push(narrationShort(beats.length, lines.length));
-  }
-  if (v2.voiceMode === 'narrated' && lines.length && !CTA_RE.test(str(lines[lines.length - 1]))) w.push(`the last narration line ("${str(lines[lines.length - 1]).slice(0, 60)}") should read as a call to action (e.g. "Critters Quest. Play now!")`);
+  if ((v2.voiceMode || 'narrated') === 'narrated' && lines.length && !CTA_RE.test(str(lines[lines.length - 1]))) w.push(`the last narration line ("${str(lines[lines.length - 1]).slice(0, 60)}") should read as a call to action (e.g. "Critters Quest. Play now!")`);
   return w;
 }
 

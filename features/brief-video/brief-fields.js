@@ -20,9 +20,10 @@ export const SETTABLE_STATUSES = ['draft', 'ready', 'approved'];
 import { classifyBrief } from './brief.js';
 import { HOWTO_ALLOWED_CLIENTS } from './howto-request.js';
 import { versionsOf, reviewRecord } from './video-review.js';
+import { directorNotesOf, postsByDirectorStatus, pendingDirectorNotes } from './director-notes.js';
 import { normalizeV2, assertV2Ready, v2Missing, renderV2Text, sameV2, newStoryboard, isV2Meta, isV2Brief } from './brief-v2.js';
 
-export { isV2Brief };
+export { isV2Brief, directorNotesOf, postsByDirectorStatus };
 
 const bad = (message) => Object.assign(new Error(message), { status: 400, code: 'invalid-video-brief' });
 const str = (v) => (v == null ? '' : String(v));
@@ -99,6 +100,8 @@ export function mergeVideoBrief(post, input = {}, { by = null, now = new Date().
       ...(storyboard ? { storyboard } : {}),
       ...(videoReview ? { videoReview } : {}),
       ...(cur.directorRequestId ? { directorRequestId: cur.directorRequestId } : {}),
+      // A changed v2 resets the Director's verdict to pending (new briefHash); an unchanged save keeps it.
+      ...(v2 && v2Changed ? { directorNotes: pendingDirectorNotes(v2, { now }) } : cur.directorNotes ? { directorNotes: cur.directorNotes } : {}),
       ...(cur.authored ? { authored: cur.authored } : {}),
       ...(cur.authorError && !creativeChanged ? { authorError: cur.authorError } : {}),
       status,
@@ -155,6 +158,7 @@ export function videoBriefView(post, { episodeVideoUrl = null, episodeAudioUrl =
     meta: slimMeta(post?.videoBriefMeta),
     briefVersion: isV2Brief(post) ? 2 : 1,
     v2: isV2Brief(post) ? post.videoBriefMeta.v2 : null,
+    directorNotes: directorNotesOf(post),
     storyboard: isV2Brief(post) ? (slimMeta(post.videoBriefMeta).storyboard || null) : null,
     episodeVideoUrl: episodeVideoUrl || null, // derived server-side from the episode's storage object (route), never from the stored episode
     episodeAudioUrl: episodeAudioUrl || null, // narration + music preview, derived server-side like episodeVideoUrl

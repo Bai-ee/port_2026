@@ -124,6 +124,7 @@ Required to mark `ready` for feature, guide and chapter: format, angle, poster.b
 | `end` | The campaign end card, or an approved `art/...` path | 400 |
 | `mustNot` | What this video may never say or show, plus anything post-specific | 400 |
 | `voiceMode` | `narrated` (default), `caption-only`, `music` | enum |
+| `voiceReason` | Why it is not narrated; required (non-empty) for `caption-only` / `music` | text |
 | `narrationLines[]` | Up to 8 short calm lines. Dates in words, no numbers spoken, no word repeated across lines | 8 x 200 |
 | `needs[]` | `NEEDS: <scene or panel not built yet>`, one per entry | 10 x 160 |
 | `postCopy` | The public post text; it goes in the post, not the video | 280 |
@@ -159,10 +160,10 @@ Post `social_1795122401104_f4bhkx`. The v1 brief asked for: Valdara with a monst
   "hero": "The camera pushes onto the squad cards while the cursor passes COOLDOWN and WALKING HOME, then lands on the ready squad: the selected-squad panel flips to At the Bank.",
   "theme": "The first hit goes to the squad that is ready, so check before you swing.",
   "beats": [
-    { "purpose": "arrival: where you are", "screen": "Valdara lava map, full HUD and World Bank sign, Gravitax asleep under the dome", "camera": "slow creep, then the dive", "cursor": "click the castle", "response": "the dome pushes into the World Bank window", "caption": "none (narration carries it)", "transition": "continuous push", "seconds": 5 },
-    { "purpose": "the target", "screen": "World Bank window, guardian state (Ends-in, Weakening, HP, pool card collapsed), Gravitax rises in front", "camera": "creep", "cursor": "none", "response": "the shared health bar drains a sliver", "caption": "CHECK THE TARGET", "transition": "the window grows into the picker", "seconds": 4.5 },
-    { "purpose": "the decision (hero)", "screen": "squad picker: two ready squads, one COOLDOWN, one WALKING HOME", "camera": "push onto the cards, then ease back to show the button", "cursor": "hover COOLDOWN, hover WALKING HOME, click the ready squad, click Attack", "response": "selected squad panel reads At the Bank", "caption": "PICK A READY SQUAD", "transition": "cut on the Attack click", "seconds": 7 },
-    { "purpose": "payoff: it counted", "screen": "Gravitax swing framing from the World Bank window", "camera": "the E27 swing framing", "cursor": "none", "response": "Gravitax swings and the shared bar visibly drops", "caption": "THE FIRST HIT COUNTS", "transition": "into the end card", "seconds": 4 }
+    { "purpose": "arrival: where you are", "screen": "gravitax.arrival: Valdara lava map, full HUD and World Bank sign, Gravitax asleep under the dome", "camera": "slow creep, then the dive", "cursor": "click the castle", "response": "the dome pushes into the World Bank window", "caption": "none (narration carries it)", "transition": "continuous push", "seconds": 5 },
+    { "purpose": "the target", "screen": "gravitax.guardian: World Bank window, guardian state (Ends-in, Weakening, HP, pool card collapsed), Gravitax rises in front", "camera": "creep", "cursor": "none", "response": "the shared health bar drains a sliver", "caption": "CHECK THE TARGET", "transition": "the window grows into the picker", "seconds": 4.5 },
+    { "purpose": "the decision (hero)", "screen": "gravitax.squads: squad picker: two ready squads, one COOLDOWN, one WALKING HOME", "camera": "push onto the cards, then ease back to show the button", "cursor": "hover COOLDOWN, hover WALKING HOME, click the ready squad, click Attack", "response": "selected squad panel reads At the Bank", "caption": "PICK A READY SQUAD", "transition": "cut on the Attack click", "seconds": 7 },
+    { "purpose": "payoff: it counted", "screen": "gravitax.swing: Gravitax swing framing from the World Bank window", "camera": "the E27 swing framing", "cursor": "none", "response": "Gravitax swings and the shared bar visibly drops", "caption": "THE FIRST HIT COUNTS", "transition": "into the end card", "seconds": 4 }
   ],
   "payoff": "The hit lands; the shared bar visibly drops.",
   "end": "standard campaign end card: TITANS ARE COMING / SEASON 3 · DEC 18",
@@ -187,16 +188,17 @@ A promo example (also checked by a test):
   "format": "promo",
   "treatment": "heroRise",
   "cast": ["Axiom"],
-  "poster": { "idea": "Axiom rises over the Season 3 skyline.", "banner": "THE TITANS ARE COMING", "dateLine": "DECEMBER 18TH" },
+  "poster": { "idea": "Axiom rises over the Season 3 skyline.", "hero": "mayor, inside the town, idle, facing camera", "banner": "THE TITANS ARE COMING", "dateLine": "DECEMBER 18TH" },
   "hero": "Axiom rises out of the dark over its in-game background.",
   "theme": "The Titans arrive on December 18.",
   "beats": [
-    { "purpose": "the rise", "screen": "Axiom's in-game background with the wordmark", "camera": "slow push in", "cursor": "none", "response": "Axiom rises from below the frame as the glow builds", "caption": "AXIOM WAKES", "transition": "into the date banner", "seconds": 9 },
-    { "purpose": "the date", "screen": "same background, logos and date banner", "camera": "hold with a parallax drift", "cursor": "none", "response": "the date banner slams in and the logos settle", "caption": "DECEMBER 18TH", "transition": "end", "seconds": 8 }
+    { "purpose": "the rise", "screen": "titans.wake-on-map: Axiom's in-game background with the wordmark", "camera": "slow push in", "cursor": "none", "response": "Axiom rises from below the frame as the glow builds", "caption": "AXIOM WAKES", "transition": "into the date banner", "seconds": 9 },
+    { "purpose": "the date", "screen": "titans.window: same background, logos and date banner", "camera": "hold with a parallax drift", "cursor": "none", "response": "the date banner slams in and the logos settle", "caption": "DECEMBER 18TH", "transition": "end", "seconds": 8 }
   ],
   "end": "none",
   "mustNot": "No prices, rewards or unverified Season 3 mechanics.",
   "voiceMode": "music",
+  "voiceReason": "silent poster: the rise and the date banner carry it, music bed only",
   "postCopy": "The Titans arrive December 18th."
 }
 ```
