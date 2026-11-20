@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 import { config as loadDotenv } from 'dotenv';
 import { TwitterApi } from 'twitter-api-v2';
 import { instrumentXClient, recordXApiCall } from '../x-api-usage/index.js';
-import { saveSocialAccount, getSocialAccount } from './social-accounts.js';
+import { saveSocialAccount, getSocialAccount, markSocialAccountError } from './social-accounts.js';
 
 const require = createRequire(import.meta.url);
 const fb = require('../../api/_lib/firebase-admin.cjs');
@@ -224,7 +224,7 @@ export async function completeXOAuthFlow({ code, state }) {
   };
 
   if (clientId) {
-    await saveSocialAccount(clientId, 'x', { ...tokenDoc, authMode: 'oauth2' });
+    await saveSocialAccount(clientId, 'x', { ...tokenDoc, authMode: 'oauth2', refreshError: null, refreshErrorAt: null });
   } else {
     await tokensRef().set(tokenDoc);
   }
@@ -259,6 +259,18 @@ async function readClientTokens(clientId) {
   } catch {
     return { doc: direct, sourceClientId: clientId };
   }
+}
+
+// X really refused the stored login (invalid_grant / revoked), as opposed to a network blip or an X 5xx.
+function isRefreshRejected(error) {
+  const status = Number(error?.code ?? error?.status);
+  const grant = String(error?.data?.error || '');
+  return status === 400 || status === 401 || /invalid_grant|invalid_request/i.test(grant);
+}
+
+// Best effort: flag the dead login on every client linked to this X user so whichever dashboard is open shows it.
+async function flagDeadXLogin(clientIds, message) {
+  await Promise.all([...new Set(clientIds.filter(Boolean))].map((id) => markSocialAccountError(id, 'x', message).catch(() => {})));
 }
 
 function invalidRefreshError(error) {
@@ -343,6 +355,8 @@ export async function getXOAuth2Client(clientId = null) {
     if (!doc.refreshToken) {
       const err = new Error('The X token expired and no refresh token was stored — reconnect the account.');
       err.status = 409;
+      err.code = 'x-reconnect-required';
+      if (clientId && !servedGlobal) await flagDeadXLogin([clientId, sourceClientId], 'The X login expired. Reconnect to resume publishing.');
       throw err;
     }
     const appClient = getAppClient();
@@ -365,7 +379,9 @@ export async function getXOAuth2Client(clientId = null) {
           return { client: instrumentXClient(new TwitterApi(doc.accessToken)), tokens: doc, sourceClientId };
         }
       }
-      throw invalidRefreshError(refreshError);
+      const err = invalidRefreshError(refreshError);
+      if (clientId && !servedGlobal && isRefreshRejected(refreshError)) await flagDeadXLogin([clientId, sourceClientId], 'X refused to renew the saved login. Reconnect to resume publishing.');
+      throw err;
     }
     const { accessToken, refreshToken, expiresIn } = refreshed;
     doc = {
@@ -376,7 +392,10 @@ export async function getXOAuth2Client(clientId = null) {
       updatedAt: Date.now(),
     };
     if (servedGlobal) await tokensRef().set(doc);
-    else await saveSocialAccount(sourceClientId || clientId, 'x', { ...doc, authMode: 'oauth2' });
+    else {
+      await saveSocialAccount(sourceClientId || clientId, 'x', { ...doc, authMode: 'oauth2', refreshError: null, refreshErrorAt: null });
+      if (sourceClientId && sourceClientId !== clientId) await markSocialAccountError(clientId, 'x', null).catch(() => {});
+    }
   }
   return { client: instrumentXClient(new TwitterApi(doc.accessToken)), tokens: doc, sourceClientId, tokenSource: servedGlobal ? 'global' : 'client' };
 }

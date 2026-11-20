@@ -310,7 +310,12 @@ export const AMBIGUOUS_CLASSES = new Set(['server-error-ambiguous', 'network-amb
 // 5xx and mid-request network errors are AMBIGUOUS — X has no idempotency key,
 // so a retry can double-post on the live account; those wait for a human.
 // 402 (credits), 4xx content/auth errors and anything unrecognised never retry.
+// The account's X login is dead (refresh rejected, no refresh token, not connected): the request never reached the
+// posting endpoint, so nothing can be live. Checked FIRST: `details` can carry the refresh call's own timeout text.
+const X_AUTH_CODES = new Set(['x-reconnect-required', 'account-not-connected']);
+
 export function classifyPublishError(error) {
+  if (X_AUTH_CODES.has(error?.code)) return { retryable: false, errorClass: 'x-auth' };
   const code = Number(error?.code ?? error?.twitterError?.code);
   if (code === 402) return { retryable: false, errorClass: 'credits-depleted' };
   if (code === 429) return { retryable: true, errorClass: 'rate-limited' };
@@ -1359,7 +1364,14 @@ async function settleClaimed(post, updated) {
     const snap = await tx.get(ref);
     const cur = snap.exists ? snap.data() : post;
     const ours = cur.status === 'posting' && cur.claimedAt === post.claimedAt;
-    if (!ours && updated.status !== 'posted') return false;
+    if (!ours && updated.status !== 'posted') {
+      // Claim lost, but Instagram may be live: always keep that record so a later retry never publishes it twice.
+      const ig = updated.instagramDelivery;
+      if (snap.exists && ig && (ig.status === 'posted' || ig.status === 'needs_review')) {
+        tx.set(ref, { instagramDelivery: ig, revision: (cur.revision || 0) + 1 }, { merge: true });
+      }
+      return false;
+    }
     tx.set(ref, { ...updated, revision: (cur.revision || 0) + 1 });
     return true;
   });
@@ -1942,24 +1954,33 @@ async function postAndRecord(snapshot) {
     const now = new Date().toISOString();
     const targets = postTargets(post);
     let updated = { ...post, updatedAt: now };
+    let xFailed = false;
     if (targets.x) {
-      const result = await publishStoredPost(post, now);
-      updated = {
-        ...post,
-        status: 'posted',
-        twitterId: result.twitterId,
-        postedAt: post.postedAt || now,
-        updatedAt: now,
-        error: null,
-        retryable: false,
-        errorClass: null,
-        ...selfReplyFields(post, result, now),
-      };
+      try {
+        const result = await publishStoredPost(post, now);
+        updated = {
+          ...post,
+          status: 'posted',
+          twitterId: result.twitterId,
+          postedAt: post.postedAt || now,
+          updatedAt: now,
+          error: null,
+          retryable: false,
+          errorClass: null,
+          ...selfReplyFields(post, result, now),
+        };
+      } catch (xError) {
+        // The X leg failing never stops the Instagram leg: the networks are independent.
+        updated = failedRow(post, xError);
+        xFailed = true;
+      }
     }
-    // Instagram leg (./cross-post.js): runs after X, never fails a published X post. When X is not a target it
-    // is the row's only leg, so its outcome becomes the row's outcome.
+    // Instagram leg (./cross-post.js): runs whatever happened on X and never fails a published X post. When X is not
+    // a target it is the row's only leg, so its outcome becomes the row's outcome. A prior posted/unknown delivery
+    // (an X retry re-claiming this row) is kept as-is so Instagram is never published twice.
     if (targets.instagram) {
-      const delivery = await runInstagramLeg(post);
+      const prior = post.instagramDelivery;
+      const delivery = prior && (prior.status === 'posted' || prior.status === 'needs_review') ? prior : await runInstagramLeg(post);
       updated.instagramDelivery = delivery;
       if (!targets.x) {
         Object.assign(updated, delivery.status === 'posted'
@@ -1967,9 +1988,11 @@ async function postAndRecord(snapshot) {
           : { status: delivery.status === 'needs_review' ? 'needs_review' : 'failed', error: delivery.error, retryable: false, errorClass: `instagram-${delivery.status}` });
       }
     }
+    // Live on Instagram even though X failed: keep the slot and package (the content is out), and count the use.
+    const igLive = updated.instagramDelivery?.status === 'posted';
     await settleClaimed(post, updated);
-    if (updated.status === 'posted') await recordPackagePosted(updated, now);
-    else if (updated.status === 'failed') await releaseHeldSlot(updated);
+    if (updated.status === 'posted' || (xFailed && igLive)) await recordPackagePosted(updated, now);
+    else if (updated.status === 'failed' && !isRetryableFailure(updated)) await releaseHeldSlot(updated);
     return { ok: updated.status === 'posted', updated };
   } catch (error) {
     const updated = failedRow(post, error);

@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 
-const rowOf = (p) => ({ id: p?.id || null, status: p?.status || null, errorClass: p?.errorClass || null, clientId: p?.clientId || null });
+const rowOf = (p) => ({ id: p?.id || null, status: p?.status || null, errorClass: p?.errorClass || null, clientId: p?.clientId || null, instagramDelivery: p?.instagramDelivery ? { status: p.instagramDelivery.status } : null });
 
 /** Pure: what would be sent for this sweep result (null = nothing to report). */
 export function buildPublishAlert(result, { now = Date.now() } = {}) {
@@ -22,8 +22,8 @@ export function buildPublishAlert(result, { now = Date.now() } = {}) {
   const day = new Date(now).toISOString().slice(0, 10);
   const lines = [
     `${held.length} post(s) held for review, ${failed.length} failed, ${expired.length} missed their window (expired, not posted) in the latest publish run.`,
-    ...held.map((r) => `HELD    ${r.id}  ${r.errorClass || 'review needed'}`),
-    ...failed.map((r) => `FAILED  ${r.id}  ${r.errorClass || 'error'}`),
+    ...held.map((r) => `HELD    ${r.id}  ${r.errorClass || 'review needed'}${r.instagramDelivery?.status === 'posted' ? ' (Instagram posted)' : ''}`),
+    ...failed.map((r) => `FAILED  ${r.id}  ${r.errorClass || 'error'}${r.instagramDelivery?.status === 'posted' ? ' (X failed; Instagram posted)' : ''}`),
     ...expired.map((r) => `EXPIRED ${r.id}  missed the 2h publish window`),
     '',
     'Open Content Management → Queue & Calendar. A held post may already be live on X: check, then mark it Posted or Not posted. Failed posts with a rate-limit or pre-send network error are retried by the next run (up to 3 attempts); other failures are not retried. Expired posts were never sent: reschedule or reject them.',

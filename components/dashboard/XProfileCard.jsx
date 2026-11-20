@@ -380,6 +380,11 @@ export default function XProfileCard({ getIdToken, activeClientId, clientName })
                               : `Token renews automatically · expires ${new Date(acct.expiresAt).toLocaleDateString()}`}
                         </p>
                       ) : null}
+                      {p.key === 'x' && acct.connected && acct.refreshError ? (
+                        <p id="social-account-x-token-status" className="xp-error" style={{ margin: '6px 0 0' }}>
+                          X login expired: {acct.refreshError} Posts to X fail until you reconnect (Disconnect, then Connect).
+                        </p>
+                      ) : null}
                       {p.key === 'instagram' && !acct.connected ? (
                         <p className="xp-sub" style={{ margin: '6px 0 0' }}>
                           The account must be an Instagram Business/Creator account and accepted as an Instagram Tester on the HITLOOP Meta app (until the app passes Meta review).

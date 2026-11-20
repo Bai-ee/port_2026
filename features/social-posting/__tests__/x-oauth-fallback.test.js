@@ -26,7 +26,7 @@ const envBackup = {};
 
 beforeEach(() => {
   originalDbDescriptor = Object.getOwnPropertyDescriptor(fb, 'adminDb');
-  db = makeFakeContext().adminDb;
+  db = makeFakeContext({ deepMerge: true }).adminDb;
   Object.defineProperty(fb, 'adminDb', { configurable: true, get: () => db });
   restoreDeps = __setXOAuthDepsForTest({ resolveHomeClientId: async () => HOME });
   refreshCalls = [];
@@ -116,4 +116,35 @@ test('a client doc without an access token is not-connected (no global fallback 
   seedGlobal();
   db._patch('social_accounts', HOME, { clientId: HOME, platforms: { x: { username: 'x', updatedAt: 1 } } });
   await assert.rejects(getXOAuth2Client(HOME), (err) => err.code === 'account-not-connected');
+});
+
+// ── dead-login flag (social_accounts.platforms.x.refreshError) ───────────────
+function seedClientX(patch = {}) {
+  db._patch('social_accounts', OTHER, { clientId: OTHER, platforms: { x: { accessToken: 'old', refreshToken: 'old-r', expiresAt: Date.now() - 1000, updatedAt: 1000, authMode: 'oauth2', ...patch } } });
+}
+
+test('a rejected refresh flags the login (without bumping updatedAt) and throws x-reconnect-required', async () => {
+  seedClientX();
+  TwitterApi.prototype.refreshOAuth2Token = async () => { throw Object.assign(new Error('Request failed with code 400'), { code: 400, data: { error: 'invalid_request' } }); };
+  await assert.rejects(getXOAuth2Client(OTHER), (err) => err.code === 'x-reconnect-required');
+  const x = db._raw('social_accounts', OTHER).platforms.x;
+  assert.match(x.refreshError, /Reconnect/);
+  assert.equal(x.updatedAt, 1000);
+  assert.equal(x.accessToken, 'old');
+});
+
+test('a network failure during refresh does NOT flag the login', async () => {
+  seedClientX();
+  TwitterApi.prototype.refreshOAuth2Token = async () => { throw new Error('connect ETIMEDOUT'); };
+  await assert.rejects(getXOAuth2Client(OTHER), (err) => err.code === 'x-reconnect-required');
+  assert.equal(db._raw('social_accounts', OTHER).platforms.x.refreshError ?? null, null);
+});
+
+test('a successful refresh clears a stored login error', async () => {
+  seedClientX({ refreshError: 'old failure', refreshErrorAt: 5 });
+  const out = await getXOAuth2Client(OTHER);
+  assert.equal(out.tokens.accessToken, 'refreshed-access');
+  const x = db._raw('social_accounts', OTHER).platforms.x;
+  assert.equal(x.refreshError, null);
+  assert.equal(x.refreshErrorAt, null);
 });
