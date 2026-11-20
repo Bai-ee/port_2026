@@ -114,5 +114,464 @@
   "hosts": [
     "mayor",
     "none"
-  ]
+  ],
+  "scenes": {
+    "gravitax.map": {
+      "family": "gravitax",
+      "length": 110,
+      "description": "The lava world map with the World Bank castle in the middle, the camera creeping toward it; no monster, sign or HUD.",
+      "shows": [
+        "map",
+        "castle"
+      ],
+      "roles": [
+        "establish",
+        "step"
+      ],
+      "flags": {
+        "money": false,
+        "season": "S2",
+        "realPlayers": false,
+        "burnedText": []
+      },
+      "source": {
+        "file": "src/episodes/E27FightingGravitax/shots.ts#arrival",
+        "offset": 0
+      }
+    },
+    "gravitax.squad": {
+      "family": "gravitax",
+      "length": 88,
+      "description": "The World Bank window grows into the squad picker, the cursor picks a squad card and moves toward Attack (clipped before the press).",
+      "shows": [
+        "squad-pick",
+        "attack",
+        "monster"
+      ],
+      "roles": [
+        "step"
+      ],
+      "flags": {
+        "money": false,
+        "season": "S2",
+        "realPlayers": false,
+        "burnedText": [
+          "squad cards show combat power numbers (mock)",
+          "Attack button label",
+          "World Bank window chrome (tab bar, Leader tab)",
+          "boss HP numbers and an Ends-in countdown (mock values)"
+        ]
+      },
+      "source": {
+        "file": "src/episodes/E27FightingGravitax/shots.ts#attack",
+        "offset": 0
+      }
+    },
+    "gravitax.swing": {
+      "family": "gravitax",
+      "length": 95,
+      "description": "Gravitax swings his sword in front of the World Bank window and the guardian health bar drops on impact.",
+      "shows": [
+        "monster",
+        "boss-health",
+        "attack"
+      ],
+      "roles": [
+        "step"
+      ],
+      "flags": {
+        "money": false,
+        "season": "S2",
+        "realPlayers": false,
+        "burnedText": [
+          "World Bank window chrome (tab bar, Leader tab)",
+          "boss HP numbers and an Ends-in countdown (mock values)"
+        ]
+      },
+      "source": {
+        "file": "src/episodes/E27FightingGravitax/shots.ts#swing",
+        "offset": 0
+      }
+    },
+    "gravitax.target": {
+      "family": "gravitax",
+      "length": 150,
+      "description": "The World Bank window pops open over the lava map with the Gravitax guardian health bar draining and Gravitax himself rising in front.",
+      "shows": [
+        "monster",
+        "boss-health",
+        "castle"
+      ],
+      "roles": [
+        "establish",
+        "step"
+      ],
+      "flags": {
+        "money": false,
+        "season": "S2",
+        "realPlayers": false,
+        "burnedText": [
+          "World Bank window chrome (tab bar, Leader tab)",
+          "boss HP numbers and an Ends-in countdown (mock values)"
+        ]
+      },
+      "source": {
+        "file": "src/episodes/E27FightingGravitax/shots.ts#health",
+        "offset": 0
+      }
+    },
+    "leaderboard.countdown": {
+      "family": "leaderboard",
+      "length": 100,
+      "description": "One cream rank card on the lava castle swaps player by player from #10 to #8, each avatar, name and point total sliding in from the right while the points count up.",
+      "shows": [
+        "leaderboard",
+        "shards"
+      ],
+      "roles": [
+        "step"
+      ],
+      "flags": {
+        "money": false,
+        "season": "S2",
+        "realPlayers": true,
+        "burnedText": []
+      },
+      "source": {
+        "file": "src/episodes/E28TopTen/tune.ts#countdown",
+        "offset": 200
+      }
+    },
+    "leaderboard.podium": {
+      "family": "leaderboard",
+      "length": 150,
+      "description": "The rank card moves from #4 to #3 to #2, each swap sliding the next player's avatar, name and points in while the card grows slightly bigger.",
+      "shows": [
+        "leaderboard",
+        "shards"
+      ],
+      "roles": [
+        "step"
+      ],
+      "flags": {
+        "money": false,
+        "season": "S2",
+        "realPlayers": true,
+        "burnedText": []
+      },
+      "source": {
+        "file": "src/episodes/E28TopTen/tune.ts#podium",
+        "offset": 425
+      },
+      "variants": {
+        "number-one": {
+          "description": "The rank card swaps to the #1 player at its biggest size and the camera slowly pushes in on that player's avatar while the points count up.",
+          "offset": 70,
+          "length": 80
+        }
+      }
+    },
+    "leaderboard.poster": {
+      "family": "leaderboard",
+      "length": 90,
+      "description": "The Critters Quest wordmark over the dimmed lava World Bank castle while a loop of glowing shards bursts up and toward the camera.",
+      "shows": [
+        "shards",
+        "castle"
+      ],
+      "roles": [
+        "establish",
+        "step"
+      ],
+      "flags": {
+        "money": false,
+        "season": "S2",
+        "realPlayers": false,
+        "burnedText": [
+          "Critters Quest wordmark logo"
+        ]
+      },
+      "source": {
+        "file": "src/episodes/E28TopTen/tune.ts#poster",
+        "offset": 0
+      }
+    },
+    "raid.march": {
+      "family": "raid",
+      "length": 124,
+      "description": "A red line draws between two towns on the world map and a squad walks along it, the camera creeping in.",
+      "shows": [
+        "map",
+        "raid",
+        "town"
+      ],
+      "roles": [
+        "step"
+      ],
+      "flags": {
+        "money": false,
+        "season": null,
+        "realPlayers": false,
+        "burnedText": []
+      },
+      "source": {
+        "file": "src/episodes/E16RaidingATown/shots.ts#march",
+        "offset": 0
+      }
+    },
+    "raid.send": {
+      "family": "raid",
+      "length": 140,
+      "description": "The raid panel opens over the blurred map, the cursor picks Squad 1 and a loot token, presses Send Raid, and the panel turns into a marching card and shrinks away.",
+      "shows": [
+        "raid",
+        "squad-pick",
+        "town",
+        "map"
+      ],
+      "roles": [
+        "step"
+      ],
+      "flags": {
+        "money": true,
+        "season": null,
+        "realPlayers": false,
+        "burnedText": [
+          "raid panel labels (Loot Tokens, Select Squad, Send Raid, Travel / arrives, Squad 1 marching)",
+          "squad chips show combat power numbers (mock)",
+          "mock town names and levels (Stonebrook, Maplewood)"
+        ]
+      },
+      "source": {
+        "file": "src/episodes/E16RaidingATown/shots.ts#send",
+        "offset": 0
+      }
+    },
+    "raid.target": {
+      "family": "raid",
+      "length": 104,
+      "description": "A slow push-in on the world map as the cursor slides in and taps a rival town; no HUD.",
+      "shows": [
+        "map",
+        "raid",
+        "town"
+      ],
+      "roles": [
+        "establish",
+        "step"
+      ],
+      "flags": {
+        "money": false,
+        "season": null,
+        "realPlayers": false,
+        "burnedText": []
+      },
+      "source": {
+        "file": "src/episodes/E16RaidingATown/shots.ts#target",
+        "offset": 0
+      }
+    },
+    "raid.warning": {
+      "family": "raid",
+      "length": 136,
+      "description": "A red incoming-raid banner drops with a countdown while the attacking squad walks toward the defender's town and the cursor taps Set defense.",
+      "shows": [
+        "map",
+        "raid",
+        "town"
+      ],
+      "roles": [
+        "step"
+      ],
+      "flags": {
+        "money": false,
+        "season": null,
+        "realPlayers": false,
+        "burnedText": [
+          "banner text: Incoming raid on Maplewood, Squad 1 from Stonebrook (CP 1,240), arrives in countdown, Set defense / Shield now"
+        ]
+      },
+      "source": {
+        "file": "src/episodes/E16RaidingATown/shots.ts#warning",
+        "offset": 0
+      }
+    },
+    "shards.contest": {
+      "family": "shards",
+      "length": 150,
+      "description": "A claimed red-glow shard on the dimmed lava map while a rival squad of four round critter tokens marches in and a comic bubble says the contest is queued.",
+      "shows": [
+        "shards",
+        "map"
+      ],
+      "roles": [
+        "step"
+      ],
+      "flags": {
+        "money": false,
+        "season": "S2",
+        "realPlayers": false,
+        "burnedText": [
+          "comic bubble: \"Queued contest! The fight resolves when you land.\""
+        ]
+      },
+      "source": {
+        "file": "src/episodes/E21VaultShards/shots.ts#contest",
+        "offset": 0
+      }
+    },
+    "shards.cracks": {
+      "family": "shards",
+      "length": 121,
+      "description": "Crystal shards burst out of the cracked World Bank dome toward the camera over the lava map while two comic bubbles say the bank has cracked and shards have scattered.",
+      "shows": [
+        "castle",
+        "shards"
+      ],
+      "roles": [
+        "establish",
+        "step"
+      ],
+      "flags": {
+        "money": false,
+        "season": "S2",
+        "realPlayers": false,
+        "burnedText": [
+          "comic bubbles: \"Gravitax has been defeated!\" and \"The bank cracked and shards have scattered across the map!\""
+        ]
+      },
+      "source": {
+        "file": "src/episodes/E21VaultShards/shots.ts#cracks",
+        "offset": 0
+      }
+    },
+    "shards.map": {
+      "family": "shards",
+      "length": 79,
+      "description": "The lava world map with three glowing shard markers around the World Bank castle while the cursor glides to the middle shard and clicks it.",
+      "shows": [
+        "map",
+        "castle",
+        "shards"
+      ],
+      "roles": [
+        "step"
+      ],
+      "flags": {
+        "money": true,
+        "season": "S2",
+        "realPlayers": false,
+        "burnedText": [
+          "shard progress bars with amounts",
+          "map sign with boss HP and pool",
+          "HUD resource pills and timers (mock values)"
+        ]
+      },
+      "source": {
+        "file": "src/episodes/E21VaultShards/shots.ts#map",
+        "offset": 0
+      }
+    },
+    "shards.season": {
+      "family": "shards",
+      "length": 150,
+      "description": "The Season 2 shard leaderboard opens over the blurred castle, rows sliding in one by one and the points counting up before the player's own row highlights.",
+      "shows": [
+        "shards",
+        "leaderboard"
+      ],
+      "roles": [
+        "step"
+      ],
+      "flags": {
+        "money": true,
+        "season": "S2",
+        "realPlayers": false,
+        "burnedText": [
+          "Season 2 leaderboard: rank, points, pool and shard counts (mock names)",
+          "tab and header labels"
+        ]
+      },
+      "source": {
+        "file": "src/episodes/E21VaultShards/shots.ts#season",
+        "offset": 0
+      }
+    },
+    "titans.attackPick": {
+      "family": "titans",
+      "length": 110,
+      "description": "The Floranix Titan window swings open on its Attack tab while a squad card is picked and the rounds step up to five as the camera pushes in.",
+      "shows": [
+        "titan",
+        "squad-pick",
+        "attack"
+      ],
+      "roles": [
+        "step"
+      ],
+      "flags": {
+        "money": true,
+        "season": "S3",
+        "realPlayers": false,
+        "burnedText": [
+          "Titan window text (HP, pool chip, fee line, Attack button with QUEST fee; mock values)"
+        ]
+      },
+      "source": {
+        "file": "src/episodes/E30TitansGuide/shots.ts#shot05",
+        "offset": 0
+      }
+    },
+    "titans.attackSend": {
+      "family": "titans",
+      "length": 100,
+      "description": "A tilted low-angle sweep over the Titan window settles flat, the cursor clicks ATTACK and the button shows sent, then the cursor opens the Leader damage board.",
+      "shows": [
+        "titan",
+        "attack",
+        "leaderboard"
+      ],
+      "roles": [
+        "step"
+      ],
+      "flags": {
+        "money": true,
+        "season": "S3",
+        "realPlayers": false,
+        "burnedText": [
+          "Titan window text (HP, pool chip, fee line, Attack button with QUEST fee, board pool line; mock values and mock wallets)"
+        ]
+      },
+      "source": {
+        "file": "src/episodes/E30TitansGuide/shots.ts#shot06",
+        "offset": 0
+      }
+    },
+    "titans.wake": {
+      "family": "titans",
+      "length": 120,
+      "description": "The world map with the World Tree Sanctum and Floranix the Titan standing awake on it, the camera creeping in and the Titan timer chip ticking in the top corner.",
+      "shows": [
+        "map",
+        "titan"
+      ],
+      "roles": [
+        "establish",
+        "step"
+      ],
+      "flags": {
+        "money": false,
+        "season": "S3",
+        "realPlayers": false,
+        "burnedText": [
+          "Map HUD (profile button, wood/stone/coal pills, mini map, World Bank chip, Titan chip with HP % and timer; mock values)"
+        ]
+      },
+      "source": {
+        "file": "src/episodes/E30TitansGuide/shots.ts#shot08",
+        "offset": 10
+      }
+    }
+  },
+  "scenesHash": "35aab795a865d7d9"
 }

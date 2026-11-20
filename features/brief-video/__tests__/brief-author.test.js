@@ -51,7 +51,7 @@ test('catalogCheck: stable reason strings', () => {
 });
 
 test('tool schema: panel/preset/action are enums from the catalog; steps are one branch per panel', () => {
-  const s = authorToolSchema(catalog).properties.request.properties.steps.items.anyOf;
+  const s = authorToolSchema(catalog).properties.request.properties.steps.items.anyOf.filter((b) => b.properties.panel); // plus one scene-block branch
   assert.deepEqual(s.map((b) => b.properties.panel.enum[0]).sort(), Object.keys(catalog.panels).sort());
   const claim = s.find((b) => b.properties.panel.enum[0] === 'spotClaimReward');
   assert.deepEqual(claim.properties.clicks.items.properties.action.enum, catalog.panels.spotClaimReward.actions);
@@ -197,4 +197,69 @@ test('template doc lists every vendored catalog panel', () => {
   const doc = fs.readFileSync(new URL('../../../docs/source-of-truth/CQ-CREATIVE-BRIEF-TEMPLATE.md', import.meta.url), 'utf8');
   for (const panel of Object.keys(catalog.panels)) assert.ok(doc.includes(panel), `doc misses ${panel}`);
   for (const a of Object.values(catalog.panels).flatMap((p) => [...p.actions, ...p.presets])) assert.ok(doc.includes(a), `doc misses ${a}`);
+});
+
+test('scene blocks: tool schema enums, prompt block list and rules, exclude enforced with repair', async () => {
+  const { authorSystemPrompt, blockListText } = await import('../brief-author.js');
+  const schema = authorToolSchema(catalog);
+  const props = schema.properties.request.properties;
+  assert.deepEqual(props.exclude.items.enum, ['money', 'S3', 'realPlayers']);
+  assert.ok(props.establish.properties.scene.enum.includes('gravitax.target'));
+  assert.ok(!props.establish.properties.scene.enum.includes('gravitax.squad'), 'establish enum lists only establish-role blocks');
+  const sceneBranch = props.steps.items.anyOf.find((b) => b.properties.scene);
+  assert.ok(sceneBranch.properties.scene.enum.includes('gravitax.squad'));
+  const prompt = authorSystemPrompt(catalog, campaign);
+  assert.match(prompt, /- gravitax\.squad \| 2\.9s \| .+ \| shows: squad-pick/);
+  assert.match(prompt, /Map each brief shot to a `shows` tag first/);
+  assert.match(prompt, /\["money"\] unless the brief explicitly shows rewards/);
+  assert.ok(blockListText(catalog).split('\n').length === Object.keys(catalog.scenes).length);
+
+  const sceneInput = (scene2) => ({ unsupported: [], request: { ...goodInput().request, exclude: ['money'], establish: { caption: 'WHICH FIGHT FIRST?', seconds: 3, scene: 'gravitax.target' }, steps: [{ scene: 'gravitax.target', caption: 'CHECK THE TARGET', seconds: 2.5 }, { scene: scene2, caption: 'BUILD THE SQUAD', seconds: 3 }], end: { seconds: 3 } } });
+  const ok = await authorHowtoRequest({ post: post(), creative: CREATIVE, catalog, campaign, llm: mockLlm(sceneInput('gravitax.squad')) });
+  assert.equal(ok.ok, true, JSON.stringify(ok.reasons));
+  const llm = mockLlm(sceneInput('raid.send'), sceneInput('gravitax.squad'));
+  const fixed = await authorHowtoRequest({ post: post(), creative: CREATIVE, catalog, campaign, llm });
+  assert.equal(fixed.ok, true);
+  assert.equal(llm.calls.length, 2);
+  assert.match(JSON.stringify(llm.calls[1].messages), /excluded-scene:2:raid\.send:money/);
+});
+
+test('variety: block ids in signature, recent list in the prompt, repeat-scene warning, one jobs read', async () => {
+  const { sceneSignature, blocksOf, recentBlockLists, repeatSceneWarnings, similarRecentWarnings } = await import('../brief-author.js');
+  const mk = (id, ...blocks) => ({ id, establish: { scene: blocks[0] }, steps: blocks.slice(1).map((b) => { const [scene, variant] = b.split('#'); return { scene, ...(variant ? { variant } : {}) }; }) });
+  const a = mk('a', 'gravitax.target', 'gravitax.target', 'gravitax.squad');
+  assert.deepEqual(sceneSignature(a), ['establish|scene|gravitax.target|', 'scene|gravitax.target|', 'scene|gravitax.squad|']);
+  assert.notDeepEqual(sceneSignature(mk('b', 'raid.target', 'raid.march')), sceneSignature(a));
+  assert.deepEqual(blocksOf(mk('p', 'leaderboard.poster', 'leaderboard.podium#number-one')), ['leaderboard.poster', 'leaderboard.podium#number-one']);
+  const jobs = ['raid.target', 'titans.wake', 'shards.cracks', 'gravitax.map', 'raid.march'].map((b, i) => ({ postId: `p${i}`, status: 'done', request: mk(`r${i}`, b), createdAt: `2026-11-1${i}T10:00:00Z` }));
+  jobs.push({ postId: 'q', status: 'queued', request: mk('q', 'leaderboard.poster'), createdAt: '2026-11-18T10:00:00Z' });
+  assert.deepEqual(recentBlockLists(jobs)[0], ['raid.march'], 'newest finished first, queued skipped');
+  // previous 3 = raid.march, gravitax.map, shards.cracks
+  assert.deepEqual(repeatSceneWarnings(mk('n', 'gravitax.map', 'raid.target'), jobs), ['repeat-scene:gravitax.map']);
+  let reads = 0;
+  const db = { collection: () => ({ where: () => ({ get: async () => { reads += 1; return { docs: jobs.map((j) => ({ data: () => j })) }; } }) }) };
+  const out = await similarRecentWarnings(db, { clientId: CLIENT, request: mk('n', 'gravitax.map', 'raid.target'), postId: 'self', now: Date.parse('2026-11-19T12:00:00Z') });
+  assert.deepEqual(out.warnings, ['repeat-scene:gravitax.map']);
+  assert.equal(reads, 1);
+  // the recent list reaches the user prompt
+  const llm = mockLlm(goodInput());
+  await authorHowtoRequest({ post: post(), creative: CREATIVE, catalog, campaign, llm, recent: recentBlockLists(jobs) });
+  assert.match(llm.calls[0].messages[0].content, /Recent videos, newest first[\s\S]*1\. raid\.march/);
+});
+
+test('money exclusion is enforced in code; only "Show money: yes" in the brief opts out', async () => {
+  const noEx = (scene2) => { const i = { unsupported: [], request: { ...goodInput().request, establish: { caption: 'RAID', seconds: 3, scene: 'raid.target' }, steps: [{ scene: 'raid.march', caption: 'MARCH', seconds: 3 }, { scene: scene2, caption: 'SEND', seconds: 3 }], end: { seconds: 3 } } }; return i; };
+  // model omits exclude and picks a money block: rejected, then repaired
+  const llm = mockLlm(noEx('raid.send'), noEx('raid.warning'));
+  const out = await authorHowtoRequest({ post: post(), creative: CREATIVE, catalog, campaign, llm });
+  assert.equal(out.ok, true, JSON.stringify(out.reasons));
+  assert.equal(llm.calls.length, 2);
+  assert.match(JSON.stringify(llm.calls[1].messages), /excluded-scene:2:raid\.send:money/);
+  assert.deepEqual(out.request.exclude, ['money']);
+  // brief says Show money: yes -> the money block is allowed
+  const llm2 = mockLlm(noEx('raid.send'));
+  const yes = await authorHowtoRequest({ post: post(), creative: `${CREATIVE}\nShow money: yes`, catalog, campaign, llm: llm2 });
+  assert.equal(yes.ok, true, JSON.stringify(yes.reasons));
+  assert.equal(llm2.calls.length, 1);
+  assert.ok(!yes.request.exclude.includes('money'));
 });

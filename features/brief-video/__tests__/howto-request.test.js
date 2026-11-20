@@ -185,7 +185,7 @@ const cursor33 = () => ({
   steps: ['1. SELECT A RESOURCE', '2. PICK A CRITTER', '3. SEND IT OUT', '4. COLLECT THE HAUL'].map((caption, i) => ({
     caption, seconds: 4, later: i === 2, panel: 'spotTile', clicks: [{ action: 'selectSpot' }],
   })),
-  end: { caption: 'GATHER FIRST', seconds: 3, art: { src: 'art/posters/s3-first-look.png' } },
+  end: { caption: 'GATHER FIRST', seconds: 3, art: { src: 'art/posters/s3-first-look.jpg' } },
 });
 
 test('v3.3 cursor request is valid and auto-approves', async () => {
@@ -205,4 +205,49 @@ test('v3.3 field errors', () => {
   assert.equal(bad((r) => { r.end.art = { src: 'art/posters/s3-first-look.png', crop: { x: 1 } }; }), '');
   assert.match(bad((r) => { r.steps[0].caption = 'x'.repeat(41); }), /steps\[0\]\.caption/);
   assert.match(bad((r) => { r.skeleton = 'guide'; r.host.name = 'mayor'; delete r.steps[0].say; }), /steps\[0\]\.say is required/);
+});
+
+test('v3.3 scene blocks: the hub monster fixture validates and passes the vendored requestToSpec', async () => {
+  const fs = await import('node:fs');
+  const { loadHowtoCatalog, catalogCheck } = await import('../howto-catalog/index.js');
+  const { requestToSpec } = await import('../howto-catalog/requestToSpec.mjs');
+  const fx = JSON.parse(fs.readFileSync(new URL('./fixtures/monster-first-decision-v33.request.json', import.meta.url), 'utf8'));
+  assert.deepEqual(validateHowtoRequest(fx).errors, []);
+  const { catalog, campaign } = loadHowtoCatalog();
+  assert.deepEqual(catalogCheck(fx, catalog), []);
+  const spec = requestToSpec(fx, { catalog, campaign });
+  assert.equal(spec.ok, true, JSON.stringify(spec.reasons));
+  // scene is exclusive with panel/preset/clicks; variant and exclude are type-checked
+  const mixed = structuredClone(fx); mixed.steps[0].panel = 'spotTile';
+  assert.ok(validateHowtoRequest(mixed).errors.includes('steps[0].scene cannot be combined with panel, preset or clicks'));
+  const badEx = { ...structuredClone(fx), exclude: ['gold'] };
+  assert.ok(validateHowtoRequest(badEx).errors.some((e) => e.startsWith('exclude must be')));
+  assert.deepEqual(catalogCheck({ ...fx, steps: [{ scene: 'nope.x' }] }, catalog), ['unknown-scene:1:nope.x']);
+  assert.deepEqual(catalogCheck({ ...fx, steps: [{ scene: 'gravitax.target', variant: 'zzz' }] }, catalog), ['unknown-variant:1:gravitax.target:zzz']);
+  // guide skeleton still requires panel/clicks
+  const g = { ...structuredClone(fx), skeleton: 'guide' };
+  assert.ok(validateHowtoRequest(g).errors.includes('steps[0].panel is required'));
+});
+
+test('v3.3 cursor allows 1-6 steps (hub rule); guide keeps 2-4', async () => {
+  const fs = await import('node:fs');
+  const fx = JSON.parse(fs.readFileSync(new URL('./fixtures/monster-first-decision-v33.request.json', import.meta.url), 'utf8'));
+  const withN = (n, extra = {}) => ({ ...structuredClone(fx), ...extra, steps: Array.from({ length: n }, () => ({ caption: 'X', seconds: 2, scene: 'gravitax.squad' })) });
+  assert.deepEqual(validateHowtoRequest(withN(1)).errors, []);
+  assert.deepEqual(validateHowtoRequest(withN(6)).errors, []);
+  assert.ok(validateHowtoRequest(withN(0)).errors.includes('steps must be an array of 1 to 6 items'));
+  assert.ok(validateHowtoRequest(withN(7)).errors.includes('steps must be an array of 1 to 6 items'));
+  assert.ok(validateHowtoRequest({ ...good(), steps: [good().steps[0]] }).errors.includes('steps must be an array of 2 to 4 items'));
+});
+
+test('submit runs catalogCheck + requestToSpec for v3.3 cursor requests before auto-approving', async () => {
+  const fs = await import('node:fs');
+  const fx = JSON.parse(fs.readFileSync(new URL('./fixtures/monster-first-decision-v33.request.json', import.meta.url), 'utf8'));
+  const ok = await submitHowtoRequest(db(), { clientId: CLIENT, request: fx });
+  assert.equal(ok.ok, true, JSON.stringify(ok));
+  const bad = structuredClone(fx); bad.id = 'bad-scene-money'; bad.steps[1].scene = 'raid.send'; // money block while exclude has money
+  const r = await submitHowtoRequest(db(), { clientId: CLIENT, request: bad });
+  assert.equal(r.ok, false);
+  assert.ok(r.errors.includes('excluded-scene:2:raid.send:money'));
+  assert.equal((await db().collection('howto_requests').doc('bad-scene-money').get()).exists, false);
 });

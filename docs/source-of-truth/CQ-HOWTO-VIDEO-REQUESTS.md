@@ -101,3 +101,12 @@ The reviewer watches the video in the calendar before approving. It is rebuilt U
 - `end` `{caption? <= 48, cta? <= 80, headline? <= 60, seconds? 1-10, art? {src: /^art\/[a-z0-9\/_-]+\.(png|jpg|jpeg|webp)$/}}`. `end.art` is optional and has no crop: a supplied image is shown full-frame as is with nothing on top; with no art the render uses the approved campaign end card. `end.caption` / `end.cta` are post copy only and are never drawn. The Creative Brief author never defaults `end.art`.
 - Variety check: after a Creative Brief request is authored or revised the app compares its scene signature (establish view plus each step's panel, preset, actions) with this client's done/attached videos from the last 14 days; identical or >= 80% overlap adds the warning `similar-to-recent:<postId or howtoId>` (advice only, never blocks).
 
+### Scene blocks (v3.3 cursor)
+
+A cursor `establish` or step may carry `scene: "<family>.<shot>"` (plus optional `variant`) instead of `view`/`panel`/`preset`/`clicks` (mutually exclusive; no `later`). The request may carry `exclude: ["money","S3","realPlayers"]`; the vendored `requestToSpec` rejects a block that matches (`excluded-scene`, `unknown-scene`, `scene-role`, `unknown-variant`, `later-not-allowed`, `scene-exclusive`, `exclude-invalid`). The app validator checks types only; `catalogCheck` adds `unknown-scene` / `unknown-variant`. The Creative Brief author lists every block (id, seconds, description, shows, roles, flags) to the model, passes it the block ids of the last 7 finished videos, and the variety check adds the warning `repeat-scene:<id>` when a block was used in the previous 3 videos (the scene signature now includes block ids).
+
+`exclude` does not cover the gather-loop claim-reward panel (spotClaimReward shows rewards): do not use the claim step when money is excluded. The author always adds `money` to `exclude` for cursor requests unless the Creative Brief has `Show money: yes`; `submitHowtoRequest` runs `catalogCheck` + `requestToSpec` on v3.3 cursor requests before auto-approving.
+
+## What the video can show
+
+Scene families: Gravitax fight, Raid, Vault Shards, Titans (Season 3), Top 10 leaderboard (real player names), and the gather loop (panels). Plain-language list for brief writers: `CQ-CREATIVE-BRIEF-TEMPLATE.md`, section "What the video can show".

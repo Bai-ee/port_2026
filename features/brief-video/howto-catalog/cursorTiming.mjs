@@ -15,6 +15,7 @@ export const CURSOR_TIMING = {
   laterMin: 24, // the LATER view stays at least this long
   endMin: 45, // end art, minimum (1.5 s)
   establishMin: 30,
+  sceneMin: 30, // a scene-block step, minimum (1 s)
 };
 
 const T = CURSOR_TIMING;

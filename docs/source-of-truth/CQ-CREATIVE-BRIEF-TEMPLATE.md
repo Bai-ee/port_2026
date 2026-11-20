@@ -15,6 +15,7 @@ Every field below is required (write "none" where nothing applies).
 - **Length**: seconds, e.g. 21s.
 - **Host**: none | mayor. `none` = a cursor walks the game (no host character).
 - **Narration**: on | off. With Host none it is always off.
+- **Show money**: yes | no (default no). Put it on its own line as `Show money: yes` only when the video must show rewards, prices or pools; otherwise the build always hides them.
 - **Audience**: who it is for.
 - **Goal**: what the viewer should do or understand.
 - **Hook**: the first line, in words.
@@ -37,6 +38,21 @@ Every field below is required (write "none" where nothing applies).
 - [ ] CTA and Post copy are written (Post copy 280 chars max).
 - [ ] The gameplay scene differs from the last few CQ videos (check recent drafts/posts first).
 - [ ] Anything the scenes cannot show is written as "NEEDS: ...".
+
+## What the video can show
+
+Besides the gather loop below, the video can use ready-made game scenes (silent clips, captions are yours). Write each shot as one of these:
+
+- **Gravitax fight**: the lava map and castle, Gravitax and his health bar, a sword swing, picking the squad before the attack.
+- **Raid**: the raid target on the map, a squad marching, an incoming-raid warning (sending a raid shows loot tokens, so it counts as money).
+- **Vault Shards**: shards bursting from the cracked bank, a contested shard fight, the shard map and the Season 2 board (the last two show money).
+- **Titans (Season 3)**: the Titan waking on the map, picking the attack squad, sending the attack (the last two show fees and pools). Skip these when the post says no unverified Season 3.
+- **Top 10 leaderboard**: the countdown and the podium with real player names (the #1 player is a second cut). Skip these when the post says no player names.
+- **The gather loop**: spots, critters, send, claim. Use it only when the video is about gathering, sending, claiming or spots.
+
+The "hide money" rule does not cover the gather loop's claim-reward screen (spotClaimReward shows rewards), so do not use the claim step unless `Show money: yes`.
+
+Say in the brief whether to hide money (default for daily posts: hide prices, pools, fees, rewards), Season 3, or real player names. The video uses blocks the recent videos did not use.
 
 ## Available game scenes
 

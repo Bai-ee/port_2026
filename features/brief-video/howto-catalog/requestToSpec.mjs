@@ -10,6 +10,9 @@
 //   unknown-skeleton:<v>  cursor-host-must-be-none  guide-host-none  cursor-narration-unsupported  seconds-invalid:<establish|n|end>
 //   establish-too-short  step-too-short:<step>  end-too-short  total-too-long  unknown-view:<panel>  view-must-be-canvas
 //   later-needs-completed-view:<step>
+// Scene blocks (v3.3 "scene blocks"; src/howto/blocks): establish / steps may carry `scene: "<family>.<shot>"` (+ optional `variant`)
+//   instead of view / panel+clicks. Reasons: unknown-scene:<step|establish>:<id>  unknown-variant:<step>:<id>:<variant>  scene-exclusive:<step>
+//   later-not-allowed:<step>  scene-role:<step>:<id>  excluded-scene:<step>:<id>:<flag>  exclude-invalid  (request `exclude: [money|S3|realPlayers]`)
 // (revised: the end shows the supplied image full-frame, so there is no crop; end.caption / end.cta / end.headline are optional post copy)
 // The result spec carries vo {} and narration from the request; the VO stage fills vo, the job decides the effective narration.
 import fs from "node:fs";
@@ -39,6 +42,9 @@ const publicFile = (publicDir, rel) => {
 /** frames = seconds * 30 must be a whole number of frames (a spec window is exact). */
 const framesOf = (sec) => { const f = typeof sec === "number" ? sec * CURSOR_FPS : 0; return f > 0 && Math.abs(f - Math.round(f)) < 1e-6 ? Math.round(f) : 0; };
 
+const EXCLUDE_FLAGS = ["money", "S3", "realPlayers"];
+const flagHit = (flags, f) => (f === "money" ? flags?.money === true : f === "S3" ? flags?.season === "S3" : flags?.realPlayers === true);
+
 /** Cursor skeleton (template v3.3): no host, no VO; establish -> steps (exact windows) -> end art. */
 const cursorToSpec = (r, { catalog, publicDir }) => {
   const reasons = [];
@@ -51,17 +57,36 @@ const cursorToSpec = (r, { catalog, publicDir }) => {
   if (hostName !== "none") reasons.push("cursor-host-must-be-none");
   if (r.narration === true) reasons.push("cursor-narration-unsupported");
   if (Array.isArray(r.new_panels) && r.new_panels.some((p) => isObj(p) && Object.values(p).some((v) => str(v) || (Array.isArray(v) && v.length)))) reasons.push("new-panels-required");
+  const exclude = Array.isArray(r.exclude) ? r.exclude : [];
+  if (r.exclude !== undefined && (!Array.isArray(r.exclude) || exclude.some((f) => !EXCLUDE_FLAGS.includes(f)))) reasons.push("exclude-invalid");
+  const scenes = catalog.scenes ?? {};
+  /** Validates a scene block reference for `who` ("establish" or the 1-based step) and role; returns its info or null. */
+  const checkScene = (who, id, variant, role) => {
+    const info = scenes[id];
+    if (!info) { reasons.push(`unknown-scene:${who}:${id}`); return null; }
+    if (!(info.roles ?? []).includes(role)) reasons.push(`scene-role:${who}:${id}`);
+    for (const f of exclude) if (EXCLUDE_FLAGS.includes(f) && flagHit(info.flags, f)) reasons.push(`excluded-scene:${who}:${id}:${f}`);
+    if (variant && !info.variants?.[variant]) reasons.push(`unknown-variant:${who}:${id}:${variant}`);
+    return info;
+  };
   let total = 0;
 
   // establish
   const estCaption = str(r.establish?.caption); if (!estCaption) miss("establish.caption");
   const estView = str(r.establish?.view);
+  const estScene = str(r.establish?.scene);
+  const estVariant = str(r.establish?.variant);
+  if (estScene) {
+    if (estView) reasons.push("scene-exclusive:establish");
+    checkScene("establish", estScene, estVariant, "establish");
+  }
   const estFrames = framesOf(r.establish?.seconds);
   if (!estFrames) { if (r.establish?.seconds === undefined) miss("establish.seconds"); else reasons.push("seconds-invalid:establish"); }
   else if (estFrames < CURSOR_TIMING.establishMin) reasons.push("establish-too-short");
   total += estFrames;
   let lastCanvas;
-  if (estView) {
+  if (estScene) lastCanvas = undefined;
+  else if (estView) {
     if (!catalog.panels[estView]) reasons.push(`unknown-view:${estView}`);
     else if (catalog.panels[estView].surface !== "canvas") reasons.push("view-must-be-canvas");
     else lastCanvas = estView;
@@ -77,6 +102,21 @@ const cursorToSpec = (r, { catalog, publicDir }) => {
     r.steps.forEach((s, i) => {
       const n = i + 1;
       const caption = str(s?.caption); if (!caption) miss(`steps.${n}.caption`);
+      const sceneId = str(s?.scene);
+      if (sceneId) {
+        const variant = str(s?.variant);
+        if (str(s?.panel) || str(s?.preset) || (Array.isArray(s?.clicks) && s.clicks.length)) reasons.push(`scene-exclusive:${n}`);
+        if (s?.later === true) reasons.push(`later-not-allowed:${n}`);
+        checkScene(n, sceneId, variant, "step");
+        const sframes = framesOf(s?.seconds);
+        if (!sframes) { if (s?.seconds === undefined) miss(`steps.${n}.seconds`); else reasons.push(`seconds-invalid:${n}`); }
+        else if (sframes < CURSOR_TIMING.sceneMin) reasons.push(`step-too-short:${n}`);
+        steps.push({ caption, seconds: s?.seconds, scene: sceneId, ...(variant ? { variant } : {}) });
+        prev = { panel: sceneId, later: false };
+        at += sframes;
+        total += sframes;
+        return;
+      }
       const panel = str(s?.panel);
       const info = catalog.panels[panel];
       if (!panel) miss(`steps.${n}.panel`); else if (!info) reasons.push(`unknown-panel:${n}:${panel}`);
@@ -136,7 +176,7 @@ const cursorToSpec = (r, { catalog, publicDir }) => {
       season: r.season,
       host: "none",
       label,
-      establish: { caption: estCaption, seconds: r.establish.seconds, ...(estView ? { view: estView } : {}) },
+      establish: { caption: estCaption, seconds: r.establish.seconds, ...(estView ? { view: estView } : {}), ...(estScene ? { scene: estScene } : {}), ...(estScene && estVariant ? { variant: estVariant } : {}) },
       steps,
       end: { seconds: r.end.seconds, ...(src ? { art: { src } } : {}), ...(headline ? { headline } : {}), ...(endCaption ? { caption: endCaption } : {}), ...(cta ? { cta } : {}) },
       music: true,

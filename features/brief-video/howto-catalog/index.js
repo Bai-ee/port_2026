@@ -1,5 +1,5 @@
 // Vendored CQ-HowTo catalog (copied from the hitloop-video hub by scripts/sync-howto-catalog.mjs) and the pure checks on it.
-// catalogCheck covers only the catalog ids (panel/preset/action/host/art) with the hub's reason strings. It does NOT check timing:
+// catalogCheck covers only the catalog ids (panel/preset/action/host/art/scene/variant) with the hub's reason strings. It does NOT check timing:
 // the author also runs the vendored hub requestToSpec.mjs (frames, step minimums, total length), and only a request that passes both renders.
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
@@ -40,8 +40,18 @@ export function catalogCheck(request, catalog, art = ART_AVAILABLE) {
   if (!cursorNoHost && !(catalog?.hosts || []).includes(hostName)) reasons.push(`unknown-host:${hostName}`);
   const src = r.end?.art?.src;
   if (typeof src === 'string' && src && !art.includes(src)) reasons.push(`art-missing:${src}`);
+  // Scene blocks (same reason strings as the hub requestToSpec): role, exclusions and timing are checked by requestToSpec.
+  const sceneCheck = (who, id, variant) => {
+    const info = catalog?.scenes?.[id];
+    if (!info) reasons.push(`unknown-scene:${who}:${id}`);
+    else if (variant && !info.variants?.[variant]) reasons.push(`unknown-variant:${who}:${id}:${variant}`);
+  };
+  const estScene = typeof r.establish?.scene === 'string' ? r.establish.scene.trim() : '';
+  if (estScene) sceneCheck('establish', estScene, typeof r.establish.variant === 'string' ? r.establish.variant.trim() : '');
   (Array.isArray(r.steps) ? r.steps : []).forEach((s, i) => {
     const n = i + 1;
+    const sceneId = typeof s?.scene === 'string' ? s.scene.trim() : '';
+    if (sceneId) { sceneCheck(n, sceneId, typeof s.variant === 'string' ? s.variant.trim() : ''); return; }
     const panel = typeof s?.panel === 'string' ? s.panel.trim() : '';
     const def = catalog?.panels?.[panel];
     if (!panel || !def) { if (panel) reasons.push(`unknown-panel:${n}:${panel}`); return; }

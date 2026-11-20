@@ -2,6 +2,8 @@
 // app/api/dashboard/howto-requests/route.js wires auth. MCP/ChatGPT can only create or overwrite a request while its
 // status is 'submitted'; building/approved/rejected are set by the owner script (scripts/cq-howto/approve-request.mjs).
 import { HOWTO_REQUESTS } from './clients.js';
+import { loadHowtoCatalog, catalogCheck } from './howto-catalog/index.js';
+import { requestToSpec } from './howto-catalog/requestToSpec.mjs';
 import { requestHash as computeRequestHash, effectiveNarration } from './howto.js';
 
 export const HOWTO_ALLOWED_CLIENTS = Object.freeze(['paradice-dbBQCHUX']);
@@ -17,12 +19,16 @@ const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
 const ART_RE = /^art\/[a-z0-9/_-]+\.(png|jpg|jpeg|webp)$/;
 const num = (v, lo, hi) => typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi;
 const str = (v, max) => typeof v === 'string' && v.length <= max;
+const EXCLUDE_FLAGS = ['money', 'S3', 'realPlayers'];
+const SCENE_ID_RE = /^[a-z0-9]+\.[a-zA-Z0-9-]+$/; // scene block id: <family>.<shot>
+const VARIANT_RE = /^[a-zA-Z0-9-]{1,40}$/;
 
 // v3.3 optional fields: type/size only. The render service does the deep validation.
 function validateV33Top(req, errors) {
   if (req.skeleton !== undefined && !['guide', 'cursor'].includes(req.skeleton)) errors.push('skeleton must be "guide" or "cursor"');
   if (req.host?.name === 'none' && req.skeleton !== 'cursor') errors.push('host.name "none" is only allowed when skeleton is "cursor"');
   if (req.label !== undefined && !str(req.label, 32)) errors.push('label must be a string of 32 characters or fewer');
+  if (req.exclude !== undefined && (!Array.isArray(req.exclude) || req.exclude.some((f) => !EXCLUDE_FLAGS.includes(f)))) errors.push('exclude must be a list of "money", "S3" or "realPlayers"');
   const est = req.establish;
   if (est !== undefined) {
     if (!isObj(est)) errors.push('establish must be an object');
@@ -30,6 +36,9 @@ function validateV33Top(req, errors) {
       if (!str(est.caption, 40)) errors.push('establish.caption must be a string of 40 characters or fewer');
       if (!num(est.seconds, 1, 10)) errors.push('establish.seconds must be a number 1-10');
       if (est.view !== undefined && typeof est.view !== 'string') errors.push('establish.view must be a string');
+      if (est.scene !== undefined && (typeof est.scene !== 'string' || !SCENE_ID_RE.test(est.scene))) errors.push('establish.scene must be a scene id like "<family>.<shot>"');
+      if (est.variant !== undefined && (typeof est.variant !== 'string' || !VARIANT_RE.test(est.variant))) errors.push('establish.variant must be a short name');
+      if (est.scene && est.view) errors.push('establish.scene cannot be combined with establish.view');
     }
   }
   const end = req.end;
@@ -51,7 +60,12 @@ function validateV33Step(s, p, errors) {
   if (s.caption !== undefined && !str(s.caption, 40)) errors.push(`${p}.caption must be a string of 40 characters or fewer`);
   if (s.seconds !== undefined && !num(s.seconds, 1, 15)) errors.push(`${p}.seconds must be a number 1-15`);
   if (s.later !== undefined && typeof s.later !== 'boolean') errors.push(`${p}.later must be true or false`);
+  if (s.scene !== undefined && (typeof s.scene !== 'string' || !SCENE_ID_RE.test(s.scene))) errors.push(`${p}.scene must be a scene id like "<family>.<shot>"`);
+  if (s.variant !== undefined && (typeof s.variant !== 'string' || !VARIANT_RE.test(s.variant))) errors.push(`${p}.variant must be a short name`);
 }
+
+/** A scene step (v3.3 cursor): `scene` replaces panel/preset/clicks; the two are mutually exclusive. */
+const isSceneStep = (s) => typeof s?.scene === 'string' && s.scene.trim() !== '';
 
 /** @returns {{errors: string[], warnings: string[]}} errors block the submit; warnings are the template section 3 copy budget. */
 export function validateHowtoRequest(req) {
@@ -92,13 +106,19 @@ export function validateHowtoRequest(req) {
   if (v32 && Array.isArray(req.new_panels) && req.new_panels.some((p) => isObj(p) && Object.values(p).some((v) => v != null && v !== '' && !(Array.isArray(v) && !v.length)))) errors.push('new_panels must be empty for 3.2 (automatic renders use only rebuilt panels; see the template catalog)');
 
   const steps = req.steps;
-  if (!Array.isArray(steps) || steps.length < 2 || steps.length > 4) errors.push('steps must be an array of 2 to 4 items');
+  // The hub's cursorToSpec allows 1-6 steps (requestToSpec.mjs steps-count); guide/panel requests keep 2-4.
+  const [minSteps, maxSteps] = cursor ? [1, 6] : [2, 4];
+  if (!Array.isArray(steps) || steps.length < minSteps || steps.length > maxSteps) errors.push(`steps must be an array of ${minSteps} to ${maxSteps} items`);
   else {
     steps.forEach((s, i) => {
       const p = `steps[${i}]`;
       if (!isObj(s)) { errors.push(`${p} must be an object`); return; }
       if (!cursor) need(`${p}.say`, s.say); // 3.3 cursor skeleton: no narration line required
       if (v33) validateV33Step(s, p, errors);
+      if (cursor && isSceneStep(s)) {
+        if (text(s.panel) || text(s.preset) || (Array.isArray(s.clicks) && s.clicks.length)) errors.push(`${p}.scene cannot be combined with panel, preset or clicks`);
+        return; // a scene block has no panel, clicks or narration; the hub requestToSpec checks the id, role, variant and exclusions
+      }
       need(`${p}.panel`, s.panel);
       if (!v32) need(`${p}.surface`, s.surface); // 3.2: informational only
       if (!Array.isArray(s.clicks) || s.clicks.length < 1) errors.push(`${p}.clicks needs at least 1 click`);
@@ -140,6 +160,11 @@ const fail = (status, error) => ({ ok: false, status, error });
 export async function submitHowtoRequest(db, { clientId, request, by = null, now = () => new Date().toISOString(), createOnly = false }) {
   if (!HOWTO_ALLOWED_CLIENTS.includes(clientId)) return fail(403, `client-not-allowed:${clientId || 'none'}`);
   const { errors, warnings } = validateHowtoRequest(request);
+  if (!errors.length && request.request_version === 3.3 && request.skeleton === 'cursor') { // deep checks: what the render service will run
+    const { catalog, campaign } = loadHowtoCatalog();
+    const spec = requestToSpec(request, { catalog, campaign });
+    errors.push(...new Set([...catalogCheck(request, catalog), ...(spec.ok ? [] : spec.reasons)]));
+  }
   if (errors.length) return { ok: false, status: 400, error: 'invalid-request', errors, warnings };
   const id = request.id;
   const ref = db.collection(HOWTO_REQUESTS).doc(id);
