@@ -316,4 +316,9 @@ OWNER RULE: once the Director has accepted the CURRENT v2 brief version, the own
   - `queue.post.video-brief.download` (tier 0)
 - The direct MCP tool writes no action-log row and has no undo; revert in HITLOOP.
 - The owner and the ChatGPT brief writer share one admin identity. The controls are the Director's accepted verdict on the current hash plus the pinned revision. No MCP or agent path can write `directorNotes`.
-- Not built yet: Telegram delivery of storyboard frames and the video (needs a CQ Telegram binding decision).
+- Telegram (`features/telegram/creative-brief-media.js`, route `video-brief-telegram {postId, part: frames|video}`):
+  - Storyboard frames go as ONE album (`sendMediaGroup`, at most 10, caption per frame). The attached video goes by `sendVideo` with a 60 s timeout. A `bad-request` falls back to a link message; a timeout stays queued and is never sent as a link.
+  - Target: the post's own client binding; else the requesting admin's own binding (CQ has none; the admin's is HITLOOP). Never any other binding. A Telegram user can hold only one binding (`telegram_bindings/{telegramUserId}`), so linking CQ would unlink HITLOOP.
+  - Each part is one outbox item, deduplicated on the storyboard `updatedAt` / video `outlineHash`+`storagePath`. It stores ids and the expected version only, never URLs; the post is re-read at send time.
+  - The route sends immediately after `claimOutboxItem`; the `telegram-dispatch` cron retries what is left. Its drain re-checks `bindingVersion` and the requesting admin uid, and fails unknown kinds instead of marking them sent.
+  - MCP: `creative_brief_get {sendToTelegram: true}` sends the frames and the video. A storyboard approve that attaches the video sends it automatically and respects `notificationsPaused`.

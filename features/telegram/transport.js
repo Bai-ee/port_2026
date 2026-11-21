@@ -39,9 +39,9 @@ export function createBotTransport({ token, fetchImpl = globalThis.fetch, timeou
     .split(token).join('[redacted]')
     .replace(/https?:\/\/api\.telegram\.org\S*/g, '[telegram-url]');
 
-  async function request(url, init, { method, expect }) {
+  async function request(url, init, { method, expect, timeout = timeoutMs }) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const timer = setTimeout(() => controller.abort(), timeout);
     try {
       let res;
       try {
@@ -72,7 +72,8 @@ export function createBotTransport({ token, fetchImpl = globalThis.fetch, timeou
     });
   }
 
-  async function call(method, body = {}) {
+  // `timeout`: a per-call override (Telegram fetching a large media URL can take far longer than a text call).
+  async function call(method, body = {}, { timeout } = {}) {
     const url = `${API_ORIGIN}/bot${token}/${method}`;
     return request(url, {
       method: 'POST',
@@ -80,6 +81,7 @@ export function createBotTransport({ token, fetchImpl = globalThis.fetch, timeou
       body: JSON.stringify(compact(body)),
     }, {
       method,
+      ...(timeout ? { timeout } : {}),
       expect: async (res) => {
         let json = null;
         try { json = await res.json(); } catch { /* non-JSON body */ }
@@ -90,8 +92,8 @@ export function createBotTransport({ token, fetchImpl = globalThis.fetch, timeou
   }
 
   const replyParams = (id) => (id ? { message_id: id } : undefined);
-  const media = (field, method) => (chatId, ref, { caption, parseMode, replyMarkup } = {}) =>
-    call(method, { chat_id: chatId, [field]: ref, caption, parse_mode: parseMode, reply_markup: replyMarkup });
+  const media = (field, method) => (chatId, ref, { caption, parseMode, replyMarkup, timeout } = {}) =>
+    call(method, { chat_id: chatId, [field]: ref, caption, parse_mode: parseMode, reply_markup: replyMarkup }, { timeout });
 
   async function downloadFile(filePath, { maxBytes = 20 * 1024 * 1024, fileSize } = {}) {
     const tooLarge = () => new TelegramError({ status: 413, code: 'bad-request', retryable: false, description: 'file exceeds size limit' });
@@ -140,6 +142,8 @@ export function createBotTransport({ token, fetchImpl = globalThis.fetch, timeou
     sendPhoto: media('photo', 'sendPhoto'),
     sendVideo: media('video', 'sendVideo'),
     sendDocument: media('document', 'sendDocument'),
+    // One album (2-10 photos/videos by URL, caption per item) in ONE call: it is delivered or not as a whole.
+    sendMediaGroup: (chatId, items, { timeout } = {}) => call('sendMediaGroup', { chat_id: chatId, media: items }, { timeout }),
     // null markup clears the keyboard (Telegram wants an empty inline_keyboard, not null).
     editMessageReplyMarkup: (chatId, messageId, replyMarkup) => call('editMessageReplyMarkup', {
       chat_id: chatId,
@@ -205,6 +209,7 @@ export function createFakeTransport() {
     sendPhoto: async (chatId, url, opts) => record('sendPhoto', [chatId, url, opts], sent(chatId)),
     sendVideo: async (chatId, url, opts) => record('sendVideo', [chatId, url, opts], sent(chatId)),
     sendDocument: async (chatId, url, opts) => record('sendDocument', [chatId, url, opts], sent(chatId)),
+    sendMediaGroup: async (chatId, items, opts) => record('sendMediaGroup', [chatId, items, opts], () => (items || []).map(() => sent(chatId)())),
     editMessageReplyMarkup: async (chatId, messageId, markup) => record('editMessageReplyMarkup', [chatId, messageId, markup], true),
     editMessageText: async (chatId, messageId, text, opts) => record('editMessageText', [chatId, messageId, text, opts], true),
     answerCallbackQuery: async (id, opts) => record('answerCallbackQuery', [id, opts], true),

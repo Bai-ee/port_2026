@@ -1,6 +1,7 @@
 // Due-time dispatch for the Telegram command center. Called by the */5 cron (worst-case notification delay about
 // 5 minutes plus outbox backoff). Reads post state, enqueues deduplicated notifications, then drains the outbox.
 // It NEVER writes a post: quiet hours, pauses and Telegram failures change when we notify, not when HITLOOP publishes.
+import { CBM_KIND, cbmBindingProblem, planCreativeBriefMedia, deliverCreativeBriefMedia } from './creative-brief-media.js';
 import { createBot } from './bot.js';
 import { checkBindingAccess } from './access.js';
 import { TERMINAL_STATUSES, inQuietHours, localParts, quietHoursEnd, toMs } from './handoff.js';
@@ -121,13 +122,19 @@ export async function runDispatch(ctx, { now: nowIn } = {}) {
     }
     // A creative follow-up answers an explicit button tap: it is bound to that user + bindingVersion, and ignores
     // pause/quiet hours (the person asked for it). Binding/access were re-checked above.
-    const direct = item.payload?.kind === 'creative';
-    if (direct && (String(binding.telegramUserId) !== String(item.payload.telegramUserId) || binding.bindingVersion !== item.payload.bindingVersion)) {
+    const cbm = item.payload?.kind === CBM_KIND;
+    const direct = item.payload?.kind === 'creative' || cbm;
+    if (item.payload?.kind === 'creative' && (String(binding.telegramUserId) !== String(item.payload.telegramUserId) || binding.bindingVersion !== item.payload.bindingVersion)) {
       await store.supersedeOutbox(db, item.id, { reason: 'binding-changed', now });
       continue;
     }
+    // Creative Brief media: pinned to the binding version and (for an admin's own chat) the requesting admin.
+    if (cbm) {
+      const problem = cbmBindingProblem(item, binding);
+      if (problem) { await store.supersedeOutbox(db, item.id, { reason: problem, now }); continue; }
+    }
     const settings = await store.getSettings(db, item.clientId);
-    if (!direct && settings.notificationsPaused) { await store.supersedeOutbox(db, item.id, { reason: 'notifications-paused', now }); continue; }
+    if ((!direct || (cbm && item.payload.honorPause)) && settings.notificationsPaused) { await store.supersedeOutbox(db, item.id, { reason: 'notifications-paused', now }); continue; }
     if (!direct && inQuietHours(now, settings.timezone, settings.quietHours)) {
       await store.retryOutbox(db, item.id, { retryAfterSec: Math.ceil((quietHoursEnd(now, settings.timezone, settings.quietHours) - now) / 1000), error: 'quiet-hours', now });
       continue;
@@ -152,10 +159,20 @@ export async function runDispatch(ctx, { now: nowIn } = {}) {
         const r = await bot.sendSlotAlert(binding, item.payload.alert);
         if (r?.skipped) { await store.supersedeOutbox(db, item.id, { reason: r.skipped, now }); continue; }
         messageIds = r.messageIds;
-      } else if (direct) {
+      } else if (item.payload?.kind === 'creative') {
         await bot.sendCreative(binding, item.payload.postId, { followup: true });
       } else if (item.payload?.kind === 'briefing') {
         await bot.showHappening(binding);
+      } else if (cbm) {
+        const p = item.payload;
+        const fresh = await services.getSocialPost(p.postClientId, p.postId);
+        const plan = planCreativeBriefMedia(fresh, p);
+        if (!plan.ok) { await store.supersedeOutbox(db, item.id, { reason: plan.reason, now }); continue; }
+        messageIds = await deliverCreativeBriefMedia(c.transport, binding.chatId, plan.plan);
+      } else {
+        // An unknown kind is never marked sent without sending.
+        await store.failOutbox(db, item.id, { error: { code: 'unknown-kind', message: `Unknown outbox kind ${item.payload?.kind || item.kind}` }, now });
+        continue;
       }
       await store.completeOutbox(db, item.id, { messageIds, now });
       counts.outbox += 1;

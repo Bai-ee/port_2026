@@ -453,6 +453,25 @@ export async function POST(request) {
         video: attached || { downloadUrl: previewUrl, posterUrl: null, storagePath: ep?.storagePath || null, preview: true },
         episode: ep ? { outlineHash: ep.outlineHash || null, storagePath: ep.storagePath || null } : null });
     }
+    // Send a Creative Brief's storyboard frames (one album) or its attached video to Telegram (features/telegram/creative-brief-media.js):
+    // the client's own chat, else the requesting admin's own chat. requester comes from the verified token, never the body.
+    if (action === 'video-brief-telegram') {
+      await gatePilotRow(context, decoded, body.postId);
+      if (context.impersonating && !context.isAdmin) return json({ error: 'Only the owner can send this to Telegram.' }, 403);
+      const part = body.part === 'video' ? 'video' : body.part === 'frames' ? 'frames' : null;
+      if (!part) return json({ error: 'part must be frames or video.' }, 400);
+      const row = await getSocialPost(context.clientId, body.postId);
+      if (!row) return json({ error: 'Post not found.' }, 404);
+      const [{ getTelegramRuntime }, store, { sendCreativeBriefPart }] = await Promise.all([
+        import('../../../features/telegram/runtime.js'), import('../../../features/telegram/store.js'), import('../../../features/telegram/creative-brief-media.js'),
+      ]);
+      let transport;
+      try { transport = getTelegramRuntime().ctx.transport; } catch (e) { return json({ ok: true, telegram: { status: 'skipped', reason: e.message || 'Telegram is not configured.' } }); }
+      const telegram = await sendCreativeBriefPart({ db: adminDb(), store, transport, readPost: getSocialPost }, {
+        clientId: context.clientId, post: row, part, requesterUid: decoded?.uid || null, requesterIsAdmin: Boolean(context.isAdmin), honorPause: body.honorPause === true,
+      });
+      return json({ ok: true, telegram });
+    }
     // Director inbox: read only, no write path.
     if (action === 'video-brief-revisions') {
       if (context.impersonating && !context.isAdmin) return json({ error: 'Only the owner can read the revision inbox.' }, 403);
