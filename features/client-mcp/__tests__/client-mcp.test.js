@@ -11,7 +11,7 @@ import { grantIdOf, parseClientResource, clientResourceUrl, clientResourceBase, 
 import { resolveClientConsent } from '../consent.js';
 import { handleClientMcp } from '../handler.js';
 import { clientRegistry, HIDDEN_STATE_KEYS } from '../tools.js';
-import { siteStatsSourceFor, DATA_SOURCES } from '../sources.js';
+import { siteStatsSourceFor, DATA_SOURCES, hasPeople, peopleUrlOf } from '../sources.js';
 
 // Secret-shaped fixtures are assembled at runtime so the pre-push secret scanner does not flag them.
 const SECRET = ['test', 'signing', 'secret', '0123456789'].join('-');
@@ -298,6 +298,14 @@ test('Not The Rug is the first registered site source, keyed by env name only', 
   const s = siteStatsSourceFor('nottherug-ten-QSMYxuuv', DATA_SOURCES);
   assert.equal(s.url, 'https://nottherug.com/api/stats');
   assert.equal(s.keyEnv, 'CLIENT_STATS_KEY_NOTTHERUG');
+});
+
+test('U-God is a registered site source with people, keyed by env name only', () => {
+  const s = siteStatsSourceFor('ugod', DATA_SOURCES);
+  assert.equal(s.url, 'https://ugod-rock-so-many.vercel.app/api/stats');
+  assert.equal(s.keyEnv, 'CLIENT_STATS_KEY_UGOD');
+  assert.equal(hasPeople(s), true);
+  assert.equal(peopleUrlOf(s), 'https://ugod-rock-so-many.vercel.app/api/stats/people');
 });
 
 // ---- marketing data + brain --------------------------------------------------------------------------------

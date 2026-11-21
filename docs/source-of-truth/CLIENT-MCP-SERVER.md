@@ -51,6 +51,14 @@ One row per client in `features/client-mcp/data-sources.json`: `{clientId, label
 the env var in Vercel prod (Not The Rug: `CLIENT_STATS_KEY_NOTTHERUG`). The key is only sent as
 `Authorization: Bearer`; it never appears in a result, error or audit row.
 
+**U-God (`ugod`, row added 2026-11):** `{clientId:'ugod', label:'U-God website', kind:'site-stats', url:'https://ugod-rock-so-many.vercel.app/api/stats', peopleUrl:'.../api/stats/people', keyEnv:'CLIENT_STATS_KEY_UGOD'}`. The URL is the stable preview alias until ugodofwutang.com goes live (then a one-line change in `data-sources.json`). `signups` and `rate_limits` are denied collections in the owner MCP (`features/mcp/redact.js`): signups hold emails, rate_limits hold IP hashes.
+Known gaps:
+- If deployment protection is ever turned on for the preview alias, HITLOOP will report 401 "key needs updating", which is misleading (the key is fine).
+- U-God only has `kind=captures` (list signups); leads and applicants come back empty with a note.
+- The people tool wording and the daily-update format are written for Not The Rug (dog names, questionnaire, "Leads"/"Booked"); a follow-up should add per-source wording. Not changed yet.
+- Visitor sessions: U-God returns an empty 200 with a note from `/api/stats/sessions` (being added on the U-God side).
+- Activation still needs owner OK (not done): a `clients/ugod` doc, `CLIENT_STATS_KEY_UGOD` in HITLOOP prod env, and a client-MCP grant.
+
 **Unique visitors (NTR, since 2026-10-23):** the site keeps a random localStorage visitor id per browser; `/api/stats` returns `analytics.visitors` (number, null for ranges before tracking began) and `analytics.visitorBreakdown` (`newVisitors`, `returningVisitors`, `sessionsWithVisitorId`, `sessionsPerVisitor`). A browser, not a person.
 
 **Not available from the Not The Rug site (not recorded, so no tool can return it):** lead acquisition source (leads are not linked to sessions), scroll depth beyond the one-time 50% engagement signal, and counts of filtered bot traffic (dropped silently at `/api/track`). Each needs new tracking on the site first.

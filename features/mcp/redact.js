@@ -16,6 +16,8 @@ export const DENY_COLLECTIONS = Object.freeze([
   '_stripe_events',          // billing events
   // Personal data of third parties (people who signed up, were emailed, were prospected, or messaged the bot):
   'records_waitlist', 'digest_deliveries', 'leadgen_prospects', 'telegram_updates',
+  'signups',                 // emails of people who joined a client site's list (U-God writes clients/ugod/signups)
+  'rate_limits',             // keyed by IP hashes = pseudonymous personal data
 ]);
 
 // Subcollections that are denied only under a specific parent collection (clients/<id>/members = people's emails).
