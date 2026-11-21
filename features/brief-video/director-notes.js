@@ -49,3 +49,15 @@ export function postsByDirectorStatus(posts = [], status = null) {
     .map((p) => ({ postId: p.id || null, reviewOn: p.reviewOn || null, briefStatus: p.videoBriefMeta?.status || null, format: p.videoBriefMeta?.v2?.format || null, directorNotes: directorNotesOf(p) }))
     .sort((a, b) => str(b.directorNotes.at).localeCompare(str(a.directorNotes.at)));
 }
+
+/**
+ * Gate for owner approvals outside the dashboard (MCP): the Director accepted EXACTLY the v2 brief saved now.
+ * A missing briefHash fails (directorNotesOf only reports `stale` when a hash exists, so `!stale` alone is not enough).
+ */
+export function directorAcceptedCurrent(post) {
+  const v2 = post?.videoBriefMeta?.v2;
+  const d = post?.videoBriefMeta?.directorNotes;
+  if (Number(post?.videoBriefMeta?.briefVersion) !== 2 || !v2 || typeof v2 !== 'object') return false;
+  if (!d || d.status !== 'accepted' || !d.briefHash) return false;
+  return String(d.briefHash) === briefHashOf(v2);
+}

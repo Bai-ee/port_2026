@@ -3,7 +3,9 @@
 // the MCP server already verified (OAuth) and the in-process strategy handlers. chat_send carries the owner's own
 // dashboard authorization (../owner-session.js), so the action runtime treats it like the dashboard chat: tier-1
 // changes (calendar drafts, creative, dates, tracks) run, with Undo in the action log; approving, scheduling,
-// posting and spending stay confirm cards (owner rule 2026-11-17). Also exposes the action registry search and log.
+// posting and spending stay confirm cards (owner rule 2026-11-17). Exception (owner rule 2026-11-21): a Director-accepted
+// Creative Brief's phases are decided directly (creative_brief_review, or the tier-1 queue.post.video-brief.review-*).
+// Also exposes the action registry search and log.
 
 import { ToolError } from '../jsonrpc.js';
 import { defTool, resolveClientId, CLIENT_ID_PROP, str } from './common.js';
@@ -76,7 +78,7 @@ const chatSend = defTool({
   name: 'chat_send',
   title: 'Send to Strategy chat',
   kind: 'propose',
-  description: `Talk to the dashboard Strategy agent for a client (pass clientId) and return its reply. Runs the SAME agent turn as the dashboard chat (same tools, rules, memory of the thread, same permissions), so it makes ONE model call and counts against the same daily turn cap. Omit threadId to start a new thread; pass a threadId from chat_threads to continue a dashboard thread. Calendar and content changes the dashboard chat applies directly (draft text, creative, dates, tracks) are applied here too and listed under applied (undo from ${DASHBOARD_PATH} or the action log). Approving, scheduling, posting and anything paid come back as PENDING cards the owner confirms in the dashboard; never say those were done.`,
+  description: `Talk to the dashboard Strategy agent for a client (pass clientId) and return its reply. Runs the SAME agent turn as the dashboard chat (same tools, rules, memory of the thread, same permissions), so it makes ONE model call and counts against the same daily turn cap. Omit threadId to start a new thread; pass a threadId from chat_threads to continue a dashboard thread. Calendar and content changes the dashboard chat applies directly (draft text, creative, dates, tracks) are applied here too and listed under applied (undo from ${DASHBOARD_PATH} or the action log). Approving, scheduling, posting and anything paid come back as PENDING cards the owner confirms in the dashboard; never say those were done. Exception: Creative Brief phases the Director accepted are decided directly with creative_brief_review (no card).`,
   inputSchema: { type: 'object', properties: { text: str('The message to send, as the owner would type it in the chat.'), threadId: str('Existing thread id to continue; omit to start a new thread.'), clientId: CLIENT_ID_PROP }, required: ['text'] },
   handler: async ({ args, ctx }) => {
     const clientId = await resolveClientId(ctx, args);
@@ -95,7 +97,7 @@ const chatSend = defTool({
 const findActions = defTool({
   name: 'find_actions',
   title: 'Find dashboard actions',
-  description: ACTION_TOOLS.find((t) => t.name === 'find_actions').description + ' Over MCP this only SEARCHES the registry (what the dashboard can do and its arguments); to have one run, use chat_send: reads and tier-1 reversible writes (e.g. briefs.client.*) run directly, while tier 2/3 actions become cards the owner confirms in the dashboard. Client briefs: prefer calling publish_client_brief directly.',
+  description: ACTION_TOOLS.find((t) => t.name === 'find_actions').description + ' Over MCP this only SEARCHES the registry (what the dashboard can do and its arguments); to have one run, use chat_send: reads and tier-1 reversible writes (e.g. briefs.client.*) run directly, while tier 2/3 actions become cards the owner confirms in the dashboard. Client briefs: prefer calling publish_client_brief directly. Creative Brief reviews (Director-accepted brief, storyboard, video): call creative_brief_get / creative_brief_review directly.',
   inputSchema: { type: 'object', properties: { query: str('What to do, in plain words'), group: str('Optional group filter'), clientId: CLIENT_ID_PROP }, required: ['query'] },
   handler: async ({ args, ctx }) => {
     const clientId = await resolveClientId(ctx, args);
