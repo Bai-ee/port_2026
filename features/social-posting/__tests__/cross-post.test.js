@@ -74,6 +74,7 @@ let ctx;
 let tweets;
 let igCalls;
 let igResult;
+let xThrow;
 let account;
 let restoreX;
 let originalDb;
@@ -83,17 +84,18 @@ const raw = (id) => ctx.adminDb._raw('social_posts', id);
 beforeEach(() => {
   tweets = [];
   igCalls = [];
+  xThrow = null;
   igResult = async () => ({ instagramMediaId: 'ig-1', containerId: 'ct-1' });
   account = ACCOUNT;
   originalDb = Object.getOwnPropertyDescriptor(fb, 'adminDb');
-  ctx = makeFakeContext();
+  ctx = makeFakeContext({ deepMerge: true });
   Object.defineProperty(fb, 'adminDb', { configurable: true, get: () => ctx.adminDb });
   restoreX = __setXAdapterDepsForTest({
     getClient: async () => ({
       authMode: 'oauth2',
       client: {
         v1: { uploadMedia: async () => 'm1' },
-        v2: { uploadMedia: async () => 'm1', tweet: async (payload) => { tweets.push(payload); return { data: { id: `x-${tweets.length}` } }; } },
+        v2: { uploadMedia: async () => 'm1', tweet: async (payload) => { if (xThrow) throw xThrow(); tweets.push(payload); return { data: { id: `x-${tweets.length}` } }; } },
       },
     }),
     fetchMedia: async () => ({ buffer: Buffer.alloc(16), mimeType: 'image/jpeg', isVideo: false }),
@@ -165,6 +167,61 @@ test('sweep: Instagram-only with an unknown outcome parks the row for review', a
   const row = raw(post.id);
   assert.equal(row.status, 'needs_review');
   assert.equal(row.errorClass, 'instagram-needs_review');
+});
+
+test('sweep: X login dead -> Instagram still posts; row failed x-auth (not "may be live"), slot kept', async () => {
+  xThrow = () => Object.assign(new Error('The saved X authorization is no longer refreshable.'), { status: 409, code: 'x-reconnect-required', details: 'ETIMEDOUT' });
+  const post = await due(IMG);
+  await svc.setPostTargets('c1', post.id, { x: true, instagram: true });
+  await svc.processDuePostsForAllClients();
+  const row = raw(post.id);
+  assert.equal(igCalls.length, 1);
+  assert.equal(row.status, 'failed');
+  assert.equal(row.errorClass, 'x-auth');
+  assert.equal(row.instagramDelivery.status, 'posted');
+});
+
+test('sweep: X 429 retried next sweep -> Instagram published once in total', async () => {
+  xThrow = () => Object.assign(new Error('Too Many Requests'), { code: 429 });
+  const post = await due(IMG);
+  await svc.setPostTargets('c1', post.id, { x: true, instagram: true });
+  await svc.processDuePostsForAllClients();
+  assert.equal(raw(post.id).status, 'failed');
+  assert.equal(raw(post.id).retryable, true);
+  xThrow = null;
+  await svc.processDuePostsForAllClients();
+  const row = raw(post.id);
+  assert.equal(igCalls.length, 1);
+  assert.equal(tweets.length, 1);
+  assert.equal(row.status, 'posted');
+  assert.equal(row.instagramDelivery.status, 'posted');
+});
+
+test('sweep: X 5xx (ambiguous) -> row held, Instagram still runs', async () => {
+  xThrow = () => Object.assign(new Error('Service Unavailable'), { code: 503 });
+  const post = await due(IMG);
+  await svc.setPostTargets('c1', post.id, { x: true, instagram: true });
+  await svc.processDuePostsForAllClients();
+  const row = raw(post.id);
+  assert.equal(igCalls.length, 1);
+  assert.notEqual(row.status, 'posted');
+  assert.equal(row.errorClass, 'server-error-ambiguous');
+  assert.equal(row.instagramDelivery.status, 'posted');
+});
+
+test('sweep: claim lost while publishing -> the Instagram record is still saved', async () => {
+  xThrow = () => Object.assign(new Error('Payment Required'), { code: 402 });
+  const post = await due(IMG);
+  await svc.setPostTargets('c1', post.id, { x: true, instagram: true });
+  igResult = async () => {
+    await ctx.adminDb.collection('social_posts').doc(post.id).set({ status: 'needs_review', claimedAt: 'someone-else' }, { merge: true });
+    return { instagramMediaId: 'ig-9', containerId: 'ct-9' };
+  };
+  await svc.processDuePostsForAllClients();
+  const row = raw(post.id);
+  assert.equal(row.status, 'needs_review');
+  assert.equal(row.instagramDelivery.status, 'posted');
+  assert.equal(row.instagramDelivery.mediaId, 'ig-9');
 });
 
 test('setPostTargets: refuses Instagram for text-only posts or without a connected account; keeps the schedule', async () => {

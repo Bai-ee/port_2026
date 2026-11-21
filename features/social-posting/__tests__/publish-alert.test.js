@@ -49,3 +49,8 @@ test('expired rows are reported; an ambiguous failure (status needs_review insid
   assert.ok(!calls[0].html.includes('<b>x</b>'));
   assert.equal((await alertOnHeldPosts({ expired: [{ id: 'z' }] }, { env: ENV, now: NOW, send: async () => ({ ok: false, reason: 'send-failed' }) })).reason, 'send-failed');
 });
+
+test('a failed X leg whose Instagram leg posted says so', () => {
+  const out = buildPublishAlert({ failed: [{ id: 'p1', status: 'failed', errorClass: 'x-auth', instagramDelivery: { status: 'posted', mediaId: 'm' } }] }, { now: Date.parse('2026-11-19T23:00:00Z') });
+  assert.match(out.text, /FAILED  p1  x-auth \(X failed; Instagram posted\)/);
+});

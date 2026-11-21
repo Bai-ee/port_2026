@@ -70,6 +70,18 @@ export async function saveSocialAccount(clientId, platform, patch) {
   return getSocialAccount(clientId, platform);
 }
 
+/**
+ * Record (message) or clear (null) a platform's login error WITHOUT touching its updatedAt: the X token resolver
+ * picks the newest credential by updatedAt, so bumping it here would make a dead login look fresh.
+ */
+export async function markSocialAccountError(clientId, platform, message) {
+  if (!clientId || !PLATFORM_KEYS.includes(platform)) return;
+  await accountRef(clientId).set(
+    { platforms: { [platform]: { refreshError: message ? String(message).slice(0, 300) : null, refreshErrorAt: message ? Date.now() : null } } },
+    { merge: true }
+  );
+}
+
 export async function disconnectSocialAccount(clientId, platform) {
   await accountRef(clientId).set({ platforms: { [platform]: fb.FieldValue.delete() } }, { merge: true });
   return { ok: true };
