@@ -156,8 +156,8 @@
     {
       "id": "titans.spotlight",
       "kit": "titans",
-      "status": "owner-check",
-      "shows": "one Titan rises over its own in-game background"
+      "status": "ready",
+      "shows": "one Titan rises over its own in-game background (wordmark behind, partner logos, its own bottom banner)"
     },
     {
       "id": "titans.end",
