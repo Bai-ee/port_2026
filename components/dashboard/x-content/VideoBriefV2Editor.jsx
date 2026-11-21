@@ -14,7 +14,7 @@ import {
   addBeat, formFromV2, formMissing, formTotalSeconds, formWarnings, moveBeat, overBudget, removeBeat, setBeatCell, toV2Body,
 } from './video-brief-v2-model.js';
 
-const STATUS_LABEL = { draft: 'Draft', ready: 'Ready for review', approved: 'Approved (storyboard next)', rendered: 'Rendered' };
+const STATUS_LABEL = { draft: 'Draft', ready: 'Ready for review', approved: 'Approved: Director is making the video', rendered: 'Rendered' };
 
 export default function VideoBriefV2Editor({ row, callSocial, editable, onRowPatch }) {
   const saved = row?.videoBriefMeta?.v2 || null;
@@ -64,7 +64,7 @@ export default function VideoBriefV2Editor({ row, callSocial, editable, onRowPat
     }
   };
   const save = (status) => run({ action: 'video-brief-save', v2: toV2Body(f), status }, status === 'ready' ? 'Marked ready. The post copy was not changed.' : 'Draft saved. The post copy was not changed.');
-  const approve = () => (directorNotes?.status === 'accepted' || typeof window === 'undefined' || window.confirm(`${directorStatusLabel(directorNotes)}. The Director has not accepted this brief. Approve anyway (owner override)?`)) && run({ action: 'video-brief-approve' }, 'Brief approved.', (res) => (res.next === 'storyboard' ? 'Brief approved. Next: the storyboard. No video is rendered yet.' : 'Brief approved.'));
+  const approve = () => (directorNotes?.status === 'accepted' || typeof window === 'undefined' || window.confirm(`${directorStatusLabel(directorNotes)}. The Director has not accepted this brief. Approve anyway (owner override)?`)) && run({ action: 'video-brief-approve' }, 'Brief approved.', (res) => (res.next === 'storyboard' ? 'Brief approved. Nothing else to do: the Director is making the video. It will appear below for you to approve or change.' : 'Brief approved.'));
   const review = (decision) => run(
     { action: 'video-brief-storyboard-review', decision, notes: reviewNotes.trim(), frameNotes: Object.fromEntries(Object.entries(frameNotes).filter(([, v]) => String(v).trim())) },
     decision === 'approve' ? 'Storyboard approved.' : 'Changes requested. The storyboard goes back to the Director.',
@@ -209,7 +209,9 @@ export default function VideoBriefV2Editor({ row, callSocial, editable, onRowPat
           <span id="video-brief-v2-storyboard-status-chip" className="pe-vb-pill">{storyboard ? (STORYBOARD_LABEL[storyboard.status] || storyboard.status) : 'Not started'}</span>
         </div>
         {!storyboard ? <p className="pe-muted">Approve the brief to ask for a storyboard. Nothing is rendered until you approve the storyboard.</p> : null}
-        {storyboard?.status === 'pending' ? <p className="pe-muted">Waiting for the Director's storyboard.</p> : null}
+        {storyboard?.status === 'pending' ? <p id="video-brief-v2-storyboard-waiting-note" className="pe-muted"><strong>Nothing to do now.</strong> The Director is making the video. It will appear here with a storyboard and a Listen track; then you approve it (it goes on the post) or request changes.</p> : null}
+        {storyboard?.status === 'ready' ? <p id="video-brief-v2-storyboard-your-turn-note"><strong>Your turn:</strong> watch the video and listen, then Approve (it goes on the post) or Request changes below.</p> : null}
+        {storyboard?.status === 'changes' ? <p id="video-brief-v2-storyboard-revising-note" className="pe-muted"><strong>Nothing to do now.</strong> The Director is revising from your notes; the new version will appear here.</p> : null}
         {storyboard?.outline ? (
           <details id="video-brief-v2-storyboard-outline">
             <summary id="video-brief-v2-storyboard-outline-summary">Outline</summary>
@@ -266,7 +268,7 @@ export default function VideoBriefV2Editor({ row, callSocial, editable, onRowPat
       </section>
       <VideoReviewPanel row={row} callSocial={callSocial} editable={editable} onRowPatch={onRowPatch} />
       {msg ? <p id="video-brief-v2-message" className={msg.tone === 'bad' ? 'pe-over' : 'pe-muted'} role={msg.tone === 'bad' ? 'alert' : 'status'}>{msg.text}</p> : null}
-      <p className="pe-muted">Saving never changes the post copy, approval or schedule. Approving a v2 brief asks for a storyboard; it does not render a video.</p>
+      <p className="pe-muted">Saving never changes the post copy, approval or schedule. Approving a brief asks the Director for the video; nothing goes on the post until you approve the storyboard.</p>
     </div>
   );
 }
