@@ -401,6 +401,21 @@ export async function claimOutbox(db, { now = Date.now(), limit = 10, workerId, 
   return claimed;
 }
 
+/** Claim ONE outbox item by id (same rules as claimOutbox): the caller sends only when it won, so a concurrent drain never double-sends. */
+export async function claimOutboxItem(db, id, { now = Date.now(), workerId, leaseMs = 120000 } = {}) {
+  const r = ref(db, COL.outbox, id);
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(r);
+    if (!snap.exists) return null;
+    const d = snap.data();
+    const ready = (d.status === 'queued' && ms(d.nextAttemptAt) <= now) || (d.status === 'processing' && ms(d.lease?.expiresAt) <= now);
+    if (!ready) return null;
+    const next = { ...d, status: 'processing', attempts: (d.attempts || 0) + 1, lease: { workerId, expiresAt: iso(now + leaseMs) } };
+    tx.set(r, next);
+    return { id: snap.id, ...next };
+  });
+}
+
 export async function completeOutbox(db, id, { messageIds = [], now = Date.now() } = {}) {
   await ref(db, COL.outbox, id).set({ status: 'sent', messageIds, sentAt: iso(now), lease: null, error: null }, { merge: true });
 }

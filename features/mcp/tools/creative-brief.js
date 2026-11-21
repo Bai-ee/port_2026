@@ -5,6 +5,7 @@
 // social-posting route enforces it (features/brief-video/owner-review.js): Director gate on approves, the revision the caller
 // read, and the episode / video version shown. Calls the route in-process with the owner's session (../ops/dashboard-route.js),
 // so the route keeps its own checks. Not logged in the Strategy action log and no Undo: say so to the owner.
+// Telegram (2026-11-21): sendToTelegram on get; a storyboard approve that attaches the video also sends it (respects pause).
 
 import { ToolError } from '../jsonrpc.js';
 import { callDashboardRoute } from '../ops/dashboard-route.js';
@@ -20,6 +21,23 @@ async function post(ctx, clientId, body) {
 }
 
 const fail = (status, json) => new ToolError(`${json.error || `Refused (${status}).`}${json.code ? ` [${json.code}]` : ''}`);
+
+const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
+
+async function sendPart(ctx, clientId, postId, part, honorPause = false) {
+  const { status, json } = await post(ctx, clientId, { action: 'video-brief-telegram', postId, part, honorPause });
+  if (status >= 400 || !json.ok) return { status: 'skipped', reason: json.error || `Refused (${status}).` };
+  return json.telegram;
+}
+
+/** Frames (when the storyboard has any) and the attached video (when there is one). */
+async function sendTelegram(ctx, clientId, postId, shaped) {
+  const out = {};
+  if (shaped.storyboard?.frames?.length) out.frames = await sendPart(ctx, clientId, postId, 'frames');
+  if (shaped.attachedVideo?.downloadUrl) out.video = await sendPart(ctx, clientId, postId, 'video');
+  if (!out.frames && !out.video) out.note = 'Nothing to send yet: no storyboard frames and no attached video.';
+  return out;
+}
 
 /** What the owner needs to decide, trimmed from the route's brief view. */
 export function shapeBrief(b, download) {
@@ -64,7 +82,7 @@ const getTool = defTool({
   name: 'creative_brief_get',
   title: 'Read a Creative Brief (all phases)',
   description: 'Read one calendar post\'s v2 Creative Brief with everything needed to review it from here: revision, brief status, creative text, the Director\'s verdict (directorNotes: status, current = verdict is for the saved version, notes, items), the storyboard (status, outline, frames with imageUrl + note, episode outlineHash/storagePath/previewUrl), the video review, the attached video and a downloadable link (download.video.downloadUrl). Also returns nextStep. Pass the returned revision (and episode / video fields) to creative_brief_review. Read-only.',
-  inputSchema: { type: 'object', properties: { clientId: CLIENT_ID_PROP, postId: str('The calendar post id (social_...).') }, required: ['postId'] },
+  inputSchema: { type: 'object', properties: { clientId: CLIENT_ID_PROP, postId: str('The calendar post id (social_...).'), sendToTelegram: { type: 'boolean', description: 'Also send the storyboard frames (one album) and the attached video to the owner\'s Telegram. A repeat for the same version returns already-sent.' } }, required: ['postId'] },
   handler: async ({ args, ctx }) => {
     const clientId = await resolveClientId(ctx, args);
     const postId = String(args.postId || '').trim();
@@ -73,7 +91,8 @@ const getTool = defTool({
     if (got.status >= 400 || !got.json.ok) throw fail(got.status, got.json);
     const dl = await post(ctx, clientId, { action: 'video-brief-download', postId });
     const shaped = shapeBrief(got.json.brief || {}, dl.status < 400 && dl.json.ok ? dl.json.video : null);
-    return { clientId, ...shaped, nextStep: nextStep(shaped) };
+    const telegram = args.sendToTelegram === true ? await sendTelegram(ctx, clientId, postId, shaped) : undefined;
+    return { clientId, ...shaped, nextStep: nextStep(shaped), ...(telegram ? { telegram } : {}) };
   },
 });
 
@@ -81,7 +100,7 @@ const reviewTool = defTool({
   name: 'creative_brief_review',
   title: 'Decide a Creative Brief phase',
   kind: 'write',
-  description: 'The owner\'s decision on ONE phase of a v2 Creative Brief, without the dashboard. WRITES to the draft (never schedules or publishes). Call creative_brief_get first and pass its revision as expectedRevision. step "brief": approve only (brief changes go through the brief writer). step "storyboard": approve (pass episode outlineHash + storagePath from creative_brief_get; attaches the episode video to the draft and returns its downloadUrl) or changes (notes and/or frameNotes {"0": "..."}). step "video": approve or changes (notes, optional atSeconds); pass attachedVideo.v + attachedVideo.outlineHash. Every approve requires the Director to have accepted the CURRENT brief version, else it is refused. Not undoable from the MCP: use HITLOOP to revert.',
+  description: 'The owner\'s decision on ONE phase of a v2 Creative Brief, without the dashboard. WRITES to the draft (never schedules or publishes). Call creative_brief_get first and pass its revision as expectedRevision. step "brief": approve only (brief changes go through the brief writer). step "storyboard": approve (pass episode outlineHash + storagePath from creative_brief_get; attaches the episode video to the draft and returns its downloadUrl and sends the video to the owner\'s Telegram) or changes (notes and/or frameNotes {"0": "..."}). step "video": approve or changes (notes, optional atSeconds); pass attachedVideo.v + attachedVideo.outlineHash. Every approve requires the Director to have accepted the CURRENT brief version, else it is refused. Not undoable from the MCP: use HITLOOP to revert.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -106,7 +125,11 @@ const reviewTool = defTool({
     const { status, json } = await post(ctx, clientId, body);
     if (status >= 400 || !json.ok) throw fail(status, json);
     const shaped = shapeBrief(json.brief || {}, json.video || null);
-    return { clientId, step: json.step, decision: json.decision, revision: json.post?.revision ?? null, download: json.video || null, state: shaped, nextStep: nextStep(shaped), undo: 'Not undoable from the MCP; revert in HITLOOP.' };
+    // A storyboard approve that attached the video: send it to Telegram too, best effort (never fails or slows the review much).
+    const telegram = json.step === 'storyboard' && json.decision === 'approve' && json.video?.downloadUrl
+      ? await withTimeout(sendPart(ctx, clientId, body.postId, 'video', true), 15_000).catch(() => ({ status: 'queued', reason: 'Telegram send still running.' }))
+      : undefined;
+    return { clientId, ...(telegram ? { telegram } : {}), step: json.step, decision: json.decision, revision: json.post?.revision ?? null, download: json.video || null, state: shaped, nextStep: nextStep(shaped), undo: 'Not undoable from the MCP; revert in HITLOOP.' };
   },
 });
 
