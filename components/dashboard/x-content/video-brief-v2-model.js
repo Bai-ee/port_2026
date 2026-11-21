@@ -11,7 +11,7 @@ export const V2_CLIENT_IDS = Object.freeze(['paradice-dbBQCHUX']);
 export const canUseV2 = (row) => V2_CLIENT_IDS.includes(row?.clientId);
 export const isV2Row = (row) => Number(row?.videoBriefMeta?.briefVersion) === 2 && Boolean(row?.videoBriefMeta?.v2);
 
-export const STORYBOARD_LABEL = { pending: 'Storyboard pending', ready: 'Storyboard ready for review', approved: 'Storyboard approved', changes: 'Changes requested' };
+export const STORYBOARD_LABEL = { pending: 'Director working: nothing to do', ready: 'Your turn: review the video', approved: 'Storyboard approved', changes: 'Changes requested: Director revising' };
 export const BEAT_COLUMNS = [
   { key: 'purpose', label: 'Purpose' }, { key: 'screen', label: 'Screen + state' }, { key: 'camera', label: 'Camera' },
   { key: 'cursor', label: 'Cursor' }, { key: 'response', label: 'What happens' }, { key: 'caption', label: 'Caption' },

@@ -158,7 +158,7 @@ export default function VideoBriefPanel({ row, callSocial, locked = false, onRow
     <details id="post-editor-video-brief-panel" className="pe-vb" open={hasSaved || undefined}>
       <summary id="post-editor-video-brief-summary">
         <span>Creative Brief <span className="pe-muted">· internal, never published</span></span>
-        {savedStatus ? <span id="post-editor-video-brief-status-pill" className="pe-vb-pill">{isV2Row(row) && savedStatus === 'approved' ? 'Approved (storyboard next)' : (STATUS_LABEL[savedStatus] || savedStatus)}</span> : null}
+        {savedStatus ? <span id="post-editor-video-brief-status-pill" className="pe-vb-pill">{isV2Row(row) && savedStatus === 'approved' ? 'Approved: Director is making the video' : (STATUS_LABEL[savedStatus] || savedStatus)}</span> : null}
       </summary>
       <div id="post-editor-video-brief-body" className="pe-vb-body">
         {legacy ? <p className="pe-muted">This post has an INTERNAL VIDEO BRIEF in its text. Move it out of the post copy (cut, save the post), then paste it here.</p> : null}
