@@ -8,11 +8,12 @@ import { syncTools } from './tools/syncs.js';
 import { playbookTools } from './tools/playbook.js';
 import { chatTools } from './tools/chat.js';
 import { clientBriefTools } from './tools/client-brief.js';
+import { creativeBriefTools } from './tools/creative-brief.js';
 import { siteAnalyticsTools } from './tools/site-analytics.js';
 import { opsTools } from './tools/ops.js';
 import { guideTool } from './guide.js';
 
-export const registry = Object.freeze([guideTool, ...strategyTools, ...dataTools, ...siteAnalyticsTools, ...codebaseTools, ...syncTools, ...playbookTools, ...chatTools, ...clientBriefTools, ...opsTools]);
+export const registry = Object.freeze([guideTool, ...strategyTools, ...dataTools, ...siteAnalyticsTools, ...codebaseTools, ...syncTools, ...playbookTools, ...chatTools, ...clientBriefTools, ...creativeBriefTools, ...opsTools]);
 
 export function findTool(name) {
   return registry.find((t) => t.name === name) || null;

@@ -294,3 +294,26 @@ Once a Creative Brief is authored (`videoBriefMeta.authored`), the owner can cha
 - **Rollback** (`video-brief-rollback {postId, n}`, owner only, no model call): re-submits version `n`'s request as `cb-<8>-r<rev>-b<n>` (current `public_copy`/`review_on`), then a replace render. Repeatable.
 - **Connector:** `queue.post.video-brief.feedback` (tier 2, owner confirm, draft only). No rollback via the connector.
 - **Panel:** `#creative-brief-feedback-panel` (`-input`, `-submit`), `#creative-brief-version-list`, per-version "Use this version".
+
+## 17. Owner review from the MCP (2026-11-21)
+
+OWNER RULE: once the Director has accepted the CURRENT v2 brief version, the owner can decide every phase from the MCP, with no dashboard confirm card.
+
+- MCP tools (`features/mcp/tools/creative-brief.js`):
+  - `creative_brief_get {clientId, postId}` returns everything needed to decide: revision, brief status, creative, the Director verdict (`current` = for the saved version), the storyboard (outline, frames with `imageUrl` + note, episode `outlineHash`/`storagePath`/preview), the video review, the attached video, and `download.downloadUrl`.
+  - `creative_brief_review {clientId, postId, step, decision, expectedRevision, ...}` decides one phase.
+- Route: social-posting `video-brief-owner-review`. Rules live in `features/brief-video/owner-review.js` `checkOwnerReview`:
+  - `brief`: approve only. Brief changes go through the writer.
+  - `storyboard`: `approve` needs `outlineHash` + `storagePath` of the episode shown. It attaches the versioned `-vNN.mp4` and returns `downloadUrl`. `changes` needs `notes` or `frameNotes`.
+  - `video`: approve or changes, with `v` + `outlineHash` of the attached version.
+  - Every approve needs `directorAcceptedCurrent(post)` (`director-notes.js`): status accepted AND a non-null `briefHash` equal to `briefHashOf(v2)`.
+  - Every decision needs `expectedRevision` equal to the row's revision. Drafts only.
+- Read only: `video-brief-download` returns the attached video (`downloadUrl`, `posterUrl`, `v`, `outlineHash`). Otherwise it returns the episode preview (`preview: true`), resolved from Storage (`resolveEpisodeMedia`); the URL is never built from strings.
+- Strategy-chat parity, tier 1 with a SNAP_POST undo:
+  - `queue.post.video-brief.review-brief`
+  - `queue.post.video-brief.review-storyboard`
+  - `queue.post.video-brief.review-video`
+  - `queue.post.video-brief.download` (tier 0)
+- The direct MCP tool writes no action-log row and has no undo; revert in HITLOOP.
+- The owner and the ChatGPT brief writer share one admin identity. The controls are the Director's accepted verdict on the current hash plus the pinned revision. No MCP or agent path can write `directorNotes`.
+- Not built yet: Telegram delivery of storyboard frames and the video (needs a CQ Telegram binding decision).

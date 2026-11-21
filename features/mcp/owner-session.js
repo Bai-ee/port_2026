@@ -3,6 +3,8 @@
 // OWNER RULE (2026-11-17): the MCP Strategy chat (chat_send) acts like the dashboard Strategy chat: tier-1 calendar
 // changes (draft text, creative, dates, tracks) run directly, with the same Undo in the action log. Approving,
 // scheduling, posting and spending stay confirm cards in the dashboard (the action runtime's gates, unchanged).
+// Exception (2026-11-21): Creative Brief phases the Director has accepted (brief / storyboard / video) are decided
+// directly from the MCP (features/brief-video/owner-review.js); the route enforces the Director gate and the revision.
 //
 // The action runtime calls the dashboard routes in-process and needs the owner's Firebase ID token, exactly as the
 // dashboard sends it. The MCP caller is already a verified admin (OAuth + isAdminEmail on every call); this mints a

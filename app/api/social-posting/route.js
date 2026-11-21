@@ -3,6 +3,7 @@ import { briefWarnings } from '../../../features/brief-video/brief.js';
 import { videoBriefView, isV2Brief, postsByDirectorStatus } from '../../../features/brief-video/brief-fields.js';
 import { episodeAlreadyAttached } from '../../../features/brief-video/attach.js';
 import { postCopyDrift } from '../../../features/brief-video/brief-v2.js';
+import { checkOwnerReview, attachedVideoOf } from '../../../features/brief-video/owner-review.js';
 import { authorPostBrief } from '../../../features/brief-video/brief-author.js';
 import { applyFeedback, applyRollback } from '../../../features/brief-video/brief-feedback.js';
 import { listVersions, setVersionJob } from '../../../features/brief-video/brief-versions.js';
@@ -419,6 +420,38 @@ export async function POST(request) {
         ? await reviewVideoBriefVideo(context.clientId, body.postId, { decision: body.decision, notes: body.notes, atSeconds: body.atSeconds, v: body.v, outlineHash: body.outlineHash }, opts)
         : await restoreVideoBriefVersion(context.clientId, body.postId, { v: body.v }, opts);
       return json({ ok: true, post: { id: post.id, revision: post.revision, status: post.status }, brief: videoBriefView(post), mediaUrl: post.mediaUrl || null, posterUrl: post.posterUrl || null });
+    }
+    // Owner decision from the MCP, one explicit step (features/brief-video/owner-review.js): approves need the Director's accepted
+    // verdict on the current brief; every decision pins the revision (and episode/version) the caller viewed. Owner or admin only.
+    if (action === 'video-brief-owner-review') {
+      await gatePilotRow(context, decoded, body.postId);
+      if (context.impersonating && !context.isAdmin) return json({ error: 'Only the owner can review a Creative Brief.' }, 403);
+      const row = await getSocialPost(context.clientId, body.postId);
+      const { step, decision, revision } = checkOwnerReview(row, body);
+      const by = decoded?.email || decoded?.uid || null;
+      let post;
+      if (step === 'brief') {
+        post = await saveVideoBrief(context.clientId, body.postId, { status: 'approved' }, { by, allowApprove: true, expectedRevision: revision });
+      } else if (step === 'storyboard') {
+        post = await reviewVideoBriefStoryboard(context.clientId, body.postId, { decision, notes: body.notes, frameNotes: body.frameNotes }, { by, expectedRevision: revision });
+      } else {
+        post = await reviewVideoBriefVideo(context.clientId, body.postId, { decision, notes: body.notes, atSeconds: body.atSeconds, v: body.v, outlineHash: body.outlineHash }, { by, expectedRevision: revision });
+      }
+      const next = step === 'brief' ? 'storyboard' : step === 'storyboard' && decision === 'approve' ? 'video' : undefined;
+      return json({ ok: true, step, decision, post: { id: post.id, revision: post.revision, status: post.status }, brief: videoBriefView(post), video: attachedVideoOf(post), ...(next ? { next } : {}) });
+    }
+    // Read only: the post's downloadable video (attached, else the storyboard episode preview, both resolved from Storage).
+    if (action === 'video-brief-download') {
+      await gatePilotRow(context, decoded, body.postId);
+      const row = await getSocialPost(context.clientId, body.postId);
+      if (!row) return json({ error: 'Post not found.' }, 404);
+      const attached = attachedVideoOf(row);
+      const ep = row.videoBriefMeta?.storyboard?.episode || null;
+      const previewUrl = attached ? null : await episodeVideoUrlSafe(row);
+      if (!attached && !previewUrl) return json({ ok: false, error: 'This post has no video yet.', code: 'no-video' }, 409);
+      return json({ ok: true, postId: row.id, revision: row.revision ?? 0,
+        video: attached || { downloadUrl: previewUrl, posterUrl: null, storagePath: ep?.storagePath || null, preview: true },
+        episode: ep ? { outlineHash: ep.outlineHash || null, storagePath: ep.storagePath || null } : null });
     }
     // Director inbox: read only, no write path.
     if (action === 'video-brief-revisions') {
