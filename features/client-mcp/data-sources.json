@@ -22,5 +22,13 @@
     "provider": "hitloop",
     "site": "ue",
     "url": "https://undergroundexistence.info"
+  },
+  {
+    "clientId": "ugod",
+    "label": "U-God website",
+    "kind": "site-stats",
+    "url": "https://ugod-rock-so-many.vercel.app/api/stats",
+    "peopleUrl": "https://ugod-rock-so-many.vercel.app/api/stats/people",
+    "keyEnv": "CLIENT_STATS_KEY_UGOD"
   }
 ]

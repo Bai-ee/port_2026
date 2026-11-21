@@ -204,6 +204,21 @@ test('PII collections and the clients/<id>/members subcollection are denied; oth
   assert.throws(() => assertReadablePath('clients/abc/members'), (e) => e.status === 403);
 });
 
+test('client-site signups and rate_limits are denied; analytics_events and perf_runs stay readable', () => {
+  for (const c of ['signups', 'rate_limits']) {
+    assert.ok(DENY_COLLECTIONS.includes(c), c);
+    assert.equal(isDeniedPath(`clients/ugod/${c}`), true, c);
+    assert.equal(isDeniedPath(`clients/ugod/${c}/doc1`), true, `${c} doc`);
+    assert.equal(isDeniedCollectionName(c), true, c);
+    assert.throws(() => assertReadablePath(`clients/ugod/${c}`), (e) => e.status === 403);
+  }
+  assert.equal(isDeniedPath('clients/ugod/analytics_events'), false);
+  assert.equal(isDeniedPath('clients/ugod/analytics_events/e1'), false);
+  assert.equal(isDeniedPath('clients/ugod/perf_runs'), false);
+  const subs = ['signups', 'rate_limits', 'analytics_events'].filter((id) => !isDeniedCollectionName(id) && !isDeniedSubcollection(id, 'ugod'));
+  assert.deepEqual(subs, ['analytics_events']);
+});
+
 test('query args: where/orderBy on credential-looking fields are rejected', () => {
   for (const field of ['accessToken', 'user.refreshToken', 'apiKey', 'appKey', 'webhook', 'signature', 'oauthState', 'jwt']) {
     assert.throws(() => normalizeQueryArgs({ collection: 'social_posts', where: [{ field, value: 'x' }] }), ToolError, field);
